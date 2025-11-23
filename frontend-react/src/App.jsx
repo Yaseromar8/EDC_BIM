@@ -505,66 +505,107 @@ function App() {
 
   const handleBuildFileUpload = async (file, targetPinId = null) => {
     const pinId = targetPinId || selectedPinId;
-    if (!pinId) {
-      alert('Por favor, selecciona un punto en el mapa primero para asociar el documento.');
-      return;
-    }
+    if (!pinId || !file) return;
+
+    // 1. Optimistic Update: Show image immediately
+    const tempId = Date.now();
+    const tempUrl = URL.createObjectURL(file);
+    const tempDoc = {
+      id: tempId,
+      name: file.name,
+      url: tempUrl,
+      status: 'uploading',
+      timestamp: new Date().toISOString()
+    };
+
+    setBuildPins(prevPins => prevPins.map(pin => {
+      if (pin.id === pinId) {
+        return {
+          ...pin,
+          documents: [...(pin.documents || []), tempDoc]
+        };
+      }
+      return pin;
+    }));
 
     setBuildUploading(true);
-    setBuildUploadError(null);
+    setBuildUploadError('');
 
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      const response = await fetch('/api/build/acc-upload', {
+      // 2. Upload to Server
+      const res = await fetch('/api/build/acc-upload', {
         method: 'POST',
-        body: formData,
+        body: formData
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Upload failed');
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Error al subir archivo');
       }
 
-      const data = await response.json();
-      console.log('Build upload response:', data);
+      const data = await res.json();
 
-      // Add document to the selected PIN
-      // Update pin with new document
-      const pin = buildPins.find(p => p.id === pinId);
-      if (pin) {
-        const newDoc = {
-          id: Date.now(),
-          name: file.name,
-          urn: data.urn,
-          storageId: data.storage_id,
-          versionId: data.version_id,
-          itemId: data.item_id,
-          // Use proxy URL for permanent access, fallback to blob for immediate local preview if needed
-          url: `/api/images/proxy?storageId=${encodeURIComponent(data.storage_id)}`,
-          status: 'processing',
-          timestamp: new Date().toISOString()
-        };
+      // 3. Prepare Final Document
+      const finalDoc = {
+        id: tempId, // Keep the same ID to maintain continuity in UI if needed, or use server ID
+        name: file.name,
+        urn: data.urn,
+        storageId: data.storage_id,
+        versionId: data.version_id,
+        itemId: data.item_id,
+        // Use proxy URL for permanent access
+        url: `/api/images/proxy?storageId=${encodeURIComponent(data.storage_id)}`,
+        status: 'processed',
+        timestamp: new Date().toISOString()
+      };
 
-        const updatedDocuments = [...(pin.documents || []), newDoc];
+      // 4. Update Local State (Swap Temp for Real)
+      setBuildPins(prevPins => prevPins.map(pin => {
+        if (pin.id === pinId) {
+          const updatedDocs = (pin.documents || []).map(d =>
+            d.id === tempId ? finalDoc : d
+          );
+          return { ...pin, documents: updatedDocs };
+        }
+        return pin;
+      }));
 
-        // Save to server
-        const updateRes = await fetch(`/api/pins/${pinId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ documents: updatedDocuments })
-        });
+      // 5. Sync with Server (Fetch latest -> Append -> Save)
+      // We fetch the latest pin state from server to ensure we don't overwrite other committed changes
+      // and we don't send our local "temp" docs to the server.
+      const pinRes = await fetch(`/api/pins`);
+      if (pinRes.ok) {
+        const allPins = await pinRes.json();
+        const serverPin = allPins.find(p => p.id === pinId);
 
-        if (updateRes.ok) {
-          const updatedPin = await updateRes.json();
-          setBuildPins(prev => prev.map(p => p.id === pinId ? updatedPin : p));
+        if (serverPin) {
+          const newServerDocs = [...(serverPin.documents || []), finalDoc];
+
+          await fetch(`/api/pins/${pinId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ documents: newServerDocs })
+          });
         }
       }
 
     } catch (err) {
       console.error('Build upload error:', err);
       setBuildUploadError(err.message);
+
+      // Remove the temp doc on error
+      setBuildPins(prevPins => prevPins.map(pin => {
+        if (pin.id === pinId) {
+          return {
+            ...pin,
+            documents: (pin.documents || []).filter(d => d.id !== tempId)
+          };
+        }
+        return pin;
+      }));
     } finally {
       setBuildUploading(false);
     }

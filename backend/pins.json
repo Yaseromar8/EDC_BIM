@@ -26,5 +26,25 @@
     "name": "Punto 2",
     "documents": [],
     "createdAt": "2025-11-23T04:13:22.381828Z"
+  },
+  {
+    "id": "1763874401725",
+    "lat": -6.7811702113771,
+    "lng": -79.84234211366417,
+    "name": "Punto 3",
+    "documents": [
+      {
+        "id": 1763874410486,
+        "name": "logo-anin_02.jpg",
+        "urn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLk5XM08yWktSUnZxdG9oUnk0cGF3S0E_dmVyc2lvbj0x",
+        "storageId": "urn:adsk.objects:os.object:wip.dm.prod/420d6bea-11bc-4869-8741-5ee530b9d32a.jpg",
+        "versionId": "urn:adsk.wipprod:fs.file:vf.NW3O2ZKRRvqtohRy4pawKA?version=1",
+        "itemId": "urn:adsk.wipprod:dm.lineage:NW3O2ZKRRvqtohRy4pawKA",
+        "url": "/api/images/proxy?storageId=urn%3Aadsk.objects%3Aos.object%3Awip.dm.prod%2F420d6bea-11bc-4869-8741-5ee530b9d32a.jpg",
+        "status": "processed",
+        "timestamp": "2025-11-23T05:06:57.314Z"
+      }
+    ],
+    "createdAt": "2025-11-23T05:06:41.741911Z"
   }
 ]
