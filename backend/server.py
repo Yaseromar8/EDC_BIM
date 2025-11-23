@@ -1053,7 +1053,65 @@ def get_signed_read_url():
     except requests.exceptions.RequestException as e:
         return jsonify({'error': f'Request error: {e}'}), 500
 
-@app.route('/api/build/translation-status', methods=['GET'])
+@app.route('/api/images/proxy', methods=['GET'])
+def proxy_image():
+    """
+    Proxies a request to an image in ACC/OSS by redirecting to a fresh signed URL.
+    Accepts 'storageId' or 'versionId'.
+    """
+    storage_id = request.args.get('storageId')
+    version_id = request.args.get('versionId')
+    
+    if not storage_id and not version_id:
+        return jsonify({'error': 'Missing storageId or versionId'}), 400
+
+    token, error = get_internal_token()
+    if error:
+        return jsonify({'error': error}), 500
+
+    # If we only have versionId, we need to find the storageId
+    if not storage_id and version_id:
+        try:
+            # We assume ACC_PROJECT_ID is available globally
+            url = f'https://developer.api.autodesk.com/data/v1/projects/{ACC_PROJECT_ID}/versions/{urllib.parse.quote(version_id)}'
+            headers = {'Authorization': f'Bearer {token}'}
+            resp = requests.get(url, headers=headers)
+            if resp.ok:
+                data = resp.json()
+                storage_id = data['data']['relationships']['storage']['data']['id']
+            else:
+                return jsonify({'error': f'Failed to resolve version: {resp.status_code}'}), resp.status_code
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    # Now get the signed URL for the storageId
+    bucket_key, object_name = parse_storage_components(storage_id)
+    if not bucket_key or not object_name:
+        return jsonify({'error': 'Invalid storageId format'}), 400
+
+    encoded_obj = urllib.parse.quote(object_name, safe='/')
+    
+    # Try to use user token if available (for 3-legged access), otherwise internal 2-legged
+    # For proxying images in a public-ish app, 2-legged is often safer/easier if the bucket allows it,
+    # but ACC usually requires 3-legged or 2-legged with x-user-id. 
+    # However, get_internal_token returns a 2-legged token which usually works for read if the app has access.
+    # Let's stick to the token we got above (internal 2-legged).
+    
+    signed_url_endpoint = f'https://developer.api.autodesk.com/oss/v2/buckets/{bucket_key}/objects/{encoded_obj}/signed?access=read'
+    
+    try:
+        resp = requests.get(signed_url_endpoint, headers={'Authorization': f'Bearer {token}'})
+        if resp.ok:
+            data = resp.json()
+            signed_url = data.get('signedUrl') or data.get('url')
+            if signed_url:
+                return redirect(signed_url)
+            else:
+                return jsonify({'error': 'No signed URL returned'}), 500
+        else:
+            return jsonify({'error': f'OSS Error: {resp.text}'}), resp.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 def get_translation_status():
     urn = request.args.get('urn')
     print(f"[translation-status] Received URN: {urn}")

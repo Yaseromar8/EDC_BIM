@@ -541,7 +541,8 @@ function App() {
           storageId: data.storage_id,
           versionId: data.version_id,
           itemId: data.item_id,
-          url: data.url || URL.createObjectURL(file),
+          // Use proxy URL for permanent access, fallback to blob for immediate local preview if needed
+          url: `/api/images/proxy?storageId=${encodeURIComponent(data.storage_id)}`,
           status: 'processing',
           timestamp: new Date().toISOString()
         };
