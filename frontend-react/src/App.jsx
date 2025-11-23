@@ -430,20 +430,24 @@ function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [buildUploading, setBuildUploading] = useState(false);
   const [buildUploadError, setBuildUploadError] = useState('');
-  const [buildPins, setBuildPins] = useState(() => {
-    const saved = localStorage.getItem('buildPins');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [buildPins, setBuildPins] = useState([]);
   const [selectedPinId, setSelectedPinId] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const handleModelProperties = useCallback((props = []) => {
     setModelProperties(props);
   }, []);
 
-  // Persist pins to localStorage
+  // Load pins from server
   useEffect(() => {
-    localStorage.setItem('buildPins', JSON.stringify(buildPins));
-  }, [buildPins]);
+    fetch('/api/pins')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setBuildPins(data);
+        }
+      })
+      .catch(err => console.error('Error loading pins:', err));
+  }, []);
 
   // Get user geolocation
   useEffect(() => {
@@ -464,22 +468,38 @@ function App() {
     }
   }, []);
 
-  const handlePinCreated = useCallback((pin) => {
-    setBuildPins(prev => {
-      const newPins = [...prev, pin];
-      return newPins;
-    });
-    setSelectedPinId(pin.id); // Auto-select new pin
+  const handlePinCreated = useCallback(async (pinData) => {
+    try {
+      const res = await fetch('/api/pins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pinData)
+      });
+      if (res.ok) {
+        const newPin = await res.json();
+        setBuildPins(prev => [...prev, newPin]);
+        setSelectedPinId(newPin.id);
+      }
+    } catch (err) {
+      console.error('Error creating pin:', err);
+    }
   }, []);
 
   const handlePinSelect = useCallback((pinId) => {
     setSelectedPinId(pinId);
   }, []);
 
-  const handlePinDelete = useCallback((pinId) => {
-    setBuildPins(prev => prev.filter(p => p.id !== pinId));
-    if (selectedPinId === pinId) {
-      setSelectedPinId(null);
+  const handlePinDelete = useCallback(async (pinId) => {
+    try {
+      const res = await fetch(`/api/pins/${pinId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setBuildPins(prev => prev.filter(p => p.id !== pinId));
+        if (selectedPinId === pinId) {
+          setSelectedPinId(null);
+        }
+      }
+    } catch (err) {
+      console.error('Error deleting pin:', err);
     }
   }, [selectedPinId]);
 
@@ -511,25 +531,35 @@ function App() {
       console.log('Build upload response:', data);
 
       // Add document to the selected PIN
-      setBuildPins(prevPins => prevPins.map(pin => {
-        if (pin.id === pinId) {
-          return {
-            ...pin,
-            documents: [...(pin.documents || []), {
-              id: Date.now(),
-              name: file.name,
-              urn: data.urn,
-              storageId: data.storage_id,
-              versionId: data.version_id,
-              itemId: data.item_id,
-              url: data.url || URL.createObjectURL(file), // Fallback to local blob for immediate preview
-              status: 'processing',
-              timestamp: new Date().toISOString()
-            }]
-          };
+      // Update pin with new document
+      const pin = buildPins.find(p => p.id === pinId);
+      if (pin) {
+        const newDoc = {
+          id: Date.now(),
+          name: file.name,
+          urn: data.urn,
+          storageId: data.storage_id,
+          versionId: data.version_id,
+          itemId: data.item_id,
+          url: data.url || URL.createObjectURL(file),
+          status: 'processing',
+          timestamp: new Date().toISOString()
+        };
+
+        const updatedDocuments = [...(pin.documents || []), newDoc];
+
+        // Save to server
+        const updateRes = await fetch(`/api/pins/${pinId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ documents: updatedDocuments })
+        });
+
+        if (updateRes.ok) {
+          const updatedPin = await updateRes.json();
+          setBuildPins(prev => prev.map(p => p.id === pinId ? updatedPin : p));
         }
-        return pin;
-      }));
+      }
 
     } catch (err) {
       console.error('Build upload error:', err);
@@ -762,10 +792,19 @@ function App() {
     setSpritePlacementActive(false);
   }, [addSprite]);
 
+  const handleSpriteDelete = useCallback((spriteId) => {
+    setSprites(prev => prev.filter(s => s.id !== spriteId));
+    if (activeSpriteId === spriteId) {
+      setActiveSpriteId(null);
+    }
+  }, [activeSpriteId]);
+
   const handleSpriteSelect = useCallback((id) => {
     setActiveSpriteId(id);
     if (id) {
       setShowSprites(true);
+      setActivePanel('docs');
+      setPanelVisible(true);
     }
   }, []);
 
@@ -850,8 +889,20 @@ function App() {
     setExpandedFilters(prev => ({ ...prev, [propId]: !prev[propId] }));
   }, []);
 
-  const handlePinUpdate = (updatedPin) => {
-    setBuildPins(prev => prev.map(p => p.id === updatedPin.id ? updatedPin : p));
+  const handlePinUpdate = async (updatedPin) => {
+    try {
+      const res = await fetch(`/api/pins/${updatedPin.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedPin)
+      });
+      if (res.ok) {
+        const savedPin = await res.json();
+        setBuildPins(prev => prev.map(p => p.id === savedPin.id ? savedPin : p));
+      }
+    } catch (err) {
+      console.error('Error updating pin:', err);
+    }
   };
 
   return (
@@ -1074,6 +1125,7 @@ function App() {
             showSprites={showSprites}
             activeSpriteId={activeSpriteId}
             onSpriteSelect={handleSpriteSelect}
+            onSpriteDelete={handleSpriteDelete}
             placementMode={spritePlacementActive}
             onPlacementComplete={handlePlacementComplete}
             onModelProperties={handleModelProperties}

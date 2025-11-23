@@ -435,17 +435,14 @@ const BuildMapView = ({
 
     const handleCreatePin = () => {
         if (contextMenu && contextMenu.latLng) {
-            const newPin = {
-                id: Date.now().toString(),
+            // Server handles ID and Name generation now
+            const newPinData = {
                 lat: contextMenu.latLng.lat,
-                lng: contextMenu.latLng.lng,
-                name: `Punto ${pins.length + 1}`,
-                documents: [],
-                createdAt: new Date().toISOString()
+                lng: contextMenu.latLng.lng
             };
 
             if (onPinCreated) {
-                onPinCreated(newPin);
+                onPinCreated(newPinData);
             }
             setContextMenu(null);
         }
@@ -464,10 +461,14 @@ const BuildMapView = ({
     };
 
     const handleCameraUpload = () => {
-        // Use custom in-app camera UI for better experience on both Desktop and Mobile
+        // Trigger native file input without 'capture' attribute
+        // This allows the user to choose between Camera, Gallery, or other apps
         if (contextMenu && contextMenu.pinId) {
-            openCamera(contextMenu.pinId);
+            if (cameraInputRef.current) {
+                cameraInputRef.current.click();
+            }
         }
+        setContextMenu(null);
     };
 
     const handleViewGallery = () => {
@@ -512,7 +513,6 @@ const BuildMapView = ({
                 ref={cameraInputRef}
                 style={{ display: 'none' }}
                 accept="image/*"
-                capture="environment"
                 onChange={handleFileChange}
             />
 

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "1763870722126",
+    "lat": -6.781812278777819,
+    "lng": -79.83986899736298,
+    "name": "Punto 1",
+    "documents": [
+      {
+        "id": 1763870742430,
+        "name": "CRONOGRAMA DE INTERFERENCIA.jpeg",
+        "urn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLlQwX19yRE9JVFdtZDM5WEZaV1BDVUE_dmVyc2lvbj0x",
+        "storageId": "urn:adsk.objects:os.object:wip.dm.prod/045d429c-5464-43f1-83bf-67f040d9169c.jpeg",
+        "versionId": "urn:adsk.wipprod:fs.file:vf.T0__rDOITWmd39XFZWPCUA?version=1",
+        "itemId": "urn:adsk.wipprod:dm.lineage:T0__rDOITWmd39XFZWPCUA",
+        "url": "blob:http://localhost:5173/da10b12b-5e7e-47f9-b3bb-02221528c9c6",
+        "status": "processing",
+        "timestamp": "2025-11-23T04:05:42.431Z"
+      }
+    ],
+    "createdAt": "2025-11-23T04:05:22.126868Z"
+  },
+  {
+    "id": "1763871202381",
+    "lat": -6.78119435990354,
+    "lng": -79.83985826852692,
+    "name": "Punto 2",
+    "documents": [],
+    "createdAt": "2025-11-23T04:13:22.381828Z"
+  }
+]

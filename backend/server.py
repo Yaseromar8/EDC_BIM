@@ -6,6 +6,8 @@ import mimetypes
 import requests
 import urllib.parse
 import time
+import json
+import re
 from flask import Flask, jsonify, request, send_from_directory, redirect
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -39,6 +41,25 @@ MAP_JOBS = {}
 
 os.makedirs(MAP_UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(DOC_UPLOAD_FOLDER, exist_ok=True)
+
+PINS_FILE = os.path.join(os.path.dirname(__file__), 'pins.json')
+
+def load_pins():
+    if not os.path.exists(PINS_FILE):
+        return []
+    try:
+        with open(PINS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading pins: {e}")
+        return []
+
+def save_pins(pins):
+    try:
+        with open(PINS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(pins, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error saving pins: {e}")
 
 def allowed_gis_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_GIS_EXTENSIONS
@@ -846,9 +867,80 @@ def delete_acc_file():
         print(f"[delete-file] Excepción: {e}")
         return jsonify({'error': str(e)}), 500
 
+# --- PINS API (Centralized State) ---
 
-if __name__ == '__main__':
-    app.run(debug=True, port=3000)
+@app.route('/api/pins', methods=['GET'])
+def get_pins():
+    return jsonify(load_pins())
+
+@app.route('/api/pins', methods=['POST'])
+def create_pin():
+    data = request.json or {}
+    if 'lat' not in data or 'lng' not in data:
+        return jsonify({'error': 'Missing lat/lng'}), 400
+
+    pins = load_pins()
+    
+    # Calculate next Point Number
+    max_num = 0
+    for p in pins:
+        # Extract number from "Punto N"
+        match = re.match(r'Punto (\d+)', p.get('name', ''))
+        if match:
+            num = int(match.group(1))
+            if num > max_num:
+                max_num = num
+    
+    next_num = max_num + 1
+    name = f"Punto {next_num}"
+    
+    new_pin = {
+        'id': str(int(time.time() * 1000)),
+        'lat': data['lat'],
+        'lng': data['lng'],
+        'name': name,
+        'documents': [],
+        'createdAt': datetime.utcnow().isoformat() + 'Z'
+    }
+    
+    pins.append(new_pin)
+    save_pins(pins)
+    return jsonify(new_pin)
+
+@app.route('/api/pins/<pin_id>', methods=['DELETE'])
+def delete_pin(pin_id):
+    pins = load_pins()
+    initial_len = len(pins)
+    pins = [p for p in pins if p['id'] != pin_id]
+    
+    if len(pins) < initial_len:
+        save_pins(pins)
+        return jsonify({'success': True})
+    return jsonify({'error': 'Pin not found'}), 404
+
+@app.route('/api/pins/<pin_id>', methods=['PUT'])
+def update_pin(pin_id):
+    data = request.json or {}
+    pins = load_pins()
+    
+    found = False
+    updated_pin = None
+    
+    for p in pins:
+        if p['id'] == pin_id:
+            # Update fields if present
+            if 'documents' in data:
+                p['documents'] = data['documents']
+            if 'name' in data:
+                p['name'] = data['name']
+            found = True
+            updated_pin = p
+            break
+            
+    if found:
+        save_pins(pins)
+        return jsonify(updated_pin)
+    return jsonify({'error': 'Pin not found'}), 404
 def extract_download_url(formats_payload):
     entries = formats_payload.get('data') or formats_payload.get('included') or []
     if isinstance(entries, dict):
