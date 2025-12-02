@@ -1062,17 +1062,27 @@ def proxy_image():
     storage_id = request.args.get('storageId')
     version_id = request.args.get('versionId')
     
+    print(f"[proxy_image] Request for storageId={storage_id} versionId={version_id}")
+
     if not storage_id and not version_id:
         return jsonify({'error': 'Missing storageId or versionId'}), 400
 
-    token, error = get_internal_token()
-    if error:
-        return jsonify({'error': error}), 500
+    # Try to get user token first (best for ACC files)
+    tokens = load_user_tokens()
+    token = tokens.get('access_token') if tokens else None
+    internal_token = None
+    
+    # Fallback to internal token if no user token
+    if not token:
+        print("[proxy_image] No user token, using internal token")
+        internal_token, error = get_internal_token()
+        if error:
+            return jsonify({'error': error}), 500
+        token = internal_token
 
     # If we only have versionId, we need to find the storageId
     if not storage_id and version_id:
         try:
-            # We assume ACC_PROJECT_ID is available globally
             url = f'https://developer.api.autodesk.com/data/v1/projects/{ACC_PROJECT_ID}/versions/{urllib.parse.quote(version_id)}'
             headers = {'Authorization': f'Bearer {token}'}
             resp = requests.get(url, headers=headers)
@@ -1080,36 +1090,84 @@ def proxy_image():
                 data = resp.json()
                 storage_id = data['data']['relationships']['storage']['data']['id']
             else:
-                return jsonify({'error': f'Failed to resolve version: {resp.status_code}'}), resp.status_code
+                # Try with internal token if user token failed
+                if token != internal_token:
+                     if not internal_token:
+                         internal_token, _ = get_internal_token()
+                     headers = {'Authorization': f'Bearer {internal_token}'}
+                     resp = requests.get(url, headers=headers)
+                     if resp.ok:
+                        data = resp.json()
+                        storage_id = data['data']['relationships']['storage']['data']['id']
+                     else:
+                        return jsonify({'error': f'Failed to resolve version: {resp.status_code}'}), resp.status_code
+                else:
+                    return jsonify({'error': f'Failed to resolve version: {resp.status_code}'}), resp.status_code
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
     # Now get the signed URL for the storageId
     bucket_key, object_name = parse_storage_components(storage_id)
     if not bucket_key or not object_name:
+        print(f"[proxy_image] Invalid storageId format: {storage_id}")
         return jsonify({'error': 'Invalid storageId format'}), 400
 
+    encoded_obj = urllib.parse.quote(object_name, safe='') # safe='' encodes slashes too which is sometimes needed for signeds3download
+    
+    # For ACC files (wip.dm.prod), we often need signeds3download
+    if 'wip.dm.prod' in storage_id or 'wip.dm' in storage_id:
+         url = f'https://developer.api.autodesk.com/oss/v2/buckets/{bucket_key}/objects/{encoded_obj}/signeds3download'
+         try:
+            print(f"[proxy_image] Trying signeds3download for ACC file: {url}")
+            resp = requests.get(url, headers={'Authorization': f'Bearer {token}'})
+            if resp.ok:
+                data = resp.json()
+                # signeds3download returns { "status": "complete", "url": "..." }
+                download_url = data.get('url')
+                if download_url:
+                    return redirect(download_url)
+            
+            print(f"[proxy_image] User token failed ({resp.status_code}), trying internal token")
+            # If failed, try internal token
+            if token != internal_token:
+                 if not internal_token:
+                     internal_token, _ = get_internal_token()
+                 resp = requests.get(url, headers={'Authorization': f'Bearer {internal_token}'})
+                 if resp.ok:
+                    data = resp.json()
+                    download_url = data.get('url')
+                    if download_url:
+                        return redirect(download_url)
+
+         except Exception as e:
+             print(f"Error getting signeds3download: {e}")
+
+    # Fallback to standard signed URL (OSS)
+    # Re-encode with safe='/' for standard OSS endpoint
     encoded_obj = urllib.parse.quote(object_name, safe='/')
-    
-    # Try to use user token if available (for 3-legged access), otherwise internal 2-legged
-    # For proxying images in a public-ish app, 2-legged is often safer/easier if the bucket allows it,
-    # but ACC usually requires 3-legged or 2-legged with x-user-id. 
-    # However, get_internal_token returns a 2-legged token which usually works for read if the app has access.
-    # Let's stick to the token we got above (internal 2-legged).
-    
     signed_url_endpoint = f'https://developer.api.autodesk.com/oss/v2/buckets/{bucket_key}/objects/{encoded_obj}/signed?access=read'
     
     try:
+        print(f"[proxy_image] Trying standard signed URL: {signed_url_endpoint}")
         resp = requests.get(signed_url_endpoint, headers={'Authorization': f'Bearer {token}'})
         if resp.ok:
             data = resp.json()
             signed_url = data.get('signedUrl') or data.get('url')
             if signed_url:
                 return redirect(signed_url)
-            else:
-                return jsonify({'error': 'No signed URL returned'}), 500
-        else:
-            return jsonify({'error': f'OSS Error: {resp.text}'}), resp.status_code
+        
+        # Retry with internal token
+        if token != internal_token:
+             if not internal_token:
+                 internal_token, _ = get_internal_token()
+             resp = requests.get(signed_url_endpoint, headers={'Authorization': f'Bearer {internal_token}'})
+             if resp.ok:
+                data = resp.json()
+                signed_url = data.get('signedUrl') or data.get('url')
+                if signed_url:
+                    return redirect(signed_url)
+
+        return jsonify({'error': 'No signed URL returned', 'details': resp.text}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 def get_translation_status():
