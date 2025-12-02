@@ -9,7 +9,8 @@ const BuildMapView = ({
     onPinSelect,
     onPinDelete,
     onPinUpdate,
-    onFileUpload
+    onFileUpload,
+    layers = []
 }) => {
     const mapContainerRef = useRef(null);
     const mapInstanceRef = useRef(null);
@@ -383,18 +384,6 @@ const BuildMapView = ({
 
         // Cleanup removed markers
         Object.keys(currentMarkers).forEach(id => {
-            // Note: pin.id is string or number? usually string in this app. 
-            // If ID types mismatch (string vs number), this might fail. 
-            // Let's assume string comparison is safe if we cast or if they match.
-            // The 'pins' loop adds to Set. If pin.id is number 123, Set has 123.
-            // Object.keys returns strings "123". 
-            // So we should check if activePinIds has the id (casted to correct type) or just use loose check.
-            // Safer to cast activePinIds to string for the Set.
-
-            // Actually, let's fix the Set population above to be sure.
-            // But for now, let's just assume IDs are consistent.
-
-            // Better safe:
             const exists = pins.some(p => String(p.id) === id);
             if (!exists) {
                 currentMarkers[id].setMap(null);
@@ -403,6 +392,60 @@ const BuildMapView = ({
         });
 
     }, [pins, selectedPinId]);
+
+    // Manage KML Layers
+    const kmlLayersRef = useRef({}); // Store KmlLayer instances by layer ID
+
+    useEffect(() => {
+        if (!mapInstanceRef.current || !window.google?.maps) return;
+        const map = mapInstanceRef.current;
+        const currentLayers = kmlLayersRef.current;
+
+        // If no layers prop provided, do nothing or clear all
+        if (!layers) return;
+
+        layers.forEach(layer => {
+            // If layer exists
+            if (currentLayers[layer.id]) {
+                // Update visibility
+                if (currentLayers[layer.id].getMap() !== (layer.visible ? map : null)) {
+                    currentLayers[layer.id].setMap(layer.visible ? map : null);
+                }
+                return;
+            }
+
+            // Create new layer
+            if (layer.visible && layer.url) {
+                console.log('🗺️ Adding KML Layer:', layer.name, layer.url);
+                const kmlLayer = new window.google.maps.KmlLayer({
+                    url: layer.url,
+                    map: map,
+                    preserveViewport: true, // Don't auto-zoom to KML
+                    suppressInfoWindows: false
+                });
+
+                // Add listener to catch errors (like localhost blocking)
+                window.google.maps.event.addListener(kmlLayer, 'status_changed', () => {
+                    const status = kmlLayer.getStatus();
+                    if (status !== 'OK') {
+                        console.warn(`⚠️ KML Layer failed to load: ${status}. Note: KmlLayer requires a public URL. Localhost URLs will fail.`);
+                    }
+                });
+
+                currentLayers[layer.id] = kmlLayer;
+            }
+        });
+
+        // Cleanup removed layers
+        Object.keys(currentLayers).forEach(id => {
+            const exists = layers.some(l => String(l.id) === id);
+            if (!exists) {
+                currentLayers[id].setMap(null);
+                delete currentLayers[id];
+            }
+        });
+
+    }, [layers]);
 
     // --- Actions ---
 

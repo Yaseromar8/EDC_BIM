@@ -431,13 +431,14 @@ function App() {
   const [buildUploading, setBuildUploading] = useState(false);
   const [buildUploadError, setBuildUploadError] = useState('');
   const [buildPins, setBuildPins] = useState([]);
+  const [buildLayers, setBuildLayers] = useState([]);
   const [selectedPinId, setSelectedPinId] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const handleModelProperties = useCallback((props = []) => {
     setModelProperties(props);
   }, []);
 
-  // Load pins from server
+  // Load pins and layers from server
   useEffect(() => {
     fetch('/api/pins')
       .then(res => res.json())
@@ -447,6 +448,15 @@ function App() {
         }
       })
       .catch(err => console.error('Error loading pins:', err));
+
+    fetch('/api/layers')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setBuildLayers(data);
+        }
+      })
+      .catch(err => console.error('Error loading layers:', err));
   }, []);
 
   // Get user geolocation
@@ -608,6 +618,69 @@ function App() {
       }));
     } finally {
       setBuildUploading(false);
+    }
+  };
+
+  const handleLayerUpload = async (file) => {
+    if (!file) return;
+
+    // 1. Upload file to server (using existing maps upload endpoint)
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/maps/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!res.ok) throw new Error('Error uploading layer file');
+
+      const data = await res.json();
+      const fileUrl = data.url; // This should be the full URL
+
+      // 2. Create layer entry
+      const layerRes = await fetch('/api/layers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: file.name,
+          url: fileUrl
+        })
+      });
+
+      if (layerRes.ok) {
+        const newLayer = await layerRes.json();
+        setBuildLayers(prev => [...prev, newLayer]);
+      }
+    } catch (err) {
+      console.error('Layer upload error:', err);
+      alert('Error al subir la capa: ' + err.message);
+    }
+  };
+
+  const handleLayerDelete = async (layerId) => {
+    if (!window.confirm('¿Eliminar esta capa?')) return;
+    try {
+      await fetch(`/api/layers/${layerId}`, { method: 'DELETE' });
+      setBuildLayers(prev => prev.filter(l => l.id !== layerId));
+    } catch (err) {
+      console.error('Error deleting layer:', err);
+    }
+  };
+
+  const handleLayerToggle = async (layerId, visible) => {
+    // Optimistic update
+    setBuildLayers(prev => prev.map(l => l.id === layerId ? { ...l, visible } : l));
+
+    try {
+      await fetch(`/api/layers/${layerId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visible })
+      });
+    } catch (err) {
+      console.error('Error toggling layer:', err);
     }
   };
 
@@ -1144,6 +1217,10 @@ function App() {
             onFileUpload={handleBuildFileUpload}
             uploading={buildUploading}
             uploadError={buildUploadError}
+            layers={buildLayers}
+            onLayerUpload={handleLayerUpload}
+            onLayerDelete={handleLayerDelete}
+            onLayerToggle={handleLayerToggle}
           />
         )}
       </aside>
@@ -1157,8 +1234,9 @@ function App() {
             onPinCreated={handlePinCreated}
             onPinSelect={handlePinSelect}
             onPinDelete={handlePinDelete}
-            onPinUpdate={handlePinUpdate}
+            onPinUpdate={handlePinCreated}
             onFileUpload={handleBuildFileUpload}
+            layers={buildLayers}
           />
         ) : (
           <Viewer

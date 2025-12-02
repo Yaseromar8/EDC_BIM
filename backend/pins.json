@@ -46,5 +46,25 @@
       }
     ],
     "createdAt": "2025-11-23T05:06:41.741911Z"
+  },
+  {
+    "id": "1764704345755",
+    "lat": -4.586510511987613,
+    "lng": -81.26781472979752,
+    "name": "Punto 4",
+    "documents": [
+      {
+        "id": 1764704356445,
+        "name": "WhatsApp Image 2025-11-28 at 1.28.05 PM.jpeg",
+        "urn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLk5jVDl2RkcwUl9DZmF3WVU2V1V6d0E_dmVyc2lvbj0x",
+        "storageId": "urn:adsk.objects:os.object:wip.dm.prod/6f16b5ef-d3b6-4fed-8b80-498702510075.jpeg",
+        "versionId": "urn:adsk.wipprod:fs.file:vf.NcT9vFG0R_CfawYU6WUzwA?version=1",
+        "itemId": "urn:adsk.wipprod:dm.lineage:NcT9vFG0R_CfawYU6WUzwA",
+        "url": "/api/images/proxy?storageId=urn%3Aadsk.objects%3Aos.object%3Awip.dm.prod%2F6f16b5ef-d3b6-4fed-8b80-498702510075.jpeg",
+        "status": "processed",
+        "timestamp": "2025-12-02T19:39:22.641Z"
+      }
+    ],
+    "createdAt": "2025-12-02T19:39:05.755754Z"
   }
 ]

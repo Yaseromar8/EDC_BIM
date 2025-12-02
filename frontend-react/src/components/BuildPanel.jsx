@@ -8,7 +8,11 @@ const BuildPanel = ({
     onPinSelect,
     onFileUpload,
     uploading,
-    uploadError
+    uploadError,
+    layers,
+    onLayerUpload,
+    onLayerDelete,
+    onLayerToggle
 }) => {
     const selectedPin = pins.find(p => p.id === selectedPinId);
 
@@ -110,6 +114,54 @@ const BuildPanel = ({
                     </ul>
                 </div>
             )}
+
+            {/* Map Layers Section */}
+            <div className="build-layers-section" style={{ marginTop: '20px', borderTop: '1px solid #eee', paddingTop: '15px' }}>
+                <h4 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    Capas del Mapa
+                    <label className="add-layer-btn" style={{ cursor: 'pointer', fontSize: '12px', color: '#0696D7' }}>
+                        + Agregar
+                        <input
+                            type="file"
+                            accept=".kml,.kmz"
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                    onLayerUpload(e.target.files[0]);
+                                    e.target.value = '';
+                                }
+                            }}
+                        />
+                    </label>
+                </h4>
+                {layers && layers.length > 0 ? (
+                    <ul className="layers-list" style={{ listStyle: 'none', padding: 0 }}>
+                        {layers.map(layer => (
+                            <li key={layer.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px', background: '#f9fafb', marginBottom: '5px', borderRadius: '4px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={layer.visible}
+                                        onChange={() => onLayerToggle(layer.id, !layer.visible)}
+                                    />
+                                    <span style={{ fontSize: '13px', fontWeight: 500 }}>{layer.name}</span>
+                                </div>
+                                <button
+                                    onClick={() => onLayerDelete(layer.id)}
+                                    style={{ border: 'none', background: 'none', cursor: 'pointer', opacity: 0.5 }}
+                                    title="Eliminar capa"
+                                >
+                                    ✕
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <p style={{ fontSize: '12px', color: '#6b7280', fontStyle: 'italic' }}>
+                        No hay capas (KMZ) cargadas.
+                    </p>
+                )}
+            </div>
 
             <div className="build-upload-section">
                 <label className={`build-upload-btn ${!selectedPin ? 'disabled' : ''}`}>
