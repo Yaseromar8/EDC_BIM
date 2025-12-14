@@ -1,4 +1,6 @@
-body, #root, .app-container {
+body,
+#root,
+.app-container {
   margin: 0;
   padding: 0;
   width: 100vw;
@@ -57,8 +59,8 @@ body, #root, .app-container {
 }
 
 .rail-button.active {
-  color: #3aa0ff;
-  background: rgba(58, 160, 255, 0.16);
+  color: #111;
+  background: #ffffff;
 }
 
 .rail-icon {
@@ -75,7 +77,9 @@ body, #root, .app-container {
   position: absolute;
   top: 0;
   left: 64px;
-  width: 300px;
+  width: fit-content;
+  min-width: 300px;
+  max-width: 450px;
   height: 100%;
   background-color: rgba(28, 32, 39, 0.88);
   color: #f0f0f0;
@@ -265,6 +269,122 @@ body, #root, .app-container {
   flex: 1;
   height: 100%;
   background-color: #0f1116;
+  position: relative;
+  /* For absolute positioning of doc viewer */
+  display: flex;
+  overflow: hidden;
+}
+
+.split-view-container {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.split-3d {
+  flex: 1;
+  height: 100%;
+  position: relative;
+  transition: width 0.3s ease;
+  /* Ensure z-index is lower than floating doc */
+  z-index: 1;
+}
+
+
+.split-doc {
+  /* Default: Floating / Miniature Style (Matches Autodesk Minimap) */
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 400px;
+  height: 320px;
+  background: white;
+  border: 1px solid #ccc;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  z-index: 20;
+  /* Higher than z-index 10-15 used elsewhere */
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-5px) scale(0.98);
+}
+
+.split-doc.active {
+  opacity: 1;
+  pointer-events: all;
+  transform: translateY(0) scale(1);
+}
+
+/* Parallel Mode (Split Screen) */
+.split-doc.parallel {
+  position: relative;
+  top: 0;
+  right: 0;
+  width: 50%;
+  height: 100%;
+  border-radius: 0;
+  border: none;
+  border-left: 1px solid #444;
+  background: #202020;
+  /* Resets background to dark if needed, but inner content has own bg */
+  box-shadow: none;
+  transform: none;
+  z-index: 1;
+}
+
+/* Ensure header looks good in parallel too, handled by inline styles mostly */
+
+
+/* When parallel is active, 3D width adjustment is handled via JS or Flex,
+   but since .split-doc.parallel is position:relative + flex item, it works automatically if container is flex.
+*/
+
+
+.doc-header {
+  height: 40px;
+  background: #2a2a2a;
+  border-bottom: 1px solid #444;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 10px;
+}
+
+.doc-title {
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-close-btn {
+  background: transparent;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 1.2rem;
+}
+
+.doc-close-btn:hover {
+  color: #fff;
+}
+
+.doc-content {
+  flex: 1;
+  background: #fff;
+  /* White background for documents */
+  position: relative;
+}
+
+.doc-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
 }
 
 .source-files {
@@ -397,9 +517,10 @@ body, #root, .app-container {
 }
 
 .filters-shell {
-  background: rgba(16, 18, 24, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: #2a2a2a;
+  /* Tandem-like dark gray */
+  border: none;
+  border-radius: 0;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -472,13 +593,18 @@ body, #root, .app-container {
 }
 
 .filters-block {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 10px;
-  padding: 10px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+  padding: 12px 4px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.filters-block:last-child {
+  border-bottom: none;
 }
 
 .filters-block-header {
@@ -486,6 +612,7 @@ body, #root, .app-container {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  padding-bottom: 4px;
 }
 
 .filters-block-info {
@@ -498,24 +625,25 @@ body, #root, .app-container {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
+  color: #e5e7eb;
 }
 
 .filters-block-path {
   font-size: 11px;
   color: #9ca3af;
+  display: none;
+  /* Hide path to match Tandem's cleaner look */
 }
 
 .filters-block-subcount {
-  font-size: 10px;
-  color: #737c8c;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 11px;
+  color: #9ca3af;
 }
 
 .filters-block-toolbar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .filters-block-toolbar .filters-block-count {
@@ -523,6 +651,7 @@ body, #root, .app-container {
   color: #f3f4f6;
   min-width: 24px;
   text-align: right;
+  font-size: 13px;
 }
 
 .filters-block-count {
@@ -541,50 +670,81 @@ body, #root, .app-container {
 .filters-value-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 8px;
+  /* Indent items slightly */
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
+  /* Tighter spacing */
 }
 
 .filters-value-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
-  padding: 6px 10px;
+  background: transparent;
+  border-radius: 4px;
+  padding: 4px 8px;
   gap: 12px;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+
+.filters-value-item:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .filters-value-label {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #e5e7eb;
+  gap: 10px;
+  font-size: 13px;
+  color: #d1d5db;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.filters-value-label span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filters-value-label input:checked+span {
+  color: #3aa0ff;
+  /* Blue text when checked, matching Tandem */
+  font-weight: 500;
 }
 
 .filters-value-label input {
   accent-color: #3aa0ff;
   width: 14px;
   height: 14px;
+  margin: 0;
+  cursor: pointer;
 }
 
 .filters-value-count {
   font-size: 12px;
-  color: #d1d5db;
+  color: #9ca3af;
+  min-width: 30px;
+  text-align: right;
 }
 
 .filters-more-btn {
   border: none;
   background: transparent;
-  color: #9ca3af;
+  color: #3aa0ff;
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   cursor: pointer;
   align-self: flex-start;
+  padding: 4px 8px;
+  margin-left: 8px;
+}
+
+.filters-more-btn:hover {
+  text-decoration: underline;
 }
 
 .tree-wrapper .native-file-tree {
@@ -909,7 +1069,8 @@ body, #root, .app-container {
 
 .native-file-tree ul {
   list-style: none;
-  padding-left: 15px; /* Smaller indent for nested items */
+  padding-left: 15px;
+  /* Smaller indent for nested items */
 }
 
 .native-file-tree li {
@@ -930,7 +1091,8 @@ body, #root, .app-container {
 }
 
 .native-file-tree li div.selected {
-  background-color: rgba(0, 123, 255, 0.3); /* A subtle blue for selected items */
+  background-color: rgba(0, 123, 255, 0.3);
+  /* A subtle blue for selected items */
 }
 
 .node-icon {
@@ -942,6 +1104,7 @@ body, #root, .app-container {
   font-weight: normal;
   font-size: 0.95em;
 }
+
 .docs-panel {
   display: flex;
   flex-direction: column;
@@ -1142,6 +1305,7 @@ body, #root, .app-container {
   border-radius: 999px;
   cursor: pointer;
 }
+
 .modal-panel.large {
   width: 860px;
 }
@@ -1197,4 +1361,35 @@ body, #root, .app-container {
 .error-text {
   color: #f87171;
   font-size: 12px;
+}
+
+/* Filter Colors */
+.color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.3);
+}
+
+.icon-button.active {
+  background: rgba(58, 160, 255, 0.25);
+  color: #3aa0ff;
+  border-color: rgba(58, 160, 255, 0.4);
+}
+
+.filters-value-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.color-dot-placeholder {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+  background: transparent;
 }

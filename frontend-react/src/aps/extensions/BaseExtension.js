@@ -28,16 +28,17 @@ export class BaseExtension extends Autodesk.Viewing.Extension {
         console.log('Object tree created.');
         const model = ev.model;
         const leafIds = await findLeafNodes(model);
-        this.viewer.model.leafIds = leafIds;
+        model.leafIds = leafIds;
         try {
-            this.viewer.model.allProps = await getBulkProperties(model, leafIds);
+            model.allProps = await getBulkProperties(model, leafIds);
         } catch (error) {
             console.error('Bulk property extraction failed', error);
-            this.viewer.model.allProps = [];
+            model.allProps = [];
         }
-        const detail = this.viewer.model.allProps || [];
+        const detail = model.allProps || [];
+        // Optional: still dispatch global window event for legacy/debug, but Viewer.jsx uses the viewer event
         window.dispatchEvent(new CustomEvent('viewer-model-properties', { detail }));
-        this.viewer.dispatchEvent({ type: 'model.loaded', model: this.viewer.model });
+        this.viewer.dispatchEvent({ type: 'model.loaded', model: model });
     }
 
     onSelectionChanged(ev) {

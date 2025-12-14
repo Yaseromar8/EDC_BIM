@@ -76,10 +76,21 @@ const TreeNode = ({ node, onFileSelect, hubId }) => {
             if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
             const json = await res.json();
             if (!json.data || !json.data.length) return;
-            const latestVersion = json.data[json.data.length - 1];
+
+            // Sort versions by versionNumber descending to ensure we get the latest
+            const sortedVersions = json.data.sort((a, b) => {
+                const vA = a.attributes.versionNumber;
+                const vB = b.attributes.versionNumber;
+                return vB - vA;
+            });
+
+            const latestVersion = sortedVersions[0];
             const versionUrn = latestVersion.id;
             const urn = btoa(versionUrn).replace(/=+$/, '');
             const label = node.attributes.displayName || latestVersion.attributes?.displayName || latestVersion.attributes?.name;
+
+            console.log(`[NativeFileTree] Selected Latest Version: v${latestVersion.attributes.versionNumber} (ID: ${versionUrn})`);
+
             onFileSelect?.({
                 urn,
                 name: label || `Modelo ${node.id}`,

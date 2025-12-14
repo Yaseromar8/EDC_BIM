@@ -1,222 +1,159 @@
+/* Inherit base styles from SourceFilesPanel.css (imported in BuildPanel via className reuse) */
+
+/* Overrides for specific BuildPanel elements to match Dark Theme */
 .build-panel {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    background: #f8fafc;
+    /* Ensure it doesn't override the dark bg if .source-files-panel is used */
+    background-color: #2b2d30 !important;
+    color: #e0e0e0;
 }
 
 .build-panel-header {
-    padding: 20px;
-    background: white;
-    border-bottom: 2px solid #e2e8f0;
-    flex-shrink: 0;
+    background-color: #2b2d30;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .build-panel-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #1e293b;
-    margin: 0 0 4px 0;
+    color: #f0f0f0;
 }
 
 .build-panel-subtitle {
-    font-size: 13px;
-    color: #64748b;
+    color: #9ca3af;
 }
 
 .build-panel-info {
-    padding: 16px 20px;
-    background: #dbeafe;
-    border-left: 4px solid #3b82f6;
-    margin: 12px;
-    border-radius: 8px;
-    flex-shrink: 0;
+    background: #383a3e;
+    border-left: 3px solid #3b82f6;
+    color: #d1d5db;
+    margin: 10px 14px;
+    padding: 10px;
+    border-radius: 4px;
 }
 
 .build-instruction {
-    margin: 0;
-    font-size: 14px;
-    color: #1e40af;
-    font-weight: 600;
+    color: #9ca3af;
 }
 
-.pins-list-simple {
-    padding: 0 20px;
-    margin-top: 12px;
-    flex-shrink: 0;
-}
-
-.pins-list-simple h4 {
-    font-size: 14px;
+/* Pins List Badges */
+.pin-index-badge {
+    background: #3b82f6;
+    color: white;
+    font-size: 10px;
     font-weight: 700;
-    color: #475569;
-    margin: 0 0 12px 0;
-}
-
-.pins-list-simple ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-.pins-list-simple li {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px;
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    margin-bottom: 8px;
-}
-
-.pin-number {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
-    background: #10b981;
-    color: white;
-    border-radius: 50%;
-    font-weight: 700;
-    font-size: 13px;
-    flex-shrink: 0;
+    margin-right: 8px;
 }
 
-.pins-list-simple li strong {
-    display: block;
-    font-size: 13px;
-    color: #1e293b;
-    margin-bottom: 2px;
+.pin-doc-badge {
+    font-size: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    color: #d1d5db;
 }
 
-.pins-list-simple li small {
-    display: block;
+.selected-indicator {
+    margin-left: auto;
+    color: #3b82f6;
+}
+
+.simple-item.selected {
+    background: rgba(59, 130, 246, 0.15);
+    border-left: 2px solid #3b82f6;
+}
+
+/* Import/Upload Button Area */
+.sfp-import-text-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #e0e0e0;
+    padding: 4px 8px;
+    border-radius: 4px;
     font-size: 11px;
-    color: #64748b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
+.sfp-import-text-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Upload Section */
 .build-upload-section {
-    padding: 16px 20px;
-    background: white;
-    border-top: 2px solid #e2e8f0;
-    margin-top: auto;
-    flex-shrink: 0;
+    padding: 14px;
+    background: #2b2d30;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .build-upload-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 14px 24px;
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    padding: 10px 16px;
+    background: #3b82f6;
+    /* Blue to match accent */
     color: white;
-    border-radius: 10px;
-    font-size: 15px;
-    font-weight: 700;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    transition: all 0.2s;
+    border: none;
     width: 100%;
 }
 
 .build-upload-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+    background: #2563eb;
+}
+
+.build-upload-btn.disabled {
+    background: #4b5563;
+    cursor: not-allowed;
+    color: #9ca3af;
 }
 
 .build-upload-btn input[type="file"] {
     display: none;
 }
 
-.build-upload-error {
-    margin-top: 12px;
-    padding: 12px;
-    background: #fee2e2;
-    color: #991b1b;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
+.build-docs-list-compact {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
-.build-docs-list {
-    padding: 0 20px;
-    margin-top: 16px;
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
+.compact-doc-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #d1d5db;
+    padding: 4px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
 }
 
-.build-docs-list h4 {
-    font-size: 14px;
-    font-weight: 700;
-    color: #475569;
-    margin: 0 0 12px 0;
-    position: sticky;
-    top: 0;
-    background: #f8fafc;
-    padding: 8px 0;
-    z-index: 1;
+.doc-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
 }
 
-.build-docs-list ul {
-    list-style: none;
-    margin: 0;
+/* Simple list override if needed */
+.sfp-item.simple-item {
     padding: 0;
 }
 
-.build-docs-list li {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px;
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    margin-bottom: 8px;
-}
-
-.doc-icon {
-    font-size: 20px;
-    flex-shrink: 0;
-}
-
-.build-docs-list li strong {
-    display: block;
-    font-size: 13px;
-    color: #1e293b;
-    margin-bottom: 2px;
-    word-break: break-word;
-}
-
-.build-docs-list li small {
-    display: block;
-    font-size: 11px;
-    color: #64748b;
-}
-
-/* Mobile Responsiveness */
-@media (max-width: 768px) {
-    .build-panel {
-        width: 100%;
-        height: 100%;
-        position: fixed;
-        top: 0;
-        left: 0;
-        z-index: 2000;
-    }
-
-    .build-upload-btn {
-        padding: 18px;
-        font-size: 18px;
-    }
-
-    .pins-list-simple li,
-    .build-docs-list li {
-        padding: 16px;
-    }
+.sfp-item.simple-item .sfp-item-row {
+    height: auto;
+    padding: 8px 14px;
 }

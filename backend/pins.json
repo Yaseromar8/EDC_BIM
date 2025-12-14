@@ -1,70 +1,11 @@
 [
   {
-    "id": "1763870722126",
-    "lat": -6.781812278777819,
-    "lng": -79.83986899736298,
+    "id": "1765736800629",
     "name": "Punto 1",
-    "documents": [
-      {
-        "id": 1763870742430,
-        "name": "CRONOGRAMA DE INTERFERENCIA.jpeg",
-        "urn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLlQwX19yRE9JVFdtZDM5WEZaV1BDVUE_dmVyc2lvbj0x",
-        "storageId": "urn:adsk.objects:os.object:wip.dm.prod/045d429c-5464-43f1-83bf-67f040d9169c.jpeg",
-        "versionId": "urn:adsk.wipprod:fs.file:vf.T0__rDOITWmd39XFZWPCUA?version=1",
-        "itemId": "urn:adsk.wipprod:dm.lineage:T0__rDOITWmd39XFZWPCUA",
-        "url": "blob:http://localhost:5173/da10b12b-5e7e-47f9-b3bb-02221528c9c6",
-        "status": "processing",
-        "timestamp": "2025-11-23T04:05:42.431Z"
-      }
-    ],
-    "createdAt": "2025-11-23T04:05:22.126868Z"
-  },
-  {
-    "id": "1763871202381",
-    "lat": -6.78119435990354,
-    "lng": -79.83985826852692,
-    "name": "Punto 2",
     "documents": [],
-    "createdAt": "2025-11-23T04:13:22.381828Z"
-  },
-  {
-    "id": "1763874401725",
-    "lat": -6.7811702113771,
-    "lng": -79.84234211366417,
-    "name": "Punto 3",
-    "documents": [
-      {
-        "id": 1763874410486,
-        "name": "logo-anin_02.jpg",
-        "urn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLk5XM08yWktSUnZxdG9oUnk0cGF3S0E_dmVyc2lvbj0x",
-        "storageId": "urn:adsk.objects:os.object:wip.dm.prod/420d6bea-11bc-4869-8741-5ee530b9d32a.jpg",
-        "versionId": "urn:adsk.wipprod:fs.file:vf.NW3O2ZKRRvqtohRy4pawKA?version=1",
-        "itemId": "urn:adsk.wipprod:dm.lineage:NW3O2ZKRRvqtohRy4pawKA",
-        "url": "/api/images/proxy?storageId=urn%3Aadsk.objects%3Aos.object%3Awip.dm.prod%2F420d6bea-11bc-4869-8741-5ee530b9d32a.jpg",
-        "status": "processed",
-        "timestamp": "2025-11-23T05:06:57.314Z"
-      }
-    ],
-    "createdAt": "2025-11-23T05:06:41.741911Z"
-  },
-  {
-    "id": "1764704345755",
-    "lat": -4.586510511987613,
-    "lng": -81.26781472979752,
-    "name": "Punto 4",
-    "documents": [
-      {
-        "id": 1764704356445,
-        "name": "WhatsApp Image 2025-11-28 at 1.28.05 PM.jpeg",
-        "urn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLk5jVDl2RkcwUl9DZmF3WVU2V1V6d0E_dmVyc2lvbj0x",
-        "storageId": "urn:adsk.objects:os.object:wip.dm.prod/6f16b5ef-d3b6-4fed-8b80-498702510075.jpeg",
-        "versionId": "urn:adsk.wipprod:fs.file:vf.NcT9vFG0R_CfawYU6WUzwA?version=1",
-        "itemId": "urn:adsk.wipprod:dm.lineage:NcT9vFG0R_CfawYU6WUzwA",
-        "url": "/api/images/proxy?storageId=urn%3Aadsk.objects%3Aos.object%3Awip.dm.prod%2F6f16b5ef-d3b6-4fed-8b80-498702510075.jpeg",
-        "status": "processed",
-        "timestamp": "2025-12-02T19:39:22.641Z"
-      }
-    ],
-    "createdAt": "2025-12-02T19:39:05.755754Z"
+    "createdAt": "2025-12-14T18:26:40.629191Z",
+    "x": 469454998.083262,
+    "y": 9495965258.300085,
+    "z": 10182.840633975175
   }
 ]

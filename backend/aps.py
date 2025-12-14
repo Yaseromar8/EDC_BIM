@@ -9,7 +9,7 @@ APS_CLIENT_ID = os.getenv('APS_CLIENT_ID')
 APS_CLIENT_SECRET = os.getenv('APS_CLIENT_SECRET')
 APS_AUTH_URL = os.getenv('APS_AUTH_URL', 'https://developer.api.autodesk.com/authentication/v2/token')
 APS_DATA_URL = os.getenv('APS_DATA_URL', 'https://developer.api.autodesk.com')
-APS_SCOPES = ['data:read', 'bucket:read', 'account:read']
+APS_SCOPES = ['data:read', 'data:write', 'data:create', 'bucket:read', 'bucket:create', 'bucket:delete', 'account:read']
 
 # Cache for API responses
 cache = SimpleCache()
@@ -34,6 +34,9 @@ def get_internal_token():
             token = token_data['access_token']
             cache.set('internal_token', token, timeout=token_data['expires_in'])
         except requests.exceptions.RequestException as e:
+            if 'response' in locals() and response is not None:
+                print(f"APS Token Error: {response.status_code} - {response.text}")
+            print(f"APS Token Request Exception: {e}")
             return None, str(e)
     return token, None
 

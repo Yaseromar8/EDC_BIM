@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import JSZip from 'jszip';
+import { kml } from '@tmcw/togeojson';
 import './BuildMapView.css';
 
 const BuildMapView = ({
@@ -393,57 +395,119 @@ const BuildMapView = ({
 
     }, [pins, selectedPinId]);
 
-    // Manage KML Layers
-    const kmlLayersRef = useRef({}); // Store KmlLayer instances by layer ID
+
+
+    // Manage KML/GeoJSON Layers
+    const layersRef = useRef({}); // Store { layerId: { type: 'google'|'local', obj: instance } }
 
     useEffect(() => {
         if (!mapInstanceRef.current || !window.google?.maps) return;
         const map = mapInstanceRef.current;
-        const currentLayers = kmlLayersRef.current;
+        const currentLayers = layersRef.current;
 
-        // If no layers prop provided, do nothing or clear all
         if (!layers) return;
 
-        layers.forEach(layer => {
-            // If layer exists
-            if (currentLayers[layer.id]) {
-                // Update visibility
-                if (currentLayers[layer.id].getMap() !== (layer.visible ? map : null)) {
-                    currentLayers[layer.id].setMap(layer.visible ? map : null);
-                }
-                return;
-            }
+        const processLayers = async () => {
+            for (const layer of layers) {
+                // Check if already loaded
+                if (currentLayers[layer.id]) {
+                    const loaded = currentLayers[layer.id];
+                    // Update visibility
+                    const targetMap = layer.visible ? map : null;
 
-            // Create new layer
-            if (layer.visible && layer.url) {
-                console.log('🗺️ Adding KML Layer:', layer.name, layer.url);
-                const kmlLayer = new window.google.maps.KmlLayer({
-                    url: layer.url,
-                    map: map,
-                    preserveViewport: true, // Don't auto-zoom to KML
-                    suppressInfoWindows: false
-                });
-
-                // Add listener to catch errors (like localhost blocking)
-                window.google.maps.event.addListener(kmlLayer, 'status_changed', () => {
-                    const status = kmlLayer.getStatus();
-                    if (status !== 'OK') {
-                        console.warn(`⚠️ KML Layer failed to load: ${status}. Note: KmlLayer requires a public URL. Localhost URLs will fail.`);
+                    if (loaded.type === 'google') {
+                        if (loaded.obj.getMap() !== targetMap) loaded.obj.setMap(targetMap);
+                    } else if (loaded.type === 'local') {
+                        if (loaded.obj.getMap() !== targetMap) loaded.obj.setMap(targetMap);
                     }
-                });
+                    continue; // Skip initialization
+                }
 
-                currentLayers[layer.id] = kmlLayer;
-            }
-        });
+                // Initialize new layer
+                if (layer.visible && layer.url) {
+                    console.log('🗺️ Processing Layer:', layer.name, layer.url);
 
-        // Cleanup removed layers
-        Object.keys(currentLayers).forEach(id => {
-            const exists = layers.some(l => String(l.id) === id);
-            if (!exists) {
-                currentLayers[id].setMap(null);
-                delete currentLayers[id];
+                    const isLocal = window.location.hostname === 'localhost' ||
+                        window.location.hostname === '127.0.0.1' ||
+                        layer.url.startsWith('/');
+
+                    if (isLocal) {
+                        console.log('🏠 Localhost: Fetching and parsing manually...');
+                        try {
+                            // 1. Fetch file
+                            const response = await fetch(layer.url);
+                            if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+                            const blob = await response.blob();
+
+                            let kmlText = '';
+
+                            // 2. Detect KMZ vs KML
+                            // Simple check: KMZ is binary (zip), KML is text/xml
+                            const isZip = layer.url.toLowerCase().endsWith('.kmz') ||
+                                (blob.type === 'application/vnd.google-earth.kmz') ||
+                                (blob.type === 'application/zip');
+
+                            if (isZip) {
+                                console.log('📦 Unzipping KMZ...');
+                                const zip = await JSZip.loadAsync(blob);
+                                // Find the .kml file inside
+                                const kmlFile = Object.values(zip.files).find(f => f.name.toLowerCase().endsWith('.kml'));
+                                if (!kmlFile) throw new Error('No .kml file found inside KMZ');
+                                kmlText = await kmlFile.async('string');
+                            } else {
+                                console.log('📄 Reading KML text...');
+                                kmlText = await blob.text();
+                            }
+
+                            // 3. Parse KML to GeoJSON
+                            const parser = new DOMParser();
+                            const kmlDom = parser.parseFromString(kmlText, 'text/xml');
+                            const geoJson = kml(kmlDom);
+
+                            // 4. Create Data Layer
+                            const dataLayer = new window.google.maps.Data();
+                            dataLayer.addGeoJson(geoJson);
+
+                            // Basic Styling
+                            dataLayer.setStyle({
+                                fillColor: '#3b82f6',
+                                strokeColor: '#2563eb',
+                                strokeWeight: 2
+                            });
+
+                            dataLayer.setMap(map);
+                            currentLayers[layer.id] = { type: 'local', obj: dataLayer };
+                            console.log('✅ Layer loaded locally:', layer.name);
+
+                        } catch (err) {
+                            console.error('❌ Failed to load local layer:', err);
+                        }
+
+                    } else {
+                        // Public URL -> Native KmlLayer
+                        const kmlLayer = new window.google.maps.KmlLayer({
+                            url: layer.url,
+                            map: map,
+                            preserveViewport: true,
+                            suppressInfoWindows: false
+                        });
+                        currentLayers[layer.id] = { type: 'google', obj: kmlLayer };
+                    }
+                }
             }
-        });
+
+            // Cleanup removed layers
+            Object.keys(currentLayers).forEach(id => {
+                const exists = layers.some(l => String(l.id) === id);
+                if (!exists) {
+                    const loaded = currentLayers[id];
+                    loaded.obj.setMap(null); // Works for both Data and KmlLayer
+                    delete currentLayers[id];
+                }
+            });
+        };
+
+        processLayers();
 
     }, [layers]);
 

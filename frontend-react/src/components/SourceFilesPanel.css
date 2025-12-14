@@ -1,0 +1,271 @@
+.source-files-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    color: #e0e0e0;
+    font-family: 'Inter', sans-serif;
+    background-color: #2b2d30;
+}
+
+.sfp-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sfp-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #f0f0f0;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.sfp-import-btn {
+    background: transparent;
+    border: none;
+    color: #3AA0FF;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.sfp-import-btn:hover {
+    background: rgba(58, 160, 255, 0.1);
+}
+
+.sfp-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sfp-control-btn {
+    background: transparent;
+    border: none;
+    color: #D1D5DB;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+}
+
+.sfp-control-btn:hover {
+    color: white;
+}
+
+.sfp-chevron {
+    display: flex;
+    align-items: center;
+    color: #999;
+}
+
+.sfp-sort-btn {
+    background: transparent;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.sfp-sort-btn:hover {
+    color: white;
+}
+
+.sfp-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding: 4px 0;
+}
+
+.sfp-empty {
+    padding: 20px;
+    text-align: center;
+    font-size: 13px;
+    color: #888;
+}
+
+.sfp-item {
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.sfp-item-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 14px;
+    cursor: pointer;
+    background: transparent;
+    transition: background 0.15s;
+    height: 36px;
+}
+
+.sfp-item-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.sfp-item-row:hover .sfp-actions {
+    opacity: 1;
+    display: flex;
+}
+
+.sfp-list-chevron {
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-right: 4px;
+    cursor: pointer;
+}
+
+.sfp-label {
+    flex: 1;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 8px;
+    color: #e5e7eb;
+}
+
+.sfp-actions {
+    display: none;
+    /* Hidden by default similar to Tandem */
+    align-items: center;
+    gap: 8px;
+    color: #9ca3af;
+    transition: opacity 0.2s;
+}
+
+/* Keep actions visible if menu is actively open for this item */
+.sfp-menu-wrapper:active .sfp-actions,
+.sfp-item-row:focus-within .sfp-actions {
+    display: flex;
+    opacity: 1;
+}
+
+.sfp-action-btn {
+    background: transparent;
+    border: none;
+    color: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 2px;
+}
+
+.sfp-action-btn:hover {
+    color: #fff;
+}
+
+.sfp-action-btn.star:hover {
+    color: #fbbf24;
+}
+
+.sfp-action-btn.eye.off {
+    color: #6b7280;
+}
+
+.sfp-menu-wrapper {
+    position: relative;
+    display: flex;
+}
+
+.sfp-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    width: 160px;
+    background: #383a3e;
+    /* Lighter dark gray for menu */
+    border: none;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    padding: 6px 0;
+}
+
+.sfp-dropdown button {
+    background: transparent;
+    border: none;
+    color: #e0e0e0;
+    padding: 8px 16px;
+    text-align: left;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sfp-dropdown button:hover {
+    background: #4b4d52;
+}
+
+.sfp-menu-separator {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin: 4px 0;
+}
+
+.sfp-menu-icon {
+    display: flex;
+    align-items: center;
+    width: 16px;
+    color: #9ca3af;
+}
+
+/* Expanded Details */
+.sfp-details {
+    padding-left: 38px;
+    /* Indent under label */
+    padding-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sfp-detail-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: #9ca3af;
+}
+
+.file-info {
+    color: #e0e0e0;
+    margin-bottom: 2px;
+}
+
+.sfp-menu-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 99;
+}

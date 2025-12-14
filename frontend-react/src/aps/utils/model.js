@@ -3,15 +3,20 @@
  * @param {Autodesk.Viewing.Model} model El modelo del visor.
  * @returns {Promise<number[]>} Una promesa que se resuelve con un array de IDs de nodos hoja.
  */
-export async function findLeafNodes(model) {
-    const tree = await model.getObjectTree();
-    const leaves = [];
-    tree.enumNodeChildren(tree.getRootId(), (dbId) => {
-        if (tree.getChildCount(dbId) === 0) {
-            leaves.push(dbId);
-        }
-    }, true /* recursive */);
-    return leaves;
+export function findLeafNodes(model) {
+    return new Promise((resolve, reject) => {
+        model.getObjectTree((tree) => {
+            const leaves = [];
+            tree.enumNodeChildren(tree.getRootId(), (dbId) => {
+                if (tree.getChildCount(dbId) === 0) {
+                    leaves.push(dbId);
+                }
+            }, true /* recursive */);
+            resolve(leaves);
+        }, (code, msg) => {
+            reject(new Error(msg));
+        });
+    });
 }
 
 /**

@@ -1,0 +1,164 @@
+import os
+import time
+import json
+import base64
+import traceback
+import requests
+from datetime import datetime
+from flask import Blueprint, request, jsonify
+from werkzeug.utils import secure_filename
+from aps import get_internal_token
+
+digital_twin_bp = Blueprint('digital_twin', __name__)
+
+# Constants
+# Constants
+CONFIG_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "digital_twin_config.json")
+
+def get_project_config_internal():
+    """Reads the config JSON from local file."""
+    if not os.path.exists(CONFIG_FILE_PATH):
+        return {"models": []}
+    try:
+        with open(CONFIG_FILE_PATH, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error reading local config: {e}")
+        return {"models": []}
+
+def save_project_config_internal(config):
+    """Writes the config JSON to local file."""
+    try:
+        with open(CONFIG_FILE_PATH, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"Error saving local config: {e}")
+        return False
+
+def trigger_translation(urn, token):
+    """Triggers SVF translation for a given URN."""
+    url = 'https://developer.api.autodesk.com/modelderivative/v2/designdata/job'
+    headers = {
+        'Authorization': f'Bearer {token}', 
+        'Content-Type': 'application/json',
+        'x-ads-force': 'true'
+    }
+    payload = {
+        'input': {'urn': urn},
+        'output': {
+            'formats': [
+                {'type': 'svf', 'views': ['2d', '3d']}
+            ]
+        }
+    }
+    try:
+        resp = requests.post(url, headers=headers, json=payload)
+        if resp.status_code == 200 or resp.status_code == 201:
+            print(f"[trigger_translation] Success for {urn}")
+            return True
+        else:
+            print(f"[trigger_translation] Failed: {resp.text}")
+            return False
+    except Exception as e:
+        print(f"[trigger_translation] Exception: {e}")
+        return False
+
+# Routes
+@digital_twin_bp.route('/api/config/project', methods=['GET'])
+def get_config_route():
+    config = get_project_config_internal()
+    return jsonify(config)
+
+@digital_twin_bp.route('/api/config/project/add', methods=['POST'])
+def add_model_link():
+    data = request.get_json()
+    if not data or 'urn' not in data:
+        return jsonify({'error': 'Missing URN'}), 400
+        
+    config = get_project_config_internal()
+    
+    existing = next((m for m in config.get('models', []) if m['urn'] == data['urn']), None)
+    if existing:
+        return jsonify(config)
+        
+    new_model = {
+        'id': str(int(time.time() * 1000)),
+        'name': data.get('name', 'Unknown Model'),
+        'urn': data['urn'],
+        'source': 'DOCS',
+        'region': data.get('region', 'US'),
+        'added_at': datetime.utcnow().isoformat()
+    }
+    
+    config.setdefault('models', []).append(new_model)
+    save_project_config_internal(config)
+    
+    return jsonify(config)
+
+@digital_twin_bp.route('/api/config/project/upload', methods=['POST'])
+def upload_local_model():
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file part'}), 400
+        file = request.files['file']
+        label = request.form.get('label') or file.filename
+        
+        token, error = get_internal_token()
+        if error or not token:
+             return jsonify({'error': 'Internal auth failed', 'details': error}), 500
+             
+        bucket_key = get_app_bucket_key()
+        if not ensure_bucket_exists(bucket_key, token):
+             return jsonify({'error': 'Could not create bucket'}), 500
+        
+        object_name = f"{int(time.time())}_{secure_filename(file.filename)}"
+        url = f'https://developer.api.autodesk.com/oss/v2/buckets/{bucket_key}/objects/{object_name}'
+        
+        file_content = file.read()
+        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/octet-stream'}
+        up_resp = requests.put(url, headers=headers, data=file_content)
+        
+        if not up_resp.ok:
+            return jsonify({'error': f"Upload failed: {up_resp.text}"}), 500
+            
+        object_data = up_resp.json()
+        object_id = object_data.get('objectId')
+        
+        urn_bytes = base64.urlsafe_b64encode(object_id.encode('utf-8'))
+        urn = urn_bytes.decode('utf-8').rstrip('=')
+        
+        translation_triggered = trigger_translation(urn, token)
+        
+        config = get_project_config_internal()
+        new_model = {
+            'id': str(int(time.time() * 1000)),
+            'name': label,
+            'urn': urn,
+            'source': 'UPLOAD',
+            'status': 'translating' if translation_triggered else 'error',
+            'object_id': object_id,
+            'added_at': datetime.utcnow().isoformat()
+        }
+        config.setdefault('models', []).append(new_model)
+        save_project_config_internal(config)
+        
+        return jsonify({'config': config, 'model': new_model})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+@digital_twin_bp.route('/api/config/project/remove', methods=['POST'])
+def remove_model_link():
+    data = request.get_json()
+    if not data or 'urn' not in data:
+        return jsonify({'error': 'Missing URN'}), 400
+        
+    config = get_project_config_internal()
+    original_len = len(config.get('models', []))
+    config['models'] = [m for m in config.get('models', []) if m['urn'] != data['urn']]
+    
+    if len(config['models']) < original_len:
+        save_project_config_internal(config)
+        
+    return jsonify(config)

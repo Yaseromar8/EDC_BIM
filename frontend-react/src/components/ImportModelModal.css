@@ -1,0 +1,146 @@
+.import-modal {
+    width: 600px;
+    max-width: 90vw;
+    min-height: 500px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    background: #2a2a2a;
+    /* Match Tandem */
+    color: #fff;
+}
+
+.import-tabs {
+    display: flex;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0 16px;
+    margin-bottom: 0px;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.import-tab {
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    padding: 12px 16px;
+    cursor: pointer;
+    font-weight: 600;
+    border-bottom: 2px solid transparent;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+
+.import-tab.active {
+    color: #3aa0ff;
+    border-bottom-color: #3aa0ff;
+}
+
+.import-tab:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.import-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    gap: 20px;
+    overflow-y: auto;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.form-group label {
+    font-size: 12px;
+    color: #d1d5db;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.required {
+    color: #ef4444;
+}
+
+.modal-input {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.modal-input:focus {
+    border-color: #3aa0ff;
+    outline: none;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.drop-zone {
+    border: 1px dashed rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.1);
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.drop-zone:hover,
+.drop-zone.drag-over {
+    border-color: #3aa0ff;
+    background: rgba(58, 160, 255, 0.05);
+}
+
+.drop-hint {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: #9ca3af;
+    text-align: center;
+}
+
+.upload-icon {
+    font-size: 24px;
+    opacity: 0.7;
+}
+
+.tree-container {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    height: 300px;
+    overflow: auto;
+    background: rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+}
+
+.file-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.file-icon {
+    font-size: 24px;
+}
+
+.file-name {
+    font-weight: 500;
+    color: #fff;
+}
+
+.file-size {
+    font-size: 12px;
+    color: #9ca3af;
+}
