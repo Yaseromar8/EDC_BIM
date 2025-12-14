@@ -1346,13 +1346,42 @@ const Viewer = ({
 
             const globalOffset = viewer.model?.getData()?.globalOffset || { x: 0, y: 0, z: 0 };
 
+            // DEBUG: List registered extensions to confirm availability
+            const registered = Autodesk.Viewing.theExtensionManager.getRegisteredExtensions();
+            console.log('[Viewer] Registered Extensions:', registered);
+
             const pushPinItems = buildPins
                 .filter(pin => pin.x !== undefined && pin.y !== undefined && pin.z !== undefined)
                 .map((pin, index) => {
+                    // ADAPTIVE COORDINATES
                     const isWorldCoord = Math.abs(pin.x) > 1000000 || Math.abs(pin.y) > 1000000;
-                    let finalX = isWorldCoord ? pin.x - globalOffset.x : pin.x;
-                    let finalY = isWorldCoord ? pin.y - globalOffset.y : pin.y;
-                    let finalZ = isWorldCoord ? pin.z - globalOffset.z : pin.z;
+
+                    let finalX, finalY, finalZ;
+
+                    if (isWorldCoord) {
+                        finalX = pin.x - globalOffset.x;
+                        finalY = pin.y - globalOffset.y;
+                        finalZ = pin.z - globalOffset.z;
+                    } else {
+                        finalX = pin.x;
+                        finalY = pin.y;
+                        finalZ = pin.z;
+                    }
+
+                    // --- DEBUG SPHERE (Manual Fallback) ---
+                    // Create a physical sphere in the scene to verify coordinates visually
+                    const geom = new THREE.SphereGeometry(20, 32, 32); // Radius 20
+                    const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                    const sphere = new THREE.Mesh(geom, mat);
+                    sphere.position.set(finalX, finalY, finalZ);
+                    sphere.name = 'debug-pin-' + index;
+
+                    if (!viewer.overlays.hasScene('debug-scene')) {
+                        viewer.overlays.addScene('debug-scene');
+                    }
+                    viewer.overlays.addMesh(sphere, 'debug-scene');
+                    console.log(`[Viewer] DEBUG SPHERE placed at`, { x: finalX, y: finalY, z: finalZ });
+                    // --------------------------------------
 
                     return {
                         id: pin.id || index.toString(),
