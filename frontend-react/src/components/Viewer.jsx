@@ -1334,107 +1334,40 @@ const Viewer = ({
         });
         buildPinMeshesRef.current = {};
 
-        // 3. Render New Pins (MANUAL RENDERING - RELIABLE FALLBACK)
-        // We revert to manual sprites because the Extension loading is inconsistent.
-        // We use the ADAPTIVE MATH to ensure both World and Local pins appear correct.
+        // 3. Render New Pins using Official PushPin Extension
+        // User explicitly requested using the Autodesk.BIM360.Extension.PushPin
 
-        // Dynamic Size Calculation
-        const pinSize = getOptimalPinSize() * 6; // Increased multiplier for better visibility on large maps
-        const globalOffset = viewer.model?.getData()?.globalOffset || { x: 0, y: 0, z: 0 };
-        console.log('[Viewer] Global Offset:', globalOffset);
+        const extensionName = 'Autodesk.BIM360.Extension.PushPin';
 
-        buildPins.forEach((pin, index) => {
-            if (pin.x === undefined || pin.y === undefined || pin.z === undefined) return;
+        viewer.loadExtension(extensionName).then((extension) => {
+            console.log('[Viewer] PushPin Extension loaded:', extension);
+            extension.removeAllItems();
+            extension.showAll();
 
-            // ADAPTIVE COORDINATES
-            const isWorldCoord = Math.abs(pin.x) > 1000000 || Math.abs(pin.y) > 1000000;
+            const globalOffset = viewer.model?.getData()?.globalOffset || { x: 0, y: 0, z: 0 };
 
-            let finalX, finalY, finalZ;
+            const pushPinItems = buildPins
+                .filter(pin => pin.x !== undefined && pin.y !== undefined && pin.z !== undefined)
+                .map((pin, index) => {
+                    const isWorldCoord = Math.abs(pin.x) > 1000000 || Math.abs(pin.y) > 1000000;
+                    let finalX = isWorldCoord ? pin.x - globalOffset.x : pin.x;
+                    let finalY = isWorldCoord ? pin.y - globalOffset.y : pin.y;
+                    let finalZ = isWorldCoord ? pin.z - globalOffset.z : pin.z;
 
-            if (isWorldCoord) {
-                // World -> Local
-                finalX = pin.x - globalOffset.x;
-                finalY = pin.y - globalOffset.y;
-                finalZ = pin.z - globalOffset.z;
-            } else {
-                // Legacy Local
-                finalX = pin.x;
-                finalY = pin.y;
-                finalZ = pin.z;
-            }
+                    return {
+                        id: pin.id || index.toString(),
+                        label: pin.name || `Pin ${index + 1}`,
+                        status: 'open',
+                        position: { x: finalX, y: finalY, z: finalZ },
+                        type: 'issues',
+                        objectId: 0
+                    };
+                });
 
-            // Create Pin Texture (Blue with Index Number)
-            const canvas = document.createElement('canvas');
-            canvas.width = 128;
-            canvas.height = 128;
-            const ctx = canvas.getContext('2d');
-
-            // Draw Pin Shape (Teardrop)
-            ctx.beginPath();
-            ctx.moveTo(64, 120); // Bottom tip
-            ctx.bezierCurveTo(20, 80, 20, 20, 64, 20); // Left curve
-            ctx.bezierCurveTo(108, 20, 108, 80, 64, 120); // Right curve
-            ctx.closePath();
-
-            // Color Logic (Selected = Red, Default = Blue)
-            const isSelected = pin.id === selectedPinId;
-            ctx.fillStyle = isSelected ? '#EF4444' : '#3B82F6';
-            ctx.fill();
-
-            // White Border
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = '#FFFFFF';
-            ctx.stroke();
-
-            // Draw Number
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = 'bold 48px Inter, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            // Show Index + 1
-            const number = typeof pin.name === 'string' && pin.name.includes('Punto')
-                ? pin.name.replace('Punto ', '')
-                : (index + 1).toString();
-
-            ctx.fillText(number, 64, 60);
-
-            const texture = new THREE.CanvasTexture(canvas);
-            const material = new THREE.SpriteMaterial({
-                map: texture,
-                transparent: true,
-                depthTest: false, // Ensure visibility on top
-                depthWrite: false
-            });
-
-            const spriteMesh = new THREE.Sprite(material);
-            spriteMesh.position.set(finalX, finalY, finalZ);
-
-            // Apply Dynamic Scale
-            if (pinSize && !isNaN(pinSize)) {
-                spriteMesh.scale.set(pinSize, pinSize, pinSize);
-                // Important: Lift slightly
-                spriteMesh.position.z += (pinSize * 0.1);
-            } else {
-                console.warn('[Viewer] Warning: pinSize is invalid', pinSize);
-                const fallbackSize = 20; // fallback
-                spriteMesh.scale.set(fallbackSize, fallbackSize, fallbackSize);
-            }
-
-            // Name for Click Detection
-            spriteMesh.name = 'build-' + pin.id;
-
-            // Ensure on top
-            spriteMesh.renderOrder = 999;
-
-            console.log(`[Viewer] Rendering Pin ${number} at Local:`, { x: finalX, y: finalY, z: finalZ }, 'Size:', pinSize);
-
-            console.log(`[Viewer] Rendering Pin ${number} at Local:`, { x: finalX, y: finalY, z: finalZ });
-
-            viewer.impl.addOverlay(overlayName, spriteMesh);
-            buildPinMeshesRef.current[pin.id] = spriteMesh;
+            if (pushPinItems.length > 0) extension.loadItems(pushPinItems);
         });
 
-        viewer.impl.invalidate(true, true, true);
+
 
 
     }, [buildPins, showBuildPins, selectedPinId, viewerReady]);
