@@ -12,6 +12,7 @@ import AddDocumentModal from './components/AddDocumentModal';
 import BuildPanel from './components/BuildPanel';
 import BuildMapView from './components/BuildMapView';
 import NavigationPanel from './components/NavigationPanel';
+import AddAttachmentModal from './components/AddAttachmentModal';
 
 const FilterIcon = () => (
   <svg
@@ -454,8 +455,9 @@ function App() {
   const [buildUploading, setBuildUploading] = useState(false);
   const [buildUploadError, setBuildUploadError] = useState('');
   const [buildPins, setBuildPins] = useState([]);
-  const [showBuildPins, setShowBuildPins] = useState(true);
+  const [showBuildPins, setShowBuildPins] = useState(false);
   const [buildPlacementMode, setBuildPlacementMode] = useState(false);
+  const [buildPinType, setBuildPinType] = useState('data'); // 'data', 'docs', 'avance', 'restriccion'
   const [selectedPinId, setSelectedPinId] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [minimapActive, setMinimapActive] = useState(false);
@@ -467,6 +469,10 @@ function App() {
   const [docs, setDocs] = useState([]); // Array of attached docs (legacy?) (Keeping for safety)
   const [docPins, setDocPins] = useState([]); // Array of { id, x, y, z, docs: [] }
   const [openedDoc, setOpenedDoc] = useState(null); // Currently viewing doc in Split Screen
+
+  // Attachments Modal State
+  const [attachmentModalOpen, setAttachmentModalOpen] = useState(false);
+  const [attachmentPinId, setAttachmentPinId] = useState(null);
 
   const [parallelMode, setParallelMode] = useState(false); // Floating vs Split Default False
 
@@ -664,6 +670,7 @@ function App() {
       id: tempId,
       name: `Punto ${buildPins.length + 1} (Creando...)`,
       ...pinData,
+      type: buildPinType, // Save the type selected in UI
       createdAt: new Date().toISOString(),
       documents: []
     };
@@ -676,7 +683,7 @@ function App() {
       const res = await fetch('/api/pins', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(pinData)
+        body: JSON.stringify({ ...pinData, type: buildPinType }) // Send type to backend
       });
       if (res.ok) {
         const newPin = await res.json();
@@ -697,7 +704,27 @@ function App() {
 
   const handlePinSelect = useCallback((pinId) => {
     setSelectedPinId(pinId);
-  }, []);
+    // Loose compare or stringify to handle potential mismatches (number vs string)
+    const pin = buildPins.find(p => String(p.id) === String(pinId));
+
+    if (pin) {
+      // Always open the sheet/doc context for the pin
+      setActiveSheet({
+        name: pin.name,
+        isPin: true,
+        pinId: pin.id,
+        docs: pin.documents || [] // Pass empty array if no docs
+      });
+      // If docs exist, open the first one. If not, open nothing (empty state will show)
+      if (pin.documents && pin.documents.length > 0) {
+        setOpenedDoc(pin.documents[0]);
+        setParallelMode(false);
+      } else {
+        setOpenedDoc(null);
+        // Keep parallel mode as is or default?
+      }
+    }
+  }, [buildPins]);
 
   const handlePinDelete = useCallback(async (pinId) => {
     try {
@@ -945,7 +972,11 @@ function App() {
         body: JSON.stringify({
           urn: model.urn,
           name: model.name || model.label,
-          region: 'US' // Assume US for now
+          region: 'US', // Assume US for now
+          // Metadata for Update support
+          projectId: model.projectId,
+          itemId: model.itemId,
+          versionId: model.versionId
         })
       });
       if (res.ok) {
@@ -956,6 +987,31 @@ function App() {
       }
     } catch (e) {
       console.error("Error linking model:", e);
+    }
+  }, []);
+
+  const handleModelUpdate = useCallback(async (urn) => {
+    try {
+      const res = await fetch('/api/config/project/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urn })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.updated && data.config?.models) {
+          alert(`Model updated to latest version!`);
+          setModels(data.config.models.map(m => ({ ...m, label: m.name })));
+        } else if (data.message) {
+          alert(data.message);
+        }
+      } else {
+        const err = await res.json();
+        alert(`Update failed: ${err.error || 'Unknown error'}`);
+      }
+    } catch (e) {
+      console.error("Error updating model:", e);
+      alert("Error updating model. See console.");
     }
   }, []);
 
@@ -1429,6 +1485,63 @@ function App() {
     }
   };
 
+  // --- ATTACHMENT MODAL HANDLERS ---
+  const handleOpenAttachmentModal = (pinId) => {
+    setAttachmentPinId(pinId);
+    setAttachmentModalOpen(true);
+  };
+
+  const handleAttachment = async (data) => {
+    if (!attachmentPinId) return;
+
+    let newDoc = null;
+
+    if (data.type === 'local') {
+      await handleBuildFileUpload(data.file, attachmentPinId);
+    } else if (data.type === 'acc') {
+      const { file } = data;
+      const tempId = 'acc-' + Date.now();
+      newDoc = {
+        id: tempId,
+        name: file.name,
+        urn: file.urn,
+        versionId: file.versionId,
+        itemId: file.itemId,
+        source: 'acc',
+        status: 'ready',
+        timestamp: new Date().toISOString()
+      };
+
+      setBuildPins(prevPins => prevPins.map(pin => {
+        if (pin.id === attachmentPinId) {
+          return { ...pin, documents: [...(pin.documents || []), newDoc] };
+        }
+        return pin;
+      }));
+
+      try {
+        const pin = buildPins.find(p => p.id === attachmentPinId);
+        if (pin) {
+          const currentDocs = pin.documents || [];
+          const updatedPin = { ...pin, documents: [...currentDocs, newDoc] };
+
+          const res = await fetch(`/api/pins/${pin.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedPin)
+          });
+
+          if (res.ok) {
+            const savedPin = await res.json();
+            setBuildPins(prev => prev.map(p => p.id === savedPin.id ? savedPin : p));
+          }
+        }
+      } catch (err) {
+        console.error("Error linking ACC doc:", err);
+      }
+    }
+  };
+
 
 
   // Calculate available properties dynamically from ALL LOADED properties (stable list for configuration)
@@ -1714,6 +1827,7 @@ function App() {
               modelViews={modelViews}
               activeViewableGuids={activeViewableGuids}
               onLoadView={handleLoadSpecificView}
+              onUpdate={handleModelUpdate}
             />
           )}
           {activePanel === 'docs' && (
@@ -1750,7 +1864,15 @@ function App() {
               onTogglePins={() => setShowBuildPins(prev => !prev)}
 
               placementMode={buildPlacementMode}
-              onTogglePlacement={() => setBuildPlacementMode(prev => !prev)}
+              onTogglePlacement={(type) => {
+                // Ensure we set type FIRST, then toggle mode
+                // Also, if clicking the button while active, we might want to just ensure type is set if we are enabling.
+                // If disabling, type doesn't matter.
+                if (type) setBuildPinType(type);
+                setBuildPlacementMode(prev => !prev);
+              }}
+              onPinDelete={handlePinDelete}
+              onPinUpload={handleOpenAttachmentModal}
             />
           )}
           {activePanel === 'navigation' && (
@@ -1800,11 +1922,13 @@ function App() {
                 // BUILD MODE INTEGRATION (Infraworks)
                 buildMode={activePanel === 'build'}
                 buildPlacementMode={buildPlacementMode}
+                buildPinType={buildPinType}
                 buildPins={buildPins}
                 showBuildPins={showBuildPins} // Pass visibility state
                 selectedBuildPinId={selectedPinId}
                 onBuildPinCreate={handlePinCreated}
                 onBuildPinSelect={handlePinSelect}
+                onBuildPinUpdate={handlePinUpdate}
               // onBuildPinDelete={handlePinDelete} // If needed later
               />
             </div>
@@ -1869,6 +1993,10 @@ function App() {
                           <iframe src={openedDoc.url} style={{ width: '100%', height: '100%', border: 'none' }} title="Doc Viewer" />
                         ) : openedDoc.type === 'image' ? (
                           <img src={openedDoc.url} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} alt="Doc" />
+                        ) : (openedDoc.source === 'acc' || openedDoc.urn) ? (
+                          <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                            <SecondaryViewer urn={openedDoc.urn} />
+                          </div>
                         ) : (
                           <div style={{ textAlign: 'center', padding: 20 }}>
                             <div style={{ fontSize: '3rem' }}>📄</div>
@@ -1979,6 +2107,12 @@ function App() {
             addDocuments(items);
             setDocumentsModalOpen(false);
           }}
+        />
+
+        <AddAttachmentModal
+          open={attachmentModalOpen}
+          onClose={() => setAttachmentModalOpen(false)}
+          onAttach={handleAttachment}
         />
 
         <FilterConfigurator

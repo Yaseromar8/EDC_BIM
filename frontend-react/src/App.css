@@ -81,7 +81,9 @@ body,
   min-width: 300px;
   max-width: 450px;
   height: 100%;
-  background-color: rgba(28, 32, 39, 0.88);
+  background-color: rgba(28, 32, 39, 0.70);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   color: #f0f0f0;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   overflow-y: auto;
@@ -1392,4 +1394,182 @@ body,
   border: 1px solid rgba(255, 255, 255, 0.2);
   flex-shrink: 0;
   background: transparent;
+}
+
+/* --- Custom PushPin Colors Mapped to Statuses --- */
+
+/* RESTRICCION (Mapped to 'open') -> FORCE NATIVE ORANGE */
+/* User requested: If it's yellow/orange in viewer, make it yellow in panel. Removing Red override. */
+div[class*="status-open"],
+.group-status-open {
+  /* No filter needed, native is Orange */
+  opacity: 1 !important;
+}
+
+/* AVANCE (Mapped to 'closed') -> FORCE GREEN and FIX TRANSPARENCY */
+/* AVANCE (Mapped to 'closed') -> FORCE NATIVE GREY */
+div[class*="status-closed"],
+.group-status-closed {
+  /* No filter needed, native is Grey */
+  opacity: 1 !important;
+  /* Fix user reported transparency */
+}
+
+/* GLOBAL PUSHPIN VISIBILITY FIX - AGGRESSIVE */
+/* Forces all pins AND THEIR CHILDREN to be opaque, defeating JS occlusion/fading */
+div[class*="status-"],
+div[class*="status-"] *,
+div[class*="bim360-visually-hidden"],
+div[class*="bim360-visual-style-group"],
+div[class*="bim360-visual-style-group"] * {
+  opacity: 1 !important;
+  visibility: visible !important;
+  z-index: 999 !important;
+  /* Force on top */
+  background-blend-mode: normal !important;
+  transition: none !important;
+  /* Prevent fading animations */
+}
+
+/* DOCS (Mapped to 'answered') -> NATIVE BLUE */
+div[class*="status-answered"],
+.group-status-answered {
+  filter: none !important;
+}
+
+/* =========================================
+   RESPONSIVE DESIGN (TABLET & MOBILE)
+   ========================================= */
+
+@media (max-width: 768px) {
+
+  /* 1. Layout Container */
+  .app-container {
+    flex-direction: column-reverse;
+    /* Visual ordering if flex, but mainly affects children flow if relative */
+  }
+
+  /* 2. Navigation Rail -> Bottom Bar */
+  .app-left-rail {
+    width: 100%;
+    height: 60px;
+    bottom: 0;
+    top: auto;
+    left: 0;
+    right: 0;
+    flex-direction: row;
+    /* Horizontal icons */
+    justify-content: space-evenly;
+    border-right: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: #1c2027;
+    z-index: 2000;
+    /* High priority */
+  }
+
+  .rail-button {
+    width: auto;
+    height: 100%;
+    flex: 1;
+    border-radius: 0;
+    gap: 4px;
+    /* Tighter text */
+  }
+
+  .rail-label {
+    font-size: 10px;
+    /* Smaller text */
+  }
+
+  .rail-icon {
+    font-size: 20px;
+    /* Larger touch targets */
+  }
+
+  /* 3. Sidebar Panels (Build, Files, Docs) -> Full Screen Overlay */
+  .app-sidebar {
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    height: calc(100% - 60px);
+    /* Subtract rail height */
+    top: 0;
+    left: 0;
+    border-right: none;
+    background: rgba(20, 24, 33, 0.98);
+    /* Almost solid */
+    z-index: 1005;
+    /* Above viewer, below modal */
+  }
+
+  /* Keep standard slide transition, just ensures full coverage */
+
+  /* 4. Viewer Area */
+  .app-viewer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: calc(100% - 60px);
+  }
+
+  /* 5. Mini Window (Documents) -> Adaptive */
+  /* FLOATING MODE: Full width, bottom aligned or centered */
+  .split-doc {
+    width: 96% !important;
+    left: 2% !important;
+    right: 2% !important;
+    top: 50px !important;
+    /* Below header if any */
+    height: 50% !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  /* PARALLEL MODE: Top/Bottom Split instead of Left/Right */
+  .split-doc.parallel {
+    position: relative !important;
+    width: 100% !important;
+    height: 50% !important;
+    top: auto !important;
+    left: auto !important;
+    border-left: none;
+    border-top: 4px solid #000;
+    /* Separator */
+  }
+
+  /* Force container to stack in parallel/mobile */
+  .split-view-container {
+    flex-direction: column !important;
+  }
+
+  .split-3d {
+    width: 100% !important;
+    height: 50% !important;
+    /* In parallel mode */
+    flex: 1;
+    /* In floating mode */
+  }
+
+  /* 6. Modals */
+  .modal-panel,
+  .filters-config-panel {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    border: none;
+  }
+
+  .modal-overlay {
+    padding: 0;
+    /* Full screen modals */
+    align-items: flex-end;
+    /* Slide up feel? Or center is fine */
+  }
+
+  .build-preview {
+    aspect-ratio: 16 / 9;
+    /* Wider for mobile landscape/portrait fit */
+  }
 }

@@ -1023,77 +1023,69 @@ const Viewer = ({
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
 
-        const handleCanvasInteraction = (event) => {
-            // Priority: Build Placement Mode (Intercept BEFORE Viewer Selection)
-            if (buildPlacementMode) {
-                // Stop the viewer from doing ANYTHING (Selection, Navigation starts, etc) on click/up
-                // We might allow mousedown for navigation if we want, but if "Selection" happens on mousedown, we must stop it.
-                // Usually Selection is on MouseUp (Click). 
+        // --- BUILD PIN CREATION (Official Workflow) ---
+        // This takes precedence over other interactions when active
+        if (buildPlacementMode) {
+            const extension = viewer.getExtension('Autodesk.BIM360.Extension.PushPin');
+            if (extension) {
+                // console.log('[Viewer] Starting PushPin Creation Mode via Extension...');
 
-                // We want to allow Navigation (Orbit/Pan) but prevent Selection.
-                // Navigation usually requires MouseDown. Selection usually MouseUp/Click.
+                // 1. Activate Extension Tool
+                // This handles cursor and click sequence internally
+                extension.startCreateItem({
+                    label: 'New Issue',
+                    status: 'open',
+                    type: 'issues',
+                    position: { x: 0, y: 0, z: 0 } // Placeholder, user will click
+                });
 
-                // If we stop ALL propagation, we break navigation (Orbit). 
-                // We only want to stop "Selection".
+                // 2. Listen for Creation Event
+                const handlePushPinCreated = (event) => {
+                    // event.value contains: { itemData: { position, objectId, ... } }
+                    const newItem = event.value?.itemData;
 
-                // The Viewer's Selection Tool usually runs late.
-                // If we want to blocking Selection but allow Navigation:
-                // It is tricky with raw events. 
-
-                // Alternative: Use viewer.selection.select(null) immediately after? 
-                // Or better: temporary disable selection tool.
-
-                // But specifically for "Click" (which creates the pin), we definitely want to consume it.
-                if (event.type === 'click') {
-                    event.stopPropagation();
-                    event.preventDefault();
-
-                    // Get canvas bounds
-                    const rect = viewer.canvas.getBoundingClientRect();
-                    const canvasX = event.clientX - rect.left;
-                    const canvasY = event.clientY - rect.top;
-
-                    const result = viewer.impl.hitTest(canvasX, canvasY, true);
-
-                    if (result && onBuildPinCreate) {
-                        console.log('[Viewer] CREATING PIN via Interception. Local:', result.intersectPoint);
-
-                        // GLOBAL OFFSET CORRECTION (Local -> World)
-                        // Save as World Coordinates to match Issues API standards
+                    if (newItem && onBuildPinCreate) {
+                        // Get Global Offset to convert Local -> Global
                         const globalOffset = viewer.model?.getData()?.globalOffset || { x: 0, y: 0, z: 0 };
-                        console.log('[Viewer] Adding Offset for Save:', globalOffset);
 
+                        // Convert Local (Viewer) to World (Global)
                         const worldPoint = {
-                            x: result.intersectPoint.x + globalOffset.x,
-                            y: result.intersectPoint.y + globalOffset.y,
-                            z: result.intersectPoint.z + globalOffset.z,
+                            x: newItem.position.x + globalOffset.x,
+                            y: newItem.position.y + globalOffset.y,
+                            z: newItem.position.z + globalOffset.z,
+                            objectId: newItem.objectId,
+                            viewerState: viewer.getState({ viewport: true }),
+                            seedUrn: viewer.model?.getData()?.urn
                         };
 
-                        // Clear any accidental selection
-                        viewer.clearSelection();
-
+                        // console.log('[Viewer] PushPin Created via Extension:', worldPoint);
                         onBuildPinCreate(worldPoint);
                     }
-                    return;
+                };
+
+                // The extension fires 'pushpin.created' on its manager
+                if (extension.pushPinManager) {
+                    extension.pushPinManager.addEventListener('pushpin.created', handlePushPinCreated);
                 }
 
-                // For MouseDown/Up, if we just want to prevent selection but allow orbit... 
-                // If we stop prop on mousedown, orbit breaks.
-                // Let's rely on 'click' interception for now, but ensure we clear selection.
-                // And maybe intercept 'mouseup' if 'click' isn't enough.
-                if (event.type === 'mouseup') {
-                    // Sometimes viewer selects on mouseup. 
-                    // Let's risk stopping it here if it's a clean click (not a drag).
-                    // But dealing with "drag vs click" manually is hard.
-                    // A safe bet: Just clear selection immediately if one happened.
-                }
-                return;
+                // Cleanup function when mode ends
+                return () => {
+                    if (extension.pushPinManager) {
+                        extension.pushPinManager.removeEventListener('pushpin.created', handlePushPinCreated);
+                    }
+                    extension.endCreateItem();
+                };
+            } else {
+                console.warn('[Viewer] PushPin extension not found during creation attempt.');
             }
+            return; // Exit effect if in build mode
+        }
 
-            // Normal Interaction (Sprites, etc) - Only process on CLICK
+
+        // --- STANDARD INTERACTION (Sprites, Docs, etc) ---
+        const handleCanvasInteraction = (event) => {
+            // Only process on CLICK
             if (event.type !== 'click') return;
-
-
             if (placementMode || docPlacementMode) return;
 
             // Get canvas bounds
@@ -1135,21 +1127,14 @@ const Viewer = ({
 
         const container = viewer.container;
         if (container) {
-            // Intercept CLICK to handle Pin Creation and stop Viewer Selection
             container.addEventListener('click', handleCanvasInteraction, true);
-
-            // We don't block mousedown/up globally to preserve Orbit/Pan, 
-            // but we rely on click capture + clearSelection to fix the UX.
-
-            if (buildMode) container.style.cursor = 'copy';
         }
         return () => {
             if (container) {
                 container.removeEventListener('click', handleCanvasInteraction, true);
-                container.style.cursor = 'default';
             }
         };
-    }, [viewerReady, placementMode, docPlacementMode, buildMode, onSpriteSelect, onDocPinSelect, onBuildPinSelect, onBuildPinCreate]);
+    }, [viewerReady, placementMode, docPlacementMode, buildPlacementMode, buildMode, onSpriteSelect, onDocPinSelect, onBuildPinSelect, onBuildPinCreate]);
 
     // Handle Clicks on Doc Pins
     useEffect(() => {
@@ -1313,93 +1298,105 @@ const Viewer = ({
         viewer.impl.invalidate(true, true, true);
     }, [sprites, showSprites, activeSpriteId, viewerReady]);
 
-    // RENDER BUILD PINS
+    // RENDER BUILD PINS (DataViz Extension Logic)
     useEffect(() => {
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
 
-        const overlayName = 'build-pins-scene';
-        const overlayManager = viewer.impl?.overlayManager;
-
-        if (!overlayManager) return;
-
-        // 1. Setup Overlay Scene
-        if (!overlayManager.hasScene(overlayName)) {
-            viewer.impl.createOverlayScene(overlayName);
-        }
-
-        // 2. Clear Existing Meshes (Manual cleanup if we were still using manual sprites)
-        Object.values(buildPinMeshesRef.current).forEach(mesh => {
-            viewer.impl.removeOverlay(overlayName, mesh);
-        });
-        buildPinMeshesRef.current = {};
-
-        // 3. Render New Pins using Official PushPin Extension
-        // User explicitly requested using the Autodesk.BIM360.Extension.PushPin
-
         const extensionName = 'Autodesk.BIM360.Extension.PushPin';
 
+        // Load extension and render items
         viewer.loadExtension(extensionName).then((extension) => {
-            console.log('[Viewer] PushPin Extension loaded:', extension);
-            extension.removeAllItems();
-            extension.showAll();
+            // console.log('[Viewer] PushPin Extension Loaded. Rendering Pins:', buildPins.length);
 
+            // 1. Clear existing
+            extension.removeAllItems();
+
+            if (!showBuildPins) return;
+
+            // 2. Prepare Data
             const globalOffset = viewer.model?.getData()?.globalOffset || { x: 0, y: 0, z: 0 };
 
-            // DEBUG: List registered extensions to confirm availability
-            const registered = Autodesk.Viewing.theExtensionManager.getRegisteredExtensions();
-            console.log('[Viewer] Registered Extensions:', registered);
-
             const pushPinItems = buildPins
-                .filter(pin => pin.x !== undefined && pin.y !== undefined && pin.z !== undefined)
+                .filter(pin => pin.x !== undefined)
                 .map((pin, index) => {
-                    // ADAPTIVE COORDINATES
-                    const isWorldCoord = Math.abs(pin.x) > 1000000 || Math.abs(pin.y) > 1000000;
+                    // Check if pin is World Coordinate (Large value heuristic)
+                    // If > 10,000, assumes it's world coordinate and subtracts globalOffset
+                    const isWorldCoord = Math.abs(pin.x) > 10000;
 
-                    let finalX, finalY, finalZ;
-
-                    if (isWorldCoord) {
-                        finalX = pin.x - globalOffset.x;
-                        finalY = pin.y - globalOffset.y;
-                        finalZ = pin.z - globalOffset.z;
-                    } else {
-                        finalX = pin.x;
-                        finalY = pin.y;
-                        finalZ = pin.z;
-                    }
-
-                    // --- DEBUG SPHERE (Manual Fallback) ---
-                    // Create a physical sphere in the scene to verify coordinates visually
-                    const geom = new THREE.SphereGeometry(20, 32, 32); // Radius 20
-                    const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-                    const sphere = new THREE.Mesh(geom, mat);
-                    sphere.position.set(finalX, finalY, finalZ);
-                    sphere.name = 'debug-pin-' + index;
-
-                    if (!viewer.overlays.hasScene('debug-scene')) {
-                        viewer.overlays.addScene('debug-scene');
-                    }
-                    viewer.overlays.addMesh(sphere, 'debug-scene');
-                    console.log(`[Viewer] DEBUG SPHERE placed at`, { x: finalX, y: finalY, z: finalZ });
-                    // --------------------------------------
+                    let finalX = isWorldCoord ? pin.x - globalOffset.x : pin.x;
+                    let finalY = isWorldCoord ? pin.y - globalOffset.y : pin.y;
+                    let finalZ = isWorldCoord ? pin.z - globalOffset.z : pin.z;
 
                     return {
                         id: pin.id || index.toString(),
                         label: pin.name || `Pin ${index + 1}`,
-                        status: 'open',
+                        // Map our custom types to 'status' which controls color in standard extension
+                        // STATUS controls color. 
+                        // Mappings based on BIM360 defaults: open(orange), answered(blue), closed(grey), void(black)
+                        // However, user reports might imply different theme. Testing robust mapping:
+                        // STATUS MAPPING for Visual Differentiation:
+                        // We map our types to standard BIM360 statuses to leverage existing icon logic.
+                        // RESTRICCION -> 'open' (Orange default) -> Will override to RED in CSS
+                        // DOCS        -> 'answered' (Blue default) -> Will keep BLUE
+                        // AVANCE      -> 'closed' (Grey default) -> Will override to GREEN in CSS
+                        status: pin.status || (() => {
+                            const t = (pin.type || '').toLowerCase();
+                            if (t === 'restriccion') return 'open';
+                            if (t === 'docs') return 'answered';
+                            if (t === 'avance') return 'closed';
+                            return 'open'; // Default
+                        })(),
                         position: { x: finalX, y: finalY, z: finalZ },
-                        type: 'issues',
-                        objectId: 0
+                        type: 'issues', // Ensure visibility
+                        objectId: pin.objectId || 0,
+                        seedUrn: pin.seedUrn || viewer.model?.getData()?.urn // Pass seedUrn to link to specific model
+                        // viewerState: pin.viewerState // Optional: restore camera state on click if saved
                     };
                 });
 
-            if (pushPinItems.length > 0) extension.loadItems(pushPinItems);
+            // 3. Load
+            // 3. Load
+            if (pushPinItems.length > 0) {
+                extension.loadItems(pushPinItems);
+            }
+
+            // 4. Handle Selection
+            const handlePinSelect = (event) => {
+                console.log('[Viewer] PushPin Event Fired:', event.type, event);
+                const selectedItems = event.data;
+                if (selectedItems && selectedItems.length > 0) {
+                    const pinId = selectedItems[0].id;
+                    console.log('[Viewer] Pin Selected ID:', pinId);
+                    if (onBuildPinSelect) {
+                        onBuildPinSelect(pinId);
+                    }
+                }
+            };
+
+            // Attempt to resolve known constants or use known strings
+            // The casing 'pushPin.selected' is critical if the constant is missing.
+            const eventsToListen = [
+                'pushPin.selected',
+                'bim360.pushPin.selected',
+                Autodesk?.BIM360?.Extension?.PushPin?.EVENT_ITEM_SELECT
+            ];
+
+            // Filter unique and defined
+            const uniqueEvents = [...new Set(eventsToListen.filter(Boolean))];
+
+            console.log('[Viewer] Listening for PushPin events:', uniqueEvents);
+
+            uniqueEvents.forEach(evt => {
+                viewer.removeEventListener(evt, handlePinSelect);
+                viewer.addEventListener(evt, handlePinSelect);
+            });
+
+        }).catch(err => {
+            console.error('[Viewer] Failed to load PushPin extension:', err);
         });
 
-
-
-
-    }, [buildPins, showBuildPins, selectedPinId, viewerReady]);
+    }, [buildPins, showBuildPins, viewerReady, onBuildPinSelect]);
 
     // ZOOM TO SELECTED PIN
     // ZOOM TO SELECTED PIN
@@ -1442,30 +1439,115 @@ const Viewer = ({
             viewer.navigation.setPivotPoint(target);
         }
 
-        // 2. Move Camera
+        // 2. Move Camera - DISABLED to prevent zooming out/moving away
+        // User requested that the view stays put when selecting.
+        /*
         const camera = viewer.impl.camera;
         const currentPos = camera.position.clone();
-
-        // Direction from target to current camera (preserve orientation roughly)
         let direction = currentPos.clone().sub(target).normalize();
-
-        // Handle case where camera is exactly at target (unlikely)
-        if (direction.lengthSq() < 0.0001) {
-            direction = new THREE.Vector3(0, 0, 1);
-        }
-
+        if (direction.lengthSq() < 0.0001) direction = new THREE.Vector3(0, 0, 1);
         const newPos = target.clone().add(direction.multiplyScalar(standoffDist));
-
-        console.log('[Viewer] Moving Camera to:', newPos, 'Target:', target);
-
-        // Apply View
         viewer.navigation.setPosition(newPos);
-        viewer.navigation.setTarget(target);
+        */
+
+        // Just look at target? Or do nothing?
+        // Doing nothing maintains current view which is what "MANTENGA AHI" likely implies.
+        // We only needed to target it for pivot rotation.
+
+        // viewer.navigation.setTarget(target); // This might shift view slightly if target is not center. 
+        // Let's rely on setPivotPoint for rotation center, but not change camera position/target abruptly.
 
         // Force update
         viewer.impl.invalidate(true, true, true);
 
     }, [selectedPinId, viewerReady, buildPins]);
+
+    useEffect(() => {
+        const viewer = viewerRef.current;
+        if (!viewer || !viewerReady) return;
+
+        // Manual Hit Test for Build Pins (Fallback for extension events/HTML labels)
+        const handleCanvasClick = (event) => {
+            // If we are in placement mode, do not select pins
+            if (placementMode) return;
+
+            // 1. Check if we clicked on an HTML Label directly (if accessible)
+            // Sometimes labels consume events. If we catch it in capture phase, we can check target.
+            // But manual distance check is more reliable for 3D/2D mix.
+
+            const rect = viewer.container.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const clickY = event.clientY - rect.top;
+
+            const globalOffset = viewer.model?.getData()?.globalOffset || { x: 0, y: 0, z: 0 };
+            let closestPin = null;
+            let minDistance = 999; // Start large to allow box-based hits to register
+
+            buildPins.forEach(pin => {
+                if (!showBuildPins) return;
+
+                // Consistency with Rendering Logic
+                const isWorldCoord = Math.abs(pin.x) > 10000;
+                const point = new THREE.Vector3(pin.x, pin.y, pin.z);
+
+                if (isWorldCoord) {
+                    point.sub(globalOffset);
+                }
+
+                // Project to screen
+                const screenPoint = viewer.worldToClient(point);
+
+                if (screenPoint) {
+                    // Manual Hit Logic:
+                    // PushPins often render visually "above" the anchor point (stem + head).
+                    // Or they might be centered.
+                    // To cover all cases (and user's report of "clicking outside works but on it doesn't"),
+                    // we'll define a generous "Hit Box" relative to the anchor.
+
+                    // Coordinates: Y increases downwards.
+                    // screenPoint is the anchor (3D point projected).
+                    // We allow clicks:
+                    // - Horizontal: +/- 40px (Wide enough for label or loose clicking)
+                    // - Vertical: 10px below anchor (tolerance) to 80px above anchor (head of pin)
+
+                    const dx = Math.abs(screenPoint.x - clickX);
+                    const dy = screenPoint.y - clickY; // Positive if click is ABOVE anchor
+
+                    // Check Horizontal
+                    const isHorizontallyClose = dx < 40;
+
+                    // Check Vertical (Allow from -10px (below) to +80px (above))
+                    const isVerticallyClose = dy > -10 && dy < 80;
+
+                    if (isHorizontallyClose && isVerticallyClose) {
+                        // Use a "score" to find the closest one if multiple overlap
+                        // Score = simple euclidean distance for sorting, but validation was box-based
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+
+                        if (dist < minDistance) {
+                            minDistance = dist;
+                            closestPin = pin;
+                        }
+                    }
+                }
+            });
+
+            if (closestPin) {
+                console.log('[Viewer] Manual Hit Detected on Pin:', closestPin.name, closestPin.id);
+                // Stop other handlers if we found a pin?
+                // event.stopPropagation(); // Maybe? risky if it blocks other viewer interactions.
+                onBuildPinSelect?.(closestPin.id);
+            }
+        };
+
+        // Use Capture Phase to ensure we get the event even if the PushPin label stops propagation
+        viewer.container.addEventListener('click', handleCanvasClick, true);
+
+        return () => {
+            viewer.container.removeEventListener('click', handleCanvasClick, true);
+        };
+    }, [buildPins, showBuildPins, viewerReady, placementMode, onBuildPinSelect]);
+
 
     useEffect(() => {
         const viewer = viewerRef.current;

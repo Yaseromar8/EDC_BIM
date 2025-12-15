@@ -88,6 +88,9 @@ def add_model_link():
         'urn': data['urn'],
         'source': 'DOCS',
         'region': data.get('region', 'US'),
+        'projectId': data.get('projectId'),
+        'itemId': data.get('itemId'),
+        'versionId': data.get('versionId'),
         'added_at': datetime.utcnow().isoformat()
     }
     
@@ -95,6 +98,73 @@ def add_model_link():
     save_project_config_internal(config)
     
     return jsonify(config)
+
+@digital_twin_bp.route('/api/config/project/update', methods=['POST'])
+def update_model_link():
+    data = request.get_json()
+    if not data or 'urn' not in data:
+        return jsonify({'error': 'Missing URN'}), 400
+    
+    config = get_project_config_internal()
+    model = next((m for m in config.get('models', []) if m['urn'] == data['urn']), None)
+    
+    if not model:
+        return jsonify({'error': 'Model not found'}), 404
+        
+    if not model.get('projectId') or not model.get('itemId'):
+        # Just reload if we can't check for updates
+        return jsonify(config) # Or return specific status to frontend
+        
+    # Check for new version from APS
+    try:
+        token, error = get_internal_token()
+        if error or not token:
+             return jsonify({'error': 'Internal auth failed', 'details': error}), 500
+             
+        project_id = model['projectId']
+        item_id = model['itemId']
+        
+        # Get Item Tip (Latest Version)
+        url = f"https://developer.api.autodesk.com/data/v1/projects/{project_id}/items/{item_id}"
+        headers = {'Authorization': f'Bearer {token}'}
+        
+        resp = requests.get(url, headers=headers)
+        if not resp.ok:
+            return jsonify({'error': 'Failed to fetch item details from APS'}), 502
+            
+        item_data = resp.json()
+        
+        latest_version_id = item_data['data']['relationships']['tip']['data']['id']
+        current_version_id = model.get('versionId')
+        
+        if latest_version_id != current_version_id:
+            # New version detected!
+            print(f"Updating model {model['name']} from {current_version_id} to {latest_version_id}")
+            
+            # Calculate new URN
+            # Standard URN is base64 encoded version_id (no padding)
+            urn_bytes = base64.urlsafe_b64encode(latest_version_id.encode('utf-8'))
+            new_urn = urn_bytes.decode('utf-8').rstrip('=')
+            
+            # Update Model Record
+            model['urn'] = new_urn
+            model['versionId'] = latest_version_id
+            
+            # Optional: Update Name if changed?
+            # We can fetch version details if we want the new name:
+            # v_url = f"https://developer.api.autodesk.com/data/v1/projects/{project_id}/versions/{latest_version_id}"
+            # v_resp = requests.get(v_url, headers=headers)
+            # if v_resp.ok:
+            #    model['name'] = v_resp.json()['data']['attributes']['name'] 
+            
+            save_project_config_internal(config)
+            return jsonify({'updated': True, 'config': config, 'newUrn': new_urn})
+        else:
+            return jsonify({'updated': False, 'message': 'Already latest version', 'config': config})
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 @digital_twin_bp.route('/api/config/project/upload', methods=['POST'])
 def upload_local_model():

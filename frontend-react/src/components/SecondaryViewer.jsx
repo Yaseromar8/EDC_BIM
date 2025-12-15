@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef } from 'react';
 
-const SecondaryViewer = ({ document, node }) => {
+const SecondaryViewer = ({ document, node, urn }) => {
     const containerRef = useRef(null);
     const viewerRef = useRef(null);
 
@@ -42,25 +42,40 @@ const SecondaryViewer = ({ document, node }) => {
     // Load the Document/Node when props change
     useEffect(() => {
         const viewer = viewerRef.current;
-        if (viewer && document && node) {
+        if (!viewer) return;
+
+        // CASE 1: Document + Node passed directly
+        if (document && node) {
             console.log('[SecondaryViewer] Loading node:', node.data.name);
-
-            // Unload previous model if any? 
-            // loadDocumentNode adds to the scene if aggregated view is supported, 
-            // but for sheets usually replaces.
-            // Explicit unload is safer for a "Single Sheet View"
-            if (viewer.model) {
-                viewer.unloadModel(viewer.model);
-            }
-
-            viewer.loadDocumentNode(document, node).then(model => {
-                console.log('[SecondaryViewer] Sheet loaded');
-                // Fit to view
-                // viewer.autocam.shotParams.destinationPercent = 1;
-                // viewer.fitToView();
+            if (viewer.model) viewer.unloadModel(viewer.model);
+            viewer.loadDocumentNode(document, node).then(() => {
+                console.log('[SecondaryViewer] Sheet loaded from Node');
             }).catch(err => console.error('Failed to load sheet:', err));
+            return;
         }
-    }, [document, node]);
+
+        // CASE 2: URN passed (Load document then default viewable)
+        if (urn) {
+            const documentId = 'urn:' + urn;
+            Autodesk.Viewing.Document.load(documentId, (doc) => {
+                const rootItem = doc.getRoot();
+                const viewables = rootItem.search({ type: 'geometry', role: '2d' });
+                if (viewables.length === 0) {
+                    console.warn('[SecondaryViewer] No 2D viewables found for URN');
+                    return;
+                }
+                // Load the first 2D viewable (Sheet)
+                const viewable = viewables[0];
+                if (viewer.model) viewer.unloadModel(viewer.model);
+                viewer.loadDocumentNode(doc, viewable).then(() => {
+                    console.log('[SecondaryViewer] Sheet loaded from URN');
+                });
+            }, (errorCode, errorMsg) => {
+                console.error('[SecondaryViewer] Load Error:', errorCode, errorMsg);
+            });
+        }
+
+    }, [document, node, urn]);
 
     return (
         <div

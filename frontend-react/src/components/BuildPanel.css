@@ -3,12 +3,12 @@
 /* Overrides for specific BuildPanel elements to match Dark Theme */
 .build-panel {
     /* Ensure it doesn't override the dark bg if .source-files-panel is used */
-    background-color: #2b2d30 !important;
+    background-color: transparent !important;
     color: #e0e0e0;
 }
 
 .build-panel-header {
-    background-color: #2b2d30;
+    background-color: transparent;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -156,4 +156,44 @@
 .sfp-item.simple-item .sfp-item-row {
     height: auto;
     padding: 8px 14px;
+}
+
+/* Tabs logic for BuildPanel */
+.bp-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 4px 8px 4px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.bp-tab {
+    background: transparent;
+    border: 1px solid transparent;
+    color: #9ca3af;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 6px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex: 1;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bp-tab:hover {
+    color: #e0e0e0;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.bp-tab.active {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.1);
 }

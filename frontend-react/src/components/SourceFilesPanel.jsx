@@ -134,7 +134,7 @@ const getTimeAgo = (dateString) => {
     return "just now";
 };
 
-const SourceFilesPanel = ({ models, hiddenModels = [], onImport, onRemove, onToggleVisibility, modelViews, activeViewableGuids, onLoadView }) => {
+const SourceFilesPanel = ({ models, hiddenModels = [], onImport, onRemove, onToggleVisibility, modelViews, activeViewableGuids, onLoadView, onUpdate }) => {
     // Local state for UI only (expanded items)
     const [expandedModels, setExpandedModels] = useState({});
     const [activeMenu, setActiveMenu] = useState(null);
@@ -198,7 +198,7 @@ const SourceFilesPanel = ({ models, hiddenModels = [], onImport, onRemove, onTog
                                         </button>
                                         {activeMenu === model.urn && (
                                             <div className="sfp-dropdown">
-                                                <button onClick={(e) => { e.stopPropagation(); setActiveMenu(null); }}>
+                                                <button onClick={(e) => { e.stopPropagation(); onUpdate && onUpdate(model.urn); setActiveMenu(null); }}>
                                                     <span className="sfp-menu-icon"><UpdateIcon /></span> Update
                                                 </button>
                                                 <button onClick={(e) => { e.stopPropagation(); setActiveMenu(null); }}>

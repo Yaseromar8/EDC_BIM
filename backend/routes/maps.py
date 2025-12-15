@@ -95,6 +95,18 @@ def create_pin():
         new_pin['x'] = data['x']
         new_pin['y'] = data['y']
         new_pin['z'] = data['z']
+        
+    # Persist additional PushPin metadata
+    if 'objectId' in data:
+        new_pin['objectId'] = data['objectId']
+    if 'viewerState' in data:
+        new_pin['viewerState'] = data['viewerState']
+    if 'status' in data:
+        new_pin['status'] = data['status']
+    if 'seedUrn' in data:
+        new_pin['seedUrn'] = data['seedUrn']
+    if 'type' in data:
+        new_pin['type'] = data['type']
     
     pins.append(new_pin)
     save_pins(pins)
