@@ -73,12 +73,13 @@ const HelpIcon = () => (
 const TopBar = ({
     activePanel,
     togglePanel,
-    isViewsActive
+    isViewsActive,
+    onLogoClick
 }) => {
     return (
         <header className="top-bar">
             <div className="top-bar-left">
-                <div className="logo-section">
+                <div className="logo-section" onClick={onLogoClick} style={{ cursor: 'pointer' }}>
                     <img src="/logo.png" alt="Logo" style={{ height: '32px' }} />
                 </div>
             </div>

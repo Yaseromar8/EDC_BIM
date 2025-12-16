@@ -1604,7 +1604,58 @@ div[class*="status-answered"],
     /* Expand Viewer to take sidebar space */
     .doc-open .app-viewer {
       width: 100% !important;
-      left: 0 !important;
     }
+  }
+}
+
+/* --- MOBILE TOOLBAR TOGGLE --- */
+.mobile-tools-toggle {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+
+  /* Show Toggle Button on Mobile/Tablet */
+  .mobile-tools-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    bottom: 24px;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background-color: #1e293b;
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    z-index: 100;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(4px);
+  }
+
+  .mobile-tools-toggle:active {
+    transform: scale(0.92);
+    background-color: #3AA0FF;
+  }
+
+  /* DEFAULTS: Hide native toolbar and overlays on mobile initially */
+  .viewer-container.mobile-tools-hidden .adsk-viewing-viewer .adsk-toolbar,
+  .viewer-container.mobile-tools-hidden .adsk-control-group {
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: opacity 0.2s ease, visibility 0.2s;
+  }
+
+  /* VISIBLE STATE: Show toolbar */
+  .viewer-container.mobile-tools-visible .adsk-viewing-viewer .adsk-toolbar,
+  .viewer-container.mobile-tools-visible .adsk-control-group {
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transition: opacity 0.2s ease, visibility 0.2s;
   }
 }

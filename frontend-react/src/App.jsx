@@ -855,12 +855,15 @@ function App() {
     }
   }, [activePanel, panelVisible]);
 
+  /* REMOVED AUTO-HIDE SPLASH logic to keep it until explicit user action */
+  /*
   useEffect(() => {
     if (!showSplash) return;
     if (models.length > 0 || documents.length > 0) {
       setShowSplash(false);
     }
   }, [models.length, documents.length, showSplash]);
+  */
 
   useEffect(() => {
     if (!availableProperties.length) return;
@@ -1549,6 +1552,13 @@ function App() {
         activePanel={activePanel}
         togglePanel={togglePanel}
         isViewsActive={activePanel === 'views' && panelVisible}
+        onLogoClick={() => {
+          setShowSplash(true);
+          setPanelVisible(false);
+          setActivePanel(null);
+          // Optional: Clear selection or open docs if desired
+          setOpenedDoc(null);
+        }}
       />
       <div className="app-container" style={{ flex: 1, position: 'relative' }}>
         {showSplash && (
