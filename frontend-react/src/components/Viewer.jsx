@@ -215,8 +215,11 @@ const Viewer = ({
     }, [viewerReady, placementMode, docPlacementMode, onPlacementComplete, onDocPlacementComplete]);
     useEffect(() => {
         const initializeViewer = () => {
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
             const options = {
-                env: 'AutodeskProduction',
+                env: 'AutodeskProduction2', // SVF2 for better memory management
+                api: 'streamingV2',         // Streaming V2 API
                 getAccessToken: (onSuccess) => {
                     fetch('/api/token')
                         .then(res => res.json())
@@ -229,28 +232,41 @@ const Viewer = ({
                 Autodesk.Viewing.theExtensionManager.registerExtension('LoggerExtension', LoggerExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('HistogramExtension', HistogramExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('PhasingExtension', PhasingExtension);
+
+                // Use Viewer3D (Headless) for custom UI or GuiViewer3D for standard
+                // User requested standard layout now, but optimized for mobile memory
                 const config = {
                     extensions: [
                         'BaseExtension',
                         'LoggerExtension',
                         'HistogramExtension',
                         'PhasingExtension',
-                        'Autodesk.BIM360.Extension.PushPin' // ADDED: Enable PushPin extension
-                    ]
+                        'Autodesk.BIM360.Extension.PushPin'
+                    ],
+                    loaderExtensions: { svf: "Autodesk.MemoryLimited" } // Optimization
                 };
+
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);
                 viewer.start();
                 viewerRef.current = viewer;
                 setViewerReady(true);
 
                 // --- PERFORMANCE OPTIMIZATIONS ---
-                // Crucial for heavy Infraworks models with Orthophotos
-                viewer.setOptimizeNavigation(true); // Lowers quality while moving
-                viewer.setQualityLevel(false, false); // Disable ambient shadows/high quality
-                viewer.setGroundShadow(false);
-                viewer.setGroundReflection(false);
-                viewer.setGhosting(true); // Keep ghosting for filters but verify performance
+                viewer.setOptimizeNavigation(true);
 
+                if (isMobile) {
+                    console.log('[Viewer] Mobile device detected. Optimizing performance.');
+                    viewer.setQualityLevel(false, false); // No ambient occlusion
+                    viewer.setGroundShadow(false);
+                    viewer.setGroundReflection(false);
+                    viewer.setGhosting(false); // Disable ghosting on mobile
+                    viewer.impl.setFPSTarget(30); // Cap FPS
+                } else {
+                    viewer.setQualityLevel(false, false);
+                    viewer.setGroundShadow(false);
+                    viewer.setGroundReflection(false);
+                    viewer.setGhosting(true);
+                }
                 // Increase memory limit for SVF2 if applicable (internal setting)
                 // viewer.impl.setFPSTarget(30);
 
