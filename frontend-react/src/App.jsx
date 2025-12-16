@@ -543,15 +543,19 @@ function App() {
 
   const activeProperties = useMemo(() => {
     let all = [];
+    // Create a Set of currently loaded URNs for fast lookup
+    const activeUrns = new Set(models.map(m => m.urn));
+
     Object.entries(modelProperties).forEach(([urn, props]) => {
-      if (!hiddenModelUrns.includes(urn)) {
+      // Only include properties from models that are currently in the list AND not hidden
+      if (activeUrns.has(urn) && !hiddenModelUrns.includes(urn)) {
         // Tag each row with its model URN so we can distinguish DbIds from different models
         const tagged = props.map(p => ({ ...p, modelUrn: urn }));
         all = all.concat(tagged);
       }
     });
     return all;
-  }, [modelProperties, hiddenModelUrns]);
+  }, [modelProperties, hiddenModelUrns, models]);
 
   // Load views on mount
   useEffect(() => {

@@ -1659,3 +1659,21 @@ div[class*="status-answered"],
     transition: opacity 0.2s ease, visibility 0.2s;
   }
 }
+
+/* FIX FILTERS PARENT TRANSPARENCY */
+.filters-shell {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.filters-shell-header,
+.filters-shell-body {
+  background: transparent !important;
+  border: none !important;
+}
+
+.filters-block {
+  background: transparent !important;
+  border: none !important;
+}
