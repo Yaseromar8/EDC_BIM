@@ -1613,7 +1613,7 @@ div[class*="status-answered"],
   display: none;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1366px) {
 
   /* Show Toggle Button on Mobile/Tablet */
   .mobile-tools-toggle {
@@ -1641,18 +1641,16 @@ div[class*="status-answered"],
     background-color: #3AA0FF;
   }
 
-  /* DEFAULTS: Hide native toolbar and overlays on mobile initially */
-  .viewer-container.mobile-tools-hidden .adsk-viewing-viewer .adsk-toolbar,
-  .viewer-container.mobile-tools-hidden .adsk-control-group {
+  /* DEFAULTS: Hide native toolbar on mobile initially */
+  .viewer-container.mobile-tools-hidden .adsk-viewing-viewer .adsk-toolbar {
     visibility: hidden !important;
     opacity: 0 !important;
     pointer-events: none !important;
     transition: opacity 0.2s ease, visibility 0.2s;
   }
 
-  /* VISIBLE STATE: Show toolbar */
-  .viewer-container.mobile-tools-visible .adsk-viewing-viewer .adsk-toolbar,
-  .viewer-container.mobile-tools-visible .adsk-control-group {
+  /* VISIBLE STATE: Show toolbar container (Let children handle themselves) */
+  .viewer-container.mobile-tools-visible .adsk-viewing-viewer .adsk-toolbar {
     visibility: visible !important;
     opacity: 1 !important;
     pointer-events: auto !important;
@@ -1676,74 +1674,77 @@ div[class*="status-answered"],
 .filters-block {
   background: transparent !important;
   border: none !important;
-}/* --- LANDSCAPE MOBILE ORIENTATION FIX --- */
-@media (max-width: 1024px) and (orientation: landscape) {
+}
 
-    /* 1. Layout: Side-by-Side instead of Top/Bottom */
-    .app-container {
-        flex-direction: row !important;
-    }
+/* --- LANDSCAPE MOBILE ORIENTATION FIX --- */
+/* --- LANDSCAPE MOBILE ORIENTATION FIX --- */
+@media (max-width: 1366px) and (orientation: landscape) {
 
-    .app-left-rail {
-        width: 50px !important;
-        height: 100% !important;
-        flex-direction: column !important;
-        bottom: auto !important;
-        left: 0 !important;
-        top: 0 !important;
-        padding-bottom: 0 !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.15) !important;
-        border-top: none !important;
-    }
+  /* 1. Layout: Side-by-Side instead of Top/Bottom */
+  .app-container {
+    flex-direction: row !important;
+  }
 
-    .rail-button {
-        height: 50px !important;
-        width: 100% !important;
-        margin-bottom: 4px;
-    }
+  .app-left-rail {
+    width: 50px !important;
+    height: 100% !important;
+    flex-direction: column !important;
+    bottom: auto !important;
+    left: 0 !important;
+    top: 0 !important;
+    padding-bottom: 0 !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-top: none !important;
+  }
 
-    /* 2. Viewer fills space */
-    .app-viewer {
-        top: 0 !important;
-        left: 50px !important;
-        width: calc(100% - 50px) !important;
-        height: 100% !important;
-    }
+  .rail-button {
+    height: 50px !important;
+    width: 100% !important;
+    margin-bottom: 4px;
+  }
 
-    /* 3. Split Doc (Laminas) -> Right Side Panel (Overlay) */
-    .split-doc {
-        top: 10px !important;
-        right: 10px !important;
-        bottom: 10px !important;
-        left: auto !important;
-        width: 45% !important;
-        height: 90% !important;
-        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5) !important;
-    }
+  /* 2. Viewer fills space */
+  .app-viewer {
+    top: 0 !important;
+    left: 50px !important;
+    width: calc(100% - 50px) !important;
+    height: 100% !important;
+  }
 
-    .split-doc.parallel {
-        position: absolute !important;
-        border-top: none !important;
-        border-left: 2px solid #000 !important;
-        width: 50% !important;
-        left: 50% !important;
-        right: 0 !important;
-        top: 0 !important;
-        height: 100% !important;
-    }
+  /* 3. Split Doc (Laminas) -> Right Side Panel (Overlay) */
+  .split-doc {
+    top: 10px !important;
+    right: 10px !important;
+    bottom: 10px !important;
+    left: auto !important;
+    width: 45% !important;
+    height: 90% !important;
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5) !important;
+  }
 
-    .adsk-viewing-viewer .adsk-toolbar {
-        bottom: 20px !important;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        width: auto !important;
-        max-width: 90% !important;
-        display: flex !important;
-        justify-content: center !important;
-    }
+  .split-doc.parallel {
+    position: absolute !important;
+    border-top: none !important;
+    border-left: 2px solid #000 !important;
+    width: 50% !important;
+    left: 50% !important;
+    right: 0 !important;
+    top: 0 !important;
+    height: 100% !important;
+  }
 
-    .mobile-tools-toggle {
-        bottom: 20px !important;
-        right: 20px !important;
-    }
+  .adsk-viewing-viewer .adsk-toolbar {
+    bottom: 20px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: auto !important;
+    max-width: 90% !important;
+    display: flex !important;
+    justify-content: center !important;
+  }
+
+  .mobile-tools-toggle {
+    bottom: 20px !important;
+    right: 20px !important;
+  }
 }
