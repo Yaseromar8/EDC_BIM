@@ -218,8 +218,7 @@ const Viewer = ({
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
             const options = {
-                env: 'AutodeskProduction2', // SVF2 for better memory management
-                api: 'streamingV2',         // Streaming V2 API
+                env: 'AutodeskProduction', // Revert to standard production to fix 400 errors
                 getAccessToken: (onSuccess) => {
                     fetch('/api/token')
                         .then(res => res.json())
@@ -242,8 +241,7 @@ const Viewer = ({
                         'HistogramExtension',
                         'PhasingExtension',
                         'Autodesk.BIM360.Extension.PushPin'
-                    ],
-                    loaderExtensions: { svf: "Autodesk.MemoryLimited" } // Optimization
+                    ]
                 };
 
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);
