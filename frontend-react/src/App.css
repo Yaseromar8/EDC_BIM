@@ -1676,4 +1676,74 @@ div[class*="status-answered"],
 .filters-block {
   background: transparent !important;
   border: none !important;
+}/* --- LANDSCAPE MOBILE ORIENTATION FIX --- */
+@media (max-width: 1024px) and (orientation: landscape) {
+
+    /* 1. Layout: Side-by-Side instead of Top/Bottom */
+    .app-container {
+        flex-direction: row !important;
+    }
+
+    .app-left-rail {
+        width: 50px !important;
+        height: 100% !important;
+        flex-direction: column !important;
+        bottom: auto !important;
+        left: 0 !important;
+        top: 0 !important;
+        padding-bottom: 0 !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border-top: none !important;
+    }
+
+    .rail-button {
+        height: 50px !important;
+        width: 100% !important;
+        margin-bottom: 4px;
+    }
+
+    /* 2. Viewer fills space */
+    .app-viewer {
+        top: 0 !important;
+        left: 50px !important;
+        width: calc(100% - 50px) !important;
+        height: 100% !important;
+    }
+
+    /* 3. Split Doc (Laminas) -> Right Side Panel (Overlay) */
+    .split-doc {
+        top: 10px !important;
+        right: 10px !important;
+        bottom: 10px !important;
+        left: auto !important;
+        width: 45% !important;
+        height: 90% !important;
+        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5) !important;
+    }
+
+    .split-doc.parallel {
+        position: absolute !important;
+        border-top: none !important;
+        border-left: 2px solid #000 !important;
+        width: 50% !important;
+        left: 50% !important;
+        right: 0 !important;
+        top: 0 !important;
+        height: 100% !important;
+    }
+
+    .adsk-viewing-viewer .adsk-toolbar {
+        bottom: 20px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        width: auto !important;
+        max-width: 90% !important;
+        display: flex !important;
+        justify-content: center !important;
+    }
+
+    .mobile-tools-toggle {
+        bottom: 20px !important;
+        right: 20px !important;
+    }
 }
