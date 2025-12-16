@@ -1912,7 +1912,7 @@ function App() {
               />
             </div>
 
-            <div className={`split-doc ${activeSheet ? 'active' : ''} ${parallelMode ? 'parallel' : ''}`}>
+            <div className={`split-doc ${activeSheet ? 'active' : ''} ${(activeSheet && parallelMode) ? 'parallel' : ''}`}>
               {activeSheet && (
                 <>
                   {/* Header styled like Minimap: Dark Grey/Black */}
@@ -1942,7 +1942,7 @@ function App() {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       {/* Parallel Toggle */}
-                      <div className="parallel-toggle" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#ccc', background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: '4px' }}>
+                      <label className="parallel-toggle" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#ccc', background: 'rgba(255,255,255,0.1)', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', userSelect: 'none' }}>
                         <span>En Paralelo</span>
                         <input
                           type="checkbox"
@@ -1950,7 +1950,7 @@ function App() {
                           onChange={(e) => setParallelMode(e.target.checked)}
                           style={{ cursor: 'pointer' }}
                         />
-                      </div>
+                      </label>
 
                       {/* Back Button */}
                       {openedDoc && (

@@ -1678,7 +1678,8 @@ div[class*="status-answered"],
 
 /* --- LANDSCAPE MOBILE ORIENTATION FIX --- */
 /* --- LANDSCAPE MOBILE ORIENTATION FIX --- */
-@media (max-width: 1366px) and (orientation: landscape) {
+/* --- LANDSCAPE TABLET (Large) ORIENTATION FIX --- */
+@media (min-width: 1025px) and (max-width: 1366px) and (orientation: landscape) {
 
   /* 1. Layout: Side-by-Side instead of Top/Bottom */
   .app-container {
@@ -1733,18 +1734,71 @@ div[class*="status-answered"],
     height: 100% !important;
   }
 
+
+  /* --- GLOBAL MOBILE TOOLBAR STYLE (Shared by Portrait & Landscape) --- */
+  /* Target toolbar in ALL mobile/tablet views (up to 1366px) */
   .adsk-viewing-viewer .adsk-toolbar {
-    bottom: 20px !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: auto !important;
-    max-width: 90% !important;
+    /* Position: Vertical on Right */
     display: flex !important;
-    justify-content: center !important;
+    flex-direction: column !important;
+    width: 45px !important;
+    /* Compact width */
+    height: auto !important;
+    max-height: 80% !important;
+
+    top: 50% !important;
+    right: 15px !important;
+    bottom: auto !important;
+    left: auto !important;
+    transform: translateY(-50%) !important;
+
+    margin: 0 !important;
+    background: transparent !important;
+    /* Let buttons have backgrounds */
+    box-shadow: none !important;
+    /* Remove container shadow */
+    pointer-events: none;
+    /* Container passes clicks */
+
+    /* Allow scrolling if too tall */
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
+
+    /* Scrollbar hiding */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 
+  .adsk-viewing-viewer .adsk-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Internal groups vertical stack */
+  .adsk-viewing-viewer .adsk-toolbar .adsk-control-group {
+    display: flex !important;
+    flex-direction: column !important;
+    margin: 0 0 10px 0 !important;
+    /* Spacing between groups */
+    pointer-events: auto !important;
+    /* Re-enable clicks */
+    background: rgba(34, 34, 34, 0.9) !important;
+    border-radius: 6px !important;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3) !important;
+    width: 44px !important;
+  }
+
+  /* Reset Split Doc Specifics - Inherit the global mobile style */
+  .split-doc .adsk-viewing-viewer .adsk-toolbar {
+    /* Ensure it behaves same as main viewer */
+    right: 10px !important;
+    z-index: 100 !important;
+  }
+
+  /* Position the toggle button on floating bottom right if needed */
   .mobile-tools-toggle {
     bottom: 20px !important;
-    right: 20px !important;
+    right: 70px !important;
+    /* Move left of the toolbar */
   }
 }
