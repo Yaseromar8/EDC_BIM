@@ -655,12 +655,14 @@ def link_acc_document():
 from routes.maps import maps_bp
 from routes.digital_twin import digital_twin_bp
 from routes.views import views_bp
+from routes.pins import pins_bp
 
 # ... (rest of imports)
 
 app.register_blueprint(digital_twin_bp)
 app.register_blueprint(maps_bp)
 app.register_blueprint(views_bp)
+app.register_blueprint(pins_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
