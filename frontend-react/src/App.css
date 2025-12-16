@@ -1775,7 +1775,7 @@ div[class*="status-answered"],
   }
 
   /* Internal groups vertical stack */
-  .adsk-viewing-viewer .adsk-toolbar .adsk-control-group {
+  html body .adsk-viewing-viewer .adsk-toolbar .adsk-control-group {
     display: flex !important;
     flex-direction: column !important;
     margin: 0 0 10px 0 !important;
@@ -1789,9 +1789,13 @@ div[class*="status-answered"],
   }
 
   /* Reset Split Doc Specifics - Inherit the global mobile style */
-  .split-doc .adsk-viewing-viewer .adsk-toolbar {
+  html body .split-doc .adsk-viewing-viewer .adsk-toolbar {
     /* Ensure it behaves same as main viewer */
     right: 10px !important;
+    top: 50% !important;
+    left: auto !important;
+    bottom: auto !important;
+    transform: translateY(-50%) !important;
     z-index: 100 !important;
   }
 
