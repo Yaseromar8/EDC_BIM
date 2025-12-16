@@ -1544,7 +1544,7 @@ function App() {
   }, [allLoadedProperties]);
 
   return (
-    <div className="app-layout" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden' }}>
+    <div className={`app-layout ${activeSheet ? 'doc-open' : ''}`} style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden' }}>
       <TopBar
         activePanel={activePanel}
         togglePanel={togglePanel}

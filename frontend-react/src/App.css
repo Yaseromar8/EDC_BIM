@@ -1603,6 +1603,16 @@ div[class*="status-answered"],
     /* Prevent container from forcing strange heights */
     height: auto !important;
     min-height: 50px !important;
+
+    /* UNIVERSAL FLOATING CENTER FOR MOBILE */
+    position: absolute !important;
+    bottom: 20px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: auto !important;
+    display: flex !important;
+    justify-content: center !important;
+    pointer-events: none;
   }
 
   .adsk-viewing-viewer .adsk-control-group {
@@ -1623,6 +1633,8 @@ div[class*="status-answered"],
     left: auto !important;
     right: auto !important;
     bottom: auto !important;
+    pointer-events: auto;
+    /* Enable clicks */
   }
 
   .adsk-viewing-viewer .adsk-button {
@@ -1633,43 +1645,25 @@ div[class*="status-answered"],
 
   /* --- PORTRAIT MODE (Phones & Tablets Vertical) --- */
   @media (orientation: portrait) {
-    .adsk-viewing-viewer .adsk-toolbar {
-      /* Dock to bottom */
-      bottom: 0px !important;
-      left: 0 !important;
-      width: 100% !important;
-      display: flex !important;
-      justify-content: center !important;
-      align-items: center !important;
-      pointer-events: none;
-      /* Pass clicks on empty space */
-      background-color: rgba(0, 0, 0, 0.3) !important;
-      padding-bottom: 20px !important;
-      /* Spacing for home bar */
+
+    /* HIDE SIDEBAR (Rail) WHEN DOCUMENT IS OPEN (`doc-open` class on root) */
+    .doc-open .app-left-rail {
+      display: none !important;
     }
 
-    .adsk-viewing-viewer .adsk-control-group {
-      pointer-events: auto;
-      /* Re-enable clicks */
+    /* Expand Viewer to take sidebar space */
+    .doc-open .app-viewer {
+      width: 100% !important;
+      left: 0 !important;
     }
   }
 
   /* --- LANDSCAPE MODE (Tablets Horizontal) --- */
   @media (orientation: landscape) {
-    .adsk-viewing-viewer .adsk-toolbar {
-      /* Standard Floating Center */
-      bottom: 20px !important;
-      width: auto !important;
-      left: 50% !important;
-      transform: translateX(-50%) !important;
-      display: flex !important;
-      justify-content: center !important;
-      background: transparent !important;
-      pointer-events: none;
-    }
 
-    .adsk-viewing-viewer .adsk-control-group {
-      pointer-events: auto;
+    /* Toolbar stays floating center (defined in shared block above) */
+    .adsk-viewing-viewer .adsk-toolbar {
+      bottom: 25px !important;
     }
   }
 }
