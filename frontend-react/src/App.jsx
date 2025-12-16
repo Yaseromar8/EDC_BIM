@@ -11,8 +11,9 @@ import DocumentPanel from './components/DocumentPanel';
 import AddDocumentModal from './components/AddDocumentModal';
 import BuildPanel from './components/BuildPanel';
 import BuildMapView from './components/BuildMapView';
-import NavigationPanel from './components/NavigationPanel';
+
 import AddAttachmentModal from './components/AddAttachmentModal';
+import buildIconImg from './assets/build-icon.png';
 
 const FilterIcon = () => (
   <svg
@@ -102,43 +103,22 @@ const DocumentIcon = () => (
   </svg>
 );
 
-const BuildIcon = () => (
-  <svg
+const BuildIcon = ({ isActive }) => (
+  <img
+    src={buildIconImg}
     className="rail-icon"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M2 22h20" />
-    <path d="M12 2v20" />
-    <path d="M2 12h10" />
-    <path d="M12 7h5" />
-    <path d="M12 17h5" />
-    <path d="M17 7v10" />
-  </svg>
+    alt="Build"
+    style={{
+      width: '32px',
+      height: '32px',
+      objectFit: 'contain',
+      filter: isActive ? 'none' : 'invert(1)',
+      transition: 'filter 0.2s ease'
+    }}
+  />
 );
 
-const CompassIcon = () => (
-  <svg
-    className="rail-icon"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="12" cy="12" r="10" />
-    <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
-  </svg>
-);
+
 
 const normalizePropertyList = (detail = []) => {
   return detail.map((item, index) => {
@@ -1610,18 +1590,10 @@ function App() {
             onClick={() => togglePanel('build')}
             title="Build"
           >
-            <BuildIcon />
+            <BuildIcon isActive={activePanel === 'build' && panelVisible} />
             <span className="rail-label">Build</span>
           </button>
-          <button
-            type="button"
-            className={`rail-button ${activePanel === 'navigation' && panelVisible ? 'active' : ''}`}
-            onClick={() => togglePanel('navigation')}
-            title="Navigation"
-          >
-            <CompassIcon />
-            <span className="rail-label">Nav</span>
-          </button>
+
         </nav>
 
         <aside className={`app-sidebar ${panelVisible && activePanel !== 'views' ? '' : 'hidden'}`}>
@@ -1875,19 +1847,7 @@ function App() {
               onPinUpload={handleOpenAttachmentModal}
             />
           )}
-          {activePanel === 'navigation' && (
-            <NavigationPanel
-              minimapActive={minimapActive}
-              onToggleMinimap={setMinimapActive}
-              vrActive={vrActive}
-              onToggleVR={setVrActive}
-              sheets={sheets}
-              onSelectSheet={setActiveSheet}
-              activeSheet={activeSheet}
-              docPlacementMode={docPlacementMode}
-              onToggleDocMode={setDocPlacementMode}
-            />
-          )}
+
         </aside>
 
         <div className="app-viewer">

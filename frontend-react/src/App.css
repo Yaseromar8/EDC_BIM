@@ -1592,4 +1592,61 @@ div[class*="status-answered"],
     aspect-ratio: 16 / 9;
     /* Wider for mobile landscape/portrait fit */
   }
+
+  /* --- PORTRAIT MODE (Phones & Tablets Vertical) --- */
+  @media (orientation: portrait) {
+
+    /* Dock toolbar to bottom full width */
+    .adsk-viewing-viewer .adsk-toolbar {
+      bottom: 0px !important;
+      left: 0 !important;
+      width: 100% !important;
+      display: flex !important;
+      flex-wrap: nowrap !important;
+      justify-content: center !important;
+      gap: 5px !important;
+      pointer-events: none;
+      background: transparent !important;
+      padding: 10px 0 !important;
+    }
+
+    .adsk-viewing-viewer .adsk-control-group {
+      background-color: rgba(34, 34, 34, 0.9) !important;
+      border-radius: 8px !important;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3) !important;
+      pointer-events: auto;
+      margin: 0 2px !important;
+      display: flex !important;
+      flex-wrap: wrap !important;
+      justify-content: center !important;
+    }
+
+    .adsk-viewing-viewer .adsk-button {
+      width: 40px !important;
+      height: 40px !important;
+    }
+  }
+
+  /* --- LANDSCAPE MODE (Tablets Horizontal) --- */
+  @media (orientation: landscape) {
+
+    /* Revert to standard floating toolbar but optimized for touch */
+    .adsk-viewing-viewer .adsk-toolbar {
+      bottom: 20px !important;
+      width: auto !important;
+      display: block !important;
+      pointer-events: auto;
+    }
+
+    .adsk-viewing-viewer .adsk-control-group {
+      background-color: rgba(34, 34, 34, 0.9) !important;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    /* Slightly larger buttons for touch accuracy */
+    .adsk-viewing-viewer .adsk-button {
+      width: 38px !important;
+      height: 38px !important;
+    }
+  }
 }
