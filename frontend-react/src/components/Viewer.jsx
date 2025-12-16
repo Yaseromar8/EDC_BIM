@@ -713,7 +713,9 @@ const Viewer = ({
             const detail = event?.detail;
 
             // RESET EVERYTHING FIRST to ensure clean slate
-            viewer.clearThemingColors();
+            Object.values(loadedModelsRef.current).forEach(model => {
+                viewer.clearThemingColors(model);
+            });
             viewer.clearSelection();
 
             // If no filters, show all and exit

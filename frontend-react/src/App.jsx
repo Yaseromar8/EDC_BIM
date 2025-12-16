@@ -255,10 +255,14 @@ function FilterConfigurator({
     }
   }, [open, selectedIds]);
 
-  const toggleProp = propId => {
-    setPendingSelection(prev =>
-      prev.includes(propId) ? prev.filter(id => id !== propId) : [...prev, propId]
-    );
+  const addProp = propId => {
+    if (!pendingSelection.includes(propId)) {
+      setPendingSelection(prev => [...prev, propId]);
+    }
+  };
+
+  const removeProp = propId => {
+    setPendingSelection(prev => prev.filter(id => id !== propId));
   };
 
   const handleSave = () => {
@@ -270,133 +274,134 @@ function FilterConfigurator({
 
   const availableGroups = groupProperties(availableProperties, availableQuery);
   const propertyMap = new Map(availableProperties.map(prop => [prop.id, prop]));
+
+  // Selected details
   const selectedDetails = pendingSelection
     .map(id => propertyMap.get(id))
     .filter(Boolean)
-    .filter(prop =>
-      selectedQuery.trim()
-        ? prop.name.toLowerCase().includes(selectedQuery.trim().toLowerCase()) ||
-        (prop.path || '').toLowerCase().includes(selectedQuery.trim().toLowerCase())
-        : true
-    );
+    .filter(prop => {
+      const q = selectedQuery.trim().toLowerCase();
+      if (!q) return true;
+      return prop.name.toLowerCase().includes(q) || (prop.path || '').toLowerCase().includes(q);
+    });
 
   return (
     <div className="modal-overlay filters-config-overlay">
-      <div className="filters-config-panel">
+      <div className="filters-config-panel" style={{ width: '900px', maxWidth: '95vw', height: '70vh', display: 'flex', flexDirection: 'column' }}>
+
         <header className="filters-config-header">
           <div>
             <h3>Edit Filters</h3>
-            <p>Search and select the parameters you want to expose in the filter panel.</p>
+            <p>Select properties to display in the filters panel. Use (+) to add and Trash icon to remove.</p>
           </div>
-          <div className="filters-config-actions">
-            <button className="secondary-btn" onClick={() => onReset?.()} type="button">
-              Reset default
-            </button>
-            <button className="modal-close" onClick={onClose} aria-label="Close configurator">
-              ×
-            </button>
-          </div>
+          <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </header>
-        <div className="filters-config-body">
-          <section>
-            <p className="filters-config-label">Available Properties</p>
-            <div className="filters-config-search">
+
+        <div className="filters-config-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', flex: 1, overflow: 'hidden', padding: '20px' }}>
+
+          {/* LEFT: AVAILABLE */}
+          <section style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', background: 'rgba(30, 30, 30, 0.4)' }}>
+            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <strong style={{ color: '#e0e0e0' }}>Available Properties</strong>
+                <small style={{ color: '#999' }}>{availableGroups.reduce((acc, g) => acc + g.properties.length, 0)} items</small>
+              </div>
               <input
                 type="search"
-                placeholder="Search"
+                placeholder="Search properties..."
                 value={availableQuery}
                 onChange={e => setAvailableQuery(e.target.value)}
+                style={{ width: '100%', background: '#222', border: '1px solid #444', color: 'white', padding: '8px', borderRadius: '4px', fontSize: '13px' }}
               />
             </div>
-            {availableGroups.map(group => {
-              const selectedCount = group.properties.filter(prop =>
-                pendingSelection.includes(prop.id)
-              ).length;
-              return (
-                <details key={group.id} open>
-                  <summary>
-                    <span>{group.label}</span>
-                    <span className="filters-config-count">
-                      {selectedCount} of {group.properties.length}
-                    </span>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
+              {availableGroups.map(group => (
+                <details key={group.id} open style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <summary style={{ padding: '10px 12px', cursor: 'pointer', background: 'rgba(255,255,255,0.02)', fontWeight: 600, fontSize: '12px', color: '#ccc' }}>
+                    {group.label}
                   </summary>
-                  <ul>
-                    {group.properties.map(prop => (
-                      <li key={prop.id}>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={pendingSelection.includes(prop.id)}
-                            onChange={() => toggleProp(prop.id)}
-                          />
-                          <span>
-                            <strong>{prop.name}</strong>
-                            <small>{prop.path}</small>
-                          </span>
-                        </label>
-                      </li>
-                    ))}
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {group.properties.map(prop => {
+                      const isSelected = pendingSelection.includes(prop.id);
+                      return (
+                        <li key={prop.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.02)', opacity: isSelected ? 0.5 : 1 }}>
+                          <div style={{ overflow: 'hidden', marginRight: '8px' }}>
+                            <div style={{ fontSize: '13px', color: '#eee', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={prop.name}>{prop.name}</div>
+                            <div style={{ fontSize: '11px', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={prop.path}>{prop.path}</div>
+                          </div>
+                          {!isSelected && (
+                            <button
+                              onClick={() => addProp(prop.id)}
+                              style={{ background: 'transparent', border: '1px solid #444', borderRadius: '4px', color: '#4ade80', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              title="Add to filters"
+                            >
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            </button>
+                          )}
+                          {isSelected && <span style={{ fontSize: '11px', color: '#666' }}>Added</span>}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </details>
-              );
-            })}
-            {!availableGroups.length && (
-              <div className="filters-config-empty">No properties found for this search.</div>
-            )}
+              ))}
+              {!availableGroups.length && <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>No properties found.</div>}
+            </div>
           </section>
-          <section>
-            <p className="filters-config-label">Selected Properties</p>
-            <div className="filters-config-search">
+
+          {/* RIGHT: SELECTED */}
+          <section style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', background: 'rgba(30, 30, 30, 0.4)' }}>
+            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <strong style={{ color: '#e0e0e0' }}>Selected Properties</strong>
+                <small style={{ color: '#999' }}>{pendingSelection.length} selected</small>
+              </div>
               <input
                 type="search"
-                placeholder="Search"
+                placeholder="Filter selected..."
                 value={selectedQuery}
                 onChange={e => setSelectedQuery(e.target.value)}
+                style={{ width: '100%', background: '#222', border: '1px solid #444', color: 'white', padding: '8px', borderRadius: '4px', fontSize: '13px' }}
               />
             </div>
-            {selectedDetails.length === 0 && (
-              <div className="filters-config-empty">Select at least one property to display.</div>
-            )}
-            <ul className="filters-selected-list">
-              {selectedDetails.map(prop => (
-                <li key={prop.id}>
-                  <div>
-                    <strong>{prop.name}</strong>
-                    <small>{prop.path}</small>
-                  </div>
-                  <button onClick={() => toggleProp(prop.id)} aria-label={`Remove ${prop.name}`}>
-                    Remove
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <div className="filters-config-visibility">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={hideLocations}
-                  onChange={e => setHideLocations(e.target.checked)}
-                />
-                <span>Hide location categories (Levels, Rooms, Spaces) from graphics and results</span>
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={includeMultiLevel}
-                  onChange={e => setIncludeMultiLevel(e.target.checked)}
-                />
-                <span>Include elements spanning multiple levels in each level filter</span>
-              </label>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {selectedDetails.map(prop => (
+                  <li key={prop.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(59, 130, 246, 0.05)' }}>
+                    <div style={{ flex: 1, overflow: 'hidden', marginRight: '10px' }}>
+                      <div style={{ fontSize: '13px', color: '#fff' }}>{prop.name}</div>
+                      <div style={{ fontSize: '11px', color: '#888' }}>{prop.category} &rsaquo; {prop.group}</div>
+                    </div>
+                    <button
+                      onClick={() => removeProp(prop.id)}
+                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                      title="Remove"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
+                  </li>
+                ))}
+                {!selectedDetails.length && <div style={{ padding: '30px', textAlign: 'center', color: '#666', fontSize: '13px' }}>No properties selected.<br />Add properties from the left panel.</div>}
+              </ul>
             </div>
           </section>
+
         </div>
-        <footer className="filters-config-footer">
-          <button className="secondary-btn" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="primary-btn" onClick={handleSave} disabled={!pendingSelection.length}>
-            Update
-          </button>
+
+        <footer className="filters-config-footer" style={{ padding: '16px 20px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)' }}>
+          <div>
+            {/* Options can go here if needed */}
+          </div>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button className="secondary-btn" onClick={() => onReset?.()} style={{ background: 'transparent', border: '1px solid #444', color: '#ccc', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
+              Reset Default
+            </button>
+            <button className="primary-btn" onClick={handleSave} style={{ background: '#3b82f6', border: 'none', color: 'white', padding: '8px 24px', borderRadius: '4px', fontWeight: 600, cursor: 'pointer' }}>
+              Update
+            </button>
+          </div>
         </footer>
       </div>
     </div>
