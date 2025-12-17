@@ -455,6 +455,8 @@ function App() {
   const [docPins, setDocPins] = useState([]); // Array of { id, x, y, z, docs: [] }
   const [openedDoc, setOpenedDoc] = useState(null); // Currently viewing doc in Split Screen
 
+  const [isRailExpanded, setIsRailExpanded] = useState(true); // Added for responsive rail
+
   // Attachments Modal State
   const [attachmentModalOpen, setAttachmentModalOpen] = useState(false);
   const [attachmentPinId, setAttachmentPinId] = useState(null);
