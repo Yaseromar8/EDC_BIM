@@ -100,17 +100,21 @@ body,
 .splash-overlay {
   position: absolute;
   top: 0;
-  left: 64px;
-  width: calc(100% - 64px);
+  left: 0;
+  width: 100%;
   height: 100%;
-  z-index: 9000;
-  background: url('/FONDO_PAGINA.jpg') center/cover no-repeat;
-  box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  /* Let clicks pass through if needed, but mainly it's an overlay */
+  z-index: 50;
+  /* Above viewer, below UI panels */
   display: flex;
   align-items: center;
   justify-content: center;
-  border-left: 1px solid rgba(0, 0, 0, 0.08);
-  pointer-events: none;
+  /* background: url('/FONDO_PAGINA.jpg') center/cover no-repeat; */
+  /* REMOVED BACKGROUND IMAGE */
+  /* background-size: cover; */
+  background-color: rgba(0, 0, 0, 0.2);
+  /* Just a slight tint if desired, or transparent */
 }
 
 .splash-overlay img {
