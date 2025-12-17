@@ -389,12 +389,13 @@ const Viewer = ({
                         }
 
                         if (!viewable) {
-                            // Default logic: Try 'master', then first available
-                            // Infraworks often names the main view 'master'
-                            viewable = viewables.find(v => v.name().toLowerCase() === 'master') || viewables[0];
+                            // 1. Try standard default from metadata (Revit Publish Settings usually sets this)
+                            viewable = doc.getRoot().getDefaultGeometry();
 
-                            // If still null, fallback to getAllDefault
-                            if (!viewable) viewable = doc.getRoot().getDefaultGeometry();
+                            // 2. If no default is marked, try 'master' (Infraworks) or fallback to first
+                            if (!viewable) {
+                                viewable = viewables.find(v => v.name().toLowerCase() === 'master') || viewables[0];
+                            }
                         }
 
                         if (!viewable) {
