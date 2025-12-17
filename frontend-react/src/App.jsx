@@ -1227,15 +1227,7 @@ function App() {
     setShowSprites(prev => !prev);
   }, []);
 
-  const togglePanel = panel => {
-    if (showSplash) setShowSplash(false);
-    if (activePanel === panel) {
-      setPanelVisible(prev => !prev);
-    } else {
-      setActivePanel(panel);
-      setPanelVisible(true);
-    }
-  };
+
 
   const selectedPropertyObjects = useMemo(() => (
     filterProperties
