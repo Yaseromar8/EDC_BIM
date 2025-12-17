@@ -481,36 +481,7 @@ function App() {
     }));
   }, []);
 
-  const handleViewerInitialized = useCallback((viewerInstance) => {
-    // When viewer starts or geometry loads
-    viewerInstance.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, () => {
-      // FORCE TRANSPARENCY ON TOPOGRAPHY
-      viewerInstance.search('Topografía', (dbIds) => {
-        if (dbIds && dbIds.length > 0) {
-          console.log('Fuerza Bruta: Applying transparency to Topography', dbIds);
-          // Iterate fragments for these DbIds
-          const fragList = viewerInstance.model.getFragmentList();
-          dbIds.forEach(dbId => {
-            viewerInstance.model.getData().instanceTree.enumNodeFragments(dbId, (fragId) => {
-              // Get current material
-              const mat = fragList.getMaterial(fragId);
-              if (mat) {
-                // Clone to avoid affecting other objects sharing same material
-                const transparentMat = mat.clone();
-                transparentMat.opacity = 0.2; // 20% opacity (Very transparent)
-                transparentMat.transparent = true;
-                transparentMat.depthWrite = false; // Better for seeing through
-                transparentMat.needsUpdate = true;
-                // Apply back
-                fragList.setMaterial(fragId, transparentMat);
-              }
-            });
-          });
-          viewerInstance.impl.invalidate(true); // Redraw
-        }
-      }, (err) => { }, ['Category']); // Search only in 'Category' property if possible, or global
-    });
-  }, []);
+
 
   const handleDocPinComplete = (position) => {
     const newPin = {
@@ -1939,8 +1910,7 @@ function App() {
                 onBuildPinCreate={handlePinCreated}
                 onBuildPinSelect={handlePinSelect}
                 onBuildPinUpdate={handlePinUpdate}
-                // onBuildPinDelete={handlePinDelete} // If needed later
-                onViewerInitialized={handleViewerInitialized}
+              // onBuildPinDelete={handlePinDelete} // If needed later
               />
             </div>
 
