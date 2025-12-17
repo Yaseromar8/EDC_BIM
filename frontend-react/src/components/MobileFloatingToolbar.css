@@ -1,0 +1,97 @@
+.mobile-floating-toolbar {
+    position: fixed;
+    top: 50%;
+    right: 16px;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    z-index: 2000;
+}
+
+/* The button that expands/collapses the toolbar */
+.mft-toggle-btn {
+    width: 48px;
+    height: 48px;
+    background: rgba(28, 32, 39, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mft-toggle-btn:active {
+    transform: scale(0.95);
+}
+
+/* Determine rotation for collapsed state */
+.mft-toggle-btn.collapsed svg {
+    transform: rotate(180deg);
+}
+
+/* The container for the action items */
+.mft-items {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 12px;
+    opacity: 1;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    transform-origin: bottom right;
+}
+
+.mft-items.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.8);
+    height: 0;
+    overflow: hidden;
+    margin: 0;
+}
+
+/* Individual Action Button */
+.mft-action-btn {
+    width: 48px;
+    height: 48px;
+    background: rgba(28, 32, 39, 0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    color: #a1a1aa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.mft-action-btn.active {
+    background: #3b82f6;
+    color: #fff;
+    border-color: #3b82f6;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+}
+
+.mft-action-btn:hover {
+    color: #fff;
+    transform: scale(1.05);
+}
+
+/* Tooltip for mobile (optional, might block touch) */
+/* We'll skip hover tooltips for mobile optimization */
+
+/* Responsiveness: Only show on smaller screens */
+@media (min-width: 1025px) {
+    .mobile-floating-toolbar {
+        display: none;
+    }
+}

@@ -189,7 +189,8 @@ const BuildPanel = ({
                         </div>
                     )}
 
-                    {/* Modelos 3D Section - ONLY IN DATA */}
+                    {/* Modelos 3D Section - REMOVED per user request (Files handling only in FILES panel) */}
+                    {/* 
                     {activeTab === 'DATA' && (
                         <div className="sfp-section">
                             <div
@@ -240,6 +241,7 @@ const BuildPanel = ({
                             )}
                         </div>
                     )}
+                    */}
 
                     {/* Puntos de Control Section - SHOWN IN ALL TABS (Filtered) */}
                     <div className="sfp-section" style={{ marginTop: '0' }}>
@@ -353,6 +355,7 @@ const BuildPanel = ({
                                                                 }}>
                                                                     <span className="sfp-menu-icon" style={{ fontSize: '12px' }}>✏️</span> Renombrar
                                                                 </button>
+                                                                {/* 
                                                                 <button onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     handlePinUploadClick(pin.id);
@@ -360,6 +363,7 @@ const BuildPanel = ({
                                                                 }}>
                                                                     <span className="sfp-menu-icon">📎</span> Adjuntar
                                                                 </button>
+                                                                */}
                                                                 <hr className="sfp-menu-separator" />
                                                                 <button
                                                                     className="delete-option"

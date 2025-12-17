@@ -45,6 +45,12 @@ const Viewer = ({
     const spriteMeshesRef = useRef({});
     const buildPinMeshesRef = useRef({}); // New ref for Build Pins
     const sheetsMapRef = useRef({});
+    const hiddenModelUrnsRef = useRef(hiddenModelUrns);
+
+    // Sync hiddenModelUrnsRef
+    useEffect(() => {
+        hiddenModelUrnsRef.current = hiddenModelUrns;
+    }, [hiddenModelUrns]);
     const [viewerReady, setViewerReady] = useState(false);
     const [mobileToolsVisible, setMobileToolsVisible] = useState(false);
     // ...
@@ -313,7 +319,7 @@ const Viewer = ({
             handleModelLoaded({ model: viewer.model });
         }
         return () => {
-            viewer.removeEventListener('model.loaded', handleModelLoaded);
+            if (viewer) viewer.removeEventListener('model.loaded', handleModelLoaded);
         };
     }, [viewerReady, onModelProperties]);
 
@@ -458,6 +464,24 @@ const Viewer = ({
 
                             if (!isIdentity) {
                                 loadedModel.setModelTransform(matrix);
+                            }
+                        }
+
+
+                        if (loadedModel) {
+                            // Check visibility immediately to handle race conditions
+                            const shouldHide = hiddenModelUrnsRef.current.includes(model.urn);
+                            try {
+                                if (shouldHide) {
+                                    viewer.hideModel(loadedModel.id);
+                                    if (loadedModel.getRootId) {
+                                        viewer.impl.visibilityManager.setNodeOff(loadedModel.getRootId(), true);
+                                    }
+                                } else {
+                                    viewer.showModel(loadedModel.id);
+                                }
+                            } catch (e) {
+                                console.error('[Viewer] Error setting initial visibility:', e);
                             }
                         }
 
@@ -1235,14 +1259,33 @@ const Viewer = ({
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
 
+        // console.log('[Viewer] Updating visibility. Hidden URNs:', hiddenModelUrns);
+
         Object.entries(loadedModelsRef.current).forEach(([urn, model]) => {
+            if (!model) return;
             const shouldHide = hiddenModelUrns.includes(urn);
-            if (shouldHide) {
-                viewer.hideModel(model.id);
-            } else {
-                viewer.showModel(model.id);
+
+            // console.log(`[Viewer] Processing visibility for ${urn}: Hide? ${shouldHide}`);
+
+            try {
+                if (shouldHide) {
+                    viewer.hideModel(model.id);
+                    // Fallback: Manually hide root node if model.id doesn't catch everything
+                    if (model.getRootId) {
+                        viewer.impl.visibilityManager.setNodeOff(model.getRootId(), true);
+                    }
+                } else {
+                    viewer.showModel(model.id);
+                    if (model.getRootId) {
+                        viewer.impl.visibilityManager.setNodeOff(model.getRootId(), false);
+                    }
+                }
+            } catch (e) {
+                console.error(`[Viewer] Error toggling visibility for ${urn}:`, e);
             }
         });
+        // Force a full scene update to ensure changes take effect immediately
+        viewer.impl.invalidate(true, true, true);
     }, [hiddenModelUrns, viewerReady]);
 
     useEffect(() => {

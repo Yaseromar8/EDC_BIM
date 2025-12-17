@@ -69,45 +69,47 @@ def trigger_translation(urn, token):
 def get_config_route():
     config = get_project_config_internal()
     
+    
     # Auto-update logic: Check for latest versions of linked docs
-    # Only verify if we have a token and models to check
-    token, error = get_internal_token()
-    if not error and token:
-        updated_any = False
-        models = config.get('models', [])
-        
-        for model in models:
-            if model.get('source') == 'DOCS' and model.get('projectId') and model.get('itemId'):
-                try:
-                    # Quick check for latest tip
-                    url = f"https://developer.api.autodesk.com/data/v1/projects/{model['projectId']}/items/{model['itemId']}"
-                    headers = {'Authorization': f'Bearer {token}'}
-                    resp = requests.get(url, headers=headers, timeout=2) # Short timeout to not block too long
-                    
-                    if resp.ok:
-                        data = resp.json()
-                        latest_version_id = data['data']['relationships']['tip']['data']['id']
-                        current_version_id = model.get('versionId')
-                        
-                        if latest_version_id and latest_version_id != current_version_id:
-                            print(f"[AutoUpdate] Updating {model['name']} to {latest_version_id}")
-                            
-                            # Calculate new URN
-                            urn_bytes = base64.urlsafe_b64encode(latest_version_id.encode('utf-8'))
-                            new_urn = urn_bytes.decode('utf-8').rstrip('=')
-                            
-                            model['urn'] = new_urn
-                            model['versionId'] = latest_version_id
-                            # We could also trigger translation here if needed, but Viewer usually handles it or we'll assume it exists.
-                            # Optimistically assume SVF exists for the version in ACC.
-                            
-                            updated_any = True
-                except Exception as e:
-                    print(f"[AutoUpdate] Failed to check {model.get('name')}: {e}")
-                    continue
-        
-        if updated_any:
-            save_project_config_internal(config)
+    # DISABLED per user request: "no crucemos la informacion" (manual update only)
+    #
+    # token, error = get_internal_token()
+    # if not error and token:
+    #     updated_any = False
+    #     models = config.get('models', [])
+    #     
+    #     for model in models:
+    #         if model.get('source') == 'DOCS' and model.get('projectId') and model.get('itemId'):
+    #             try:
+    #                 # Quick check for latest tip
+    #                 url = f"https://developer.api.autodesk.com/data/v1/projects/{model['projectId']}/items/{model['itemId']}"
+    #                 headers = {'Authorization': f'Bearer {token}'}
+    #                 resp = requests.get(url, headers=headers, timeout=2) # Short timeout to not block too long
+    #                 
+    #                 if resp.ok:
+    #                     data = resp.json()
+    #                     latest_version_id = data['data']['relationships']['tip']['data']['id']
+    #                     current_version_id = model.get('versionId')
+    #                     
+    #                     if latest_version_id and latest_version_id != current_version_id:
+    #                         print(f"[AutoUpdate] Updating {model['name']} to {latest_version_id}")
+    #                         
+    #                         # Calculate new URN
+    #                         urn_bytes = base64.urlsafe_b64encode(latest_version_id.encode('utf-8'))
+    #                         new_urn = urn_bytes.decode('utf-8').rstrip('=')
+    #                         
+    #                         model['urn'] = new_urn
+    #                         model['versionId'] = latest_version_id
+    #                         # We could also trigger translation here if needed, but Viewer usually handles it or we'll assume it exists.
+    #                         # Optimistically assume SVF exists for the version in ACC.
+    #                         
+    #                         updated_any = True
+    #             except Exception as e:
+    #                 print(f"[AutoUpdate] Failed to check {model.get('name')}: {e}")
+    #                 continue
+    #     
+    #     if updated_any:
+    #         save_project_config_internal(config)
             
     return jsonify(config)
 

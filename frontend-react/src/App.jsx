@@ -10,7 +10,9 @@ import ImportModelModal from './components/ImportModelModal';
 import DocumentPanel from './components/DocumentPanel';
 import AddDocumentModal from './components/AddDocumentModal';
 import BuildPanel from './components/BuildPanel';
+
 import BuildMapView from './components/BuildMapView';
+import MobileFloatingToolbar from './components/MobileFloatingToolbar'; // New Mobile Toolbar
 
 import AddAttachmentModal from './components/AddAttachmentModal';
 import buildIconImg from './assets/build-icon.png';
@@ -1656,6 +1658,7 @@ function App() {
               <FilterIcon />
               <span className="rail-label">Filters</span>
             </button>
+            {/* 
             <button
               type="button"
               className={`rail-button ${activePanel === 'docs' && panelVisible ? 'active' : ''}`}
@@ -1665,6 +1668,7 @@ function App() {
               <DocumentIcon />
               <span className="rail-label">Docs</span>
             </button>
+            */}
             <button
               type="button"
               className={`rail-button ${activePanel === 'build' && panelVisible ? 'active' : ''}`}
@@ -1676,7 +1680,35 @@ function App() {
             </button>
 
           </nav>
+
         )}
+
+        {/* MOBILE FLOATING TOOLBAR */}
+        <MobileFloatingToolbar
+          items={[
+            {
+              id: 'files',
+              label: 'Videos',
+              icon: <FolderIcon />,
+              active: activePanel === 'files' && panelVisible,
+              onClick: () => togglePanel('files')
+            },
+            {
+              id: 'filters',
+              label: 'Filtros',
+              icon: <FilterIcon />,
+              active: activePanel === 'filters' && panelVisible,
+              onClick: () => togglePanel('filters')
+            },
+            {
+              id: 'build',
+              label: 'Build',
+              icon: <BuildIcon isActive={activePanel === 'build' && panelVisible} />,
+              active: activePanel === 'build' && panelVisible,
+              onClick: () => togglePanel('build')
+            }
+          ]}
+        />
 
         <aside className={`app-sidebar ${panelVisible && activePanel !== 'views' ? '' : 'hidden'}`}>
           {activePanel === 'filters' && (

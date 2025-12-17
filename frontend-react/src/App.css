@@ -25,6 +25,13 @@ body,
   z-index: 1000;
 }
 
+@media (max-width: 1024px) {
+  .app-left-rail {
+    display: none;
+  }
+}
+
+
 .rail-button {
   width: 48px;
   height: 64px;
@@ -95,6 +102,16 @@ body,
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+@media (max-width: 1024px) {
+  .app-sidebar {
+    left: 0;
+    width: 100%;
+    max-width: 100%;
+    background: rgba(28, 32, 39, 0.95);
+    border-right: none;
+  }
 }
 
 .splash-overlay {
