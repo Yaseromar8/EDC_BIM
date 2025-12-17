@@ -1686,6 +1686,11 @@ div[class*="status-answered"],
     flex-direction: row !important;
   }
 
+  /* Force sidebar hidden unless explicitly active */
+  .app-sidebar:not(.active) {
+    display: none !important;
+  }
+
   .app-left-rail {
     width: 50px !important;
     height: 100% !important;
@@ -1751,6 +1756,8 @@ div[class*="status-answered"],
     bottom: auto !important;
     left: auto !important;
     transform: translateY(-50%) !important;
+    display: flex !important;
+    visibility: visible !important;
 
     margin: 0 !important;
     background: transparent !important;
