@@ -33,7 +33,8 @@ const Viewer = ({
     showBuildPins = true, // Toggle visibility
     onBuildPinCreate,
     onBuildPinSelect,
-    selectedPinId // Add this prop
+    selectedPinId, // Add this prop
+    onViewerInitialized
 }) => {
     const viewerRef = useRef(null);
     const containerRef = useRef(null);
@@ -249,6 +250,10 @@ const Viewer = ({
                 viewer.start();
                 viewerRef.current = viewer;
                 setViewerReady(true);
+
+                if (onViewerInitialized) {
+                    onViewerInitialized(viewer);
+                }
 
                 // --- PERFORMANCE OPTIMIZATIONS ---
                 viewer.setOptimizeNavigation(true);
