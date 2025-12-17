@@ -497,8 +497,10 @@ function App() {
               if (mat) {
                 // Clone to avoid affecting other objects sharing same material
                 const transparentMat = mat.clone();
-                transparentMat.opacity = 0.5;
+                transparentMat.opacity = 0.2; // 20% opacity (Very transparent)
                 transparentMat.transparent = true;
+                transparentMat.depthWrite = false; // Better for seeing through
+                transparentMat.needsUpdate = true;
                 // Apply back
                 fragList.setMaterial(fragId, transparentMat);
               }
