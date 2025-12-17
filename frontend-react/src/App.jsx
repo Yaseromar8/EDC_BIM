@@ -1640,19 +1640,6 @@ function App() {
 
             <button
               type="button"
-              className={`rail-button ${activePanel === 'views' ? 'active' : ''}`}
-              onClick={() => {
-                setViewsPanelOpen(true);
-                setActivePanel('views');
-                if (window.innerWidth < 1024) setIsRailExpanded(false);
-              }}
-              title="Views"
-            >
-              <TargetIcon />
-              <span className="rail-label">Views</span>
-            </button>
-            <button
-              type="button"
               className={`rail-button ${activePanel === 'sources' && panelVisible ? 'active' : ''}`}
               onClick={() => togglePanel('sources')}
               title="Models"
