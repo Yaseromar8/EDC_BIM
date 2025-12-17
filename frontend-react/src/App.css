@@ -1438,10 +1438,117 @@ div[class*="status-answered"],
 }
 
 /* =========================================
-   RESPONSIVE DESIGN (TABLET & MOBILE)
+   RESPONSIVE DESIGN SYSTEM
    ========================================= */
 
-/* --- MOBILE TOOLBAR TOGGLE --- */
+/* --- 1. TABLET & SMALLER DESKTOP (< 1024px) --- */
+/* Focus: Better Split View Stacking */
+@media (max-width: 1024px) {
+
+  /* Stack Parallel View Vertically (Top 3D / Bottom 2D) */
+  .app-container:has(.split-doc.parallel) .app-viewer {
+    height: 50% !important;
+    width: 100% !important;
+  }
+
+  .split-doc.parallel {
+    width: 100% !important;
+    height: 50% !important;
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    top: auto !important;
+    right: auto !important;
+    border-left: none !important;
+    border-top: 4px solid #111;
+  }
+}
+
+/* --- 2. MOBILE PHONES (< 768px) --- */
+/* Focus: Bottom Navigation, Full Screen interactions */
+@media (max-width: 768px) {
+
+  /* A. Layout: Flip to Vertical (Viewer Top / Rail Bottom) */
+  .app-container {
+    flex-direction: column-reverse;
+  }
+
+  /* B. Navigation Rail -> Bottom Tab Bar */
+  .app-left-rail {
+    width: 100%;
+    height: 60px;
+    /* Thumber friendly height */
+    flex-direction: row;
+    /* Horizontal Icons */
+    justify-content: space-around;
+    border-right: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0;
+    z-index: 2000;
+    /* Always on top */
+    background: #1c2027;
+  }
+
+  .rail-button {
+    height: 100%;
+    width: auto;
+    flex: 1;
+    /* Distribute evenly */
+    margin: 0;
+    border-radius: 0;
+    gap: 4px;
+  }
+
+  .rail-label {
+    font-size: 10px;
+    /* Smaller text */
+    display: block;
+    /* Ensure visibility */
+  }
+
+  /* C. Sidebar Panels -> Full Screen Overlay */
+  .app-sidebar {
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    height: calc(100% - 60px);
+    /* Full height minus bottom rail */
+    top: 0;
+    left: 0;
+    border-right: none;
+    z-index: 1500;
+    /* Above viewer, below rail */
+    background: #1c2027;
+    /* Solid background */
+  }
+
+  /* D. Viewer Area */
+  .app-viewer {
+    width: 100%;
+    height: calc(100% - 60px);
+    /* Leave room for rail */
+  }
+
+  /* E. Floating Doc Windows (Non-Parallel) */
+  .split-doc:not(.parallel) {
+    width: 96% !important;
+    left: 2% !important;
+    right: 2% !important;
+    top: 60px !important;
+    height: 50% !important;
+  }
+
+  /* F. Modals */
+  .modal-panel {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    border-radius: 0;
+  }
+}
+
+/* --- MOBILE TOOLBAR TOGGLE (Matches previous logic) --- */
 .mobile-tools-toggle {
   display: none;
 }
