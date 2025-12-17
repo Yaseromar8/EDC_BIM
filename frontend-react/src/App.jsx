@@ -475,6 +475,28 @@ function App() {
     });
   }, []);
 
+  // --- UI Helpers for Mobile Logic ---
+  const togglePanel = useCallback((panelName) => {
+    if (activePanel === panelName) {
+      // Closing the active panel
+      setPanelVisible(!panelVisible);
+    } else {
+      // Opening a new panel
+      setActivePanel(panelName);
+      setPanelVisible(true);
+
+      // If mobile/vertical, collapse rail automatically to save space
+      if (window.innerWidth < 1024) {
+        setIsRailExpanded(false);
+      }
+    }
+  }, [activePanel, panelVisible]);
+
+  const toggleRail = useCallback(() => {
+    setIsRailExpanded(prev => !prev);
+  }, []);
+
+
   const handleLoadSpecificView = useCallback((urn, guid) => {
     console.log('[App] Switching view for', urn, 'to', guid);
     setActiveViewableGuids(prev => ({
