@@ -118,10 +118,12 @@ body,
 }
 
 .splash-overlay img {
-  max-width: 480px;
-  width: min(45vw, 480px);
-  height: auto;
-  filter: drop-shadow(0 18px 30px rgba(15, 23, 42, 0.45));
+  max-width: 400px;
+  max-height: 200px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
+  display: none;
+  /* User requested removal */
   background: rgba(255, 255, 255, 0.92);
   padding: 24px 36px;
   border-radius: 16px;
@@ -1435,8 +1437,13 @@ div[class*="bim360-visual-style-group"] * {
   /* Prevent fading animations */
 }
 
-/* DOCS (Mapped to 'answered') -> NATIVE BLUE */
-div[class*="status-answered"],
+/* Hide ViewCube on desktop/laptops as requested */
+@media (min-width: 1024px) {
+  .adsk-viewing-viewer .viewcube {
+    display: none !important;
+  }
+}
+
 .group-status-answered {
   filter: none !important;
 }
