@@ -1640,8 +1640,8 @@ function App() {
 
             <button
               type="button"
-              className={`rail-button ${activePanel === 'sources' && panelVisible ? 'active' : ''}`}
-              onClick={() => togglePanel('sources')}
+              className={`rail-button ${activePanel === 'files' && panelVisible ? 'active' : ''}`}
+              onClick={() => togglePanel('files')}
               title="Models"
             >
               <FolderIcon />
