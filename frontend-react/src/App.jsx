@@ -1577,45 +1577,103 @@ function App() {
             <img src="/POWER_CHINA.webp" alt="Company logo" />
           </div>
         )}
-        <nav className="app-left-rail" aria-label="Primary tools">
+        {/* Expand Rail Button (Only visible when rail is hidden) */}
+        {!isRailExpanded && (
           <button
-            type="button"
-            className={`rail-button ${activePanel === 'filters' && panelVisible ? 'active' : ''}`}
-            onClick={() => togglePanel('filters')}
-            title="Filters"
+            onClick={toggleRail}
+            style={{
+              position: 'absolute',
+              top: '12px',
+              left: '12px',
+              zIndex: 3000,
+              background: '#1c2027',
+              color: '#fff',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '8px',
+              width: '40px',
+              height: '40px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              cursor: 'pointer'
+            }}
           >
-            <FilterIcon />
-            <span className="rail-label">Filters</span>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
           </button>
-          <button
-            type="button"
-            className={`rail-button ${activePanel === 'files' && panelVisible ? 'active' : ''}`}
-            onClick={() => togglePanel('files')}
-            title="Files"
-          >
-            <FolderIcon />
-            <span className="rail-label">Files</span>
-          </button>
-          <button
-            type="button"
-            className={`rail-button ${activePanel === 'docs' && panelVisible ? 'active' : ''}`}
-            onClick={() => togglePanel('docs')}
-            title="Documentation"
-          >
-            <DocumentIcon />
-            <span className="rail-label">Docs</span>
-          </button>
-          <button
-            type="button"
-            className={`rail-button ${activePanel === 'build' && panelVisible ? 'active' : ''}`}
-            onClick={() => togglePanel('build')}
-            title="Build"
-          >
-            <BuildIcon isActive={activePanel === 'build' && panelVisible} />
-            <span className="rail-label">Build</span>
-          </button>
+        )}
 
-        </nav>
+        {/* Navigation Rail */}
+        {isRailExpanded && (
+          <nav className="app-left-rail" aria-label="Primary tools">
+            {/* Close Rail Button (Mobile Only) */}
+            <button
+              className="rail-button mobile-only-close"
+              onClick={toggleRail}
+              style={{
+                height: '40px',
+                marginBottom: '10px',
+                display: window.innerWidth < 1024 ? 'flex' : 'none', // Simple inline check, better done via CSS class
+                color: '#888'
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+
+            <button
+              type="button"
+              className={`rail-button ${activePanel === 'views' ? 'active' : ''}`}
+              onClick={() => {
+                setViewsPanelOpen(true);
+                setActivePanel('views');
+                if (window.innerWidth < 1024) setIsRailExpanded(false);
+              }}
+              title="Views"
+            >
+              <TargetIcon />
+              <span className="rail-label">Views</span>
+            </button>
+            <button
+              type="button"
+              className={`rail-button ${activePanel === 'sources' && panelVisible ? 'active' : ''}`}
+              onClick={() => togglePanel('sources')}
+              title="Models"
+            >
+              <FolderIcon />
+              <span className="rail-label">Files</span>
+            </button>
+            <button
+              type="button"
+              className={`rail-button ${activePanel === 'filters' && panelVisible ? 'active' : ''}`}
+              onClick={() => togglePanel('filters')}
+              title="Filters"
+            >
+              <FilterIcon />
+              <span className="rail-label">Filters</span>
+            </button>
+            <button
+              type="button"
+              className={`rail-button ${activePanel === 'docs' && panelVisible ? 'active' : ''}`}
+              onClick={() => togglePanel('docs')}
+              title="Documentation"
+            >
+              <DocumentIcon />
+              <span className="rail-label">Docs</span>
+            </button>
+            <button
+              type="button"
+              className={`rail-button ${activePanel === 'build' && panelVisible ? 'active' : ''}`}
+              onClick={() => togglePanel('build')}
+              title="Build"
+            >
+              <BuildIcon isActive={activePanel === 'build' && panelVisible} />
+              <span className="rail-label">Build</span>
+            </button>
+
+          </nav>
+        )}
 
         <aside className={`app-sidebar ${panelVisible && activePanel !== 'views' ? '' : 'hidden'}`}>
           {activePanel === 'filters' && (
