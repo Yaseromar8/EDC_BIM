@@ -1,28 +1,28 @@
 [
   {
-    "id": "1765947153237",
-    "name": "DURBANO",
+    "id": "1766380826761",
+    "name": "PLANOS",
     "viewerState": {
       "viewport": {
-        "aspectRatio": 2.1584506957120926,
+        "aspectRatio": 2.2731768317265866,
         "isOrthographic": true,
         "name": "",
         "eye": [
-          -290174.10849469434,
-          -465782.5721182874,
-          232267.1043781921
+          192927.28010463557,
+          -297623.68346291827,
+          222277.0847567718
         ],
         "target": [
-          -19259.079629983346,
-          -576.1213891782681,
-          -21607.530804057344
+          11978.698743575631,
+          6232.593489097781,
+          -1224.6519126179337
         ],
         "up": [
-          0.21464981676459846,
-          0.36858966379668295,
-          0.9044706274419156
+          -0.2733435689810565,
+          0.4590097284798845,
+          0.8453362422477348
         ],
-        "distanceToOrbit": 595201.0795131861,
+        "distanceToOrbit": 418358.7604364874,
         "projection": "orthographic",
         "worldUpVector": [
           0,
@@ -30,11 +30,100 @@
           1
         ],
         "pivotPoint": [
-          0.03976216912269592,
-          0.008096110075712204,
+          0.02612900733947754,
+          0.0023062117397785187,
           0.00015352503396570683
         ],
-        "orthographicHeight": 595201.0795131865
+        "orthographicHeight": 418358.7604364866
+      },
+      "renderOptions": {
+        "environment": "Boardwalk",
+        "ambientOcclusion": {
+          "enabled": false,
+          "radius": 250,
+          "intensity": 1
+        },
+        "toneMap": {
+          "method": 1,
+          "exposure": -7,
+          "lightMultiplier": -1e-20
+        },
+        "appearance": {
+          "ghostHidden": true,
+          "ambientShadow": false,
+          "antiAliasing": false,
+          "progressiveDisplay": true,
+          "swapBlackAndWhite": false,
+          "displayLines": true,
+          "displayPoints": true
+        }
+      }
+    },
+    "filterState": {
+      "filterSelections": {
+        "__revit__::ElementId": [],
+        "__category__::Category": [
+          "Revit Muros",
+          "Revit Modelos gen\u00e9ricos",
+          "Revit Bordes de losa",
+          "Revit Eje",
+          "Revit Tuber\u00edas",
+          "Revit Cotas de elevaci\u00f3n",
+          "Revit Puertas",
+          "Revit Refuerzo de \u00e1rea estructural",
+          "Revit Suelos"
+        ],
+        "__categoryId__::CategoryId": [],
+        "__parent__::parent": []
+      },
+      "filterColors": {},
+      "filterProperties": [
+        "__revit__::ElementId",
+        "__category__::Category",
+        "__categoryId__::CategoryId",
+        "__parent__::parent"
+      ]
+    },
+    "config": {},
+    "createdAt": "2025-12-22T05:20:26Z",
+    "projectId": null
+  },
+  {
+    "id": "1766381044697",
+    "name": "CANAL PLANOS",
+    "viewerState": {
+      "viewport": {
+        "aspectRatio": 2.2731768317265866,
+        "isOrthographic": true,
+        "name": "",
+        "eye": [
+          -658352.0532825269,
+          583757.7168817655,
+          551144.8738985286
+        ],
+        "target": [
+          103580.07166764808,
+          218948.64962506082,
+          -1724.568742630002
+        ],
+        "up": [
+          0.49391749838022336,
+          -0.23648508310059385,
+          0.8367319225801818
+        ],
+        "distanceToOrbit": 1009599.3458744618,
+        "projection": "orthographic",
+        "worldUpVector": [
+          0,
+          0,
+          1
+        ],
+        "pivotPoint": [
+          -0.06558257341384888,
+          -0.12151461839675903,
+          0.002784096635878086
+        ],
+        "orthographicHeight": 1009599.3458744618
       },
       "renderOptions": {
         "environment": "Boardwalk",
@@ -61,10 +150,9 @@
     },
     "filterState": {
       "filterSelections": {
-        "__revit__::ElementId": [],
-        "__category__::Category": [],
         "__categoryId__::CategoryId": [],
-        "__parent__::parent": []
+        "__parent__::parent": [],
+        "__revit__::ElementId": []
       },
       "filterColors": {},
       "filterProperties": [
@@ -75,6 +163,7 @@
       ]
     },
     "config": {},
-    "createdAt": "2025-12-17T04:52:33Z"
+    "createdAt": "2025-12-22T05:24:04Z",
+    "projectId": null
   }
 ]

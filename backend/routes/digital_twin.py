@@ -68,6 +68,15 @@ def trigger_translation(urn, token):
 @digital_twin_bp.route('/api/config/project', methods=['GET'])
 def get_config_route():
     config = get_project_config_internal()
+    project_id = request.args.get('project')
+    
+    if project_id and 'models' in config:
+        # Filter models by internal 'userProjectId' (we'll use this key to distinguish from ACC's projectId)
+        # Or simply overload 'projectId' if it's not strictly ACC-bound? 
+        # ACC models use 'projectId' for the BIM360 Project ID.
+        # Let's use 'internalProjectId' or 'appContext' to avoid confusion.
+        # BETTER: Let's use 'appProjectId' for our filter "DRENAJE_URBANO" etc.
+        config['models'] = [m for m in config['models'] if m.get('appProjectId') == project_id]
     
     
     # Auto-update logic: Check for latest versions of linked docs
@@ -114,33 +123,32 @@ def get_config_route():
     return jsonify(config)
 
 @digital_twin_bp.route('/api/config/project/add', methods=['POST'])
-def add_model_link():
-    data = request.get_json()
-    if not data or 'urn' not in data:
-        return jsonify({'error': 'Missing URN'}), 400
-        
+def add_model_route():
+    data = request.json
     config = get_project_config_internal()
     
-    existing = next((m for m in config.get('models', []) if m['urn'] == data['urn']), None)
-    if existing:
-        return jsonify(config)
-        
+    app_project_id = data.get('project') # "DRENAJE_URBANO" or "CANAL"
+
     new_model = {
-        'id': str(int(time.time() * 1000)),
-        'name': data.get('name', 'Unknown Model'),
-        'urn': data['urn'],
-        'source': 'DOCS',
-        'region': data.get('region', 'US'),
-        'projectId': data.get('projectId'),
-        'itemId': data.get('itemId'),
-        'versionId': data.get('versionId'),
-        'added_at': datetime.utcnow().isoformat()
+        "id": str(int(time.time() * 1000)),
+        "name": data.get('name'),
+        "urn": data.get('urn'),
+        "source": "DOCS",
+        "region": data.get('region', "US"),
+        "projectId": data.get('projectId'), # ACC Project ID
+        "itemId": data.get('itemId'),
+        "versionId": data.get('versionId'),
+        "added_at": datetime.now().isoformat(),
+        "appProjectId": app_project_id # Segregation tag
     }
     
     config.setdefault('models', []).append(new_model)
-    save_project_config_internal(config)
-    
-    return jsonify(config)
+    if save_project_config_internal(config):
+         # Return filtered list to frontend so it updates correctly
+         if app_project_id:
+             config['models'] = [m for m in config['models'] if m.get('appProjectId') == app_project_id]
+         return jsonify(config)
+    return jsonify({"error": "Failed to save"}), 500
 
 @digital_twin_bp.route('/api/config/project/update', methods=['POST'])
 def update_model_link():
@@ -213,10 +221,15 @@ def update_model_link():
 def upload_local_model():
     try:
         if 'file' not in request.files:
-            return jsonify({'error': 'No file part'}), 400
-        file = request.files['file']
-        label = request.form.get('label') or file.filename
+            return jsonify({"error": "No file part"}), 400
         
+        file = request.files['file']
+        label = request.form.get('label', file.filename)
+        app_project_id = request.form.get('project') # "DRENAJE_URBANO" or "CANAL"
+        
+        if file.filename == '':
+            return jsonify({"error": "No selected file"}), 400
+
         token, error = get_internal_token()
         if error or not token:
              return jsonify({'error': 'Internal auth failed', 'details': error}), 500
@@ -242,36 +255,46 @@ def upload_local_model():
         urn = urn_bytes.decode('utf-8').rstrip('=')
         
         translation_triggered = trigger_translation(urn, token)
-        
+       # 6. Update Config
         config = get_project_config_internal()
         new_model = {
-            'id': str(int(time.time() * 1000)),
-            'name': label,
-            'urn': urn,
-            'source': 'UPLOAD',
-            'status': 'translating' if translation_triggered else 'error',
-            'object_id': object_id,
-            'added_at': datetime.utcnow().isoformat()
+            "id": str(int(time.time() * 1000)),
+            "name": label,
+            "urn": urn,
+            "source": "LOCAL",
+            "region": "US",
+            "added_at": datetime.now().isoformat(),
+            "appProjectId": app_project_id
         }
         config.setdefault('models', []).append(new_model)
-        save_project_config_internal(config)
-        
-        return jsonify({'config': config, 'model': new_model})
+        if save_project_config_internal(config):
+            # Return filtered list
+            if app_project_id:
+                 config['models'] = [m for m in config['models'] if m.get('appProjectId') == app_project_id]
+            return jsonify({"status": "success", "urn": urn, "config": config})
+        else:
+            return jsonify({"error": "Failed to save config"}), 500
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 @digital_twin_bp.route('/api/config/project/remove', methods=['POST'])
-def remove_model_link():
-    data = request.get_json()
-    if not data or 'urn' not in data:
-        return jsonify({'error': 'Missing URN'}), 400
-        
+def remove_model_route():
+    data = request.json
+    urn = data.get('urn')
+    app_project_id = data.get('project')
+
     config = get_project_config_internal()
-    original_len = len(config.get('models', []))
-    config['models'] = [m for m in config.get('models', []) if m['urn'] != data['urn']]
+    initial_len = len(config.get('models', []))
+    config['models'] = [m for m in config.get('models', []) if m.get('urn') != urn]
     
-    if len(config['models']) < original_len:
-        save_project_config_internal(config)
-        
-    return jsonify(config)
+    if len(config['models']) < initial_len:
+         if save_project_config_internal(config):
+             # Return filtered
+             if app_project_id:
+                 config['models'] = [m for m in config['models'] if m.get('appProjectId') == app_project_id]
+             return jsonify(config)
+         else:
+             return jsonify({"error": "Failed to save"}), 500
+    
+    return jsonify({"error": "Model not found"}), 404

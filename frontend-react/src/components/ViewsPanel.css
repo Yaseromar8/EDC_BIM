@@ -230,3 +230,14 @@
 .btn-icon {
     display: flex;
 }
+
+/* Responsive */
+@media (max-width: 768px) {
+    .views-panel-popover {
+        right: 10px;
+        left: 10px;
+        width: auto;
+        top: 60px;
+        max-width: none;
+    }
+}

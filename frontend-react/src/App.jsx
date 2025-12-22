@@ -12,7 +12,8 @@ import AddDocumentModal from './components/AddDocumentModal';
 import BuildPanel from './components/BuildPanel';
 
 import BuildMapView from './components/BuildMapView';
-import MobileFloatingToolbar from './components/MobileFloatingToolbar'; // New Mobile Toolbar
+import MobileFloatingToolbar from './components/MobileFloatingToolbar';
+import LandingPage from './components/LandingPage'; // Import Landing Page
 
 import AddAttachmentModal from './components/AddAttachmentModal';
 import buildIconImg from './assets/build-icon.png';
@@ -437,8 +438,12 @@ function App() {
   const [modelProperties, setModelProperties] = useState({}); // Changed to object {urn: props[]}
   const [filterSelections, setFilterSelections] = useState({});
   const [expandedFilters, setExpandedFilters] = useState({});
-  const [filterColors, setFilterColors] = useState({}); // Restored state
-  const [showSplash, setShowSplash] = useState(true);
+  const [filterColors, setFilterColors] = useState({});
+
+  // Project Context State
+  const [selectedProject, setSelectedProject] = useState(null); // 'DRENAJE_URBANO' | 'CANAL'
+
+  const [showSplash, setShowSplash] = useState(false); // Valid only after project selection triggers load
   const [buildUploading, setBuildUploading] = useState(false);
   const [buildUploadError, setBuildUploadError] = useState('');
   const [buildPins, setBuildPins] = useState([]);
@@ -586,14 +591,17 @@ function App() {
   }, [modelProperties, hiddenModelUrns, models]);
 
   // Load views on mount
+  // Load views on mount
   useEffect(() => {
+    if (!selectedProject) return;
+
     fetch('/api/views')
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setSavedViews(data);
       })
       .catch(err => console.error("Error loading views:", err));
-  }, []);
+  }, [selectedProject]);
 
   const handleSaveView = useCallback((name) => {
     const handleStateCapture = (e) => {
@@ -643,15 +651,20 @@ function App() {
   }, []);
 
   const handleToggleModelVisibility = useCallback((urn) => {
-    setHiddenModelUrns(prev =>
-      prev.includes(urn) ? prev.filter(u => u !== urn) : [...prev, urn]
-    );
+    console.log('[App] Toggling visibility for:', urn);
+    setHiddenModelUrns(prev => {
+      const next = prev.includes(urn) ? prev.filter(u => u !== urn) : [...prev, urn];
+      console.log('[App] New hidden list:', next);
+      return next;
+    });
   }, []);
 
 
   // Load pins and layers from server
   useEffect(() => {
-    fetch('/api/pins')
+    if (!selectedProject) return;
+
+    fetch(`/api/pins?project=${selectedProject}`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {
@@ -659,7 +672,7 @@ function App() {
         }
       })
       .catch(err => console.error('Error loading pins:', err));
-  }, []);
+  }, [selectedProject]);
 
   // Get user geolocation
   useEffect(() => {
@@ -696,12 +709,19 @@ function App() {
     setSelectedPinId(tempId);
     setBuildPlacementMode(false); // Immediate exit
 
+
     try {
+      if (!selectedProject) return alert("Error: No project context for new pin");
       const res = await fetch('/api/pins', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...pinData, type: buildPinType }) // Send type to backend
+        body: JSON.stringify({
+          ...pinData,
+          type: buildPinType,
+          projectId: selectedProject // Add segregation
+        })
       });
+
       if (res.ok) {
         const newPin = await res.json();
         // Replace temp pin with real one
@@ -717,9 +737,10 @@ function App() {
       // Rollback on network error
       setBuildPins(prev => prev.filter(p => p.id !== tempId));
     }
-  }, [buildPins.length]);
+  }, [buildPins.length, selectedProject, buildPinType]);
 
   const handlePinSelect = useCallback((pinId) => {
+    console.log('[App] handlePinSelect called with ID:', pinId);
     setSelectedPinId(pinId);
     // Loose compare or stringify to handle potential mismatches (number vs string)
     const pin = buildPins.find(p => String(p.id) === String(pinId));
@@ -963,29 +984,36 @@ function App() {
 
 
 
-  // Twin Config: Load models from backend on mount
+  // Twin Config: Load models from backend on mount (and when project changes)
   useEffect(() => {
-    fetch('/api/config/project')
+    if (!selectedProject) return; // Don't fetch if no project selected
+
+    fetch(`/api/config/project?project=${selectedProject}`)
       .then(res => res.json())
       .then(data => {
         if (data.models && Array.isArray(data.models)) {
-          // Map backend format to viewer format if needed
-          // Backend: { urn, name, source, ... }
-          // Viewer expects: { urn, name (or label), ... }
+          // Map backend format to viewer format
           const mapped = data.models.map(m => ({
             ...m,
-            label: m.name // Viewer uses label or name
+            label: m.name
           }));
           setModels(mapped);
+
+          // Reset view
+          setModelProperties({});
+          setHiddenModelUrns([]);
+          // setFilterSelections({}); // Maybe reset filters too?
         }
       })
       .catch(err => console.error("Error loading project config:", err));
-  }, []);
+  }, [selectedProject]);
 
   const handleLinkDocs = useCallback(async (model) => {
     // 1. Optimistic Update (Optional)
     // 2. Call Backend
     try {
+      if (!selectedProject) return alert("No project selected");
+
       const res = await fetch('/api/config/project/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -996,7 +1024,8 @@ function App() {
           // Metadata for Update support
           projectId: model.projectId,
           itemId: model.itemId,
-          versionId: model.versionId
+          versionId: model.versionId,
+          project: selectedProject // Pass the selected project
         })
       });
       if (res.ok) {
@@ -1008,7 +1037,7 @@ function App() {
     } catch (e) {
       console.error("Error linking model:", e);
     }
-  }, []);
+  }, [selectedProject]);
 
   const handleModelUpdate = useCallback(async (urn) => {
     try {
@@ -1036,9 +1065,12 @@ function App() {
   }, []);
 
   const handleLocalUpload = useCallback(async (file, label) => {
+    if (!selectedProject) return alert("Error: No project context.");
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('label', label);
+    formData.append('project', selectedProject); // Add project context
 
     try {
       // Show loading indicator?
@@ -1066,7 +1098,7 @@ function App() {
       const res = await fetch('/api/config/project/remove', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urn })
+        body: JSON.stringify({ urn, project: selectedProject })
       });
       if (res.ok) {
         const config = await res.json();
@@ -1575,6 +1607,13 @@ function App() {
     setAvailableProperties(Array.from(uniqueProps.values()));
   }, [allLoadedProperties]);
 
+
+
+  // --- RENDER: LANDING PAGE VS APP ---
+  if (!selectedProject) {
+    return <LandingPage onSelectProject={setSelectedProject} />;
+  }
+
   return (
     <div className={`app-layout ${activeSheet ? 'doc-open' : ''}`} style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden' }}>
       <TopBar
@@ -1582,11 +1621,16 @@ function App() {
         togglePanel={togglePanel}
         isViewsActive={activePanel === 'views' && panelVisible}
         onLogoClick={() => {
-          setShowSplash(true);
+          // Return to Landing Page immediately and clean up
+          setSelectedProject(null);
           setPanelVisible(false);
           setActivePanel(null);
-          // Optional: Clear selection or open docs if desired
-          setOpenedDoc(null);
+          setModels([]);
+          setSavedViews([]);
+          setBuildPins([]);
+          setDocuments([]);
+          setSprites([]);
+          setHiddenModelUrns([]);
         }}
       />
       <div className="app-container" style={{ flex: 1, position: 'relative' }}>
@@ -1599,6 +1643,7 @@ function App() {
         {!isRailExpanded && (
           <button
             onClick={toggleRail}
+            className="desktop-rail-toggle"
             style={{
               position: 'absolute',
               top: '12px',
@@ -1610,7 +1655,6 @@ function App() {
               borderRadius: '8px',
               width: '40px',
               height: '40px',
-              display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
@@ -2007,8 +2051,14 @@ function App() {
               />
             </div>
 
-            <div className={`split-doc ${activeSheet ? 'active' : ''} ${(activeSheet && parallelMode) ? 'parallel' : ''}`}>
-              {activeSheet && (
+            {/* DEBUG: Log activeSheet render */}
+            {/* {console.log('[App] Rendering. ActiveSheet:', activeSheet)} */}
+            {activeSheet && (
+              <div className={`split-doc active ${parallelMode ? 'parallel' : ''}`}>
+                {/* 
+                  Note: I moved the wrapper inside the condition so it unmounts completely when closed.
+                  This ensures flexbox layout works correctly (3D viewer takes full height when this is gone).
+               */}
                 <>
                   {/* Header styled like Minimap: Dark Grey/Black */}
                   <div className="doc-header" style={{
@@ -2055,6 +2105,7 @@ function App() {
                       {/* Close Button */}
                       <button onClick={() => { setActiveSheet(null); setOpenedDoc(null); }} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
                     </div>
+
                   </div>
 
                   {/* Body */}
@@ -2149,10 +2200,9 @@ function App() {
 
                   </div>
                 </>
-              )}
-            </div>
+              </div>
+            )}
           </div>
-
         </div>
 
         <ImportModelModal
@@ -2163,15 +2213,17 @@ function App() {
         />
 
         {/* Views Popover */}
-        {activePanel === 'views' && panelVisible && (
-          <ViewsPanel
-            views={savedViews}
-            onSaveView={handleSaveView}
-            onDeleteView={handleDeleteView}
-            onLoadView={handleLoadView}
-            onClose={() => setPanelVisible(false)}
-          />
-        )}
+        {
+          activePanel === 'views' && panelVisible && (
+            <ViewsPanel
+              views={savedViews}
+              onSaveView={handleSaveView}
+              onDeleteView={handleDeleteView}
+              onLoadView={handleLoadView}
+              onClose={() => setPanelVisible(false)}
+            />
+          )
+        }
 
         <AddDocumentModal
           open={documentsModalOpen}
@@ -2203,7 +2255,7 @@ function App() {
             setFilterConfiguratorOpen(false);
           }}
         />
-      </div>
+      </div >
     </div >
   );
 }

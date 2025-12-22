@@ -1,0 +1,210 @@
+.landing-container {
+    width: 100vw;
+    height: 100vh;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-color: #1a1a1a;
+    /* Fallback */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Inter', sans-serif;
+    /* Assuming Inter is available, else sans-serif */
+    overflow: hidden;
+}
+
+.landing-overlay {
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    /* Dark overlay for text readability */
+    backdrop-filter: blur(4px);
+    /* Slight blur for premium feel */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 40px 20px;
+}
+
+/* Header */
+.landing-header {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 40px;
+}
+
+.landing-logo {
+    max-height: 80px;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
+}
+
+.landing-title-text {
+    color: white;
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+}
+
+/* Content */
+.landing-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 1200px;
+    flex: 1;
+    justify-content: center;
+}
+
+.landing-subtitle {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 1.5rem;
+    font-weight: 300;
+    margin-bottom: 40px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.project-cards-container {
+    display: flex;
+    gap: 40px;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+/* Cards */
+.project-card {
+    width: 320px;
+    height: 400px;
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    cursor: pointer;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #2a2a2a;
+}
+
+.project-card:hover {
+    transform: translateY(-10px) scale(1.02);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.card-image {
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    transition: transform 0.5s ease;
+}
+
+.project-card:hover .card-image {
+    transform: scale(1.1);
+}
+
+.card-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.2) 60%, rgba(0, 0, 0, 0.1) 100%);
+    transition: background 0.3s ease;
+}
+
+.project-card:hover .card-overlay {
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.1) 60%, rgba(0, 0, 0, 0) 100%);
+}
+
+.card-label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding: 30px 20px;
+    text-align: center;
+    z-index: 2;
+}
+
+.card-label span {
+    color: white;
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    display: block;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+    border-bottom: 2px solid transparent;
+    transition: border-color 0.3s, color 0.3s;
+    padding-bottom: 5px;
+    display: inline-block;
+}
+
+.project-card:hover .card-label span {
+    color: #4da6ff;
+    /* Power China Blue hint */
+    border-color: #4da6ff;
+}
+
+/* Footer */
+.landing-footer {
+    width: 100%;
+    text-align: center;
+    margin-top: 20px;
+}
+
+.landing-footer p {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.8rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .landing-overlay {
+        padding: 20px 10px;
+        justify-content: flex-start;
+        /* Allow scroll if needed */
+        overflow-y: auto;
+        /* Scrollable content */
+    }
+
+    .landing-header {
+        margin-bottom: 20px;
+        margin-top: 10px;
+    }
+
+    .project-cards-container {
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+        width: 100%;
+    }
+
+    .project-card {
+        width: 90%;
+        max-width: 340px;
+        height: 200px;
+        /* Compact height for mobile list */
+    }
+
+    .landing-subtitle {
+        font-size: 1.2rem;
+        margin-bottom: 20px;
+    }
+
+    .landing-logo {
+        max-height: 50px;
+    }
+
+    .card-label span {
+        font-size: 1.2rem;
+    }
+}

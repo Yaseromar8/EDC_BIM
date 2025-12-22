@@ -1,1 +1,4 @@
 tokens.json
+pins_debug.log
+__pycache__/
+*.pyc

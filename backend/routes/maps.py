@@ -15,22 +15,6 @@ LAYERS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'layers.j
 
 # --- HELPERS ---
 
-def load_pins():
-    if not os.path.exists(PINS_FILE):
-        return []
-    try:
-        with open(PINS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"Error loading pins: {e}")
-        return []
-
-def save_pins(pins):
-    try:
-        with open(PINS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(pins, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        print(f"Error saving pins: {e}")
 
 def load_layers():
     if not os.path.exists(LAYERS_FILE):
@@ -51,101 +35,6 @@ def save_layers(layers):
 
 # --- ROUTES ---
 
-@maps_bp.route('/api/pins', methods=['GET'])
-def get_pins():
-    return jsonify(load_pins())
-
-@maps_bp.route('/api/pins', methods=['POST'])
-def create_pin():
-    data = request.json or {}
-    
-    has_latlng = 'lat' in data and 'lng' in data
-    has_xyz = 'x' in data and 'y' in data and 'z' in data
-    
-    if not has_latlng and not has_xyz:
-        return jsonify({'error': 'Missing coordinates (lat/lng OR x/y/z)'}), 400
-
-    pins = load_pins()
-    
-    # Calculate next Point Number
-    max_num = 0
-    for p in pins:
-        # Extract number from "Punto N"
-        match = re.match(r'Punto (\d+)', p.get('name', ''))
-        if match:
-            num = int(match.group(1))
-            if num > max_num:
-                max_num = num
-    
-    next_num = max_num + 1
-    name = f"Punto {next_num}"
-    
-    new_pin = {
-        'id': str(int(time.time() * 1000)),
-        'name': name,
-        'documents': [],
-        'createdAt': datetime.utcnow().isoformat() + 'Z'
-    }
-    
-    if has_latlng:
-        new_pin['lat'] = data['lat']
-        new_pin['lng'] = data['lng']
-        
-    if has_xyz:
-        new_pin['x'] = data['x']
-        new_pin['y'] = data['y']
-        new_pin['z'] = data['z']
-        
-    # Persist additional PushPin metadata
-    if 'objectId' in data:
-        new_pin['objectId'] = data['objectId']
-    if 'viewerState' in data:
-        new_pin['viewerState'] = data['viewerState']
-    if 'status' in data:
-        new_pin['status'] = data['status']
-    if 'seedUrn' in data:
-        new_pin['seedUrn'] = data['seedUrn']
-    if 'type' in data:
-        new_pin['type'] = data['type']
-    
-    pins.append(new_pin)
-    save_pins(pins)
-    return jsonify(new_pin)
-
-@maps_bp.route('/api/pins/<pin_id>', methods=['DELETE'])
-def delete_pin(pin_id):
-    pins = load_pins()
-    initial_len = len(pins)
-    pins = [p for p in pins if p['id'] != pin_id]
-    
-    if len(pins) < initial_len:
-        save_pins(pins)
-        return jsonify({'success': True})
-    return jsonify({'error': 'Pin not found'}), 404
-
-@maps_bp.route('/api/pins/<pin_id>', methods=['PUT'])
-def update_pin(pin_id):
-    data = request.json or {}
-    pins = load_pins()
-    
-    found = False
-    updated_pin = None
-    
-    for p in pins:
-        if p['id'] == pin_id:
-            # Update fields if present
-            if 'documents' in data:
-                p['documents'] = data['documents']
-            if 'name' in data:
-                p['name'] = data['name']
-            found = True
-            updated_pin = p
-            break
-            
-    if found:
-        save_pins(pins)
-        return jsonify(updated_pin)
-    return jsonify({'error': 'Pin not found'}), 404
 
 @maps_bp.route('/api/layers', methods=['GET'])
 def get_layers_route():

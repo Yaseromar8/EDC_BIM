@@ -29,6 +29,10 @@ body,
   .app-left-rail {
     display: none;
   }
+
+  .desktop-rail-toggle {
+    display: none !important;
+  }
 }
 
 
@@ -135,14 +139,19 @@ body,
   /* We force it to height 50% width 100% */
   .split-view-container>.split-3d {
     width: 100% !important;
-    height: 50% !important;
-    flex: none !important;
+    height: auto !important;
+    /* Let flex handle height */
+    flex: 1 1 auto !important;
+    /* Grow to fill space */
   }
 
   /* The Doc panel in parallel mode */
   .split-doc.parallel {
     width: 100% !important;
-    height: 50% !important;
+    height: auto !important;
+    /* Let flex handle height */
+    flex: 1 1 auto !important;
+    /* Grow to share space 50/50 */
     top: 0 !important;
     right: 0 !important;
     border-left: none !important;
@@ -378,6 +387,9 @@ body,
   opacity: 1;
   pointer-events: all;
   transform: translateY(0) scale(1);
+  display: flex !important;
+  /* Force display */
+  visibility: visible !important;
 }
 
 /* Parallel Mode (Split Screen) */

@@ -522,61 +522,40 @@ const Viewer = ({
 
         if (activeSheet) {
             console.log('[Viewer] Active sheet selected. Splitting view...');
-            // DO NOT load document node here. We want 3D to stay.
-            // viewer.loadDocumentNode(activeSheet.document, activeSheet.node);
 
-            // Resize viewer immediately to fit 50% width
-            setTimeout(() => {
-                viewer.resize();
-            }, 350); // Wait for CSS transition
+            // Only load 2D document if it's NOT a pin (pins stick to 3D)
+            if (!activeSheet.isPin) {
+                // viewer.loadDocumentNode(activeSheet.document, activeSheet.node);
+            }
+
+            // Resize viewer immediately to fit 50% width if parallel
+            // setTimeout(() => { viewer.resize(); }, 350); 
         } else {
-            // Return to 3D if we have models loaded (but maybe hidden/unloaded by 2D switch)
-            if (models.length > 0) {
-                console.log('[Viewer] Returning to 3D view...');
-                // We re-trigger loadAll or simply ensure models are shown.
-                // Since loadDocumentNode(2D) replaces the "main" view, the safest way
-                // to restore the aggregated 3D view is to reload the 3D nodes.
+            // Return to 3D ONLY if we are currently in 2D mode (i.e. coming back from a Sheet)
+            // If we are just closing a Pin panel (which overlays 3D), DO NOT RELOAD.
+            const is2D = viewer.model && viewer.model.is2d();
 
-                // Clear state temporarily to force re-mount or re-load?
-                // Better: iterate models and load document nodes again.
-                // Note: loadedModelsRef might need clearing if viewer unloaded them.
+            if (models.length > 0 && is2D) {
+                console.log('[Viewer] Returning to 3D view from 2D...');
 
                 // Unload current 2D model first
-                if (viewer.model && viewer.model.is2d()) {
-                    // 1. Unload 2D
-                    // viewer.unloadModel(viewer.model); // Might cause flash, but cleaner
+                if (viewer.model) {
+                    // viewer.unloadModel(viewer.model);
                 }
 
-                // 2. Load all 3D models again
-                // We use the helper function logic but we need to trigger it.
-                // We can't call loadAll() directly as it is inside another effect.
-                // Instead, we can use a small hack or simply duplicate the load logic here
-                // OR better: we assume the 'models' effect will not run again because 'models' didn't change.
-
-                // Strategy: Explicitly call load for each model.
                 const reset3D = async () => {
                     for (const model of models) {
-                        // We need to force load even if loadedModelsRef has it,
-                        // because the viewer might have detached it.
-                        // However, let's try unloading everything first to be clean.
-
-                        // Check if model is actually in viewer?
-                        // If we are in 2D, the 3D models are likely gone from the scene.
-
-                        // Let's clear our ref to force re-load
+                        // Clear ref to force re-load
                         if (loadedModelsRef.current[model.urn]) {
-                            // viewer.unloadModel(loadedModelsRef.current[model.urn]);
                             delete loadedModelsRef.current[model.urn];
                         }
-
-                        // Now trigger load
                         await loadModelSequentially(model);
                     }
                 };
                 reset3D();
             }
         }
-    }, [activeSheet]); // Only run when activeSheet changes (to null or value)
+    }, [activeSheet]); // Only run when activeSheet changes
 
     // Handle Viewable Switching (Proposals)
     useEffect(() => {
@@ -743,10 +722,12 @@ const Viewer = ({
             });
             viewer.clearSelection();
 
-            // If no filters, show all and exit
+            // If no filters, show all (clear isolation) and exit
             if (!detail || !detail.dbIds || !detail.dbIds.length) {
                 viewer.setGhosting(false);
-                viewer.showAll();
+                // viewer.showAll(); // This unhides everything including manually hidden models via setNodeOff
+                viewer.impl.visibilityManager.isolate([]); // Clear isolation
+                viewer.impl.visibilityManager.setNodeOff(viewer.model.getRootId(), false); // Ensure root is on? No, let separate visibility logic handle it.
                 return;
             }
 
@@ -1065,66 +1046,23 @@ const Viewer = ({
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
 
-        // --- BUILD PIN CREATION (Official Workflow) ---
-        // This takes precedence over other interactions when active
+        // --- BUILD PIN CREATION (Manual Mode) ---
+        // We use the manual hit test logic (separate useEffect) to capture exact Model URN.
+        // This effect ensures the official extension's creation mode is DISABLED so it doesn't conflict.
         if (buildPlacementMode) {
             const extension = viewer.getExtension('Autodesk.BIM360.Extension.PushPin');
             if (extension) {
-                // console.log('[Viewer] Starting PushPin Creation Mode via Extension...');
-
-                // 1. Activate Extension Tool
-                // This handles cursor and click sequence internally
-                extension.startCreateItem({
-                    label: 'New Issue',
-                    status: 'open',
-                    type: 'issues',
-                    position: { x: 0, y: 0, z: 0 } // Placeholder, user will click
-                });
-
-                // 2. Listen for Creation Event
-                const handlePushPinCreated = (event) => {
-                    // event.value contains: { itemData: { position, objectId, ... } }
-                    const newItem = event.value?.itemData;
-
-                    if (newItem && onBuildPinCreate) {
-                        // Get Global Offset to convert Local -> Global
-                        const globalOffset = viewer.model?.getData()?.globalOffset || { x: 0, y: 0, z: 0 };
-
-                        // Convert Local (Viewer) to World (Global)
-                        const worldPoint = {
-                            x: newItem.position.x + globalOffset.x,
-                            y: newItem.position.y + globalOffset.y,
-                            z: newItem.position.z + globalOffset.z,
-                            objectId: newItem.objectId,
-                            viewerState: viewer.getState({ viewport: true }),
-                            seedUrn: viewer.model?.getData()?.urn
-                        };
-
-                        // console.log('[Viewer] PushPin Created via Extension:', worldPoint);
-                        onBuildPinCreate(worldPoint);
-                    }
-                };
-
-                // The extension fires 'pushpin.created' on its manager
-                if (extension.pushPinManager) {
-                    extension.pushPinManager.addEventListener('pushpin.created', handlePushPinCreated);
-                }
-
-                // Cleanup function when mode ends
-                return () => {
-                    if (extension.pushPinManager) {
-                        extension.pushPinManager.removeEventListener('pushpin.created', handlePushPinCreated);
-                    }
-                    extension.endCreateItem();
-                };
-            } else {
-                console.warn('[Viewer] PushPin extension not found during creation attempt.');
+                extension.endCreateItem();
             }
-            return; // Exit effect if in build mode
         }
+    }, [buildPlacementMode, viewerReady]);
 
 
-        // --- STANDARD INTERACTION (Sprites, Docs, etc) ---
+    // --- STANDARD INTERACTION (Sprites, Docs, etc) ---
+    useEffect(() => {
+        const viewer = viewerRef.current;
+        if (!viewer || !viewerReady) return;
+
         const handleCanvasInteraction = (event) => {
             // Only process on CLICK
             if (event.type !== 'click') return;
@@ -1226,7 +1164,14 @@ const Viewer = ({
 
         Object.entries(loaded).forEach(([urn, model]) => {
             if (!targetUrns.includes(urn)) {
+                console.log('[Viewer] Unloading model:', urn);
+                // Use unloadModel if it's not the primary one, or unloadDocumentNode
                 viewer.unloadModel(model);
+                // Also check if it's the current 'model' property of viewer to force clear?
+                if (viewer.model === model) {
+                    // viewer.impl.unloadCurrentModel(); // Sometimes needed for full cleanup
+                }
+
                 delete loadedModelsRef.current[urn];
 
                 // Remove sheets for this model
@@ -1255,29 +1200,32 @@ const Viewer = ({
     }, [models, viewerReady]);
 
     // Handle Model Visibility
+    // Handle Model Visibility
     useEffect(() => {
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
 
-        // console.log('[Viewer] Updating visibility. Hidden URNs:', hiddenModelUrns);
+        console.log('[Viewer] Updating visibility. Hidden URNs:', hiddenModelUrns);
+        const allLoaded = Object.keys(loadedModelsRef.current);
+        console.log('[Viewer] Loaded Models URNs:', allLoaded);
 
         Object.entries(loadedModelsRef.current).forEach(([urn, model]) => {
             if (!model) return;
             const shouldHide = hiddenModelUrns.includes(urn);
 
-            // console.log(`[Viewer] Processing visibility for ${urn}: Hide? ${shouldHide}`);
+            console.log(`[Viewer] Processing visibility for ${urn} (ID: ${model.id}): Hide? ${shouldHide}`);
 
             try {
                 if (shouldHide) {
                     viewer.hideModel(model.id);
                     // Fallback: Manually hide root node if model.id doesn't catch everything
                     if (model.getRootId) {
-                        viewer.impl.visibilityManager.setNodeOff(model.getRootId(), true);
+                        // viewer.impl.visibilityManager.setNodeOff(model.getRootId(), true);
                     }
                 } else {
                     viewer.showModel(model.id);
                     if (model.getRootId) {
-                        viewer.impl.visibilityManager.setNodeOff(model.getRootId(), false);
+                        // viewer.impl.visibilityManager.setNodeOff(model.getRootId(), false);
                     }
                 }
             } catch (e) {
@@ -1285,7 +1233,7 @@ const Viewer = ({
             }
         });
         // Force a full scene update to ensure changes take effect immediately
-        viewer.impl.invalidate(true, true, true);
+        // viewer.impl.invalidate(true, true, true);
     }, [hiddenModelUrns, viewerReady]);
 
     useEffect(() => {
@@ -1379,7 +1327,16 @@ const Viewer = ({
             const globalOffset = viewer.model?.getData()?.globalOffset || { x: 0, y: 0, z: 0 };
 
             const pushPinItems = buildPins
-                .filter(pin => pin.x !== undefined)
+                .filter(pin => {
+                    // Safety check for coords
+                    if (pin.x === undefined) return false;
+
+                    // Filter based on Model Visibility
+                    if (pin.modelUrn) {
+                        return !hiddenModelUrns.includes(pin.modelUrn);
+                    }
+                    return true; // If no modelUrn (legacy), show it? or hide it? Let's show it by default to be safe.
+                })
                 .map((pin, index) => {
                     // Check if pin is World Coordinate (Large value heuristic)
                     // If > 10,000, assumes it's world coordinate and subtracts globalOffset
@@ -1411,27 +1368,83 @@ const Viewer = ({
                         position: { x: finalX, y: finalY, z: finalZ },
                         type: 'issues', // Ensure visibility
                         objectId: pin.objectId || 0,
-                        seedUrn: pin.seedUrn || viewer.model?.getData()?.urn // Pass seedUrn to link to specific model
-                        // viewerState: pin.viewerState // Optional: restore camera state on click if saved
+                        seedUrn: (() => {
+                            // Robust URN Resolution
+                            const allModels = viewer.getAllModels(); // or viewer.impl.modelQueue().getModels()
+                            const validUrns = allModels.map(m => m.getData().urn);
+
+                            let targetUrn = pin.modelUrn || pin.seedUrn;
+
+                            // 1. Direct Match
+                            if (targetUrn && validUrns.includes(targetUrn)) {
+                                return targetUrn;
+                            }
+
+                            // 2. Fallback: Force use of the first available model
+                            // This prevents "issue seedUrn does not exist" by ensuring we attach to *something* visible.
+                            if (validUrns.length > 0) {
+                                return validUrns[0];
+                            }
+
+                            return null;
+                            // viewerState: pin.viewerState // Optional: restore camera state on click if saved
+                        })(),
+                        viewerState: null // PREVENT AUTO-RESTORE: Ensure clicking a pin doesn't reset visibility/isolation
                     };
+                }).filter(item => {
+                    if (!item.seedUrn) {
+                        console.warn('[Viewer] Skipping pin due to missing/invalid URN:', item.label);
+                        return false;
+                    }
+                    return true;
                 });
 
             // 3. Load
-            // 3. Load
             if (pushPinItems.length > 0) {
-                extension.loadItems(pushPinItems);
+                // console.log('[Viewer] Loading PushPins with URNs:', pushPinItems.map(p => p.seedUrn));
+                extension.removeAllItems();
+
+                // Use V2 if available (recommended by Autodesk for 3D models to fix URN issues)
+                if (extension.loadItemsV2) {
+                    extension.loadItemsV2(pushPinItems);
+                } else {
+                    extension.loadItems(pushPinItems);
+                }
+
+                // NUCLEAR FIX: Override internal methods to prevent visibility reset
+                // The PushPin extension saves/restores state automatically. We disable this behavior.
+                if (extension.pushPinManager) {
+                    // 1. Disable restoring state (fixes "hidden elements reappear")
+                    extension.pushPinManager.restoreViewerState = function () {
+                        console.log('[Viewer] Prevented PushPin state restore.');
+                    };
+
+                    // 2. Disable saving state on new pins (optional, but cleaner)
+                    // extension.pushPinManager.saveViewerState = function() { return null; };
+                }
             }
 
             // 4. Handle Selection
+            // 4. Handle Selection
             const handlePinSelect = (event) => {
+                // Prevent extension from restoring state if possible (though often internal)
+                if (event.preventDefault) event.preventDefault();
+
                 console.log('[Viewer] PushPin Event Fired:', event.type, event);
+
+                // Get selected items
                 const selectedItems = event.data;
                 if (selectedItems && selectedItems.length > 0) {
-                    const pinId = selectedItems[0].id;
+                    const pinId = selectedItems[0].id; // This is the ID we assigned (string)
                     console.log('[Viewer] Pin Selected ID:', pinId);
+
                     if (onBuildPinSelect) {
                         onBuildPinSelect(pinId);
                     }
+
+                    // HACK: Restore invalidation to prevent "flash" of restored state if the extension forces it
+                    // Or, simpler: Immediately deselect in the extension to stop it from holding "active" state?
+                    // extension.pushPinManager.deselectAll(); // This might close the label too?
                 }
             };
 
@@ -1446,20 +1459,132 @@ const Viewer = ({
             // Filter unique and defined
             const uniqueEvents = [...new Set(eventsToListen.filter(Boolean))];
 
-            console.log('[Viewer] Listening for PushPin events:', uniqueEvents);
+            console.log('[Viewer] Listening for PushPin events on Viewer:', uniqueEvents);
 
+            // 1. Listen on Viewer (Global)
             uniqueEvents.forEach(evt => {
                 viewer.removeEventListener(evt, handlePinSelect);
                 viewer.addEventListener(evt, handlePinSelect);
             });
 
+            // 2. Listen on PushPinManager (Specific - often required for newer versions)
+            if (extension.pushPinManager) {
+                console.log('[Viewer] Also listening on PushPinManager');
+                uniqueEvents.forEach(evt => {
+                    // Manager might use different method signatures or only support specific events
+                    // But typically it mimics EventDispatcher
+                    if (extension.pushPinManager.addEventListener) {
+                        extension.pushPinManager.removeEventListener(evt, handlePinSelect);
+                        extension.pushPinManager.addEventListener(evt, handlePinSelect);
+                    }
+                });
+            }
+
         }).catch(err => {
             console.error('[Viewer] Failed to load PushPin extension:', err);
         });
 
-    }, [buildPins, showBuildPins, viewerReady, onBuildPinSelect]);
+    }, [buildPins, showBuildPins, viewerReady, onBuildPinSelect, hiddenModelUrns]);
 
-    // ZOOM TO SELECTED PIN
+    // MANUAL HIT TEST (Bypass Extension Logic)
+    useEffect(() => {
+        const viewer = viewerRef.current;
+        if (!viewer || !viewerReady || !showBuildPins) return;
+
+
+        const container = viewer.container;
+        const canvas = viewer.canvas;
+        if (!container || !canvas) return;
+
+        let hoveredPin = null;
+        let downPin = null;
+
+        // Helper: Project Logic
+        const getHitPin = (clientX, clientY) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+
+            let closest = null;
+            let minDistance = 35;
+
+            buildPins.forEach(pin => {
+                if (pin.x === undefined || pin.y === undefined || pin.z === undefined) return;
+                const screenPos = viewer.worldToClient(new THREE.Vector3(pin.x, pin.y, pin.z));
+                const dx = screenPos.x - x;
+                const dy = screenPos.y - y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closest = pin;
+                }
+            });
+            return closest;
+        };
+
+        // 1. Hover Effect
+        const handleMouseMove = (e) => {
+            const pin = getHitPin(e.clientX, e.clientY);
+            if (pin) {
+                if (!hoveredPin) canvas.style.cursor = 'pointer';
+                hoveredPin = pin;
+            } else if (hoveredPin) {
+                canvas.style.cursor = 'default';
+                hoveredPin = null;
+            }
+        };
+
+        // 2. Block Down
+        const handlePointerDown = (e) => {
+            const pin = getHitPin(e.clientX, e.clientY);
+            if (pin) {
+                downPin = pin;
+                e.preventDefault();
+                e.stopImmediatePropagation();
+            } else {
+                downPin = null;
+            }
+        };
+
+        // 3. Trigger Click on Up
+        const handlePointerUp = (e) => {
+            if (downPin) {
+                const pin = getHitPin(e.clientX, e.clientY);
+                if (pin && pin.id === downPin.id) {
+                    console.log('[Viewer] Manual Interaction Success:', pin.id);
+                    if (onBuildPinSelect) onBuildPinSelect(pin.id);
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    viewer.clearSelection();
+                }
+                downPin = null;
+            }
+        };
+
+        // 4. Cleanup Click
+        const handleClick = (e) => {
+            const pin = getHitPin(e.clientX, e.clientY);
+            if (pin) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+            }
+        };
+
+        container.addEventListener('mousemove', handleMouseMove, { capture: true });
+        container.addEventListener('pointerdown', handlePointerDown, { capture: true });
+        container.addEventListener('pointerup', handlePointerUp, { capture: true });
+        container.addEventListener('click', handleClick, { capture: true });
+
+        return () => {
+            container.removeEventListener('mousemove', handleMouseMove, { capture: true });
+            container.removeEventListener('pointerdown', handlePointerDown, { capture: true });
+            container.removeEventListener('pointerup', handlePointerUp, { capture: true });
+            container.removeEventListener('click', handleClick, { capture: true });
+            if (canvas) canvas.style.cursor = '';
+        };
+    }, [viewerReady, buildPins, showBuildPins, onBuildPinSelect]);
+
     // ZOOM TO SELECTED PIN
     useEffect(() => {
         const viewer = viewerRef.current;
@@ -1605,7 +1730,9 @@ const Viewer = ({
         viewer.container.addEventListener('click', handleCanvasClick, true);
 
         return () => {
-            viewer.container.removeEventListener('click', handleCanvasClick, true);
+            if (viewer && viewer.container) {
+                viewer.container.removeEventListener('click', handleCanvasClick, true);
+            }
         };
     }, [buildPins, showBuildPins, viewerReady, placementMode, onBuildPinSelect]);
 
@@ -1613,7 +1740,7 @@ const Viewer = ({
     useEffect(() => {
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
-        if (!placementMode) {
+        if (!placementMode && !buildPlacementMode) {
             viewer.setCursor && viewer.setCursor('default');
             return;
         }
@@ -1630,21 +1757,50 @@ const Viewer = ({
             console.log('Sprite placement - Hit test result:', hit);
 
             if (hit && hit.point) {
-                console.log('✓ Sprite placed at:', {
+                let modelUrn = null;
+                if (hit.model) {
+                    modelUrn = hit.model.getData().urn;
+                }
+
+                console.log('✓ Hit placed at:', {
                     position: { x: hit.point.x, y: hit.point.y, z: hit.point.z },
-                    dbId: hit.dbId
+                    dbId: hit.dbId,
+                    modelUrn: modelUrn
                 });
-                if (onPlacementComplete) {
+
+                // Branch based on Mode
+                if (placementMode && onPlacementComplete) {
+                    // SPRITE
                     onPlacementComplete({
                         position: { x: hit.point.x, y: hit.point.y, z: hit.point.z },
-                        dbId: hit.dbId
+                        dbId: hit.dbId,
+                        modelUrn: modelUrn
                     });
+                } else if (buildPlacementMode && onBuildPinCreate) {
+                    // BUILD PIN
+                    // Convert to World Coordinates automatically? 
+                    // No, our stored pins seem to use Local now? Or we should normalize?
+                    // Let's use Local + Model Link.
+                    // But if we want Global, we should add globalOffset.
+                    const globalOffset = hit.model?.getData()?.globalOffset || { x: 0, y: 0, z: 0 };
+                    const worldPoint = {
+                        x: hit.point.x, // + globalOffset.x, // Keeping consistent with current local logic?
+                        y: hit.point.y, // + globalOffset.y, 
+                        z: hit.point.z, // + globalOffset.z,
+                        // Actually, previously we were converting to World in extension handler.
+                        // But `View` uses local.
+                        // Let's pass the raw hit point which is Viewer-Local.
+                        // If we need world, we can add it.
+                        // The existing extension handler acted on `newItem.position` which is local usually.
+                        // Let's pass Local.
+                        objectId: hit.dbId,
+                        modelUrn: modelUrn
+                    };
+                    onBuildPinCreate(worldPoint);
                 }
+
             } else {
-                console.warn('✗ No geometry detected at click position. Try clicking directly on the 3D model.');
-                if (onPlacementComplete) {
-                    onPlacementComplete(null);
-                }
+                console.warn('✗ No geometry detected at click position.');
             }
         };
         target.addEventListener('click', handlePlacement, true);
@@ -1652,7 +1808,7 @@ const Viewer = ({
             target.removeEventListener('click', handlePlacement, true);
             viewer.setCursor && viewer.setCursor('default');
         };
-    }, [placementMode, onPlacementComplete, viewerReady]);
+    }, [placementMode, buildPlacementMode, onPlacementComplete, onBuildPinCreate, viewerReady]);
 
     // Context menu for sprite creation (right-click / long-press)
     // AND existing sprite interaction
@@ -1771,23 +1927,23 @@ const Viewer = ({
 
         const handleClickOutside = () => setContextMenu(null);
 
-        canvas.addEventListener('contextmenu', handleContextMenu, true);
-        canvas.addEventListener('mousedown', handleMouseDown);
-        canvas.addEventListener('touchstart', handleMouseDown);
-        canvas.addEventListener('mouseup', handleMouseUp);
-        canvas.addEventListener('touchend', handleMouseUp);
-        canvas.addEventListener('mousemove', handleMouseMove);
-        canvas.addEventListener('touchmove', handleMouseMove);
+        // canvas.addEventListener('contextmenu', handleContextMenu, true);
+        // canvas.addEventListener('mousedown', handleMouseDown);
+        // canvas.addEventListener('touchstart', handleMouseDown);
+        // canvas.addEventListener('mouseup', handleMouseUp);
+        // canvas.addEventListener('touchend', handleMouseUp);
+        // canvas.addEventListener('mousemove', handleMouseMove);
+        // canvas.addEventListener('touchmove', handleMouseMove);
         window.addEventListener('click', handleClickOutside);
 
         return () => {
-            canvas.removeEventListener('contextmenu', handleContextMenu, true);
-            canvas.removeEventListener('mousedown', handleMouseDown);
-            canvas.removeEventListener('touchstart', handleMouseDown);
-            canvas.removeEventListener('mouseup', handleMouseUp);
-            canvas.removeEventListener('touchend', handleMouseUp);
-            canvas.removeEventListener('mousemove', handleMouseMove);
-            canvas.removeEventListener('touchmove', handleMouseMove);
+            // canvas.removeEventListener('contextmenu', handleContextMenu, true);
+            // canvas.removeEventListener('mousedown', handleMouseDown);
+            // canvas.removeEventListener('touchstart', handleMouseDown);
+            // canvas.removeEventListener('mouseup', handleMouseUp);
+            // canvas.removeEventListener('touchend', handleMouseUp);
+            // canvas.removeEventListener('mousemove', handleMouseMove);
+            // canvas.removeEventListener('touchmove', handleMouseMove);
             window.removeEventListener('click', handleClickOutside);
             if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
         };

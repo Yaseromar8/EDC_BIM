@@ -32,6 +32,11 @@ def save_views_internal(views_list):
 @views_bp.route('/api/views', methods=['GET'])
 def get_views():
     views = get_views_internal()
+    project_id = request.args.get('project')
+    
+    if project_id:
+        views = [v for v in views if v.get('projectId') == project_id]
+        
     return jsonify(views)
 
 @views_bp.route('/api/views', methods=['POST'])
@@ -48,7 +53,8 @@ def save_view():
         'viewerState': data['viewerState'],
         'filterState': data.get('filterState', {}), # Custom React state (filters, colors)
         'config': data.get('config', {}),          # Other config if needed
-        'createdAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        'createdAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        'projectId': data.get('project') # Project isolation
     }
     
     views.append(new_view)
