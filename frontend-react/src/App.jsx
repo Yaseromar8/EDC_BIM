@@ -14,9 +14,20 @@ import BuildPanel from './components/BuildPanel';
 import BuildMapView from './components/BuildMapView';
 import MobileFloatingToolbar from './components/MobileFloatingToolbar';
 import LandingPage from './components/LandingPage'; // Import Landing Page
+import FilterConfiguratorModal from './components/FilterConfiguratorModal';
 
 import AddAttachmentModal from './components/AddAttachmentModal';
 import buildIconImg from './assets/build-icon.png';
+
+const ARIcon = () => (
+  <svg className="rail-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M5,3A2,2,0,0,0,3,5V9a1,1,0,0,0,2,0V5H9a1,1,0,0,0,0-2Z" />
+    <path d="M19,3H15a1,1,0,0,0,0,2h4V9a1,1,0,0,0,2,0V5A2,2,0,0,0,19,3Z" />
+    <path d="M19,19H15a1,1,0,0,0,0,2h4a2,2,0,0,0,2-2V15a1,1,0,0,0-2,0Z" />
+    <path d="M5,19V15a1,1,0,0,0-2,0v4a2,2,0,0,0,2,2H9a1,1,0,0,0,0-2Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
 
 const FilterIcon = () => (
   <svg
@@ -24,29 +35,49 @@ const FilterIcon = () => (
     width="24"
     height="24"
     viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
+    fill="currentColor"
   >
-    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+    <path d="M21.5,3.54a1.53,1.53,0,0,0-1.4-.73H3.91a1.52,1.52,0,0,0-1.4.73A1.77,1.77,0,0,0,2.7,5.43c.5.82,5.34,8.2,6.2,9.51v4.72c0,1.82,1.11,2.06,2.07,2.06h.91a.25.25,0,0,0,.12,0,.25.25,0,0,0,.12,0H13c1,0,2.07-.24,2.07-2.06V14.94c.86-1.31,5.7-8.69,6.2-9.51A1.81,1.81,0,0,0,21.5,3.54ZM20,4.65c-.52.85-6.24,9.57-6.29,9.66a.74.74,0,0,0-.13.41v4.94a1.23,1.23,0,0,1-.06.5,1.15,1.15,0,0,1-.51.06h-.91a.25.25,0,0,0-.12,0,.25.25,0,0,0-.12,0H11c-.45,0-.5,0-.5,0a1.05,1.05,0,0,1-.07-.51V14.72a.73.73,0,0,0-.12-.41C10.22,14.22,4.5,5.5,4,4.65a1.19,1.19,0,0,1-.15-.34H20.17A1,1,0,0,1,20,4.65Z" />
   </svg>
 );
 
 const GearIcon = () => (
   <svg
-    width="20"
-    height="20"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
+    width="18"
+    height="18"
+    viewBox="0 0 18 18"
+    fill="currentColor"
   >
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    <path d="M1.5 6.645v-.06a.398.398 0 0 0 0 .098v.067-.105ZM16.307 11.1a2.43 2.43 0 0 1-1.073-2.542 2.4 2.4 0 0 1 1.073-1.538.563.563 0 0 0 .187-.75l-1.387-2.377a.563.563 0 0 0-.75-.225c-.468.217-.994.28-1.5.18a2.407 2.407 0 0 1-1.905-2.19.562.562 0 0 0-.563-.525h-2.76a.555.555 0 0 0-.562.517 1.83 1.83 0 0 1-.053.345A2.377 2.377 0 0 1 6.001 3.51a2.43 2.43 0 0 1-1.808.338 2.775 2.775 0 0 1-.532-.173.563.563 0 0 0-.75.218L1.5 6.248a.54.54 0 0 0-.075.285V6.645c.019.04.044.075.075.105.02.068.056.13.105.18.032.036.07.067.112.09l.105.075a2.385 2.385 0 0 1-.112 4.005.563.563 0 0 0-.188.75l1.38 2.4a.563.563 0 0 0 .75.218c.469-.217.994-.28 1.5-.18a2.408 2.408 0 0 1 1.898 2.1.562.562 0 0 0 .555.502h2.782a.57.57 0 0 0 .563-.502c0-.083 0-.165.037-.248a2.414 2.414 0 0 1 2.858-1.89c.182.046.36.106.532.18a.562.562 0 0 0 .75-.225l1.373-2.347a.563.563 0 0 0-.195-.758Zm-1.935 2.153a3.525 3.525 0 0 0-4.44 2.498H8.086a3.51 3.51 0 0 0-2.693-2.573 3.427 3.427 0 0 0-1.762.075l-.878-1.5a3.518 3.518 0 0 0 1.148-1.958 3.54 3.54 0 0 0-1.155-3.412l.892-1.5.293.067a3.518 3.518 0 0 0 4.177-2.7h1.785a3.533 3.533 0 0 0 2.723 2.685 3.48 3.48 0 0 0 1.755-.075l.9 1.5a3.525 3.525 0 0 0 0 5.325l-.9 1.568ZM9 6a3.068 3.068 0 1 0 3.067 3.068A3.075 3.075 0 0 0 9.001 6Zm0 5.01a1.942 1.942 0 1 1 1.942-1.942 1.95 1.95 0 0 1-1.942 1.935v.007ZM1.816 7.088a.285.285 0 0 1-.098-.045.532.532 0 0 1-.262-.36.398.398 0 0 1 0-.098v.06l.045.105c.02.068.056.13.105.18.032.036.07.067.112.09l.098.068Z" />
+  </svg>
+);
+
+const RevertIcon = () => (
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+  >
+    <path d="M19.77,13.69A5.75,5.75,0,0,1,14,19.43H6.43a.75.75,0,0,1,0-1.5H14a4.24,4.24,0,0,0,0-8.48H6.6l1.82,2.12a.75.75,0,0,1-.57,1.24.76.76,0,0,1-.57-.26L4.4,9.18a.74.74,0,0,1,0-1L7.28,4.84a.76.76,0,0,1,1.06-.08.75.75,0,0,1,.08,1.06L6.6,8H14A5.74,5.74,0,0,1,19.77,13.69Z" />
+  </svg>
+);
+
+const ClusterIconTandem = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+    <path d="M2.13,12.43a.34.34,0,0,0-.09.08.57.57,0,0,1,.18-.12Zm-.26,1a.63.63,0,0,1-.07-.26A.77.77,0,0,0,1.87,13.38Zm20.31-.52a.54.54,0,0,0-.1-.22.49.49,0,0,0-.12-.13l-.09-.08-.08,0h0l-.1,0-4.2-2V5.09a.69.69,0,0,0,0-.2.54.54,0,0,0-.11-.23l-.1-.12,0,0a.57.57,0,0,0-.13-.08s0,0,0,0L12.4,2.21l-.08,0a.72.72,0,0,0-.54,0,.51.51,0,0,0-.17.07L7,4.41s0,0,0,0h0l0,0-.05,0-.06,0a.76.76,0,0,0-.11.14.81.81,0,0,0-.12.4v5.26l-4.19,2-.11.05a.57.57,0,0,0-.18.12.61.61,0,0,0-.13.15.48.48,0,0,0-.08.16,1.13,1.13,0,0,0,0,.18h0s0,0,0,.05v5.85a.76.76,0,0,0,.45.69L7,21.69l.09,0a.76.76,0,0,0,.21,0,.78.78,0,0,0,.22,0l.09,0,4.43-2,4.42,2,.09,0a.76.76,0,0,0,.21,0,.78.78,0,0,0,.22,0l.09,0,4.73-2.09a.75.75,0,0,0,.44-.69V13.06A.69.69,0,0,0,22.18,12.86Zm-15.66,7L3.29,18.42v-4.2l3.23,1.43Zm.76-5.51L4.34,13l2.88-1.37h0l0,0,0,0h0L10.2,13Zm4,4.08L8,19.85v-4.2l3.23-1.43Zm0-6.54L8,10.35V6.24l3.23,1.43ZM9.08,5.07,12,3.68l2.93,1.39L12,6.36ZM16,6.24v4.11l-3.23,1.53V7.67Zm0,13.61-3.23-1.43v-4.2L16,15.65Zm.76-5.51L13.8,13l2.88-1.37.05,0,.05,0L19.66,13Zm4,4.08-3.23,1.43v-4.2l3.23-1.43ZM7.31,11.67H7.23l0,0ZM6.88,4.45l0,0h0Zm9.9,7.22h-.1l.05,0Zm.44-7.15a.57.57,0,0,0-.13-.08l.05,0Z" />
+  </svg>
+);
+
+const SearchIconTandem = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+    <path d="M20.59,19.53l-5.32-5.32a6.76,6.76,0,1,0-1.06,1.06l5.32,5.32a.74.74,0,0,0,.53.22.71.71,0,0,0,.53-.22A.74.74,0,0,0,20.59,19.53ZM4.75,10A5.25,5.25,0,1,1,10,15.25,5.26,5.26,0,0,1,4.75,10Z" />
+  </svg>
+);
+
+const PaletteIconTandem = () => (
+  <svg viewBox="0 0 17 17" width="16" height="16" fill="currentColor">
+    <path fillRule="evenodd" d="M16 8.39785C16.0013 8.67363 15.948 8.94693 15.8431 9.20189C15.7382 9.45685 15.5838 9.68839 15.3889 9.88306L10.2409 15.043C9.84594 15.4362 9.3119 15.6569 8.75527 15.6569C8.19863 15.6569 7.66459 15.4362 7.26966 15.043L1.44181 9.21701L1.30433 9.34716C1.25144 9.40083 1.18839 9.44338 1.11887 9.4723C1.04935 9.50123 0.974775 9.51594 0.89951 9.51558C0.824181 9.51638 0.749473 9.50186 0.679897 9.47291C0.61032 9.44397 0.547317 9.40119 0.494692 9.34716C0.387415 9.2395 0.327158 9.09356 0.327158 8.9414C0.327158 8.78925 0.387415 8.64331 0.494692 8.53565L0.983528 8.05334L8.31608 0.688512L8.36191 0.627266H8.40773L8.85838 0.167921C8.96579 0.0603959 9.11139 0 9.2632 0C9.415 0 9.5606 0.0603959 9.66801 0.167921C9.77529 0.27558 9.83555 0.421517 9.83555 0.573676C9.83555 0.725834 9.77529 0.871771 9.66801 0.97943L9.53817 1.11723L15.3584 6.95091C15.7551 7.33208 15.9857 7.85484 16 8.4055V8.39785ZM2.8243 7.81601H14.648C14.6295 7.77802 14.6035 7.74417 14.5717 7.71649L8.75145 1.89046L2.8243 7.81601ZM2.30491 14.4076C2.02162 13.7108 1.64379 13.0564 1.18212 12.463C0.717517 13.0544 0.339445 13.7092 0.0593219 14.4076C0.0012077 14.5871 -0.0144889 14.7776 0.0134716 14.9642C0.0414321 15.1508 0.112284 15.3283 0.220433 15.4827C0.328583 15.6372 0.471068 15.7643 0.636641 15.8541C0.802213 15.9438 0.986339 15.9938 1.17448 16C1.36328 15.9949 1.54829 15.9458 1.71483 15.8566C1.88137 15.7673 2.02484 15.6403 2.13384 15.4857C2.24285 15.3311 2.31437 15.1532 2.34274 14.966C2.37112 14.7789 2.35555 14.5877 2.29728 14.4076H2.30491Z" />
   </svg>
 );
 
@@ -76,13 +107,9 @@ const FolderIcon = () => (
     width="24"
     height="24"
     viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
+    fill="currentColor"
   >
-    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+    <path d="M21.208 7.84812V5.57112C21.208 4.69012 20.494 3.97612 19.613 3.97612H11.574L11.363 3.76612C11.222 3.62512 11.032 3.54712 10.834 3.54712H5.99199C4.00399 3.54712 2.38599 5.16512 2.38599 7.15312V16.8461C2.38599 18.8341 4.00399 20.4521 5.99199 20.4521H18.008C19.996 20.4521 21.614 18.8341 21.614 16.8461V9.47512C21.614 8.88612 21.459 8.33812 21.208 7.84712V7.84812ZM20.114 16.8471C20.114 18.0081 19.169 18.9531 18.008 18.9531H5.99199C4.83099 18.9531 3.88599 18.0081 3.88599 16.8471V7.15312C3.88599 5.99212 4.83099 5.04712 5.99199 5.04712H10.524L12.636 7.15112C12.777 7.29212 12.967 7.37012 13.165 7.37012H18.007C19.168 7.37012 20.113 8.31512 20.113 9.47612V16.8471H20.114Z" />
   </svg>
 );
 
@@ -106,6 +133,18 @@ const DocumentIcon = () => (
   </svg>
 );
 
+const InventoryIcon = () => (
+  <svg
+    className="rail-icon"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+  >
+    <path d="M20,3.25H4A2.75,2.75,0,0,0,1.25,6V18A2.75,2.75,0,0,0,4,20.75H20A2.75,2.75,0,0,0,22.75,18V6A2.75,2.75,0,0,0,20,3.25ZM2.75,8.75h2.5v4.5H2.75Zm4,0h6.5v4.5H6.75Zm8,0h6.5v4.5h-6.5ZM2.75,6A1.25,1.25,0,0,1,4,4.75H20A1.25,1.25,0,0,1,21.25,6V7.25H2.75Zm0,12V14.75h2.5v4.5H4A1.25,1.25,0,0,1,2.75,18Zm4-3.25h6.5v4.5H6.75ZM21.25,18A1.25,1.25,0,0,1,20,19.25H14.75v-4.5h6.5Z" />
+  </svg>
+);
+
 const BuildIcon = ({ isActive }) => (
   <img
     src={buildIconImg}
@@ -122,6 +161,20 @@ const BuildIcon = ({ isActive }) => (
 );
 
 
+
+const PALETTE = [
+  'rgb(0, 255, 255)',   // Cyan
+  'rgb(138, 43, 226)',  // Purple
+  'rgb(0, 0, 205)',     // Dark Blue
+  'rgb(255, 127, 127)', // Light Red
+  'rgb(127, 255, 163)', // Light Green
+  'rgb(199, 127, 255)', // Medium Purple
+  'rgb(255, 235, 127)', // Yellow
+  'rgb(127, 237, 255)', // Light Cyan
+  'rgb(192, 192, 192)', // Silver
+  'rgb(0, 100, 0)',     // Dark Green
+  'rgb(25, 25, 112)'    // Dark Navy
+];
 
 const normalizePropertyList = (detail = []) => {
   return detail.map((item, index) => {
@@ -420,6 +473,7 @@ function FilterConfigurator({
 
 function App() {
   const [models, setModels] = useState([]);
+  const [relinkTargetModel, setRelinkTargetModel] = useState(null); // Relink State
   const [hiddenModelUrns, setHiddenModelUrns] = useState([]);
   const [savedViews, setSavedViews] = useState([]); // New State
   const [documents, setDocuments] = useState([]);
@@ -434,7 +488,7 @@ function App() {
   const [buildUploads, setBuildUploads] = useState([]);
   const [filterConfiguratorOpen, setFilterConfiguratorOpen] = useState(false);
   const [availableProperties, setAvailableProperties] = useState([]);
-  const [filterProperties, setFilterProperties] = useState([]);
+  const [filterProperties, setFilterProperties] = useState(['Standard::Sources', 'Tandem Category']);
   const [modelProperties, setModelProperties] = useState({}); // Changed to object {urn: props[]}
   const [filterSelections, setFilterSelections] = useState({});
   const [expandedFilters, setExpandedFilters] = useState({});
@@ -454,6 +508,7 @@ function App() {
   const [userLocation, setUserLocation] = useState(null);
   const [minimapActive, setMinimapActive] = useState(false);
   const [vrActive, setVrActive] = useState(false);
+  const [arModeActive, setArModeActive] = useState(false);
   // Duplicate removed
   const [sheets, setSheets] = useState([]); // To store 2D sheets
   const [activeSheet, setActiveSheet] = useState(null);
@@ -578,12 +633,22 @@ function App() {
     let all = [];
     // Create a Set of currently loaded URNs for fast lookup
     const activeUrns = new Set(models.map(m => m.urn));
+    const urnNames = new Map(models.map(m => [m.urn, m.name]));
 
     Object.entries(modelProperties).forEach(([urn, props]) => {
       // Only include properties from models that are currently in the list AND not hidden
       if (activeUrns.has(urn) && !hiddenModelUrns.includes(urn)) {
+        const modelName = urnNames.get(urn) || 'Model';
         // Tag each row with its model URN so we can distinguish DbIds from different models
-        const tagged = props.map(p => ({ ...p, modelUrn: urn }));
+        const tagged = props.map(p => ({
+          ...p,
+          modelUrn: urn,
+          properties: [
+            ...(p.properties || []),
+            // Inject Synthetic "Sources" property for filtering by Model
+            { displayName: 'Sources', displayValue: modelName, category: 'Standard', type: 'String' }
+          ]
+        }));
         all = all.concat(tagged);
       }
     });
@@ -927,17 +992,19 @@ function App() {
     if (!availableProperties.length) return;
     setFilterProperties(prev => {
       const availableIds = new Set(availableProperties.map(prop => prop.id));
-      const sanitized = prev.filter(id => availableIds.has(id));
+      // Whitelist 'Standard::Sources' and 'Tandem Category' so they are not stripped
+      const sanitized = prev.filter(id => availableIds.has(id) || id === 'Standard::Sources' || id === 'Tandem Category');
+
       if (sanitized.length) return sanitized;
-      const defaults = availableProperties.slice(0, Math.min(availableProperties.length, 4)).map(prop => prop.id);
-      return defaults;
+      // Default fallback
+      return ['Standard::Sources', 'Tandem Category'];
     });
   }, [availableProperties]);
 
   const resetFiltersToDefault = useCallback(() => {
-    if (!availableProperties.length) return;
-    setFilterProperties(availableProperties.slice(0, Math.min(availableProperties.length, 4)).map(prop => prop.id));
-  }, [availableProperties]);
+    // Reset to hardcoded defaults
+    setFilterProperties(['Standard::Sources', 'Tandem Category']);
+  }, []);
 
   useEffect(() => {
     // Initialize filterSelections with ALL values when filter properties change
@@ -1008,30 +1075,77 @@ function App() {
       .catch(err => console.error("Error loading project config:", err));
   }, [selectedProject]);
 
-  const handleLinkDocs = useCallback(async (model) => {
-    // 1. Optimistic Update (Optional)
-    // 2. Call Backend
+  const handleLinkDocs = useCallback(async (modelsInput) => {
+    // Determine if input is array
+    const models = Array.isArray(modelsInput) ? modelsInput : [modelsInput];
+
     try {
       if (!selectedProject) return alert("No project selected");
 
-      const res = await fetch('/api/config/project/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          urn: model.urn,
-          name: model.name || model.label,
-          region: 'US', // Assume US for now
-          // Metadata for Update support
-          projectId: model.projectId,
-          itemId: model.itemId,
-          versionId: model.versionId,
-          project: selectedProject // Pass the selected project
-        })
-      });
-      if (res.ok) {
-        const config = await res.json();
-        if (config.models) {
-          setModels(config.models.map(m => ({ ...m, label: m.name })));
+      // Handle Relink Mode
+      if (relinkTargetModel) {
+        if (models.length === 0) return;
+        const newModelData = models[0]; // Relink strictly one model
+
+        const res = await fetch('/api/config/project/relink', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            targetId: relinkTargetModel.id,
+            oldUrn: relinkTargetModel.urn,
+            project: selectedProject,
+            newModel: {
+              urn: newModelData.urn,
+              name: newModelData.name || newModelData.label,
+              versionId: newModelData.versionId,
+              versionNumber: newModelData.versionNumber,
+              lastModifiedTime: newModelData.lastModifiedTime,
+              projectId: newModelData.projectId, // ACC Project
+              itemId: newModelData.itemId
+            }
+          })
+        });
+
+        if (res.ok) {
+          const config = await res.json();
+          if (config.models) {
+            setModels(config.models.map(m => ({ ...m, label: m.name })));
+            alert("Model relinked successfully.");
+          }
+        } else {
+          alert("Failed to relink model.");
+        }
+        setRelinkTargetModel(null);
+        return;
+      }
+
+      // Standard Add Mode
+      // Sequential execution to avoid race conditions on the server's file write
+      // Ideally backend should handle bulk, but sequential is safe fix for now.
+      for (const model of models) {
+        const res = await fetch('/api/config/project/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            urn: model.urn,
+            name: model.name || model.label,
+            region: 'US',
+            projectId: model.projectId,
+            itemId: model.itemId,
+            versionId: model.versionId,
+            versionNumber: model.versionNumber,
+            lastModifiedTime: model.lastModifiedTime,
+            project: selectedProject
+          })
+        });
+
+        if (res.ok) {
+          const config = await res.json();
+          if (config.models) {
+            // Update state after EACH success to be safe, or wait for last?
+            // Waiting for last is better for UI flicker, but we need the latest config from the LAST write.
+            setModels(config.models.map(m => ({ ...m, label: m.name })));
+          }
         }
       }
     } catch (e) {
@@ -1091,7 +1205,7 @@ function App() {
       console.error("Upload error:", e);
       alert("Error uploading file.");
     }
-  }, []);
+  }, [selectedProject]);
 
   const removeModel = useCallback(async (urn) => {
     try {
@@ -1119,7 +1233,7 @@ function App() {
     } catch (e) {
       console.error("Error removing model:", e);
     }
-  }, []);
+  }, [selectedProject]);
 
   // Removed old upsertModel or kept it aliased?
   // We can remove upsertModel as it was local only.
@@ -1370,6 +1484,38 @@ function App() {
     }
   }, [dynamicFilterBuckets, filterSelections]);
 
+  const handleValueToggle = useCallback((propId, value) => {
+    setFilterSelections(prev => {
+      const currentList = prev[propId] || [];
+      const isAllVirtual = currentList.length === 0; // "Virtual All" state
+
+      let nextList;
+
+      if (isAllVirtual) {
+        // From "All Visible" -> "Isolate One"
+        nextList = [value];
+      } else {
+        // Standard Toggle
+        const currentSet = new Set(currentList);
+        if (currentSet.has(value)) {
+          currentSet.delete(value);
+        } else {
+          currentSet.add(value);
+        }
+        nextList = Array.from(currentSet);
+      }
+
+      const next = { ...prev };
+      if (nextList.length > 0) {
+        next[propId] = nextList;
+      } else {
+        // If empty, delete key -> Returns to "All Visible"
+        delete next[propId];
+      }
+      return next;
+    });
+  }, []);
+
   // State for color toggles (per property) - MOVED TO TOP
   // const [filterColors, setFilterColors] = useState({});
 
@@ -1401,9 +1547,11 @@ function App() {
         const entry = bucket.valueIndex?.get(value);
         if (entry) {
           entry.dbIds.forEach(item => {
-            const key = `${item.modelUrn}#${item.id}`;
-            propKeys.add(key);
-            if (!keyMap.has(key)) keyMap.set(key, item);
+            if (!hiddenModelUrns.includes(item.modelUrn)) {
+              const key = `${item.modelUrn}#${item.id}`;
+              propKeys.add(key);
+              if (!keyMap.has(key)) keyMap.set(key, item);
+            }
           });
         }
       });
@@ -1426,9 +1574,11 @@ function App() {
     const allKnownKeys = new Set();
     Object.values(filterBuckets).forEach(bucket => {
       bucket.values.forEach(v => v.dbIds.forEach(item => {
-        const key = `${item.modelUrn}#${item.id}`;
-        allKnownKeys.add(key);
-        if (!keyMap.has(key)) keyMap.set(key, item);
+        if (!hiddenModelUrns.includes(item.modelUrn)) {
+          const key = `${item.modelUrn}#${item.id}`;
+          allKnownKeys.add(key);
+          if (!keyMap.has(key)) keyMap.set(key, item);
+        }
       }));
     });
 
@@ -1473,7 +1623,7 @@ function App() {
       dbIds: finalDbIds,
       nonMatchingDbIds
     };
-  }, [filterSelections, filterBuckets, filterColors]);
+  }, [filterSelections, filterBuckets, filterColors, hiddenModelUrns]);
 
   // ... existing code ...
 
@@ -1491,23 +1641,7 @@ function App() {
     window.dispatchEvent(new CustomEvent('filters-apply', { detail: activeFilterDetail }));
   }, [activeFilterDetail]);
 
-  const handleValueToggle = useCallback((propId, value) => {
-    setFilterSelections(prev => {
-      const current = new Set(prev[propId] || []);
-      if (current.has(value)) {
-        current.delete(value);
-      } else {
-        current.add(value);
-      }
-      const next = { ...prev };
-      if (current.size) {
-        next[propId] = Array.from(current);
-      } else {
-        delete next[propId];
-      }
-      return next;
-    });
-  }, []);
+
 
   const toggleExpandBlock = useCallback((propId) => {
     setExpandedFilters(prev => ({ ...prev, [propId]: !prev[propId] }));
@@ -1691,7 +1825,7 @@ function App() {
               title="Models"
             >
               <FolderIcon />
-              <span className="rail-label">Files</span>
+              <span className="rail-label" style={{ fontWeight: 700 }}>Files</span>
             </button>
             <button
               type="button"
@@ -1700,7 +1834,7 @@ function App() {
               title="Filters"
             >
               <FilterIcon />
-              <span className="rail-label">Filters</span>
+              <span className="rail-label" style={{ fontWeight: 700 }}>Filters</span>
             </button>
             {/* 
             <button
@@ -1721,6 +1855,27 @@ function App() {
             >
               <BuildIcon isActive={activePanel === 'build' && panelVisible} />
               <span className="rail-label">Build</span>
+            </button>
+
+            <button
+              type="button"
+              className={`rail-button ${activePanel === 'inventory' && panelVisible ? 'active' : ''}`}
+              onClick={() => togglePanel('inventory')}
+              title="Inventory"
+            >
+              <InventoryIcon />
+              <span className="rail-label" style={{ fontWeight: 700 }}>Inventory</span>
+            </button>
+
+            <button
+              type="button"
+              className={`rail-button ${arModeActive ? 'active' : ''}`}
+              onClick={() => setArModeActive(!arModeActive)}
+              title="AR Mode"
+              style={{ marginTop: 'auto', marginBottom: '10px' }}
+            >
+              <ARIcon />
+              <span className="rail-label" style={{ fontWeight: 700 }}>AR</span>
             </button>
 
           </nav>
@@ -1750,202 +1905,328 @@ function App() {
               icon: <BuildIcon isActive={activePanel === 'build' && panelVisible} />,
               active: activePanel === 'build' && panelVisible,
               onClick: () => togglePanel('build')
+            },
+            {
+              id: 'inventory',
+              label: 'Inventory',
+              icon: <InventoryIcon />,
+              active: activePanel === 'inventory' && panelVisible,
+              onClick: () => togglePanel('inventory')
+            },
+            {
+              id: 'ar',
+              label: 'AR Mode',
+              icon: <ARIcon />,
+              active: arModeActive,
+              onClick: () => setArModeActive(!arModeActive)
             }
           ]}
         />
 
         <aside className={`app-sidebar ${panelVisible && activePanel !== 'views' ? '' : 'hidden'}`}>
           {activePanel === 'filters' && (
-            <div className="filters-shell">
-              <header className="filters-shell-header">
+            <div className="filters-shell" style={{
+              display: 'flex',
+              flexDirection: 'column',
+              position: 'absolute',
+              inset: 0,
+              height: '100%',
+              background: 'transparent',
+              color: '#adadad',
+              fontSize: '12px',
+              zIndex: 20,
+              overflow: 'hidden'
+            }}>
+              <style>
+                {`
+                  .tandem-header { padding: 12px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: space-between; align-items: center; background: transparent; }
+                  .tandem-title { font-weight: 600; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; color: #f0f0f0; }
+                  
+                  .tandem-scroll { flex: 1; overflow-y: auto; padding-bottom: 20px; }
+                  .tandem-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+                  .tandem-scroll::-webkit-scrollbar-track { background: transparent; }
+                  .tandem-scroll::-webkit-scrollbar-thumb { background: #4f5259; border-radius: 3px; }
+                  .tandem-scroll::-webkit-scrollbar-thumb:hover { background: #5f6269; }
+
+                  .tandem-group { border-bottom: 1px solid #3e4045; }
+                  .tandem-group-header { display: flex; align-items: center; padding: 8px 16px 8px 12px; cursor: pointer; transition: background 0.1s; }
+                  .tandem-group-header:hover { background: #35383d; }
+                  
+                  /* Custom Checkbox "Tandem Style - Grey/Technical" */
+                  .tandem-checkbox {
+                    appearance: none;
+                    -webkit-appearance: none;
+                    width: 14px;
+                    height: 14px;
+                    border: 1px solid #555;
+                    border-radius: 1px; /* Sharper */
+                    background: #222; /* Darker base */
+                    margin-right: 10px;
+                    position: relative;
+                    cursor: pointer;
+                    flex-shrink: 0;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    transition: border-color 0.1s, background 0.1s;
+                  }
+                  
+                  .tandem-checkbox:hover { 
+                    border-color: #999; 
+                    background: rgba(255,255,255,0.05);
+                  }
+
+                  .tandem-checkbox:checked {
+                    background: #383838; /* Matte Opaque */
+                    border-color: #555;
+                  }
+                  
+                  /* precise tick mark matching Tandem SVG M6,11.3 L10.3,16 L18,6.2 */
+                  .tandem-checkbox:checked::after {
+                    content: '';
+                    width: 5px;
+                    height: 9px;
+                    border: solid #fff; /* White crisp tick */
+                    border-width: 0 2px 2px 0;
+                    transform: rotate(45deg) translate(-1px, -1px);
+                    margin-bottom: 3px;
+                  }
+                  
+                  .tandem-checkbox:indeterminate {
+                    background: #4a4d52;
+                    border-color: #6b6f75;
+                  }
+                   .tandem-checkbox:indeterminate::after {
+                    content: '';
+                    width: 10px;
+                    height: 2px;
+                    background: #fff;
+                    display: block;
+                  }
+
+                  .tandem-group-info { flex: 1; display: flex; align-items: baseline; gap: 8px; overflow: hidden; }
+                  .tandem-group-title { font-weight: 600; color: #ffffff; white-space: nowrap; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+                  .tandem-group-count { color: #ccc; font-size: 11px; }
+                  
+                  .tandem-actions { display: flex; gap: 2px; opacity: 0.8; transition: opacity 0.2s; }
+                  .tandem-group-header:hover .tandem-actions { opacity: 1; }
+                  .tandem-action-btn { background: none; border: none; color: #999; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
+                  .tandem-action-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+                  .tandem-action-btn.active { color: #3aa0ff; background: rgba(58, 160, 255, 0.15); }
+                  
+                  .tandem-list { list-style: none; padding: 0; margin: 0; display: none; }
+                  .tandem-list.open { display: block; }
+                  .tandem-item { display: flex; align-items: center; padding: 2px 16px 2px 36px; min-height: 28px; transition: background 0.1s; }
+                  .tandem-item:hover { background: rgba(53, 56, 61, 0.8); }
+                  .tandem-item-label { flex: 1; cursor: pointer; display: flex; align-items: center; overflow: hidden; }
+                  .tandem-item-text { margin-left: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #f0f0f0; font-weight: 500; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+                  .tandem-item-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+                  .tandem-count-badge { color: #ccc; font-size: 11px; min-width: 20px; text-align: right; margin-right: 8px; }
+                  .tandem-color-box { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(255,255,255,0.15); cursor: pointer; }
+                  .tandem-color-box.default { background: #333; }
+                `}
+              </style>
+
+              <header className="tandem-header">
                 <div>
-                  <h2 className="filters-shell-title">FILTERS</h2>
-                  <span className="filters-shell-subtitle">Select elements to highlight</span>
+                  <h2 className="tandem-title">Filters</h2>
                 </div>
-                <div className="filters-shell-actions">
-                  <button className="icon-button ghost" onClick={() => setFilterConfiguratorOpen(true)} title="Configure Filters">
+                <div className="tandem-actions" style={{ opacity: 1, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <button className="tandem-action-btn" onClick={() => setFilterConfiguratorOpen(true)} title="Configure">
                     <GearIcon />
                   </button>
-                  <button className="icon-button ghost" title="Reset Filters" onClick={() => {
+                  <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)', margin: '0 4px' }}></div>
+                  <button className="tandem-action-btn" title="Reset" onClick={() => {
                     setFilterSelections({});
+                    setHiddenModelUrns([]);
                     window.dispatchEvent(new CustomEvent('filters-apply', { detail: { dbIds: [] } }));
                   }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                      <path d="M3 3v5h5" />
-                    </svg>
+                    <RevertIcon />
                   </button>
                 </div>
               </header>
-              <div className="filters-shell-body">
-                {/* Sources Filter Block */}
-                <div className="filters-block">
-                  <header className="filters-block-header">
-                    <div className="filters-block-info">
-                      <h3 className="filters-block-title">Sources</h3>
-                      <span className="filters-block-subcount">({models.length - hiddenModelUrns.length} of {models.length})</span>
+
+              <div className="tandem-scroll">
+
+                {/* 1. SOURCES GROUP */}
+                <div className="tandem-group">
+                  <div className="tandem-group-header">
+                    <input
+                      type="checkbox"
+                      className="tandem-checkbox"
+                      checked={hiddenModelUrns.length === 0}
+                      ref={el => { if (el) el.indeterminate = hiddenModelUrns.length > 0 && hiddenModelUrns.length < models.length; }}
+                      onChange={() => {
+                        if (hiddenModelUrns.length === 0) {
+                          // Hide All
+                          setHiddenModelUrns(models.map(m => m.urn));
+                        } else {
+                          // Show All
+                          setHiddenModelUrns([]);
+                        }
+                      }}
+                      title="Toggle all models"
+                    />
+                    <div className="tandem-group-info" onClick={() => setExpandedFilters(prev => ({ ...prev, 'sources': !prev['sources'] }))}>
+                      <span className="tandem-group-title">Sources</span>
+                      <span className="tandem-group-count">({models.length - hiddenModelUrns.length} of {models.length})</span>
                     </div>
-                    <div className="filters-block-toolbar">
-                      <button className="icon-button ghost" style={{ width: 24, height: 24 }} onClick={() => setExpandedFilters(prev => ({ ...prev, 'sources': !prev['sources'] }))}>
-                        {expandedFilters['sources'] !== false ? (
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
-                        ) : (
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
-                        )}
-                      </button>
+                    <div className="tandem-actions" style={{ gap: '4px', alignItems: 'center' }}>
+                      <button className="tandem-action-btn" title="Search"><SearchIconTandem /></button>
+                      <button className="tandem-action-btn" title="Color"><PaletteIconTandem /></button>
                     </div>
-                  </header>
-                  {expandedFilters['sources'] !== false && (
-                    <ul className="filters-value-list">
-                      {models.map(model => (
-                        <li key={model.urn} className="filters-value-item">
-                          <label className="filters-value-label">
-                            <input
-                              type="checkbox"
-                              checked={!hiddenModelUrns.includes(model.urn)}
-                              onChange={() => handleToggleModelVisibility(model.urn)}
-                            />
-                            <span title={model.label}>{model.label}</span>
-                          </label>
-                          <span className="filters-value-count">
-                            {/* We could show element count per model here if available */}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                    {/* Expand Arrow moved to right of actions or kept distinct? Snippet puts expand arrow inside? No, probably actions on hover, arrow always there. */}
+                    <button className="tandem-action-btn" onClick={() => setExpandedFilters(prev => ({ ...prev, 'sources': !prev['sources'] }))}>
+                      {expandedFilters['sources'] !== false ? (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+                      ) : (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
+                      )}
+                    </button>
+                  </div>
+
+                  <ul className={`tandem-list ${expandedFilters['sources'] !== false ? 'open' : ''}`}>
+                    {models.map(model => (
+                      <li key={model.urn} className="tandem-item">
+                        <label className="tandem-item-label">
+                          <input
+                            type="checkbox"
+                            className="tandem-checkbox"
+                            checked={!hiddenModelUrns.includes(model.urn)}
+                            onChange={() => handleToggleModelVisibility(model.urn)}
+                          />
+                          <span className="tandem-item-text" title={model.label}>{model.label}</span>
+                        </label>
+                        <div className="tandem-item-right">
+                          <span className="tandem-count-badge">1</span>
+                          <div className="tandem-color-box default"></div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
 
-                {/* Dynamically Generated Model Filters */}
+                {/* 2. PROPERTIES GROUPS */}
                 {Object.keys(filterBuckets).length === 0 && (
-                  <div style={{ padding: 20, textAlign: 'center', color: '#666', fontSize: 13 }}>
-                    No properties available.
+                  <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontStyle: 'italic' }}>
+                    Loading properties...
                   </div>
                 )}
-                {!availableProperties.length && (
-                  <div className="filters-block-empty">
-                    Carga o selecciona un modelo para descubrir sus parámetros disponibles.
-                  </div>
-                )}
-                {availableProperties.length > 0 && selectedPropertyObjects.length === 0 && (
-                  <div className="filters-block-empty">
-                    Usa el engranaje para elegir los parámetros que quieres ver aquí.
-                  </div>
-                )}
+
                 {visiblePropertyObjects.map(prop => {
                   const bucket = dynamicFilterBuckets[prop.id];
                   const selectedValues = filterSelections[prop.id] || [];
 
-                  // Filter: Hide items with 0 count unless they are selected
+                  // Determine visibility logic
                   const validItems = bucket
                     ? bucket.values.filter(item => item.count > 0 || selectedValues.includes(item.value))
                     : [];
 
-                  const values = expandedFilters[prop.id]
-                    ? validItems
-                    : validItems.slice(0, DEFAULT_VISIBLE_VALUES);
+                  // Expansion limit
+                  const isExpanded = expandedFilters[prop.id];
+                  const visibleItems = isExpanded ? validItems : validItems.slice(0, DEFAULT_VISIBLE_VALUES);
+                  const hasMore = validItems.length > DEFAULT_VISIBLE_VALUES;
 
                   const allSelected = bucket && selectedValues.length === bucket.values.length;
                   const someSelected = selectedValues.length > 0 && selectedValues.length < (bucket?.values.length || 0);
-                  const hasMore = validItems.length > DEFAULT_VISIBLE_VALUES;
 
                   return (
-                    <div key={prop.id} className="filters-block">
-                      <div className="filters-block-header">
-                        <div className="filters-block-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <input
-                            type="checkbox"
-                            checked={allSelected}
-                            ref={input => { if (input) input.indeterminate = someSelected; }}
-                            onChange={() => togglePropertyAll(prop.id)}
-                            style={{ width: '14px', height: '14px', accentColor: '#3aa0ff', cursor: 'pointer' }}
-                          />
-                          <div className="filters-block-info">
-                            <p className="filters-block-title">{prop.name}</p>
-                            <span className="filters-block-path">{prop.path}</span>
-                            <span className="filters-block-subcount">
-                              {selectedValues.length} of {bucket?.values.length || 0}
-                            </span>
-                          </div>
+                    <div key={prop.id} className="tandem-group">
+                      <div className="tandem-group-header">
+                        <input
+                          type="checkbox"
+                          className="tandem-checkbox"
+                          checked={allSelected}
+                          ref={input => { if (input) input.indeterminate = someSelected; }}
+                          onChange={() => togglePropertyAll(prop.id)}
+                        />
+                        <div className="tandem-group-info" onClick={() => toggleExpandBlock(prop.id)}>
+                          <span className="tandem-group-title" title={prop.name}>{prop.name}</span>
+                          <span className="tandem-group-count">({selectedValues.length} of {bucket?.values.length || 0})</span>
                         </div>
-                        <div className="filters-block-toolbar">
+                        <div className="tandem-actions" style={{ gap: '4px', alignItems: 'center' }}>
+                          {/* 1. Search Icon */}
+                          <button className="tandem-action-btn" title="Search">
+                            <SearchIconTandem />
+                          </button>
+
+                          {/* 2. Cluster Icon (Cubes) */}
+                          <button className="tandem-action-btn" title="Group by property">
+                            <ClusterIconTandem />
+                          </button>
+
+                          {/* 3. Palette Icon */}
                           <button
-                            type="button"
-                            className={`icon-button ${filterColors[prop.id] ? 'active' : ''}`}
-                            title={filterColors[prop.id] ? "Remove filter colors" : "Color by property"}
+                            className={`tandem-action-btn ${filterColors[prop.id] ? 'active' : ''}`}
                             onClick={(e) => { e.stopPropagation(); toggleColor(prop.id); }}
+                            title="Color by property"
                           >
-                            {/* Palette Icon */}
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <circle cx="13.5" cy="6.5" r="1.5"></circle>
-                              <circle cx="17.5" cy="10.5" r="1.5"></circle>
-                              <circle cx="8.5" cy="7.5" r="1.5"></circle>
-                              <circle cx="6.5" cy="12.5" r="1.5"></circle>
-                              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path>
-                            </svg>
+                            <PaletteIconTandem />
                           </button>
-                          <button type="button" className="icon-button ghost" title="Buscar valores">
-                            <SearchIcon />
+
+                          {/* 3. Chevron (Solid Triangle) */}
+                          <button className="tandem-action-btn" onClick={() => toggleExpandBlock(prop.id)}>
+                            {isExpanded ? (
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M24 24H0L12 0z" /></svg>
+                            ) : (
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ transform: 'rotate(180deg)' }}><path d="M24 24H0L12 0z" /></svg>
+                            )}
                           </button>
-                          <span className="filters-block-count">{bucket?.total || 0}</span>
                         </div>
                       </div>
-                      {bucket && bucket.values.length ? (
-                        <>
-                          <ul className="filters-value-list">
-                            {values.map((item, index) => {
-                              const checked = selectedValues.includes(item.value);
-                              // Calculate color if enabled
-                              let colorDot = null;
-                              if (filterColors[prop.id]) {
-                                const originalIndex = bucket.values.findIndex(v => v.value === item.value);
-                                const color = PALETTE[originalIndex % PALETTE.length];
-                                colorDot = <div className="color-dot" style={{ backgroundColor: color }}></div>;
-                              }
 
-                              return (
-                                <li key={item.value} className="filters-value-item">
-                                  <label className="filters-value-label">
-                                    <input
-                                      type="checkbox"
-                                      checked={checked}
-                                      onChange={() => handleValueToggle(prop.id, item.value)}
-                                    />
-                                    <span title={item.value}>{item.value}</span>
-                                  </label>
-                                  <div className="filters-value-right">
-                                    <span className="filters-value-count">{item.count}</span>
-                                    {colorDot ? colorDot : <div className="color-dot-placeholder"></div>}
-                                  </div>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                          {hasMore && (
-                            <button
-                              type="button"
-                              className="filters-more-btn"
-                              onClick={() => toggleExpandBlock(prop.id)}
-                            >
-                              {expandedFilters[prop.id] ? 'less' : 'more'}
-                            </button>
-                          )}
-                        </>
-                      ) : null}
+                      <ul className={`tandem-list open`}>
+                        {visibleItems.map(item => {
+                          const isChecked = selectedValues.length === 0 || selectedValues.includes(item.value);
+
+                          // Color logic
+                          let colorStyle = {};
+                          if (filterColors[prop.id]) {
+                            const originalIndex = bucket.values.findIndex(v => v.value === item.value);
+                            const color = PALETTE[originalIndex % PALETTE.length];
+                            colorStyle = { backgroundColor: color, border: `1px solid ${color}` };
+                          }
+
+                          return (
+                            <li key={item.value} className="tandem-item">
+                              <label className="tandem-item-label">
+                                <input
+                                  type="checkbox"
+                                  className="tandem-checkbox"
+                                  checked={selectedValues.length === 0 || selectedValues.includes(item.value)}
+                                  onChange={() => handleValueToggle(prop.id, item.value)}
+                                />
+                                <span className="tandem-item-text" title={item.value}>{item.value}</span>
+                              </label>
+                              <div className="tandem-item-right">
+                                <span className="tandem-count-badge">{item.count}</span>
+                                <div className="tandem-color-box" style={colorStyle}></div>
+                              </div>
+                            </li>
+                          );
+                        })}
+                        {hasMore && !isExpanded && (
+                          <li className="tandem-item" style={{ justifyContent: 'flex-end', paddingRight: '16px', cursor: 'pointer', color: '#ccc', fontSize: '11px' }} onClick={() => toggleExpandBlock(prop.id)}>
+                            <span>more ⌄</span>
+                          </li>
+                        )}
+                      </ul>
                     </div>
                   );
                 })}
+
                 {hasMoreProperties && (
-                  <button
-                    className="filters-more-btn"
-                    onClick={() => setVisiblePropertiesCount(prev => prev + 5)}
-                  >
-                    Show more properties...
-                  </button>
+                  <div style={{ padding: '12px', textAlign: 'center' }}>
+                    <button className="tandem-action-btn" style={{ width: '100%', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }} onClick={() => setVisiblePropertiesCount(prev => prev + 5)}>
+                      Load more properties
+                    </button>
+                  </div>
                 )}
+
               </div>
             </div>
           )}
+
 
           {activePanel === 'files' && (
             <SourceFilesPanel
@@ -1957,7 +2238,12 @@ function App() {
               modelViews={modelViews}
               activeViewableGuids={activeViewableGuids}
               onLoadView={handleLoadSpecificView}
+
               onUpdate={handleModelUpdate}
+              onRelink={(model) => {
+                setRelinkTargetModel(model);
+                setImportModalOpen(true);
+              }}
             />
           )}
           {activePanel === 'docs' && (
@@ -2047,6 +2333,7 @@ function App() {
                 onBuildPinCreate={handlePinCreated}
                 onBuildPinSelect={handlePinSelect}
                 onBuildPinUpdate={handlePinUpdate}
+                arMode={arModeActive}
               // onBuildPinDelete={handlePinDelete} // If needed later
               />
             </div>
@@ -2241,20 +2528,19 @@ function App() {
           onAttach={handleAttachment}
         />
 
-        <FilterConfigurator
+        <FilterConfiguratorModal
           open={filterConfiguratorOpen}
           availableProperties={availableProperties}
-          selectedIds={filterProperties}
+          selectedProperties={filterProperties}
           onClose={() => setFilterConfiguratorOpen(false)}
-          onSave={(newProps) => {
+          onUpdate={(newProps) => {
+            // Mock update logic or implement real prop reordering if needed
+            // For now we just close or update state if we implement reorder
             setFilterProperties(newProps);
             setFilterConfiguratorOpen(false);
           }}
-          onReset={() => {
-            setFilterProperties([]);
-            setFilterConfiguratorOpen(false);
-          }}
         />
+
       </div >
     </div >
   );

@@ -1,146 +1,433 @@
 .import-modal {
     width: 600px;
     max-width: 90vw;
-    min-height: 500px;
-    max-height: 85vh;
     display: flex;
     flex-direction: column;
     background: #2a2a2a;
-    /* Match Tandem */
+    /* Slightly lighter than pure black */
+    color: #f1f1f1;
+    border-radius: 4px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    font-family: "Artifakt Element", sans-serif;
+    border: 1px solid #444;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    /* No border bottom in some Tandem screens, but Image 02 implies a separation? Usually yes. */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #fff;
+    text-transform: uppercase;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px;
+}
+
+.modal-close:hover {
     color: #fff;
 }
 
+/* Tabs */
 .import-tabs {
     display: flex;
+    padding: 0 24px;
+    gap: 20px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 0 16px;
-    margin-bottom: 0px;
-    background: rgba(0, 0, 0, 0.2);
+    margin-top: 10px;
 }
 
 .import-tab {
     background: transparent;
     border: none;
-    color: #9ca3af;
-    padding: 12px 16px;
+    color: #aaa;
+    padding: 10px 0;
     cursor: pointer;
     font-weight: 600;
-    border-bottom: 2px solid transparent;
     font-size: 13px;
-    transition: all 0.2s;
-}
-
-.import-tab.active {
-    color: #3aa0ff;
-    border-bottom-color: #3aa0ff;
+    border-bottom: 2px solid transparent;
+    text-transform: uppercase;
 }
 
 .import-tab:hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.05);
+    color: #ccc;
 }
 
+.import-tab.active {
+    color: #3899ec;
+    /* Tandem Blue */
+    border-bottom-color: #3899ec;
+}
+
+/* Body */
 .import-body {
+    padding: 24px;
     flex: 1;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
-    padding: 20px;
-    gap: 20px;
-    overflow-y: auto;
+    gap: 0;
 }
 
+/* Docs Selectors Row */
+.docs-selectors-row {
+    display: flex;
+    gap: 40px;
+    /* Space between the two headers */
+    margin-bottom: 20px;
+}
+
+.doc-selector-wrapper {
+    position: relative;
+}
+
+.doc-selector-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    opacity: 0.9;
+    padding: 4px 8px;
+    border-radius: 2px;
+}
+
+.doc-selector-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    opacity: 1;
+}
+
+/* Dropdown Menu */
+.doc-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 300px;
+    background: #333;
+    border: 1px solid #111;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    z-index: 100;
+    margin-top: 4px;
+    border-radius: 2px;
+    padding: 4px 0;
+}
+
+.doc-dropdown-item {
+    padding: 10px 16px;
+    font-size: 13px;
+    color: #e0e0e0;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.doc-dropdown-item:hover,
+.doc-dropdown-item.selected {
+    background: #0696D7;
+    /* Autodesk Blue */
+    color: #fff;
+}
+
+/* Tree */
+.tree-container-clean {
+    height: 250px;
+    overflow-y: auto;
+    margin-bottom: 20px;
+    /* Clean look, no border, native tree will handle padding */
+    padding-left: 10px;
+}
+
+/* Form Groups */
 .form-group {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    margin-bottom: 16px;
 }
 
 .form-group label {
     font-size: 12px;
-    color: #d1d5db;
+    color: #fff;
+    /* Image 02 shows white label */
     font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
 }
 
 .required {
-    color: #ef4444;
+    color: #ff5555;
+    margin-left: 2px;
 }
 
+/* Input styling to match reference */
 .modal-input {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #111;
+    /* Darker background */
+    border: 1px solid #444;
     color: #fff;
     padding: 10px 12px;
-    border-radius: 4px;
+    border-radius: 2px;
     font-size: 14px;
+    height: 40px;
+    transition: border-color 0.2s;
 }
 
 .modal-input:focus {
-    border-color: #3aa0ff;
+    border-color: #0696D7;
+    /* Blue focus */
     outline: none;
-    background: rgba(0, 0, 0, 0.3);
 }
 
+/* Drop Zone - Visible dashed border */
 .drop-zone {
-    border: 1px dashed rgba(255, 255, 255, 0.2);
-    border-radius: 6px;
+    border: 1px dashed #555;
+    /* Distinct dashed border */
+    border-radius: 4px;
     height: 180px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.1);
+    background: transparent;
+    /* Clean background */
     transition: all 0.2s;
+    cursor: pointer;
+    margin-top: 4px;
+}
+
+.drop-zone:hover {
+    border-color: #0696D7;
+    background: rgba(6, 150, 215, 0.05);
+    /* Subtle blue tint */
+}
+
+/* Upload Icon - Remove circle, just icon */
+.upload-icon-circle {
+    width: 40px;
+    height: 40px;
+    background: transparent;
+    /* No circle bg */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ccc;
+    margin-bottom: 12px;
+}
+
+.upload-svg {
+    width: 24px;
+    height: 24px;
+}
+
+/* Phase Split Control */
+.phase-input-group {
+    display: flex;
+    gap: 0;
+    width: 100%;
+}
+
+.phase-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #111;
+    /* Match input bg */
+    border: 1px solid #444;
+    border-right: 1px solid #333;
+    /* Divider */
+    color: #f1f1f1;
+    padding: 0 12px;
+    height: 40px;
+    min-width: 100px;
+    border-radius: 2px 0 0 2px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.phase-btn:hover {
+    background: #1a1a1a;
+}
+
+.phase-text-input {
+    flex: 1;
+    background: #111;
+    border: 1px solid #444;
+    border-left: none;
+    /* Join */
+    color: #fff;
+    padding: 0 12px;
+    height: 40px;
+    border-radius: 0 2px 2px 0;
+    font-size: 14px;
+    transition: border-color 0.2s;
+}
+
+.phase-text-input:focus {
+    border-color: #0696D7;
+    /* Focus blue */
+    outline: none;
+    /* When focused, show full border effectively or just visually ok */
+}
+
+/* Custom Select Dropdown */
+.select-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.modal-select {
+    width: 100%;
+    background: #333;
+    border: 1px solid #555;
+    color: #fff;
+    padding: 10px 12px;
+    padding-right: 30px;
+    border-radius: 2px;
+    font-size: 13px;
+    appearance: none;
     cursor: pointer;
 }
 
-.drop-zone:hover,
-.drop-zone.drag-over {
-    border-color: #3aa0ff;
-    background: rgba(58, 160, 255, 0.05);
+.modal-select:focus {
+    border-color: #3899ec;
+    outline: none;
 }
 
-.drop-hint {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    color: #9ca3af;
-    text-align: center;
-}
-
-.upload-icon {
-    font-size: 24px;
-    opacity: 0.7;
-}
-
-.tree-container {
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    height: 300px;
-    overflow: auto;
-    background: rgba(0, 0, 0, 0.2);
-    display: flex;
-    flex-direction: column;
-}
-
-.file-info {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-}
-
-.file-icon {
-    font-size: 24px;
-}
-
-.file-name {
-    font-weight: 500;
+.select-arrow {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
     color: #fff;
 }
 
-.file-size {
-    font-size: 12px;
-    color: #9ca3af;
+/* Checkbox - Custom Style */
+.checkbox-container {
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+}
+
+.tandem-checkbox {
+    display: block;
+    position: relative;
+    padding-left: 26px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #ddd;
+    user-select: none;
+}
+
+.tandem-checkbox input {
+    position: absolute;
+    opacity: 0;
+    cursor: pointer;
+    height: 0;
+    width: 0;
+}
+
+.checkmark {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 16px;
+    width: 16px;
+    background-color: transparent;
+    border: 1px solid #666;
+    border-radius: 2px;
+}
+
+.tandem-checkbox:hover input~.checkmark {
+    border-color: #3899ec;
+}
+
+.tandem-checkbox input:checked~.checkmark {
+    background-color: #3899ec;
+    border-color: #3899ec;
+}
+
+.checkmark:after {
+    content: "";
+    position: absolute;
+    display: none;
+}
+
+.tandem-checkbox input:checked~.checkmark:after {
+    display: block;
+}
+
+.tandem-checkbox .checkmark:after {
+    left: 5px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+/* Footer */
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    /* Very subtle or none depending on image */
+    margin-top: auto;
+}
+
+.modal-btn-cancel {
+    background: transparent;
+    border: 1px solid #666;
+    color: #eee;
+    padding: 6px 16px;
+    border-radius: 2px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.modal-btn-cancel:hover {
+    border-color: #999;
+}
+
+.modal-btn-primary {
+    background: #0696D7;
+    /* Autodesk Blue */
+    border: 1px solid #0696D7;
+    color: #fff;
+    padding: 8px 24px;
+    border-radius: 2px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.modal-btn-primary:disabled {
+    background: #444;
+    border-color: #444;
+    color: #888;
+    cursor: not-allowed;
+}
+
+.modal-btn-primary:hover:not(:disabled) {
+    background: #2b8ce0;
+}
+
+.modal-btn-primary:active {
+    background: #0585BE;
 }

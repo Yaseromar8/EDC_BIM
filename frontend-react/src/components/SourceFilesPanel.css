@@ -17,6 +17,275 @@
 
 .sfp-header h3 {
     margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #f0f0f0;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.sfp-import-btn {
+    background: transparent;
+    border: none;
+    color: #3AA0FF;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.sfp-import-btn:hover {
+    background: rgba(58, 160, 255, 0.1);
+}
+
+.sfp-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+}
+
+.sfp-empty {
+    padding: 20px;
+    text-align: center;
+    font-size: 13px;
+    color: #888;
+}
+
+.sfp-item {
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.sfp-item-row {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    cursor: pointer;
+    background: transparent;
+    transition: background 0.15s;
+    height: 32px;
+}
+
+.sfp-item-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.sfp-list-chevron {
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-right: 4px;
+    cursor: pointer;
+    padding: 0;
+}
+
+.sfp-icon {
+    display: block;
+}
+
+.sfp-label {
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 8px;
+    color: #e5e7eb;
+    font-weight: 500;
+}
+
+.sfp-spacer {
+    flex: 1;
+}
+
+.sfp-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    color: #9ca3af;
+    opacity: 0;
+    /* Hidden by default similar to Tandem hover behavior */
+    transition: opacity 0.2s;
+}
+
+.sfp-item-row:hover .sfp-actions,
+.sfp-menu-wrapper:active .sfp-actions,
+.sfp-actions:focus-within {
+    opacity: 1;
+}
+
+/* Force show if menu open */
+.sfp-item .sfp-menu-wrapper button[aria-expanded="true"]~.sfp-actions {
+    opacity: 1;
+}
+
+.sfp-action-btn {
+    background: transparent;
+    border: none;
+    color: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 2px;
+    min-width: 28px;
+    min-height: 28px;
+}
+
+.sfp-action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.sfp-action-btn.star:hover {
+    color: #fbbf24;
+}
+
+.sfp-action-btn.more {
+    margin-left: 2px;
+}
+
+.sfp-menu-wrapper {
+    position: relative;
+    display: flex;
+}
+
+.sfp-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    width: 160px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 2px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    padding: 4px 0;
+}
+
+.sfp-dropdown button {
+    background: transparent;
+    border: none;
+    color: #e0e0e0;
+    padding: 8px 16px;
+    text-align: left;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sfp-dropdown button:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.sfp-menu-separator {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin: 4px 0;
+}
+
+.sfp-menu-icon {
+    display: flex;
+    align-items: center;
+    width: 16px;
+    color: #9ca3af;
+}
+
+.delete-option {
+    color: #ef4444 !important;
+}
+
+.sfp-menu-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 99;
+}
+
+/* Expanded Details */
+.sfp-details {
+    padding-left: 40px;
+    /* Aligned under label */
+    padding-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    /* Tandem spacing */
+    background: rgba(0, 0, 0, 0.1);
+    /* Subtle background for expanded area */
+    padding-top: 8px;
+}
+
+.sfp-detail-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 11px;
+    color: #aaa;
+    min-height: 20px;
+}
+
+.detail-icon-wrap {
+    width: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0.8;
+}
+
+.detail-text {
+    color: #ccc;
+    font-family: 'Inter', sans-serif;
+}
+
+.detail-text.main {
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.sfp-view-select {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #ccc;
+    font-size: 11px;
+    padding: 2px 4px;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    max-width: 200px;
+}
+
+.sfp-view-select:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.sfp-view-select option {
+    background: #333;
+    color: #fff;
+}
+
+
+.sfp-header h3 {
+    margin: 0;
     font-size: 14px;
     font-weight: 600;
     color: #f0f0f0;

@@ -138,6 +138,8 @@ def add_model_route():
         "projectId": data.get('projectId'), # ACC Project ID
         "itemId": data.get('itemId'),
         "versionId": data.get('versionId'),
+        "versionNumber": data.get('versionNumber'),
+        "lastModifiedTime": data.get('lastModifiedTime'),
         "added_at": datetime.now().isoformat(),
         "appProjectId": app_project_id # Segregation tag
     }
@@ -298,3 +300,41 @@ def remove_model_route():
              return jsonify({"error": "Failed to save"}), 500
     
     return jsonify({"error": "Model not found"}), 404
+
+@digital_twin_bp.route('/api/config/project/relink', methods=['POST'])
+def relink_model_route():
+    data = request.json
+    target_id = data.get('targetId')
+    app_project_id = data.get('project') # Segregation
+    new_data = data.get('newModel')
+
+    if not target_id or not new_data:
+        return jsonify({"error": "Missing targetId or newModel data"}), 400
+
+    config = get_project_config_internal()
+    model_found = False
+
+    for m in config.get('models', []):
+        # Match by ID (preferred) or URN if needed
+        if m.get('id') == target_id or (not target_id and m.get('urn') == data.get('oldUrn')):
+            model_found = True
+            # Update fields
+            m['urn'] = new_data.get('urn')
+            m['name'] = new_data.get('name') or new_data.get('label')
+            m['versionId'] = new_data.get('versionId')
+            m['versionNumber'] = new_data.get('versionNumber')
+            m['lastModifiedTime'] = new_data.get('lastModifiedTime')
+            m['projectId'] = new_data.get('projectId')
+            m['itemId'] = new_data.get('itemId')
+            # appProjectId stays same to keep it in same view
+            break
+    
+    if model_found:
+        if save_project_config_internal(config):
+             if app_project_id:
+                 config['models'] = [m for m in config['models'] if m.get('appProjectId') == app_project_id]
+             return jsonify(config)
+        else:
+             return jsonify({"error": "Failed to save config"}), 500
+
+    return jsonify({"error": "Target model not found"}), 404

@@ -4,6 +4,7 @@ import { BaseExtension } from '../aps/extensions/BaseExtension';
 import { LoggerExtension } from '../aps/extensions/LoggerExtension';
 import { HistogramExtension } from '../aps/extensions/HistogramExtension';
 import { PhasingExtension } from '../aps/extensions/PhasingExtension';
+import { ARExtension } from '../aps/extensions/ARExtension';
 
 const Viewer = ({
     models,
@@ -33,7 +34,8 @@ const Viewer = ({
     showBuildPins = true, // Toggle visibility
     onBuildPinCreate,
     onBuildPinSelect,
-    selectedPinId // Add this prop
+    selectedPinId, // Add this prop
+    arMode = false // AR Mode Prop
 }) => {
     const viewerRef = useRef(null);
     const containerRef = useRef(null);
@@ -238,6 +240,7 @@ const Viewer = ({
                 Autodesk.Viewing.theExtensionManager.registerExtension('LoggerExtension', LoggerExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('HistogramExtension', HistogramExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('PhasingExtension', PhasingExtension);
+                Autodesk.Viewing.theExtensionManager.registerExtension('ARExtension', ARExtension);
 
                 // Use Viewer3D (Headless) for custom UI or GuiViewer3D for standard
                 // User requested standard layout now, but optimized for mobile memory
@@ -247,6 +250,7 @@ const Viewer = ({
                         'LoggerExtension',
                         'HistogramExtension',
                         'PhasingExtension',
+                        'ARExtension',
                         'Autodesk.BIM360.Extension.PushPin'
                     ]
                 };
@@ -596,6 +600,24 @@ const Viewer = ({
 
     }, [activeViewableGuids]);
 
+    // Handle AR Mode Toggle
+    useEffect(() => {
+        const viewer = viewerRef.current;
+        if (!viewer || !viewerReady) return;
+
+        const ext = viewer.getExtension('ARExtension');
+        if (ext) {
+            if (arMode) {
+                if (!ext.isActive) ext.startAR();
+            } else {
+                if (ext.isActive) ext.stopAR();
+            }
+        } else {
+            // If extension isn't loaded yet (race condition), wait or try loading?
+            // It should be loaded by Initializer config.
+        }
+    }, [arMode, viewerReady]);
+
     // Handle Minimap Toggle
     useEffect(() => {
         const viewer = viewerRef.current;
@@ -725,9 +747,9 @@ const Viewer = ({
             // If no filters, show all (clear isolation) and exit
             if (!detail || !detail.dbIds || !detail.dbIds.length) {
                 viewer.setGhosting(false);
-                // viewer.showAll(); // This unhides everything including manually hidden models via setNodeOff
+                // viewer.showAll(); 
                 viewer.impl.visibilityManager.isolate([]); // Clear isolation
-                viewer.impl.visibilityManager.setNodeOff(viewer.model.getRootId(), false); // Ensure root is on? No, let separate visibility logic handle it.
+                // REMOVED explicit unhide of root node to prevent overriding manual visibility
                 return;
             }
 
@@ -747,6 +769,9 @@ const Viewer = ({
             });
 
             idsByModel.forEach((ids, urn) => {
+                // CRITICAL: Do not touch hidden models. Let them stay hidden.
+                if (hiddenModelUrnsRef.current.includes(urn)) return;
+
                 const model = loadedModelsRef.current[urn];
                 if (model) {
                     if (ids.length === 0) {

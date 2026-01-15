@@ -1,3 +1,21 @@
+/* Tandem-like Scrollbars & Typography */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  width: 5px;
+  border-radius: 3px;
+  background-color: #999;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
 body,
 #root,
 .app-container {
@@ -92,12 +110,14 @@ body,
   min-width: 300px;
   max-width: 450px;
   height: 100%;
-  background-color: rgba(28, 32, 39, 0.55);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: #f0f0f0;
+  /* Tandem-like dark semi-transparent background */
+  background-color: rgba(34, 34, 34, 0.92);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: #ececec;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
-  overflow-y: auto;
+  overflow-y: hidden;
   padding: 10px;
   z-index: 900;
   box-sizing: border-box;
@@ -1693,4 +1713,148 @@ div[class*="bim360-visual-style-group"] * {
     max-height: 60vh;
     overflow-y: auto;
   }
+}
+
+/* Override global checkbox styling for Tandem-like appearance */
+input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid #555;
+  background-color: #2a2a2a;
+  border-radius: 2px;
+  cursor: pointer;
+  position: relative;
+  vertical-align: middle;
+  outline: none;
+}
+
+input[type='checkbox']:checked {
+  background-color: #383838;
+  border-color: #666;
+}
+
+input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 3px;
+  height: 8px;
+  border: solid rgba(255, 255, 255, 0.85);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+input[type='checkbox']:hover {
+  border-color: #777;
+}
+
+/* FORCE TANDEM CHECKBOX STYLE (Exact Match) */
+input[type='checkbox'] {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  width: 14px !important;
+  height: 14px !important;
+  border: 1px solid #555 !important;
+  background-color: #222 !important;
+  /* Darker Unchecked */
+  border-radius: 2px !important;
+  /* Slight radius, mostly square */
+  cursor: pointer !important;
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  outline: none !important;
+  margin: 0;
+  transition: all 0.1s ease;
+}
+
+/* Checked State - Matte Opaque Grey */
+input[type='checkbox']:checked {
+  background-color: #383838 !important;
+  /* Common dark grey UI element */
+  border-color: #555 !important;
+}
+
+/* SVG Checkmark Background */
+input[type='checkbox']:checked::after {
+  content: '' !important;
+  width: 14px !important;
+  height: 14px !important;
+  border: none !important;
+  transform: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='none' stroke='%23ffffff' stroke-width='2.5' d='M6,11.3 L10.3,16 L18,6.2'/%3E%3C/svg%3E") !important;
+  background-size: 100% 100% !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  display: block !important;
+  opacity: 0.9;
+}
+
+input[type='checkbox']:hover {
+  border-color: #777 !important;
+}
+
+/* TANDEM FILTER LIST ITEM STYLES */
+.tandem-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 8px 2px 2px;
+  min-height: 24px;
+  cursor: pointer;
+  border-radius: 2px;
+  color: #dcdcdc;
+  /* Lighter text for clarity */
+  font-size: 11px;
+}
+
+.tandem-item:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.tandem-item-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  flex: 1;
+  cursor: pointer;
+}
+
+.tandem-item-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+
+.tandem-item-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tandem-count-badge {
+  color: #888;
+  font-size: 10px;
+  min-width: 16px;
+  text-align: right;
+  font-feature-settings: "tnum";
+}
+
+.tandem-color-box {
+  width: 10px;
+  height: 10px;
+  border-radius: 50% !important;
+  /* FORCE CIRCLE */
+  /* Remove border for cleaner look if filled, or keep subtle */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
 }

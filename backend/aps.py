@@ -48,7 +48,7 @@ def get_api_data(endpoint, token):
             response = requests.get(f'{APS_DATA_URL}/{endpoint}', headers={'Authorization': f'Bearer {token}'})
             response.raise_for_status()
             data = response.json()
-            cache.set(endpoint, data, timeout=60 * 60)  # Cache for 1 hour
+            cache.set(endpoint, data, timeout=30)  # Cache for 30 seconds
         except requests.exceptions.RequestException as e:
             return None, str(e)
     return data, None
