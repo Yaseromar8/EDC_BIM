@@ -1858,3 +1858,17 @@ input[type='checkbox']:hover {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
   flex-shrink: 0;
 }
+
+/* AR Mode Transparency Overrides */
+.ar-mode,
+.ar-mode .adsk-viewing-viewer,
+.ar-mode canvas {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+.ar-mode .adsk-viewing-viewer {
+  z-index: 1;
+  /* Keep viewer above video */
+}
