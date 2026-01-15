@@ -12,7 +12,8 @@ const ARView = ({ models, onExit }) => {
     const [videoOpacity, setVideoOpacity] = useState(1.0);
     const [viewerOpacity, setViewerOpacity] = useState(1.0); // New Control
     const [debugVideoOnTop, setDebugVideoOnTop] = useState(false);
-    const [gyroEnabled, setGyroEnabled] = useState(false); // If true, video z-index > viewer
+    const [gyroEnabled, setGyroEnabled] = useState(false);
+    const [sensorData, setSensorData] = useState({ alpha: 0, beta: 0, gamma: 0 });
 
     // 1. Initialize Camera Loop
     useEffect(() => {
@@ -115,6 +116,13 @@ const ARView = ({ models, onExit }) => {
             if (!THREE) return;
 
             const { alpha, beta, gamma } = event;
+            // Update Debug UI
+            setSensorData({
+                alpha: alpha ? alpha.toFixed(1) : 0,
+                beta: beta ? beta.toFixed(1) : 0,
+                gamma: gamma ? gamma.toFixed(1) : 0
+            });
+
             if (alpha === null) return;
 
             // Convert deg to rad
@@ -219,7 +227,10 @@ const ARView = ({ models, onExit }) => {
                             className="ar-close-btn"
                             onClick={async () => {
                                 if (!gyroEnabled && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                                    try { await DeviceOrientationEvent.requestPermission(); } catch (e) { }
+                                    try {
+                                        const response = await DeviceOrientationEvent.requestPermission();
+                                        if (response !== 'granted') alert("Permiso de Giroscopio denegado.");
+                                    } catch (e) { console.error(e); }
                                 }
                                 setGyroEnabled(!gyroEnabled);
                             }}
@@ -227,6 +238,12 @@ const ARView = ({ models, onExit }) => {
                         >
                             {gyroEnabled ? "Giroscopio: ACTIVO" : "Activar Giroscopio (Movimiento)"}
                         </button>
+
+                        {gyroEnabled && (
+                            <div style={{ fontSize: '10px', background: 'rgba(0,0,0,0.5)', color: 'lime', padding: '2px' }}>
+                                A: {sensorData.alpha} | B: {sensorData.beta} | G: {sensorData.gamma}
+                            </div>
+                        )}
 
                     </div>
                 </div>
