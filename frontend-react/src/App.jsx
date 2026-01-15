@@ -15,6 +15,7 @@ import BuildMapView from './components/BuildMapView';
 import MobileFloatingToolbar from './components/MobileFloatingToolbar';
 import LandingPage from './components/LandingPage'; // Import Landing Page
 import FilterConfiguratorModal from './components/FilterConfiguratorModal';
+import ARView from './components/ARView';
 
 import AddAttachmentModal from './components/AddAttachmentModal';
 import buildIconImg from './assets/build-icon.png';
@@ -2333,7 +2334,7 @@ function App() {
                 onBuildPinCreate={handlePinCreated}
                 onBuildPinSelect={handlePinSelect}
                 onBuildPinUpdate={handlePinUpdate}
-                arMode={arModeActive}
+                arMode={false} // Use Dedicated ARView instead
               // onBuildPinDelete={handlePinDelete} // If needed later
               />
             </div>
@@ -2540,6 +2541,13 @@ function App() {
             setFilterConfiguratorOpen(false);
           }}
         />
+
+        {arModeActive && (
+          <ARView
+            models={models}
+            onExit={() => setArModeActive(false)}
+          />
+        )}
 
       </div >
     </div >
