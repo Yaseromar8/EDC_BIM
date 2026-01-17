@@ -107,34 +107,32 @@ const ARView = ({ models, onExit }) => {
     }, [models]);
 
     // 3. GYROSCOPE LOGIC
+    // 3. GYROSCOPE LOGIC
     useEffect(() => {
         const handleOrientation = (event) => {
-            if (!gyroEnabled || !viewerRef.current) return;
-
-            // Check if THREE is available (Viewer usually exposes it)
-            const THREE = window.THREE || Autodesk.Viewing.Private.THREE;
-            if (!THREE) return;
-
+            // 1. DEBUG FIRST: Always update UI if event fires
             const { alpha, beta, gamma } = event;
-            // Update Debug UI
             setSensorData({
                 alpha: alpha ? alpha.toFixed(1) : 0,
                 beta: beta ? beta.toFixed(1) : 0,
                 gamma: gamma ? gamma.toFixed(1) : 0
             });
 
+            if (!gyroEnabled || !viewerRef.current) return;
+
+            // Check if THREE is available
+            const THREE = window.THREE || Autodesk.Viewing.Private.THREE;
+            if (!THREE) return;
+
             if (alpha === null) return;
 
-            // Convert deg to rad
+            // ... (Rest of logic same) ...
             const bg = THREE.Math.degToRad(beta);
             const ag = THREE.Math.degToRad(alpha);
             const gg = THREE.Math.degToRad(gamma);
-
-            // Orientation of screen (0 for portrait, 90 for landscape)
             const orient = window.orientation ? THREE.Math.degToRad(window.orientation) : 0;
 
-            // Math from standard libraries (DeviceOrientationControls)
-            const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // - PI/2 around X
+            const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
             const zee = new THREE.Vector3(0, 0, 1);
             const euler = new THREE.Euler();
             const q0 = new THREE.Quaternion();
@@ -147,13 +145,12 @@ const ARView = ({ models, onExit }) => {
             q2.setFromAxisAngle(zee, -orient);
             q0.multiply(q2);
 
-            // Apply to Camera
             const camera = viewerRef.current.impl.camera;
             camera.quaternion.copy(q0);
-            // Standard APS camera is 'up' vector based, so we might need to sync dirty
             viewerRef.current.impl.invalidate(true, false, false);
         };
 
+        // Always listen if gyroEnabled is true
         if (gyroEnabled) {
             window.addEventListener('deviceorientation', handleOrientation);
         }
@@ -184,72 +181,72 @@ const ARView = ({ models, onExit }) => {
                 className="ar-viewer-canvas"
                 style={{
                     zIndex: 5,
-                    opacity: viewerOpacity // Controlled by slider
+                    opacity: viewerOpacity
                 }}
             />
 
-            {/* UI Overlay */}
+            {/* UI Overlay - MOBILE OPTIMIZED */}
             <div className="ar-ui-overlay">
-                <div style={{ pointerEvents: 'auto', display: 'flex', gap: '10px', flexDirection: 'column' }}>
+
+                {/* Top: Exit Button */}
+                <div className="ar-top-bar">
                     <button className="ar-close-btn" onClick={onExit}>✕ Salir</button>
-
-                    <div className="ar-instructions" style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-
-                        {/* Camera Controls */}
-                        <div style={{ background: 'rgba(0,0,0,0.3)', padding: '5px', borderRadius: '4px' }}>
-                            <label>Cámara Opacidad: {Math.round(videoOpacity * 100)}%</label>
-                            <input
-                                type="range" min="0" max="1" step="0.1"
-                                value={videoOpacity}
-                                onChange={(e) => setVideoOpacity(parseFloat(e.target.value))}
-                            />
-                            <button
-                                className="ar-close-btn"
-                                onClick={() => setDebugVideoOnTop(!debugVideoOnTop)}
-                                style={{ fontSize: '10px', width: '100%', marginTop: '5px', background: debugVideoOnTop ? 'orange' : '#333' }}
-                            >
-                                {debugVideoOnTop ? "Cámara: AL FRENTE (Debug)" : "Cámara: AL FONDO"}
-                            </button>
-                        </div>
-
-                        {/* Viewer Controls */}
-                        <div style={{ background: 'rgba(0,0,0,0.3)', padding: '5px', borderRadius: '4px' }}>
-                            <label>Modelo Opacidad: {Math.round(viewerOpacity * 100)}%</label>
-                            <input
-                                type="range" min="0" max="1" step="0.1"
-                                value={viewerOpacity}
-                                onChange={(e) => setViewerOpacity(parseFloat(e.target.value))}
-                            />
-                        </div>
-
-                        {/* Gyro Control */}
-                        <button
-                            className="ar-close-btn"
-                            onClick={async () => {
-                                if (!gyroEnabled && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                                    try {
-                                        const response = await DeviceOrientationEvent.requestPermission();
-                                        if (response !== 'granted') alert("Permiso de Giroscopio denegado.");
-                                    } catch (e) { console.error(e); }
-                                }
-                                setGyroEnabled(!gyroEnabled);
-                            }}
-                            style={{ background: gyroEnabled ? '#00cc00' : '#444' }}
-                        >
-                            {gyroEnabled ? "Giroscopio: ACTIVO" : "Activar Giroscopio (Movimiento)"}
-                        </button>
-
-                        {gyroEnabled && (
-                            <div style={{ fontSize: '10px', background: 'rgba(0,0,0,0.5)', color: 'lime', padding: '2px' }}>
-                                A: {sensorData.alpha} | B: {sensorData.beta} | G: {sensorData.gamma}
-                            </div>
-                        )}
-
-                    </div>
                 </div>
 
-                <div className="ar-instructions">
-                    {cameraReady ? "Cámara Activa" : "Cargando..."}
+                {/* Bottom: Controls Panel */}
+                <div className="ar-controls-panel">
+
+                    {/* Camera Transparency */}
+                    <div className="ar-slider-group">
+                        <label>Cámara: {Math.round(videoOpacity * 100)}%</label>
+                        <input
+                            type="range" min="0" max="1" step="0.1"
+                            value={videoOpacity}
+                            onChange={(e) => setVideoOpacity(parseFloat(e.target.value))}
+                        />
+                    </div>
+
+                    <button
+                        className="ar-close-btn"
+                        onClick={() => setDebugVideoOnTop(!debugVideoOnTop)}
+                        style={{ fontSize: '10px', padding: '4px', background: debugVideoOnTop ? 'orange' : 'rgba(255,255,255,0.1)' }}
+                    >
+                        {debugVideoOnTop ? "Capa: CÁMARA ENCIMA" : "Capa: CÁMARA FONDO"}
+                    </button>
+
+                    {/* Model Transparency */}
+                    <div className="ar-slider-group">
+                        <label>Modelo: {Math.round(viewerOpacity * 100)}%</label>
+                        <input
+                            type="range" min="0" max="1" step="0.1"
+                            value={viewerOpacity}
+                            onChange={(e) => setViewerOpacity(parseFloat(e.target.value))}
+                        />
+                    </div>
+
+                    {/* Gyro Toggle */}
+                    <button
+                        className="ar-close-btn"
+                        onClick={async () => {
+                            // Check iOS permission
+                            if (!gyroEnabled && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                                try {
+                                    const response = await DeviceOrientationEvent.requestPermission();
+                                    if (response !== 'granted') alert("Permiso denegado");
+                                } catch (e) { console.error(e); }
+                            }
+                            setGyroEnabled(!gyroEnabled);
+                        }}
+                        style={{ background: gyroEnabled ? '#4ade80' : '#444', color: gyroEnabled ? 'black' : 'white' }}
+                    >
+                        {gyroEnabled ? "Giroscopio: ON" : "Activar Sensor"}
+                    </button>
+
+                    {/* Sensor Data Debug */}
+                    <div className="ar-instructions" style={{ textAlign: 'left', fontFamily: 'monospace', fontSize: '9px' }}>
+                        A:{sensorData.alpha} | B:{sensorData.beta} | G:{sensorData.gamma}
+                    </div>
+
                 </div>
             </div>
         </div>

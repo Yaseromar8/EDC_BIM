@@ -42,31 +42,97 @@
 
 .ar-ui-overlay {
     position: absolute;
-    top: 20px;
+    top: 0;
     left: 0;
     width: 100%;
+    height: 100%;
     z-index: 10;
     display: flex;
+    flex-direction: column;
     justify-content: space-between;
-    padding: 0 20px;
+    /* Exit arriba, controles abajo */
+    padding: 10px;
     box-sizing: border-box;
+    pointer-events: none;
+}
+
+/* Botón Salir (parte superior) */
+.ar-top-bar {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
     pointer-events: none;
 }
 
 .ar-close-btn {
     pointer-events: auto;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.6);
     color: white;
-    border: 1px solid white;
-    padding: 8px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    padding: 6px 14px;
     border-radius: 20px;
     cursor: pointer;
     font-weight: bold;
+    font-size: 13px;
+    backdrop-filter: blur(4px);
+}
+
+/* Panel de Controles (parte inferior) */
+.ar-controls-panel {
+    align-self: center;
+    /* Centrado horizontalmente */
+    width: 95%;
+    max-width: 350px;
+    background: rgba(0, 0, 0, 0.65);
+    /* Fondo oscuro semitransparente */
+    padding: 12px;
+    border-radius: 12px;
+    backdrop-filter: blur(8px);
+    /* Efecto vidrio */
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+    /* Separación del borde inferior */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ar-slider-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ar-slider-group label {
+    font-size: 11px;
+    color: #ddd;
+    font-weight: 500;
+}
+
+/* Input Range personalizado para móvil */
+input[type=range] {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+    outline: none;
+    -webkit-appearance: none;
+}
+
+input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    background: #4ade80;
+    /* Verde brillante */
+    border-radius: 50%;
+    cursor: pointer;
 }
 
 .ar-instructions {
-    background: rgba(0, 0, 0, 0.5);
-    color: white;
-    padding: 8px 12px;
-    border-radius: 8px;
+    font-size: 10px;
+    color: #aaa;
+    text-align: center;
+    margin-top: 5px;
 }
