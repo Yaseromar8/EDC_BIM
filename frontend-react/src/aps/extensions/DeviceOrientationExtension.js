@@ -8,6 +8,7 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         this.enabled = false;
         this.onOrientationEvent = this.onOrientationEvent.bind(this);
         this.onScreenOrientationChange = this.onScreenOrientationChange.bind(this);
+        this.debugEl = null;
     }
 
     load() {
@@ -30,14 +31,24 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         }
 
         // 2. DISABLE CONFLICTING TOOLS (CRITICAL)
+        // Note: We do NOT set setIsLocked(true) because it freezes programmatic updates too.
+        // We only deactivate the specific tools.
         const toolController = this.viewer.toolController;
         if (toolController) {
             toolController.deactivateTool('orbit');
             toolController.deactivateTool('pan');
             toolController.deactivateTool('zoom');
             toolController.deactivateTool('bifocal');
-            // Lock navigation to prevent touch gestures from overriding gyro
-            this.viewer.navigation.setIsLocked(true);
+        }
+
+        // 2.5 CREATE DEBUG OVERLAY (Vital for diagnosing sensor issues)
+        if (!document.getElementById('gyro-debug')) {
+            const d = document.createElement('div');
+            d.id = 'gyro-debug';
+            d.style.cssText = 'position:absolute; top:80px; left:10px; color:yellow; font-weight:bold; font-size:14px; z-index:99999; background:rgba(0,0,0,0.6); padding:8px; border-radius:4px; pointer-events:none; font-family:monospace;';
+            d.innerHTML = 'Giroscopio: ESPERANDO DATOS...';
+            this.viewer.container.appendChild(d);
+            this.debugEl = d;
         }
 
         // 3. SETUP MATH
@@ -56,7 +67,7 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         // Force initial update
         this.viewer.impl.invalidate(true, true, true);
 
-        console.log('DeviceOrientationExtension activated (Tools Disabled)');
+        console.log('DeviceOrientationExtension activated (Tools Disabled, Debug On)');
         return true;
     }
 
@@ -67,10 +78,17 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         window.removeEventListener('deviceorientation', this.onOrientationEvent, false);
         window.removeEventListener('orientationchange', this.onScreenOrientationChange, false);
 
+        // Remove debug
+        if (this.debugEl) {
+            this.debugEl.remove();
+            this.debugEl = null;
+        }
+
         // 2. RESTORE TOOLS
         const toolController = this.viewer.toolController;
         if (toolController) {
             toolController.activateTool('orbit'); // Default tool
+            // Ensure lock is off
             this.viewer.navigation.setIsLocked(false);
         }
 
@@ -87,6 +105,14 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
     onOrientationEvent(event) {
         if (!this.enabled || !this.viewer) return;
 
+        // Debug Update: If numbers change here, sensors work.
+        if (this.debugEl) {
+            const a = event.alpha ? Math.round(event.alpha) : 'null';
+            const b = event.beta ? Math.round(event.beta) : 'null';
+            const g = event.gamma ? Math.round(event.gamma) : 'null';
+            this.debugEl.innerHTML = `Alpha:${a}<br>Beta:${b}<br>Gamma:${g}`;
+        }
+
         // Access THREE inside loop just in case
         const THREE = window.THREE || Autodesk.Viewing.Private.THREE;
         if (!THREE) return;
@@ -94,14 +120,17 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         // Check for iOS null event (before permission)
         if (event.alpha === null && event.beta === null && event.gamma === null) return;
 
+        // Robust Math Util (Some viewers utilize MathUtils, others Math)
+        const MathUtils = THREE.MathUtils || THREE.Math;
+
         // Convert to Radians
-        const alpha = event.alpha ? THREE.Math.degToRad(event.alpha) : 0; // Z
-        const beta = event.beta ? THREE.Math.degToRad(event.beta) : 0;   // X'
-        const gamma = event.gamma ? THREE.Math.degToRad(event.gamma) : 0; // Y''
+        const alpha = event.alpha ? MathUtils.degToRad(event.alpha) : 0; // Z
+        const beta = event.beta ? MathUtils.degToRad(event.beta) : 0;   // X'
+        const gamma = event.gamma ? MathUtils.degToRad(event.gamma) : 0; // Y''
 
-        const orient = this.screenOrientation ? THREE.Math.degToRad(this.screenOrientation) : 0;
+        const orient = this.screenOrientation ? MathUtils.degToRad(this.screenOrientation) : 0;
 
-        // YXZ order is critical for device orientation
+        // YXZ order is critical for device orientation logic
         this.euler.set(beta, alpha, -gamma, 'YXZ');
         this.q0.setFromEuler(this.euler);
         this.q0.multiply(this.q1);
