@@ -1,57 +1,84 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './ARView.css';
-import '../aps/extensions/DeviceOrientationExtension'; // Import the new extension
+import '../aps/extensions/DeviceOrientationExtension'; // Make sure this path is correct
+
+// --- STATIC TOKEN CONFIGURATION ---
+// PASTE YOUR VALID TOKEN HERE IF BACKEND IS DOWN
+const STATIC_TOKEN = "";
 
 const ARView = ({ models, onExit }) => {
     const viewerDivRef = useRef(null);
     const viewerRef = useRef(null);
     const videoRef = useRef(null);
-
-    // UI States
     const [permStatus, setPermStatus] = useState("init");
 
-    // 1. Initialize Camera (Background)
+    // 1. INITIALIZE CAMERA FEED
     useEffect(() => {
         const startCamera = async () => {
             try {
+                // 'environment' requests the back camera
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'environment' },
                     audio: false
                 });
                 if (videoRef.current) {
                     videoRef.current.srcObject = stream;
-                    videoRef.current.onloadedmetadata = () => videoRef.current.play();
+                    // Play only when metadata loads to avoid black frame
+                    videoRef.current.onloadedmetadata = () => {
+                        videoRef.current.play().catch(e => console.error("Play error:", e));
+                    };
                 }
             } catch (err) {
                 console.error("Camera Error:", err);
+                alert("Error: Camera access denied or not available (HTTPS required).");
             }
         };
+
         startCamera();
 
+        // Cleanup
         return () => {
             if (videoRef.current && videoRef.current.srcObject) {
-                videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+                videoRef.current.srcObject.getTracks().forEach(track => track.stop());
             }
         };
     }, []);
 
-    // 2. Initialize Viewer & Auto-Start Logic
+    // 2. INITIALIZE AUTODESK VIEWER
     useEffect(() => {
         if (!models || models.length === 0) return;
 
+        // AUTH LOGIC (Static vs Fetch)
+        const getAccessToken = (onSuccess) => {
+            if (STATIC_TOKEN && STATIC_TOKEN.length > 10) {
+                console.log("Using STATIC_TOKEN");
+                onSuccess(STATIC_TOKEN, 3600);
+            } else {
+                // Fallback to fetch if Static is empty
+                fetch('/api/token')
+                    .then(res => {
+                        if (!res.ok) throw new Error("Backend Token Fetch Failed");
+                        return res.json();
+                    })
+                    .then(data => onSuccess(data.access_token, data.expires_in))
+                    .catch(err => {
+                        console.error(err);
+                        alert("Token Error: Backend unreachable. Please use STATIC_TOKEN in ARView.jsx");
+                    });
+            }
+        };
+
         const options = {
             env: 'AutodeskProduction',
-            getAccessToken: (onSuccess) => {
-                fetch('/api/token').then(res => res.json())
-                    .then(data => onSuccess(data.access_token, data.expires_in));
-            }
+            getAccessToken: getAccessToken
         };
 
         Autodesk.Viewing.Initializer(options, () => {
             if (!viewerDivRef.current) return;
 
+            // CONFIGURATION FOR TRANSPARENCY
             const config = {
-                extensions: ['Autodesk.Viewing.ZoomWindow', 'DeviceOrientationExtension'], // Load Extension
+                extensions: ['DeviceOrientationExtension'], // Load our custom gyro logic
                 canvasConfig: { alpha: true, premultipliedAlpha: false }
             };
 
@@ -59,39 +86,48 @@ const ARView = ({ models, onExit }) => {
             viewer.start();
             viewerRef.current = viewer;
 
+            // Load Model
             Autodesk.Viewing.Document.load('urn:' + models[0].urn, (doc) => {
                 const defaultModel = doc.getRoot().getDefaultGeometry();
                 viewer.loadDocumentNode(doc, defaultModel, {
                     keepCurrentModels: false,
-                    globalOffset: { x: 0, y: 0, z: 0 }
+                    globalOffset: { x: 0, y: 0, z: 0 }, // Prevent Jitter
+                    placementTransform: new THREE.Matrix4() // Reset transform
                 }).then(() => {
-                    // --- FORCE TRANSPARENCY ROBUSTLY ---
+                    // --- SUCCESS LINK: MODEL LOADED ---
+                    console.log("AR Model Loaded. Applying Transparency...");
+
+                    // A. FORCE TRANSPARENCY (The "Ghost" Fix)
                     const makeTransparent = () => {
                         viewer.container.style.background = 'transparent';
+                        viewer.container.style.backgroundColor = 'transparent';
+
                         const renderer = viewer.impl.glrenderer ? viewer.impl.glrenderer() : viewer.impl.renderer();
                         if (renderer) {
-                            renderer.setClearColor(0xffffff, 0);
+                            renderer.setClearColor(0xffffff, 0); // 0 Alpha
                             if (renderer.setClearAlpha) renderer.setClearAlpha(0);
                         }
                         viewer.impl.invalidate(true, true, true);
                     };
 
-                    makeTransparent(); // Initial Call
+                    makeTransparent();
+                    // Re-apply on events just in case viewer resets it
                     viewer.addEventListener(Autodesk.Viewing.TEXTURES_LOADED_EVENT, makeTransparent);
                     viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, makeTransparent);
 
                     viewer.fitToView();
 
-                    // --- AUTO START GYRO (ANDROID/PC) ---
+                    // B. AUTO-START EXTENSION (If Android)
                     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission !== 'function') {
+                        // Android doesn't need explicit permission click usually
                         const ext = viewer.getExtension('DeviceOrientationExtension');
                         if (ext) {
                             ext.activate();
-                            setPermStatus('active');
+                            setPermStatus("active");
                         }
                     } else {
-                        // iOS needs button
-                        setPermStatus('pending');
+                        // iOS needs explicit button
+                        setPermStatus("pending_ios");
                     }
                 });
             });
@@ -105,53 +141,50 @@ const ARView = ({ models, onExit }) => {
         };
     }, [models]);
 
+    // 3. RENDER UI
     return (
         <div className="ar-view-container">
-            {/* Background Camera */}
-            <video
-                ref={videoRef} className="ar-video-feed" playsInline autoPlay muted
-                style={{ opacity: 1 }}
-            />
+            {/* LAYER 0: Camera */}
+            <video ref={videoRef} className="ar-video-feed" playsInline autoPlay muted />
 
-            {/* Foreground Viewer */}
-            <div
-                ref={viewerDivRef} className="ar-viewer-canvas"
-                style={{ opacity: 1 }}
-            />
+            {/* LAYER 1: Viewer */}
+            <div ref={viewerDivRef} className="ar-viewer-canvas" />
 
-            {/* Simple UI */}
+            {/* LAYER 2: UI Overlay */}
             <div className="ar-ui-overlay">
                 <div className="ar-top-bar">
-                    <button className="ar-close-btn" onClick={onExit}>✕ Salir</button>
+                    <button className="ar-btn" onClick={onExit}>✕ Salir</button>
                 </div>
 
-                {/* iOS Permission Button */}
-                {permStatus === 'pending' && (
-                    <div style={{ position: 'absolute', bottom: '50px', width: '100%', display: 'flex', justifyContent: 'center' }}>
+                {/* iOS ENABLE BUTTON */}
+                <div className="ar-bottom-controls">
+                    {permStatus === 'pending_ios' && (
                         <button
-                            className="ar-close-btn"
-                            style={{ background: '#4ade80', color: 'black', fontSize: '16px', padding: '12px 24px' }}
+                            className="ar-btn ar-btn-primary"
                             onClick={async () => {
                                 try {
-                                    // 1. Request OS Permission
-                                    const res = await DeviceOrientationEvent.requestPermission();
-                                    if (res === 'granted') {
+                                    // Request iOS Permission
+                                    const response = await DeviceOrientationEvent.requestPermission();
+                                    if (response === 'granted') {
                                         setPermStatus('active');
-                                        // 2. Activate Extension
+                                        // Activate Extension
                                         if (viewerRef.current) {
                                             const ext = viewerRef.current.getExtension('DeviceOrientationExtension');
                                             if (ext) ext.activate();
                                         }
                                     } else {
-                                        alert("Permiso denegado.");
+                                        alert("Permission Denied (iOS). Please reset site permissions.");
                                     }
-                                } catch (e) { console.error(e); }
+                                } catch (e) {
+                                    console.error(e);
+                                    alert("Error requesting permission: " + e.message);
+                                }
                             }}
                         >
-                            Activar Movimiento (iOS)
+                            Activar AR (Permitir Movimiento)
                         </button>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
         </div>
     );
