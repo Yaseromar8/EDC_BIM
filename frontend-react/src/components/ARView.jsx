@@ -65,14 +65,21 @@ const ARView = ({ models, onExit }) => {
                     keepCurrentModels: false,
                     globalOffset: { x: 0, y: 0, z: 0 }
                 }).then(() => {
-                    // Force Transparent Background
-                    viewer.container.style.background = 'transparent';
-                    const renderer = viewer.impl.glrenderer ? viewer.impl.glrenderer() : viewer.impl.renderer();
-                    if (renderer) {
-                        renderer.setClearColor(0xffffff, 0);
-                        if (renderer.setClearAlpha) renderer.setClearAlpha(0);
-                    }
-                    viewer.impl.invalidate(true, true, true);
+                    // --- FORCE TRANSPARENCY ROBUSTLY ---
+                    const makeTransparent = () => {
+                        viewer.container.style.background = 'transparent';
+                        const renderer = viewer.impl.glrenderer ? viewer.impl.glrenderer() : viewer.impl.renderer();
+                        if (renderer) {
+                            renderer.setClearColor(0xffffff, 0);
+                            if (renderer.setClearAlpha) renderer.setClearAlpha(0);
+                        }
+                        viewer.impl.invalidate(true, true, true);
+                    };
+
+                    makeTransparent(); // Initial Call
+                    viewer.addEventListener(Autodesk.Viewing.TEXTURES_LOADED_EVENT, makeTransparent);
+                    viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, makeTransparent);
+
                     viewer.fitToView();
 
                     // --- AUTO START GYRO (ANDROID/PC) ---
