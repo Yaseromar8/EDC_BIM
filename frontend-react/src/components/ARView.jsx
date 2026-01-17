@@ -14,6 +14,7 @@ const ARView = ({ models, onExit }) => {
     const [debugVideoOnTop, setDebugVideoOnTop] = useState(false);
     const [gyroEnabled, setGyroEnabled] = useState(false);
     const [sensorData, setSensorData] = useState({ alpha: 0, beta: 0, gamma: 0 });
+    const [permStatus, setPermStatus] = useState("init");
 
     // 1. Initialize Camera Loop
     useEffect(() => {
@@ -225,16 +226,29 @@ const ARView = ({ models, onExit }) => {
                     </div>
 
                     {/* Gyro Toggle */}
+                    {/* Gyro Toggle */}
                     <button
                         className="ar-close-btn"
                         onClick={async () => {
-                            // Check iOS permission
-                            if (!gyroEnabled && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                            // 1. Check iOS Permission
+                            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                                 try {
+                                    setPermStatus("requesting...");
                                     const response = await DeviceOrientationEvent.requestPermission();
-                                    if (response !== 'granted') alert("Permiso denegado");
-                                } catch (e) { console.error(e); }
+                                    setPermStatus(response);
+                                    if (response !== 'granted') {
+                                        alert("Permiso RECHAZADO por el sistema (iOS). Recarga la página.");
+                                        return;
+                                    }
+                                } catch (e) {
+                                    console.error(e);
+                                    setPermStatus("error: " + e.message);
+                                }
+                            } else {
+                                setPermStatus("active (android/pc)");
                             }
+
+                            // 2. Toggle State
                             setGyroEnabled(!gyroEnabled);
                         }}
                         style={{ background: gyroEnabled ? '#4ade80' : '#444', color: gyroEnabled ? 'black' : 'white' }}
@@ -243,7 +257,8 @@ const ARView = ({ models, onExit }) => {
                     </button>
 
                     {/* Sensor Data Debug */}
-                    <div className="ar-instructions" style={{ textAlign: 'left', fontFamily: 'monospace', fontSize: '9px' }}>
+                    <div className="ar-instructions" style={{ textAlign: 'left', fontFamily: 'monospace', fontSize: '9px', color: (sensorData.alpha == 0 && gyroEnabled) ? 'orange' : 'lime' }}>
+                        Status: {permStatus}<br />
                         A:{sensorData.alpha} | B:{sensorData.beta} | G:{sensorData.gamma}
                     </div>
 

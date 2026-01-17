@@ -136,3 +136,17 @@ input[type=range]::-webkit-slider-thumb {
     text-align: center;
     margin-top: 5px;
 }
+
+/* HIDE AUTODESK UI ELEMENTS IN AR */
+.ar-viewer-canvas .adsk-toolbar,
+.ar-viewer-canvas .adsk-control-group,
+.ar-viewer-canvas .viewcube,
+.ar-viewer-canvas .viewcubeWrapper,
+.ar-viewer-canvas .docking-panel,
+.ar-viewer-canvas .docking-panel-container,
+.ar-viewer-canvas .adsk-viewing-viewer .adsk-viewing-progress {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
