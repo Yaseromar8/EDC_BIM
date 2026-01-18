@@ -1868,16 +1868,7 @@ function App() {
               <span className="rail-label" style={{ fontWeight: 700 }}>Inventory</span>
             </button>
 
-            <button
-              type="button"
-              className={`rail-button ${arModeActive ? 'active' : ''}`}
-              onClick={() => setArModeActive(!arModeActive)}
-              title="AR Mode"
-              style={{ marginTop: 'auto', marginBottom: '10px' }}
-            >
-              <ARIcon />
-              <span className="rail-label" style={{ fontWeight: 700 }}>AR</span>
-            </button>
+
 
           </nav>
 
@@ -2541,13 +2532,6 @@ function App() {
             setFilterConfiguratorOpen(false);
           }}
         />
-
-        {arModeActive && (
-          <ARView
-            models={models}
-            onExit={() => setArModeActive(false)}
-          />
-        )}
 
       </div >
     </div >

@@ -1,0 +1,47 @@
+.custom-viewer-toolbar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(34, 34, 34, 0.9);
+    padding: 6px 12px;
+    border-radius: 8px;
+    display: flex;
+    gap: 8px;
+    z-index: 200;
+    /* Above viewer canvas */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.custom-toolbar-btn {
+    background: transparent;
+    border: none;
+    color: #e0e0e0;
+    cursor: pointer;
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.custom-toolbar-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.custom-toolbar-btn.active {
+    background: rgba(59, 130, 246, 0.2);
+    /* Blue tint */
+    color: #3b82f6;
+    /* Blue icon */
+    border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.custom-toolbar-btn svg {
+    width: 24px;
+    height: 24px;
+}

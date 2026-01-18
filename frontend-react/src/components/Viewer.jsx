@@ -4,7 +4,6 @@ import { BaseExtension } from '../aps/extensions/BaseExtension';
 import { LoggerExtension } from '../aps/extensions/LoggerExtension';
 import { HistogramExtension } from '../aps/extensions/HistogramExtension';
 import { PhasingExtension } from '../aps/extensions/PhasingExtension';
-import { ARExtension } from '../aps/extensions/ARExtension';
 import { DeviceOrientationExtension } from '../aps/extensions/DeviceOrientationExtension';
 
 const Viewer = ({
@@ -35,8 +34,7 @@ const Viewer = ({
     showBuildPins = true, // Toggle visibility
     onBuildPinCreate,
     onBuildPinSelect,
-    selectedPinId, // Add this prop
-    arMode = false // AR Mode Prop
+    selectedPinId // Add this prop
 }) => {
     const viewerRef = useRef(null);
     const containerRef = useRef(null);
@@ -241,20 +239,16 @@ const Viewer = ({
                 Autodesk.Viewing.theExtensionManager.registerExtension('LoggerExtension', LoggerExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('HistogramExtension', HistogramExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('PhasingExtension', PhasingExtension);
-                Autodesk.Viewing.theExtensionManager.registerExtension('ARExtension', ARExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('DeviceOrientationExtension', DeviceOrientationExtension);
-
                 // Use Viewer3D (Headless) for custom UI or GuiViewer3D for standard
                 // User requested standard layout now, but optimized for mobile memory
                 const config = {
                     extensions: [
                         'BaseExtension',
                         'LoggerExtension',
-                        'HistogramExtension',
                         'PhasingExtension',
-                        'ARExtension',
                         'Autodesk.BIM360.Extension.PushPin',
-                        'DeviceOrientationExtension' // Add Gyro Extension
+                        'DeviceOrientationExtension'
                     ]
                 };
 
@@ -603,23 +597,7 @@ const Viewer = ({
 
     }, [activeViewableGuids]);
 
-    // Handle AR Mode Toggle
-    useEffect(() => {
-        const viewer = viewerRef.current;
-        if (!viewer || !viewerReady) return;
 
-        const ext = viewer.getExtension('ARExtension');
-        if (ext) {
-            if (arMode) {
-                if (!ext.isActive) ext.startAR();
-            } else {
-                if (ext.isActive) ext.stopAR();
-            }
-        } else {
-            // If extension isn't loaded yet (race condition), wait or try loading?
-            // It should be loaded by Initializer config.
-        }
-    }, [arMode, viewerReady]);
 
     // Handle Minimap Toggle
     useEffect(() => {
@@ -1977,101 +1955,6 @@ const Viewer = ({
         };
     }, [viewerReady, placementMode, sprites, showSprites]);
 
-    // --- GYROSCOPE (LOOK AROUND) TOOLBAR BUTTON ---
-    useEffect(() => {
-        const viewer = viewerRef.current;
-        if (!viewer || !viewerReady) return;
-
-        const createGyroButton = () => {
-            const toolbar = viewer.getToolbar();
-            if (!toolbar) return;
-
-            // Check if button already exists
-            if (toolbar.getControl('gyro-button')) return;
-
-            // Create Button
-            const gyroBtn = new Autodesk.Viewing.UI.Button('gyro-button');
-            gyroBtn.setToolTip('Mirar Alrededor (AR/Giroscopio)');
-            gyroBtn.setIcon('adsk-icon-first-person'); // Standard icon similar to Look Around
-
-            // Custom State Handling
-            gyroBtn.onClick = async (e) => {
-                const ext = viewer.getExtension('DeviceOrientationExtension');
-                if (!ext) {
-                    console.log('Gyro Extension not found');
-                    return;
-                }
-
-                if (ext.enabled) {
-                    // STOP
-                    ext.deactivate();
-                    gyroBtn.setState(Autodesk.Viewing.UI.Button.State.INACTIVE);
-                    gyroBtn.removeClass('active');
-
-                    // Restore Background
-                    viewer.container.style.background = ''; // Revert to CSS default
-                    try {
-                        const renderer = viewer.impl.glrenderer ? viewer.impl.glrenderer() : viewer.impl.renderer();
-                        // Reset clear color (usually gradient or gray in APS)
-                        viewer.impl.setClearColor(viewer.impl.clientClearColor || 0, viewer.impl.clientClearAlpha || 1);
-                        viewer.impl.invalidate(true, true, true);
-                    } catch (err) { console.warn(err); }
-
-                    // Stop video stream if we started it here? 
-                    // Ideally we should manage a single video element. 
-                    // For now, let's assume the video is always behind if ARView.css is active.
-                } else {
-                    // START
-                    // iOS Permission
-                    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                        try {
-                            const resp = await DeviceOrientationEvent.requestPermission();
-                            if (resp !== 'granted') {
-                                alert('Permiso de sensores denegado por iOS.');
-                                return;
-                            }
-                        } catch (err) {
-                            console.error(err);
-                            return;
-                        }
-                    }
-
-                    if (ext.activate()) {
-                        gyroBtn.setState(Autodesk.Viewing.UI.Button.State.ACTIVE);
-                        gyroBtn.addClass('active');
-
-                        // Force Transparent Background
-                        viewer.container.style.background = 'transparent';
-                        const renderer = viewer.impl.glrenderer ? viewer.impl.glrenderer() : viewer.impl.renderer();
-                        if (renderer) {
-                            renderer.setClearColor(0xffffff, 0);
-                            if (renderer.setClearAlpha) renderer.setClearAlpha(0);
-                        }
-                        viewer.impl.invalidate(true, true, true);
-                    }
-                }
-            };
-
-            // Add controls to 'modelTools' or create new group
-            let subToolbar = toolbar.getControl('modelTools');
-            if (!subToolbar) {
-                subToolbar = new Autodesk.Viewing.UI.ControlGroup('my-custom-tools');
-                toolbar.addControl(subToolbar);
-            }
-            subToolbar.addControl(gyroBtn);
-        };
-
-        // If toolbar exists, create now. Else wait for event.
-        if (viewer.getToolbar()) {
-            createGyroButton();
-        } else {
-            viewer.addEventListener(Autodesk.Viewing.TOOLBAR_CREATED_EVENT, createGyroButton);
-        }
-
-        return () => {
-            if (viewer) viewer.removeEventListener(Autodesk.Viewing.TOOLBAR_CREATED_EVENT, createGyroButton);
-        };
-    }, [viewerReady]);
 
     const handleCreateSpriteFromMenu = () => {
         if (contextMenu && contextMenu.position && onPlacementComplete) {
@@ -2086,29 +1969,7 @@ const Viewer = ({
     return (
         <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
             {/* BACKGROUND CAMERA (Always Active/Ready) */}
-            <video
-                id="ar-background-video"
-                playsInline
-                autoPlay
-                muted
-                style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    zIndex: 0,
-                    pointerEvents: 'none'
-                }}
-                ref={el => {
-                    if (el && !el.srcObject) {
-                        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-                            .then(stream => el.srcObject = stream)
-                            .catch(e => console.warn("Camera access warning:", e));
-                    }
-                }}
-            />
+            {/* BACKGROUND CAMERA REMOVED */}
 
             <div
                 id="viewer-container"
@@ -2117,6 +1978,9 @@ const Viewer = ({
                 style={{ width: '100%', height: '100%', position: 'relative', zIndex: 1 }}
             />
 
+
+
+            {/* Mobile Tools Toggle */}
             <button
                 className="mobile-tools-toggle"
                 onClick={() => setMobileToolsVisible(prev => !prev)}
