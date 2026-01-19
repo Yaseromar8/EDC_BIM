@@ -256,33 +256,20 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         // Order 'ZXY': Apply Yaw (Z) first, then Pitch (X).
         // this.euler.set(beta, 0, -alpha, 'ZXY'); 
 
-        // --- MAPPING V8 (STANDARD VR MATH) ---
-        // Implementation adapted from Three.js DeviceOrientationControls.
-        // This properly handles the mix of rotations without gimbal lock.
+        // --- MAPPING V9 (SPLIT-AXIS RELATIVE - ARCHITECTURAL Z-UP) ---
+        // Instead of complex quaternion math that mixes axes, we treat Yaw and Pitch separately.
+        // Yaw (Alpha): Rotates around World Z (Vertical building axis).
+        // Pitch (Beta): Rotates around Camera Local X (Ears).
 
-        const zee = new THREE.Vector3(0, 0, 1);
-        const euler = new THREE.Euler();
-        const q0 = new THREE.Quaternion();
-        const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // - PI/2 around X
-
-        // 1. Get raw sensor Euler (Order YXZ is critical for sensors)
-        // Alpha (Z), Beta (X), Gamma (Y)
-        euler.set(beta, alpha, -gamma, 'YXZ');
-
-        // 2. Convert to Quaternion
-        this.deviceQuaternion.setFromEuler(euler);
-
-        // 3. Apply Device Coordinate Transformations (The "Standard" Formula)
-        this.deviceQuaternion.multiply(q1); // Fix device frame (Android/iOS standard)
-        this.deviceQuaternion.multiply(q0.setFromAxisAngle(zee, -orient)); // Fix screen rotation 
-
-        // 4. Initial Tare (Calibration)
-        // We capture the FIRST valid reading as the "Zero" offset.
+        // 1. Initial Calibration (Tare)
         if (!this.isCalibrated) {
             this.initialCameraQuaternion.copy(this.viewer.impl.camera.quaternion);
-            this.initialDeviceQuaternion.copy(this.deviceQuaternion);
 
-            // Setup initial distance for focus
+            // Capture "Zero" angles
+            this.initialAlpha = alpha; // Z-rotation
+            this.initialBeta = beta;   // X-rotation
+
+            // Setup focus distance
             const pos = this.viewer.navigation.getPosition();
             const target = this.viewer.navigation.getTarget();
             this.initialDistance = pos.distanceTo(target) || 10.0;
@@ -292,18 +279,25 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             this.finalQuaternion = new THREE.Quaternion();
         }
 
-        // 5. Apply Relative Rotation properly (Post-multiply)
-        // Camera = InitialCamera * (InitialDevice^-1 * CurrentDevice)
-        const currentRelative = this.deviceQuaternion.clone();
-        const initialInv = this.initialDeviceQuaternion.clone().invert();
+        // 2. Calculate Deltas (Movement from "Zero")
+        let dAlpha = alpha - this.initialAlpha;
+        let dBeta = beta - this.initialBeta;
 
-        // Combine: "Change in device"
-        const delta = new THREE.Quaternion();
-        delta.multiplyQuaternions(currentRelative, initialInv); // Delta = Current * InvInitial
+        // 3. Reconstruct Camera Rotation
+        // Start from original
+        const camQ = this.initialCameraQuaternion.clone();
 
-        // Apply delta to camera (Pre-multiply for local rotation feel)
-        this.finalQuaternion.copy(this.initialCameraQuaternion);
-        this.finalQuaternion.multiply(delta);
+        // Apply YAW (Global Z) - "Turning body"
+        const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), dAlpha);
+        camQ.premultiply(yawQ); // Apply world rotation FIRST (Parent)
+
+        // Apply PITCH (Local X) - "Nodding head"
+        const pitchQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), dBeta);
+        camQ.multiply(pitchQ); // Apply local rotation LAST (Child)
+
+        this.finalQuaternion.copy(camQ);
+
+
 
 
         // --- DIRECT APPLY (Sync Navigation) ---
@@ -338,8 +332,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:violet;font-size:16px;">DEBUG MODE: V8 (VIOLETA)</div>
-                <b>STANDARD VR MATH (QUATERNIONS)</b><br/>
+                <div style="color:gray;font-size:16px;">DEBUG MODE: V9 (GRIS)</div>
+                <b>ARCHITECTURAL MODE (Z-UP)</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
                 Dist: ${dist}<br/>
