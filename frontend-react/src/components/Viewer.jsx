@@ -229,10 +229,13 @@ const Viewer = ({
     }, [viewerReady, placementMode, docPlacementMode, onPlacementComplete, onDocPlacementComplete]);
     useEffect(() => {
         const initializeViewer = () => {
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            if (!window.Autodesk) {
+                setTimeout(initializeViewer, 500);
+                return;
+            }
 
             const options = {
-                env: 'AutodeskProduction', // Revert to standard production to fix 400 errors
+                env: 'AutodeskProduction',
                 getAccessToken: (onSuccess) => {
                     if (accessToken) {
                         onSuccess(accessToken, 3600);
@@ -251,50 +254,40 @@ const Viewer = ({
                 Autodesk.Viewing.theExtensionManager.registerExtension('HistogramExtension', HistogramExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('PhasingExtension', PhasingExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('DeviceOrientationExtension', DeviceOrientationExtension);
-                // Use Viewer3D (Headless) for custom UI or GuiViewer3D for standard
-                // User requested standard layout now, but optimized for mobile memory
+
                 const config = {
                     extensions: [
                         'BaseExtension',
                         'LoggerExtension',
                         'PhasingExtension',
                         'Autodesk.BIM360.Extension.PushPin',
+                        'Autodesk.PDF',
+                        'Autodesk.AEC.LevelsExtension',
+                        'Autodesk.AEC.Minimap3DExtension',
                         'DeviceOrientationExtension'
-                    ]
+                    ],
+                    loaderExtensions: { svf: "Autodesk.MemoryLimited" }
                 };
 
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);
                 viewer.start();
                 viewerRef.current = viewer;
+
                 setViewerReady(true);
 
-                // --- PERFORMANCE OPTIMIZATIONS ---
-                viewer.setOptimizeNavigation(true);
-
-                if (isMobile) {
-                    console.log('[Viewer] Mobile device detected. Optimizing performance.');
-                    viewer.setQualityLevel(false, false); // No ambient occlusion
-                    viewer.setGroundShadow(false);
-                    viewer.setGroundReflection(false);
-                    viewer.setGhosting(false); // Disable ghosting on mobile
-
-                } else {
-                    viewer.setQualityLevel(false, false);
-                    viewer.setGroundShadow(false);
-                    viewer.setGroundReflection(false);
-                    viewer.setGhosting(true);
-                }
-                // Increase memory limit for SVF2 if applicable (internal setting)
-                // viewer.impl.setFPSTarget(30);
-
-                console.log('[Viewer] Performance mode enabled for stability.');
+                // Performance settings
+                viewer.setQualityLevel(false, false);
+                viewer.setGroundShadow(false);
+                viewer.setGroundReflection(false);
+                viewer.setGhosting(false);
             });
         };
 
-        initializeViewer();
+        if (!viewerReady && accessToken) {
+            initializeViewer();
+        }
 
         return () => {
-            spriteViewRef.current?.clear();
             if (viewerRef.current) {
                 viewerRef.current.finish();
                 viewerRef.current = null;
@@ -302,14 +295,17 @@ const Viewer = ({
             }
         };
     }, [viewerReady, accessToken]);
+
+    // Handle Model Loaded Event
     useEffect(() => {
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
+
         const handleModelLoaded = (event) => {
             const model = event?.model || viewer?.model;
             if (!model) return;
+
             const props = model.allProps || [];
-            // Resolve URN by comparing model object with loadedModelsRef
             let urn = model.getData()?.urn;
 
             // Try to find the exact URN key from our loadedModelsRef that matches this model instance
@@ -324,11 +320,13 @@ const Viewer = ({
 
             onModelProperties?.({ urn, props });
         };
+
         viewer.addEventListener('model.loaded', handleModelLoaded);
         // In case BaseExtension already populated props before we subscribed
         if (viewer?.model?.allProps?.length) {
             handleModelLoaded({ model: viewer.model });
         }
+
         return () => {
             if (viewer) viewer.removeEventListener('model.loaded', handleModelLoaded);
         };
