@@ -13,7 +13,7 @@ class GyroTool {
 
     getNames() { return this.names; }
     getName() { return this.names[0]; }
-    getPriority() { return 10000; }
+    getPriority() { return 10000; } // SUPER Priority
 
     activate() { this.active = true; }
     deactivate() { this.active = false; }
@@ -21,8 +21,11 @@ class GyroTool {
     update() {
         if (!this.active || !this.extension.currentQuaternion) return false;
 
-        // Force Camera Update
-        this.viewer.impl.camera.quaternion.copy(this.extension.currentQuaternion);
+        // DIRECT CONTROL: We overwrite the camera rotation every single frame
+        const camera = this.viewer.impl.camera;
+        camera.quaternion.copy(this.extension.currentQuaternion);
+        camera.updateMatrixWorld(true); // Force update
+
         return true;
     }
 }
@@ -31,6 +34,7 @@ class GyroTool {
 export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
     constructor(viewer, options) {
         super(viewer, options);
+        this.tool = new GyroTool(viewer, this);
         this.onOrientationEvent = this.onOrientationEvent.bind(this);
         this.onScreenOrientationChange = this.onScreenOrientationChange.bind(this);
         this.toggleGyro = this.toggleGyro.bind(this);
@@ -39,7 +43,13 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         this.enabled = false;
         this.button = null;
         this.currentQuaternion = null;
-        this.tool = new GyroTool(viewer, this);
+        this.debugEl = null;
+
+        // THREE.js objects
+        this.zee = null;
+        this.euler = null;
+        this.q0 = null;
+        this.q1 = null;
     }
 
     load() {
@@ -54,7 +64,7 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
 
     unload() {
         this.deactivate();
-        this.viewer.toolController.deregisterTool(this.tool);
+        this.viewer.toolController.deregisterTool(this.tool); // Unregister tool
         if (this.button) {
             const group = this.viewer.toolbar.getControl('modelTools') || this.viewer.toolbar.getControl('navTools');
             if (group) group.removeControl(this.button);
@@ -73,12 +83,10 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
 
         this.button = new Autodesk.Viewing.UI.Button('gyro-toggle-button');
         this.button.setToolTip('Giroscopio (Look Around)');
-        // Using 'adsk-viewing-icon-eye' which looks like the "Look Around" eye/circle
         this.button.setIcon('adsk-viewing-icon-eye');
         this.button.onClick = this.toggleGyro;
 
-        this.button.setState(this.enabled ? Autodesk.Viewing.UI.Button.State.ACTIVE : Autodesk.Viewing.UI.Button.State.INACTIVE);
-
+        // Add to toolbar
         let group = this.viewer.toolbar.getControl('modelTools');
         if (!group) group = this.viewer.toolbar.getControl('navTools');
         if (group) group.addControl(this.button);
@@ -88,58 +96,72 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
     async toggleGyro() {
         if (this.enabled) {
             this.deactivate();
-            alert("Giroscopio Desactivado");
+            // Restore default tool
+            this.viewer.toolController.activateTool('orbit');
+            // alert("Giroscopio OFF"); // Removing spam alerts
         } else {
-            alert("Intentando activar Giroscopio..."); // DEBUG ALERT
+            // alert("Activando modo inmersivo..."); 
 
-            // iOS Permission Check
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 try {
                     const response = await DeviceOrientationEvent.requestPermission();
                     if (response !== 'granted') {
-                        alert("ERROR: Permiso denegado por el usuario.");
+                        alert("Permiso de sensores denegado.");
                         return;
                     }
                 } catch (e) {
-                    alert("ERROR solicitando permiso: " + e.message);
-                    return;
+                    // console.error(e);
                 }
             }
 
-            this.activate();
+            if (this.activate()) {
+                // alert("Giroscopio ON"); // Confirm
+            }
         }
     }
 
     activate() {
         if (this.enabled) return true;
-
         const THREE = window.THREE || Autodesk.Viewing.Private.THREE;
-        if (!THREE) {
-            alert("ERROR CRITICO: THREE.js no encontrado");
-            return false;
+        if (!THREE) return false;
+
+        // 1. Init Math
+        if (!this.zee) {
+            this.zee = new THREE.Vector3(0, 0, 1);
+            this.euler = new THREE.Euler();
+            this.q0 = new THREE.Quaternion();
+            this.q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
         }
 
-        // 1. Math Init
-        this.zee = new THREE.Vector3(0, 0, 1);
-        this.euler = new THREE.Euler();
-        this.q0 = new THREE.Quaternion();
-        this.q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
-        this.screenOrientation = window.orientation || 0;
-
+        // Initialize currentQuaternion from CURRENT camera view so it doesn't jump wildly
         if (!this.currentQuaternion) this.currentQuaternion = new THREE.Quaternion();
         this.currentQuaternion.copy(this.viewer.impl.camera.quaternion);
 
-        // 2. Activate Tool
-        this.viewer.toolController.activateTool('gyro-tool');
+        // 2. EXCLUSIVE MODE: Deactivate other navigation tools to avoid conflict
+        const tc = this.viewer.toolController;
+        tc.deactivateTool('orbit');
+        tc.deactivateTool('pan');
+        tc.deactivateTool('zoom');
+        tc.deactivateTool('bimwalk'); // Deactivate First Person too!
 
-        // 3. Listeners
+        // 3. Activate Gyro Tool
+        tc.activateTool('gyro-tool');
+
+        // 4. Listeners
         window.addEventListener('deviceorientation', this.onOrientationEvent, false);
         window.addEventListener('orientationchange', this.onScreenOrientationChange, false);
 
-        this.enabled = true;
-        if (this.button) this.button.setState(Autodesk.Viewing.UI.Button.State.ACTIVE);
+        // Debug Overlay (Optional, keeping it small)
+        if (!this.debugEl) {
+            this.debugEl = document.createElement('div');
+            this.debugEl.style.cssText = 'position:absolute;bottom:80px;left:10px;color:lime;background:rgba(0,0,0,0.5);padding:2px;font-size:10px;pointer-events:none;';
+            this.viewer.container.appendChild(this.debugEl);
+        }
+        this.debugEl.innerHTML = "GYRO: ON";
+        this.debugEl.style.display = 'block';
 
-        alert("Giroscopio ACTIVADO. Mueve tu dispositivo."); // DEBUG ALERT
+        this.enabled = true;
+        this.button.setState(Autodesk.Viewing.UI.Button.State.ACTIVE);
         return true;
     }
 
@@ -150,6 +172,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         window.removeEventListener('orientationchange', this.onScreenOrientationChange, false);
 
         this.viewer.toolController.deactivateTool('gyro-tool');
+
+        if (this.debugEl) this.debugEl.style.display = 'none';
 
         this.enabled = false;
         if (this.button) this.button.setState(Autodesk.Viewing.UI.Button.State.INACTIVE);
@@ -164,20 +188,15 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
     onOrientationEvent(event) {
         if (!this.enabled) return;
 
-        // Check if we are receiving data
-        if (event.alpha === null || event.alpha === undefined) {
-            // Only alert ONCE to avoid spamming
-            if (!this.hasWarnedNoData) {
-                console.warn("Evento recibido pero sin datos (Alpha is null)");
-                this.hasWarnedNoData = true;
-            }
-            return;
-        }
+        if (event.alpha === null) return;
+
+        // Update Debug
+        if (this.debugEl) this.debugEl.innerHTML = `Alpha: ${Math.round(event.alpha)}`;
 
         const THREE = window.THREE || Autodesk.Viewing.Private.THREE;
-        if (!THREE) return;
         const MathUtils = THREE.MathUtils || THREE.Math;
 
+        // --- CALCULATION ---
         const alpha = MathUtils.degToRad(event.alpha);
         const beta = MathUtils.degToRad(event.beta);
         const gamma = MathUtils.degToRad(event.gamma);
@@ -191,7 +210,7 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         q2.setFromAxisAngle(this.zee, -orient);
         this.q0.multiply(q2);
 
-        if (!this.currentQuaternion) this.currentQuaternion = new THREE.Quaternion();
+        // Store for the tool to apply
         this.currentQuaternion.copy(this.q0);
     }
 }
