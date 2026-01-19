@@ -275,32 +275,42 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         this.finalQuaternion.copy(this.initialCameraQuaternion);
         this.finalQuaternion.multiply(delta);
 
-        // --- DIRECT APPLY (Bypass Tool Loop) ---
-        if (this.viewer.impl.camera) {
-            const cam = this.viewer.impl.camera;
-            cam.quaternion.copy(this.finalQuaternion);
-            cam.updateMatrixWorld(true);
+        // --- DIRECT APPLY (Sync Navigation) ---
+        if (this.viewer.navigation) {
+            const THREE = window.THREE || Autodesk.Viewing.Private.THREE;
 
-            // Mark as dirty so Viewer knows something changed
-            cam.dirty = true;
+            // 1. Get current position
+            const pos = this.viewer.navigation.getPosition();
 
-            // Aggressive Redraw
+            // 2. Calculate new Forward and Up from Quaternion
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.finalQuaternion);
+            const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.finalQuaternion);
+
+            // 3. Calculate new Target
+            const target = pos.clone().add(forward);
+
+            // 4. Update View (Position stays same, Target & Up change)
+            this.viewer.navigation.setView(pos, target);
+            this.viewer.navigation.setCameraUpVector(up);
+
+            // 5. Force Redraw
             this.viewer.impl.invalidate(true, true, true);
         }
-
         // --- DEBUG UPDATE COUNTER + QUATERNION ---
         this._updateCount = (this._updateCount || 0) + 1;
+
         if (this.debugEl) {
             const a = event.alpha ? Math.round(event.alpha) : 'null';
-            const q = this.finalQuaternion;
-            // Show first decimal to see micro-movements
-            const qx = q.x.toFixed(2);
-            const qy = q.y.toFixed(2);
-            const qz = q.z.toFixed(2);
-            const qw = q.w.toFixed(2);
+            // Check if finalQuaternion exists before accessing properties
+            const q = this.finalQuaternion || { x: 0, y: 0, z: 0, w: 0 };
+
+            const qx = q.x ? q.x.toFixed(2) : '0';
+            const qy = q.y ? q.y.toFixed(2) : '0';
+            const qz = q.z ? q.z.toFixed(2) : '0';
+            const qw = q.w ? q.w.toFixed(2) : '0';
 
             this.debugEl.innerHTML = `
-                <div style="color:cyan;font-size:16px;">DEBUG MODE: V3 (CYAN)</div>
+                <div style="color:#00FF00;font-size:16px;">DEBUG MODE: V4 (VERDE) (Nav Sync)</div>
                 <b>GYRO ACTIVE</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
