@@ -241,69 +241,92 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         const MathUtils = THREE.MathUtils || THREE.Math;
 
         // --- 1. Compute Device Quaternion from Sensors ---
-        // --- MAPPING V17 (CANONICAL MATH - GREEN) ---
-        // Implementation based on THREE.DeviceOrientationControls standard.
-        // Pure Quaternion math to avoid "diagonal drift" (cross-axis coupling).
+        // --- MAPPING V18 (ACC STYLE - DIRECT MAPPING) ---
+        // Mimics Autodesk Cloud Construction behavior.
+        // Explicitly swaps axes based on orientation to match human perception.
 
-        const alpha = event.alpha ? MathUtils.degToRad(event.alpha) : 0; // Z
-        const beta = event.beta ? MathUtils.degToRad(event.beta) : 0;   // X'
-        const gamma = event.gamma ? MathUtils.degToRad(event.gamma) : 0; // Y''
-        const orient = this.screenOrientation ? MathUtils.degToRad(this.screenOrientation) : 0;
+        // 1. Data Prep
+        const alphaRad = event.alpha ? MathUtils.degToRad(event.alpha) : 0;
+        const betaRad = event.beta ? MathUtils.degToRad(event.beta) : 0;
+        const gammaRad = event.gamma ? MathUtils.degToRad(event.gamma) : 0;
 
-        const zee = new THREE.Vector3(0, 0, 1);
-        const euler = new THREE.Euler();
-        const q0 = new THREE.Quaternion();
-        const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // - PI/2 around X
-
-        // 1. Build Standard Device Quaternion (Sensor Space)
-        // Order must be 'YXZ' for device orientation spec
-        euler.set(beta, alpha, -gamma, 'YXZ');
-        const sensorQ = new THREE.Quaternion();
-        sensorQ.setFromEuler(euler);
-
-        // 2. Adjust for Camera Frame (-90 around X)
-        // Sensors assume Z is out of screen, Camera assumes -Z is forward.
-        sensorQ.multiply(q1);
-
-        // 3. Adjust for Screen Orientation (Landscape compensation)
-        // Must be applied AFTER sensor rotation but BEFORE world alignment
-        sensorQ.multiply(q0.setFromAxisAngle(zee, -orient));
-
-        // 4. Calibration (Yaw Offset Calculation)
+        // 2. Calibration (Tare)
         if (!this.isCalibrated) {
-            // We need to calculate the difference between "Device Look" and "Camera Look"
-            // projected onto the horizontal plane (World Z).
+            this.startAlpha = alphaRad;
+            this.startBeta = betaRad;
+            this.startGamma = gammaRad;
 
-            // Current Device Direction (Projected to XY Plane)
-            const deviceDir = new THREE.Vector3(0, 0, -1);
-            deviceDir.applyQuaternion(sensorQ);
-            const deviceAngle = Math.atan2(deviceDir.y, deviceDir.x); // Range -PI to PI
-
-            // Current Camera Direction (Projected to XY Plane)
-            const camDir = new THREE.Vector3(0, 0, -1);
-            const currentCamQ = this.viewer.impl.camera.quaternion;
-            camDir.applyQuaternion(currentCamQ);
-            const camAngle = Math.atan2(camDir.y, camDir.x); // Range -PI to PI
-
-            // Calculate Offset (How much to rotate Device to match Camera)
-            this.alphaOffset = camAngle - deviceAngle;
+            // Capture Camera Initial State (Euler YXZ)
+            const camQ = this.viewer.impl.camera.quaternion.clone();
+            const camEuler = new THREE.Euler().setFromQuaternion(camQ, 'YXZ');
+            this.startCamYaw = camEuler.y; // World Up (Y in Three.js standard, but Viewer uses Z-up usually) ... wait.
+            // APS Viewer is usually Z-Up. Let's check.
+            // If Z is up, then Yaw is rotation around Z. Pitch is rotation around X or Y.
+            // Let's assume Z-Up for APS.
+            const eulerZUp = new THREE.Euler().setFromQuaternion(camQ, 'ZXY');
+            this.startCamYaw = eulerZUp.z;
+            this.startCamPitch = eulerZUp.x;
 
             this.isCalibrated = true;
             this.finalQuaternion = new THREE.Quaternion();
 
-            // Distance Setup
+            // Distance
             const pos = this.viewer.navigation.getPosition();
             const target = this.viewer.navigation.getTarget();
             this.initialDistance = pos.distanceTo(target) || 10.0;
         }
 
-        // 5. Apply Alpha Offset (Align Device North to Model North)
-        // Offset is applied around World Z (Vertical)
-        const offsetQ = new THREE.Quaternion();
-        offsetQ.setFromAxisAngle(zee, this.alphaOffset);
+        // 3. Calculate Deltas
+        let dAlpha = alphaRad - this.startAlpha;
+        let dBeta = betaRad - this.startBeta;
+        let dGamma = gammaRad - this.startGamma;
 
-        // Final = Offset * SensorCorrected
-        this.finalQuaternion.multiplyQuaternions(offsetQ, sensorQ);
+        // Handle Alpha wrapping
+        // (Not strictly necessary for small movements but good practice)
+
+        // 4. Map Sensors to Camera Axes (The "Real Feel" Logic)
+        let deltaYaw = 0;
+        let deltaPitch = 0;
+
+        // Check Orientation
+        const isLandscape = Math.abs(this.screenOrientation) === 90;
+
+        if (isLandscape) {
+            // LANDSCAPE MAPPING:
+            // Holding tablet sideways:
+            // - Turning left/right (Yaw) = Rotate around gravity Z = Alpha
+            // - Tilting up/down (Pitch) = Rotate around tablet long axis = Gamma
+
+            deltaYaw = dAlpha;  // Standard
+
+            // Fix directionality if needed. Usually Gamma needs inversion depending on side.
+            // If rotation is -90 (button right), Gamma might be inverted vs 90 (button left).
+            const sign = (this.screenOrientation === 90) ? -1 : 1;
+            deltaPitch = dGamma * sign;
+
+        } else {
+            // PORTRAIT MAPPING:
+            // Holding tablet upright:
+            // - Turning left/right (Yaw) = Alpha
+            // - Tilting up/down (Pitch) = Beta
+
+            deltaYaw = dAlpha;
+            deltaPitch = dBeta;
+        }
+
+        // 5. Apply to Camera
+        // New Yaw = StartYaw + DeltaYaw (Around World Z)
+        // New Pitch = StartPitch + DeltaPitch (Around Local X)
+
+        // We reconstruct the quaternion from scratch to avoid "drift"
+        const newYaw = this.startCamYaw + deltaYaw;
+        const newPitch = this.startCamPitch + deltaPitch; // Clamp this if needed to avoid flipping
+
+        const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), newYaw);
+        const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), newPitch);
+
+        // Final = Yaw * Pitch (Order matters: Yaw happens globally, Pitch happens locally)
+        this.finalQuaternion.multiplyQuaternions(qYaw, qPitch);
 
 
 
@@ -341,8 +364,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:green;font-size:16px;">DEBUG MODE: V17 (VERDE)</div>
-                <b>CANONICAL MATH (NO DRIFT)</b><br/>
+                <div style="color:orange;font-size:16px;">DEBUG MODE: V18 (ACC STYLE)</div>
+                <b>DIRECT MAPPING (REAL FEEL)</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
                 Dist: ${dist}<br/>
