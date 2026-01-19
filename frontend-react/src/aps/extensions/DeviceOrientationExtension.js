@@ -251,17 +251,40 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             this.finalQuaternion = new THREE.Quaternion(); // Init final
         }
 
-        // --- 3. Compute Relative Rotation ---
+        // ... existing math ...
+        // 3. Compute Relative Rotation
         // Delta = CurrentDevice * Inverse(InitialDevice)
         const delta = new THREE.Quaternion();
         delta.copy(this.deviceQuaternion);
         delta.multiply(this.initialDeviceQuaternion.clone().invert());
 
-        // --- 4. Apply Delta to Initial Camera ---
-        // Final = InitialCamera * Delta (Order matters!)
-        // Note: For first-person view, we usually multiply camera * delta.
+        // 4. Apply Delta to Initial Camera
         this.finalQuaternion.copy(this.initialCameraQuaternion);
         this.finalQuaternion.multiply(delta);
+
+        // --- DIRECT APPLY (Bypass Tool Loop) ---
+        // Verify we have a camera
+        if (this.viewer.impl.camera) {
+            this.viewer.impl.camera.quaternion.copy(this.finalQuaternion);
+            this.viewer.impl.camera.updateMatrixWorld(true);
+            this.viewer.impl.invalidate(true, true, true);
+        }
+
+        // --- DEBUG UPDATE COUNTER ---
+        this._updateCount = (this._updateCount || 0) + 1;
+        if (this.debugEl) {
+            const a = event.alpha ? Math.round(event.alpha) : 'null';
+            const b = event.beta ? Math.round(event.beta) : 'null';
+            const g = event.gamma ? Math.round(event.gamma) : 'null';
+            this.debugEl.innerHTML = `
+                <b>GYRO ACTIVE</b><br/>
+                Alpha: ${a}<br/>
+                Beta:  ${b}<br/>
+                Gamma: ${g}<br/>
+                Updates: ${this._updateCount}<br/>
+                Calibrated: ${this.isCalibrated ? 'YES' : 'NO'}
+             `;
+        }
     }
 }
 
