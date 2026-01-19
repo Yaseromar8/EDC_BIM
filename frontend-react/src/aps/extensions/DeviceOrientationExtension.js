@@ -256,51 +256,55 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         // Order 'ZXY': Apply Yaw (Z) first, then Pitch (X).
         // this.euler.set(beta, 0, -alpha, 'ZXY'); 
 
-        // --- MAPPING V7 (Natural Motion) ---
-        // Alpha (Compass) -> Yaw (Z)
-        // Beta (Tilt) -> Pitch (X)
-        // Gamma (Roll) -> Roll (Y) 
+        // --- MAPPING V8 (STANDARD VR MATH) ---
+        // Implementation adapted from Three.js DeviceOrientationControls.
+        // This properly handles the mix of rotations without gimbal lock.
 
-        const qAlpha = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), alpha);
-        const qBeta = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), beta);
-        const qGamma = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -gamma);
+        const zee = new THREE.Vector3(0, 0, 1);
+        const euler = new THREE.Euler();
+        const q0 = new THREE.Quaternion();
+        const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // - PI/2 around X
 
-        this.deviceQuaternion.copy(qAlpha);
-        this.deviceQuaternion.multiply(qBeta);
-        this.deviceQuaternion.multiply(qGamma);
-        this.deviceQuaternion.multiply(this.q1); // Fix phone frame
+        // 1. Get raw sensor Euler (Order YXZ is critical for sensors)
+        // Alpha (Z), Beta (X), Gamma (Y)
+        euler.set(beta, alpha, -gamma, 'YXZ');
 
-        const qOrient = new THREE.Quaternion();
-        qOrient.setFromAxisAngle(this.zee, -orient);
-        this.deviceQuaternion.multiply(qOrient); // Fix screen rotation
+        // 2. Convert to Quaternion
+        this.deviceQuaternion.setFromEuler(euler);
 
-        // --- 2. Calibration (First Frame) ---
+        // 3. Apply Device Coordinate Transformations (The "Standard" Formula)
+        this.deviceQuaternion.multiply(q1); // Fix device frame (Android/iOS standard)
+        this.deviceQuaternion.multiply(q0.setFromAxisAngle(zee, -orient)); // Fix screen rotation 
+
+        // 4. Initial Tare (Calibration)
+        // We capture the FIRST valid reading as the "Zero" offset.
         if (!this.isCalibrated) {
-            // Store current camera rotation
             this.initialCameraQuaternion.copy(this.viewer.impl.camera.quaternion);
-            // Store current device rotation
             this.initialDeviceQuaternion.copy(this.deviceQuaternion);
 
-            // --- CALC INITIAL DISTANCE ---
+            // Setup initial distance for focus
             const pos = this.viewer.navigation.getPosition();
             const target = this.viewer.navigation.getTarget();
-            this.initialDistance = pos.distanceTo(target);
-            if (this.initialDistance < 0.1) this.initialDistance = 10.0; // Fail-safe
+            this.initialDistance = pos.distanceTo(target) || 10.0;
+            if (this.initialDistance < 0.1) this.initialDistance = 10.0;
 
             this.isCalibrated = true;
-            this.finalQuaternion = new THREE.Quaternion(); // Init final
+            this.finalQuaternion = new THREE.Quaternion();
         }
 
-        // ... existing math ...
-        // 3. Compute Relative Rotation
-        // Delta = CurrentDevice * Inverse(InitialDevice)
-        const delta = new THREE.Quaternion();
-        delta.copy(this.deviceQuaternion);
-        delta.multiply(this.initialDeviceQuaternion.clone().invert());
+        // 5. Apply Relative Rotation properly (Post-multiply)
+        // Camera = InitialCamera * (InitialDevice^-1 * CurrentDevice)
+        const currentRelative = this.deviceQuaternion.clone();
+        const initialInv = this.initialDeviceQuaternion.clone().invert();
 
-        // 4. Apply Delta to Initial Camera
+        // Combine: "Change in device"
+        const delta = new THREE.Quaternion();
+        delta.multiplyQuaternions(currentRelative, initialInv); // Delta = Current * InvInitial
+
+        // Apply delta to camera (Pre-multiply for local rotation feel)
         this.finalQuaternion.copy(this.initialCameraQuaternion);
         this.finalQuaternion.multiply(delta);
+
 
         // --- DIRECT APPLY (Sync Navigation) ---
         if (this.viewer.navigation) {
@@ -334,8 +338,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:white;font-size:16px;">DEBUG MODE: V7 (BLANCO)</div>
-                <b>FULL MOTION (YAW/PITCH/ROLL)</b><br/>
+                <div style="color:violet;font-size:16px;">DEBUG MODE: V8 (VIOLETA)</div>
+                <b>STANDARD VR MATH (QUATERNIONS)</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
                 Dist: ${dist}<br/>
