@@ -265,8 +265,7 @@ const Viewer = ({
                         'Autodesk.AEC.LevelsExtension',
                         'Autodesk.AEC.Minimap3DExtension',
                         'DeviceOrientationExtension'
-                    ],
-                    loaderExtensions: { svf: "Autodesk.MemoryLimited" }
+                    ]
                 };
 
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);
