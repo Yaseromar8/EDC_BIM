@@ -244,32 +244,25 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         const alpha = MathUtils.degToRad(event.alpha);
         const beta = MathUtils.degToRad(event.beta);
         const gamma = MathUtils.degToRad(event.gamma);
-        const orient = MathUtils.degToRad(this.screenOrientation);
+        // --- MAPPING V10 (HYBRID RELATIVE - CORRECTED) ---
+        // 1. Get standard Device Quaternion (Robust inputs)
+        const zee = new THREE.Vector3(0, 0, 1);
+        const euler = new THREE.Euler();
+        const q0 = new THREE.Quaternion();
+        const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // - PI/2 around X
+        const orient = this.screenOrientation ? THREE.MathUtils.degToRad(this.screenOrientation) : 0;
 
-        // --- IMPROVED MAPPING V6 (Horizon Lock) ---
-        // For Z-Up Architecture:
-        // Alpha (Compass) -> Rotation around Z (World Up)
-        // Beta (Tilt) -> Rotation around X (Pitch)
-        // Gamma (Roll) -> IGNORED (0) to keep horizon level!
+        euler.set(beta, alpha, -gamma, 'YXZ');
+        this.deviceQuaternion.setFromEuler(euler);
+        this.deviceQuaternion.multiply(q1);
+        this.deviceQuaternion.multiply(q0.setFromAxisAngle(zee, -orient));
 
-        // Note: We might need to adjust signs based on testing, but this isolates axes.
-        // Order 'ZXY': Apply Yaw (Z) first, then Pitch (X).
-        // this.euler.set(beta, 0, -alpha, 'ZXY'); 
-
-        // --- MAPPING V9 (SPLIT-AXIS RELATIVE - ARCHITECTURAL Z-UP) ---
-        // Instead of complex quaternion math that mixes axes, we treat Yaw and Pitch separately.
-        // Yaw (Alpha): Rotates around World Z (Vertical building axis).
-        // Pitch (Beta): Rotates around Camera Local X (Ears).
-
-        // 1. Initial Calibration (Tare)
+        // 2. Calibration (Store Initial State)
         if (!this.isCalibrated) {
             this.initialCameraQuaternion.copy(this.viewer.impl.camera.quaternion);
+            this.initialDeviceQuaternion.copy(this.deviceQuaternion);
 
-            // Capture "Zero" angles
-            this.initialAlpha = alpha; // Z-rotation
-            this.initialBeta = beta;   // X-rotation
-
-            // Setup focus distance
+            // Setup distance
             const pos = this.viewer.navigation.getPosition();
             const target = this.viewer.navigation.getTarget();
             this.initialDistance = pos.distanceTo(target) || 10.0;
@@ -279,21 +272,34 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             this.finalQuaternion = new THREE.Quaternion();
         }
 
-        // 2. Calculate Deltas (Movement from "Zero")
-        let dAlpha = alpha - this.initialAlpha;
-        let dBeta = beta - this.initialBeta;
+        // 3. Calculate Relative Change (Delta)
+        const currentQ = this.deviceQuaternion.clone();
+        const initialInv = this.initialDeviceQuaternion.clone().invert();
+        const deltaQ = new THREE.Quaternion();
+        deltaQ.multiplyQuaternions(currentQ, initialInv); // Delta = Current * InvInitial
 
-        // 3. Reconstruct Camera Rotation
-        // Start from original
+        // 4. DECOMPOSE DELTA (Crucial Step for Arch Viz)
+        // Instead of applying deltaQ directly (which rotates all axes),
+        // we extract Yaw and Pitch to force Z-Up stability.
+
+        const deltaEuler = new THREE.Euler().setFromQuaternion(deltaQ, 'YXZ');
+        const dYaw = deltaEuler.y;   // Rotation around Y (Vertical in Device space mapped to Z)
+        const dPitch = deltaEuler.x; // Rotation around X (Pitch)
+
+        // 5. Reconstruct Camera Rotation
         const camQ = this.initialCameraQuaternion.clone();
 
-        // Apply YAW (Global Z) - "Turning body"
-        const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), dAlpha);
-        camQ.premultiply(yawQ); // Apply world rotation FIRST (Parent)
+        // Apply Yaw to WORLD Z (0,0,1) -> Keeps horizon flat
+        const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), dYaw);
 
-        // Apply PITCH (Local X) - "Nodding head"
-        const pitchQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), dBeta);
-        camQ.multiply(pitchQ); // Apply local rotation LAST (Child)
+        // Apply Pitch to LOCAL X (1,0,0) -> Look up/down
+        const pitchQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), dPitch);
+
+        // Order: WorldYaw * InitialCam * LocalPitch
+        // This ensures panning is always around building vertical, 
+        // and pitching is always around your "ears".
+        camQ.premultiply(yawQ);
+        camQ.multiply(pitchQ);
 
         this.finalQuaternion.copy(camQ);
 
@@ -332,8 +338,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:gray;font-size:16px;">DEBUG MODE: V9 (GRIS)</div>
-                <b>ARCHITECTURAL MODE (Z-UP)</b><br/>
+                <div style="color:red;font-size:16px;">DEBUG MODE: V10 (ROJO)</div>
+                <b>HYBRID RELATIVE (Z-UP/X-LOCAL)</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
                 Dist: ${dist}<br/>
