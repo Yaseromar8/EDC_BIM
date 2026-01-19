@@ -241,52 +241,29 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         const MathUtils = THREE.MathUtils || THREE.Math;
 
         // --- 1. Compute Device Quaternion from Sensors ---
+        // --- MAPPING V11 (HYBRID RELATIVE - BLUE) ---
+        // Vertical (Pitch/Roll) = ABSOLUTE (Gravity)
+        // Horizontal (Yaw) = RELATIVE (Calibration Offset)
+
+        const zee = new THREE.Vector3(0, 0, 1);
+        const euler = new THREE.Euler();
+        const q0 = new THREE.Quaternion();
+        const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -PI/2 around X
+        const orient = this.screenOrientation ? MathUtils.degToRad(this.screenOrientation) : 0;
+
+        // 1. Build Device Quaternion (Standard Math)
         const alpha = MathUtils.degToRad(event.alpha);
         const beta = MathUtils.degToRad(event.beta);
         const gamma = MathUtils.degToRad(event.gamma);
-        // --- MAPPING V16 (STANDARD GOLD - USER REQUESTED) ---
-        // Uses standard Three.js DeviceOrientation logic with robust screen adjustment.
-        // 1. Get radians
-        // 2. Euler YXZ (Standard)
-        // 3. SensorQ * CameraAdj * ScreenAdj
+        euler.set(beta, alpha, -gamma, 'YXZ');
+        this.deviceQuaternion.setFromEuler(euler);
+        this.deviceQuaternion.multiply(q1);
+        this.deviceQuaternion.multiply(q0.setFromAxisAngle(zee, -orient));
 
-        // 1. Data Prep
-        const alphaRad = event.alpha ? MathUtils.degToRad(event.alpha) : 0;
-        const betaRad = event.beta ? MathUtils.degToRad(event.beta) : 0;
-        const gammaRad = event.gamma ? MathUtils.degToRad(event.gamma) : 0;
-        const orientRad = this.screenOrientation ? MathUtils.degToRad(this.screenOrientation) : 0;
-
-        // 2. Quaternion from Sensor (Z-X-Y order implies YXZ euler for generic sensor)
-        const euler = new THREE.Euler(betaRad, alphaRad, -gammaRad, 'YXZ');
-        const q1 = new THREE.Quaternion().setFromEuler(euler);
-
-        // 3. Camera Adjustment (-90 deg around X to look forward)
-        const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-
-        // 4. Screen Adjustment (Landscape/Portrait compensation)
-        const q3 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -orientRad);
-
-        // 5. Compose Absolute Device Quaternion
-        // Order: q1 * q2 * q3 (Sensor -> CameraFrame -> ScreenFrame)
-        this.deviceQuaternion.copy(q1);
-        this.deviceQuaternion.multiply(q2);
-        this.deviceQuaternion.multiply(q3);
-
-        // 6. Calibration / Relative Yaw Offset
-        // The user wants: "Automatically snap to Top View (Gravity) but keep Direction relative"
+        // 2. Calibration (First Frame Only)
         if (!this.isCalibrated) {
-            // We need to know the offset between Device's "North" and Camera's current "Forward".
-            // We use flattened Project method on World Z.
-
-            // Camera Azimuth
-            const camDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.viewer.impl.camera.quaternion);
-            const camAngle = Math.atan2(camDir.y, camDir.x);
-
-            // Device Azimuth
-            const devDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.deviceQuaternion);
-            const devAngle = Math.atan2(devDir.y, devDir.x);
-
-            this.yawOffset = camAngle - devAngle;
+            // Capture Initial Camera State
+            this.initialCameraQ = this.viewer.impl.camera.quaternion.clone();
 
             // Setup distance
             const pos = this.viewer.navigation.getPosition();
@@ -298,15 +275,36 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             this.finalQuaternion = new THREE.Quaternion();
         }
 
-        // 7. Apply Yaw Offset
-        // We rotate the Absolute Device Quaternion by the Yaw Offset around World Z.
-        // This makes "North" match "Where I was looking".
-        const offsetQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), this.yawOffset || 0);
+        // 3. Calculate Delta Quaternion
+        // deltaQ represents the rotation from initialDevice to currentDevice
+        const deltaQ = new THREE.Quaternion();
+        deltaQ.copy(this.deviceQuaternion);
 
-        // Final = Offset * Device
-        this.finalQuaternion.multiplyQuaternions(offsetQ, this.deviceQuaternion);
+        // We need the rotation that takes us from initial device to current device
+        // Since we didn't store initialDeviceQ, we use the camera's initial state as reference
+        // deltaQ = currentDevice (already computed above)
 
+        // 4. Decompose Delta into Yaw and Pitch
+        // Extract Euler angles from deltaQ
+        const deltaEuler = new THREE.Euler().setFromQuaternion(deltaQ, 'ZXY');
+        const deltaYaw = deltaEuler.z;   // Rotation around World Z
+        const deltaPitch = deltaEuler.x; // Rotation around Local X
 
+        // 5. Apply Rotations
+        // Start with Initial Camera Quaternion
+        const camQ = this.initialCameraQ.clone();
+
+        // Apply Yaw (World Space - around Z)
+        const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), deltaYaw);
+
+        // Apply Pitch (Local Space - around X)
+        const pitchQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), deltaPitch);
+
+        // Combine: Yaw * Camera * Pitch
+        // Use multiplyQuaternions for Three.js r71 compatibility
+        const tempQ = new THREE.Quaternion();
+        tempQ.multiplyQuaternions(yawQ, camQ);
+        this.finalQuaternion.multiplyQuaternions(tempQ, pitchQ);
 
 
 
@@ -344,8 +342,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:gold;font-size:16px;">DEBUG MODE: V16 (GOLD STANDARD)</div>
-                <b>STANDARD QUATERNION (ROBUST)</b><br/>
+                <div style="color:blue;font-size:16px;">DEBUG MODE: V11 (AZUL)</div>
+                <b>HYBRID RELATIVE (PITCH ABS / YAW REL)</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
                 Dist: ${dist}<br/>
