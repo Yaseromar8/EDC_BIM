@@ -244,31 +244,35 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         const alpha = MathUtils.degToRad(event.alpha);
         const beta = MathUtils.degToRad(event.beta);
         const gamma = MathUtils.degToRad(event.gamma);
-        // --- MAPPING V12 (ABSOLUTE PITCH / RELATIVE YAW) ---
-        // Rules:
-        // 1. Pitch/Roll (Beta/Gamma) are ABSOLUTE (Gravity). Tablet Vertical = Horizon. Tablet Flat = Down.
-        // 2. Yaw (Alpha) is RELATIVE. Start direction = Camera Front.
-        // 3. Screen Orientation is compensated dynamically.
+        // --- MAPPING V13 (POST-PROCESS YAW OFFSET) ---
+        // Fixes "Crossed" axes by calculating Standard Quaternion FIRST,
+        // then rotating the result to align Yaw.
 
-        // Constants
         const zee = new THREE.Vector3(0, 0, 1);
         const euler = new THREE.Euler();
         const q0 = new THREE.Quaternion();
         const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // - PI/2 around X
         const orient = this.screenOrientation ? THREE.MathUtils.degToRad(this.screenOrientation) : 0;
 
-        // 1. Calibration (Yaw Offset Only)
+        // 1. Standard Math (Gravity Aligned)
+        // This gives us a quaternion where "Up" is World Up (Gravity)
+        euler.set(beta, alpha, -gamma, 'YXZ');
+        this.deviceQuaternion.setFromEuler(euler);
+        this.deviceQuaternion.multiply(q1);
+        this.deviceQuaternion.multiply(q0.setFromAxisAngle(zee, -orient));
+
+        // 2. Calibration (Calculate Yaw Difference)
         if (!this.isCalibrated) {
-            // We need to know where the camera is looking horizontally (Yaw)
-            // to align the device's "North" (Alpha 0) to it.
-            const camQ = this.viewer.impl.camera.quaternion.clone();
-            const camEuler = new THREE.Euler().setFromQuaternion(camQ, 'YXZ');
+            // We need to match Device Yaw to Camera Yaw in World Space.
+            // APS Viewer (Z-Up Architectural): Yaw is rotation around Z.
+            // We use 'ZXY' order to isolate Z as the primary yaw axis.
 
-            // Calculate offset: Offset = CamYaw - DeviceAlpha
-            // So that: AdjustedAlpha = DeviceAlpha + Offset = CamYaw
-            this.yawOffset = camEuler.y - alpha;
+            const devEulerZ = new THREE.Euler().setFromQuaternion(this.deviceQuaternion, 'ZXY');
+            const camEulerZ = new THREE.Euler().setFromQuaternion(this.viewer.impl.camera.quaternion, 'ZXY');
 
-            // Initial distance for focus (Zoom fix)
+            this.yawOffset = camEulerZ.z - devEulerZ.z;
+
+            // Setup distance
             const pos = this.viewer.navigation.getPosition();
             const target = this.viewer.navigation.getTarget();
             this.initialDistance = pos.distanceTo(target) || 10.0;
@@ -278,20 +282,14 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             this.finalQuaternion = new THREE.Quaternion();
         }
 
-        // 2. Apply Yaw Offset
-        const adjustedAlpha = alpha + (this.yawOffset || 0);
+        // 3. Apply Yaw Offset (Rotate around World Z)
+        // We take the gravity-aligned Device Quaternion and spin it to match the compass.
+        const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), this.yawOffset || 0);
 
-        // 3. Construct Quaternion (Order YXZ)
-        // Note: Using ABSOLUTE beta and gamma
-        euler.set(beta, adjustedAlpha, -gamma, 'YXZ');
-        this.deviceQuaternion.setFromEuler(euler);
+        // Final = YawOffset * Device
+        // (Pre-multiply to rotate in World Space)
+        this.finalQuaternion.multiplyQuaternions(yawQ, this.deviceQuaternion);
 
-        // 4. Apply Transformations
-        this.deviceQuaternion.multiply(q1); // Device Frame
-        this.deviceQuaternion.multiply(q0.setFromAxisAngle(zee, -orient)); // Screen Rotate
-
-        // 5. Final assignment
-        this.finalQuaternion.copy(this.deviceQuaternion);
 
 
 
@@ -330,8 +328,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:green;font-size:16px;">DEBUG MODE: V12 (VERDE)</div>
-                <b>ABSOLUTE PITCH / RELATIVE YAW</b><br/>
+                <div style="color:cyan;font-size:16px;">DEBUG MODE: V13 (CIAN)</div>
+                <b>POST-PROCESS YAW OFFSET (CLEAN)</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
                 Dist: ${dist}<br/>
