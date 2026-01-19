@@ -266,7 +266,7 @@ const Viewer = ({
                     viewer.setGroundShadow(false);
                     viewer.setGroundReflection(false);
                     viewer.setGhosting(false); // Disable ghosting on mobile
-                    viewer.impl.setFPSTarget(30); // Cap FPS
+
                 } else {
                     viewer.setQualityLevel(false, false);
                     viewer.setGroundShadow(false);
