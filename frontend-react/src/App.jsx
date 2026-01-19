@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { Capacitor } from '@capacitor/core';
 import './App.css';
 import TopBar from './components/TopBar';
 import ViewsPanel from './components/ViewsPanel';
@@ -472,7 +473,11 @@ function FilterConfigurator({
 
 
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || (window.location.hostname === 'localhost' && !window.Capacitor ? '' : 'https://visor-ecd-backend.onrender.com');
+const BACKEND_URL = Capacitor.isNativePlatform()
+  ? 'https://visor-ecd-backend.onrender.com'
+  : (import.meta.env.VITE_BACKEND_URL || '');
+
+console.log('[App] Initializing. Platform:', Capacitor.getPlatform(), 'Backend:', BACKEND_URL);
 
 function App() {
   const [models, setModels] = useState([]);
@@ -571,6 +576,22 @@ function App() {
   }, []);
 
 
+
+  // 1. Fetch token on mount
+  const [accessToken, setAccessToken] = useState('');
+
+  useEffect(() => {
+    const getToken = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/token`);
+        const data = await res.json();
+        setAccessToken(data.access_token);
+      } catch (err) {
+        console.error('Failed to get token', err);
+      }
+    };
+    getToken();
+  }, []);
 
   const handleDocPinComplete = (position) => {
     const newPin = {
@@ -2292,6 +2313,7 @@ function App() {
           <div className="split-view-container">
             <div className="split-3d">
               <Viewer
+                accessToken={accessToken}
                 models={models}
                 hiddenModelUrns={hiddenModelUrns}
                 sprites={sprites}
