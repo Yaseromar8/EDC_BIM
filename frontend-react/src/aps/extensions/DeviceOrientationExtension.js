@@ -246,7 +246,16 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         const gamma = MathUtils.degToRad(event.gamma);
         const orient = MathUtils.degToRad(this.screenOrientation);
 
-        this.euler.set(beta, alpha, -gamma, 'YXZ');
+        // --- IMPROVED MAPPING V6 (Horizon Lock) ---
+        // For Z-Up Architecture:
+        // Alpha (Compass) -> Rotation around Z (World Up)
+        // Beta (Tilt) -> Rotation around X (Pitch)
+        // Gamma (Roll) -> IGNORED (0) to keep horizon level!
+
+        // Note: We might need to adjust signs based on testing, but this isolates axes.
+        // Order 'ZXY': Apply Yaw (Z) first, then Pitch (X).
+        this.euler.set(beta, 0, -alpha, 'ZXY');
+
         this.deviceQuaternion.setFromEuler(this.euler);
         this.deviceQuaternion.multiply(this.q1); // Fix phone frame
 
@@ -314,8 +323,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:yellow;font-size:16px;">DEBUG MODE: V5 (AMARILLO)</div>
-                <b>GYRO ACTIVE</b><br/>
+                <div style="color:orange;font-size:16px;">DEBUG MODE: V6 (NARANJA)</div>
+                <b>HORIZON LOCKED</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
                 Dist: ${dist}<br/>
