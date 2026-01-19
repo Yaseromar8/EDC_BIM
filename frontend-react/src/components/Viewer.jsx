@@ -5,6 +5,11 @@ import { LoggerExtension } from '../aps/extensions/LoggerExtension';
 import { HistogramExtension } from '../aps/extensions/HistogramExtension';
 import { PhasingExtension } from '../aps/extensions/PhasingExtension';
 import { DeviceOrientationExtension } from '../aps/extensions/DeviceOrientationExtension';
+import { Capacitor } from '@capacitor/core';
+
+const BACKEND_URL = Capacitor.isNativePlatform()
+    ? 'https://visor-ecd-backend.onrender.com'
+    : (import.meta.env.VITE_BACKEND_URL || '');
 
 const Viewer = ({
     models,
@@ -34,7 +39,8 @@ const Viewer = ({
     showBuildPins = true, // Toggle visibility
     onBuildPinCreate,
     onBuildPinSelect,
-    selectedPinId // Add this prop
+    selectedPinId, // Add this prop
+    accessToken // Receive token from App
 }) => {
     const viewerRef = useRef(null);
     const containerRef = useRef(null);
@@ -228,9 +234,14 @@ const Viewer = ({
             const options = {
                 env: 'AutodeskProduction', // Revert to standard production to fix 400 errors
                 getAccessToken: (onSuccess) => {
-                    fetch('/api/token')
-                        .then(res => res.json())
-                        .then(data => onSuccess(data.access_token, data.expires_in));
+                    if (accessToken) {
+                        onSuccess(accessToken, 3600);
+                    } else {
+                        fetch(`${BACKEND_URL}/api/token`)
+                            .then(res => res.json())
+                            .then(data => onSuccess(data.access_token, data.expires_in))
+                            .catch(err => console.error("Token fetch error", err));
+                    }
                 }
             };
 
@@ -290,8 +301,7 @@ const Viewer = ({
                 setViewerReady(false);
             }
         };
-    }, []);
-
+    }, [viewerReady, accessToken]);
     useEffect(() => {
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
