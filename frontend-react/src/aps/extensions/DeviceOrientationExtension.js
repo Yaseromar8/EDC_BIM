@@ -254,9 +254,20 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
 
         // Note: We might need to adjust signs based on testing, but this isolates axes.
         // Order 'ZXY': Apply Yaw (Z) first, then Pitch (X).
-        this.euler.set(beta, 0, -alpha, 'ZXY');
+        // this.euler.set(beta, 0, -alpha, 'ZXY'); 
 
-        this.deviceQuaternion.setFromEuler(this.euler);
+        // --- MAPPING V7 (Natural Motion) ---
+        // Alpha (Compass) -> Yaw (Z)
+        // Beta (Tilt) -> Pitch (X)
+        // Gamma (Roll) -> Roll (Y) 
+
+        const qAlpha = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), alpha);
+        const qBeta = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), beta);
+        const qGamma = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -gamma);
+
+        this.deviceQuaternion.copy(qAlpha);
+        this.deviceQuaternion.multiply(qBeta);
+        this.deviceQuaternion.multiply(qGamma);
         this.deviceQuaternion.multiply(this.q1); // Fix phone frame
 
         const qOrient = new THREE.Quaternion();
@@ -323,8 +334,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:orange;font-size:16px;">DEBUG MODE: V6 (NARANJA)</div>
-                <b>HORIZON LOCKED</b><br/>
+                <div style="color:white;font-size:16px;">DEBUG MODE: V7 (BLANCO)</div>
+                <b>FULL MOTION (YAW/PITCH/ROLL)</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
                 Dist: ${dist}<br/>
