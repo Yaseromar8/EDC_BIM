@@ -298,10 +298,17 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         // Order: WorldYaw * InitialCam * LocalPitch
         // This ensures panning is always around building vertical, 
         // and pitching is always around your "ears".
-        camQ.premultiply(yawQ);
-        camQ.multiply(pitchQ);
 
-        this.finalQuaternion.copy(camQ);
+        // Fix for older Three.js: premultiply might not exist.
+        // We use multiplyQuaternions manually.
+        // 1. worldRotated = Yaw * Initial
+        const worldRotated = new THREE.Quaternion();
+        worldRotated.multiplyQuaternions(yawQ, this.initialCameraQuaternion);
+
+        // 2. final = worldRotated * Pitch (Local)
+        this.finalQuaternion.multiplyQuaternions(worldRotated, pitchQ);
+
+
 
 
 
@@ -338,8 +345,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:red;font-size:16px;">DEBUG MODE: V10 (ROJO)</div>
-                <b>HYBRID RELATIVE (Z-UP/X-LOCAL)</b><br/>
+                <div style="color:blue;font-size:16px;">DEBUG MODE: V11 (AZUL)</div>
+                <b>HYBRID RELATIVE (COMPATIBILITY FIX)</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
                 Dist: ${dist}<br/>
