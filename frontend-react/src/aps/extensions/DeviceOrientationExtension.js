@@ -244,9 +244,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         const alpha = MathUtils.degToRad(event.alpha);
         const beta = MathUtils.degToRad(event.beta);
         const gamma = MathUtils.degToRad(event.gamma);
-        // --- MAPPING V13 (POST-PROCESS YAW OFFSET) ---
-        // Fixes "Crossed" axes by calculating Standard Quaternion FIRST,
-        // then rotating the result to align Yaw.
+        // --- MAPPING V14 (GRAVITY HORIZON LOCK) ---
+        // Solves "Inclined Model" by stripping the Roll component entirely.
 
         const zee = new THREE.Vector3(0, 0, 1);
         const euler = new THREE.Euler();
@@ -254,23 +253,25 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // - PI/2 around X
         const orient = this.screenOrientation ? THREE.MathUtils.degToRad(this.screenOrientation) : 0;
 
-        // 1. Standard Math (Gravity Aligned)
-        // This gives us a quaternion where "Up" is World Up (Gravity)
+        // 1. Standard Device Orientation (Hand Position)
         euler.set(beta, alpha, -gamma, 'YXZ');
         this.deviceQuaternion.setFromEuler(euler);
         this.deviceQuaternion.multiply(q1);
         this.deviceQuaternion.multiply(q0.setFromAxisAngle(zee, -orient));
 
-        // 2. Calibration (Calculate Yaw Difference)
+        // 2. Calibration: Calculate Yaw Offset
         if (!this.isCalibrated) {
-            // We need to match Device Yaw to Camera Yaw in World Space.
-            // APS Viewer (Z-Up Architectural): Yaw is rotation around Z.
-            // We use 'ZXY' order to isolate Z as the primary yaw axis.
+            // Calculate offset between Device Look and Camera Look on XY plane
 
-            const devEulerZ = new THREE.Euler().setFromQuaternion(this.deviceQuaternion, 'ZXY');
-            const camEulerZ = new THREE.Euler().setFromQuaternion(this.viewer.impl.camera.quaternion, 'ZXY');
+            // Camera Forward flattened to XY
+            const camDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.viewer.impl.camera.quaternion);
+            const camAngle = Math.atan2(camDir.y, camDir.x);
 
-            this.yawOffset = camEulerZ.z - devEulerZ.z;
+            // Device Forward flattened to XY
+            const devDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.deviceQuaternion);
+            const devAngle = Math.atan2(devDir.y, devDir.x);
+
+            this.yawOffset = camAngle - devAngle;
 
             // Setup distance
             const pos = this.viewer.navigation.getPosition();
@@ -282,13 +283,27 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             this.finalQuaternion = new THREE.Quaternion();
         }
 
-        // 3. Apply Yaw Offset (Rotate around World Z)
-        // We take the gravity-aligned Device Quaternion and spin it to match the compass.
-        const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), this.yawOffset || 0);
+        // 3. Apply Calibration Offset to Device Quaternion
+        const offsetQ = new THREE.Quaternion().setFromAxisAngle(zee, this.yawOffset || 0);
+        const calibratedQ = new THREE.Quaternion().multiplyQuaternions(offsetQ, this.deviceQuaternion);
 
-        // Final = YawOffset * Device
-        // (Pre-multiply to rotate in World Space)
-        this.finalQuaternion.multiplyQuaternions(yawQ, this.deviceQuaternion);
+        // 4. GRAVITY LOCK (Matrix Construction)
+        // Extract the target Look Direction from the calibrated quaternion
+        const lookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(calibratedQ);
+
+        // Handle Gimbal Lock (Looking straight up/down)
+        if (Math.abs(lookDir.z) > 0.99) {
+            this.finalQuaternion.copy(calibratedQ);
+        } else {
+            // Force Z-Up: Look from (0,0,0) to lookDir with Up=(0,0,1)
+            const m = new THREE.Matrix4();
+            const eye = new THREE.Vector3(0, 0, 0);
+            const target = lookDir.clone();
+            const up = new THREE.Vector3(0, 0, 1); // World Z
+
+            m.lookAt(eye, target, up);
+            this.finalQuaternion.setFromRotationMatrix(m);
+        }
 
 
 
@@ -328,8 +343,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:cyan;font-size:16px;">DEBUG MODE: V13 (CIAN)</div>
-                <b>POST-PROCESS YAW OFFSET (CLEAN)</b><br/>
+                <div style="color:orange;font-size:16px;">DEBUG MODE: V14 (NARANJA)</div>
+                <b>GRAVITY HORIZON LOCK (LEVEL)</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
                 Dist: ${dist}<br/>
