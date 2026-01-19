@@ -143,6 +143,12 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         // 3. Activate Gyro Tool
         tc.activateTool('gyro-tool');
 
+        // --- LOCK DEFAULT NAVIGATION ---
+        // This stops Orbit/Pan from resetting the camera every frame
+        if (this.viewer.navigation) {
+            this.viewer.navigation.setIsLocked(true);
+        }
+
         // 4. Listeners
         if (window.DeviceOrientationEvent) {
             window.addEventListener('deviceorientation', this.onOrientationEvent, false);
@@ -195,6 +201,11 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         window.removeEventListener('orientationchange', this.onScreenOrientationChange, false);
 
         this.viewer.toolController.deactivateTool('gyro-tool');
+
+        // --- UNLOCK DEFAULT NAVIGATION ---
+        if (this.viewer.navigation) {
+            this.viewer.navigation.setIsLocked(false);
+        }
 
         if (this.debugEl) this.debugEl.style.display = 'none';
 
@@ -277,19 +288,23 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             this.viewer.impl.invalidate(true, true, true);
         }
 
-        // --- DEBUG UPDATE COUNTER ---
+        // --- DEBUG UPDATE COUNTER + QUATERNION ---
         this._updateCount = (this._updateCount || 0) + 1;
         if (this.debugEl) {
             const a = event.alpha ? Math.round(event.alpha) : 'null';
-            const b = event.beta ? Math.round(event.beta) : 'null';
-            const g = event.gamma ? Math.round(event.gamma) : 'null';
+            const q = this.finalQuaternion;
+            // Show first decimal to see micro-movements
+            const qx = q.x.toFixed(2);
+            const qy = q.y.toFixed(2);
+            const qz = q.z.toFixed(2);
+            const qw = q.w.toFixed(2);
+
             this.debugEl.innerHTML = `
-                <div style="color:red;font-size:16px;">VERSION: V2 (MAGENTA)</div>
+                <div style="color:cyan;font-size:16px;">DEBUG MODE: V3 (CYAN)</div>
                 <b>GYRO ACTIVE</b><br/>
-                Alpha: ${a}<br/>
-                Beta:  ${b}<br/>
-                Gamma: ${g}<br/>
                 Updates: ${this._updateCount}<br/>
+                Alpha: ${a}<br/>
+                Q: [${qx}, ${qy}, ${qz}, ${qw}]<br/>
              `;
         }
     }
