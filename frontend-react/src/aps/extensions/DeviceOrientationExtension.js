@@ -241,70 +241,69 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         const MathUtils = THREE.MathUtils || THREE.Math;
 
         // --- 1. Compute Device Quaternion from Sensors ---
-        // --- MAPPING V11 (HYBRID RELATIVE - BLUE) ---
-        // Vertical (Pitch/Roll) = ABSOLUTE (Gravity)
-        // Horizontal (Yaw) = RELATIVE (Calibration Offset)
+        // --- MAPPING V17 (CANONICAL MATH - GREEN) ---
+        // Implementation based on THREE.DeviceOrientationControls standard.
+        // Pure Quaternion math to avoid "diagonal drift" (cross-axis coupling).
+
+        const alpha = event.alpha ? MathUtils.degToRad(event.alpha) : 0; // Z
+        const beta = event.beta ? MathUtils.degToRad(event.beta) : 0;   // X'
+        const gamma = event.gamma ? MathUtils.degToRad(event.gamma) : 0; // Y''
+        const orient = this.screenOrientation ? MathUtils.degToRad(this.screenOrientation) : 0;
 
         const zee = new THREE.Vector3(0, 0, 1);
         const euler = new THREE.Euler();
         const q0 = new THREE.Quaternion();
-        const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -PI/2 around X
-        const orient = this.screenOrientation ? MathUtils.degToRad(this.screenOrientation) : 0;
+        const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // - PI/2 around X
 
-        // 1. Build Device Quaternion (Standard Math)
-        const alpha = MathUtils.degToRad(event.alpha);
-        const beta = MathUtils.degToRad(event.beta);
-        const gamma = MathUtils.degToRad(event.gamma);
+        // 1. Build Standard Device Quaternion (Sensor Space)
+        // Order must be 'YXZ' for device orientation spec
         euler.set(beta, alpha, -gamma, 'YXZ');
-        this.deviceQuaternion.setFromEuler(euler);
-        this.deviceQuaternion.multiply(q1);
-        this.deviceQuaternion.multiply(q0.setFromAxisAngle(zee, -orient));
+        const sensorQ = new THREE.Quaternion();
+        sensorQ.setFromEuler(euler);
 
-        // 2. Calibration (First Frame Only)
+        // 2. Adjust for Camera Frame (-90 around X)
+        // Sensors assume Z is out of screen, Camera assumes -Z is forward.
+        sensorQ.multiply(q1);
+
+        // 3. Adjust for Screen Orientation (Landscape compensation)
+        // Must be applied AFTER sensor rotation but BEFORE world alignment
+        sensorQ.multiply(q0.setFromAxisAngle(zee, -orient));
+
+        // 4. Calibration (Yaw Offset Calculation)
         if (!this.isCalibrated) {
-            // Capture Initial Camera State
-            this.initialCameraQ = this.viewer.impl.camera.quaternion.clone();
+            // We need to calculate the difference between "Device Look" and "Camera Look"
+            // projected onto the horizontal plane (World Z).
 
-            // Setup distance
-            const pos = this.viewer.navigation.getPosition();
-            const target = this.viewer.navigation.getTarget();
-            this.initialDistance = pos.distanceTo(target) || 10.0;
-            if (this.initialDistance < 0.1) this.initialDistance = 10.0;
+            // Current Device Direction (Projected to XY Plane)
+            const deviceDir = new THREE.Vector3(0, 0, -1);
+            deviceDir.applyQuaternion(sensorQ);
+            const deviceAngle = Math.atan2(deviceDir.y, deviceDir.x); // Range -PI to PI
+
+            // Current Camera Direction (Projected to XY Plane)
+            const camDir = new THREE.Vector3(0, 0, -1);
+            const currentCamQ = this.viewer.impl.camera.quaternion;
+            camDir.applyQuaternion(currentCamQ);
+            const camAngle = Math.atan2(camDir.y, camDir.x); // Range -PI to PI
+
+            // Calculate Offset (How much to rotate Device to match Camera)
+            this.alphaOffset = camAngle - deviceAngle;
 
             this.isCalibrated = true;
             this.finalQuaternion = new THREE.Quaternion();
+
+            // Distance Setup
+            const pos = this.viewer.navigation.getPosition();
+            const target = this.viewer.navigation.getTarget();
+            this.initialDistance = pos.distanceTo(target) || 10.0;
         }
 
-        // 3. Calculate Delta Quaternion
-        // deltaQ represents the rotation from initialDevice to currentDevice
-        const deltaQ = new THREE.Quaternion();
-        deltaQ.copy(this.deviceQuaternion);
+        // 5. Apply Alpha Offset (Align Device North to Model North)
+        // Offset is applied around World Z (Vertical)
+        const offsetQ = new THREE.Quaternion();
+        offsetQ.setFromAxisAngle(zee, this.alphaOffset);
 
-        // We need the rotation that takes us from initial device to current device
-        // Since we didn't store initialDeviceQ, we use the camera's initial state as reference
-        // deltaQ = currentDevice (already computed above)
-
-        // 4. Decompose Delta into Yaw and Pitch
-        // Extract Euler angles from deltaQ
-        const deltaEuler = new THREE.Euler().setFromQuaternion(deltaQ, 'ZXY');
-        const deltaYaw = deltaEuler.z;   // Rotation around World Z
-        const deltaPitch = deltaEuler.x; // Rotation around Local X
-
-        // 5. Apply Rotations
-        // Start with Initial Camera Quaternion
-        const camQ = this.initialCameraQ.clone();
-
-        // Apply Yaw (World Space - around Z)
-        const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), deltaYaw);
-
-        // Apply Pitch (Local Space - around X)
-        const pitchQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), deltaPitch);
-
-        // Combine: Yaw * Camera * Pitch
-        // Use multiplyQuaternions for Three.js r71 compatibility
-        const tempQ = new THREE.Quaternion();
-        tempQ.multiplyQuaternions(yawQ, camQ);
-        this.finalQuaternion.multiplyQuaternions(tempQ, pitchQ);
+        // Final = Offset * SensorCorrected
+        this.finalQuaternion.multiplyQuaternions(offsetQ, sensorQ);
 
 
 
@@ -342,8 +341,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:blue;font-size:16px;">DEBUG MODE: V11 (AZUL)</div>
-                <b>HYBRID RELATIVE (PITCH ABS / YAW REL)</b><br/>
+                <div style="color:green;font-size:16px;">DEBUG MODE: V17 (VERDE)</div>
+                <b>CANONICAL MATH (NO DRIFT)</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
                 Dist: ${dist}<br/>
