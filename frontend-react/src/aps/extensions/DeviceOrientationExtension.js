@@ -260,6 +260,13 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             this.initialCameraQuaternion.copy(this.viewer.impl.camera.quaternion);
             // Store current device rotation
             this.initialDeviceQuaternion.copy(this.deviceQuaternion);
+
+            // --- CALC INITIAL DISTANCE ---
+            const pos = this.viewer.navigation.getPosition();
+            const target = this.viewer.navigation.getTarget();
+            this.initialDistance = pos.distanceTo(target);
+            if (this.initialDistance < 0.1) this.initialDistance = 10.0; // Fail-safe
+
             this.isCalibrated = true;
             this.finalQuaternion = new THREE.Quaternion(); // Init final
         }
@@ -286,8 +293,10 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.finalQuaternion);
             const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.finalQuaternion);
 
-            // 3. Calculate new Target
-            const target = pos.clone().add(forward);
+            // 3. Project new Target using STORED DISTANCE (Fix "Zoom" issue)
+            // Use 100 units if calibration failed, or the real distance
+            const dist = this.initialDistance || 100.0;
+            const target = pos.clone().add(forward.multiplyScalar(dist));
 
             // 4. Update View (Position stays same, Target & Up change)
             this.viewer.navigation.setView(pos, target);
@@ -301,20 +310,15 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
 
         if (this.debugEl) {
             const a = event.alpha ? Math.round(event.alpha) : 'null';
-            // Check if finalQuaternion exists before accessing properties
             const q = this.finalQuaternion || { x: 0, y: 0, z: 0, w: 0 };
-
-            const qx = q.x ? q.x.toFixed(2) : '0';
-            const qy = q.y ? q.y.toFixed(2) : '0';
-            const qz = q.z ? q.z.toFixed(2) : '0';
-            const qw = q.w ? q.w.toFixed(2) : '0';
+            const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:#00FF00;font-size:16px;">DEBUG MODE: V4 (VERDE) (Nav Sync)</div>
+                <div style="color:yellow;font-size:16px;">DEBUG MODE: V5 (AMARILLO)</div>
                 <b>GYRO ACTIVE</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
-                Q: [${qx}, ${qy}, ${qz}, ${qw}]<br/>
+                Dist: ${dist}<br/>
              `;
         }
     }
