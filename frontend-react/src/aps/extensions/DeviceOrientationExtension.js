@@ -144,18 +144,42 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         tc.activateTool('gyro-tool');
 
         // 4. Listeners
-        window.addEventListener('deviceorientation', this.onOrientationEvent, false);
+        if (window.DeviceOrientationEvent) {
+            window.addEventListener('deviceorientation', this.onOrientationEvent, false);
+        }
         window.addEventListener('orientationchange', this.onScreenOrientationChange, false);
         this.screenOrientation = window.orientation || 0;
 
-        // Debug
+        // Debug Overlay - Enhanced
         if (!this.debugEl) {
             this.debugEl = document.createElement('div');
-            this.debugEl.style.cssText = 'position:absolute;bottom:80px;left:10px;color:lime;background:rgba(0,0,0,0.5);padding:2px;font-size:10px;pointer-events:none;';
+            this.debugEl.style.cssText = `
+                position: absolute;
+                bottom: 150px; /* Higher up */
+                left: 20px;
+                color: #00FF00; /* Bright Green */
+                background: rgba(0, 0, 0, 0.8);
+                padding: 10px;
+                font-family: monospace;
+                font-size: 14px;
+                pointer-events: none;
+                z-index: 1000;
+                border-radius: 8px;
+                min-width: 200px;
+            `;
             this.viewer.container.appendChild(this.debugEl);
         }
-        this.debugEl.innerHTML = "GYRO: Calibrando...";
         this.debugEl.style.display = 'block';
+
+        // Initial Debug State
+        const apiStatus = window.DeviceOrientationEvent ? "AVAILABLE" : "MISSING";
+        const httpsStatus = window.isSecureContext ? "SECURE" : "NOT SECURE";
+        this.debugEl.innerHTML = `
+            <b>GYRO DEBUG</b><br/>
+            API: ${apiStatus}<br/>
+            Context: ${httpsStatus}<br/>
+            Waiting for data...
+        `;
 
         this.enabled = true;
         this.button.setState(Autodesk.Viewing.UI.Button.State.ACTIVE);
@@ -183,9 +207,22 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
     }
 
     onOrientationEvent(event) {
-        if (!this.enabled || event.alpha === null) return;
+        if (!this.enabled) return;
 
-        if (this.debugEl) this.debugEl.innerHTML = `Alpha: ${Math.round(event.alpha)}`;
+        if (this.debugEl) {
+            const a = event.alpha ? Math.round(event.alpha) : 'null';
+            const b = event.beta ? Math.round(event.beta) : 'null';
+            const g = event.gamma ? Math.round(event.gamma) : 'null';
+            this.debugEl.innerHTML = `
+                <b>GYRO ACTIVE</b><br/>
+                Alpha: ${a}<br/>
+                Beta:  ${b}<br/>
+                Gamma: ${g}<br/>
+                Calibrated: ${this.isCalibrated ? 'YES' : 'NO'}
+             `;
+        }
+
+        if (event.alpha === null) return;
 
         const THREE = window.THREE || Autodesk.Viewing.Private.THREE;
         const MathUtils = THREE.MathUtils || THREE.Math;
