@@ -1,6 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import NativeFileTree from './NativeFileTree';
+import { Capacitor } from '@capacitor/core';
 import './ImportModelModal.css';
+
+const BACKEND_URL = Capacitor.isNativePlatform()
+  ? 'https://visor-ecd-backend.onrender.com'
+  : (import.meta.env.VITE_BACKEND_URL || '');
 
 const ChevronDownIcon = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ opacity: 0.7 }}>
@@ -44,7 +49,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal }) => {
   // Fetch Hubs on Mount
   useEffect(() => {
     if (open && activeTab === 'DOCS') {
-      fetch('/api/hubs')
+      fetch(`${BACKEND_URL}/api/hubs`)
         .then(r => r.json())
         .then(res => {
           if (res.data) {
@@ -62,7 +67,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal }) => {
   // Fetch Projects when Account (Hub) changes
   useEffect(() => {
     if (selectedAccountId) {
-      fetch(`/api/hubs/${selectedAccountId}/projects`)
+      fetch(`${BACKEND_URL}/api/hubs/${selectedAccountId}/projects`)
         .then(r => r.json())
         .then(res => {
           if (res.data) {

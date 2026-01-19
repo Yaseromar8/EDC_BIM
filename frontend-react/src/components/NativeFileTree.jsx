@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
+
+const BACKEND_URL = Capacitor.isNativePlatform()
+    ? 'https://visor-ecd-backend.onrender.com'
+    : (import.meta.env.VITE_BACKEND_URL || '');
 
 const API_ENDPOINTS = {
-    hubs: '/api/hubs',
-    projects: (hubId) => `/api/hubs/${hubId}/projects`,
-    topFolders: (hubId, projectId) => `/api/hubs/${hubId}/projects/${projectId}/topFolders`,
-    folderContents: (projectId, folderId) => `/api/projects/${projectId}/folders/${folderId}/contents`,
-    itemVersions: (projectId, itemId) => `/api/projects/${projectId}/items/${itemId}/versions`,
+    hubs: `${BACKEND_URL}/api/hubs`,
+    projects: (hubId) => `${BACKEND_URL}/api/hubs/${hubId}/projects`,
+    topFolders: (hubId, projectId) => `${BACKEND_URL}/api/hubs/${hubId}/projects/${projectId}/topFolders`,
+    folderContents: (projectId, folderId) => `${BACKEND_URL}/api/projects/${projectId}/folders/${folderId}/contents`,
+    itemVersions: (projectId, itemId) => `${BACKEND_URL}/api/projects/${projectId}/items/${itemId}/versions`,
 };
 
 // Custom hook for fetching data
