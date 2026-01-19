@@ -22,7 +22,7 @@ from aps import get_internal_token, get_api_data
 
 # Flask app setup
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Register Blueprints
 

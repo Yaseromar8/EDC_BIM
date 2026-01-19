@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Visor APS</string>
+    <string name="title_activity_main">Visor APS</string>
+    <string name="package_name">com.visoraps.app</string>
+    <string name="custom_url_scheme">com.visoraps.app</string>
+</resources>

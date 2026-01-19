@@ -472,6 +472,8 @@ function FilterConfigurator({
 
 
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || (window.location.hostname === 'localhost' && !window.Capacitor ? '' : 'https://visor-ecd-backend.onrender.com');
+
 function App() {
   const [models, setModels] = useState([]);
   const [relinkTargetModel, setRelinkTargetModel] = useState(null); // Relink State
@@ -661,7 +663,7 @@ function App() {
   useEffect(() => {
     if (!selectedProject) return;
 
-    fetch('/api/views')
+    fetch(`${BACKEND_URL}/api/views`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setSavedViews(data);
@@ -680,7 +682,7 @@ function App() {
         filterProperties
       };
 
-      fetch('/api/views', {
+      fetch(`${BACKEND_URL}/api/views`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -702,7 +704,7 @@ function App() {
 
   const handleDeleteView = useCallback((viewId) => {
     if (!window.confirm("Delete this view?")) return;
-    fetch(`/api/views/${viewId}`, { method: 'DELETE' })
+    fetch(`${BACKEND_URL}/api/views/${viewId}`, { method: 'DELETE' })
       .then(res => res.ok ? setSavedViews(prev => prev.filter(v => v.id !== viewId)) : null)
       .catch(err => console.error("Error deleting view:", err));
   }, []);
@@ -730,7 +732,7 @@ function App() {
   useEffect(() => {
     if (!selectedProject) return;
 
-    fetch(`/api/pins?project=${selectedProject}`)
+    fetch(`${BACKEND_URL}/api/pins?project=${selectedProject}`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {
@@ -778,7 +780,7 @@ function App() {
 
     try {
       if (!selectedProject) return alert("Error: No project context for new pin");
-      const res = await fetch('/api/pins', {
+      const res = await fetch(`${BACKEND_URL}/api/pins`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -832,7 +834,7 @@ function App() {
 
   const handlePinDelete = useCallback(async (pinId) => {
     try {
-      const res = await fetch(`/api/pins/${pinId}`, { method: 'DELETE' });
+      const res = await fetch(`${BACKEND_URL}/api/pins/${pinId}`, { method: 'DELETE' });
       if (res.ok) {
         setBuildPins(prev => prev.filter(p => p.id !== pinId));
         if (selectedPinId === pinId) {
@@ -877,7 +879,7 @@ function App() {
 
     try {
       // 2. Upload to Server
-      const res = await fetch('/api/build/acc-upload', {
+      const res = await fetch(`${BACKEND_URL}/api/build/acc-upload`, {
         method: 'POST',
         body: formData
       });
@@ -898,7 +900,7 @@ function App() {
         versionId: data.version_id,
         itemId: data.item_id,
         // Use proxy URL for permanent access
-        url: `/api/images/proxy?storageId=${encodeURIComponent(data.storage_id)}`,
+        url: `${BACKEND_URL}/api/images/proxy?storageId=${encodeURIComponent(data.storage_id)}`,
         status: 'processed',
         timestamp: new Date().toISOString()
       };
@@ -917,7 +919,7 @@ function App() {
       // 5. Sync with Server (Fetch latest -> Append -> Save)
       // We fetch the latest pin state from server to ensure we don't overwrite other committed changes
       // and we don't send our local "temp" docs to the server.
-      const pinRes = await fetch(`/api/pins`);
+      const pinRes = await fetch(`${BACKEND_URL}/api/pins`);
       if (pinRes.ok) {
         const allPins = await pinRes.json();
         const serverPin = allPins.find(p => p.id === pinId);
@@ -925,7 +927,7 @@ function App() {
         if (serverPin) {
           const newServerDocs = [...(serverPin.documents || []), finalDoc];
 
-          await fetch(`/api/pins/${pinId}`, {
+          await fetch(`${BACKEND_URL}/api/pins/${pinId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ documents: newServerDocs })
@@ -1056,7 +1058,7 @@ function App() {
   useEffect(() => {
     if (!selectedProject) return; // Don't fetch if no project selected
 
-    fetch(`/api/config/project?project=${selectedProject}`)
+    fetch(`${BACKEND_URL}/api/config/project?project=${selectedProject}`)
       .then(res => res.json())
       .then(data => {
         if (data.models && Array.isArray(data.models)) {
@@ -1088,7 +1090,7 @@ function App() {
         if (models.length === 0) return;
         const newModelData = models[0]; // Relink strictly one model
 
-        const res = await fetch('/api/config/project/relink', {
+        const res = await fetch(`${BACKEND_URL}/api/config/project/relink`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1124,7 +1126,7 @@ function App() {
       // Sequential execution to avoid race conditions on the server's file write
       // Ideally backend should handle bulk, but sequential is safe fix for now.
       for (const model of models) {
-        const res = await fetch('/api/config/project/add', {
+        const res = await fetch(`${BACKEND_URL}/api/config/project/add`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1156,7 +1158,7 @@ function App() {
 
   const handleModelUpdate = useCallback(async (urn) => {
     try {
-      const res = await fetch('/api/config/project/update', {
+      const res = await fetch(`${BACKEND_URL}/api/config/project/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ urn })
@@ -1189,7 +1191,7 @@ function App() {
 
     try {
       // Show loading indicator?
-      const res = await fetch('/api/config/project/upload', {
+      const res = await fetch(`${BACKEND_URL}/api/config/project/upload`, {
         method: 'POST',
         body: formData
       });
@@ -1210,7 +1212,7 @@ function App() {
 
   const removeModel = useCallback(async (urn) => {
     try {
-      const res = await fetch('/api/config/project/remove', {
+      const res = await fetch(`${BACKEND_URL}/api/config/project/remove`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ urn, project: selectedProject })
@@ -1260,7 +1262,7 @@ function App() {
       try {
         // Encode URN twice to ensure slashes are handled correctly by proxies/servers
         const encodedUrn = encodeURIComponent(urn);
-        const response = await fetch(`/api/build/translation-status?urn=${encodedUrn}`);
+        const response = await fetch(`${BACKEND_URL}/api/build/translation-status?urn=${encodedUrn}`);
         const data = await response.json();
         if (data.status === 'success') {
           setBuildUploads(prev => prev.map(f => f.urn === urn ? { ...f, status: 'success' } : f));
@@ -1285,7 +1287,7 @@ function App() {
     const projectId = file.projectId || file.project_id;
     const versionId = file.versionId || file.version_id;
     const body = storageId ? { storageId } : { projectId, versionId };
-    const resp = await fetch('/api/build/signed-read', {
+    const resp = await fetch(`${BACKEND_URL}/api/build/signed-read`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -1650,7 +1652,7 @@ function App() {
 
   const handlePinUpdate = async (updatedPin) => {
     try {
-      const res = await fetch(`/api/pins/${updatedPin.id}`, {
+      const res = await fetch(`${BACKEND_URL}/api/pins/${updatedPin.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedPin)
@@ -1704,7 +1706,7 @@ function App() {
           const currentDocs = pin.documents || [];
           const updatedPin = { ...pin, documents: [...currentDocs, newDoc] };
 
-          const res = await fetch(`/api/pins/${pin.id}`, {
+          const res = await fetch(`${BACKEND_URL}/api/pins/${pin.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updatedPin)
