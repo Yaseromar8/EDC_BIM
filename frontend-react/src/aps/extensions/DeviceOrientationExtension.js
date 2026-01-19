@@ -155,17 +155,19 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             this.debugEl = document.createElement('div');
             this.debugEl.style.cssText = `
                 position: absolute;
-                bottom: 150px; /* Higher up */
+                bottom: 150px;
                 left: 20px;
-                color: #00FF00; /* Bright Green */
-                background: rgba(0, 0, 0, 0.8);
+                color: #FF00FF; /* MAGENTA - VISUAL CONFIRMATION OF NEW VERSION */
+                background: rgba(255, 255, 255, 0.9);
                 padding: 10px;
                 font-family: monospace;
                 font-size: 14px;
+                font-weight: bold;
                 pointer-events: none;
                 z-index: 1000;
                 border-radius: 8px;
                 min-width: 200px;
+                border: 2px solid #FF00FF;
             `;
             this.viewer.container.appendChild(this.debugEl);
         }
@@ -263,10 +265,15 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         this.finalQuaternion.multiply(delta);
 
         // --- DIRECT APPLY (Bypass Tool Loop) ---
-        // Verify we have a camera
         if (this.viewer.impl.camera) {
-            this.viewer.impl.camera.quaternion.copy(this.finalQuaternion);
-            this.viewer.impl.camera.updateMatrixWorld(true);
+            const cam = this.viewer.impl.camera;
+            cam.quaternion.copy(this.finalQuaternion);
+            cam.updateMatrixWorld(true);
+
+            // Mark as dirty so Viewer knows something changed
+            cam.dirty = true;
+
+            // Aggressive Redraw
             this.viewer.impl.invalidate(true, true, true);
         }
 
@@ -277,15 +284,16 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const b = event.beta ? Math.round(event.beta) : 'null';
             const g = event.gamma ? Math.round(event.gamma) : 'null';
             this.debugEl.innerHTML = `
+                <div style="color:red;font-size:16px;">VERSION: V2 (MAGENTA)</div>
                 <b>GYRO ACTIVE</b><br/>
                 Alpha: ${a}<br/>
                 Beta:  ${b}<br/>
                 Gamma: ${g}<br/>
                 Updates: ${this._updateCount}<br/>
-                Calibrated: ${this.isCalibrated ? 'YES' : 'NO'}
              `;
         }
     }
 }
+
 
 Autodesk.Viewing.theExtensionManager.registerExtension('DeviceOrientationExtension', DeviceOrientationExtension);
