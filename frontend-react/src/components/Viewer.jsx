@@ -283,18 +283,20 @@ const Viewer = ({
             });
         };
 
-        if (!viewerReady && accessToken) {
+        if (accessToken && !viewerRef.current) {
             initializeViewer();
         }
 
         return () => {
+            // Only cleanup if we are truly unmounting or changing specific critical props
             if (viewerRef.current) {
                 viewerRef.current.finish();
                 viewerRef.current = null;
                 setViewerReady(false);
             }
         };
-    }, [viewerReady, accessToken]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [accessToken]);
 
     // Handle Model Loaded Event
     useEffect(() => {
