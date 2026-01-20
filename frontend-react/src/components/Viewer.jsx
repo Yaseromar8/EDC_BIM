@@ -268,9 +268,13 @@ const Viewer = ({
                     ]
                 };
 
+
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);
                 viewer.start();
                 viewerRef.current = viewer;
+
+                // Expose globally for AR camera capture
+                window.NOP_VIEWER = viewer;
 
                 setViewerReady(true);
 

@@ -11,6 +11,7 @@ const ARView = ({ models, initialCamera, onExit }) => {
     const viewerRef = useRef(null);
     const videoRef = useRef(null);
     const [permStatus, setPermStatus] = useState("init");
+    const [modelOpacity, setModelOpacity] = useState(0.7); // NEW: Control model transparency (0.0 = invisible, 1.0 = solid)
 
     // 1. INITIALIZE CAMERA FEED & CHECK AR SUPPORT
     useEffect(() => {
@@ -197,6 +198,16 @@ const ARView = ({ models, initialCamera, onExit }) => {
         };
     }, [models]);
 
+    // 3. APPLY MODEL OPACITY (when slider changes)
+    useEffect(() => {
+        if (viewerRef.current) {
+            const container = viewerRef.current.container;
+            if (container) {
+                container.style.opacity = modelOpacity;
+            }
+        }
+    }, [modelOpacity]);
+
     // 3. RENDER UI
     return (
         <div className="ar-view-container">
@@ -210,6 +221,34 @@ const ARView = ({ models, initialCamera, onExit }) => {
             <div className="ar-ui-overlay">
                 <div className="ar-top-bar">
                     <button className="ar-btn" onClick={onExit}>✕ Salir</button>
+
+                    {/* OPACITY SLIDER */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        background: 'rgba(0,0,0,0.6)',
+                        padding: '8px 16px',
+                        borderRadius: '20px',
+                        backdropFilter: 'blur(5px)'
+                    }}>
+                        <span style={{ color: 'white', fontSize: '13px', fontWeight: 'bold' }}>Transparencia:</span>
+                        <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={modelOpacity}
+                            onChange={(e) => setModelOpacity(parseFloat(e.target.value))}
+                            style={{
+                                width: '120px',
+                                cursor: 'pointer'
+                            }}
+                        />
+                        <span style={{ color: 'white', fontSize: '12px', minWidth: '35px' }}>
+                            {Math.round(modelOpacity * 100)}%
+                        </span>
+                    </div>
                 </div>
 
                 {/* iOS ENABLE BUTTON */}

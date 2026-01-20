@@ -1936,23 +1936,29 @@ function App() {
               active: arModeActive,
               onClick: () => {
                 if (!arModeActive) {
-                  // BEFORE activating AR, request current camera state from Viewer
-                  window.dispatchEvent(new CustomEvent('request-camera-state-for-ar'));
-                  // The Viewer will respond via 'camera-state-for-ar' event
-                  // We'll listen for it and then activate AR
-                  const handleCameraState = (e) => {
-                    setArInitialCamera(e.detail);
-                    setArModeActive(true);
-                    window.removeEventListener('camera-state-for-ar', handleCameraState);
-                  };
-                  window.addEventListener('camera-state-for-ar', handleCameraState);
-                  // Fallback: if no response in 500ms, activate anyway
-                  setTimeout(() => {
-                    window.removeEventListener('camera-state-for-ar', handleCameraState);
-                    if (!arModeActive) {
-                      setArModeActive(true);
+                  // CAPTURE camera from main viewer (if exists)
+                  try {
+                    // Try to find the global viewer instance
+                    const viewer = window.NOP_VIEWER || (window.Autodesk && window.Autodesk.Viewing && window.Autodesk.Viewing.Private && window.Autodesk.Viewing.Private.GuiViewer3D && window.Autodesk.Viewing.Private.GuiViewer3D.instances && window.Autodesk.Viewing.Private.GuiViewer3D.instances[0]);
+
+                    if (viewer && viewer.navigation) {
+                      const cam = viewer.navigation.getCamera();
+                      const cameraState = {
+                        position: cam.position.clone(),
+                        target: cam.target.clone(),
+                        up: cam.up.clone(),
+                        fov: viewer.navigation.getVerticalFov()
+                      };
+                      console.log("[App] Captured camera for AR:", cameraState);
+                      setArInitialCamera(cameraState);
+                    } else {
+                      console.warn("[App] No viewer found, AR will use fitToView");
                     }
-                  }, 500);
+                  } catch (err) {
+                    console.error("[App] Error capturing camera:", err);
+                  }
+
+                  setArModeActive(true);
                 } else {
                   // Deactivate AR
                   setArModeActive(false);
