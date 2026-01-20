@@ -32,33 +32,42 @@ const ARView = ({ models, onExit }) => {
 
         const startCamera = async () => {
             try {
-                // 'environment' requests the back camera
+                // Stop any existing stream first
+                if (videoRef.current && videoRef.current.srcObject) {
+                    videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+                }
+
+                // Request new stream with 'environment' (back camera)
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment' },
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    },
                     audio: false
                 });
+
                 if (videoRef.current) {
                     videoRef.current.srcObject = stream;
-                    // Play only when metadata loads to avoid black frame
                     videoRef.current.onloadedmetadata = () => {
                         videoRef.current.play().catch(e => console.error("Play error:", e));
                     };
                 }
             } catch (err) {
                 console.error("Camera Error:", err);
-                // Don't alert blocking errors in dev, just log
+                // Don't block AR with alerts, just log
             }
         };
 
         startCamera();
 
-        // Cleanup
+        // Cleanup only on unmount
         return () => {
             if (videoRef.current && videoRef.current.srcObject) {
                 videoRef.current.srcObject.getTracks().forEach(track => track.stop());
             }
         };
-    }, []);
+    }, []); // Empty dependency to run once
 
     // 2. INITIALIZE AUTODESK VIEWER
     useEffect(() => {
@@ -105,49 +114,62 @@ const ARView = ({ models, onExit }) => {
             viewer.start();
             viewerRef.current = viewer;
 
-            // Load Model
-            Autodesk.Viewing.Document.load('urn:' + models[0].urn, (doc) => {
-                const defaultModel = doc.getRoot().getDefaultGeometry();
-                viewer.loadDocumentNode(doc, defaultModel, {
-                    keepCurrentModels: false,
-                    globalOffset: { x: 0, y: 0, z: 0 }, // Prevent Jitter
-                    placementTransform: new THREE.Matrix4() // Reset transform
-                }).then(() => {
-                    // --- SUCCESS LINK: MODEL LOADED ---
-                    console.log("AR Model Loaded. Applying Transparency...");
+            // Force transparency immediately
+            const makeTransparent = () => {
+                viewer.container.style.background = 'transparent';
+                viewer.container.style.backgroundColor = 'transparent';
+                const renderer = viewer.impl.glrenderer ? viewer.impl.glrenderer() : viewer.impl.renderer();
+                if (renderer) {
+                    renderer.setClearColor(0xffffff, 0);
+                    if (renderer.setClearAlpha) renderer.setClearAlpha(0);
+                }
+                viewer.impl.invalidate(true, true, true);
+            };
 
-                    // A. FORCE TRANSPARENCY (The "Ghost" Fix)
-                    const makeTransparent = () => {
-                        viewer.container.style.background = 'transparent';
-                        viewer.container.style.backgroundColor = 'transparent';
+            // LOAD ALL MODELS (Aggregation)
+            let loadedCount = 0;
+            const totalModels = models.length;
 
-                        const renderer = viewer.impl.glrenderer ? viewer.impl.glrenderer() : viewer.impl.renderer();
-                        if (renderer) {
-                            renderer.setClearColor(0xffffff, 0); // 0 Alpha
-                            if (renderer.setClearAlpha) renderer.setClearAlpha(0);
+            models.forEach((model, index) => {
+                Autodesk.Viewing.Document.load('urn:' + model.urn, (doc) => {
+                    const defaultModel = doc.getRoot().getDefaultGeometry();
+                    viewer.loadDocumentNode(doc, defaultModel, {
+                        keepCurrentModels: index > 0, // Keep previous models for aggregation
+                        globalOffset: model.globalOffset || { x: 0, y: 0, z: 0 },
+                        placementTransform: model.placementTransform || new THREE.Matrix4()
+                    }).then(() => {
+                        loadedCount++;
+                        console.log(`[AR] Loaded model ${loadedCount}/${totalModels}: ${model.name || model.urn}`);
+
+                        // Apply transparency after each load
+                        makeTransparent();
+
+                        // When ALL models are loaded
+                        if (loadedCount === totalModels) {
+                            console.log("[AR] All models loaded. Fitting to view...");
+
+                            // Center the view on all models
+                            setTimeout(() => {
+                                viewer.fitToView();
+                                makeTransparent(); // Ensure transparency after fit
+                            }, 500);
+
+                            // Re-apply transparency on viewer events
+                            viewer.addEventListener(Autodesk.Viewing.TEXTURES_LOADED_EVENT, makeTransparent);
+                            viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, makeTransparent);
+
+                            // B. AUTO-START GYRO EXTENSION (If Android)
+                            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission !== 'function') {
+                                const ext = viewer.getExtension('DeviceOrientationExtension');
+                                if (ext) {
+                                    ext.activate();
+                                    setPermStatus("active");
+                                }
+                            } else {
+                                setPermStatus("pending_ios");
+                            }
                         }
-                        viewer.impl.invalidate(true, true, true);
-                    };
-
-                    makeTransparent();
-                    // Re-apply on events just in case viewer resets it
-                    viewer.addEventListener(Autodesk.Viewing.TEXTURES_LOADED_EVENT, makeTransparent);
-                    viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, makeTransparent);
-
-                    viewer.fitToView();
-
-                    // B. AUTO-START EXTENSION (If Android)
-                    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission !== 'function') {
-                        // Android doesn't need explicit permission click usually
-                        const ext = viewer.getExtension('DeviceOrientationExtension');
-                        if (ext) {
-                            ext.activate();
-                            setPermStatus("active");
-                        }
-                    } else {
-                        // iOS needs explicit button
-                        setPermStatus("pending_ios");
-                    }
+                    });
                 });
             });
         });
