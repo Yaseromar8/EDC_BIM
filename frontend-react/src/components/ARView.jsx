@@ -149,6 +149,17 @@ const ARView = ({ models, initialCamera, onExit }) => {
                 }
             }, 1000);
 
+            // Helper to enforce transparency
+            const makeTransparent = () => {
+                if (!viewer || !viewer.impl) return;
+                viewer.container.style.background = 'transparent';
+                if (viewer.impl.renderer()) {
+                    viewer.impl.renderer().setClearColor(0x000000, 0);
+                    viewer.impl.renderer().setClearAlpha(0);
+                }
+                viewer.impl.invalidate(true, true, true);
+            };
+
             // LOAD ALL MODELS (Aggregation)
             let loadedCount = 0;
             const totalModels = models.length;
@@ -157,46 +168,27 @@ const ARView = ({ models, initialCamera, onExit }) => {
                 Autodesk.Viewing.Document.load('urn:' + model.urn, (doc) => {
                     const defaultModel = doc.getRoot().getDefaultGeometry();
                     viewer.loadDocumentNode(doc, defaultModel, {
-                        keepCurrentModels: index > 0, // Keep previous models for aggregation
+                        keepCurrentModels: index > 0,
                         globalOffset: model.globalOffset || { x: 0, y: 0, z: 0 },
                         placementTransform: model.placementTransform || new THREE.Matrix4()
                     }).then(() => {
                         loadedCount++;
-                        console.log(`[AR] Loaded model ${loadedCount}/${totalModels}: ${model.name || model.urn}`);
-
-                        // Apply transparency after each load
                         makeTransparent();
 
-                        // When ALL models are loaded
                         if (loadedCount === totalModels) {
                             console.log("[AR] All models loaded.");
 
-                            // Apply initial camera or fit to view
-                            setTimeout(() => {
-                                if (initialCamera && initialCamera.position && initialCamera.target) {
-                                    console.log("[AR] Applying initial camera from main viewer:", initialCamera);
-                                    viewer.navigation.setView(
-                                        initialCamera.position,
-                                        initialCamera.target
-                                    );
-                                    if (initialCamera.up) {
-                                        viewer.navigation.setCameraUpVector(initialCamera.up);
-                                    }
-                                    if (initialCamera.fov) {
-                                        viewer.navigation.setVerticalFov(initialCamera.fov, false);
-                                    }
-                                } else {
-                                    console.log("[AR] No initial camera, fitting to view...");
-                                    viewer.fitToView();
-                                }
-                                makeTransparent(); // Ensure transparency after camera setup
-                            }, 500);
+                            // Initial Fit
+                            if (initialCamera) {
+                                // Try to respect initial camera roughly
+                                viewer.navigation.setView(initialCamera.position, initialCamera.target);
+                                if (initialCamera.up) viewer.navigation.setCameraUpVector(initialCamera.up);
+                            } else {
+                                viewer.fitToView();
+                            }
+                            makeTransparent();
 
-                            // Re-apply transparency on viewer events
-                            viewer.addEventListener(Autodesk.Viewing.TEXTURES_LOADED_EVENT, makeTransparent);
-                            viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, makeTransparent);
-
-                            // B. AUTO-START GYRO EXTENSION (If Android)
+                            // Activate Gyroscope (DeviceOrientation)
                             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission !== 'function') {
                                 const ext = viewer.getExtension('DeviceOrientationExtension');
                                 if (ext) {
@@ -214,69 +206,51 @@ const ARView = ({ models, initialCamera, onExit }) => {
 
         return () => {
             if (viewerRef.current) {
-                if (viewerRef.current.transparencyInterval) {
-                    clearInterval(viewerRef.current.transparencyInterval);
-                }
                 viewerRef.current.finish();
                 viewerRef.current = null;
             }
         };
     }, [models]);
 
-    // 3. APPLY MODEL OPACITY (when slider changes)
+    // 3. APPLY MODEL OPACITY
     useEffect(() => {
-        if (viewerRef.current) {
-            const container = viewerRef.current.container;
-            if (container) {
-                container.style.opacity = modelOpacity;
-            }
+        if (viewerRef.current && viewerRef.current.container) {
+            viewerRef.current.container.style.opacity = modelOpacity;
         }
     }, [modelOpacity]);
 
-    // 4. APPLY PLACEMENT (Camera-based)
+    // 4. APPLY PLACEMENT (MODEL TRANSFORM)
+    // This moves the MODEL, leaving the Camera (Gyro) free.
     useEffect(() => {
         if (!viewerRef.current) return;
         const viewer = viewerRef.current;
 
-        try {
-            // Save initial camera if not saved
-            if (!viewer._arInitialCam && viewer.navigation) {
-                const c = viewer.navigation.getCamera();
-                viewer._arInitialCam = {
-                    pos: c.position.clone(),
-                    target: c.target.clone(),
-                    up: c.up.clone()
-                };
-            }
+        const models = viewer.impl.modelQueue().getModels();
+        if (!models || models.length === 0) return;
 
-            const initCam = viewer._arInitialCam;
-            if (initCam) {
-                // Direction Vector
-                const dir = new THREE.Vector3().subVectors(initCam.pos, initCam.target);
+        // Create Transform Matrix
+        const matrix = new THREE.Matrix4();
 
-                // Scale (Distance)
-                // If scale is 2.0, we get closer (divide distance by 2)
-                const newDist = dir.length() / modelScale;
-                dir.normalize().multiplyScalar(newDist);
+        // 1. Scale
+        matrix.makeScale(modelScale, modelScale, modelScale);
 
-                // Rotation (Around Y)
-                const rotMatrix = new THREE.Matrix4().makeRotationY(THREE.MathUtils.degToRad(modelRotationY));
-                dir.applyMatrix4(rotMatrix);
+        // 2. Rotate (around Y)
+        const rotMatrix = new THREE.Matrix4();
+        rotMatrix.makeRotationY(THREE.MathUtils.degToRad(modelRotationY));
+        matrix.multiply(rotMatrix);
 
-                // Height (Translate Target Y)
-                const newTarget = initCam.target.clone();
-                newTarget.y += modelHeight;
+        // 3. Translate (Height)
+        const transMatrix = new THREE.Matrix4();
+        transMatrix.makeTranslation(0, modelHeight, 0);
+        matrix.multiply(transMatrix);
 
-                // New Position
-                const newPos = new THREE.Vector3().addVectors(newTarget, dir);
+        // Apply to ALL models
+        models.forEach(m => {
+            m.setPlacementTransform(matrix);
+        });
 
-                // Apply
-                viewer.navigation.setView(newPos, newTarget);
-                viewer.navigation.setCameraUpVector(initCam.up);
-            }
-        } catch (e) {
-            console.warn("Placement error:", e);
-        }
+        viewer.impl.invalidate(true, true, true);
+
     }, [modelScale, modelHeight, modelRotationY]);
 
     const resetPlacement = () => {
@@ -332,6 +306,9 @@ const ARView = ({ models, initialCamera, onExit }) => {
                         </span>
                     </div>
                 </div>
+
+                {/* RETICLE (Aiming Point) */}
+                <div className="ar-reticle" />
 
                 {/* iOS ENABLE BUTTON */}
                 <div className="ar-bottom-controls">

@@ -115,3 +115,35 @@
     padding: 15px 30px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
+
+/* AR Reticle (Aiming Point) */
+.ar-reticle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 5;
+}
+
+.ar-reticle::before,
+.ar-reticle::after {
+    content: '';
+    position: absolute;
+    background: rgba(255, 255, 255, 0.8);
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.ar-reticle::before {
+    width: 2px;
+    height: 20px;
+}
+
+.ar-reticle::after {
+    width: 20px;
+    height: 2px;
+}
