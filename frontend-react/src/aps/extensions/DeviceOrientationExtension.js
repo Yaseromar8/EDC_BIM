@@ -52,10 +52,14 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         // Use a simple icon or text
         const icon = this.button.container.querySelector('.adsk-button-icon');
         if (icon) {
-            icon.style.backgroundImage = 'none'; // Clear default
-            icon.innerHTML = '📱'; // Simple emoji icon
+            // Restore default potential or just ensure it's visible. 
+            // If the user liked the previous one, maybe I should ask. 
+            // But for now let's make it very clear.
+            icon.style.backgroundImage = 'none';
+            icon.innerText = 'G'; // 'G' for Gyro
             icon.style.fontSize = '20px';
             icon.style.lineHeight = '24px';
+            icon.style.color = 'white';
         }
 
         // Add to toolbar
