@@ -12,6 +12,9 @@ const ARView = ({ models, initialCamera, onExit }) => {
     const videoRef = useRef(null);
     const [permStatus, setPermStatus] = useState("init");
     const [modelOpacity, setModelOpacity] = useState(0.8); // Control model transparency (0.0 = invisible, 1.0 = solid)
+    const [modelScale, setModelScale] = useState(1.0);
+    const [modelHeight, setModelHeight] = useState(0);
+    const [modelRotationY, setModelRotationY] = useState(0);
 
     // 1. INITIALIZE CAMERA FEED & CHECK AR SUPPORT
     useEffect(() => {
@@ -105,13 +108,12 @@ const ARView = ({ models, initialCamera, onExit }) => {
         Autodesk.Viewing.Initializer(options, () => {
             if (!viewerDivRef.current) return;
 
-            // CONFIGURATION FOR TRANSPARENCY - REMOVE GYROSCOPE TO AVOID CONFLICTS
             const config = {
-                extensions: [], // NO extensions - pure AR
+                extensions: ['DeviceOrientationExtension'], // Re-enable for rotation if possible
                 canvasConfig: {
                     alpha: true,
                     premultipliedAlpha: false,
-                    preserveDrawingBuffer: true // CRITICAL
+                    preserveDrawingBuffer: false
                 }
             };
 
@@ -119,55 +121,33 @@ const ARView = ({ models, initialCamera, onExit }) => {
             viewer.start();
             viewerRef.current = viewer;
 
-            // CRITICAL: DISABLE AUTOCLEAR TO PREVENT BACKGROUND REPAINT
+            // CLEAN TRANSPARENCY SETUP (Run ONCE)
             viewer.addEventListener(Autodesk.Viewing.VIEWER_INITIALIZED, () => {
-                const renderer = viewer.impl.glrenderer ? viewer.impl.glrenderer() : viewer.impl.renderer();
-                if (renderer) {
-                    console.log("[AR] Disabling autoClear...");
-                    renderer.autoClear = false;
-                    renderer.autoClearColor = false;
-                    renderer.autoClearDepth = true; // Keep depth clearing
-                    renderer.autoClearStencil = false;
-
-                    renderer.setClearColor(0x000000, 0);
-                    if (renderer.setClearAlpha) renderer.setClearAlpha(0);
-
-                    const gl = renderer.context;
-                    if (gl) {
-                        gl.clearColor(0, 0, 0, 0);
-                    }
-                }
-            });
-
-            // Force transparency immediately AND continuously
-            const makeTransparent = () => {
-                if (!viewer || !viewer.impl) return;
-
+                // Remove Viewer Background
                 viewer.container.style.background = 'transparent';
                 viewer.container.style.backgroundColor = 'transparent';
 
-                const renderer = viewer.impl.glrenderer ? viewer.impl.glrenderer() : viewer.impl.renderer();
-                if (renderer) {
-                    renderer.setClearColor(0x000000, 0); // Black with 0 alpha
-                    if (renderer.setClearAlpha) renderer.setClearAlpha(0);
-
-                    // Force WebGL to honor alpha
-                    const gl = renderer.context;
-                    if (gl) {
-                        gl.clearColor(0, 0, 0, 0);
-                    }
+                // Set Renderer to Transparent
+                if (viewer.impl.renderer()) {
+                    viewer.impl.renderer().setClearColor(0x000000, 0);
+                    viewer.impl.renderer().setClearAlpha(0);
                 }
+
+                // Disable Environment (Skybox/Ground)
+                viewer.setEnvMapBackground(false);
+                viewer.impl.setLightPreset(0); // Simple lighting
+
+                // Invalidate to apply
                 viewer.impl.invalidate(true, true, true);
-            };
+            });
 
-            makeTransparent();
-
-
-            // Keep re-applying transparency every 100ms (more aggressive to prevent graying)
-            const transparencyInterval = setInterval(makeTransparent, 100);
-
-            // Store interval ref for cleanup
-            viewerRef.current.transparencyInterval = transparencyInterval;
+            // Backup transparency check (run once after 1s)
+            setTimeout(() => {
+                if (viewer.impl.renderer()) {
+                    viewer.impl.renderer().setClearColor(0x000000, 0);
+                    viewer.impl.invalidate(true, true, true);
+                }
+            }, 1000);
 
             // LOAD ALL MODELS (Aggregation)
             let loadedCount = 0;
@@ -253,6 +233,62 @@ const ARView = ({ models, initialCamera, onExit }) => {
         }
     }, [modelOpacity]);
 
+    // 4. APPLY PLACEMENT (Camera-based)
+    useEffect(() => {
+        if (!viewerRef.current) return;
+        const viewer = viewerRef.current;
+
+        try {
+            // Save initial camera if not saved
+            if (!viewer._arInitialCam && viewer.navigation) {
+                const c = viewer.navigation.getCamera();
+                viewer._arInitialCam = {
+                    pos: c.position.clone(),
+                    target: c.target.clone(),
+                    up: c.up.clone()
+                };
+            }
+
+            const initCam = viewer._arInitialCam;
+            if (initCam) {
+                // Direction Vector
+                const dir = new THREE.Vector3().subVectors(initCam.pos, initCam.target);
+
+                // Scale (Distance)
+                // If scale is 2.0, we get closer (divide distance by 2)
+                const newDist = dir.length() / modelScale;
+                dir.normalize().multiplyScalar(newDist);
+
+                // Rotation (Around Y)
+                const rotMatrix = new THREE.Matrix4().makeRotationY(THREE.MathUtils.degToRad(modelRotationY));
+                dir.applyMatrix4(rotMatrix);
+
+                // Height (Translate Target Y)
+                const newTarget = initCam.target.clone();
+                newTarget.y += modelHeight;
+
+                // New Position
+                const newPos = new THREE.Vector3().addVectors(newTarget, dir);
+
+                // Apply
+                viewer.navigation.setView(newPos, newTarget);
+                viewer.navigation.setCameraUpVector(initCam.up);
+            }
+        } catch (e) {
+            console.warn("Placement error:", e);
+        }
+    }, [modelScale, modelHeight, modelRotationY]);
+
+    const resetPlacement = () => {
+        setModelScale(1.0);
+        setModelHeight(0);
+        setModelRotationY(0);
+    };
+
+    const rotateModel = () => {
+        setModelRotationY(p => (p + 90) % 360);
+    };
+
 
     // 4. RENDER UI
     return (
@@ -297,8 +333,119 @@ const ARView = ({ models, initialCamera, onExit }) => {
                     </div>
                 </div>
 
-                {/* BOTTOM CONTROLS - EMPTY FOR NOW */}
+                {/* iOS ENABLE BUTTON */}
                 <div className="ar-bottom-controls">
+                    {permStatus === 'pending_ios' && (
+                        <button
+                            className="ar-btn ar-btn-primary"
+                            onClick={async () => {
+                                try {
+                                    const response = await DeviceOrientationEvent.requestPermission();
+                                    if (response === 'granted') {
+                                        setPermStatus('active');
+                                        if (viewerRef.current) {
+                                            const ext = viewerRef.current.getExtension('DeviceOrientationExtension');
+                                            if (ext) ext.activate();
+                                        }
+                                    } else {
+                                        alert("Permission Denied (iOS). Please reset site permissions.");
+                                    }
+                                } catch (e) {
+                                    console.error(e);
+                                    alert("Error requesting permission: " + e.message);
+                                }
+                            }}
+                        >
+                            Activar AR (Permitir Movimiento)
+                        </button>
+                    )}
+
+                    {/* PLACEMENT CONTROLS PANEL */}
+                    <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                        background: 'rgba(0,0,0,0.7)',
+                        padding: '15px',
+                        borderRadius: '15px',
+                        backdropFilter: 'blur(10px)',
+                        minWidth: '280px',
+                        maxWidth: '90vw'
+                    }}>
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '5px'
+                        }}>
+                            <span style={{ color: '#4ade80', fontWeight: 'bold', fontSize: '14px' }}>🎯 Ajustes del Modelo</span>
+                            <button
+                                className="ar-btn"
+                                onClick={resetPlacement}
+                                style={{
+                                    padding: '5px 12px',
+                                    fontSize: '12px',
+                                    background: '#f97316'
+                                }}
+                            >
+                                ↻ Reset
+                            </button>
+                        </div>
+
+                        {/* SCALE SLIDER */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ color: 'white', fontSize: '12px', minWidth: '60px', fontWeight: 'bold' }}>Escala:</span>
+                            <input
+                                type="range"
+                                min="0.1"
+                                max="3"
+                                step="0.1"
+                                value={modelScale}
+                                onChange={(e) => setModelScale(parseFloat(e.target.value))}
+                                style={{ flex: 1, cursor: 'pointer' }}
+                            />
+                            <span style={{ color: 'white', fontSize: '12px', minWidth: '45px' }}>
+                                {Math.round(modelScale * 100)}%
+                            </span>
+                        </div>
+
+                        {/* HEIGHT SLIDER */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ color: 'white', fontSize: '12px', minWidth: '60px', fontWeight: 'bold' }}>Altura:</span>
+                            <input
+                                type="range"
+                                min="-50"
+                                max="50"
+                                step="1"
+                                value={modelHeight}
+                                onChange={(e) => setModelHeight(parseFloat(e.target.value))}
+                                style={{ flex: 1, cursor: 'pointer' }}
+                            />
+                            <span style={{ color: 'white', fontSize: '12px', minWidth: '45px' }}>
+                                {modelHeight > 0 ? '+' : ''}{modelHeight}m
+                            </span>
+                        </div>
+
+                        {/* ROTATION BUTTON */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ color: 'white', fontSize: '12px', minWidth: '60px', fontWeight: 'bold' }}>Rotación:</span>
+                            <button
+                                className="ar-btn"
+                                onClick={rotateModel}
+                                style={{
+                                    flex: 1,
+                                    padding: '10px',
+                                    background: '#3aa0ff',
+                                    fontSize: '13px'
+                                }}
+                            >
+                                🔄 Girar 90°
+                            </button>
+                            <span style={{ color: 'white', fontSize: '12px', minWidth: '45px' }}>
+                                {modelRotationY}°
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
