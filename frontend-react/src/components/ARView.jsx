@@ -105,15 +105,39 @@ const ARView = ({ models, initialCamera, onExit }) => {
         Autodesk.Viewing.Initializer(options, () => {
             if (!viewerDivRef.current) return;
 
-            // CONFIGURATION FOR TRANSPARENCY
+            // CONFIGURATION FOR TRANSPARENCY - REMOVE GYROSCOPE TO AVOID CONFLICTS
             const config = {
-                extensions: ['DeviceOrientationExtension'], // Load our custom gyro logic
-                canvasConfig: { alpha: true, premultipliedAlpha: false }
+                extensions: [], // NO extensions - pure AR
+                canvasConfig: {
+                    alpha: true,
+                    premultipliedAlpha: false,
+                    preserveDrawingBuffer: true // CRITICAL
+                }
             };
 
             const viewer = new Autodesk.Viewing.GuiViewer3D(viewerDivRef.current, config);
             viewer.start();
             viewerRef.current = viewer;
+
+            // CRITICAL: DISABLE AUTOCLEAR TO PREVENT BACKGROUND REPAINT
+            viewer.addEventListener(Autodesk.Viewing.VIEWER_INITIALIZED, () => {
+                const renderer = viewer.impl.glrenderer ? viewer.impl.glrenderer() : viewer.impl.renderer();
+                if (renderer) {
+                    console.log("[AR] Disabling autoClear...");
+                    renderer.autoClear = false;
+                    renderer.autoClearColor = false;
+                    renderer.autoClearDepth = true; // Keep depth clearing
+                    renderer.autoClearStencil = false;
+
+                    renderer.setClearColor(0x000000, 0);
+                    if (renderer.setClearAlpha) renderer.setClearAlpha(0);
+
+                    const gl = renderer.context;
+                    if (gl) {
+                        gl.clearColor(0, 0, 0, 0);
+                    }
+                }
+            });
 
             // Force transparency immediately AND continuously
             const makeTransparent = () => {
@@ -273,32 +297,8 @@ const ARView = ({ models, initialCamera, onExit }) => {
                     </div>
                 </div>
 
-                {/* iOS ENABLE BUTTON */}
+                {/* BOTTOM CONTROLS - EMPTY FOR NOW */}
                 <div className="ar-bottom-controls">
-                    {permStatus === 'pending_ios' && (
-                        <button
-                            className="ar-btn ar-btn-primary"
-                            onClick={async () => {
-                                try {
-                                    const response = await DeviceOrientationEvent.requestPermission();
-                                    if (response === 'granted') {
-                                        setPermStatus('active');
-                                        if (viewerRef.current) {
-                                            const ext = viewerRef.current.getExtension('DeviceOrientationExtension');
-                                            if (ext) ext.activate();
-                                        }
-                                    } else {
-                                        alert("Permission Denied (iOS). Please reset site permissions.");
-                                    }
-                                } catch (e) {
-                                    console.error(e);
-                                    alert("Error requesting permission: " + e.message);
-                                }
-                            }}
-                        >
-                            Activar AR (Permitir Movimiento)
-                        </button>
-                    )}
                 </div>
             </div>
         </div>
