@@ -297,23 +297,35 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
 
 
 
-        // --- DIRECT APPLY (Sync Navigation) ---
+        // --- DIRECT APPLY V22 (SLERP SMOOTH - WHITE) ---
+        // Filters out sensor noise/drift (the "pull") using Spherical Interpolation.
+
         if (this.viewer.navigation) {
             const THREE = window.THREE || Autodesk.Viewing.Private.THREE;
+
+            // Initialize smoothing quaternion if needed
+            if (!this.currentSmoothedQuaternion) {
+                this.currentSmoothedQuaternion = this.viewer.impl.camera.quaternion.clone();
+            }
+
+            // SLERP FACTOR: 0.1 (Very smooth/slow) to 1.0 (Instant)
+            // 0.2 is a good balance for AR feel to hide jitter
+            const smoothFactor = 0.2;
+
+            this.currentSmoothedQuaternion.slerp(this.finalQuaternion, smoothFactor);
 
             // 1. Get current position
             const pos = this.viewer.navigation.getPosition();
 
-            // 2. Calculate new Forward and Up from Quaternion
-            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.finalQuaternion);
-            const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.finalQuaternion);
+            // 2. Calculate new Forward and Up from SMOOTHED Quaternion
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.currentSmoothedQuaternion);
+            const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.currentSmoothedQuaternion);
 
-            // 3. Project new Target using STORED DISTANCE (Fix "Zoom" issue)
-            // Use 100 units if calibration failed, or the real distance
+            // 3. Project new Target using STORED DISTANCE
             const dist = this.initialDistance || 100.0;
             const target = pos.clone().add(forward.multiplyScalar(dist));
 
-            // 4. Update View (Position stays same, Target & Up change)
+            // 4. Update View
             this.viewer.navigation.setView(pos, target);
             this.viewer.navigation.setCameraUpVector(up);
 
@@ -329,8 +341,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:yellow;font-size:16px;">DEBUG MODE: V21 (ZENITH ROBUST)</div>
-                <b>QUATERNION TARE (NO GIMBAL LOCK)</b><br/>
+                <div style="color:white;font-size:16px;">DEBUG MODE: V22 (SLERP SMOOTH)</div>
+                <b>ZENITH ROBUST + NOISE FILTER</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
                 Dist: ${dist}<br/>
