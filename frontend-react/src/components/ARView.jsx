@@ -11,12 +11,7 @@ const ARView = ({ models, initialCamera, onExit }) => {
     const viewerRef = useRef(null);
     const videoRef = useRef(null);
     const [permStatus, setPermStatus] = useState("init");
-    const [modelOpacity, setModelOpacity] = useState(0.7); // Control model transparency (0.0 = invisible, 1.0 = solid)
-
-    // PLACEMENT CONTROLS
-    const [modelScale, setModelScale] = useState(1.0); // 0.1 to 3.0
-    const [modelHeight, setModelHeight] = useState(0); // -50 to +50 meters
-    const [modelRotationY, setModelRotationY] = useState(0); // Degrees (0, 90, 180, 270)
+    const [modelOpacity, setModelOpacity] = useState(0.8); // Control model transparency (0.0 = invisible, 1.0 = solid)
 
     // 1. INITIALIZE CAMERA FEED & CHECK AR SUPPORT
     useEffect(() => {
@@ -235,80 +230,7 @@ const ARView = ({ models, initialCamera, onExit }) => {
     }, [modelOpacity]);
 
 
-    // 4. APPLY PLACEMENT TRANSFORMATIONS (Scale, Height, Rotation)
-    useEffect(() => {
-        if (!viewerRef.current || !viewerRef.current.impl) return;
-
-        const viewer = viewerRef.current;
-
-        try {
-            // Store original camera if not stored
-            if (!viewer._arOriginalCamera && viewer.navigation) {
-                const cam = viewer.navigation.getCamera();
-                viewer._arOriginalCamera = {
-                    position: cam.position.clone(),
-                    target: cam.target.clone(),
-                    up: cam.up.clone()
-                };
-            }
-
-            // Apply scale by adjusting camera distance
-            const originalCam = viewer._arOriginalCamera;
-            if (originalCam) {
-                const direction = new THREE.Vector3().subVectors(originalCam.position, originalCam.target);
-
-                // Scale: move camera closer/farther (inverse of scale)
-                const scaledDistance = direction.length() / modelScale;
-                direction.normalize().multiplyScalar(scaledDistance);
-
-                // Rotation: rotate the direction vector around Y axis
-                const rotMatrix = new THREE.Matrix4().makeRotationY(THREE.MathUtils.degToRad(modelRotationY));
-                direction.applyMatrix4(rotMatrix);
-
-                // Height: offset target vertically
-                const newTarget = originalCam.target.clone();
-                newTarget.y += modelHeight;
-
-                const newPosition = new THREE.Vector3().addVectors(newTarget, direction);
-
-                viewer.navigation.setView(newPosition, newTarget);
-                viewer.navigation.setCameraUpVector(originalCam.up);
-            }
-
-            // CRITICAL: Force transparency after transformation
-            const makeTransparent = () => {
-                if (!viewer || !viewer.impl) return;
-                viewer.container.style.background = 'transparent';
-                viewer.container.style.backgroundColor = 'transparent';
-                const renderer = viewer.impl.glrenderer ? viewer.impl.glrenderer() : viewer.impl.renderer();
-                if (renderer) {
-                    renderer.setClearColor(0x000000, 0);
-                    if (renderer.setClearAlpha) renderer.setClearAlpha(0);
-                    const gl = renderer.context;
-                    if (gl) gl.clearColor(0, 0, 0, 0);
-                }
-                viewer.impl.invalidate(true, true, true);
-            };
-
-            makeTransparent();
-
-        } catch (err) {
-            console.warn("[AR] Transform error:", err);
-        }
-    }, [modelScale, modelHeight, modelRotationY]);
-
-    // Helper functions
-    const rotateModel = () => {
-        setModelRotationY(prev => (prev + 90) % 360);
-    };
-
-    const resetPlacement = () => {
-        setModelScale(1.0);
-        setModelHeight(0);
-        setModelRotationY(0);
-    };
-
-    // 5. RENDER UI
+    // 4. RENDER UI
     return (
         <div className="ar-view-container">
             {/* LAYER 0: Camera */}
@@ -377,93 +299,6 @@ const ARView = ({ models, initialCamera, onExit }) => {
                             Activar AR (Permitir Movimiento)
                         </button>
                     )}
-
-                    {/* PLACEMENT CONTROLS PANEL */}
-                    <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '10px',
-                        background: 'rgba(0,0,0,0.7)',
-                        padding: '15px',
-                        borderRadius: '15px',
-                        backdropFilter: 'blur(10px)',
-                        minWidth: '280px',
-                        maxWidth: '90vw'
-                    }}>
-                        <div style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginBottom: '5px'
-                        }}>
-                            <span style={{ color: '#4ade80', fontWeight: 'bold', fontSize: '14px' }}>🎯 Ajustes del Modelo</span>
-                            <button
-                                className="ar-btn"
-                                onClick={resetPlacement}
-                                style={{
-                                    padding: '5px 12px',
-                                    fontSize: '12px',
-                                    background: '#f97316'
-                                }}
-                            >
-                                ↻ Reset
-                            </button>
-                        </div>
-
-                        {/* SCALE SLIDER */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span style={{ color: 'white', fontSize: '12px', minWidth: '60px', fontWeight: 'bold' }}>Escala:</span>
-                            <input
-                                type="range"
-                                min="0.1"
-                                max="3"
-                                step="0.1"
-                                value={modelScale}
-                                onChange={(e) => setModelScale(parseFloat(e.target.value))}
-                                style={{ flex: 1, cursor: 'pointer' }}
-                            />
-                            <span style={{ color: 'white', fontSize: '12px', minWidth: '45px' }}>
-                                {Math.round(modelScale * 100)}%
-                            </span>
-                        </div>
-
-                        {/* HEIGHT SLIDER */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span style={{ color: 'white', fontSize: '12px', minWidth: '60px', fontWeight: 'bold' }}>Altura:</span>
-                            <input
-                                type="range"
-                                min="-50"
-                                max="50"
-                                step="1"
-                                value={modelHeight}
-                                onChange={(e) => setModelHeight(parseFloat(e.target.value))}
-                                style={{ flex: 1, cursor: 'pointer' }}
-                            />
-                            <span style={{ color: 'white', fontSize: '12px', minWidth: '45px' }}>
-                                {modelHeight > 0 ? '+' : ''}{modelHeight}m
-                            </span>
-                        </div>
-
-                        {/* ROTATION BUTTON */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span style={{ color: 'white', fontSize: '12px', minWidth: '60px', fontWeight: 'bold' }}>Rotación:</span>
-                            <button
-                                className="ar-btn"
-                                onClick={rotateModel}
-                                style={{
-                                    flex: 1,
-                                    padding: '10px',
-                                    background: '#3aa0ff',
-                                    fontSize: '13px'
-                                }}
-                            >
-                                🔄 Girar 90°
-                            </button>
-                            <span style={{ color: 'white', fontSize: '12px', minWidth: '45px' }}>
-                                {modelRotationY}°
-                            </span>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
