@@ -219,39 +219,108 @@ const ARView = ({ models, initialCamera, onExit }) => {
         }
     }, [modelOpacity]);
 
+    const [isPositioning, setIsPositioning] = useState(false);
+
     // 4. APPLY PLACEMENT (MODEL TRANSFORM)
-    // This moves the MODEL, leaving the Camera (Gyro) free.
+    // Runs continously if isPositioning is true to "follow" the reticle
     useEffect(() => {
         if (!viewerRef.current) return;
+
+        let interval;
+        if (isPositioning) {
+            interval = setInterval(() => {
+                const viewer = viewerRef.current;
+                if (!viewer.navigation) return;
+
+                // 1. Get Camera Info
+                const cam = viewer.navigation.getCamera();
+                const threeCam = cam; // Autodesk camera is a THREE.Camera
+
+                // 2. Define Virtual Floor (at -1.6m relative to camera)
+                // We assume camera is at (0,0,0) locally, so floor is at Y = -1.6
+                // But Autodesk camera moves. 
+                // Using Raycaster:
+
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), threeCam); // Center of screen
+
+                // Plane at Y = modelHeight (default -1.6 relative to camera eye)
+                // Actually, let's assume world floor is at Y = modelHeight
+                // And we intersect it.
+
+                const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -modelHeight);
+                const target = new THREE.Vector3();
+                const intersection = raycaster.ray.intersectPlane(plane, target);
+
+                if (intersection) {
+                    // Update Model Translation ONLY (keep scale/rotation)
+                    const models = viewer.impl.modelQueue().getModels();
+                    models.forEach(m => {
+                        const matrix = new THREE.Matrix4();
+                        matrix.makeScale(modelScale, modelScale, modelScale);
+
+                        const rotMatrix = new THREE.Matrix4();
+                        rotMatrix.makeRotationY(THREE.MathUtils.degToRad(modelRotationY));
+                        matrix.multiply(rotMatrix);
+
+                        const transMatrix = new THREE.Matrix4();
+                        // Move to intersection point
+                        transMatrix.setPosition(intersection);
+
+                        // Combine: Scale -> Rotate -> Translate
+                        // Correct order for multiply: Translate * Rotate * Scale
+                        // But m.setPlacementTransform expects the final matrix
+
+                        // Let's decompose current, or just rebuild:
+                        const finalM = new THREE.Matrix4();
+                        finalM.makeTranslation(intersection.x, intersection.y, intersection.z);
+                        finalM.multiply(rotMatrix);
+                        finalM.scale(new THREE.Vector3(modelScale, modelScale, modelScale));
+
+                        m.setPlacementTransform(finalM);
+                    });
+                    viewer.impl.invalidate(true, true, true);
+                }
+            }, 50); // High refresh rate for smoothness
+        } else {
+            // Just apply static transforms (Scale/Rot/Height) from state
+            // This is handled by the other useEffect below/merged
+            applyStaticTransform();
+        }
+
+        return () => clearfix(interval);
+    }, [isPositioning, modelScale, modelRotationY, modelHeight]);
+
+    // Helper to apply transform when NOT in positioning mode (manual sliders)
+    const applyStaticTransform = () => {
+        if (!viewerRef.current) return;
         const viewer = viewerRef.current;
-
         const models = viewer.impl.modelQueue().getModels();
-        if (!models || models.length === 0) return;
 
-        // Create Transform Matrix
-        const matrix = new THREE.Matrix4();
-
-        // 1. Scale
-        matrix.makeScale(modelScale, modelScale, modelScale);
-
-        // 2. Rotate (around Y)
-        const rotMatrix = new THREE.Matrix4();
-        rotMatrix.makeRotationY(THREE.MathUtils.degToRad(modelRotationY));
-        matrix.multiply(rotMatrix);
-
-        // 3. Translate (Height)
-        const transMatrix = new THREE.Matrix4();
-        transMatrix.makeTranslation(0, modelHeight, 0);
-        matrix.multiply(transMatrix);
-
-        // Apply to ALL models
         models.forEach(m => {
-            m.setPlacementTransform(matrix);
+            // Here modelHeight works as absolute Y
+            const finalM = new THREE.Matrix4();
+            finalM.makeTranslation(0, modelHeight, 0); // Default to center 0,H,0
+
+            const rotMatrix = new THREE.Matrix4();
+            rotMatrix.makeRotationY(THREE.MathUtils.degToRad(modelRotationY));
+            finalM.multiply(rotMatrix);
+
+            finalM.scale(new THREE.Vector3(modelScale, modelScale, modelScale));
+
+            m.setPlacementTransform(finalM);
         });
-
         viewer.impl.invalidate(true, true, true);
+    };
 
-    }, [modelScale, modelHeight, modelRotationY]);
+    // Trigger static transform when sliders change (and not positioning)
+    useEffect(() => {
+        if (!isPositioning) {
+            applyStaticTransform();
+        }
+    }, [modelScale, modelRotationY, modelHeight, isPositioning]);
+
+    function clearfix(i) { if (i) clearInterval(i); }
 
     const resetPlacement = () => {
         setModelScale(1.0);
@@ -262,7 +331,6 @@ const ARView = ({ models, initialCamera, onExit }) => {
     const rotateModel = () => {
         setModelRotationY(p => (p + 90) % 360);
     };
-
 
     // 4. RENDER UI
     return (
@@ -310,8 +378,10 @@ const ARView = ({ models, initialCamera, onExit }) => {
                 {/* RETICLE (Aiming Point) */}
                 <div className="ar-reticle" />
 
-                {/* iOS ENABLE BUTTON */}
+                {/* BOTTOM CONTROLS */}
                 <div className="ar-bottom-controls">
+
+                    {/* iOS Permission Button */}
                     {permStatus === 'pending_ios' && (
                         <button
                             className="ar-btn ar-btn-primary"
@@ -353,19 +423,39 @@ const ARView = ({ models, initialCamera, onExit }) => {
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
-                            marginBottom: '5px'
+                            marginBottom: '10px'
                         }}>
                             <span style={{ color: '#4ade80', fontWeight: 'bold', fontSize: '14px' }}>🎯 Ajustes del Modelo</span>
+
+                            {/* MODE TOGGLE */}
                             <button
                                 className="ar-btn"
-                                onClick={resetPlacement}
+                                onClick={() => setIsPositioning(!isPositioning)}
                                 style={{
-                                    padding: '5px 12px',
+                                    padding: '6px 14px',
                                     fontSize: '12px',
-                                    background: '#f97316'
+                                    background: isPositioning ? '#ef4444' : '#8b5cf6',
+                                    fontWeight: 'bold',
+                                    boxShadow: isPositioning ? '0 0 10px #ef4444' : 'none'
                                 }}
                             >
-                                ↻ Reset
+                                {isPositioning ? "🚫 FIJAR" : "📍 Mover con Mira"}
+                            </button>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '5px' }}>
+                            <button
+                                onClick={resetPlacement}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#aaa',
+                                    fontSize: '11px',
+                                    cursor: 'pointer',
+                                    textDecoration: 'underline'
+                                }}
+                            >
+                                Resetear Valores
                             </button>
                         </div>
 
