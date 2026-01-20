@@ -65,13 +65,16 @@ const ARView = ({ models, onExit }) => {
         if (!models || models.length === 0) return;
 
         // AUTH LOGIC (Static vs Fetch)
+        // Use Render backend URL for Capacitor (native app)
+        const BACKEND_URL = 'https://visor-ecd-backend.onrender.com';
+
         const getAccessToken = (onSuccess) => {
             if (STATIC_TOKEN && STATIC_TOKEN.length > 10) {
                 console.log("Using STATIC_TOKEN");
                 onSuccess(STATIC_TOKEN, 3600);
             } else {
-                // Fallback to fetch if Static is empty
-                fetch('/api/token')
+                // Fallback to fetch using full URL
+                fetch(`${BACKEND_URL}/api/token`)
                     .then(res => {
                         if (!res.ok) throw new Error("Backend Token Fetch Failed");
                         return res.json();
