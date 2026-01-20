@@ -517,6 +517,7 @@ function App() {
   const [minimapActive, setMinimapActive] = useState(false);
   const [vrActive, setVrActive] = useState(false);
   const [arModeActive, setArModeActive] = useState(false);
+  const [arInitialCamera, setArInitialCamera] = useState(null); // NEW: Store viewer camera state for AR
   // Duplicate removed
   const [sheets, setSheets] = useState([]); // To store 2D sheets
   const [activeSheet, setActiveSheet] = useState(null);
@@ -1933,7 +1934,31 @@ function App() {
               label: 'AR Mode',
               icon: <ARIcon />,
               active: arModeActive,
-              onClick: () => setArModeActive(!arModeActive)
+              onClick: () => {
+                if (!arModeActive) {
+                  // BEFORE activating AR, request current camera state from Viewer
+                  window.dispatchEvent(new CustomEvent('request-camera-state-for-ar'));
+                  // The Viewer will respond via 'camera-state-for-ar' event
+                  // We'll listen for it and then activate AR
+                  const handleCameraState = (e) => {
+                    setArInitialCamera(e.detail);
+                    setArModeActive(true);
+                    window.removeEventListener('camera-state-for-ar', handleCameraState);
+                  };
+                  window.addEventListener('camera-state-for-ar', handleCameraState);
+                  // Fallback: if no response in 500ms, activate anyway
+                  setTimeout(() => {
+                    window.removeEventListener('camera-state-for-ar', handleCameraState);
+                    if (!arModeActive) {
+                      setArModeActive(true);
+                    }
+                  }, 500);
+                } else {
+                  // Deactivate AR
+                  setArModeActive(false);
+                  setArInitialCamera(null);
+                }
+              }
             }
           ]}
         />
@@ -2561,7 +2586,11 @@ function App() {
         {arModeActive && (
           <ARView
             models={models}
-            onExit={() => setArModeActive(false)}
+            initialCamera={arInitialCamera}
+            onExit={() => {
+              setArModeActive(false);
+              setArInitialCamera(null);
+            }}
           />
         )}
 

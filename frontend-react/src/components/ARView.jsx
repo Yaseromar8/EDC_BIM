@@ -6,7 +6,7 @@ import '../aps/extensions/DeviceOrientationExtension'; // Make sure this path is
 // PASTE YOUR VALID TOKEN HERE IF BACKEND IS DOWN
 const STATIC_TOKEN = "";
 
-const ARView = ({ models, onExit }) => {
+const ARView = ({ models, initialCamera, onExit }) => {
     const viewerDivRef = useRef(null);
     const viewerRef = useRef(null);
     const videoRef = useRef(null);
@@ -146,12 +146,27 @@ const ARView = ({ models, onExit }) => {
 
                         // When ALL models are loaded
                         if (loadedCount === totalModels) {
-                            console.log("[AR] All models loaded. Fitting to view...");
+                            console.log("[AR] All models loaded.");
 
-                            // Center the view on all models
+                            // Apply initial camera or fit to view
                             setTimeout(() => {
-                                viewer.fitToView();
-                                makeTransparent(); // Ensure transparency after fit
+                                if (initialCamera && initialCamera.position && initialCamera.target) {
+                                    console.log("[AR] Applying initial camera from main viewer:", initialCamera);
+                                    viewer.navigation.setView(
+                                        initialCamera.position,
+                                        initialCamera.target
+                                    );
+                                    if (initialCamera.up) {
+                                        viewer.navigation.setCameraUpVector(initialCamera.up);
+                                    }
+                                    if (initialCamera.fov) {
+                                        viewer.navigation.setVerticalFov(initialCamera.fov, false);
+                                    }
+                                } else {
+                                    console.log("[AR] No initial camera, fitting to view...");
+                                    viewer.fitToView();
+                                }
+                                makeTransparent(); // Ensure transparency after camera setup
                             }, 500);
 
                             // Re-apply transparency on viewer events

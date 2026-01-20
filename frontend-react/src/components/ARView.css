@@ -38,20 +38,32 @@
     /* Force transparency */
 }
 
-/* Force Autodesk Internals to be transparent */
+
+/* Force Autodesk Internals to be transparent  - AGGRESSIVE */
+.ar-viewer-canvas,
 .ar-viewer-canvas .adsk-viewing-viewer,
-.ar-viewer-canvas canvas {
+.ar-viewer-canvas canvas,
+.ar-viewer-canvas .adsk-canvas-wrapper {
     background: transparent !important;
     background-color: transparent !important;
+}
+
+/* CRITICAL: Force canvas to not paint background */
+.ar-viewer-canvas canvas {
+    mix-blend-mode: screen !important;
+    opacity: 0.95 !important;
 }
 
 /* Hide Autodesk UI clutter in AR Mode */
 .ar-viewer-canvas .adsk-toolbar,
 .ar-viewer-canvas .viewcube,
 .ar-viewer-canvas .viewcubeWrapper,
-.ar-viewer-canvas .docking-panel {
+.ar-viewer-canvas .docking-panel,
+.ar-viewer-canvas .progressbar {
     display: none !important;
+    visibility: hidden !important;
 }
+
 
 /* LAYER 2 (TOP): The UI Overlay */
 .ar-ui-overlay {
