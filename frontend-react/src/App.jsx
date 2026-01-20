@@ -2557,6 +2557,14 @@ function App() {
           }}
         />
 
+        {/* AR VIEW OVERLAY */}
+        {arModeActive && (
+          <ARView
+            models={models}
+            onExit={() => setArModeActive(false)}
+          />
+        )}
+
       </div >
     </div >
   );
