@@ -241,32 +241,44 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         const MathUtils = THREE.MathUtils || THREE.Math;
 
         // --- 1. Compute Device Quaternion from Sensors ---
-        // --- MAPPING V20 (HYBRID GEO-COMPASS - PINK) ---
-        // YAW = ABSOLUTE (Magnetic North)
-        // PITCH = RELATIVE (Tare/Calibrated Horizon)
-        // Solves "Looking Down" issues by letting user define what is "Vertical".
+        // --- MAPPING V21 (ZENITH ROBUST - YELLOW) ---
+        // Uses V17 Canonical Math (Robust Quaternion) + V20 Tare Logic.
+        // Prevents Gimbal Lock at 90 degrees up.
 
-        // 1. Data Prep
-        const alphaRad = event.alpha ? MathUtils.degToRad(event.alpha) : 0;
-        const betaRad = event.beta ? MathUtils.degToRad(event.beta) : 0;
-        const gammaRad = event.gamma ? MathUtils.degToRad(event.gamma) : 0;
+        const alpha = event.alpha ? MathUtils.degToRad(event.alpha) : 0;
+        const beta = event.beta ? MathUtils.degToRad(event.beta) : 0;
+        const gamma = event.gamma ? MathUtils.degToRad(event.gamma) : 0;
+        const orient = this.screenOrientation ? MathUtils.degToRad(this.screenOrientation) : 0;
 
-        // 2. Calibration (Position & Pitch Tare)
+        const zee = new THREE.Vector3(0, 0, 1);
+        const euler = new THREE.Euler();
+        const q0 = new THREE.Quaternion();
+        const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // - PI/2 around X
+
+        // 1. Build Standard Device Quaternion (Sensor Space)
+        euler.set(beta, alpha, -gamma, 'YXZ');
+        const sensorQ = new THREE.Quaternion();
+        sensorQ.setFromEuler(euler);
+
+        // 2. Adjust for Camera Frame (-90 around X)
+        sensorQ.multiply(q1);
+
+        // 3. Adjust for Screen Orientation
+        sensorQ.multiply(q0.setFromAxisAngle(zee, -orient));
+
+        // 4. Calibration (Pitch Tare & Project North)
         if (!this.isCalibrated) {
-            // Pitch Calibration: Capture starting angles
-            this.startBeta = betaRad;
-            this.startGamma = gammaRad;
+            // We need to know the offset between Device Attitude and Camera Attitude
+            // We calculate the delta quaternion that transforms DeviceQ to CameraQ *at this moment*.
+            // Delta = CameraQ * Inverse(DeviceQ)
 
-            // Capture Camera Pitch (Initial Horizon)
-            const camQ = this.viewer.impl.camera.quaternion.clone();
-            // Assuming Z-Up Viewer, Pitch is rotation around Local X.
-            // We use 'ZXY' order to isolate X.
-            const eulerZUp = new THREE.Euler().setFromQuaternion(camQ, 'ZXY');
-            this.startCamPitch = eulerZUp.x; // Keep current View Pitch
+            const currentCamQ = this.viewer.impl.camera.quaternion.clone();
+            const inverseSensorQ = sensorQ.clone().inverse();
 
-            // Project North Offset (Optional - can be set via UI later)
-            // For now, assume 0 (Alpha 0 = North)
-            this.projectNorthOffset = 0;
+            // This 'alignmentQ' captures the difference in BOTH Yaw (North) and Pitch (Horizon).
+            // It effectively "Tares" the device to the current view.
+            this.alignmentQ = new THREE.Quaternion();
+            this.alignmentQ.multiplyQuaternions(currentCamQ, inverseSensorQ);
 
             // Distance Setup
             const pos = this.viewer.navigation.getPosition();
@@ -277,52 +289,10 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             this.finalQuaternion = new THREE.Quaternion();
         }
 
-        // 3. Map Sensors to Camera Axes
-        // YAW is ABSOLUTE (Compass)
-        // PITCH is RELATIVE (Input - Start)
-
-        let targetYaw = 0;
-        let targetPitch = 0;
-
-        // Check Orientation
-        const isLandscape = Math.abs(this.screenOrientation) === 90;
-
-        if (isLandscape) {
-            // LANDSCAPE:
-            // Yaw = Alpha (Direct Compass)
-            targetYaw = alphaRad + this.projectNorthOffset;
-
-            // Pitch = Gamma Delta
-            // Calculate change from start
-            const dGamma = gammaRad - this.startGamma;
-
-            // Direction check based on orientation side
-            const sign = (this.screenOrientation === 90) ? -1 : 1;
-
-            // New Pitch = StartCamPitch + (Delta * Sign)
-            targetPitch = this.startCamPitch + (dGamma * sign);
-
-        } else {
-            // PORTRAIT:
-            // Yaw = Alpha
-            targetYaw = alphaRad + this.projectNorthOffset;
-
-            // Pitch = Beta Delta
-            const dBeta = betaRad - this.startBeta;
-
-            // New Pitch = StartCamPitch + Delta
-            targetPitch = this.startCamPitch + dBeta;
-        }
-
-        // 4. Reconstruct Camera Quaternion
-        // Apply Absolute Yaw around World Z
-        const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), targetYaw);
-
-        // Apply Relative Pitch around Local X
-        const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), targetPitch);
-
-        // Final = Yaw * Pitch
-        this.finalQuaternion.multiplyQuaternions(qYaw, qPitch);
+        // 5. Apply Alignment
+        // Final = Alignment * CurrentSensor
+        // This is pure quaternion multiplication, so it handles all axes (including Zenith) correctly without gimbal lock.
+        this.finalQuaternion.multiplyQuaternions(this.alignmentQ, sensorQ);
 
 
 
@@ -359,8 +329,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:hotpink;font-size:16px;">DEBUG MODE: V20 (HYBRID GEO)</div>
-                <b>ABS YAW (NORTH) + REL PITCH</b><br/>
+                <div style="color:yellow;font-size:16px;">DEBUG MODE: V21 (ZENITH ROBUST)</div>
+                <b>QUATERNION TARE (NO GIMBAL LOCK)</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
                 Dist: ${dist}<br/>
