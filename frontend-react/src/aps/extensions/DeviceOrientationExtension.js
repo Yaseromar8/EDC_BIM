@@ -241,23 +241,31 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         const MathUtils = THREE.MathUtils || THREE.Math;
 
         // --- 1. Compute Device Quaternion from Sensors ---
-        // --- MAPPING V19 (GEO-COMPASS ABSOLUTE - CYAN) ---
-        // Uses ABSOLUTE sensor values.
-        // YAW = Magnetic North (Alpha 0).
-        // PITCH = Gravity (Vertical device = Horizon).
-        // Ideal for Georeferenced models.
+        // --- MAPPING V20 (HYBRID GEO-COMPASS - PINK) ---
+        // YAW = ABSOLUTE (Magnetic North)
+        // PITCH = RELATIVE (Tare/Calibrated Horizon)
+        // Solves "Looking Down" issues by letting user define what is "Vertical".
 
-        // 1. Data Prep (Absolutes)
-        const alphaRad = event.alpha ? MathUtils.degToRad(event.alpha) : 0; // 0 = North (usually)
+        // 1. Data Prep
+        const alphaRad = event.alpha ? MathUtils.degToRad(event.alpha) : 0;
         const betaRad = event.beta ? MathUtils.degToRad(event.beta) : 0;
         const gammaRad = event.gamma ? MathUtils.degToRad(event.gamma) : 0;
 
-        // 2. Calibration (Position Only)
-        // We DO NOT tare the angles in V19. We want Absolute North.
+        // 2. Calibration (Position & Pitch Tare)
         if (!this.isCalibrated) {
-            // Check if we need to handle "Project North" offset.
-            // For now, we assume Model North = World North (Alpha 0).
-            // A future improvement would be to add `this.projectNorthOffset`.
+            // Pitch Calibration: Capture starting angles
+            this.startBeta = betaRad;
+            this.startGamma = gammaRad;
+
+            // Capture Camera Pitch (Initial Horizon)
+            const camQ = this.viewer.impl.camera.quaternion.clone();
+            // Assuming Z-Up Viewer, Pitch is rotation around Local X.
+            // We use 'ZXY' order to isolate X.
+            const eulerZUp = new THREE.Euler().setFromQuaternion(camQ, 'ZXY');
+            this.startCamPitch = eulerZUp.x; // Keep current View Pitch
+
+            // Project North Offset (Optional - can be set via UI later)
+            // For now, assume 0 (Alpha 0 = North)
             this.projectNorthOffset = 0;
 
             // Distance Setup
@@ -269,69 +277,51 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             this.finalQuaternion = new THREE.Quaternion();
         }
 
-        // 3. Map Sensors to Camera Axes (ABSOLUTE)
-        let absYaw = 0;
-        let absPitch = 0;
+        // 3. Map Sensors to Camera Axes
+        // YAW is ABSOLUTE (Compass)
+        // PITCH is RELATIVE (Input - Start)
+
+        let targetYaw = 0;
+        let targetPitch = 0;
 
         // Check Orientation
         const isLandscape = Math.abs(this.screenOrientation) === 90;
 
         if (isLandscape) {
-            // LANDSCAPE MAPPING (Absolute):
+            // LANDSCAPE:
+            // Yaw = Alpha (Direct Compass)
+            targetYaw = alphaRad + this.projectNorthOffset;
 
-            // YAW (Compass):
-            // Alpha increases CCW (0=N, 90=E, 180=S, 270=W) in some standards, 
-            // or 0=N, 90=W, 180=S, 270=E in W3C.
-            // APS Viewer usually expects Z-rotation.
-            // We map Alpha directly to Yaw.
-            absYaw = alphaRad + this.projectNorthOffset;
+            // Pitch = Gamma Delta
+            // Calculate change from start
+            const dGamma = gammaRad - this.startGamma;
 
-            // PITCH (Gravity):
-            // In Landscape, holding vertical means Gamma is approx -90 (or 90 depending on rotation).
-            // We want Pitch = 0 when Gamma = -90.
-            // So Pitch = Gamma - (-90 degrees).
-            // Check side
+            // Direction check based on orientation side
             const sign = (this.screenOrientation === 90) ? -1 : 1;
-            // If screen is 90 (Home button left?), Vertical might be Gamma=-90.
-            // Let's assume standard Landscape-Primary (-90).
 
-            // Formula: Pitch = Gamma + PI/2 (90 deg)
-            absPitch = (gammaRad * sign) + (Math.PI / 2);
+            // New Pitch = StartCamPitch + (Delta * Sign)
+            targetPitch = this.startCamPitch + (dGamma * sign);
 
         } else {
-            // PORTRAIT MAPPING (Absolute):
+            // PORTRAIT:
+            // Yaw = Alpha
+            targetYaw = alphaRad + this.projectNorthOffset;
 
-            // YAW
-            absYaw = alphaRad + this.projectNorthOffset;
+            // Pitch = Beta Delta
+            const dBeta = betaRad - this.startBeta;
 
-            // PITCH
-            // In Portrait, Vertical means Beta = 90.
-            // We want Pitch = 0 when Beta = 90.
-            // So Pitch = Beta - 90.
-            absPitch = betaRad - (Math.PI / 2);
+            // New Pitch = StartCamPitch + Delta
+            targetPitch = this.startCamPitch + dBeta;
         }
 
-        // 4. Invert Pitch Logic (User Preference Check)
-        // Usually looking UP (Phone tilts back) decreases Beta/Gamma?
-        // Let's test standard behavior. If inverted, swap sign.
-        // Standard: Beta 90 (Upright), Beta 180 (Face down), Beta 0 (Face Up).
-        // If I tilt back (Look Ceiling), Beta goes 90 -> 0.
-        // Camera Pitch: Needs to go Positive (Look Up) or Negative?
-        // Three.js: Positive Pitch = Look Down?? No, usually CCW around X.
-        // Let's stick to standard mapping. If inverted, user will say.
-
-        // 5. Reconstruct Camera Quaternion
+        // 4. Reconstruct Camera Quaternion
         // Apply Absolute Yaw around World Z
-        // Apply Absolute Pitch around Local X
+        const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), targetYaw);
 
-        const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), absYaw);
+        // Apply Relative Pitch around Local X
+        const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), targetPitch);
 
-        // Note: For absolute compass to feel right, we might need to invert rotation direction
-        // Compass (Alpha) moves 0->360. Camera Yaw needs to rotate accordingly.
-        // Usually Camera Yaw matches Compass.
-
-        const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), absPitch);
-
+        // Final = Yaw * Pitch
         this.finalQuaternion.multiplyQuaternions(qYaw, qPitch);
 
 
@@ -369,8 +359,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
             const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
 
             this.debugEl.innerHTML = `
-                <div style="color:cyan;font-size:16px;">DEBUG MODE: V19 (GEO-COMPASS)</div>
-                <b>ABSOLUTE YAW (NORTH) + GRAVITY</b><br/>
+                <div style="color:hotpink;font-size:16px;">DEBUG MODE: V20 (HYBRID GEO)</div>
+                <b>ABS YAW (NORTH) + REL PITCH</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
                 Dist: ${dist}<br/>
