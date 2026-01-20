@@ -143,8 +143,9 @@ const ARView = ({ models, initialCamera, onExit }) => {
 
             makeTransparent();
 
-            // Keep re-applying transparency every 500ms to prevent viewer from resetting it
-            const transparencyInterval = setInterval(makeTransparent, 500);
+
+            // Keep re-applying transparency every 100ms (more aggressive to prevent graying)
+            const transparencyInterval = setInterval(makeTransparent, 100);
 
             // Store interval ref for cleanup
             viewerRef.current.transparencyInterval = transparencyInterval;
@@ -233,37 +234,64 @@ const ARView = ({ models, initialCamera, onExit }) => {
         }
     }, [modelOpacity]);
 
+
     // 4. APPLY PLACEMENT TRANSFORMATIONS (Scale, Height, Rotation)
     useEffect(() => {
         if (!viewerRef.current || !viewerRef.current.impl) return;
 
         const viewer = viewerRef.current;
 
-        // Create transformation matrix
-        const matrix = new THREE.Matrix4();
-
-        // Apply transformations: Scale -> Rotate -> Translate
-        matrix.makeScale(modelScale, modelScale, modelScale);
-
-        const rotationMatrix = new THREE.Matrix4();
-        rotationMatrix.makeRotationY(THREE.MathUtils.degToRad(modelRotationY));
-        matrix.multiply(rotationMatrix);
-
-        const translationMatrix = new THREE.Matrix4();
-        translationMatrix.makeTranslation(0, modelHeight, 0);
-        matrix.multiply(translationMatrix);
-
-        // Apply to all loaded models
         try {
-            viewer.impl.modelQueue().getModels().forEach(model => {
-                const fragList = model.getFragmentList();
-                if (fragList) {
-                    for (let fragId = 0; fragId < fragList.fragments.length; fragId++) {
-                        fragList.updateAnimTransform(fragId, null, null, matrix);
-                    }
+            // Store original camera if not stored
+            if (!viewer._arOriginalCamera && viewer.navigation) {
+                const cam = viewer.navigation.getCamera();
+                viewer._arOriginalCamera = {
+                    position: cam.position.clone(),
+                    target: cam.target.clone(),
+                    up: cam.up.clone()
+                };
+            }
+
+            // Apply scale by adjusting camera distance
+            const originalCam = viewer._arOriginalCamera;
+            if (originalCam) {
+                const direction = new THREE.Vector3().subVectors(originalCam.position, originalCam.target);
+
+                // Scale: move camera closer/farther (inverse of scale)
+                const scaledDistance = direction.length() / modelScale;
+                direction.normalize().multiplyScalar(scaledDistance);
+
+                // Rotation: rotate the direction vector around Y axis
+                const rotMatrix = new THREE.Matrix4().makeRotationY(THREE.MathUtils.degToRad(modelRotationY));
+                direction.applyMatrix4(rotMatrix);
+
+                // Height: offset target vertically
+                const newTarget = originalCam.target.clone();
+                newTarget.y += modelHeight;
+
+                const newPosition = new THREE.Vector3().addVectors(newTarget, direction);
+
+                viewer.navigation.setView(newPosition, newTarget);
+                viewer.navigation.setCameraUpVector(originalCam.up);
+            }
+
+            // CRITICAL: Force transparency after transformation
+            const makeTransparent = () => {
+                if (!viewer || !viewer.impl) return;
+                viewer.container.style.background = 'transparent';
+                viewer.container.style.backgroundColor = 'transparent';
+                const renderer = viewer.impl.glrenderer ? viewer.impl.glrenderer() : viewer.impl.renderer();
+                if (renderer) {
+                    renderer.setClearColor(0x000000, 0);
+                    if (renderer.setClearAlpha) renderer.setClearAlpha(0);
+                    const gl = renderer.context;
+                    if (gl) gl.clearColor(0, 0, 0, 0);
                 }
-            });
-            viewer.impl.invalidate(true, true, false);
+                viewer.impl.invalidate(true, true, true);
+            };
+
+            makeTransparent();
+
         } catch (err) {
             console.warn("[AR] Transform error:", err);
         }
