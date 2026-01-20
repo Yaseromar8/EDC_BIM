@@ -1,250 +1,135 @@
 
-// DeviceOrientationExtension.js
 /* global Autodesk, THREE */
+// import { toast } from 'react-toastify'; // Removed to avoid dependency error
 
-// --- INTERNAL TOOL CLASS ---
-class GyroTool {
-    constructor(viewer, extension) {
-        this.viewer = viewer;
-        this.extension = extension;
-        this.names = ['gyro-tool'];
-        this.active = false;
-    }
-
-    getNames() { return this.names; }
-    getName() { return this.names[0]; }
-    getPriority() { return 10000; } // SUPER Priority
-
-    activate() { this.active = true; }
-    deactivate() { this.active = false; }
-
-    update() {
-        if (!this.active || !this.extension.finalQuaternion) return false;
-
-        // DIRECT CONTROL: Overwrite camera rotation
-        const camera = this.viewer.impl.camera;
-        camera.quaternion.copy(this.extension.finalQuaternion);
-        camera.updateMatrixWorld(true);
-
-        // Force Viewer Update
-        this.viewer.impl.invalidate(false, false, false);
-        return true;
-    }
-
-    // Consume all inputs to prevent conflicts
-    handleSingleClick() { return true; }
-    handleDoubleClick() { return true; }
-    handleMouseMove() { return true; }
-    handleGesture() { return true; }
-}
-
-// --- MAIN EXTENSION CLASS ---
 export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
     constructor(viewer, options) {
         super(viewer, options);
-        this.tool = new GyroTool(viewer, this);
         this.onOrientationEvent = this.onOrientationEvent.bind(this);
         this.onScreenOrientationChange = this.onScreenOrientationChange.bind(this);
-        this.toggleGyro = this.toggleGyro.bind(this);
-        this.onToolbarCreated = this.onToolbarCreated.bind(this);
-
         this.enabled = false;
-        this.button = null;
         this.debugEl = null;
 
-        // Math state
-        this.finalQuaternion = null;
-        this.deviceQuaternion = new THREE.Quaternion();
-        this.initialCameraQuaternion = new THREE.Quaternion();
-        this.initialDeviceQuaternion = new THREE.Quaternion(); // The 'Tare' or Offset
+        // State Tracking
         this.isCalibrated = false;
+        this._updateCount = 0;
 
-        // THREE reusable objects
-        this.zee = new THREE.Vector3(0, 0, 1);
-        this.euler = new THREE.Euler();
-        this.q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+        // V23 State
+        this.yawOffset = 0;
+        this.baseHeight = null;
+        this.initialDistance = 10.0;
+        this.currentSmoothedQuaternion = null;
     }
 
     load() {
-        this.viewer.toolController.registerTool(this.tool);
-        if (this.viewer.toolbar) {
-            this.createUI();
-        } else {
-            this.viewer.addEventListener(Autodesk.Viewing.TOOLBAR_CREATED_EVENT, this.onToolbarCreated);
-        }
+        console.log('DeviceOrientationExtension loaded (V23 GRAVITY FPS)');
+        this.createToolbarButton();
         return true;
     }
 
     unload() {
-        this.deactivate();
-        this.viewer.toolController.deregisterTool(this.tool);
+        this.disable();
         if (this.button) {
-            const group = this.viewer.toolbar.getControl('modelTools') || this.viewer.toolbar.getControl('navTools');
-            if (group) group.removeControl(this.button);
+            this.viewer.toolbar.getControl('modelTools').removeControl(this.button);
             this.button = null;
         }
         return true;
     }
 
-    onToolbarCreated() {
-        this.viewer.removeEventListener(Autodesk.Viewing.TOOLBAR_CREATED_EVENT, this.onToolbarCreated);
-        this.createUI();
-    }
-
-    createUI() {
-        if (this.button) return;
-
-        this.button = new Autodesk.Viewing.UI.Button('gyro-toggle-button');
-        this.button.setToolTip('Giroscopio (Look Around)');
-        this.button.setIcon('adsk-viewing-icon-eye');
-        this.button.onClick = this.toggleGyro;
+    createToolbarButton() {
+        this.button = new Autodesk.Viewing.UI.Button('toolbar-device-orientation');
+        this.button.onClick = () => {
+            this.enabled = !this.enabled;
+            if (this.enabled) {
+                this.enable();
+                this.button.addClass('active');
+            } else {
+                this.disable();
+                this.button.removeClass('active');
+            }
+        };
+        this.button.setToolTip('Giroscopio (Gravity FPS)');
+        // Use a simple icon or text
+        const icon = this.button.container.querySelector('.adsk-button-icon');
+        if (icon) {
+            icon.style.backgroundImage = 'none'; // Clear default
+            icon.innerHTML = '📱'; // Simple emoji icon
+            icon.style.fontSize = '20px';
+            icon.style.lineHeight = '24px';
+        }
 
         // Add to toolbar
-        let group = this.viewer.toolbar.getControl('modelTools');
-        if (!group) group = this.viewer.toolbar.getControl('navTools');
-        if (group) group.addControl(this.button);
-        else this.viewer.toolbar.addControl(this.button);
-    }
-
-    async toggleGyro() {
-        if (this.enabled) {
-            this.deactivate();
-            this.viewer.toolController.activateTool('orbit'); // Restore default
+        const subToolbar = this.viewer.toolbar.getControl('modelTools');
+        if (subToolbar) {
+            subToolbar.addControl(this.button);
         } else {
-            // iOS Init
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const response = await DeviceOrientationEvent.requestPermission();
-                    if (response !== 'granted') {
-                        alert("Permiso denegado.");
-                        return;
-                    }
-                } catch (e) { }
-            }
-            this.activate();
+            // If toolbar not ready, wait
+            this.viewer.addEventListener(Autodesk.Viewing.TOOLBAR_CREATED_EVENT, () => {
+                this.viewer.toolbar.getControl('modelTools').addControl(this.button);
+            });
         }
     }
 
-    activate() {
-        if (this.enabled) return true;
-        const THREE = window.THREE || Autodesk.Viewing.Private.THREE;
-        if (!THREE) return false;
-
-        // 1. Reset Calibration
+    enable() {
+        console.log('Enabling V23 Gravity FPS Control...');
         this.isCalibrated = false;
-
-        // 2. EXCLUSIVE MODE: Deactivate others
-        const tc = this.viewer.toolController;
-        tc.deactivateTool('orbit');
-        tc.deactivateTool('pan');
-        tc.deactivateTool('zoom');
-        tc.deactivateTool('bimwalk');
-
-        // 3. Activate Gyro Tool
-        tc.activateTool('gyro-tool');
-
-        // --- LOCK DEFAULT NAVIGATION ---
-        // This stops Orbit/Pan from resetting the camera every frame
-        if (this.viewer.navigation) {
-            this.viewer.navigation.setIsLocked(true);
-        }
-
-        // 4. Listeners
-        if (window.DeviceOrientationEvent) {
-            window.addEventListener('deviceorientation', this.onOrientationEvent, false);
-        }
-        window.addEventListener('orientationchange', this.onScreenOrientationChange, false);
+        this.currentSmoothedQuaternion = null;
+        window.addEventListener('deviceorientation', this.onOrientationEvent, true);
+        window.addEventListener('orientationchange', this.onScreenOrientationChange, true);
         this.screenOrientation = window.orientation || 0;
 
-        // Debug Overlay - Enhanced
+        // Setup Debug Overlay
         if (!this.debugEl) {
             this.debugEl = document.createElement('div');
-            this.debugEl.style.cssText = `
-                position: absolute;
-                bottom: 150px;
-                left: 20px;
-                color: #FF00FF; /* MAGENTA - VISUAL CONFIRMATION OF NEW VERSION */
-                background: rgba(255, 255, 255, 0.9);
-                padding: 10px;
-                font-family: monospace;
-                font-size: 14px;
-                font-weight: bold;
-                pointer-events: none;
-                z-index: 1000;
-                border-radius: 8px;
-                min-width: 200px;
-                border: 2px solid #FF00FF;
-            `;
+            this.debugEl.style.position = 'absolute';
+            this.debugEl.style.top = '10px';
+            this.debugEl.style.left = '10px';
+            this.debugEl.style.background = 'rgba(0,0,0,0.7)';
+            this.debugEl.style.color = '#fff';
+            this.debugEl.style.padding = '10px';
+            this.debugEl.style.zIndex = '9999';
+            this.debugEl.style.pointerEvents = 'none';
             this.viewer.container.appendChild(this.debugEl);
         }
         this.debugEl.style.display = 'block';
 
-        // Initial Debug State
-        const apiStatus = window.DeviceOrientationEvent ? "AVAILABLE" : "MISSING";
-        const httpsStatus = window.isSecureContext ? "SECURE" : "NOT SECURE";
-        this.debugEl.innerHTML = `
-            <b>GYRO DEBUG</b><br/>
-            API: ${apiStatus}<br/>
-            Context: ${httpsStatus}<br/>
-            Waiting for data...
-        `;
-
-        this.enabled = true;
-        this.button.setState(Autodesk.Viewing.UI.Button.State.ACTIVE);
-        return true;
+        // Notify user via console or internal hud
+        console.log('Giroscopio Activado: V23 Gravity Mode. Apunte al Frente.');
     }
 
-    deactivate() {
-        if (!this.enabled) return true;
+    disable() {
+        console.log('Disabling DeviceOrientationExtension...');
+        window.removeEventListener('deviceorientation', this.onOrientationEvent, true);
+        window.removeEventListener('orientationchange', this.onScreenOrientationChange, true);
 
-        window.removeEventListener('deviceorientation', this.onOrientationEvent, false);
-        window.removeEventListener('orientationchange', this.onScreenOrientationChange, false);
-
-        this.viewer.toolController.deactivateTool('gyro-tool');
-
-        // --- UNLOCK DEFAULT NAVIGATION ---
-        if (this.viewer.navigation) {
-            this.viewer.navigation.setIsLocked(false);
+        if (this.debugEl) {
+            this.debugEl.style.display = 'none';
         }
 
-        if (this.debugEl) this.debugEl.style.display = 'none';
-
-        this.enabled = false;
-        if (this.button) this.button.setState(Autodesk.Viewing.UI.Button.State.INACTIVE);
-        return true;
+        // Reset Camera Up to clear any roll
+        if (this.viewer.navigation) {
+            this.viewer.navigation.setCameraUpVector(new THREE.Vector3(0, 0, 1));
+        }
     }
 
     onScreenOrientationChange() {
         this.screenOrientation = window.orientation || 0;
-        this.isCalibrated = false; // Recalibrate on screen rotation
     }
 
     onOrientationEvent(event) {
         if (!this.enabled) return;
-
-        if (this.debugEl) {
-            const a = event.alpha ? Math.round(event.alpha) : 'null';
-            const b = event.beta ? Math.round(event.beta) : 'null';
-            const g = event.gamma ? Math.round(event.gamma) : 'null';
-            this.debugEl.innerHTML = `
-                <b>GYRO ACTIVE</b><br/>
-                Alpha: ${a}<br/>
-                Beta:  ${b}<br/>
-                Gamma: ${g}<br/>
-                Calibrated: ${this.isCalibrated ? 'YES' : 'NO'}
-             `;
-        }
-
-        if (event.alpha === null) return;
+        if (!event.alpha && event.alpha !== 0) return; // Need data
 
         const THREE = window.THREE || Autodesk.Viewing.Private.THREE;
         const MathUtils = THREE.MathUtils || THREE.Math;
 
-        // --- 1. Compute Device Quaternion from Sensors ---
-        // --- MAPPING V21 (ZENITH ROBUST - YELLOW) ---
-        // Uses V17 Canonical Math (Robust Quaternion) + V20 Tare Logic.
-        // Prevents Gimbal Lock at 90 degrees up.
+        // --- MAPPING V23 (GRAVITY FPS - RED) ---
+        // 1. Projects rotation onto World Z (Yaw) and Local X (Pitch).
+        // 2. Forces Camera Up Vector to always be (0,0,1) - No Roll.
+        // 3. Locks Height to 1.74m (Human Eye Level) - Optional.
+        // 4. Resolves Gimbal Lock at Nadir (Looking down).
 
+        // A. SENSOR DATA PREP (Standard V17 Logic)
         const alpha = event.alpha ? MathUtils.degToRad(event.alpha) : 0;
         const beta = event.beta ? MathUtils.degToRad(event.beta) : 0;
         const gamma = event.gamma ? MathUtils.degToRad(event.gamma) : 0;
@@ -255,101 +140,111 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         const q0 = new THREE.Quaternion();
         const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // - PI/2 around X
 
-        // 1. Build Standard Device Quaternion (Sensor Space)
+        // Order YXZ is standard for device orientation
         euler.set(beta, alpha, -gamma, 'YXZ');
-        const sensorQ = new THREE.Quaternion();
-        sensorQ.setFromEuler(euler);
+        const sensorQ = new THREE.Quaternion().setFromEuler(euler);
+        sensorQ.multiply(q1); // Transform to camera frame
+        sensorQ.multiply(q0.setFromAxisAngle(zee, -orient)); // Adjust for screen
 
-        // 2. Adjust for Camera Frame (-90 around X)
-        sensorQ.multiply(q1);
-
-        // 3. Adjust for Screen Orientation
-        sensorQ.multiply(q0.setFromAxisAngle(zee, -orient));
-
-        // 4. Calibration (Pitch Tare & Project North)
+        // B. CALIBRATION (TARE YAW TO CAMERA)
         if (!this.isCalibrated) {
-            // We need to know the offset between Device Attitude and Camera Attitude
-            // We calculate the delta quaternion that transforms DeviceQ to CameraQ *at this moment*.
-            // Delta = CameraQ * Inverse(DeviceQ)
+            // 1. Capture Current Camera Yaw
+            // We only care about where the user is looking horizontally (Azimuth)
+            const camQ = this.viewer.impl.camera.quaternion.clone();
+            const camDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camQ);
 
-            const currentCamQ = this.viewer.impl.camera.quaternion.clone();
-            const inverseSensorQ = sensorQ.clone().inverse();
+            // Project onto XY plane to find Yaw angle around Z
+            // atan2(y, x) gives angle from X axis
+            const camYaw = Math.atan2(camDir.y, camDir.x);
 
-            // This 'alignmentQ' captures the difference in BOTH Yaw (North) and Pitch (Horizon).
-            // It effectively "Tares" the device to the current view.
-            this.alignmentQ = new THREE.Quaternion();
-            this.alignmentQ.multiplyQuaternions(currentCamQ, inverseSensorQ);
+            // 2. Capture Current Sensor Yaw
+            const devDir = new THREE.Vector3(0, 0, -1).applyQuaternion(sensorQ);
+            const devYaw = Math.atan2(devDir.y, devDir.x);
 
-            // Distance Setup
+            // 3. Calculate Offset: Cam = Device + Offset
+            this.yawOffset = camYaw - devYaw;
+
+            // 4. Capture Distance & Height for "Walking" feel
             const pos = this.viewer.navigation.getPosition();
+            this.baseHeight = pos.z; // Store initial height
             const target = this.viewer.navigation.getTarget();
-            this.initialDistance = pos.distanceTo(target) || 10.0;
+            this.initialDistance = pos.distanceTo(target) || 5.0; // Use reasonable distance
 
             this.isCalibrated = true;
+            this.currentSmoothedQuaternion = this.viewer.impl.camera.quaternion.clone();
             this.finalQuaternion = new THREE.Quaternion();
         }
 
-        // 5. Apply Alignment
-        // Final = Alignment * CurrentSensor
-        // This is pure quaternion multiplication, so it handles all axes (including Zenith) correctly without gimbal lock.
-        this.finalQuaternion.multiplyQuaternions(this.alignmentQ, sensorQ);
+        // C. DECOMPOSE SENSOR & RECONSTRUCT GRAVITY-LOCKED VIEW
+        // We do *not* use sensorQ directly for the camera because it contains Roll
+        // and complex behavior at poles. We extract pure direction.
 
+        // 1. Apply Yaw Offset to sensor
+        // This aligns the sensor's "North" with the Camera's current "Forward"
+        const offsetQ = new THREE.Quaternion().setFromAxisAngle(zee, this.yawOffset);
+        const calibratedQ = new THREE.Quaternion().multiplyQuaternions(offsetQ, sensorQ);
 
+        // 2. Extract LOOK DIRECTION from sensor
+        // This vector represents exactly where the back of the phone is pointing in 3D space
+        const forwardDir = new THREE.Vector3(0, 0, -1).applyQuaternion(calibratedQ);
 
+        // 3. FORCE UP VECTOR (Gravity Lock)
+        // We construct a new View Matrix looking at 'forwardDir' but with Up = (0,0,1)
+        // This effectively kills any Roll component.
+        // Note: lookAt expects (eye, target, up). 
+        // We treat Eye as (0,0,0) and Target as forwardDir.
+        const targetMx = new THREE.Matrix4().lookAt(
+            new THREE.Vector3(0, 0, 0), // Eye
+            forwardDir,               // Target
+            new THREE.Vector3(0, 0, 1)  // Up (Global Z)
+        );
+        this.finalQuaternion.setFromRotationMatrix(targetMx);
 
-        // --- DIRECT APPLY V22 (SLERP SMOOTH - WHITE) ---
-        // Filters out sensor noise/drift (the "pull") using Spherical Interpolation.
-
+        // D. APPLY TO CAMERA (WITH SMOOTHING)
         if (this.viewer.navigation) {
-            const THREE = window.THREE || Autodesk.Viewing.Private.THREE;
 
-            // Initialize smoothing quaternion if needed
-            if (!this.currentSmoothedQuaternion) {
-                this.currentSmoothedQuaternion = this.viewer.impl.camera.quaternion.clone();
-            }
-
-            // SLERP FACTOR: 0.1 (Very smooth/slow) to 1.0 (Instant)
-            // 0.2 is a good balance for AR feel to hide jitter
-            const smoothFactor = 0.2;
-
+            // 5. SLERP Smoothing (Low Pass Filter)
+            const smoothFactor = 0.2; // 0.1=Slow/Heavy, 0.5=Fast
+            if (!this.currentSmoothedQuaternion) this.currentSmoothedQuaternion = this.viewer.impl.camera.quaternion.clone();
             this.currentSmoothedQuaternion.slerp(this.finalQuaternion, smoothFactor);
 
-            // 1. Get current position
+            // 6. Calculate View Vectors
             const pos = this.viewer.navigation.getPosition();
 
-            // 2. Calculate new Forward and Up from SMOOTHED Quaternion
-            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.currentSmoothedQuaternion);
-            const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.currentSmoothedQuaternion);
+            // OPTIONAL: FORCE HEIGHT
+            // Uncomment next line to lock Z height (Walk Mode)
+            // pos.z = 1.74; 
 
-            // 3. Project new Target using STORED DISTANCE
-            const dist = this.initialDistance || 100.0;
-            const target = pos.clone().add(forward.multiplyScalar(dist));
+            // New Forward based on filtered rotation
+            const cleanForward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.currentSmoothedQuaternion);
 
-            // 4. Update View
-            this.viewer.navigation.setView(pos, target);
-            this.viewer.navigation.setCameraUpVector(up);
+            // New Target
+            const newTarget = pos.clone().add(cleanForward.multiplyScalar(this.initialDistance));
 
-            // 5. Force Redraw
+            // New Up (Strictly Global Z)
+            const newUp = new THREE.Vector3(0, 0, 1);
+
+            // 7. Apply
+            this.viewer.navigation.setView(pos, newTarget);
+            this.viewer.navigation.setCameraUpVector(newUp);
             this.viewer.impl.invalidate(true, true, true);
         }
-        // --- DEBUG UPDATE COUNTER + QUATERNION ---
-        this._updateCount = (this._updateCount || 0) + 1;
 
+        // E. DEBUG INFO
+        this._updateCount = (this._updateCount || 0) + 1;
         if (this.debugEl) {
             const a = event.alpha ? Math.round(event.alpha) : 'null';
-            const q = this.finalQuaternion || { x: 0, y: 0, z: 0, w: 0 };
-            const dist = this.initialDistance ? this.initialDistance.toFixed(1) : 'N/A';
+            const g = event.gamma ? Math.round(event.gamma) : 'null';
 
             this.debugEl.innerHTML = `
-                <div style="color:white;font-size:16px;">DEBUG MODE: V22 (SLERP SMOOTH)</div>
-                <b>ZENITH ROBUST + NOISE FILTER</b><br/>
+                <div style="color:red;font-size:16px;">DEBUG MODE: V23 (GRAVITY FPS)</div>
+                <b>NO ROLL • PURE Z-UP • NADIR FIX</b><br/>
                 Updates: ${this._updateCount}<br/>
                 Alpha: ${a}<br/>
-                Dist: ${dist}<br/>
+                Gamma: ${g}<br/>
              `;
         }
     }
 }
-
 
 Autodesk.Viewing.theExtensionManager.registerExtension('DeviceOrientationExtension', DeviceOrientationExtension);
