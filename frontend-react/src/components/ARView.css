@@ -48,11 +48,6 @@
     background-color: transparent !important;
 }
 
-/* CRITICAL: Force canvas to not paint background */
-.ar-viewer-canvas canvas {
-    mix-blend-mode: screen !important;
-    opacity: 0.95 !important;
-}
 
 /* Hide Autodesk UI clutter in AR Mode */
 .ar-viewer-canvas .adsk-toolbar,

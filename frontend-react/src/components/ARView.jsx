@@ -115,17 +115,34 @@ const ARView = ({ models, initialCamera, onExit }) => {
             viewer.start();
             viewerRef.current = viewer;
 
-            // Force transparency immediately
+            // Force transparency immediately AND continuously
             const makeTransparent = () => {
+                if (!viewer || !viewer.impl) return;
+
                 viewer.container.style.background = 'transparent';
                 viewer.container.style.backgroundColor = 'transparent';
+
                 const renderer = viewer.impl.glrenderer ? viewer.impl.glrenderer() : viewer.impl.renderer();
                 if (renderer) {
-                    renderer.setClearColor(0xffffff, 0);
+                    renderer.setClearColor(0x000000, 0); // Black with 0 alpha
                     if (renderer.setClearAlpha) renderer.setClearAlpha(0);
+
+                    // Force WebGL to honor alpha
+                    const gl = renderer.context;
+                    if (gl) {
+                        gl.clearColor(0, 0, 0, 0);
+                    }
                 }
                 viewer.impl.invalidate(true, true, true);
             };
+
+            makeTransparent();
+
+            // Keep re-applying transparency every 500ms to prevent viewer from resetting it
+            const transparencyInterval = setInterval(makeTransparent, 500);
+
+            // Store interval ref for cleanup
+            viewerRef.current.transparencyInterval = transparencyInterval;
 
             // LOAD ALL MODELS (Aggregation)
             let loadedCount = 0;
@@ -192,6 +209,9 @@ const ARView = ({ models, initialCamera, onExit }) => {
 
         return () => {
             if (viewerRef.current) {
+                if (viewerRef.current.transparencyInterval) {
+                    clearInterval(viewerRef.current.transparencyInterval);
+                }
                 viewerRef.current.finish();
                 viewerRef.current = null;
             }
