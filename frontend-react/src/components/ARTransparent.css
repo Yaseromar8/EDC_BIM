@@ -1,0 +1,17 @@
+/* AR MODE TRANSPARENCY */
+body.ar-active,
+body.ar-active #root,
+body.ar-active .app-container {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+/* Hide UI elements in AR Mode if strictly needed, or just make viewer transparent */
+body.ar-active .adsk-viewing-viewer {
+    background: transparent !important;
+}
+
+/* Ensure the canvas is transparent */
+body.ar-active canvas {
+    background: transparent !important;
+}

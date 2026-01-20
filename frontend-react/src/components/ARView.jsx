@@ -12,8 +12,24 @@ const ARView = ({ models, onExit }) => {
     const videoRef = useRef(null);
     const [permStatus, setPermStatus] = useState("init");
 
-    // 1. INITIALIZE CAMERA FEED
+    // 1. INITIALIZE CAMERA FEED & CHECK AR SUPPORT
     useEffect(() => {
+        // A. Check for WebXR (True AR) Support (Enabled by our Native Changes)
+        if (navigator.xr) {
+            navigator.xr.isSessionSupported('immersive-ar')
+                .then((supported) => {
+                    console.log(`[ARView] WebXR 'immersive-ar' Supported: ${supported}`);
+                    if (supported) {
+                        console.log("✅ ARCore Activo: Sistema Listo");
+                    } else {
+                        console.warn("[ARView] WebXR supported but AR not available.");
+                    }
+                })
+                .catch(err => console.warn("[ARView] WebXR Check Error:", err));
+        } else {
+            console.log("[ARView] WebXR API not found (Passthrough Mode Active)");
+        }
+
         const startCamera = async () => {
             try {
                 // 'environment' requests the back camera
@@ -30,7 +46,7 @@ const ARView = ({ models, onExit }) => {
                 }
             } catch (err) {
                 console.error("Camera Error:", err);
-                alert("Error: Camera access denied or not available (HTTPS required).");
+                // Don't alert blocking errors in dev, just log
             }
         };
 
