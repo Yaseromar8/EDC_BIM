@@ -11,7 +11,12 @@ const ARView = ({ models, initialCamera, onExit }) => {
     const viewerRef = useRef(null);
     const videoRef = useRef(null);
     const [permStatus, setPermStatus] = useState("init");
-    const [modelOpacity, setModelOpacity] = useState(0.7); // NEW: Control model transparency (0.0 = invisible, 1.0 = solid)
+    const [modelOpacity, setModelOpacity] = useState(0.7); // Control model transparency (0.0 = invisible, 1.0 = solid)
+
+    // PLACEMENT CONTROLS
+    const [modelScale, setModelScale] = useState(1.0); // 0.1 to 3.0
+    const [modelHeight, setModelHeight] = useState(0); // -50 to +50 meters
+    const [modelRotationY, setModelRotationY] = useState(0); // Degrees (0, 90, 180, 270)
 
     // 1. INITIALIZE CAMERA FEED & CHECK AR SUPPORT
     useEffect(() => {
@@ -228,7 +233,54 @@ const ARView = ({ models, initialCamera, onExit }) => {
         }
     }, [modelOpacity]);
 
-    // 3. RENDER UI
+    // 4. APPLY PLACEMENT TRANSFORMATIONS (Scale, Height, Rotation)
+    useEffect(() => {
+        if (!viewerRef.current || !viewerRef.current.impl) return;
+
+        const viewer = viewerRef.current;
+
+        // Create transformation matrix
+        const matrix = new THREE.Matrix4();
+
+        // Apply transformations: Scale -> Rotate -> Translate
+        matrix.makeScale(modelScale, modelScale, modelScale);
+
+        const rotationMatrix = new THREE.Matrix4();
+        rotationMatrix.makeRotationY(THREE.MathUtils.degToRad(modelRotationY));
+        matrix.multiply(rotationMatrix);
+
+        const translationMatrix = new THREE.Matrix4();
+        translationMatrix.makeTranslation(0, modelHeight, 0);
+        matrix.multiply(translationMatrix);
+
+        // Apply to all loaded models
+        try {
+            viewer.impl.modelQueue().getModels().forEach(model => {
+                const fragList = model.getFragmentList();
+                if (fragList) {
+                    for (let fragId = 0; fragId < fragList.fragments.length; fragId++) {
+                        fragList.updateAnimTransform(fragId, null, null, matrix);
+                    }
+                }
+            });
+            viewer.impl.invalidate(true, true, false);
+        } catch (err) {
+            console.warn("[AR] Transform error:", err);
+        }
+    }, [modelScale, modelHeight, modelRotationY]);
+
+    // Helper functions
+    const rotateModel = () => {
+        setModelRotationY(prev => (prev + 90) % 360);
+    };
+
+    const resetPlacement = () => {
+        setModelScale(1.0);
+        setModelHeight(0);
+        setModelRotationY(0);
+    };
+
+    // 5. RENDER UI
     return (
         <div className="ar-view-container">
             {/* LAYER 0: Camera */}
@@ -278,11 +330,9 @@ const ARView = ({ models, initialCamera, onExit }) => {
                             className="ar-btn ar-btn-primary"
                             onClick={async () => {
                                 try {
-                                    // Request iOS Permission
                                     const response = await DeviceOrientationEvent.requestPermission();
                                     if (response === 'granted') {
                                         setPermStatus('active');
-                                        // Activate Extension
                                         if (viewerRef.current) {
                                             const ext = viewerRef.current.getExtension('DeviceOrientationExtension');
                                             if (ext) ext.activate();
@@ -299,6 +349,93 @@ const ARView = ({ models, initialCamera, onExit }) => {
                             Activar AR (Permitir Movimiento)
                         </button>
                     )}
+
+                    {/* PLACEMENT CONTROLS PANEL */}
+                    <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                        background: 'rgba(0,0,0,0.7)',
+                        padding: '15px',
+                        borderRadius: '15px',
+                        backdropFilter: 'blur(10px)',
+                        minWidth: '280px',
+                        maxWidth: '90vw'
+                    }}>
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '5px'
+                        }}>
+                            <span style={{ color: '#4ade80', fontWeight: 'bold', fontSize: '14px' }}>🎯 Ajustes del Modelo</span>
+                            <button
+                                className="ar-btn"
+                                onClick={resetPlacement}
+                                style={{
+                                    padding: '5px 12px',
+                                    fontSize: '12px',
+                                    background: '#f97316'
+                                }}
+                            >
+                                ↻ Reset
+                            </button>
+                        </div>
+
+                        {/* SCALE SLIDER */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ color: 'white', fontSize: '12px', minWidth: '60px', fontWeight: 'bold' }}>Escala:</span>
+                            <input
+                                type="range"
+                                min="0.1"
+                                max="3"
+                                step="0.1"
+                                value={modelScale}
+                                onChange={(e) => setModelScale(parseFloat(e.target.value))}
+                                style={{ flex: 1, cursor: 'pointer' }}
+                            />
+                            <span style={{ color: 'white', fontSize: '12px', minWidth: '45px' }}>
+                                {Math.round(modelScale * 100)}%
+                            </span>
+                        </div>
+
+                        {/* HEIGHT SLIDER */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ color: 'white', fontSize: '12px', minWidth: '60px', fontWeight: 'bold' }}>Altura:</span>
+                            <input
+                                type="range"
+                                min="-50"
+                                max="50"
+                                step="1"
+                                value={modelHeight}
+                                onChange={(e) => setModelHeight(parseFloat(e.target.value))}
+                                style={{ flex: 1, cursor: 'pointer' }}
+                            />
+                            <span style={{ color: 'white', fontSize: '12px', minWidth: '45px' }}>
+                                {modelHeight > 0 ? '+' : ''}{modelHeight}m
+                            </span>
+                        </div>
+
+                        {/* ROTATION BUTTON */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ color: 'white', fontSize: '12px', minWidth: '60px', fontWeight: 'bold' }}>Rotación:</span>
+                            <button
+                                className="ar-btn"
+                                onClick={rotateModel}
+                                style={{
+                                    flex: 1,
+                                    padding: '10px',
+                                    background: '#3aa0ff',
+                                    fontSize: '13px'
+                                }}
+                            >
+                                🔄 Girar 90°
+                            </button>
+                            <span style={{ color: 'white', fontSize: '12px', minWidth: '45px' }}>
+                                {modelRotationY}°
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
