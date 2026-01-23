@@ -31,11 +31,12 @@ class GyroTool {
         return true;
     }
 
-    // Consume all inputs to prevent conflicts
-    handleSingleClick() { return true; }
-    handleDoubleClick() { return true; }
-    handleMouseMove() { return true; }
-    handleGesture() { return true; }
+    // ALLOW EVENTS TO PASS THROUGH (return false)
+    // This allows other tools (like Orbit/Pan/BimWalk) to handle position updates
+    handleSingleClick() { return false; }
+    handleDoubleClick() { return false; }
+    handleMouseMove() { return false; }
+    handleGesture() { return false; }
 }
 
 // --- MAIN EXTENSION CLASS ---
@@ -144,9 +145,9 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         tc.activateTool('gyro-tool');
 
         // --- LOCK DEFAULT NAVIGATION ---
-        // This stops Orbit/Pan from resetting the camera every frame
+        // REMOVED LOCK to allow position updates (Walking/Pan) while Gyro handles Rotation
         if (this.viewer.navigation) {
-            this.viewer.navigation.setIsLocked(true);
+            this.viewer.navigation.setIsLocked(false);
         }
 
         // 4. Listeners
@@ -163,8 +164,8 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
                 position: absolute;
                 bottom: 150px;
                 left: 20px;
-                color: #FF00FF; /* MAGENTA - VISUAL CONFIRMATION OF NEW VERSION */
-                background: rgba(255, 255, 255, 0.9);
+                color: #00FF00; /* GREEN - CONFIRM UNLOCKED */
+                background: rgba(0, 0, 0, 0.5);
                 padding: 10px;
                 font-family: monospace;
                 font-size: 14px;
@@ -173,7 +174,7 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
                 z-index: 1000;
                 border-radius: 8px;
                 min-width: 200px;
-                border: 2px solid #FF00FF;
+                border: 1px solid #00FF00;
             `;
             this.viewer.container.appendChild(this.debugEl);
         }
@@ -183,7 +184,7 @@ export class DeviceOrientationExtension extends Autodesk.Viewing.Extension {
         const apiStatus = window.DeviceOrientationEvent ? "AVAILABLE" : "MISSING";
         const httpsStatus = window.isSecureContext ? "SECURE" : "NOT SECURE";
         this.debugEl.innerHTML = `
-            <b>GYRO DEBUG</b><br/>
+            <b>GYRO V3 (UNLOCKED)</b><br/>
             API: ${apiStatus}<br/>
             Context: ${httpsStatus}<br/>
             Waiting for data...

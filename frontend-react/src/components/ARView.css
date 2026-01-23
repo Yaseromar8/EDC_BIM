@@ -89,7 +89,9 @@
 
 .ar-bottom-controls {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
     width: 100%;
     pointer-events: auto;
     margin-bottom: 30px;
