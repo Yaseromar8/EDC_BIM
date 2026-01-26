@@ -27,6 +27,9 @@ export class BaseExtension extends Autodesk.Viewing.Extension {
     async onObjectTreeCreated(ev) {
         console.log('Object tree created.');
         const model = ev.model;
+        // OPTIMIZATION: Property extraction moved to Viewer.jsx "On-Demand" logic.
+        // This prevents double-processing and race conditions.
+        /*
         const leafIds = await findLeafNodes(model);
         model.leafIds = leafIds;
         try {
@@ -36,8 +39,8 @@ export class BaseExtension extends Autodesk.Viewing.Extension {
             model.allProps = [];
         }
         const detail = model.allProps || [];
-        // Optional: still dispatch global window event for legacy/debug, but Viewer.jsx uses the viewer event
         window.dispatchEvent(new CustomEvent('viewer-model-properties', { detail }));
+        */
         this.viewer.dispatchEvent({ type: 'model.loaded', model: model });
     }
 

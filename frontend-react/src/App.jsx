@@ -1093,6 +1093,7 @@ function App() {
 
           // Reset view
           setModelProperties({});
+          setAvailableProperties([]); // Clear old properties
           setHiddenModelUrns([]);
           // setFilterSelections({}); // Maybe reset filters too?
         }
@@ -1555,7 +1556,7 @@ function App() {
     const activeProps = Object.entries(filterSelections).filter(([_, values]) => values && values.length > 0);
 
     if (activeProps.length === 0) {
-      return { groups: [], dbIds: [], nonMatchingDbIds: [] };
+      return { groups: [], dbIds: [], nonMatchingDbIds: [], isFiltering: false };
     }
 
     // 1. Calculate matching DbIds (Intersection of Unions)
@@ -1646,7 +1647,8 @@ function App() {
     return {
       groups,
       dbIds: finalDbIds,
-      nonMatchingDbIds
+      nonMatchingDbIds,
+      isFiltering: true
     };
   }, [filterSelections, filterBuckets, filterColors, hiddenModelUrns]);
 
@@ -1790,6 +1792,12 @@ function App() {
           setDocuments([]);
           setSprites([]);
           setHiddenModelUrns([]);
+
+          // CRITICAL FIX: Reset properties to prevent stale state on project switch
+          setAvailableProperties([]);
+          setModelProperties({});
+          setFilterSelections({});
+          // setFilterBuckets({}); // filterBuckets is computed via useMemo, no setter.
         }}
       />
       <div className="app-container" style={{ flex: 1, position: 'relative' }}>

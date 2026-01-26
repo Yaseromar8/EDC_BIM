@@ -25,13 +25,15 @@ export class LoggerExtension extends Autodesk.Viewing.Extension {
     onModelLoaded(ev) {
         console.log('Model loaded event received by LoggerExtension.');
         const allProps = ev.model.allProps;
-        const propNames = new Set();
-        for (const prop of allProps) {
-            for (const p of prop.properties) {
-                propNames.add(p.displayName);
+        if (allProps) {
+            const propNames = new Set();
+            for (const prop of allProps) {
+                for (const p of prop.properties) {
+                    propNames.add(p.displayName);
+                }
             }
+            console.log('Available properties:', Array.from(propNames).sort());
         }
-        console.log('Available properties:', Array.from(propNames).sort());
     }
 
     onSelectionChanged(ev) {

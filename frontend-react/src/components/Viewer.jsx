@@ -5,6 +5,7 @@ import { LoggerExtension } from '../aps/extensions/LoggerExtension';
 import { HistogramExtension } from '../aps/extensions/HistogramExtension';
 import { PhasingExtension } from '../aps/extensions/PhasingExtension';
 import { DeviceOrientationExtension } from '../aps/extensions/DeviceOrientationExtension';
+import { findLeafNodes, getBulkProperties } from '../aps/utils/model';
 import { Capacitor } from '@capacitor/core';
 
 const BACKEND_URL = Capacitor.isNativePlatform()
@@ -258,7 +259,7 @@ const Viewer = ({
                 const config = {
                     extensions: [
                         'BaseExtension',
-                        'LoggerExtension',
+                        // 'LoggerExtension', // Removed to prevent potential crash in cached envs
                         'PhasingExtension',
                         'Autodesk.BIM360.Extension.PushPin',
                         'Autodesk.PDF',
@@ -271,18 +272,15 @@ const Viewer = ({
 
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);
                 viewer.start();
+
+                viewer.setGhosting(true); // Essential for filter logic
+
                 viewerRef.current = viewer;
 
                 // Expose globally for AR camera capture
                 window.NOP_VIEWER = viewer;
 
                 setViewerReady(true);
-
-                // Performance settings
-                viewer.setQualityLevel(false, false);
-                viewer.setGroundShadow(false);
-                viewer.setGroundReflection(false);
-                viewer.setGhosting(false);
             });
         };
 
@@ -301,30 +299,69 @@ const Viewer = ({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [accessToken]);
 
+    const handleModelLoaded = async (event, retryCount = 1) => {
+        const viewer = viewerRef.current;
+        if (!viewer) return;
+
+        const model = event?.model || viewer?.model;
+        if (!model) return;
+
+        let urn = model.getData()?.urn;
+
+        // Try to find the exact URN key from our loadedModelsRef that matches this model instance
+        const foundUrn = Object.keys(loadedModelsRef.current).find(key => {
+            const m = loadedModelsRef.current[key];
+            return m === model || m?.id === model.id;
+        });
+
+        if (foundUrn) {
+            urn = foundUrn;
+            console.log(`[Viewer] Matched Model URN: ${urn}`);
+        } else if (Object.keys(loadedModelsRef.current).length === 1) {
+            // FALLBACK: If only one model is loaded, assume they match.
+            // This fixes mismatched IDs or references (e.g. SVF vs SVF2, or Proxy objects).
+            urn = Object.keys(loadedModelsRef.current)[0];
+            console.log(`[Viewer] Fuzzy Matched Single Model URN: ${urn}`);
+        } else {
+            console.warn(`[Viewer] Model Loaded but URN not mapped in loadedModelsRef yet. Raw: ${urn}`);
+
+            // RETRY MECHANISM: loadedModelsRef implies manual load hasn't finished mapping yet.
+            // We retry up to 5 times (2.5 seconds) to allow the loader to finish.
+            // This is critical for Filter Properties to stick to the correct URN.
+            if (retryCount <= 5) {
+                console.log(`[Viewer] Retrying property sync (Attempt ${retryCount})...`);
+                setTimeout(() => handleModelLoaded(event, retryCount + 1), 500);
+                return;
+            }
+            // If failed after retries, we proceed with Raw URN and hope for the best, 
+            // but likely filters won't work if App.jsx uses different URNs.
+            console.error(`[Viewer] Failed to map URN after retries. Using Raw: ${urn}`);
+        }
+
+        let props = model.allProps || [];
+
+        // ON-DEMAND FETCH: If extension missed the event (race condition), fetch manually.
+        if (!props || props.length === 0) {
+            console.warn('[Viewer] Properties missing. Fetching on-demand...');
+            try {
+                const leafIds = await findLeafNodes(model);
+                props = await getBulkProperties(model, leafIds);
+                model.allProps = props; // Cache it
+                console.log('[Viewer] On-demand properties fetched:', props.length);
+            } catch (err) {
+                console.error('[Viewer] Failed to fetch on-demand properties:', err);
+                return;
+            }
+        }
+
+        console.log(`[Viewer] Dispatching ${props.length} properties for model: ${urn}`);
+        onModelProperties?.({ urn, props });
+    };
+
     // Handle Model Loaded Event
     useEffect(() => {
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
-
-        const handleModelLoaded = (event) => {
-            const model = event?.model || viewer?.model;
-            if (!model) return;
-
-            const props = model.allProps || [];
-            let urn = model.getData()?.urn;
-
-            // Try to find the exact URN key from our loadedModelsRef that matches this model instance
-            const foundUrn = Object.keys(loadedModelsRef.current).find(key => {
-                const m = loadedModelsRef.current[key];
-                return m === model || m?.id === model.id;
-            });
-
-            if (foundUrn) {
-                urn = foundUrn;
-            }
-
-            onModelProperties?.({ urn, props });
-        };
 
         viewer.addEventListener('model.loaded', handleModelLoaded);
         // In case BaseExtension already populated props before we subscribed
@@ -339,9 +376,19 @@ const Viewer = ({
 
     useEffect(() => {
         if (models.length === 0) {
-            onModelProperties?.([]);
+            onModelProperties?.([]); // Clear App state
+            // loadedModelsRef.current = {}; // DO NOT CLEAR HERE, Viewer handles unloading.
+            // But if we return to Landing Page, Viewer component might Unmount.
+            // If Viewer Unmounts, Ref is lost anyway.
+            // Issue is App.jsx state persisting.
             sheetsMapRef.current = {};
             onSheetsLoaded?.([]);
+
+            // Force clear events?
+            const viewer = viewerRef.current;
+            if (viewer) {
+                // Unload all?
+            }
         }
     }, [models.length, onModelProperties, onSheetsLoaded]);
 
@@ -378,10 +425,7 @@ const Viewer = ({
                     try {
                         try {
                             await doc.downloadAecModelData();
-                            console.log('[Viewer] AEC Model Data downloaded for:', model.label || model.urn);
-                        } catch (aecErr) {
-                            console.warn('[Viewer] Could not download AEC Model Data.', aecErr);
-                        }
+                        } catch (e) { console.warn('AEC Data fetch failed', e); }
 
                         // SEARCH FOR ALL GEOMETRIES
                         const allGeometries = doc.getRoot().search({ type: 'geometry' });
@@ -497,6 +541,13 @@ const Viewer = ({
                             } catch (e) {
                                 console.error('[Viewer] Error setting initial visibility:', e);
                             }
+
+                            // Force property update with correct URN mapping
+                            handleModelLoaded({ model: loadedModel });
+
+                            // Ensure camera frames the new model (Fixes white screen if AEC data skipped)
+                            // Use fitToView with the specific model to frame it correctly.
+                            viewer.fitToView(null, loadedModel);
                         }
 
                         if (Object.keys(loadedModelsRef.current).length >= 1) {
@@ -738,8 +789,11 @@ const Viewer = ({
             });
             viewer.clearSelection();
 
-            // If no filters, show all (clear isolation) and exit
-            if (!detail || !detail.dbIds || !detail.dbIds.length) {
+            // If no filters are active, show all (clear isolation) and exit
+            // We use 'isFiltering' flag if available, otherwise fallback to checking dbIds length (legacy behavior)
+            const isFiltering = detail.isFiltering !== undefined ? detail.isFiltering : (detail.dbIds && detail.dbIds.length > 0);
+
+            if (!isFiltering) {
                 viewer.setGhosting(false);
                 // viewer.showAll(); 
                 viewer.impl.visibilityManager.isolate([]); // Clear isolation
@@ -769,11 +823,10 @@ const Viewer = ({
                 const model = loadedModelsRef.current[urn];
                 if (model) {
                     if (ids.length === 0) {
-                        // Critical: isolate([]) resets isolation (makes model fully visible).
-                        // To ghost the ENTIRE model, we isolate a non-existent ID (e.g. -1).
-                        viewer.isolate([-1], model);
+                        // Isolate "nothing" in this model -> Everything becomes Ghosted
+                        viewer.impl.visibilityManager.isolate([-1], model);
                     } else {
-                        viewer.isolate(ids, model);
+                        viewer.impl.visibilityManager.isolate(ids, model);
                     }
                 }
             });
