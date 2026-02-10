@@ -84,7 +84,8 @@ const BuildPanel = ({
     onTogglePins,
     // Pin Placement
     placementMode,
-    onTogglePlacement
+    onTogglePlacement,
+    onCameraCapture
 }) => {
     const selectedPin = pins.find(p => p.id === selectedPinId);
     const [activeMenu, setActiveMenu] = useState(null);
@@ -142,6 +143,23 @@ const BuildPanel = ({
 
     // ... handleFileChange ...
 
+    // Camera Ref
+    const cameraInputRef = React.useRef(null);
+
+    const handleCameraClick = () => {
+        if (cameraInputRef.current) {
+            cameraInputRef.current.click();
+        }
+    };
+
+    const handleCameraChange = (e) => {
+        if (e.target.files && e.target.files[0]) {
+            if (onCameraCapture) {
+                onCameraCapture(e.target.files[0]);
+            }
+        }
+    };
+
     return (
         <div className="build-panel source-files-panel">
             {/* TABS NAVIGATION */}
@@ -168,24 +186,46 @@ const BuildPanel = ({
                     {activeTab === 'DATA' && (
                         <div className="sfp-header">
                             <h3>CONTROL DE OBRA</h3>
-                            {isConnected ? (
-                                <div
-                                    onClick={() => window.location.href = '/api/auth/login'}
-                                    title="Reconectar"
-                                    style={{
-                                        display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: '#10b981', fontWeight: '600', background: '#ecfdf5', padding: '4px 6px', borderRadius: '4px', border: '1px solid #a7f3d0', cursor: 'pointer'
-                                    }}>
-                                    <span>🟢</span> ON
-                                </div>
-                            ) : (
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                 <button
-                                    className="sfp-import-btn"
-                                    onClick={() => window.location.href = '/api/auth/login'}
-                                    style={{ background: '#0696D7', border: 'none' }}
+                                    onClick={handleCameraClick}
+                                    style={{
+                                        background: '#3b82f6',
+                                        border: 'none',
+                                        color: 'white',
+                                        borderRadius: '4px',
+                                        padding: '4px 8px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        fontSize: '12px',
+                                        fontWeight: 600
+                                    }}
+                                    title="Tomar Foto nueva"
                                 >
-                                    Connect
+                                    <span>📷</span> Foto
                                 </button>
-                            )}
+
+                                {isConnected ? (
+                                    <div
+                                        onClick={() => window.location.href = '/api/auth/login'}
+                                        title="Reconectar"
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: '#10b981', fontWeight: '600', background: '#ecfdf5', padding: '4px 6px', borderRadius: '4px', border: '1px solid #a7f3d0', cursor: 'pointer'
+                                        }}>
+                                        <span>🟢</span> ON
+                                    </div>
+                                ) : (
+                                    <button
+                                        className="sfp-import-btn"
+                                        onClick={() => window.location.href = '/api/auth/login'}
+                                        style={{ background: '#0696D7', border: 'none' }}
+                                    >
+                                        Connect
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     )}
 
@@ -397,6 +437,16 @@ const BuildPanel = ({
                     <div className="sfp-menu-overlay" onClick={() => setActiveMenu(null)}></div>
                 )
             }
+
+            {/* Hidden Camera Input */}
+            <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                ref={cameraInputRef}
+                onChange={handleCameraChange}
+                style={{ display: 'none' }}
+            />
         </div>
     );
 };

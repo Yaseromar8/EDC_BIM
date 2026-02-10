@@ -40,8 +40,8 @@ ALLOWED_DOC_EXTENSIONS = {
     'odt', 'pdf', 'png', 'ppt', 'pptx', 'svg', 'txt', 'webp', 'xls', 'xlsx',
     'kml', 'kmz', 'iwm'
 }
-ACC_PROJECT_ID = os.getenv('ACC_PROJECT_ID', 'b.50e13047-2a8c-4c8b-af53-8d509a281dba')
-ACC_FOLDER_URN = os.getenv('ACC_FOLDER_URN', 'urn:adsk.wipprod:fs.folder:co.OdZ3iENkTh6vroYpYJxylA')
+ACC_PROJECT_ID = os.getenv('ACC_PROJECT_ID', 'b.a7ce4d60-79f3-4dbf-b059-fefaf14f7b1d')
+ACC_FOLDER_URN = os.getenv('ACC_FOLDER_URN', 'urn:adsk.wipprod:fs.folder:co.vZ2gSBwtR-O6eaOR_2nW-Q')
 MAP_JOBS = {}
 
 os.makedirs(MAP_UPLOAD_FOLDER, exist_ok=True)

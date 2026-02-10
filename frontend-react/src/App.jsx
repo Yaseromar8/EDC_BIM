@@ -1648,7 +1648,7 @@ function App() {
       groups,
       dbIds: finalDbIds,
       nonMatchingDbIds,
-      isFiltering: true
+      isFiltering: activeProps.length > 0
     };
   }, [filterSelections, filterBuckets, filterColors, hiddenModelUrns]);
 
@@ -1746,6 +1746,54 @@ function App() {
       }
     }
   };
+
+  const handleQuickCapture = useCallback(async (file) => {
+    if (!file) return;
+    if (!selectedProject) return alert("Selecciona un proyecto primero.");
+
+    // Use current location or default
+    const loc = userLocation || { lat: -12.0464, lng: -77.0428 };
+
+    // 1. Create Pin on Server
+    const pinData = {
+      name: `Foto ${new Date().toLocaleString()}`,
+      lat: loc.lat,
+      lng: loc.lng,
+      type: 'docs', // Force 'docs' type for photos
+      projectId: selectedProject,
+      documents: []
+    };
+
+    try {
+      // Optimistic UI could be here, but let's stick to safe server-first for now
+      const res = await fetch(`${BACKEND_URL}/api/pins`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pinData)
+      });
+
+      if (res.ok) {
+        const newPin = await res.json();
+        setBuildPins(prev => [...prev, newPin]);
+        setSelectedPinId(newPin.id);
+
+        // 2. Upload File to this new Pin
+        // This reuses the existing logic which handles ACC upload + linking to pin
+        await handleBuildFileUpload(file, newPin.id);
+      } else {
+        alert("Error al crear punto para la foto.");
+      }
+    } catch (e) {
+      console.error("Quick capture error:", e);
+      if (e.message && (e.message.includes('token') || e.message.includes('401'))) {
+        if (confirm("Se requiere conectar con Autodesk ACC para subir fotos. ¿Conectar ahora?")) {
+          window.location.href = '/api/auth/login';
+        }
+      } else {
+        alert("Error al subir foto: " + (e.message || "Error desconocido"));
+      }
+    }
+  }, [selectedProject, userLocation, handleBuildFileUpload]);
 
 
 
@@ -2343,6 +2391,7 @@ function App() {
               }}
               onPinDelete={handlePinDelete}
               onPinUpload={handleOpenAttachmentModal}
+              onCameraCapture={handleQuickCapture}
             />
           )}
 
@@ -2351,46 +2400,63 @@ function App() {
         <div className="app-viewer">
           <div className="split-view-container">
             <div className="split-3d">
-              <Viewer
-                accessToken={accessToken}
-                models={models}
-                hiddenModelUrns={hiddenModelUrns}
-                sprites={sprites}
-                showSprites={showSprites}
-                activeSpriteId={activeSpriteId}
-                onSpriteSelect={handleSpriteSelect}
-                onSpriteDelete={handleSpriteDelete}
-                placementMode={spritePlacementActive}
-                onPlacementComplete={handlePlacementComplete}
-                onModelProperties={handleModelProperties}
-                minimapActive={minimapActive}
-                vrActive={vrActive}
-                onSheetsLoaded={setSheets}
-                activeSheet={activeSheet}
+              {/* 3D VIEWER - Keep mounted but hide in Build mode to preserve state */}
+              <div style={{ width: '100%', height: '100%', display: activePanel === 'build' ? 'none' : 'block' }}>
+                <Viewer
+                  accessToken={accessToken}
+                  models={models}
+                  hiddenModelUrns={hiddenModelUrns}
+                  sprites={sprites}
+                  showSprites={showSprites}
+                  activeSpriteId={activeSpriteId}
+                  onSpriteSelect={handleSpriteSelect}
+                  onSpriteDelete={handleSpriteDelete}
+                  placementMode={spritePlacementActive}
+                  onPlacementComplete={handlePlacementComplete}
+                  onModelProperties={handleModelProperties}
+                  minimapActive={minimapActive}
+                  vrActive={vrActive}
+                  onSheetsLoaded={setSheets}
+                  activeSheet={activeSheet}
 
-                // Doc Pins Props
-                docPins={docPins}
-                docPlacementMode={docPlacementMode}
-                onDocPlacementComplete={handleDocPinComplete}
-                onDocPinSelect={handleDocPinSelect}
+                  // Doc Pins Props
+                  docPins={docPins}
+                  docPlacementMode={docPlacementMode}
+                  onDocPlacementComplete={handleDocPinComplete}
+                  onDocPinSelect={handleDocPinSelect}
 
-                // Viewables / Proposals
-                onViewablesLoaded={handleViewablesLoaded}
-                activeViewableGuids={activeViewableGuids}
+                  // Viewables / Proposals
+                  onViewablesLoaded={handleViewablesLoaded}
+                  activeViewableGuids={activeViewableGuids}
 
-                // BUILD MODE INTEGRATION (Infraworks)
-                buildMode={activePanel === 'build'}
-                buildPlacementMode={buildPlacementMode}
-                buildPinType={buildPinType}
-                buildPins={buildPins}
-                showBuildPins={showBuildPins} // Pass visibility state
-                selectedBuildPinId={selectedPinId}
-                onBuildPinCreate={handlePinCreated}
-                onBuildPinSelect={handlePinSelect}
-                onBuildPinUpdate={handlePinUpdate}
-                arMode={false} // Use Dedicated ARView instead
-              // onBuildPinDelete={handlePinDelete} // If needed later
-              />
+                  // BUILD MODE INTEGRATION (Infraworks)
+                  buildMode={activePanel === 'build'}
+                  buildPlacementMode={buildPlacementMode}
+                  buildPinType={buildPinType}
+                  buildPins={buildPins}
+                  showBuildPins={showBuildPins} // Pass visibility state
+                  selectedBuildPinId={selectedPinId}
+                  onBuildPinCreate={handlePinCreated}
+                  onBuildPinSelect={handlePinSelect}
+                  onBuildPinUpdate={handlePinUpdate}
+                  arMode={false} // Use Dedicated ARView instead
+                // onBuildPinDelete={handlePinDelete} // If needed later
+                />
+              </div>
+
+              {/* 2D PLAN / MAP (Build Mode Only) */}
+              {activePanel === 'build' && (
+                <BuildMapView
+                  userLocation={userLocation}
+                  pins={buildPins}
+                  selectedPinId={selectedPinId}
+                  onPinCreated={handlePinCreated}
+                  onPinSelect={handlePinSelect}
+                  onPinDelete={handlePinDelete}
+                  onPinUpdate={handlePinUpdate}
+                  onFileUpload={handleBuildFileUpload}
+                />
+              )}
             </div>
 
             {/* DEBUG: Log activeSheet render */}

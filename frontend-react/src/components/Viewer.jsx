@@ -54,6 +54,7 @@ const Viewer = ({
     const buildPinMeshesRef = useRef({}); // New ref for Build Pins
     const sheetsMapRef = useRef({});
     const hiddenModelUrnsRef = useRef(hiddenModelUrns);
+    const lastFilterDetailRef = useRef(null);
 
     // Sync hiddenModelUrnsRef
     useEffect(() => {
@@ -286,6 +287,9 @@ const Viewer = ({
 
         if (accessToken && !viewerRef.current) {
             initializeViewer();
+        } else if (viewerRef.current) {
+            // Ensure ghosting is enabled if viewer already exists
+            viewerRef.current.prefs.set('ghosting', true);
         }
 
         return () => {
@@ -780,8 +784,15 @@ const Viewer = ({
             '#EAB308'
         ].map(color => new THREE.Color(color));
 
+
+
+        // ... (existing refs)
+
+        // ...
+
         const handleFiltersApply = event => {
             const detail = event?.detail;
+            lastFilterDetailRef.current = detail;
 
             // RESET EVERYTHING FIRST to ensure clean slate
             Object.values(loadedModelsRef.current).forEach(model => {
@@ -797,7 +808,10 @@ const Viewer = ({
                 viewer.setGhosting(false);
                 // viewer.showAll(); 
                 viewer.impl.visibilityManager.isolate([]); // Clear isolation
-                // REMOVED explicit unhide of root node to prevent overriding manual visibility
+
+                // Force update to remove colors/ghosting immediately
+                viewer.impl.invalidate(true, true, true);
+                viewer.impl.sceneUpdated(true);
                 return;
             }
 
@@ -810,9 +824,34 @@ const Viewer = ({
             const loadedUrns = Object.keys(loadedModelsRef.current);
             loadedUrns.forEach(urn => idsByModel.set(urn, []));
 
+            console.log('[Viewer] Applying filters. Details:', detail);
+            console.log('[Viewer] Loaded URNs:', loadedUrns);
+
             detail.dbIds.forEach(item => {
-                if (item.modelUrn && idsByModel.has(item.modelUrn)) {
-                    idsByModel.get(item.modelUrn).push(item.id);
+                let targetUrn = item.modelUrn;
+
+                // 1. Exact Match
+                if (targetUrn && idsByModel.has(targetUrn)) {
+                    idsByModel.get(targetUrn).push(item.id);
+                    return;
+                }
+
+                // 2. Prefix/Suffix Match (Handle 'urn:' prefix discrepancies)
+                if (targetUrn) {
+                    const match = loadedUrns.find(u => u.includes(targetUrn) || targetUrn.includes(u));
+                    if (match) {
+                        idsByModel.get(match).push(item.id);
+                        return;
+                    }
+                }
+
+                // 3. Fallback: Fuzzy Match if only 1 model matches
+                if (loadedUrns.length === 1) {
+                    const singleUrn = loadedUrns[0];
+                    // console.log(`[Viewer] Fuzzy Match for Filter: Mapping ${item.modelUrn} -> ${singleUrn}`);
+                    idsByModel.get(singleUrn).push(item.id);
+                } else if (item.modelUrn) {
+                    console.warn(`[Viewer] Filter item has unmatched URN: ${item.modelUrn}`);
                 }
             });
 
@@ -824,8 +863,10 @@ const Viewer = ({
                 if (model) {
                     if (ids.length === 0) {
                         // Isolate "nothing" in this model -> Everything becomes Ghosted
+                        console.log(`[Viewer] Ghosting all elements for model ${urn} (No matches)`);
                         viewer.impl.visibilityManager.isolate([-1], model);
                     } else {
+                        console.log(`[Viewer] Isolating ${ids.length} elements for model ${urn}`);
                         viewer.impl.visibilityManager.isolate(ids, model);
                     }
                 }
@@ -843,22 +884,98 @@ const Viewer = ({
                 const vector = new THREE.Vector4(color.r, color.g, color.b, 1);
 
                 group.dbIds.forEach(item => {
-                    const model = loadedModelsRef.current[item.modelUrn];
-                    if (model) {
-                        viewer.setThemingColor(item.id, vector, model);
-                    }
+                    group.dbIds.forEach(item => {
+                        let model = loadedModelsRef.current[item.modelUrn];
+
+                        // 1. Prefix/Suffix Match if exact fail
+                        if (!model && item.modelUrn) {
+                            const matchUrn = Object.keys(loadedModelsRef.current).find(u => u.includes(item.modelUrn) || item.modelUrn.includes(u));
+                            if (matchUrn) {
+                                model = loadedModelsRef.current[matchUrn];
+                            }
+                        }
+
+                        // 2. Fuzzy Single Match
+                        if (!model && Object.keys(loadedModelsRef.current).length === 1) {
+                            model = loadedModelsRef.current[Object.keys(loadedModelsRef.current)[0]];
+                        }
+
+                        if (model) {
+                            viewer.setThemingColor(item.id, vector, model);
+                        }
+                    });
+
                 });
             });
 
-            // Force redraw
+            // Force visual update for colors and ghosting
+            // Ensure ghosting is definitely on
+            viewer.prefs.set('ghosting', true);
+
+            // 1. Immediate invalidation
             viewer.impl.invalidate(true, true, true);
+            viewer.impl.sceneUpdated(true);
+
+            // 2. Delayed invalidation (Next Tick) to catch any post-processing delays
+            setTimeout(() => {
+                if (viewer.impl) {
+                    viewer.prefs.set('ghosting', true);
+                    viewer.impl.invalidate(true, true, true);
+                    viewer.impl.sceneUpdated(true);
+                }
+            }, 50); // Increased to 50ms to be safe
         };
 
 
 
 
         window.addEventListener('filters-apply', handleFiltersApply);
-        return () => window.removeEventListener('filters-apply', handleFiltersApply);
+
+        // --- SELECTION ISOLATION LOGIC ---
+        const handleSelectionChanged = (event) => {
+            const selection = event.dbIdArray;
+            const model = event.model;
+
+            if (selection.length === 1) {
+                // Single item selected -> Ghost everything else
+                viewer.setGhosting(true);
+                viewer.impl.visibilityManager.isolate(selection, model);
+
+                Object.values(loadedModelsRef.current).forEach(m => {
+                    if (m !== model) {
+                        viewer.impl.visibilityManager.isolate([-1], m);
+                    }
+                });
+
+            } else if (selection.length === 0) {
+                // Selection Cleared
+                // Check if we should restore filters
+                const lastFilter = lastFilterDetailRef.current;
+                const isFiltering = lastFilter && (lastFilter.isFiltering || (lastFilter.dbIds && lastFilter.dbIds.length > 0));
+
+                if (isFiltering) {
+                    console.log('[Viewer] selection cleared, restoring active filters...');
+                    // Re-apply filters
+                    // We can't just call handleFiltersApply directly because it expects an Event.
+                    // But we can extract the logic or just dispatch the event again? 
+                    // Or just call the logic if we extract it.
+                    // Easiest: Dispatch event locally or call the handler with a mock event
+                    handleFiltersApply({ detail: lastFilter });
+                } else {
+                    // No filters active -> Show All
+                    console.log('[Viewer] selection cleared, showing all.');
+                    viewer.impl.visibilityManager.isolate([]);
+                    viewer.setGhosting(true);
+                }
+            }
+        };
+
+        viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, handleSelectionChanged);
+
+        return () => {
+            window.removeEventListener('filters-apply', handleFiltersApply);
+            viewer.removeEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, handleSelectionChanged);
+        };
     }, [viewerReady]);
 
     // Handle Canvas Click for Pin Creation (Normal & Docs)
@@ -1442,24 +1559,17 @@ const Viewer = ({
                         objectId: pin.objectId || 0,
                         seedUrn: (() => {
                             // Robust URN Resolution
-                            const allModels = viewer.getAllModels(); // or viewer.impl.modelQueue().getModels()
-                            const validUrns = allModels.map(m => m.getData().urn);
+                            // 1. Try keying off specific model if pin has it
+                            if (pin.modelUrn) return pin.modelUrn;
 
-                            let targetUrn = pin.modelUrn || pin.seedUrn;
-
-                            // 1. Direct Match
-                            if (targetUrn && validUrns.includes(targetUrn)) {
-                                return targetUrn;
+                            // 2. Fallback: Use the URN of the first loaded model
+                            // The PushPin extension *requires* a valid URN corresponding to a loaded model
+                            // to project 3D coordinates efficiently.
+                            const allModels = viewer.getAllModels();
+                            if (allModels.length > 0) {
+                                return allModels[0].getData().urn;
                             }
-
-                            // 2. Fallback: Force use of the first available model
-                            // This prevents "issue seedUrn does not exist" by ensuring we attach to *something* visible.
-                            if (validUrns.length > 0) {
-                                return validUrns[0];
-                            }
-
                             return null;
-                            // viewerState: pin.viewerState // Optional: restore camera state on click if saved
                         })(),
                         viewerState: null // PREVENT AUTO-RESTORE: Ensure clicking a pin doesn't reset visibility/isolation
                     };
