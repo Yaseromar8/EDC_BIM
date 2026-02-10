@@ -1,0 +1,27 @@
+[build]
+  base = "frontend-react"
+  publish = "dist"
+  command = "npm run build"
+
+[[redirects]]
+  from = "/api/*"
+  to = "https://CHANGE-ME-TO-YOUR-RENDER-URL.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/maps/*"
+  to = "https://CHANGE-ME-TO-YOUR-RENDER-URL.onrender.com/maps/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/docs/*"
+  to = "https://CHANGE-ME-TO-YOUR-RENDER-URL.onrender.com/docs/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
