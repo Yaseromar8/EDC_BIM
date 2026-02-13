@@ -11,12 +11,14 @@ import ImportModelModal from './components/ImportModelModal';
 import DocumentPanel from './components/DocumentPanel';
 import AddDocumentModal from './components/AddDocumentModal';
 import BuildPanel from './components/BuildPanel';
+import ProgressPanel from './components/ProgressPanel';
 
 import BuildMapView from './components/BuildMapView';
 import MobileFloatingToolbar from './components/MobileFloatingToolbar';
 import LandingPage from './components/LandingPage'; // Import Landing Page
 import FilterConfiguratorModal from './components/FilterConfiguratorModal';
 import ARView from './components/ARView';
+import PhotoAlbumModal from './components/PhotoAlbumModal';
 
 import AddAttachmentModal from './components/AddAttachmentModal';
 import buildIconImg from './assets/build-icon.png';
@@ -162,7 +164,23 @@ const BuildIcon = ({ isActive }) => (
   />
 );
 
-
+const ProgressIcon = () => (
+  <svg
+    className="rail-icon"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <line x1="18" y1="20" x2="18" y2="10"></line>
+    <line x1="12" y1="20" x2="12" y2="4"></line>
+    <line x1="6" y1="20" x2="6" y2="14"></line>
+  </svg>
+);
 
 const PALETTE = [
   'rgb(0, 255, 255)',   // Cyan
@@ -500,9 +518,17 @@ function App() {
   const [modelProperties, setModelProperties] = useState({}); // Changed to object {urn: props[]}
   const [filterSelections, setFilterSelections] = useState({});
   const [expandedFilters, setExpandedFilters] = useState({});
+
   const [filterColors, setFilterColors] = useState({});
 
-  // Project Context State
+  // Seguimiento / Tracking State
+  const [trackingTab, setTrackingTab] = useState(null); // 'avance' | 'fotos' | null
+  const [trackingPlacementMode, setTrackingPlacementMode] = useState(false);
+  // Placeholder Mock Data (Should match Viewer internal logic or pass down)
+  const [trackingData, setTrackingData] = useState({
+    avance: [],
+    fotos: []
+  });
   const [selectedProject, setSelectedProject] = useState(null); // 'DRENAJE_URBANO' | 'CANAL'
 
   const [showSplash, setShowSplash] = useState(false); // Valid only after project selection triggers load
@@ -518,7 +544,11 @@ function App() {
   const [vrActive, setVrActive] = useState(false);
   const [arModeActive, setArModeActive] = useState(false);
   const [arInitialCamera, setArInitialCamera] = useState(null); // NEW: Store viewer camera state for AR
-  // Duplicate removed
+
+  // Album Modal State
+  const [photoAlbumOpen, setPhotoAlbumOpen] = useState(false);
+  const [selectedAlbumPin, setSelectedAlbumPin] = useState(null);
+
   const [sheets, setSheets] = useState([]); // To store 2D sheets
   const [activeSheet, setActiveSheet] = useState(null);
   const [docPlacementMode, setDocPlacementMode] = useState(false);
@@ -1047,11 +1077,6 @@ function App() {
           // Since 'filterBuckets' might depend on 'filterSelections', we can't fully rely on it here
           // However, 'buildFilterBuckets' only needs modelProperties.
           // Let's optimize: We can just use modelProperties again or just wait for user interaction to populate?
-          // Actually, the best way is to pre-fill dynamicFilterBuckets logic?
-          // No, we need the initial FULL set of values for this property.
-          // Let's find the property in availableProperties? No we need the values.
-          // We can re-scan modelProperties for this property ID.
-          // BUT, to avoid heavy computation here, let's defer?
           // User wants "Todo marcado por defecto".
 
           // We can use a simpler approach: calculate values just for this property
@@ -1390,16 +1415,91 @@ function App() {
 
   const handleSpriteSelect = useCallback((id) => {
     setActiveSpriteId(id);
+    // If we want to open a panel or something upon selection, do it here
     if (id) {
-      setShowSprites(true);
       setActivePanel('docs');
       setPanelVisible(true);
     }
   }, []);
 
-  const toggleSpritesVisibility = useCallback(() => {
-    setShowSprites(prev => !prev);
+  // Load Tracking Data on Mount
+  useEffect(() => {
+    const fetchTracking = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/tracking`);
+        if (res.ok) {
+          const data = await res.json();
+          setTrackingData(data);
+        }
+      } catch (e) {
+        console.error("Failed to load tracking data", e);
+      }
+    };
+    fetchTracking();
   }, []);
+
+  // Save Tracking Data Helper
+  const saveTrackingData = async (newData) => {
+    try {
+      await fetch(`${BACKEND_URL}/api/tracking`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newData)
+      });
+    } catch (e) {
+      console.error("Failed to save tracking data", e);
+    }
+  };
+
+  const handleTrackingPinCreate = (newPin) => {
+    if (!trackingTab) return; // Guard clause
+
+    let pinsToAdd = [newPin];
+
+    if (trackingTab === 'avance') {
+      const val = prompt("Ingrese el porcentaje de avance (ej: 50%):", "0%");
+      if (val === null) return; // Cancelled
+      // Assign value to the pin
+      // We need to create a new object to avoid mutating the specialized event object if it reused reference
+      pinsToAdd = [{ ...newPin, val, color: '#fbbf24' }];
+    }
+
+    setTrackingData(prev => {
+      const currentList = prev[trackingTab] || [];
+      const updated = {
+        ...prev,
+        [trackingTab]: [...currentList, ...pinsToAdd]
+      };
+      saveTrackingData(updated); // Sync to backend
+      return updated;
+    });
+  };
+
+  const handleAddPhotoToPin = (newPhoto) => {
+    if (!selectedAlbumPin) return;
+
+    // Update Local State
+    setTrackingData(prev => {
+      const updatedFotos = prev.fotos.map(pin => {
+        if (pin.id === selectedAlbumPin.id) {
+          return { ...pin, photos: [...(pin.photos || []), newPhoto] };
+        }
+        return pin;
+      });
+      const newState = { ...prev, fotos: updatedFotos };
+
+      // Sync to Backend (Full generic update or specific endpoint)
+      // We can use the specific endpoint for better granularity if we want
+      // But full save is easier for now given the structure
+      saveTrackingData(newState);
+
+      return newState;
+    });
+
+    // Update Selected Pin State
+    setSelectedAlbumPin(prev => ({ ...prev, photos: [...(prev.photos || []), newPhoto] }));
+  };
+
 
 
 
@@ -1849,8 +1949,10 @@ function App() {
         }}
       />
       <div className="app-container" style={{ flex: 1, position: 'relative' }}>
+        {/* Photo Album Modal Removed - Now Inserted in Split View below */}
+
         {showSplash && (
-          <div className="splash-overlay">
+          <div className="splash-screen" style={{ backgroundImage: `url('/FONDO_PAGINA.jpg')` }}>
             <img src="/POWER_CHINA.webp" alt="Company logo" />
           </div>
         )}
@@ -1940,6 +2042,16 @@ function App() {
 
             <button
               type="button"
+              className={`rail-button ${activePanel === 'progress' && panelVisible ? 'active' : ''}`}
+              onClick={() => togglePanel('progress')}
+              title="Seguimiento"
+            >
+              <ProgressIcon />
+              <span className="rail-label" style={{ fontWeight: 700 }}>Seguimiento</span>
+            </button>
+
+            <button
+              type="button"
               className={`rail-button ${activePanel === 'inventory' && panelVisible ? 'active' : ''}`}
               onClick={() => togglePanel('inventory')}
               title="Inventory"
@@ -2025,7 +2137,7 @@ function App() {
           ]}
         />
 
-        <aside className={`app-sidebar ${panelVisible && activePanel !== 'views' ? '' : 'hidden'}`}>
+        <aside className={`app-sidebar ${panelVisible && activePanel !== 'views' && activePanel !== 'progress' ? '' : 'hidden'}`}>
           {activePanel === 'filters' && (
             <div className="filters-shell" style={{
               display: 'flex',
@@ -2395,9 +2507,115 @@ function App() {
             />
           )}
 
+
+
+
+
         </aside>
 
         <div className="app-viewer">
+          {activePanel === 'progress' && (
+            <div style={{
+              position: 'absolute',
+              top: '20px',
+              // Shift center if panel is open: 25% if open, 50% if closed
+              left: (trackingTab === 'fotos' && photoAlbumOpen && selectedAlbumPin) ? '25%' : '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              gap: '20px',
+              zIndex: 100,
+              transition: 'left 0.3s ease'
+            }}>
+              <button
+                className="secondary-btn"
+                style={{
+                  background: trackingTab === 'avance' ? '#22c55e' : 'rgba(0,0,0,0.6)', // Green if active
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  padding: '8px 24px',
+                  borderRadius: '4px',
+                  fontWeight: 600,
+                  backdropFilter: 'blur(4px)',
+                  cursor: 'pointer',
+                  textTransform: 'uppercase'
+                }}
+                onClick={() => setTrackingTab(prev => prev === 'avance' ? null : 'avance')}
+              >
+                AVANCE
+              </button>
+              <button
+                className="secondary-btn"
+                style={{
+                  background: trackingTab === 'fotos' ? '#3b82f6' : 'rgba(0,0,0,0.6)', // Blue if active
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  padding: '8px 24px',
+                  borderRadius: '4px',
+                  fontWeight: 600,
+                  backdropFilter: 'blur(4px)',
+                  cursor: 'pointer',
+                  textTransform: 'uppercase'
+                }}
+                onClick={() => setTrackingTab(prev => prev === 'fotos' ? null : 'fotos')}
+              >
+                FOTOS
+              </button>
+
+              {/* Add Photo Button when Photos active */}
+              {trackingTab === 'fotos' && (
+                <button
+                  className="secondary-btn"
+                  title="Agregar Nueva Foto"
+                  style={{
+                    background: trackingPlacementMode ? '#ef4444' : 'rgba(59, 130, 246, 0.8)',
+                    color: 'white',
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%', // Circle
+                    fontWeight: 600,
+                    backdropFilter: 'blur(4px)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '20px',
+                    boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
+                  }}
+                  onClick={() => setTrackingPlacementMode(prev => !prev)}
+                >
+                  {trackingPlacementMode ? '✕' : '+'}
+                </button>
+              )}
+
+              {/* Add Progress Button when Avance active */}
+              {trackingTab === 'avance' && (
+                <button
+                  className="secondary-btn"
+                  title="Marcar Avance"
+                  style={{
+                    background: trackingPlacementMode ? '#ef4444' : 'rgba(34, 197, 94, 0.8)', // Green base
+                    color: 'white',
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%', // Circle
+                    fontWeight: 600,
+                    backdropFilter: 'blur(4px)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '20px',
+                    boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
+                  }}
+                  onClick={() => setTrackingPlacementMode(prev => !prev)}
+                >
+                  {trackingPlacementMode ? '✕' : '+'}
+                </button>
+              )}
+            </div>
+          )}
           <div className="split-view-container">
             <div className="split-3d">
               {/* 3D VIEWER - Keep mounted but hide in Build mode to preserve state */}
@@ -2440,8 +2658,21 @@ function App() {
                   onBuildPinSelect={handlePinSelect}
                   onBuildPinUpdate={handlePinUpdate}
                   arMode={false} // Use Dedicated ARView instead
-                // onBuildPinDelete={handlePinDelete} // If needed later
+                  // onBuildPinDelete={handlePinDelete} // If needed later
+
+                  // SEGUIMIENTO PROPS
+                  trackingTab={trackingTab}
+                  trackingData={trackingData}
+                  trackingPlacementMode={trackingPlacementMode}
+                  onTrackingPinCreate={handleTrackingPinCreate}
+                  onTrackingPinClick={(pin) => {
+                    if (trackingTab === 'fotos') {
+                      setSelectedAlbumPin(pin);
+                      setPhotoAlbumOpen(true);
+                    }
+                  }}
                 />
+
               </div>
 
               {/* 2D PLAN / MAP (Build Mode Only) */}
@@ -2608,6 +2839,21 @@ function App() {
 
                   </div>
                 </>
+              </div>
+            )}
+
+            {/* CASE D: PHOTO ALBUM SLIDER */}
+            {trackingTab === 'fotos' && photoAlbumOpen && selectedAlbumPin && (
+              <div className="split-doc active parallel" style={{ background: '#1a1b1e', borderLeft: '1px solid #444', zIndex: 10 }}>
+                <PhotoAlbumModal
+                  isOpen={true}
+                  variant="panel"
+                  onClose={() => setPhotoAlbumOpen(false)}
+                  pinId={selectedAlbumPin?.id}
+                  title={selectedAlbumPin ? `Zona: ${selectedAlbumPin.val || selectedAlbumPin.id}` : 'Album de Fotos'}
+                  photos={selectedAlbumPin?.photos || []}
+                  onAddPhoto={handleAddPhotoToPin}
+                />
               </div>
             )}
           </div>

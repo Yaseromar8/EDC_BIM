@@ -9,6 +9,7 @@ const BG_PATH = '/FONDO_PAGINA.jpg';
 const PROJECT_1_IMG = '/drenaje.png'; // Urban/Drainage generic
 const PROJECT_2_IMG = '/canal.png'; // Canal generic
 
+
 const LandingPage = ({ onSelectProject }) => {
     return (
         <div className="landing-container" style={{ backgroundImage: `url(${BG_PATH})` }}>
@@ -52,6 +53,7 @@ const LandingPage = ({ onSelectProject }) => {
                             </div>
                         </div>
                     </div>
+
                 </div>
 
                 {/* Footer */}

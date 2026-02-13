@@ -5,6 +5,7 @@ import { LoggerExtension } from '../aps/extensions/LoggerExtension';
 import { HistogramExtension } from '../aps/extensions/HistogramExtension';
 import { PhasingExtension } from '../aps/extensions/PhasingExtension';
 import { DeviceOrientationExtension } from '../aps/extensions/DeviceOrientationExtension';
+import IconMarkupExtension from '../aps/extensions/IconMarkupExtension';
 import { findLeafNodes, getBulkProperties } from '../aps/utils/model';
 import { Capacitor } from '@capacitor/core';
 
@@ -41,7 +42,15 @@ const Viewer = ({
     onBuildPinCreate,
     onBuildPinSelect,
     selectedPinId, // Add this prop
-    accessToken // Receive token from App
+
+    accessToken, // Receive token from App
+    // SEGUIMIENTO
+    trackingTab,
+
+    trackingData = { avance: [], fotos: [] },
+    trackingPlacementMode = false,
+    onTrackingPinCreate,
+    onTrackingPinClick
 }) => {
     const viewerRef = useRef(null);
     const containerRef = useRef(null);
@@ -229,6 +238,70 @@ const Viewer = ({
             container.style.cursor = 'default';
         };
     }, [viewerReady, placementMode, docPlacementMode, onPlacementComplete, onDocPlacementComplete]);
+
+
+    // SEGUIMIENTO: Handle Tracking Pin Placement (Photos)
+    useEffect(() => {
+        const viewer = viewerRef.current;
+        if (!viewer || !viewerReady) return;
+
+        const handleTrackingClick = (event) => {
+            console.log('[Viewer] Click detected in Tracking Mode', trackingPlacementMode);
+            if (!trackingPlacementMode) return;
+
+            // Improved Raycast - clientToWorld handles the nuances
+            const result = viewer.clientToWorld(event.clientX, event.clientY);
+
+            if (result) {
+                const pos = result.point || result;
+                // clientToWorld sometimes returns direct point or null, depending on version. 
+                // But usually it returns a THREE.Vector3 if hit, or null.
+                // Let's safe check for .point property if it returns a hit result object.
+                // Actually in recent Viewer APIs, clientToWorld(x,y) returns THREE.Vector3 or null.
+
+                // Let's use hitTest directly if clientToWorld is confusing, but standard is:
+                // var hit = viewer.impl.hitTest(x, y, true);
+
+                // If it fails, maybe it's because we need to clear selection? No.
+
+                // Let's try `viewer.impl.hitTest` again but double check coordinates.
+                // The issue might be `ignoreTransparent`. Let's try putting it to FALSE or removing it.
+                // Also, let's try `viewer.clientToWorld` as a backup.
+
+                const hit = viewer.impl.hitTest(event.clientX, event.clientY, false); // Allow transparent hits
+                if (hit) {
+                    const pos = hit.intersectPoint;
+                    console.log('[Viewer] Creating Tracking Pin at', pos);
+                    const newPin = {
+                        id: Date.now(),
+                        x: pos.x,
+                        y: pos.y,
+                        z: pos.z,
+                        val: trackingTab === 'avance' ? '0%' : null // Default val
+                    };
+                    if (onTrackingPinCreate) {
+                        onTrackingPinCreate(newPin);
+                    }
+                } else {
+                    console.warn('[Viewer] Hit Test failed to find intersection');
+                }
+            } else {
+                console.warn('[Viewer] clientToWorld failed');
+            }
+        };
+
+        const container = viewer.container;
+        if (trackingPlacementMode) {
+            container.addEventListener('click', handleTrackingClick);
+            container.style.cursor = 'copy'; // Different cursor
+        }
+
+        return () => {
+            container.removeEventListener('click', handleTrackingClick);
+            container.style.cursor = 'default';
+        };
+
+    }, [viewerReady, trackingPlacementMode, trackingTab]);
     useEffect(() => {
         const initializeViewer = () => {
             if (!window.Autodesk) {
@@ -550,7 +623,6 @@ const Viewer = ({
                             handleModelLoaded({ model: loadedModel });
 
                             // Ensure camera frames the new model (Fixes white screen if AEC data skipped)
-                            // Use fitToView with the specific model to frame it correctly.
                             viewer.fitToView(null, loadedModel);
                         }
 
@@ -583,6 +655,70 @@ const Viewer = ({
             viewer.canvas.style.cursor = 'default';
         }
     }, [buildPlacementMode, viewerReady]);
+
+
+
+    // --- SEGUIMIENTO: Icon Markup Extension Integration ---
+    useEffect(() => {
+        const viewer = viewerRef.current;
+        if (!viewer || !viewerReady) return;
+
+        let ext = null;
+
+        const loadMarkupExtension = async () => {
+            // Define fresh handler
+            const currentClickHandler = (item) => {
+                console.log('[Viewer] Click handler triggering prop', item);
+                if (onTrackingPinClick) {
+                    onTrackingPinClick(item);
+                }
+            };
+
+            // Load extension if not loaded
+            ext = viewer.getExtension('IconMarkupExtension');
+            if (!ext) {
+                try {
+                    ext = await viewer.loadExtension('IconMarkupExtension', {
+                        onClick: currentClickHandler
+                    });
+                } catch (e) {
+                    console.error('Failed to load IconMarkupExtension', e);
+                }
+            } else {
+                // CRITICAL: Update the handler on existing extension to avoid stale closures
+                if (ext.options) {
+                    console.log('[Viewer] Updating IconMarkupExtension click handler');
+                    ext.options.onClick = currentClickHandler;
+                }
+            }
+
+            // Prepare Data
+            const currentProgress = trackingData?.avance || [];
+            const currentPhotos = trackingData?.fotos || [];
+
+            let icons = [];
+            if (trackingTab === 'avance') {
+                icons = currentProgress.map(i => ({ ...i, type: 'text', color: i.color || '#fbbf24' }));
+            } else if (trackingTab === 'fotos') {
+                icons = currentPhotos.map(i => ({ ...i, type: 'icon' }));
+            }
+
+            // Update Extension
+            if (ext && ext.setIcons) {
+                ext.setIcons(icons);
+            }
+        };
+
+        loadMarkupExtension();
+
+        return () => {
+            // Optional cleanup: clear icons when unmounting or changing tabs
+            if (ext && ext.clearIcons) {
+                ext.clearIcons();
+            }
+        };
+
+    }, [viewerReady, trackingTab, trackingData, onTrackingPinClick]);
 
     // --- Native Overlay Implementation (Robust & Scaled) ---
     useEffect(() => {
@@ -1922,7 +2058,7 @@ const Viewer = ({
     useEffect(() => {
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
-        if (!placementMode && !buildPlacementMode) {
+        if (!placementMode && !buildPlacementMode && !trackingPlacementMode) {
             viewer.setCursor && viewer.setCursor('default');
             return;
         }
@@ -1943,6 +2079,18 @@ const Viewer = ({
                 if (hit.model) {
                     modelUrn = hit.model.getData().urn;
                 }
+
+                if (trackingPlacementMode && onTrackingPinCreate) {
+                    const newPin = {
+                        id: Date.now().toString(),
+                        x: hit.point.x,
+                        y: hit.point.y,
+                        z: hit.point.z
+                    };
+                    onTrackingPinCreate(newPin);
+                    return;
+                }
+
 
                 console.log('✓ Hit placed at:', {
                     position: { x: hit.point.x, y: hit.point.y, z: hit.point.z },
@@ -1990,7 +2138,7 @@ const Viewer = ({
             target.removeEventListener('click', handlePlacement, true);
             viewer.setCursor && viewer.setCursor('default');
         };
-    }, [placementMode, buildPlacementMode, onPlacementComplete, onBuildPinCreate, viewerReady]);
+    }, [placementMode, buildPlacementMode, trackingPlacementMode, onPlacementComplete, onBuildPinCreate, onTrackingPinCreate, viewerReady]);
 
     // Context menu for sprite creation (right-click / long-press)
     // AND existing sprite interaction
