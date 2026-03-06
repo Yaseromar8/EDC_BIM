@@ -99,7 +99,8 @@ const LoginScreen = ({ onLogin }) => {
                 setError(data.error || 'Ocurrió un error inesperado');
             }
         } catch (err) {
-            setError('Error de conexión con el servidor');
+            console.error('[Login] Connection error:', err);
+            setError(`Error de conexión al servidor (${BACKEND_URL}). Verifique que el backend esté corriendo.`);
         } finally {
             setLoading(false);
         }

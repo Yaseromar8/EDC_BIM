@@ -81,8 +81,15 @@ def _set_cached(full_path: str, entry: dict):
 
 def _download_pdf(full_path: str, bucket_name: str) -> bytes:
     print(f"[AI] ⬇️  Descargando: gs://{bucket_name}/{full_path}")
-    client = storage.Client()
-    return client.bucket(bucket_name).blob(full_path).download_as_bytes()
+    try:
+        client = storage.Client()
+        blob = client.bucket(bucket_name).blob(full_path)
+        if not blob.exists():
+            raise FileNotFoundError(f"El archivo {full_path} no existe en el bucket {bucket_name}")
+        return blob.download_as_bytes()
+    except Exception as e:
+        print(f"[AI] Error descargando PDF: {e}")
+        raise e
 
 
 def _process_pdf(pdf_bytes: bytes) -> dict:

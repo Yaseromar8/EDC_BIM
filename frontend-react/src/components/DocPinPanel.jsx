@@ -1,13 +1,81 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './DocPinPanel.css';
 import { Document, Page, pdfjs } from 'react-pdf';
+import PdfViewer from './PdfViewer';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+const BACKEND_URL = Capacitor.isNativePlatform()
+    ? 'https://visor-ecd-backend.onrender.com'
+    : (import.meta.env.VITE_BACKEND_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3000' : ''));
+
 const DOCS_API = `${BACKEND_URL}/api/docs`;
+const PROXY_API = `${BACKEND_URL}/api/docs/proxy`;
+
+// Cache para almacenar las miniaturas de los PDFs (DataURLs) y evitar re-renderizados costosos
+const thumbnailCache = new Map();
+
+const PdfThumbnail = ({ url, docId }) => {
+    const [thumbnail, setThumbnail] = useState(thumbnailCache.get(docId) || null);
+    const [loading, setLoading] = useState(!thumbnail);
+
+    const onRenderSuccess = useCallback(() => {
+        if (thumbnailCache.has(docId)) return;
+        // Pequeño delay para asegurar que el canvas tenga contenido antes de capturarlo
+        setTimeout(() => {
+            const canvas = document.querySelector(`.pdf-page-${docId} canvas`);
+            if (canvas) {
+                try {
+                    const dataUrl = canvas.toDataURL('image/png', 0.6);
+                    thumbnailCache.set(docId, dataUrl);
+                    setThumbnail(dataUrl);
+                    setLoading(false);
+                } catch (e) {
+                    console.warn("Error capturing PDF thumbnail:", e);
+                }
+            }
+        }, 500);
+    }, [docId]);
+
+    if (thumbnail) {
+        return <img src={thumbnail} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 1, transition: 'opacity 0.3s' }} />;
+    }
+
+    // Usamos el proxy para cargar el PDF en la miniatura, evita redirects y CORS
+    // Si no tenemos docId (nodeId), intentamos pasar el fullPath/fullName al proxy de todas formas
+    const proxyUrl = docId ? `${PROXY_API}?id=${docId}` : `${PROXY_API}?urn=${url}`;
+
+    useEffect(() => {
+        console.log(`[PdfThumbnail] Loading document ${docId}. Proxy: ${proxyUrl}`);
+    }, [docId, proxyUrl]);
+
+    return (
+        <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: '#0a0a0c' }}>
+            <Document
+                file={proxyUrl}
+                loading={<div className="loading-small">...</div>}
+                onLoadError={(err) => console.error(`[PdfThumbnail] Error loading PDF ${docId}:`, err)}
+            >
+                <Page
+                    pageNumber={1}
+                    width={160}
+                    renderTextLayer={false}
+                    renderAnnotationLayer={false}
+                    className={`pdf-page-${docId}`}
+                    onRenderSuccess={onRenderSuccess}
+                    loading={null}
+                />
+            </Document>
+            {loading && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <IconPDF size={32} color="rgba(255,255,255,0.1)" />
+                </div>
+            )}
+        </div>
+    );
+};
 
 // --- MODERN ICONS (Minimalist/Autodesk Style) ---
 const IconPDF = ({ size = 20, color = "currentColor" }) => (
@@ -83,6 +151,19 @@ const DocPinPanel = ({
 
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [tempTitle, setTempTitle] = useState("");
+
+    // Edición de descripción de documentos adjuntos
+    const [editingDocId, setEditingDocId] = useState(null);
+    const [tempDesc, setTempDesc] = useState("");
+
+    const handleSaveDesc = (e, doc) => {
+        e.stopPropagation();
+        if (onAttachDoc) {
+            onAttachDoc(pin.id, { ...doc, plano_titulo: tempDesc }, true);
+        }
+        setEditingDocId(null);
+    };
+
     const [browsing, setBrowsing] = useState(false);
     const [currentPath, setCurrentPath] = useState(projectPrefix);
     const [folders, setFolders] = useState([]);
@@ -123,6 +204,7 @@ const DocPinPanel = ({
 
     // Control de vista: Cuadrícula (miniaturas) o Lista (Detalle IA)
     const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
+    const attachedDocs = pin.docs || [];
 
     // Limpiar estados cuando cambia el proyecto (modelUrn)
     useEffect(() => {
@@ -140,7 +222,7 @@ const DocPinPanel = ({
 
     // EFECTO: Análisis automático de títulos de planos faltantes
     useEffect(() => {
-        if (!pin?.docs) return;
+        if (!pin?.docs || browsing) return;
 
         const docsToAnalyze = pin.docs.filter(d =>
             (d.type === 'pdf' || d.name?.toLowerCase().endsWith('.pdf')) &&
@@ -148,28 +230,31 @@ const DocPinPanel = ({
             d.nodeId
         );
 
-        docsToAnalyze.forEach(doc => {
-            console.log(`[IA] Iniciando análisis de título para: ${doc.name}`);
-            fetch(`${BACKEND_URL}/api/ai/analyze-title`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    fullPath: doc.fullPath,
-                    nodeId: doc.nodeId
-                })
+        if (docsToAnalyze.length === 0) return;
+
+        // Analizar solo de a uno para no saturar con 500s si hay errores de red/storage
+        const doc = docsToAnalyze[0];
+
+        console.log(`[IA] Analizando título: ${doc.name}`);
+        fetch(`${BACKEND_URL}/api/ai/analyze-title`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                fullPath: doc.fullPath,
+                nodeId: doc.nodeId
             })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success && data.title) {
-                        // Actualizar el pin con el título descubierto (silent update)
-                        if (onAttachDoc) {
-                            onAttachDoc(pin.id, { ...doc, plano_titulo: data.title }, true);
-                        }
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.title) {
+                    if (onAttachDoc) {
+                        onAttachDoc(pin.id, { ...doc, plano_titulo: data.title }, true);
                     }
-                })
-                .catch(err => console.error("Error analizando título:", err));
-        });
-    }, [pin.id, pin.docs, onAttachDoc]);
+                }
+            })
+            .catch(err => console.error("Error analizando título:", err));
+
+    }, [pin.id, pin.docs, onAttachDoc, browsing]);
 
     // Activa opacidad y la resetea tras 4 seg de inactividad
     const activateCmd = () => {
@@ -549,7 +634,6 @@ const DocPinPanel = ({
         }
     };
 
-    const attachedDocs = pin.docs || [];
 
     // Breadcrumb for browsing
     const breadcrumbParts = currentPath.replace(/\/$/, '').split('/').filter(Boolean);
@@ -676,11 +760,15 @@ const DocPinPanel = ({
 
                     {/* Wrapper relativo para superponer la command bar sobre el iframe */}
                     <div className="docpin-viewer-body">
-                        <iframe
-                            className="docpin-iframe"
-                            src={viewingDoc.url}
-                            title={viewingDoc.name}
-                        />
+                        {viewingDoc.type === 'pdf' || viewingDoc.name?.toLowerCase().endsWith('.pdf') ? (
+                            <PdfViewer url={viewingDoc.nodeId ? `${PROXY_API}?id=${viewingDoc.nodeId}` : viewingDoc.url} />
+                        ) : (
+                            <iframe
+                                className="docpin-iframe"
+                                src={viewingDoc.url}
+                                title={viewingDoc.name}
+                            />
+                        )}
 
                         {/* ═══ AUTOCAD-STYLE COMMAND BAR ═══ */}
                         <div
@@ -1096,10 +1184,14 @@ const DocPinPanel = ({
                                         >
                                             <IconDelete size={12} />
                                         </button>
-                                        <div className="docpin-pdf-preview icon-style">
-                                            <div className="docpin-preview-fallback">
-                                                {getFileIcon(doc.name)}
-                                            </div>
+                                        <div className="docpin-pdf-preview icon-style" style={{ padding: 0 }}>
+                                            {isPdf ? (
+                                                <PdfThumbnail url={doc.url} docId={doc.id} />
+                                            ) : (
+                                                <div className="docpin-preview-fallback">
+                                                    {getFileIcon(doc.name)}
+                                                </div>
+                                            )}
                                             {isPdf && <div className="pdf-overlay-tag">PDF</div>}
                                         </div>
                                         <div className="docpin-pdf-info">
@@ -1141,9 +1233,41 @@ const DocPinPanel = ({
                                                 <span className="doc-name-text" title={doc.name}>{doc.name}</span>
                                             </div>
                                             <div className="row-col desc">
-                                                <span className={`doc-desc-text ${!doc.plano_titulo ? 'pending' : ''}`}>
-                                                    {doc.plano_titulo || (isPdf ? 'Analizando membrete...' : 'Sin descripción')}
-                                                </span>
+                                                {editingDocId === doc.id ? (
+                                                    <input
+                                                        autoFocus
+                                                        className="docpin-edit-desc-input"
+                                                        value={tempDesc}
+                                                        onChange={(e) => setTempDesc(e.target.value)}
+                                                        onBlur={(e) => handleSaveDesc(e, doc)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') handleSaveDesc(e, doc);
+                                                            if (e.key === 'Escape') setEditingDocId(null);
+                                                        }}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        style={{
+                                                            background: 'rgba(255,255,255,0.05)',
+                                                            border: '1px solid #3b82f6',
+                                                            borderRadius: '4px',
+                                                            color: 'white',
+                                                            padding: '4px 8px',
+                                                            width: '100%',
+                                                            fontSize: '12px'
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <span
+                                                        className={`doc-desc-text ${!doc.plano_titulo ? 'pending' : ''}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setEditingDocId(doc.id);
+                                                            setTempDesc(doc.plano_titulo || "");
+                                                        }}
+                                                        style={{ cursor: 'text', minHeight: '1.2em', display: 'block', width: '100%' }}
+                                                    >
+                                                        {doc.plano_titulo || 'Sin descripción...'}
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="row-col date">
                                                 {doc.addedAt ? new Date(doc.addedAt).toLocaleDateString() : '-'}

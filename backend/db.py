@@ -21,7 +21,9 @@ def init_db_pool():
             )
             print("Pool de conexiones a PostgreSQL inicializado correctamente.")
         except Exception as e:
-            print(f"Error iniciando Pool SQL: {str(e)}")
+            print(f"CRITICAL: Error iniciando Pool SQL a {os.environ.get('DB_HOST')}: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
 @contextmanager
 def get_db_connection():

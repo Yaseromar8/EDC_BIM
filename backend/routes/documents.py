@@ -84,22 +84,36 @@ def proxy_document():
     """Sirve el documento directamente desde GCS para evitar problemas de CORS en el Viewer."""
     urn = request.args.get('urn', '')
     path = request.args.get('path', '')
+    node_id = request.args.get('id', '')
     model_urn = request.args.get('model_urn', 'global')
     
+    gcs_urn = None
     if urn:
         gcs_urn = urn
+    elif node_id:
+        try:
+            from db import get_db_connection
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT gcs_urn FROM file_nodes WHERE id = %s AND is_deleted = FALSE", (node_id,))
+                row = cursor.fetchone()
+                if row: gcs_urn = row[0]
+        except Exception: pass
     elif path:
         from file_system_db import get_file_gcs_urn
         gcs_urn = get_file_gcs_urn(model_urn, path)
-    else:
-        return "No path or urn provided", 400
+    
+    if not gcs_urn:
+        return "No path, urn or valid id provided", 400
 
     from gcs_manager import get_blob_data
     content, content_type = get_blob_data(gcs_urn)
     
     if content is None:
-        return "File not found or error accessing bucket", 404
+        print(f"[Proxy] Blob {gcs_urn} not found in GCS.")
+        return f"File not found in storage for URN: {gcs_urn}", 404
         
+    print(f"[Proxy] Serving {gcs_urn} as {content_type}")
     return Response(content, mimetype=content_type or 'application/octet-stream')
 
 

@@ -85,7 +85,8 @@ const Viewer = ({
 
     // Gemelo / General Selection (removed - was only used for GemeloPropertiesPanel)
     onSelectionChanged,
-    aiModelCommand
+    aiModelCommand,
+    hideToolbar = false
 }) => {
     // --- Refs ---
     const viewerRef = useRef(null);
@@ -164,6 +165,38 @@ const Viewer = ({
 
         executeAiCommand();
     }, [viewerReady, aiModelCommand]);
+
+    // EFECTO: Ocultar/Mostrar barra de herramientas de APS
+    useEffect(() => {
+        const viewer = viewerRef.current;
+        if (!viewer || !viewerReady) return;
+
+        const setVisible = (isVisible) => {
+            try {
+                // Logic A: Use Viewer API
+                viewer.setToolbarOff(!isVisible);
+
+                // Logic B: Force CSS Override (Sometimes API is not enough after startup)
+                const toolbar = document.querySelector('.adsk-viewing-viewer .adsk-toolbar');
+                if (toolbar) {
+                    toolbar.style.display = isVisible ? 'flex' : 'none';
+                    toolbar.style.visibility = isVisible ? 'visible' : 'hidden';
+                }
+            } catch (e) {
+                console.warn('[Viewer] Error toggling toolbar:', e);
+            }
+        };
+
+        console.log('[Viewer] hideToolbar status:', hideToolbar);
+        setVisible(!hideToolbar);
+
+        // Retry a few times in case the toolbar was not yet created when the effect ran
+        if (hideToolbar) {
+            const intv = setInterval(() => setVisible(false), 1000);
+            const tm = setTimeout(() => clearInterval(intv), 10000); // 10s of retries
+            return () => { clearInterval(intv); clearTimeout(tm); };
+        }
+    }, [viewerReady, hideToolbar]);
 
     // --- Ghost Pin Logic (Hover Preview) ---
     useEffect(() => {

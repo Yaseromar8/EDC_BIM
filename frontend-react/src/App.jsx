@@ -21,6 +21,7 @@ import DocumentManager from './components/DocumentManager';
 import DocPinPanel from './components/DocPinPanel';
 import TandemSidebar from './components/TandemSidebar';
 import TandemFilterPanel from './components/TandemFilterPanel';
+import PdfViewer from './components/PdfViewer';
 
 
 
@@ -470,6 +471,7 @@ const BACKEND_URL = Capacitor.isNativePlatform()
   : (import.meta.env.VITE_BACKEND_URL || '');
 
 console.log('[App] Initializing. Platform:', Capacitor.getPlatform(), 'Backend:', BACKEND_URL);
+console.log('[App] Version: 1.0.2 - Tracking UI + Proxy Fixes applied.');
 
 const ACC_PROJECT_ID = 'b.a7ce4d60-79f3-4dbf-b059-fefaf14f7b1d';
 
@@ -693,14 +695,17 @@ function App() {
   // --- UI Helpers for Mobile Logic ---
   const togglePanel = useCallback((panelName) => {
     if (activePanel === panelName) {
-      // Closing the active panel
       setPanelVisible(!panelVisible);
     } else {
-      // Opening a new panel
       setActivePanel(panelName);
-      setPanelVisible(true);
+      // Ocultar el panel lateral automáticamente si es Seguimiento (Progreso)
+      // para que solo aparezcan los botones superiores
+      if (panelName === 'progress') {
+        setPanelVisible(false);
+      } else {
+        setPanelVisible(true);
+      }
 
-      // If mobile/vertical, collapse rail automatically to save space
       if (window.innerWidth < 1024) {
         setIsRailExpanded(false);
       }
@@ -2396,7 +2401,10 @@ function App() {
             </div>
           )}
           <div className="split-view-container">
-            <div className="split-3d">
+            <div className="split-3d" style={{ position: 'relative' }}>
+              <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 9999, background: 'rgba(0,0,0,0.6)', color: '#4ade80', fontSize: '10px', padding: '3px 8px', borderRadius: '4px', border: '1px solid #4ade80', pointerEvents: 'none' }}>
+                Sistema Actualizado v1.0.2
+              </div>
               {/* 3D VIEWER - Keep mounted but hide in Build mode to preserve state */}
               <div style={{ width: '100%', height: '100%', display: activePanel === 'build' ? 'none' : 'block' }}>
                 <Viewer
@@ -2436,6 +2444,7 @@ function App() {
                   onTrackingPinClick={handleTrackingPinClick}
                   onSelectionChanged={setSelectedElement}
                   aiModelCommand={aiModelCommand}
+                  hideToolbar={activePanel === 'progress'}
                 />
 
               </div>
@@ -2506,7 +2515,7 @@ function App() {
                     {openedDoc ? (
                       <div style={{ flex: 1, background: '#e5e7eb', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
                         {openedDoc.type === 'pdf' ? (
-                          <iframe src={openedDoc.url} style={{ width: '100%', height: '100%', border: 'none' }} title="Doc Viewer" />
+                          <PdfViewer url={openedDoc.nodeId ? `${import.meta.env.VITE_BACKEND_URL}/api/docs/proxy?id=${openedDoc.nodeId}` : openedDoc.url} />
                         ) : openedDoc.type === 'image' ? (
                           <img src={openedDoc.url} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} alt="Doc" />
                         ) : (openedDoc.source === 'acc' || openedDoc.urn) ? (
