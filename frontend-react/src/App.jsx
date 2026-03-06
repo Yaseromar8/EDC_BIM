@@ -2052,7 +2052,7 @@ function App() {
           items={[
             {
               id: 'files',
-              label: 'Videos',
+              label: 'Archivos',
               icon: <FolderIcon />,
               active: activePanel === 'files' && panelVisible,
               onClick: () => togglePanel('files')
@@ -2065,39 +2065,11 @@ function App() {
               onClick: () => togglePanel('filters')
             },
             {
-              id: 'ar',
-              label: 'AR Mode',
-              icon: <ARIcon />,
-              active: arModeActive,
-              onClick: () => {
-                if (!arModeActive) {
-                  // CAPTURE camera from main viewer (if exists)
-                  try {
-                    // Try to find the global viewer instance
-                    const viewer = window.NOP_VIEWER || (window.Autodesk && window.Autodesk.Viewing && window.Autodesk.Viewing.Private && window.Autodesk.Viewing.Private.GuiViewer3D && window.Autodesk.Viewing.Private.GuiViewer3D.instances && window.Autodesk.Viewing.Private.GuiViewer3D.instances[0]);
-
-                    if (viewer && viewer.navigation) {
-                      const cam = viewer.navigation.getCamera();
-                      const cameraState = {
-                        position: cam.position.clone(),
-                        target: cam.target.clone(),
-                        up: cam.up.clone(),
-                        fov: viewer.navigation.getVerticalFov()
-                      };
-                      console.log("[App] Captured camera for AR:", cameraState);
-                      setArInitialCamera(cameraState);
-                    } else {
-                      console.warn("[App] No viewer found, AR will use fitToView");
-                    }
-                  } catch (err) {
-                    console.error("[App] Error capturing camera:", err);
-                  }
-                  setArModeActive(true);
-                } else {
-                  setArModeActive(false);
-                  setArInitialCamera(null);
-                }
-              }
+              id: 'progress',
+              label: 'Seguimiento',
+              icon: <ProgressIcon />,
+              active: activePanel === 'progress' && panelVisible,
+              onClick: () => togglePanel('progress')
             }
           ]}
         />
@@ -2161,27 +2133,13 @@ function App() {
 
         <div className="app-viewer">
           {activePanel === 'progress' && (
-            <div style={{
-              position: 'absolute',
-              top: '20px',
-              // Shift center-left if any panel is docked (50% of remaining viewer space = 25%)
+            <div className="tracking-toolbar" style={{
               left: panelDocked && (
                 (trackingTab === 'fotos' && photoAlbumOpen && selectedAlbumPin) ||
                 (trackingTab === 'avance' && progressPanelOpen && selectedProgressPin) ||
                 (trackingTab === 'docs' && docPinPanelOpen && selectedDocPin) ||
                 (trackingTab === 'restricciones' && docPinPanelOpen && selectedDocPin)
-              ) ? '25%' : '50%',
-              transform: 'translateX(-50%)',
-              display: 'flex',
-              gap: '8px',
-              zIndex: 100,
-              transition: 'left 0.3s ease',
-              background: 'rgba(0,0,0,0.45)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              padding: '6px',
-              borderRadius: '12px',
-              border: '1px solid rgba(255,255,255,0.08)'
+              ) ? '25%' : '50%'
             }}>
               <button
                 className="secondary-btn"
@@ -2189,13 +2147,11 @@ function App() {
                   background: trackingTab === 'avance' ? '#22c55e' : 'transparent',
                   color: trackingTab === 'avance' ? '#fff' : '#bbb',
                   border: 'none',
-                  padding: '8px 20px',
                   borderRadius: '8px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   textTransform: 'uppercase',
-                  fontSize: '12px',
-                  letterSpacing: '0.05em',
+                  fontSize: '11px',
                   transition: 'all 0.2s ease',
                   display: 'flex',
                   alignItems: 'center',
@@ -2214,13 +2170,11 @@ function App() {
                   background: trackingTab === 'fotos' ? '#3b82f6' : 'transparent',
                   color: trackingTab === 'fotos' ? '#fff' : '#bbb',
                   border: 'none',
-                  padding: '8px 20px',
                   borderRadius: '8px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   textTransform: 'uppercase',
-                  fontSize: '12px',
-                  letterSpacing: '0.05em',
+                  fontSize: '11px',
                   transition: 'all 0.2s ease',
                   display: 'flex',
                   alignItems: 'center',
@@ -2241,13 +2195,11 @@ function App() {
                   background: trackingTab === 'docs' ? '#8b5cf6' : 'transparent',
                   color: trackingTab === 'docs' ? '#fff' : '#bbb',
                   border: 'none',
-                  padding: '8px 20px',
                   borderRadius: '8px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   textTransform: 'uppercase',
-                  fontSize: '12px',
-                  letterSpacing: '0.05em',
+                  fontSize: '11px',
                   transition: 'all 0.2s ease',
                   display: 'flex',
                   alignItems: 'center',
@@ -2270,17 +2222,15 @@ function App() {
                   background: trackingTab === 'restricciones' ? '#f59e0b' : 'transparent',
                   color: trackingTab === 'restricciones' ? '#fff' : '#bbb',
                   border: 'none',
-                  padding: '8px 20px',
                   borderRadius: '8px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   textTransform: 'uppercase',
-                  fontSize: '11px',
-                  letterSpacing: '0.05em',
+                  fontSize: '10px',
                   transition: 'all 0.2s ease',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px'
+                  gap: '4px'
                 }}
                 onClick={() => setTrackingTab(prev => prev === 'restricciones' ? null : 'restricciones')}
               >
@@ -2292,17 +2242,16 @@ function App() {
                 RESTR.
               </button>
 
-              {/* Add Photo Button when Photos active */}
-              {trackingTab === 'fotos' && (
+              {trackingTab && (
                 <button
                   className="secondary-btn"
-                  title="Agregar Nueva Foto"
+                  title="Nuevo Marcador"
                   style={{
-                    background: trackingPlacementMode ? '#ef4444' : 'rgba(59, 130, 246, 0.8)',
+                    background: trackingPlacementMode ? '#ef4444' : 'rgba(255, 255, 255, 0.15)',
                     color: 'white',
                     border: 'none',
-                    width: '34px',
-                    height: '34px',
+                    width: '32px',
+                    height: '32px',
                     borderRadius: '50%',
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -2311,87 +2260,7 @@ function App() {
                     justifyContent: 'center',
                     fontSize: '18px',
                     transition: 'all 0.2s ease',
-                    boxShadow: trackingPlacementMode ? '0 0 12px rgba(239,68,68,0.4)' : 'none'
-                  }}
-                  onClick={() => setTrackingPlacementMode(prev => !prev)}
-                >
-                  {trackingPlacementMode ? '✕' : '+'}
-                </button>
-              )}
-
-              {/* Add Progress Button when Avance active */}
-              {trackingTab === 'avance' && (
-                <button
-                  className="secondary-btn"
-                  title="Marcar Avance"
-                  style={{
-                    background: trackingPlacementMode ? '#ef4444' : 'rgba(34, 197, 94, 0.8)',
-                    color: 'white',
-                    border: 'none',
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '50%',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '18px',
-                    transition: 'all 0.2s ease',
-                    boxShadow: trackingPlacementMode ? '0 0 12px rgba(239,68,68,0.4)' : 'none'
-                  }}
-                  onClick={() => setTrackingPlacementMode(prev => !prev)}
-                >
-                  {trackingPlacementMode ? '✕' : '+'}
-                </button>
-              )}
-
-              {/* Add Doc Button when Docs active */}
-              {trackingTab === 'docs' && (
-                <button
-                  className="secondary-btn"
-                  title="Agregar Documento (PDF)"
-                  style={{
-                    background: trackingPlacementMode ? '#ef4444' : 'rgba(139, 92, 246, 0.8)',
-                    color: 'white',
-                    border: 'none',
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '50%',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '18px',
-                    transition: 'all 0.2s ease',
-                    boxShadow: trackingPlacementMode ? '0 0 12px rgba(239,68,68,0.4)' : 'none'
-                  }}
-                  onClick={() => setTrackingPlacementMode(prev => !prev)}
-                >
-                  {trackingPlacementMode ? '✕' : '+'}
-                </button>
-              )}
-              {/* Add Restriction Button when Alerta active */}
-              {trackingTab === 'restricciones' && (
-                <button
-                  className="secondary-btn"
-                  title="Marcar Restricción / Alerta"
-                  style={{
-                    background: trackingPlacementMode ? '#ef4444' : 'rgba(245, 158, 11, 0.8)',
-                    color: 'white',
-                    border: 'none',
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '50%',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '18px',
-                    transition: 'all 0.2s ease',
-                    boxShadow: trackingPlacementMode ? '0 0 12px rgba(239,68,68,0.4)' : 'none'
+                    marginLeft: '4px'
                   }}
                   onClick={() => setTrackingPlacementMode(prev => !prev)}
                 >
@@ -2402,8 +2271,8 @@ function App() {
           )}
           <div className="split-view-container">
             <div className="split-3d" style={{ position: 'relative' }}>
-              <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 9999, background: 'rgba(0,0,0,0.6)', color: '#4ade80', fontSize: '10px', padding: '3px 8px', borderRadius: '4px', border: '1px solid #4ade80', pointerEvents: 'none' }}>
-                Sistema Actualizado v1.0.3
+              <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 9999, background: 'rgba(55, 65, 81, 0.4)', color: '#9ca3af', fontSize: '10px', padding: '3px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', pointerEvents: 'none', backdropFilter: 'blur(4px)' }}>
+                Sistema Actualizado v1.0.4
               </div>
               {/* 3D VIEWER - Keep mounted but hide in Build mode to preserve state */}
               <div style={{ width: '100%', height: '100%', display: activePanel === 'build' ? 'none' : 'block' }}>

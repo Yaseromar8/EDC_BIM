@@ -1,11 +1,12 @@
 .mobile-floating-toolbar {
     position: fixed;
-    top: 70px;
+    top: 100px;
+    /* Below the logo/topbar */
     left: 16px;
     right: auto;
-    transform: none;
     display: flex;
-    flex-direction: column-reverse;
+    flex-direction: column;
+    /* Toggle first, items grow downwards */
     align-items: flex-start;
     gap: 12px;
     z-index: 2000;
@@ -15,11 +16,12 @@
 .mft-toggle-btn {
     width: 48px;
     height: 48px;
-    background: rgba(28, 32, 39, 0.85);
-    backdrop-filter: blur(10px);
+    background: rgba(31, 41, 55, 0.4);
+    /* Transparent gray/smoke */
+    backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 50%;
-    color: #fff;
+    color: #e5e7eb;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -32,8 +34,12 @@
     transform: scale(0.95);
 }
 
-/* Determine rotation for collapsed state */
+/* Rotate chevron 180deg when collapsed (points down/right or such) */
 .mft-toggle-btn.collapsed svg {
+    transform: rotate(0deg);
+}
+
+.mft-toggle-btn:not(.collapsed) svg {
     transform: rotate(180deg);
 }
 
@@ -43,7 +49,7 @@
     flex-direction: column;
     gap: 12px;
     margin-top: 0;
-    margin-bottom: 12px;
+    margin-bottom: 0;
     opacity: 1;
     transition: opacity 0.3s ease, transform 0.3s ease;
     transform-origin: top left;
@@ -62,11 +68,11 @@
 .mft-action-btn {
     width: 48px;
     height: 48px;
-    background: rgba(28, 32, 39, 0.85);
+    background: rgba(31, 41, 55, 0.4);
     backdrop-filter: blur(8px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 50%;
-    color: #a1a1aa;
+    color: #9ca3af;
     display: flex;
     align-items: center;
     justify-content: center;
