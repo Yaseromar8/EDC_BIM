@@ -4,7 +4,7 @@ import { Capacitor } from '@capacitor/core';
 
 const BACKEND_URL = Capacitor.isNativePlatform()
     ? 'https://visor-ecd-backend.onrender.com'
-    : (import.meta.env.VITE_BACKEND_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3000' : ''));
+    : (import.meta.env.VITE_BACKEND_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://visor-ecd-backend.onrender.com'));
 
 const LoginScreen = ({ onLogin }) => {
     const [darkMode, setDarkMode] = useState(true);

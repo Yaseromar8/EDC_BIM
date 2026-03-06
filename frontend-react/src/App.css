@@ -137,17 +137,6 @@ body,
     border-right: none;
   }
 
-  /* Move Autodesk Viewer Toolbar to Top Right on Mobile */
-  .adsk-viewing-viewer .adsk-control-group,
-  .adsk-viewing-viewer .adsk-toolbar {
-    bottom: auto !important;
-    top: 20px !important;
-    left: auto !important;
-    right: 20px !important;
-    transform: none !important;
-    z-index: 100 !important;
-    /* Ensure it's above canvas but maybe below floating panels if needed */
-  }
 
   /* Force Vertical Split in Portrait Mode for Split Screen */
   /* Target split-view-container when it has children */
@@ -165,19 +154,6 @@ body,
     /* Grow to fill space */
   }
 
-  /* The Doc panel in parallel mode */
-  .split-doc.parallel {
-    width: 100% !important;
-    height: auto !important;
-    /* Let flex handle height */
-    flex: 1 1 auto !important;
-    /* Grow to share space 50/50 */
-    top: 0 !important;
-    right: 0 !important;
-    border-left: none !important;
-    border-top: 2px solid #333;
-    position: relative !important;
-  }
 }
 
 .splash-overlay {

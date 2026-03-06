@@ -468,10 +468,10 @@ function FilterConfigurator({
 
 const BACKEND_URL = Capacitor.isNativePlatform()
   ? 'https://visor-ecd-backend.onrender.com'
-  : (import.meta.env.VITE_BACKEND_URL || '');
+  : (import.meta.env.VITE_BACKEND_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://visor-ecd-backend.onrender.com'));
 
 console.log('[App] Initializing. Platform:', Capacitor.getPlatform(), 'Backend:', BACKEND_URL);
-console.log('[App] Version: 1.0.2 - Tracking UI + Proxy Fixes applied.');
+console.log('[App] Version: 1.0.3 - Mobile Connection & UI Cleanup applied.');
 
 const ACC_PROJECT_ID = 'b.a7ce4d60-79f3-4dbf-b059-fefaf14f7b1d';
 
@@ -2403,7 +2403,7 @@ function App() {
           <div className="split-view-container">
             <div className="split-3d" style={{ position: 'relative' }}>
               <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 9999, background: 'rgba(0,0,0,0.6)', color: '#4ade80', fontSize: '10px', padding: '3px 8px', borderRadius: '4px', border: '1px solid #4ade80', pointerEvents: 'none' }}>
-                Sistema Actualizado v1.0.2
+                Sistema Actualizado v1.0.3
               </div>
               {/* 3D VIEWER - Keep mounted but hide in Build mode to preserve state */}
               <div style={{ width: '100%', height: '100%', display: activePanel === 'build' ? 'none' : 'block' }}>
