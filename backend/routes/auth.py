@@ -57,48 +57,8 @@ def ensure_users_tables():
                 )
             ''')
             
-            # Asegurar que el tipo de columna sea correcto si la tabla ya existía (migración pesada)
-            cursor.execute("""
-                DO $$ 
-                DECLARE
-                    row record;
-                BEGIN 
-                    -- 1. Eliminar la FK si existe para poder cambiar tipos
-                    FOR row IN (
-                        SELECT constraint_name 
-                        FROM information_schema.table_constraints 
-                        WHERE table_name = 'project_users' 
-                          AND constraint_type = 'FOREIGN KEY' 
-                          AND (constraint_name LIKE '%project_id%' OR constraint_name LIKE '%project_users_project_id_fkey%')
-                    ) LOOP
-                        EXECUTE 'ALTER TABLE project_users DROP CONSTRAINT ' || row.constraint_name;
-                    END LOOP;
-
-                    -- 2. Cambiar projects.id a TEXT si aún es integer
-                    IF EXISTS (
-                        SELECT 1 FROM information_schema.columns 
-                        WHERE table_name = 'projects' AND column_name = 'id' AND data_type = 'integer'
-                    ) THEN
-                        ALTER TABLE projects ALTER COLUMN id TYPE TEXT USING id::text;
-                    END IF;
-
-                    -- 3. Cambiar project_users.project_id a TEXT si aún es integer
-                    IF EXISTS (
-                        SELECT 1 FROM information_schema.columns 
-                        WHERE table_name = 'project_users' AND column_name = 'project_id' AND data_type = 'integer'
-                    ) THEN
-                        ALTER TABLE project_users ALTER COLUMN project_id TYPE TEXT USING project_id::text;
-                    END IF;
-
-                    -- 4. Re-añadir la FK
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.table_constraints 
-                        WHERE table_name = 'project_users' AND constraint_name = 'project_users_project_id_fkey'
-                    ) THEN
-                        ALTER TABLE project_users ADD CONSTRAINT project_users_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
-                    END IF;
-                END $$;
-            """)
+            # La migración pesada se ha removido para evitar bloqueos en la base de datos
+            # durante el reinicio de los contenedores en Render.
             
             # Crear usuario Admin (Omar) si no existe
             cursor.execute("SELECT id FROM users WHERE email='omarsanchezh8@gmail.com'")
