@@ -1400,6 +1400,10 @@ function App() {
       pinsToAdd = [{ ...newPin, val, color: '#fbbf24' }];
     } else if (trackingTab === 'docs') {
       pinsToAdd = [{ ...newPin, docs: [], color: '#8b5cf6' }]; // Purple or specific color for docs
+    } else if (trackingTab === 'rfis') {
+      const val = prompt("Asunto del RFI:", "Nuevo RFI");
+      if (val === null) return;
+      pinsToAdd = [{ ...newPin, val, docs: [], color: '#ef4444', type: 'rfi' }];
     } else if (trackingTab === 'restricciones') {
       const val = prompt("Descripción breve de la restricción / alerta:", "Pendiente");
       if (val === null) return;
@@ -1434,7 +1438,7 @@ function App() {
     } else if (type === 'avance') {
       setProgressPanelOpen(false);
       setSelectedProgressPin(null);
-    } else if (type === 'docs' || type === 'restricciones') {
+    } else if (type === 'docs' || type === 'restricciones' || type === 'rfis') {
       setDocPinPanelOpen(false);
       setSelectedDocPin(null);
     }
@@ -2152,7 +2156,8 @@ function App() {
                 (trackingTab === 'fotos' && photoAlbumOpen && selectedAlbumPin) ||
                 (trackingTab === 'avance' && progressPanelOpen && selectedProgressPin) ||
                 (trackingTab === 'docs' && docPinPanelOpen && selectedDocPin) ||
-                (trackingTab === 'restricciones' && docPinPanelOpen && selectedDocPin)
+                (trackingTab === 'restricciones' && docPinPanelOpen && selectedDocPin) ||
+                (trackingTab === 'rfis' && docPinPanelOpen && selectedDocPin)
               ) ? '25%' : '50%'
             }}>
               <button
@@ -2229,6 +2234,31 @@ function App() {
                   <polyline points="10 9 9 9 8 9"></polyline>
                 </svg>
                 DOC
+              </button>
+              <button
+                className="secondary-btn"
+                style={{
+                  background: trackingTab === 'rfis' ? '#ef4444' : 'transparent',
+                  color: trackingTab === 'rfis' ? '#fff' : '#bbb',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textTransform: 'uppercase',
+                  fontSize: '11px',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                onClick={() => setTrackingTab(prev => prev === 'rfis' ? null : 'rfis')}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                RFI
               </button>
               <button
                 className="secondary-btn"
@@ -2532,7 +2562,7 @@ function App() {
             )}
 
             {/* CASE F: DOC PIN PANEL */}
-            {(trackingTab === 'docs' || trackingTab === 'restricciones') && docPinPanelOpen && selectedDocPin && (
+            {(trackingTab === 'docs' || trackingTab === 'restricciones' || trackingTab === 'rfis') && docPinPanelOpen && selectedDocPin && (
               <div className={`split-doc active dark-float ${panelDocked ? 'parallel' : ''}`} style={panelDocked ? { background: '#1a1b1e', borderLeft: '1px solid #444', zIndex: 10 } : {}}>
                 {!panelDocked && (
                   <button className="dock-toggle-btn" onClick={() => setPanelDocked(true)} title="Acoplar panel">

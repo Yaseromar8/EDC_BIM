@@ -51,8 +51,8 @@ def upload_file_to_gcs(file_object, destination_blob_name):
         blob.metadata = {"version": str(new_version)}
         blob.patch()
         
-        # Preferiremos URLs firmadas para seguridad (o públicas si el bucket lo es)
-        return blob.public_url
+        # Preferiremos URLs firmadas para seguridad en lugar del public_url si el bucket es cerrado
+        return generate_signed_url(destination_blob_name)
 
     except Exception as e:
         print(f"Error subiendo a GCS: {str(e)}")

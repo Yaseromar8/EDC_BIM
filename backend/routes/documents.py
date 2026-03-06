@@ -103,39 +103,16 @@ def proxy_document():
         from file_system_db import get_file_gcs_urn
         gcs_urn = get_file_gcs_urn(model_urn, path)
     
-    if not gcs_urn:
-        return "No path, urn or valid id provided", 400
-
     from gcs_manager import generate_signed_url
-    import requests
+    from flask import redirect
 
     signed_url = generate_signed_url(gcs_urn)
     if not signed_url:
         return f"File not found in storage for URN: {gcs_urn}", 404
 
-    # Stream the blob directly from GCS to the client using the Signed URL
-    try:
-        req = requests.get(signed_url, stream=True, timeout=10)
-        req.raise_for_status()
-        
-        def iter_content():
-            for chunk in req.iter_content(chunk_size=1024 * 1024):  # 1MB chunks
-                if chunk:
-                    yield chunk
-
-        # Pass the original content type and content length for proper streaming/rendering
-        headers = {}
-        if 'Content-Type' in req.headers:
-            headers['Content-Type'] = req.headers['Content-Type']
-        if 'Content-Length' in req.headers:
-            headers['Content-Length'] = req.headers['Content-Length']
-            
-        print(f"[Proxy] Streaming {gcs_urn} as {headers.get('Content-Type')}")
-        return Response(iter_content(), headers=headers)
-        
-    except requests.exceptions.RequestException as e:
-        print(f"[Proxy] Error streaming {gcs_urn}: {e}")
-        return "Error fetching document from storage", 502
+    # Redirect to GCS explicitly for PDF Range Requests 
+    # and native browser caching + thumbnail optimization.
+    return redirect(signed_url)
 
 
 @documents_bp.route('/api/docs/list', methods=['GET'])
