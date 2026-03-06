@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="/logo.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
+  <link rel="stylesheet" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+    rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#1473e6",
+            "background-light": "#ffffff",
+            "background-dark": "#1e1e1e",
+          },
+          fontFamily: {
+            display: ["Inter", "sans-serif"],
+          },
+          borderRadius: {
+            DEFAULT: "4px",
+            'full': '9999px',
+          },
+        },
+      },
+    };
+  </script>
+  <title>Digital Twin - Visor</title>
+  <!-- WebXR Polyfill -->
+  <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/build/webxr-polyfill.min.js"></script>
+  <script>
+    window.polyfill = new WebXRPolyfill();
+  </script>
+  <script type="module" crossorigin src="/assets/index-dTv6I2Zl.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-C-xAllTb.css">
+</head>
+
+<body>
+  <div id="root"></div>
+  <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js"></script>
+  <script>
+    // Global callback for Google Maps
+    function initGoogleMaps() {
+      window.googleMapsLoaded = true;
+      console.log('Google Maps API loaded');
+    }
+  </script>
+  <script async
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDquuJhCuX0nVpHJAb-L6Ih9yguEqy6KjI&loading=async&callback=initGoogleMaps"></script>
+
+  <!-- Dashboard Extensions -->
+  <script type="module" src="/extensions/base/BaseExtension.js"></script>
+  <script type="module" src="/extensions/logger/LoggerExtension.js"></script>
+  <script type="module" src="/extensions/histogram/HistogramExtension.js"></script>
+
+</body>
+
+</html>

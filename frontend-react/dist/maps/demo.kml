@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Demo BIM Overlay</name>
+    <Placemark>
+      <name>Proyecto demo</name>
+      <description>Ubicación de referencia para pruebas Google Maps.</description>
+      <Style>
+        <LineStyle>
+          <color>ff0000ff</color>
+          <width>2</width>
+        </LineStyle>
+        <PolyStyle>
+          <color>7dff0000</color>
+        </PolyStyle>
+      </Style>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              -73.9864,40.7487,0
+              -73.9856,40.7487,0
+              -73.9856,40.7482,0
+              -73.9864,40.7482,0
+              -73.9864,40.7487,0
+            </coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+  </Document>
+</kml>
