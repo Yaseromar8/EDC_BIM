@@ -1509,28 +1509,42 @@ function App() {
     alert("Foto capturada: " + file.name + ". Funcionalidad de auto-pin próximamente.");
   };
 
-  const handleAddPhotoToPin = (newPhoto) => {
+  const handleAddPhotoToPin = (newPhoto, isUpdate = false) => {
     if (!selectedAlbumPin) return;
 
-    // Update Local State
     setTrackingData(prev => {
       const updatedFotos = prev.fotos.map(pin => {
         if (pin.id === selectedAlbumPin.id) {
+          if (isUpdate) {
+            return {
+              ...pin,
+              photos: (pin.photos || []).map(p => p.id === newPhoto.tempId ? newPhoto : p)
+            };
+          }
           return { ...pin, photos: [...(pin.photos || []), newPhoto] };
         }
         return pin;
       });
       const newState = { ...prev, fotos: updatedFotos };
 
-      // Sync to Backend (Full generic update or specific endpoint)
-      // We can use the specific endpoint for better granularity if we want
-      // But full save is easier for now given the structure
-      saveTrackingData(newState);
+      // Si es un update (carga finalizada) o no es temporal, guardamos en GCS
+      if (isUpdate || !newPhoto.isUploading) {
+        saveTrackingData(newState);
+      }
 
       return newState;
     });
+
     // Update Selected Pin State
-    setSelectedAlbumPin(prev => ({ ...prev, photos: [...(prev.photos || []), newPhoto] }));
+    setSelectedAlbumPin(prev => {
+      if (isUpdate) {
+        return {
+          ...prev,
+          photos: (prev.photos || []).map(p => p.id === newPhoto.tempId ? newPhoto : p)
+        };
+      }
+      return { ...prev, photos: [...(prev.photos || []), newPhoto] };
+    });
   };
 
   // Attach multiple docs to a pin in one go

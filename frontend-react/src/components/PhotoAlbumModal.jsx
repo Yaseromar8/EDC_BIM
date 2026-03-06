@@ -28,12 +28,28 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
         const file = e.target.files[0];
         if (!file) return;
 
-        setIsUploading(true);
+        // Optimistic UI: Mostrar inmediatamente
+        const temporaryUrl = URL.createObjectURL(file);
+        const tempId = Date.now();
+        const newPhotoTemp = {
+            id: tempId,
+            src: temporaryUrl,
+            desc: file.name,
+            date: new Date().toISOString().split('T')[0],
+            displayDate: new Date().toLocaleDateString(),
+            fullPath: 'Subiendo...', // Indicador
+            isUploading: true
+        };
+
+        if (onAddPhoto) {
+            onAddPhoto(newPhotoTemp);
+        }
+
         const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('path', `Fotos_Generales/Tracking/pin_${pinId}/`); // Ruta logica en PostgreSQL!!
-        formData.append('model_urn', modelUrn); // Proyecto activo para Multi-Tenant
+        formData.append('path', `Fotos_Generales/Tracking/pin_${pinId}/`);
+        formData.append('model_urn', modelUrn);
 
         try {
             const res = await fetch(`${BACKEND_URL}/api/docs/upload`, {
@@ -43,25 +59,25 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
             const data = await res.json();
 
             if (data.success) {
-                const newPhoto = {
-                    id: Date.now(),
-                    src: data.url, // Url temporal generada que durará 24h
-                    desc: file.name,
-                    date: new Date().toISOString().split('T')[0], // Standard YYYY-MM-DD for easier filtering
-                    displayDate: new Date().toLocaleDateString(),
-                    fullPath: data.fullName // Este lo guardamos en el Tracking para poder refrescarlo luego!
-                };
+                // Background upload exitosa, aquí se debería informar al padre para que 
+                // reemplace el "isUploading: true" y el "src" local por el de GCS.
+                // Como workaround simple, el padre al recargar o al terminar el useEffect
+                // verá la URL real. Si queremos reemplazar mutando:
                 if (onAddPhoto) {
-                    onAddPhoto(newPhoto);
+                    onAddPhoto({
+                        ...newPhotoTemp,
+                        src: data.url,
+                        fullPath: data.fullName,
+                        isUploading: false,
+                        tempId: tempId
+                    }, true); // El padre necesita soportar update, o lo forzamos.
                 }
             } else {
-                alert(`Error al subir la foto: ${data.error}`);
+                alert(`Error al subir la foto en 2do plano: ${data.error}`);
             }
         } catch (err) {
             console.error("Upload error:", err);
-            alert("Error de conexión al subir la foto.");
-        } finally {
-            setIsUploading(false);
+            alert("Error de conexión al subir la foto en 2do plano.");
         }
     };
 

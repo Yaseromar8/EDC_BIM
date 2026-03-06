@@ -106,15 +106,36 @@ def proxy_document():
     if not gcs_urn:
         return "No path, urn or valid id provided", 400
 
-    from gcs_manager import get_blob_data
-    content, content_type = get_blob_data(gcs_urn)
-    
-    if content is None:
-        print(f"[Proxy] Blob {gcs_urn} not found in GCS.")
+    from gcs_manager import generate_signed_url
+    import requests
+
+    signed_url = generate_signed_url(gcs_urn)
+    if not signed_url:
         return f"File not found in storage for URN: {gcs_urn}", 404
+
+    # Stream the blob directly from GCS to the client using the Signed URL
+    try:
+        req = requests.get(signed_url, stream=True, timeout=10)
+        req.raise_for_status()
         
-    print(f"[Proxy] Serving {gcs_urn} as {content_type}")
-    return Response(content, mimetype=content_type or 'application/octet-stream')
+        def iter_content():
+            for chunk in req.iter_content(chunk_size=1024 * 1024):  # 1MB chunks
+                if chunk:
+                    yield chunk
+
+        # Pass the original content type and content length for proper streaming/rendering
+        headers = {}
+        if 'Content-Type' in req.headers:
+            headers['Content-Type'] = req.headers['Content-Type']
+        if 'Content-Length' in req.headers:
+            headers['Content-Length'] = req.headers['Content-Length']
+            
+        print(f"[Proxy] Streaming {gcs_urn} as {headers.get('Content-Type')}")
+        return Response(iter_content(), headers=headers)
+        
+    except requests.exceptions.RequestException as e:
+        print(f"[Proxy] Error streaming {gcs_urn}: {e}")
+        return "Error fetching document from storage", 502
 
 
 @documents_bp.route('/api/docs/list', methods=['GET'])
