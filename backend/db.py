@@ -16,7 +16,8 @@ def init_db_pool():
                 password=os.environ.get("DB_PASS"),
                 host=os.environ.get("DB_HOST"),
                 port=os.environ.get("DB_PORT", "5432"),
-                database=os.environ.get("DB_NAME")
+                database=os.environ.get("DB_NAME"),
+                connect_timeout=10
             )
             print("Pool de conexiones a PostgreSQL inicializado correctamente.")
         except Exception as e:
