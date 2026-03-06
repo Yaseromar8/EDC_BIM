@@ -863,7 +863,8 @@ function App() {
   useEffect(() => {
     if (!selectedProject) return;
 
-    fetch(`${BACKEND_URL}/api/views`)
+    const projectId = selectedProject?.id || selectedProject?.name || 'global';
+    fetch(`${BACKEND_URL}/api/views?project=${encodeURIComponent(projectId)}`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setSavedViews(data);
@@ -889,7 +890,8 @@ function App() {
         body: JSON.stringify({
           name,
           viewerState,
-          filterState
+          filterState,
+          project: selectedProject?.id || selectedProject?.name || 'global'
         })
       })
         .then(res => res.json())
@@ -1428,7 +1430,7 @@ function App() {
     // Optimistic Update
     setTrackingData(prev => {
       const currentList = prev[type] || [];
-      const updatedList = currentList.filter(p => p.id !== id);
+      const updatedList = currentList.filter(p => String(p.id) !== String(id));
       const newState = { ...prev, [type]: updatedList };
       saveTrackingData(newState);
       return newState;
@@ -1521,11 +1523,11 @@ function App() {
 
     setTrackingData(prev => {
       const updatedFotos = prev.fotos.map(pin => {
-        if (pin.id === selectedAlbumPin.id) {
+        if (String(pin.id) === String(selectedAlbumPin.id)) {
           if (isUpdate) {
             return {
               ...pin,
-              photos: (pin.photos || []).map(p => p.id === newPhoto.tempId ? newPhoto : p)
+              photos: (pin.photos || []).map(p => String(p.id) === String(newPhoto.tempId) ? newPhoto : p)
             };
           }
           return { ...pin, photos: [...(pin.photos || []), newPhoto] };
@@ -1547,7 +1549,7 @@ function App() {
       if (isUpdate) {
         return {
           ...prev,
-          photos: (prev.photos || []).map(p => p.id === newPhoto.tempId ? newPhoto : p)
+          photos: (prev.photos || []).map(p => String(p.id) === String(newPhoto.tempId) ? newPhoto : p)
         };
       }
       return { ...prev, photos: [...(prev.photos || []), newPhoto] };

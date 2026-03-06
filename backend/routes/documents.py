@@ -103,6 +103,9 @@ def proxy_document():
         from file_system_db import get_file_gcs_urn
         gcs_urn = get_file_gcs_urn(model_urn, path)
     
+    if not gcs_urn:
+        return jsonify({"success": False, "error": "Document URN not found"}), 404
+
     from gcs_manager import generate_signed_url, get_blob_data
     from flask import redirect, Response
 

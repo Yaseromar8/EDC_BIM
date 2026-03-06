@@ -198,21 +198,24 @@ def get_tracking_data(model_urn='global'):
                     # Merge with existing avance or add
                     data["avance"].append(pin)
                 elif pin_type == 'fotos':
-                    # Check if we already have a legacy entry
-                    legacy = fotos_dict.get(pin["id"])
-                    if legacy:
-                        # Refresh legacy photos if possible
-                        for photo in legacy.get("photos", []):
-                            bucket_name = os.environ.get("GCS_BUCKET_NAME")
-                            if bucket_name and photo.get("url") and bucket_name in photo["url"]:
-                                try:
-                                    url_path = photo["url"].split(bucket_name + "/")[1].split("?")[0]
-                                    fresh = generate_signed_url(url_path)
-                                    if fresh: photo["url"] = fresh
-                                except Exception: pass
-
-                        pin["photos"] = legacy.get("photos", [])
+                    # Only use legacy if photos doesn't exist in data column
+                    if "photos" not in pin or not pin["photos"]:
+                        legacy = fotos_dict.get(pin["id"])
+                        if legacy:
+                            # Refresh legacy photos if possible
+                            for photo in legacy.get("photos", []):
+                                bucket_name = os.environ.get("GCS_BUCKET_NAME")
+                                if bucket_name and photo.get("url") and bucket_name in photo["url"]:
+                                    try:
+                                        url_path = photo["url"].split(bucket_name + "/")[1].split("?")[0]
+                                        fresh = generate_signed_url(url_path)
+                                        if fresh: photo["url"] = fresh
+                                    except Exception: pass
+                            pin["photos"] = legacy.get("photos", [])
+                    
+                    if pin["id"] in fotos_dict:
                         del fotos_dict[pin["id"]]
+                        
                     data["fotos"].append(pin)
                 elif pin_type == 'docs':
                     data["docs"].append(pin)
