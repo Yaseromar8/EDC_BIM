@@ -103,11 +103,23 @@ def proxy_document():
         from file_system_db import get_file_gcs_urn
         gcs_urn = get_file_gcs_urn(model_urn, path)
     
-    from gcs_manager import generate_signed_url
-    from flask import redirect
+    from gcs_manager import generate_signed_url, get_blob_data
+    from flask import redirect, Response
 
+    # Si es imagen, lo evitamos exponer a redirect/signing issues (soluciona error de imagen negra)
+    is_image = any(gcs_urn.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif'])
+    if is_image:
+        content, content_type = get_blob_data(gcs_urn)
+        if content:
+            return Response(content, mimetype=content_type or 'image/jpeg')
+            
+    # Para PDFs o archivos grandes, redirigir a URL firmada local o pública
     signed_url = generate_signed_url(gcs_urn)
     if not signed_url:
+        # Fallback de emergencia, extraerlo a la fuerza
+        content, content_type = get_blob_data(gcs_urn)
+        if content:
+             return Response(content, mimetype=content_type or 'application/octet-stream')
         return f"File not found in storage for URN: {gcs_urn}", 404
 
     # Redirect to GCS explicitly for PDF Range Requests 
@@ -231,13 +243,15 @@ def upload_document():
             }
         )
 
+        permalink_url = f"{request.host_url.rstrip('/')}/api/docs/proxy?urn={gcs_uuid}"
+
         return jsonify({
             "success": True,
             "filename": filename,
             "fullName": f"{folder_path}{filename}",
             "size_mb": file_info['size_mb'],
             "mime_type": file_info['mime_type'],
-            "url": gcs_url
+            "url": permalink_url
         }), 200
 
     except Exception as e:
