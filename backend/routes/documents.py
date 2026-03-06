@@ -243,7 +243,7 @@ def upload_document():
             }
         )
 
-        permalink_url = f"{request.host_url.rstrip('/')}/api/docs/proxy?urn={gcs_uuid}"
+        permalink_url = f"/api/docs/proxy?urn={gcs_uuid}"
 
         return jsonify({
             "success": True,
@@ -251,7 +251,8 @@ def upload_document():
             "fullName": f"{folder_path}{filename}",
             "size_mb": file_info['size_mb'],
             "mime_type": file_info['mime_type'],
-            "url": permalink_url
+            "url": permalink_url,
+            "gcs_urn": gcs_uuid
         }), 200
 
     except Exception as e:

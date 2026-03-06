@@ -59,18 +59,17 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
             const data = await res.json();
 
             if (data.success) {
-                // Background upload exitosa, aquí se debería informar al padre para que 
-                // reemplace el "isUploading: true" y el "src" local por el de GCS.
-                // Como workaround simple, el padre al recargar o al terminar el useEffect
-                // verá la URL real. Si queremos reemplazar mutando:
+                // Formatting URL directly from BACKEND_URL to avoid proxy URL bugs
+                const finalUrl = data.url.startsWith('http') ? data.url : `${BACKEND_URL}${data.url.startsWith('/') ? '' : '/'}${data.url}`;
+
                 if (onAddPhoto) {
                     onAddPhoto({
                         ...newPhotoTemp,
-                        src: data.url,
+                        src: finalUrl,
                         fullPath: data.fullName,
                         isUploading: false,
                         tempId: tempId
-                    }, true); // El padre necesita soportar update, o lo forzamos.
+                    }, true);
                 }
             } else {
                 alert(`Error al subir la foto en 2do plano: ${data.error}`);
