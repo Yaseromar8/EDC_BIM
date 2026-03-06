@@ -12,6 +12,8 @@ const PdfViewer = ({ url, onClose }) => {
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
+    const [lastPinchDist, setLastPinchDist] = useState(null);
+    const [lastTouchPos, setLastTouchPos] = useState(null);
 
     const containerRef = useRef(null);
     const wrapperRef = useRef(null);
@@ -54,6 +56,69 @@ const PdfViewer = ({ url, onClose }) => {
         setIsDragging(false);
     };
 
+    // Touch logic (Panning & Pinch-to-zoom)
+    const handleTouchStart = (e) => {
+        if (e.touches.length === 1) {
+            setIsDragging(true);
+            setLastTouchPos({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+        } else if (e.touches.length === 2) {
+            setIsDragging(false);
+            const dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            setLastPinchDist(dist);
+
+            const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            setLastTouchPos({ x: cx, y: cy });
+        }
+    };
+
+    const handleTouchMove = useCallback((e) => {
+        // Prevent default browser behavior (scroll/pull-to-refresh) during interaction
+        if (e.cancelable) e.preventDefault();
+
+        if (e.touches.length === 1 && isDragging && lastTouchPos) {
+            const dx = e.touches[0].clientX - lastTouchPos.x;
+            const dy = e.touches[0].clientY - lastTouchPos.y;
+
+            setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+            setLastTouchPos({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+        } else if (e.touches.length === 2 && lastPinchDist !== null && lastTouchPos !== null) {
+            const dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+
+            const zoomSpeed = 0.005; // Pinch sensitivity
+            const delta = dist - lastPinchDist;
+            const factor = Math.exp(delta * zoomSpeed);
+
+            const newScale = Math.min(Math.max(scale * factor, 0.1), 20);
+
+            if (newScale !== scale) {
+                const rect = containerRef.current.getBoundingClientRect();
+                const mouseX = lastTouchPos.x - rect.left;
+                const mouseY = lastTouchPos.y - rect.top;
+
+                setOffset(prev => ({
+                    x: mouseX - (mouseX - prev.x) * (newScale / scale),
+                    y: mouseY - (mouseY - prev.y) * (newScale / scale)
+                }));
+
+                setScale(newScale);
+            }
+            setLastPinchDist(dist);
+        }
+    }, [isDragging, lastTouchPos, lastPinchDist, scale]);
+
+    const handleTouchEnd = () => {
+        setIsDragging(false);
+        setLastPinchDist(null);
+        setLastTouchPos(null);
+    };
+
     // Zoom logic (towards cursor)
     const handleWheel = (e) => {
         e.preventDefault();
@@ -85,13 +150,16 @@ const PdfViewer = ({ url, onClose }) => {
         const container = containerRef.current;
         if (container) {
             container.addEventListener('wheel', handleWheel, { passive: false });
+            // Add touchmove with passive false to allow preventDefault
+            container.addEventListener('touchmove', handleTouchMove, { passive: false });
         }
         return () => {
             if (container) {
                 container.removeEventListener('wheel', handleWheel);
+                container.removeEventListener('touchmove', handleTouchMove);
             }
         };
-    }, [scale, offset]);
+    }, [scale, offset, handleTouchMove]);
 
     return (
         <div className="pdf-viewer-container"
@@ -101,6 +169,9 @@ const PdfViewer = ({ url, onClose }) => {
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
             onDoubleClick={handleDoubleClick}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
             style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
         >
             <div
