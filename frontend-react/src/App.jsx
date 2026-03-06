@@ -879,7 +879,8 @@ function App() {
       const filterState = {
         filterSelections,
         filterColors,
-        filterProperties
+        filterProperties,
+        hiddenModelUrns
       };
 
       fetch(`${BACKEND_URL}/api/views`, {
@@ -900,7 +901,7 @@ function App() {
 
     window.addEventListener('viewer-state-captured', handleStateCapture);
     window.dispatchEvent(new CustomEvent('viewer-request-state'));
-  }, [filterSelections, filterColors, filterProperties]);
+  }, [filterSelections, filterColors, filterProperties, hiddenModelUrns]);
 
   const handleDeleteView = useCallback((viewId) => {
     if (!window.confirm("Delete this view?")) return;
@@ -914,6 +915,8 @@ function App() {
       if (view.filterState.filterSelections) setFilterSelections(view.filterState.filterSelections);
       if (view.filterState.filterColors) setFilterColors(view.filterState.filterColors);
       if (view.filterState.filterProperties) setFilterProperties(view.filterState.filterProperties);
+      if (view.filterState.hiddenModelUrns) setHiddenModelUrns(view.filterState.hiddenModelUrns);
+      else setHiddenModelUrns([]); // Reset if empty
     }
     window.dispatchEvent(new CustomEvent('viewer-restore-state', { detail: view.viewerState }));
   }, []);

@@ -1693,7 +1693,7 @@ const Viewer = ({
         if (!viewer || !viewerReady) return;
 
         const handleRequestState = () => {
-            const state = viewer.getState({ viewport: true, renderOptions: true }); // Get basic state
+            const state = viewer.getState({ viewport: true, renderOptions: true, objectSet: true }); // Captura aislamientos (ocultos, seleccionados)
             window.dispatchEvent(new CustomEvent('viewer-state-captured', { detail: state }));
         };
 
