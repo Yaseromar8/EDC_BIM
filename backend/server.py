@@ -10,7 +10,13 @@ import json
 import re
 # Load environment variables from .env file
 from dotenv import load_dotenv
-load_dotenv()
+import pathlib
+
+# Buscar .env en CWD primero, luego un nivel arriba (raíz del proyecto)
+_env_found = load_dotenv()
+if not _env_found:
+    _parent_env = pathlib.Path(__file__).resolve().parent.parent / '.env'
+    load_dotenv(_parent_env)
 
 from flask import Flask, jsonify, request, send_from_directory, redirect
 from flask_cors import CORS
@@ -22,6 +28,7 @@ from aps import get_internal_token, get_api_data
 
 # Flask app setup
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB (Failsafe para archivos CAD/Civil pesados)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Register Blueprints
@@ -47,7 +54,43 @@ MAP_JOBS = {}
 os.makedirs(MAP_UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(DOC_UPLOAD_FOLDER, exist_ok=True)
 
-# ... (imports)
+def parse_storage_components(storage_id):
+    """Parses an APS Storage ID into bucket_key and object_name.
+    Format: urn:adsk.objects:os.object:BUCKET_KEY/OBJECT_NAME
+    Also handles: urn:adsk.wipprod:dm.lineage:... style IDs
+    """
+    if not storage_id:
+        return None, None
+    try:
+        # Standard OSS format: urn:adsk.objects:os.object:bucket_key/object_name
+        if 'os.object:' in storage_id:
+            parts = storage_id.split('os.object:')[1]
+            slash_idx = parts.index('/')
+            bucket_key = parts[:slash_idx]
+            object_name = parts[slash_idx + 1:]
+            return bucket_key, object_name
+        # WIP/DM format: urn:adsk.wipprod:dm.lineage:...
+        # or urn:adsk.wipprod:fs.file:...
+        elif 'wip.dm.prod' in storage_id or 'wipprod' in storage_id:
+            # For WIP storage, extract bucket and object from the ID
+            # Format varies, try to parse bucket from the storage ID
+            if ':fs.file:' in storage_id:
+                parts = storage_id.split(':fs.file:')[1]
+                return 'wip.dm.prod', parts
+            elif ':dm.lineage:' in storage_id:
+                parts = storage_id.split(':dm.lineage:')[1]
+                return 'wip.dm.prod', parts
+            else:
+                # Generic fallback for wip storage
+                parts = storage_id.rsplit(':', 1)
+                if len(parts) == 2:
+                    return 'wip.dm.prod', parts[1]
+        print(f"[parse_storage] Could not parse: {storage_id}")
+        return None, None
+    except Exception as e:
+        print(f"[parse_storage] Error parsing '{storage_id}': {e}")
+        return None, None
+
 
 
 def extract_download_url(formats_payload):
@@ -279,6 +322,8 @@ def proxy_image():
         return jsonify({'error': 'No signed URL returned', 'details': resp.text}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/build/translation-status')
 def get_translation_status():
     urn = request.args.get('urn')
     print(f"[translation-status] Received URN: {urn}")
@@ -329,7 +374,7 @@ def refresh_user_tokens(tokens):
     client_secret = os.getenv('APS_CLIENT_SECRET')
     
     try:
-        print("Refreshing 3-legged token...")
+        print("Refreshing 3-legged token via DB...")
         resp = requests.post(
             'https://developer.api.autodesk.com/authentication/v2/token',
             data={
@@ -342,11 +387,27 @@ def refresh_user_tokens(tokens):
         resp.raise_for_status()
         new_tokens = resp.json()
         
-        # Save new tokens
-        tokens_path = os.path.join(os.path.dirname(__file__), 'tokens.json')
-        with open(tokens_path, 'w', encoding='utf-8') as f:
-            import json
-            json.dump(new_tokens, f, ensure_ascii=False, indent=2)
+        # Save new tokens to DB
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO app_tokens (id, access_token, refresh_token, expires_in, token_type, updated_at)
+                VALUES (%s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (id) DO UPDATE SET
+                    access_token = EXCLUDED.access_token,
+                    refresh_token = EXCLUDED.refresh_token,
+                    expires_in = EXCLUDED.expires_in,
+                    token_type = EXCLUDED.token_type,
+                    updated_at = NOW()
+            ''', (
+                'autodesk_app_tokens',
+                new_tokens['access_token'],
+                new_tokens['refresh_token'],
+                new_tokens['expires_in'],
+                new_tokens['token_type']
+            ))
+            conn.commit()
             
         return new_tokens
     except Exception as e:
@@ -354,32 +415,37 @@ def refresh_user_tokens(tokens):
         return None
 
 def load_user_tokens():
-    tokens_path = os.path.join(os.path.dirname(__file__), 'tokens.json')
-    if not os.path.exists(tokens_path):
-        return None
+    """Reads tokens from DB. Replaces tokens.json local access."""
     try:
-        import json
-        with open(tokens_path, 'r', encoding='utf-8') as f:
-            tokens = json.load(f)
-            
-        # Check expiration based on file modification time
-        mtime = os.path.getmtime(tokens_path)
-        age = time.time() - mtime
-        expires_in = tokens.get('expires_in', 3599)
-        
-        # Refresh if token is older than (expires_in - 5 minutes)
-        if age > (expires_in - 300):
-            print(f"Token age {int(age)}s > {expires_in - 300}s. Refreshing...")
-            new_tokens = refresh_user_tokens(tokens)
-            if new_tokens:
-                return new_tokens
-            else:
-                print("Failed to refresh token. It might be invalid.")
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT access_token, refresh_token, expires_in, token_type, updated_at FROM app_tokens WHERE id = %s', ('autodesk_app_tokens',))
+            row = cursor.fetchone()
+            if not row:
                 return None
-        
-        return tokens
+            
+            tokens = {
+                'access_token': row[0],
+                'refresh_token': row[1],
+                'expires_in': row[2],
+                'token_type': row[3]
+            }
+            updated_at = row[4]
+            
+            # Check expiration
+            # updated_at is a datetime object from Postgres
+            age = (datetime.now(updated_at.tzinfo) - updated_at).total_seconds()
+            expires_in = tokens.get('expires_in', 3599)
+            
+            if age > (expires_in - 300):
+                print(f"Token (DB) age {int(age)}s > {expires_in - 300}s. Refreshing...")
+                new_tokens = refresh_user_tokens(tokens)
+                return new_tokens
+            
+            return tokens
     except Exception as e:
-        print(f"Error loading tokens: {e}")
+        print(f"Error loading tokens from DB: {e}")
         return None
 
 @app.route('/api/auth/status')
@@ -387,10 +453,10 @@ def auth_status():
     tokens = load_user_tokens()
     return jsonify({'connected': tokens is not None})
 
-@app.route('/api/auth/login')
+@app.route('/api/auth/aps/login')
 def auth_login():
     client_id = os.getenv('APS_CLIENT_ID')
-    redirect_uri = os.getenv('APS_REDIRECT_URI', 'http://localhost:3000/api/auth/callback')
+    redirect_uri = os.getenv('APS_REDIRECT_URI', 'http://localhost:3000/api/auth/aps/callback')
     # Scopes necesarios para ver y subir archivos
     scopes = 'data:read data:write data:create bucket:create bucket:read'
     
@@ -404,7 +470,7 @@ def auth_login():
     )
     return redirect(url)
 
-@app.route('/api/auth/callback')
+@app.route('/api/auth/aps/callback')
 def auth_callback():
     code = request.args.get('code')
     if not code:
@@ -424,14 +490,32 @@ def auth_callback():
         resp = requests.post('https://developer.api.autodesk.com/authentication/v2/token', data=payload)
         resp.raise_for_status()
         tokens = resp.json()
-        # Persist tokens locally so they can be reused (no deploy impact).
+        
+        # Persist tokens in DB (Master storage)
         try:
-            tokens_path = os.path.join(os.path.dirname(__file__), 'tokens.json')
-            with open(tokens_path, 'w', encoding='utf-8') as f:
-                import json
-                json.dump(tokens, f, ensure_ascii=False, indent=2)
-        except OSError as write_err:
-            print(f"[auth] No se pudo guardar tokens.json: {write_err}")
+            from db import get_db_connection
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO app_tokens (id, access_token, refresh_token, expires_in, token_type, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (id) DO UPDATE SET
+                        access_token = EXCLUDED.access_token,
+                        refresh_token = EXCLUDED.refresh_token,
+                        expires_in = EXCLUDED.expires_in,
+                        token_type = EXCLUDED.token_type,
+                        updated_at = NOW()
+                ''', (
+                    'autodesk_app_tokens',
+                    tokens['access_token'],
+                    tokens['refresh_token'],
+                    tokens['expires_in'],
+                    tokens['token_type']
+                ))
+                conn.commit()
+            print("[auth] Tokens guardados exitosamente en PostgreSQL.")
+        except Exception as db_err:
+            print(f"[auth] Error critico guardando tokens en DB: {db_err}")
         
         # Redirect to the frontend (configured via env var or default to localhost)
         frontend_url = os.getenv('APS_FRONTEND_URL', 'http://localhost:5173')
@@ -510,105 +594,37 @@ def trigger_translation_server(urn, token):
 
 @app.route('/api/build/acc-upload', methods=['POST'])
 def upload_to_acc():
-    tokens = load_user_tokens()
-    if not tokens or not tokens.get('access_token'):
-        return jsonify({'error': 'Falta token de usuario. Ejecuta el login 3-legged primero.'}), 401
-    access_token = tokens['access_token']
+    # Este endpoint solia subir a ACC. Ahora subirá soberanamente a GCS
+    # ya que el usuario reportó muchos errores 401 con los tokens de Autodesk.
     if 'file' not in request.files:
         return jsonify({'error': 'No se recibió archivo.'}), 400
+    
     up_file = request.files['file']
     if not up_file or not up_file.filename:
         return jsonify({'error': 'Archivo inválido.'}), 400
 
-    filename = secure_filename(up_file.filename)
+    from gcs_manager import upload_file_to_gcs
+    import time
     
-    # 1. Get Storage
-    storage_url = f'https://developer.api.autodesk.com/data/v1/projects/{ACC_PROJECT_ID}/storage'
-    storage_payload = {
-        "data": {
-            "type": "objects",
-            "attributes": {"name": filename},
-            "relationships": {"target": {"data": {"type": "folders", "id": ACC_FOLDER_URN}}}
-        }
-    }
-    try:
-        storage_resp = requests.post(storage_url, headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}, json=storage_payload)
-        if not storage_resp.ok: return jsonify({'error': f'Storage error: {storage_resp.text}'}), 500
-        object_id = storage_resp.json()['data']['id']
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-    # 2. Upload (Signed S3)
-    bucket_key, object_name = parse_storage_components(object_id)
-    if not bucket_key: return jsonify({'error': 'Invalid storage ID'}), 500
-    
-    encoded_obj = urllib.parse.quote(object_name, safe='/')
-    signed_url = f'https://developer.api.autodesk.com/oss/v2/buckets/{bucket_key}/objects/{encoded_obj}/signeds3upload'
+    filename = secure_filename(f"{int(time.time())}_{up_file.filename}")
     
     try:
-        signed_resp = requests.get(signed_url, headers={'Authorization': f'Bearer {access_token}'})
-        if not signed_resp.ok: return jsonify({'error': f'Signed URL error: {signed_resp.text}'}), 500
-        signed_data = signed_resp.json()
-        upload_url = signed_data['urls'][0]
-        upload_key = signed_data['uploadKey']
+        # Subir a carpeta documents (o general) en el bucket
+        gcs_url = upload_file_to_gcs(up_file, f"documents/{filename}")
         
-        file_bytes = up_file.read()
-        put_resp = requests.put(upload_url, data=file_bytes)
-        if not put_resp.ok: return jsonify({'error': 'S3 Upload failed'}), 500
-        
-        complete_resp = requests.post(signed_url, headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}, json={'uploadKey': upload_key})
-        if not complete_resp.ok: return jsonify({'error': 'Complete upload failed'}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-    # 3. Create Item/Version
-    item_payload = {
-        "data": {
-            "type": "items",
-            "attributes": {
-                "displayName": filename,
-                "extension": {"type": "items:autodesk.bim360:File", "version": "1.0"}
-            },
-            "relationships": {
-                "tip": {"data": {"type": "versions", "id": "1"}},
-                "parent": {"data": {"type": "folders", "id": ACC_FOLDER_URN}}
-            }
-        },
-        "included": [{
-            "type": "versions", "id": "1",
-            "attributes": {"name": filename, "extension": {"type": "versions:autodesk.bim360:File", "version": "1.0"}},
-            "relationships": {"storage": {"data": {"type": "objects", "id": object_id}}}
-        }]
-    }
-    
-    items_url = f'https://developer.api.autodesk.com/data/v1/projects/{ACC_PROJECT_ID}/items'
-    version_id = None
-    try:
-        items_resp = requests.post(items_url, headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}, json=item_payload)
-        
-        if items_resp.status_code == 409:
-            # Already exists, Create Version (Simplified logic for recovery)
-            # Fetch existing item ID logic omitted for brevity, assuming standard flow for now or user can delete and re-upload
-            return jsonify({'error': 'El archivo ya existe. Por favor, elimínalo primero o renómbralo.'}), 409
-        elif not items_resp.ok:
-             return jsonify({'error': f'Create Item failed: {items_resp.text}'}), 500
-        
-        item_data = items_resp.json()
-        if item_data.get('included'):
-            version_id = item_data['included'][0]['id']
+        if gcs_url:
+            # Simulamos el retorno de version_id para que el front-end no se rompa (lo tratan como URN/URL)
+            return jsonify({
+                'status': 'success', 
+                'version_id': gcs_url, 
+                'urn': gcs_url,
+                'url': gcs_url
+            })
         else:
-            version_id = object_id # Fallback
+            return jsonify({'error': 'Fallo la subida al bucket de Cloud Storage'}), 500
             
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-    # 4. Trigger Translation
-    if version_id:
-        urn_bytes = base64.urlsafe_b64encode(version_id.encode('utf-8'))
-        urn = urn_bytes.decode('utf-8').rstrip('=')
-        trigger_translation_server(urn, access_token)
-        
-    return jsonify({'status': 'success', 'version_id': version_id, 'urn': urn})
 
 @app.route('/api/build/delete-file', methods=['DELETE'])
 def delete_acc_file():
@@ -657,18 +673,28 @@ from routes.digital_twin import digital_twin_bp
 from routes.views import views_bp
 from routes.pins import pins_bp
 from routes.tracking import tracking_bp
-
-# ... (rest of imports)
+from routes.documents import documents_bp
+from routes.auth import auth_bp
+from routes.projects import projects_bp
+from routes.ai import ai_bp
 
 app.register_blueprint(digital_twin_bp)
 app.register_blueprint(maps_bp)
 app.register_blueprint(views_bp)
 app.register_blueprint(pins_bp)
 app.register_blueprint(tracking_bp)
+app.register_blueprint(documents_bp)
+app.register_blueprint(projects_bp)
+app.register_blueprint(auth_bp)
+app.register_blueprint(ai_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
     return send_from_directory(MAP_UPLOAD_FOLDER, filename)
+
+# Inicializar tablas maestras de la BD
+from db import ensure_file_nodes_table
+ensure_file_nodes_table()
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 3000))

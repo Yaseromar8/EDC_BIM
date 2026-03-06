@@ -10,18 +10,19 @@ import SecondaryViewer from './components/SecondaryViewer';
 import ImportModelModal from './components/ImportModelModal';
 import DocumentPanel from './components/DocumentPanel';
 import AddDocumentModal from './components/AddDocumentModal';
-import BuildPanel from './components/BuildPanel';
-import ProgressPanel from './components/ProgressPanel';
-
-import BuildMapView from './components/BuildMapView';
 import MobileFloatingToolbar from './components/MobileFloatingToolbar';
 import LandingPage from './components/LandingPage'; // Import Landing Page
+import LoginScreen from './components/LoginScreen';
 import FilterConfiguratorModal from './components/FilterConfiguratorModal';
 import ARView from './components/ARView';
 import PhotoAlbumModal from './components/PhotoAlbumModal';
+import ProgressDetailPanel from './components/ProgressDetailPanel';
+import DocumentManager from './components/DocumentManager';
+import DocPinPanel from './components/DocPinPanel';
+import TandemSidebar from './components/TandemSidebar';
+import TandemFilterPanel from './components/TandemFilterPanel';
 
-import AddAttachmentModal from './components/AddAttachmentModal';
-import buildIconImg from './assets/build-icon.png';
+
 
 const ARIcon = () => (
   <svg className="rail-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -96,12 +97,11 @@ const TargetIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
     <circle cx="12" cy="12" r="10" />
     <circle cx="12" cy="12" r="3" />
-    <line x1="12" y1="2" x2="12" y2="5" />
-    <line x1="12" y1="19" x2="12" y2="22" />
-    <line x1="2" y1="12" x2="5" y2="12" />
-    <line x1="19" y1="12" x2="22" y2="12" />
+    <line x1="12" y1="2" x2="12" y2="22" />
+    <line x1="2" y1="12" x2="22" y2="12" />
   </svg>
 );
+
 
 const DEFAULT_VISIBLE_VALUES = 5;
 
@@ -137,32 +137,6 @@ const DocumentIcon = () => (
   </svg>
 );
 
-const InventoryIcon = () => (
-  <svg
-    className="rail-icon"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="currentColor"
-  >
-    <path d="M20,3.25H4A2.75,2.75,0,0,0,1.25,6V18A2.75,2.75,0,0,0,4,20.75H20A2.75,2.75,0,0,0,22.75,18V6A2.75,2.75,0,0,0,20,3.25ZM2.75,8.75h2.5v4.5H2.75Zm4,0h6.5v4.5H6.75Zm8,0h6.5v4.5h-6.5ZM2.75,6A1.25,1.25,0,0,1,4,4.75H20A1.25,1.25,0,0,1,21.25,6V7.25H2.75Zm0,12V14.75h2.5v4.5H4A1.25,1.25,0,0,1,2.75,18Zm4-3.25h6.5v4.5H6.75ZM21.25,18A1.25,1.25,0,0,1,20,19.25H14.75v-4.5h6.5Z" />
-  </svg>
-);
-
-const BuildIcon = ({ isActive }) => (
-  <img
-    src={buildIconImg}
-    className="rail-icon"
-    alt="Build"
-    style={{
-      width: '32px',
-      height: '32px',
-      objectFit: 'contain',
-      filter: isActive ? 'none' : 'invert(1)',
-      transition: 'filter 0.2s ease'
-    }}
-  />
-);
 
 const ProgressIcon = () => (
   <svg
@@ -497,7 +471,25 @@ const BACKEND_URL = Capacitor.isNativePlatform()
 
 console.log('[App] Initializing. Platform:', Capacitor.getPlatform(), 'Backend:', BACKEND_URL);
 
+const ACC_PROJECT_ID = 'b.a7ce4d60-79f3-4dbf-b059-fefaf14f7b1d';
+
 function App() {
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('visor_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const handleLoginSuccess = (userData) => {
+    localStorage.setItem('visor_user', JSON.stringify(userData));
+    setUser(userData);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('visor_user');
+    setUser(null);
+    setSelectedProject(null);
+  };
+
   const [models, setModels] = useState([]);
   const [relinkTargetModel, setRelinkTargetModel] = useState(null); // Relink State
   const [hiddenModelUrns, setHiddenModelUrns] = useState([]);
@@ -511,43 +503,52 @@ function App() {
   const [panelVisible, setPanelVisible] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
-  const [buildUploads, setBuildUploads] = useState([]);
   const [filterConfiguratorOpen, setFilterConfiguratorOpen] = useState(false);
   const [availableProperties, setAvailableProperties] = useState([]);
   const [filterProperties, setFilterProperties] = useState(['Standard::Sources', 'Tandem Category']);
   const [modelProperties, setModelProperties] = useState({}); // Changed to object {urn: props[]}
   const [filterSelections, setFilterSelections] = useState({});
   const [expandedFilters, setExpandedFilters] = useState({});
+  const [facetSearch, setFacetSearch] = useState({}); // { [facetId]: { open: bool, query: string } }
 
   const [filterColors, setFilterColors] = useState({});
 
   // Seguimiento / Tracking State
-  const [trackingTab, setTrackingTab] = useState(null); // 'avance' | 'fotos' | null
+  const [trackingTab, setTrackingTab] = useState(null); // 'avance' | 'fotos' | 'docs' | null
   const [trackingPlacementMode, setTrackingPlacementMode] = useState(false);
   // Placeholder Mock Data (Should match Viewer internal logic or pass down)
   const [trackingData, setTrackingData] = useState({
     avance: [],
-    fotos: []
+    fotos: [],
+    docs: [],
+    restricciones: []
   });
-  const [selectedProject, setSelectedProject] = useState(null); // 'DRENAJE_URBANO' | 'CANAL'
+  const [selectedProject, setSelectedProject] = useState(null);
 
-  const [showSplash, setShowSplash] = useState(false); // Valid only after project selection triggers load
-  const [buildUploading, setBuildUploading] = useState(false);
-  const [buildUploadError, setBuildUploadError] = useState('');
-  const [buildPins, setBuildPins] = useState([]);
-  const [showBuildPins, setShowBuildPins] = useState(false);
-  const [buildPlacementMode, setBuildPlacementMode] = useState(false);
-  const [buildPinType, setBuildPinType] = useState('data'); // 'data', 'docs', 'avance', 'restriccion'
+  const [showSplash, setShowSplash] = useState(false);
   const [selectedPinId, setSelectedPinId] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [minimapActive, setMinimapActive] = useState(false);
   const [vrActive, setVrActive] = useState(false);
   const [arModeActive, setArModeActive] = useState(false);
-  const [arInitialCamera, setArInitialCamera] = useState(null); // NEW: Store viewer camera state for AR
+  const [arInitialCamera, setArInitialCamera] = useState(null);
 
   // Album Modal State
   const [photoAlbumOpen, setPhotoAlbumOpen] = useState(false);
   const [selectedAlbumPin, setSelectedAlbumPin] = useState(null);
+
+  // Progress Panel State
+
+  const [progressPanelOpen, setProgressPanelOpen] = useState(false);
+  const [selectedProgressPin, setSelectedProgressPin] = useState(null);
+  const [panelDocked, setPanelDocked] = useState(false); // PiP (false) vs Docked (true)
+  const [selectedElement, setSelectedElement] = useState(null); // New: Store { dbId, modelUrn } for detailed tracking
+
+  // Doc Pin Panel State
+  const [docPinPanelOpen, setDocPinPanelOpen] = useState(false);
+  const [selectedDocPin, setSelectedDocPin] = useState(null);
+
+
 
   const [sheets, setSheets] = useState([]); // To store 2D sheets
   const [activeSheet, setActiveSheet] = useState(null);
@@ -556,17 +557,130 @@ function App() {
   const [docPins, setDocPins] = useState([]); // Array of { id, x, y, z, docs: [] }
   const [openedDoc, setOpenedDoc] = useState(null); // Currently viewing doc in Split Screen
 
+  const toggleSpritesVisibility = () => setShowSprites(prev => !prev);
+
+  // Removed fake ingestion state and polling
+
   const [isRailExpanded, setIsRailExpanded] = useState(true); // Added for responsive rail
 
-  // Attachments Modal State
-  const [attachmentModalOpen, setAttachmentModalOpen] = useState(false);
-  const [attachmentPinId, setAttachmentPinId] = useState(null);
+
 
   const [parallelMode, setParallelMode] = useState(false); // Floating vs Split Default False
+  const [showDocManager, setShowDocManager] = useState(false); // Gestor Documental GCS
 
   // Viewable / Proposal Handling (Infraworks)
   const [modelViews, setModelViews] = useState({}); // { urn: [ { guid, name } ] }
   const [activeViewableGuids, setActiveViewableGuids] = useState({}); // { urn: guid }
+
+  // Universal Search State
+  const [universalSearch, setUniversalSearch] = useState({
+    query: '',
+    answer: '',
+    results: [],
+    loading: false
+  });
+  const [aiModelCommand, setAiModelCommand] = useState(null);
+
+  const handleUniversalSearch = async (query) => {
+    if (!query || !query.trim()) return;
+
+    // 1. Añadir el mensaje del usuario inmediatamente para el chat
+    const userMsg = { role: 'user', content: query };
+    setUniversalSearch(prev => ({
+      ...prev,
+      query,
+      answer: '',
+      results: [],
+      loading: true,
+      messages: [...(prev.messages || []), userMsg]
+    }));
+    setActivePanel('search');
+    setPanelVisible(true);
+
+    try {
+      // Usamos el historial acumulado hasta ahora más el nuevo mensaje
+      const fullHistory = [...(universalSearch.messages || []), userMsg];
+
+      const resp = await fetch(`${BACKEND_URL}/api/ai/universal-search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          model_urn: selectedProject?.urn || null,
+          history: fullHistory
+        })
+      });
+      const data = await resp.json();
+
+      if (data.success) {
+        if (data.intent === 'model_command') {
+          setAiModelCommand({ ...data.command, timestamp: Date.now() });
+          setUniversalSearch(prev => ({
+            ...prev,
+            answer: `Comando: Aislar ${data.command.parameter}`,
+            loading: false
+          }));
+        } else {
+          const assistantMsg = { role: 'assistant', content: data.answer, results: data.results };
+          setUniversalSearch(prev => ({
+            ...prev,
+            answer: data.answer,
+            results: data.results,
+            loading: false,
+            // Agregamos el mensaje del asistente al historial ya existente
+            messages: [...(prev.messages || []), assistantMsg]
+          }));
+        }
+      } else {
+        setUniversalSearch(prev => ({
+          ...prev,
+          loading: false,
+          messages: [...(prev.messages || []), { role: 'assistant', content: `Error: ${data.error || 'No se pudo procesar.'}` }]
+        }));
+      }
+    } catch (err) {
+      console.error('Search error:', err);
+      setUniversalSearch(prev => ({
+        ...prev,
+        loading: false,
+        messages: [...(prev.messages || []), { role: 'assistant', content: 'Error de conexión con la IA.' }]
+      }));
+    }
+  };
+
+  const handleOpenDocByNodeId = async (result) => {
+    if (!result.nodeId) {
+      alert("No se encontró ID de nodo para este documento en la base de datos.");
+      return;
+    }
+
+    try {
+      // Necesitamos obtener la URL real del archivo desde el backend
+      const resp = await fetch(`${BACKEND_URL}/api/documents/${result.nodeId}`);
+      const data = await resp.json();
+
+      if (data.success && data.document) {
+        // Abrir en el visor de planos/docs
+        setActiveSheet({
+          id: data.document.id,
+          name: data.document.name,
+          url: data.document.url,
+          type: data.document.mime_type?.includes('pdf') ? 'pdf' : 'image',
+          isPin: false // Se abre como un visor de documento directo
+        });
+        setOpenedDoc({
+          id: data.document.id,
+          name: data.document.name,
+          url: data.document.url,
+          type: data.document.mime_type?.includes('pdf') ? 'pdf' : 'image'
+        });
+      } else {
+        alert("No se pudo obtener la información del documento.");
+      }
+    } catch (err) {
+      console.error("Error opening doc by node ID:", err);
+    }
+  };
 
   const handleViewablesLoaded = useCallback(({ urn, views }) => {
     setModelViews(prev => {
@@ -630,6 +744,9 @@ function App() {
       x: position.x,
       y: position.y,
       z: position.z,
+      dbId: position.dbId,
+      externalId: position.externalId,
+      objectName: position.objectName,
       docs: [] // List of attached documents
     };
     setDocPins(prev => [...prev, newPin]);
@@ -683,6 +800,32 @@ function App() {
   const allLoadedProperties = useMemo(() => {
     return Object.values(modelProperties).flat();
   }, [modelProperties]);
+
+  // Extract unique CodigoDePartida values for the dropdown selector
+  const availablePartidas = useMemo(() => {
+    const partidaMap = new Map(); // code -> { code, name, count }
+    for (const element of allLoadedProperties) {
+      if (!element.properties) continue;
+      const codigoProp = element.properties.find(p => p.displayName === '03_05_DSI_CodigoDePartida');
+      if (!codigoProp || !codigoProp.displayValue) continue;
+      const code = String(codigoProp.displayValue).trim();
+      if (!code) continue;
+      if (partidaMap.has(code)) {
+        partidaMap.get(code).count++;
+      } else {
+        // Try to find element name using the specific property
+        const nameProp = element.properties.find(p => p.displayName === '03_04_DSI_NombreDePartida') ||
+          element.properties.find(p => p.displayName === 'Name' || p.displayName === 'name');
+        partidaMap.set(code, {
+          code,
+          name: nameProp?.displayValue || '',
+          count: 1
+        });
+      }
+    }
+    // Sort by code
+    return Array.from(partidaMap.values()).sort((a, b) => a.code.localeCompare(b.code));
+  }, [allLoadedProperties]);
 
   const activeProperties = useMemo(() => {
     let all = [];
@@ -780,20 +923,6 @@ function App() {
   }, []);
 
 
-  // Load pins and layers from server
-  useEffect(() => {
-    if (!selectedProject) return;
-
-    fetch(`${BACKEND_URL}/api/pins?project=${selectedProject}`)
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          setBuildPins(data);
-        }
-      })
-      .catch(err => console.error('Error loading pins:', err));
-  }, [selectedProject]);
-
   // Get user geolocation
   useEffect(() => {
     if (navigator.geolocation) {
@@ -812,199 +941,6 @@ function App() {
       setUserLocation({ lat: -12.0464, lng: -77.0428 });
     }
   }, []);
-
-  const handlePinCreated = useCallback(async (pinData) => {
-    // 1. Optimistic UI: Create immediately
-    const tempId = 'temp-' + Date.now();
-    const optimisticPin = {
-      id: tempId,
-      name: `Punto ${buildPins.length + 1} (Creando...)`,
-      ...pinData,
-      type: buildPinType, // Save the type selected in UI
-      createdAt: new Date().toISOString(),
-      documents: []
-    };
-
-    setBuildPins(prev => [...prev, optimisticPin]);
-    setSelectedPinId(tempId);
-    setBuildPlacementMode(false); // Immediate exit
-
-
-    try {
-      if (!selectedProject) return alert("Error: No project context for new pin");
-      const res = await fetch(`${BACKEND_URL}/api/pins`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...pinData,
-          type: buildPinType,
-          projectId: selectedProject // Add segregation
-        })
-      });
-
-      if (res.ok) {
-        const newPin = await res.json();
-        // Replace temp pin with real one
-        setBuildPins(prev => prev.map(p => p.id === tempId ? newPin : p));
-        setSelectedPinId(newPin.id);
-      } else {
-        // Rollback on server error
-        setBuildPins(prev => prev.filter(p => p.id !== tempId));
-        alert('Error al guardar el punto en el servidor.');
-      }
-    } catch (err) {
-      console.error('Error creating pin:', err);
-      // Rollback on network error
-      setBuildPins(prev => prev.filter(p => p.id !== tempId));
-    }
-  }, [buildPins.length, selectedProject, buildPinType]);
-
-  const handlePinSelect = useCallback((pinId) => {
-    console.log('[App] handlePinSelect called with ID:', pinId);
-    setSelectedPinId(pinId);
-    // Loose compare or stringify to handle potential mismatches (number vs string)
-    const pin = buildPins.find(p => String(p.id) === String(pinId));
-
-    if (pin) {
-      // Always open the sheet/doc context for the pin
-      setActiveSheet({
-        name: pin.name,
-        isPin: true,
-        pinId: pin.id,
-        docs: pin.documents || [] // Pass empty array if no docs
-      });
-      // If docs exist, open the first one. If not, open nothing (empty state will show)
-      if (pin.documents && pin.documents.length > 0) {
-        setOpenedDoc(pin.documents[0]);
-        setParallelMode(false);
-      } else {
-        setOpenedDoc(null);
-        // Keep parallel mode as is or default?
-      }
-    }
-  }, [buildPins]);
-
-  const handlePinDelete = useCallback(async (pinId) => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/pins/${pinId}`, { method: 'DELETE' });
-      if (res.ok) {
-        setBuildPins(prev => prev.filter(p => p.id !== pinId));
-        if (selectedPinId === pinId) {
-          setSelectedPinId(null);
-        }
-      }
-    } catch (err) {
-      console.error('Error deleting pin:', err);
-    }
-  }, [selectedPinId]);
-
-  const handleBuildFileUpload = async (file, targetPinId = null) => {
-    const pinId = targetPinId || selectedPinId;
-    if (!pinId || !file) return;
-
-    // 1. Optimistic Update: Show image immediately
-    const tempId = Date.now();
-    const tempUrl = URL.createObjectURL(file);
-    const tempDoc = {
-      id: tempId,
-      name: file.name,
-      url: tempUrl,
-      status: 'uploading',
-      timestamp: new Date().toISOString()
-    };
-
-    setBuildPins(prevPins => prevPins.map(pin => {
-      if (pin.id === pinId) {
-        return {
-          ...pin,
-          documents: [...(pin.documents || []), tempDoc]
-        };
-      }
-      return pin;
-    }));
-
-    setBuildUploading(true);
-    setBuildUploadError('');
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      // 2. Upload to Server
-      const res = await fetch(`${BACKEND_URL}/api/build/acc-upload`, {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Error al subir archivo');
-      }
-
-      const data = await res.json();
-
-      // 3. Prepare Final Document
-      const finalDoc = {
-        id: tempId, // Keep the same ID to maintain continuity in UI if needed, or use server ID
-        name: file.name,
-        urn: data.urn,
-        storageId: data.storage_id,
-        versionId: data.version_id,
-        itemId: data.item_id,
-        // Use proxy URL for permanent access
-        url: `${BACKEND_URL}/api/images/proxy?storageId=${encodeURIComponent(data.storage_id)}`,
-        status: 'processed',
-        timestamp: new Date().toISOString()
-      };
-
-      // 4. Update Local State (Swap Temp for Real)
-      setBuildPins(prevPins => prevPins.map(pin => {
-        if (pin.id === pinId) {
-          const updatedDocs = (pin.documents || []).map(d =>
-            d.id === tempId ? finalDoc : d
-          );
-          return { ...pin, documents: updatedDocs };
-        }
-        return pin;
-      }));
-
-      // 5. Sync with Server (Fetch latest -> Append -> Save)
-      // We fetch the latest pin state from server to ensure we don't overwrite other committed changes
-      // and we don't send our local "temp" docs to the server.
-      const pinRes = await fetch(`${BACKEND_URL}/api/pins`);
-      if (pinRes.ok) {
-        const allPins = await pinRes.json();
-        const serverPin = allPins.find(p => p.id === pinId);
-
-        if (serverPin) {
-          const newServerDocs = [...(serverPin.documents || []), finalDoc];
-
-          await fetch(`${BACKEND_URL}/api/pins/${pinId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ documents: newServerDocs })
-          });
-        }
-      }
-
-    } catch (err) {
-      console.error('Build upload error:', err);
-      setBuildUploadError(err.message);
-
-      // Remove the temp doc on error
-      setBuildPins(prevPins => prevPins.map(pin => {
-        if (pin.id === pinId) {
-          return {
-            ...pin,
-            documents: (pin.documents || []).filter(d => d.id !== tempId)
-          };
-        }
-        return pin;
-      }));
-    } finally {
-      setBuildUploading(false);
-    }
-  };
 
 
 
@@ -1105,7 +1041,14 @@ function App() {
   useEffect(() => {
     if (!selectedProject) return; // Don't fetch if no project selected
 
-    fetch(`${BACKEND_URL}/api/config/project?project=${selectedProject}`)
+    // CRITICAL: Clear models immediately before fetching to prevent old project's
+    // models from briefly rendering in the new project viewer
+    setModels([]);
+    setModelProperties({});
+    setAvailableProperties([]);
+    setHiddenModelUrns([]);
+
+    fetch(`${BACKEND_URL}/api/config/project?project=${selectedProject.id}`)
       .then(res => res.json())
       .then(data => {
         if (data.models && Array.isArray(data.models)) {
@@ -1115,18 +1058,12 @@ function App() {
             label: m.name
           }));
           setModels(mapped);
-
-          // Reset view
-          setModelProperties({});
-          setAvailableProperties([]); // Clear old properties
-          setHiddenModelUrns([]);
-          // setFilterSelections({}); // Maybe reset filters too?
         }
       })
       .catch(err => console.error("Error loading project config:", err));
   }, [selectedProject]);
 
-  const handleLinkDocs = useCallback(async (modelsInput) => {
+  const handleLinkDocs = useCallback(async (modelsInput, isGemelo = false) => {
     // Determine if input is array
     const models = Array.isArray(modelsInput) ? modelsInput : [modelsInput];
 
@@ -1170,46 +1107,52 @@ function App() {
         return;
       }
 
-      // Standard Add Mode
-      // Sequential execution to avoid race conditions on the server's file write
-      // Ideally backend should handle bulk, but sequential is safe fix for now.
+      // Standard Add Mode (Direct or Gemelo)
+      const endpoint = '/api/config/project/add';
+
       for (const model of models) {
-        const res = await fetch(`${BACKEND_URL}/api/config/project/add`, {
+        const payload = {
+          urn: model.urn,
+          name: model.name || model.label,
+          region: 'US',
+          projectId: model.projectId,
+          itemId: model.itemId,
+          versionId: model.versionId,
+          versionNumber: model.versionNumber,
+          lastModifiedTime: model.lastModifiedTime,
+          project: selectedProject.id
+        };
+
+        const res = await fetch(`${BACKEND_URL}${endpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            urn: model.urn,
-            name: model.name || model.label,
-            region: 'US',
-            projectId: model.projectId,
-            itemId: model.itemId,
-            versionId: model.versionId,
-            versionNumber: model.versionNumber,
-            lastModifiedTime: model.lastModifiedTime,
-            project: selectedProject
-          })
+          body: JSON.stringify(payload)
         });
 
         if (res.ok) {
           const config = await res.json();
           if (config.models) {
-            // Update state after EACH success to be safe, or wait for last?
-            // Waiting for last is better for UI flicker, but we need the latest config from the LAST write.
             setModels(config.models.map(m => ({ ...m, label: m.name })));
           }
+        } else {
+          const err = await res.json();
+          alert(`Error: ${err.error || 'Failed to link model'}`);
         }
       }
+
     } catch (e) {
       console.error("Error linking model:", e);
+      alert("Error procesando los modelos.");
     }
-  }, [selectedProject]);
+  }, [selectedProject, relinkTargetModel]);
 
   const handleModelUpdate = useCallback(async (urn) => {
+    if (!selectedProject) return alert("Error: No project context.");
     try {
       const res = await fetch(`${BACKEND_URL}/api/config/project/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urn })
+        body: JSON.stringify({ urn, project: selectedProject.id })
       });
       if (res.ok) {
         const data = await res.json();
@@ -1227,7 +1170,7 @@ function App() {
       console.error("Error updating model:", e);
       alert("Error updating model. See console.");
     }
-  }, []);
+  }, [selectedProject]);
 
   const handleLocalUpload = useCallback(async (file, label) => {
     if (!selectedProject) return alert("Error: No project context.");
@@ -1235,7 +1178,7 @@ function App() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('label', label);
-    formData.append('project', selectedProject); // Add project context
+    formData.append('project', selectedProject.id); // Add project context
 
     try {
       // Show loading indicator?
@@ -1259,30 +1202,30 @@ function App() {
   }, [selectedProject]);
 
   const removeModel = useCallback(async (urn) => {
+    // 1. Optimistic local removal — avoids cross-project contamination from backend response
+    setModels(prev => prev.filter(m => m.urn !== urn));
+    setModelProperties(prev => {
+      const next = { ...prev };
+      delete next[urn];
+      return next;
+    });
+    setHiddenModelUrns(prev => prev.filter(u => u !== urn));
+
     try {
-      const res = await fetch(`${BACKEND_URL}/api/config/project/remove`, {
+      await fetch(`${BACKEND_URL}/api/config/project/remove`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urn, project: selectedProject })
+        body: JSON.stringify({ urn, project: selectedProject.id })
       });
-      if (res.ok) {
-        const config = await res.json();
-        if (config.models) {
-          setModels(config.models.map(m => ({ ...m, label: m.name })));
-
-          // Also remove properties for this model from local state
-          setModelProperties(prev => {
-            const next = { ...prev };
-            delete next[urn];
-            return next;
-          });
-
-          // And ensure it is removed from hidden list if it was there
-          setHiddenModelUrns(prev => prev.filter(u => u !== urn));
-        }
-      }
+      // Don't use the response to update state — local optimistic update already handled it
     } catch (e) {
       console.error("Error removing model:", e);
+      // On error, reload from server to restore correct state
+      fetch(`${BACKEND_URL}/api/config/project?project=${selectedProject}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.models) setModels(data.models.map(m => ({ ...m, label: m.name })));
+        });
     }
   }, [selectedProject]);
 
@@ -1303,31 +1246,6 @@ function App() {
     const label = model.name || 'Documento Build';
     // Replace all models with just this one
     setModels([{ ...model, label }]);
-  }, []);
-
-  const pollTranslationStatus = useCallback(async (urn) => {
-    const checkStatus = async () => {
-      try {
-        // Encode URN twice to ensure slashes are handled correctly by proxies/servers
-        const encodedUrn = encodeURIComponent(urn);
-        const response = await fetch(`${BACKEND_URL}/api/build/translation-status?urn=${encodedUrn}`);
-        const data = await response.json();
-        if (data.status === 'success') {
-          setBuildUploads(prev => prev.map(f => f.urn === urn ? { ...f, status: 'success' } : f));
-        } else if (data.status === 'failed') {
-          setBuildUploads(prev => prev.map(f => f.urn === urn ? { ...f, status: 'failed' } : f));
-        } else {
-          setTimeout(checkStatus, 5000); // Retry in 5s
-        }
-      } catch (error) {
-        console.error("Polling error", error);
-      }
-    };
-    checkStatus();
-  }, []);
-
-  const removeBuildUpload = useCallback((id) => {
-    setBuildUploads(prev => prev.filter(file => file.id !== id));
   }, []);
 
   const fetchSignedRead = useCallback(async (file) => {
@@ -1422,26 +1340,39 @@ function App() {
     }
   }, []);
 
-  // Load Tracking Data on Mount
+  // Load Tracking Data on Mount or Project Change
   useEffect(() => {
     const fetchTracking = async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/tracking`);
+        const urn = selectedProject?.id || 'global';
+        console.log(`[App] Fetching tracking data for urn: ${urn}`);
+        const res = await fetch(`${BACKEND_URL}/api/tracking?model_urn=${urn}&t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        });
         if (res.ok) {
           const data = await res.json();
-          setTrackingData(data);
+          console.log(`[App] Received tracking data:`, data);
+          setTrackingData({
+            avance: data.avance || [],
+            fotos: data.fotos || [],
+            docs: data.docs || []
+          });
+        } else {
+          console.error(`[App] Failed to fetch tracking data. Status: ${res.status}`);
         }
       } catch (e) {
         console.error("Failed to load tracking data", e);
       }
     };
     fetchTracking();
-  }, []);
+  }, [selectedProject]);
 
   // Save Tracking Data Helper
   const saveTrackingData = async (newData) => {
     try {
-      await fetch(`${BACKEND_URL}/api/tracking`, {
+      const urn = selectedProject?.id || 'global';
+      await fetch(`${BACKEND_URL}/api/tracking?model_urn=${urn}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newData)
@@ -1457,11 +1388,17 @@ function App() {
     let pinsToAdd = [newPin];
 
     if (trackingTab === 'avance') {
-      const val = prompt("Ingrese el porcentaje de avance (ej: 50%):", "0%");
+      // Show detected partida in the prompt if available
+      const partidaInfo = newPin.codigoPartida ? ` (Partida: ${newPin.codigoPartida})` : '';
+      const val = prompt(`Ingrese el porcentaje de avance${partidaInfo} (ej: 50%):`, "0%");
       if (val === null) return; // Cancelled
-      // Assign value to the pin
-      // We need to create a new object to avoid mutating the specialized event object if it reused reference
       pinsToAdd = [{ ...newPin, val, color: '#fbbf24' }];
+    } else if (trackingTab === 'docs') {
+      pinsToAdd = [{ ...newPin, docs: [], color: '#8b5cf6' }]; // Purple or specific color for docs
+    } else if (trackingTab === 'restricciones') {
+      const val = prompt("Descripción breve de la restricción / alerta:", "Pendiente");
+      if (val === null) return;
+      pinsToAdd = [{ ...newPin, val, docs: [], color: '#f59e0b', type: 'restriction' }];
     }
 
     setTrackingData(prev => {
@@ -1473,6 +1410,98 @@ function App() {
       saveTrackingData(updated); // Sync to backend
       return updated;
     });
+  };
+
+  const handleTrackingPinDelete = async (type, id) => {
+    // Optimistic Update
+    setTrackingData(prev => {
+      const currentList = prev[type] || [];
+      const updatedList = currentList.filter(p => p.id !== id);
+      const newState = { ...prev, [type]: updatedList };
+      saveTrackingData(newState);
+      return newState;
+    });
+
+    // Close panels if open
+    if (type === 'fotos') {
+      setPhotoAlbumOpen(false);
+      setSelectedAlbumPin(null);
+    } else if (type === 'avance') {
+      setProgressPanelOpen(false);
+      setSelectedProgressPin(null);
+    } else if (type === 'docs' || type === 'restricciones') {
+      setDocPinPanelOpen(false);
+      setSelectedDocPin(null);
+    }
+  };
+
+  // Update a specific tracking pin (e.g., change codigoPartida, val/name, etc.)
+  const handleTrackingPinUpdate = (type, pinId, updates) => {
+    setTrackingData(prev => {
+      // Ensure we are operating on the correct category (avance/docs/fotos/restricciones)
+      const pins = prev[type] || [];
+      const updatedPins = pins.map(pin =>
+        String(pin.id) === String(pinId) ? { ...pin, ...updates } : pin
+      );
+      const newState = { ...prev, [type]: updatedPins };
+      saveTrackingData(newState);
+      return newState;
+    });
+
+    // Sync active selection state based on type
+    if (type === 'avance') {
+      setSelectedProgressPin(prev =>
+        prev && String(prev.id) === String(pinId) ? { ...prev, ...updates } : prev
+      );
+    } else if (type === 'fotos') {
+      setSelectedAlbumPin(prev =>
+        prev && String(prev.id) === String(pinId) ? { ...prev, ...updates } : prev
+      );
+    } else if (type === 'docs' || type === 'restricciones') {
+      setSelectedDocPin(prev =>
+        prev && String(prev.id) === String(pinId) ? { ...prev, ...updates } : prev
+      );
+    }
+  };
+
+  const handleTrackingPinClick = useCallback((pin) => {
+    console.log('[App] Pin Clicked:', pin);
+    if (trackingTab === 'fotos') {
+      setSelectedAlbumPin(pin);
+      setPhotoAlbumOpen(true);
+      setPanelDocked(false); // Start floating (PiP)
+    } else if (trackingTab === 'avance') {
+      setSelectedProgressPin(pin);
+      setProgressPanelOpen(true);
+      setPanelDocked(false); // Start floating (PiP)
+    } else if (trackingTab === 'docs' || trackingTab === 'restricciones') {
+      setSelectedDocPin(pin);
+      setDocPinPanelOpen(true);
+      setPanelDocked(false);
+    }
+  }, [trackingTab]);
+
+  const handleTrackingPlacementToggle = (type) => {
+    const tabMap = {
+      'data': 'avance',
+      'avance': 'avance',
+      'docs': 'docs',
+      'restriction': 'restricciones'
+    };
+    const targetTab = tabMap[type] || 'avance';
+
+    if (trackingTab === targetTab) {
+      setTrackingPlacementMode(prev => !prev);
+    } else {
+      setTrackingTab(targetTab);
+      setTrackingPlacementMode(true);
+    }
+  };
+
+  const handleCameraCapture = (file) => {
+    console.log('[App] Photo captured from BuildPanel:', file);
+    // This could trigger a pinning process or photo upload
+    alert("Foto capturada: " + file.name + ". Funcionalidad de auto-pin próximamente.");
   };
 
   const handleAddPhotoToPin = (newPhoto) => {
@@ -1495,12 +1524,86 @@ function App() {
 
       return newState;
     });
-
     // Update Selected Pin State
     setSelectedAlbumPin(prev => ({ ...prev, photos: [...(prev.photos || []), newPhoto] }));
   };
 
+  // Attach multiple docs to a pin in one go
+  const handleAttachBatchDocsToPin = (pinId, newDocs) => {
+    setTrackingData(prev => {
+      const updatedDocs = (prev.docs || []).map(pin => {
+        if (pin.id === pinId) {
+          return { ...pin, docs: [...(pin.docs || []), ...newDocs] };
+        }
+        return pin;
+      });
+      const newState = { ...prev, docs: updatedDocs };
+      saveTrackingData(newState);
+      return newState;
+    });
 
+    setSelectedDocPin(prev => {
+      if (!prev || prev.id !== pinId) return prev;
+      return { ...prev, docs: [...(prev.docs || []), ...newDocs] };
+    });
+  };
+
+  // Attach a doc (PDF) to a doc pin
+  const handleAttachDocToPin = (pinId, doc, isUpdate = false) => {
+    setTrackingData(prev => {
+      const updatedDocs = (prev.docs || []).map(pin => {
+        if (pin.id === pinId) {
+          let newDocs;
+          if (isUpdate) {
+            newDocs = (pin.docs || []).map(d =>
+              (d.nodeId === doc.nodeId || d.id === doc.id) ? { ...d, ...doc } : d
+            );
+          } else {
+            newDocs = [...(pin.docs || []), doc];
+          }
+          return { ...pin, docs: newDocs };
+        }
+        return pin;
+      });
+      const newState = { ...prev, docs: updatedDocs };
+      saveTrackingData(newState);
+      return newState;
+    });
+    // Update selected pin state
+    setSelectedDocPin(prev => {
+      if (!prev || prev.id !== pinId) return prev;
+      let newDocs;
+      if (isUpdate) {
+        newDocs = (prev.docs || []).map(d =>
+          (d.nodeId === doc.nodeId || d.id === doc.id) ? { ...d, ...doc } : d
+        );
+      } else {
+        newDocs = [...(prev.docs || []), doc];
+      }
+      return { ...prev, docs: newDocs };
+    });
+  };
+
+  // Remove a doc from a doc pin
+  const handleRemoveDocFromPin = (pinId, docId) => {
+    setTrackingData(prev => {
+      const updatedDocs = (prev.docs || []).map(pin => {
+        if (pin.id === pinId) {
+          return { ...pin, docs: (pin.docs || []).filter(d => d.id !== docId) };
+        }
+        return pin;
+      });
+      const newState = { ...prev, docs: updatedDocs };
+      saveTrackingData(newState);
+      return newState;
+    });
+    // Update selected pin state
+    setSelectedDocPin(prev =>
+      prev && prev.id === pinId
+        ? { ...prev, docs: (prev.docs || []).filter(d => d.id !== docId) }
+        : prev
+    );
+  };
 
 
   const selectedPropertyObjects = useMemo(() => (
@@ -1768,133 +1871,32 @@ function App() {
     window.dispatchEvent(new CustomEvent('filters-apply', { detail: activeFilterDetail }));
   }, [activeFilterDetail]);
 
+  const handleLogoClick = useCallback(() => {
+    // Return to Landing Page immediately and clean up
+    console.log('[App] Logo Clicked - Resetting State');
+
+    // Batch updates where possible, though React 18 does this automatically
+    setSelectedProject(null);
+    setPanelVisible(false);
+    setActivePanel(null);
+    setModels([]);
+    setSavedViews([]);
+    setDocuments([]);
+    setSprites([]);
+    setHiddenModelUrns([]);
+
+    // CRITICAL FIX: Reset properties to prevent stale state on project switch
+    setAvailableProperties([]);
+    setModelProperties({});
+    setFilterSelections({});
+    // setFilterBuckets({}); // filterBuckets is computed via useMemo, no setter.
+  }, []);
+
 
 
   const toggleExpandBlock = useCallback((propId) => {
     setExpandedFilters(prev => ({ ...prev, [propId]: !prev[propId] }));
   }, []);
-
-  const handlePinUpdate = async (updatedPin) => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/pins/${updatedPin.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedPin)
-      });
-      if (res.ok) {
-        const savedPin = await res.json();
-        setBuildPins(prev => prev.map(p => p.id === savedPin.id ? savedPin : p));
-      }
-    } catch (err) {
-      console.error('Error updating pin:', err);
-    }
-  };
-
-  // --- ATTACHMENT MODAL HANDLERS ---
-  const handleOpenAttachmentModal = (pinId) => {
-    setAttachmentPinId(pinId);
-    setAttachmentModalOpen(true);
-  };
-
-  const handleAttachment = async (data) => {
-    if (!attachmentPinId) return;
-
-    let newDoc = null;
-
-    if (data.type === 'local') {
-      await handleBuildFileUpload(data.file, attachmentPinId);
-    } else if (data.type === 'acc') {
-      const { file } = data;
-      const tempId = 'acc-' + Date.now();
-      newDoc = {
-        id: tempId,
-        name: file.name,
-        urn: file.urn,
-        versionId: file.versionId,
-        itemId: file.itemId,
-        source: 'acc',
-        status: 'ready',
-        timestamp: new Date().toISOString()
-      };
-
-      setBuildPins(prevPins => prevPins.map(pin => {
-        if (pin.id === attachmentPinId) {
-          return { ...pin, documents: [...(pin.documents || []), newDoc] };
-        }
-        return pin;
-      }));
-
-      try {
-        const pin = buildPins.find(p => p.id === attachmentPinId);
-        if (pin) {
-          const currentDocs = pin.documents || [];
-          const updatedPin = { ...pin, documents: [...currentDocs, newDoc] };
-
-          const res = await fetch(`${BACKEND_URL}/api/pins/${pin.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updatedPin)
-          });
-
-          if (res.ok) {
-            const savedPin = await res.json();
-            setBuildPins(prev => prev.map(p => p.id === savedPin.id ? savedPin : p));
-          }
-        }
-      } catch (err) {
-        console.error("Error linking ACC doc:", err);
-      }
-    }
-  };
-
-  const handleQuickCapture = useCallback(async (file) => {
-    if (!file) return;
-    if (!selectedProject) return alert("Selecciona un proyecto primero.");
-
-    // Use current location or default
-    const loc = userLocation || { lat: -12.0464, lng: -77.0428 };
-
-    // 1. Create Pin on Server
-    const pinData = {
-      name: `Foto ${new Date().toLocaleString()}`,
-      lat: loc.lat,
-      lng: loc.lng,
-      type: 'docs', // Force 'docs' type for photos
-      projectId: selectedProject,
-      documents: []
-    };
-
-    try {
-      // Optimistic UI could be here, but let's stick to safe server-first for now
-      const res = await fetch(`${BACKEND_URL}/api/pins`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(pinData)
-      });
-
-      if (res.ok) {
-        const newPin = await res.json();
-        setBuildPins(prev => [...prev, newPin]);
-        setSelectedPinId(newPin.id);
-
-        // 2. Upload File to this new Pin
-        // This reuses the existing logic which handles ACC upload + linking to pin
-        await handleBuildFileUpload(file, newPin.id);
-      } else {
-        alert("Error al crear punto para la foto.");
-      }
-    } catch (e) {
-      console.error("Quick capture error:", e);
-      if (e.message && (e.message.includes('token') || e.message.includes('401'))) {
-        if (confirm("Se requiere conectar con Autodesk ACC para subir fotos. ¿Conectar ahora?")) {
-          window.location.href = '/api/auth/login';
-        }
-      } else {
-        alert("Error al subir foto: " + (e.message || "Error desconocido"));
-      }
-    }
-  }, [selectedProject, userLocation, handleBuildFileUpload]);
-
 
 
   // Calculate available properties dynamically from ALL LOADED properties (stable list for configuration)
@@ -1918,37 +1920,38 @@ function App() {
 
 
 
-  // --- RENDER: LANDING PAGE VS APP ---
+  // --- RENDER: LOGIN -> LANDING -> APP ---
+  if (!user) {
+    return <LoginScreen onLogin={handleLoginSuccess} />;
+  }
+
   if (!selectedProject) {
     return <LandingPage onSelectProject={setSelectedProject} />;
   }
 
+  // Multi-tenant key: project.id is the unique scope for all data (like ACC project URN)
+  const activeModelUrn = (selectedProject?.id) || 'global';
+
   return (
     <div className={`app-layout ${activeSheet ? 'doc-open' : ''}`} style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden' }}>
       <TopBar
+        user={user}
+        onLogout={handleLogout}
         activePanel={activePanel}
         togglePanel={togglePanel}
-        isViewsActive={activePanel === 'views' && panelVisible}
+        isViewsActive={activePanel === 'views'}
         onLogoClick={() => {
-          // Return to Landing Page immediately and clean up
-          setSelectedProject(null);
-          setPanelVisible(false);
-          setActivePanel(null);
-          setModels([]);
-          setSavedViews([]);
-          setBuildPins([]);
-          setDocuments([]);
-          setSprites([]);
-          setHiddenModelUrns([]);
-
-          // CRITICAL FIX: Reset properties to prevent stale state on project switch
-          setAvailableProperties([]);
-          setModelProperties({});
-          setFilterSelections({});
-          // setFilterBuckets({}); // filterBuckets is computed via useMemo, no setter.
+          if (activePanel) {
+            setActivePanel(null);
+          } else {
+            setSelectedProject(null);
+          }
         }}
+        selectedProject={selectedProject}
+        onUniversalSearch={handleUniversalSearch}
       />
       <div className="app-container" style={{ flex: 1, position: 'relative' }}>
+
         {/* Photo Album Modal Removed - Now Inserted in Split View below */}
 
         {showSplash && (
@@ -2019,26 +2022,7 @@ function App() {
               <FilterIcon />
               <span className="rail-label" style={{ fontWeight: 700 }}>Filters</span>
             </button>
-            {/* 
-            <button
-              type="button"
-              className={`rail-button ${activePanel === 'docs' && panelVisible ? 'active' : ''}`}
-              onClick={() => togglePanel('docs')}
-              title="Documentation"
-            >
-              <DocumentIcon />
-              <span className="rail-label">Docs</span>
-            </button>
-            */}
-            <button
-              type="button"
-              className={`rail-button ${activePanel === 'build' && panelVisible ? 'active' : ''}`}
-              onClick={() => togglePanel('build')}
-              title="Build"
-            >
-              <BuildIcon isActive={activePanel === 'build' && panelVisible} />
-              <span className="rail-label">Build</span>
-            </button>
+
 
             <button
               type="button"
@@ -2050,15 +2034,7 @@ function App() {
               <span className="rail-label" style={{ fontWeight: 700 }}>Seguimiento</span>
             </button>
 
-            <button
-              type="button"
-              className={`rail-button ${activePanel === 'inventory' && panelVisible ? 'active' : ''}`}
-              onClick={() => togglePanel('inventory')}
-              title="Inventory"
-            >
-              <InventoryIcon />
-              <span className="rail-label" style={{ fontWeight: 700 }}>Inventory</span>
-            </button>
+
 
 
 
@@ -2082,20 +2058,6 @@ function App() {
               icon: <FilterIcon />,
               active: activePanel === 'filters' && panelVisible,
               onClick: () => togglePanel('filters')
-            },
-            {
-              id: 'build',
-              label: 'Build',
-              icon: <BuildIcon isActive={activePanel === 'build' && panelVisible} />,
-              active: activePanel === 'build' && panelVisible,
-              onClick: () => togglePanel('build')
-            },
-            {
-              id: 'inventory',
-              label: 'Inventory',
-              icon: <InventoryIcon />,
-              active: activePanel === 'inventory' && panelVisible,
-              onClick: () => togglePanel('inventory')
             },
             {
               id: 'ar',
@@ -2125,10 +2087,8 @@ function App() {
                   } catch (err) {
                     console.error("[App] Error capturing camera:", err);
                   }
-
                   setArModeActive(true);
                 } else {
-                  // Deactivate AR
                   setArModeActive(false);
                   setArInitialCamera(null);
                 }
@@ -2137,428 +2097,194 @@ function App() {
           ]}
         />
 
-        <aside className={`app-sidebar ${panelVisible && activePanel !== 'views' && activePanel !== 'progress' ? '' : 'hidden'}`}>
-          {activePanel === 'filters' && (
-            <div className="filters-shell" style={{
-              display: 'flex',
-              flexDirection: 'column',
-              position: 'absolute',
-              inset: 0,
-              height: '100%',
-              background: 'transparent',
-              color: '#adadad',
-              fontSize: '12px',
-              zIndex: 20,
-              overflow: 'hidden'
-            }}>
-              <style>
-                {`
-                  .tandem-header { padding: 12px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: space-between; align-items: center; background: transparent; }
-                  .tandem-title { font-weight: 600; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; color: #f0f0f0; }
-                  
-                  .tandem-scroll { flex: 1; overflow-y: auto; padding-bottom: 20px; }
-                  .tandem-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-                  .tandem-scroll::-webkit-scrollbar-track { background: transparent; }
-                  .tandem-scroll::-webkit-scrollbar-thumb { background: #4f5259; border-radius: 3px; }
-                  .tandem-scroll::-webkit-scrollbar-thumb:hover { background: #5f6269; }
+        <TandemSidebar
+          activePanel={activePanel}
+          panelVisible={panelVisible}
+          models={models}
+          hiddenModelUrns={hiddenModelUrns}
+          filterBuckets={filterBuckets}
+          dynamicFilterBuckets={dynamicFilterBuckets}
+          filterSelections={filterSelections}
+          filterColors={filterColors}
+          expandedFilters={expandedFilters}
+          facetSearch={facetSearch}
+          visiblePropertyObjects={visiblePropertyObjects}
+          hasMoreProperties={hasMoreProperties}
+          handleToggleModelVisibility={handleToggleModelVisibility}
+          togglePropertyAll={togglePropertyAll}
+          handleValueToggle={handleValueToggle}
+          toggleColor={toggleColor}
+          setFilterConfiguratorOpen={setFilterConfiguratorOpen}
+          setFilterSelections={setFilterSelections}
+          setHiddenModelUrns={setHiddenModelUrns}
+          setExpandedFilters={setExpandedFilters}
+          setFacetSearch={setFacetSearch}
+          setVisiblePropertiesCount={setVisiblePropertiesCount}
+          PALETTE={PALETTE}
+          DEFAULT_VISIBLE_VALUES={DEFAULT_VISIBLE_VALUES}
+          modelViews={modelViews}
+          activeViewableGuids={activeViewableGuids}
+          handleLoadSpecificView={handleLoadSpecificView}
+          handleModelUpdate={handleModelUpdate}
+          removeModel={removeModel}
+          setRelinkTargetModel={setRelinkTargetModel}
+          setImportModalOpen={setImportModalOpen}
+          documents={documents}
+          sprites={sprites}
+          activeSpriteId={activeSpriteId}
+          showSprites={showSprites}
+          spritePlacementActive={spritePlacementActive}
+          handleSpriteSelect={handleSpriteSelect}
+          setDocumentsModalOpen={setDocumentsModalOpen}
+          removeDocument={removeDocument}
+          toggleSpritesVisibility={toggleSpritesVisibility}
+          requestSpritePlacement={requestSpritePlacement}
+          onUniversalSearch={handleUniversalSearch}
+          universalSearch={universalSearch}
+          onOpenDocument={handleOpenDocByNodeId}
+          onCloseUniversalSearch={() => setPanelVisible(false)}
 
-                  .tandem-group { border-bottom: 1px solid #3e4045; }
-                  .tandem-group-header { display: flex; align-items: center; padding: 8px 16px 8px 12px; cursor: pointer; transition: background 0.1s; }
-                  .tandem-group-header:hover { background: #35383d; }
-                  
-                  /* Custom Checkbox "Tandem Style - Grey/Technical" */
-                  .tandem-checkbox {
-                    appearance: none;
-                    -webkit-appearance: none;
-                    width: 14px;
-                    height: 14px;
-                    border: 1px solid #555;
-                    border-radius: 1px; /* Sharper */
-                    background: #222; /* Darker base */
-                    margin-right: 10px;
-                    position: relative;
-                    cursor: pointer;
-                    flex-shrink: 0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    transition: border-color 0.1s, background 0.1s;
-                  }
-                  
-                  .tandem-checkbox:hover { 
-                    border-color: #999; 
-                    background: rgba(255,255,255,0.05);
-                  }
-
-                  .tandem-checkbox:checked {
-                    background: #383838; /* Matte Opaque */
-                    border-color: #555;
-                  }
-                  
-                  /* precise tick mark matching Tandem SVG M6,11.3 L10.3,16 L18,6.2 */
-                  .tandem-checkbox:checked::after {
-                    content: '';
-                    width: 5px;
-                    height: 9px;
-                    border: solid #fff; /* White crisp tick */
-                    border-width: 0 2px 2px 0;
-                    transform: rotate(45deg) translate(-1px, -1px);
-                    margin-bottom: 3px;
-                  }
-                  
-                  .tandem-checkbox:indeterminate {
-                    background: #4a4d52;
-                    border-color: #6b6f75;
-                  }
-                   .tandem-checkbox:indeterminate::after {
-                    content: '';
-                    width: 10px;
-                    height: 2px;
-                    background: #fff;
-                    display: block;
-                  }
-
-                  .tandem-group-info { flex: 1; display: flex; align-items: baseline; gap: 8px; overflow: hidden; }
-                  .tandem-group-title { font-weight: 600; color: #ffffff; white-space: nowrap; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
-                  .tandem-group-count { color: #ccc; font-size: 11px; }
-                  
-                  .tandem-actions { display: flex; gap: 2px; opacity: 0.8; transition: opacity 0.2s; }
-                  .tandem-group-header:hover .tandem-actions { opacity: 1; }
-                  .tandem-action-btn { background: none; border: none; color: #999; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
-                  .tandem-action-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
-                  .tandem-action-btn.active { color: #3aa0ff; background: rgba(58, 160, 255, 0.15); }
-                  
-                  .tandem-list { list-style: none; padding: 0; margin: 0; display: none; }
-                  .tandem-list.open { display: block; }
-                  .tandem-item { display: flex; align-items: center; padding: 2px 16px 2px 36px; min-height: 28px; transition: background 0.1s; }
-                  .tandem-item:hover { background: rgba(53, 56, 61, 0.8); }
-                  .tandem-item-label { flex: 1; cursor: pointer; display: flex; align-items: center; overflow: hidden; }
-                  .tandem-item-text { margin-left: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #f0f0f0; font-weight: 500; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
-                  .tandem-item-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-                  .tandem-count-badge { color: #ccc; font-size: 11px; min-width: 20px; text-align: right; margin-right: 8px; }
-                  .tandem-color-box { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(255,255,255,0.15); cursor: pointer; }
-                  .tandem-color-box.default { background: #333; }
-                `}
-              </style>
-
-              <header className="tandem-header">
-                <div>
-                  <h2 className="tandem-title">Filters</h2>
-                </div>
-                <div className="tandem-actions" style={{ opacity: 1, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <button className="tandem-action-btn" onClick={() => setFilterConfiguratorOpen(true)} title="Configure">
-                    <GearIcon />
-                  </button>
-                  <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)', margin: '0 4px' }}></div>
-                  <button className="tandem-action-btn" title="Reset" onClick={() => {
-                    setFilterSelections({});
-                    setHiddenModelUrns([]);
-                    window.dispatchEvent(new CustomEvent('filters-apply', { detail: { dbIds: [] } }));
-                  }}>
-                    <RevertIcon />
-                  </button>
-                </div>
-              </header>
-
-              <div className="tandem-scroll">
-
-                {/* 1. SOURCES GROUP */}
-                <div className="tandem-group">
-                  <div className="tandem-group-header">
-                    <input
-                      type="checkbox"
-                      className="tandem-checkbox"
-                      checked={hiddenModelUrns.length === 0}
-                      ref={el => { if (el) el.indeterminate = hiddenModelUrns.length > 0 && hiddenModelUrns.length < models.length; }}
-                      onChange={() => {
-                        if (hiddenModelUrns.length === 0) {
-                          // Hide All
-                          setHiddenModelUrns(models.map(m => m.urn));
-                        } else {
-                          // Show All
-                          setHiddenModelUrns([]);
-                        }
-                      }}
-                      title="Toggle all models"
-                    />
-                    <div className="tandem-group-info" onClick={() => setExpandedFilters(prev => ({ ...prev, 'sources': !prev['sources'] }))}>
-                      <span className="tandem-group-title">Sources</span>
-                      <span className="tandem-group-count">({models.length - hiddenModelUrns.length} of {models.length})</span>
-                    </div>
-                    <div className="tandem-actions" style={{ gap: '4px', alignItems: 'center' }}>
-                      <button className="tandem-action-btn" title="Search"><SearchIconTandem /></button>
-                      <button className="tandem-action-btn" title="Color"><PaletteIconTandem /></button>
-                    </div>
-                    {/* Expand Arrow moved to right of actions or kept distinct? Snippet puts expand arrow inside? No, probably actions on hover, arrow always there. */}
-                    <button className="tandem-action-btn" onClick={() => setExpandedFilters(prev => ({ ...prev, 'sources': !prev['sources'] }))}>
-                      {expandedFilters['sources'] !== false ? (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
-                      ) : (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
-                      )}
-                    </button>
-                  </div>
-
-                  <ul className={`tandem-list ${expandedFilters['sources'] !== false ? 'open' : ''}`}>
-                    {models.map(model => (
-                      <li key={model.urn} className="tandem-item">
-                        <label className="tandem-item-label">
-                          <input
-                            type="checkbox"
-                            className="tandem-checkbox"
-                            checked={!hiddenModelUrns.includes(model.urn)}
-                            onChange={() => handleToggleModelVisibility(model.urn)}
-                          />
-                          <span className="tandem-item-text" title={model.label}>{model.label}</span>
-                        </label>
-                        <div className="tandem-item-right">
-                          <span className="tandem-count-badge">1</span>
-                          <div className="tandem-color-box default"></div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* 2. PROPERTIES GROUPS */}
-                {Object.keys(filterBuckets).length === 0 && (
-                  <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontStyle: 'italic' }}>
-                    Loading properties...
-                  </div>
-                )}
-
-                {visiblePropertyObjects.map(prop => {
-                  const bucket = dynamicFilterBuckets[prop.id];
-                  const selectedValues = filterSelections[prop.id] || [];
-
-                  // Determine visibility logic
-                  const validItems = bucket
-                    ? bucket.values.filter(item => item.count > 0 || selectedValues.includes(item.value))
-                    : [];
-
-                  // Expansion limit
-                  const isExpanded = expandedFilters[prop.id];
-                  const visibleItems = isExpanded ? validItems : validItems.slice(0, DEFAULT_VISIBLE_VALUES);
-                  const hasMore = validItems.length > DEFAULT_VISIBLE_VALUES;
-
-                  const allSelected = bucket && selectedValues.length === bucket.values.length;
-                  const someSelected = selectedValues.length > 0 && selectedValues.length < (bucket?.values.length || 0);
-
-                  return (
-                    <div key={prop.id} className="tandem-group">
-                      <div className="tandem-group-header">
-                        <input
-                          type="checkbox"
-                          className="tandem-checkbox"
-                          checked={allSelected}
-                          ref={input => { if (input) input.indeterminate = someSelected; }}
-                          onChange={() => togglePropertyAll(prop.id)}
-                        />
-                        <div className="tandem-group-info" onClick={() => toggleExpandBlock(prop.id)}>
-                          <span className="tandem-group-title" title={prop.name}>{prop.name}</span>
-                          <span className="tandem-group-count">({selectedValues.length} of {bucket?.values.length || 0})</span>
-                        </div>
-                        <div className="tandem-actions" style={{ gap: '4px', alignItems: 'center' }}>
-                          {/* 1. Search Icon */}
-                          <button className="tandem-action-btn" title="Search">
-                            <SearchIconTandem />
-                          </button>
-
-                          {/* 2. Cluster Icon (Cubes) */}
-                          <button className="tandem-action-btn" title="Group by property">
-                            <ClusterIconTandem />
-                          </button>
-
-                          {/* 3. Palette Icon */}
-                          <button
-                            className={`tandem-action-btn ${filterColors[prop.id] ? 'active' : ''}`}
-                            onClick={(e) => { e.stopPropagation(); toggleColor(prop.id); }}
-                            title="Color by property"
-                          >
-                            <PaletteIconTandem />
-                          </button>
-
-                          {/* 3. Chevron (Solid Triangle) */}
-                          <button className="tandem-action-btn" onClick={() => toggleExpandBlock(prop.id)}>
-                            {isExpanded ? (
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M24 24H0L12 0z" /></svg>
-                            ) : (
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ transform: 'rotate(180deg)' }}><path d="M24 24H0L12 0z" /></svg>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      <ul className={`tandem-list open`}>
-                        {visibleItems.map(item => {
-                          const isChecked = selectedValues.length === 0 || selectedValues.includes(item.value);
-
-                          // Color logic
-                          let colorStyle = {};
-                          if (filterColors[prop.id]) {
-                            const originalIndex = bucket.values.findIndex(v => v.value === item.value);
-                            const color = PALETTE[originalIndex % PALETTE.length];
-                            colorStyle = { backgroundColor: color, border: `1px solid ${color}` };
-                          }
-
-                          return (
-                            <li key={item.value} className="tandem-item">
-                              <label className="tandem-item-label">
-                                <input
-                                  type="checkbox"
-                                  className="tandem-checkbox"
-                                  checked={selectedValues.length === 0 || selectedValues.includes(item.value)}
-                                  onChange={() => handleValueToggle(prop.id, item.value)}
-                                />
-                                <span className="tandem-item-text" title={item.value}>{item.value}</span>
-                              </label>
-                              <div className="tandem-item-right">
-                                <span className="tandem-count-badge">{item.count}</span>
-                                <div className="tandem-color-box" style={colorStyle}></div>
-                              </div>
-                            </li>
-                          );
-                        })}
-                        {hasMore && !isExpanded && (
-                          <li className="tandem-item" style={{ justifyContent: 'flex-end', paddingRight: '16px', cursor: 'pointer', color: '#ccc', fontSize: '11px' }} onClick={() => toggleExpandBlock(prop.id)}>
-                            <span>more ⌄</span>
-                          </li>
-                        )}
-                      </ul>
-                    </div>
-                  );
-                })}
-
-                {hasMoreProperties && (
-                  <div style={{ padding: '12px', textAlign: 'center' }}>
-                    <button className="tandem-action-btn" style={{ width: '100%', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }} onClick={() => setVisiblePropertiesCount(prev => prev + 5)}>
-                      Load more properties
-                    </button>
-                  </div>
-                )}
-
-              </div>
-            </div>
-          )}
-
-
-          {activePanel === 'files' && (
-            <SourceFilesPanel
-              models={models}
-              hiddenModels={hiddenModelUrns}
-              onImport={() => setImportModalOpen(true)}
-              onRemove={removeModel}
-              onToggleVisibility={handleToggleModelVisibility}
-              modelViews={modelViews}
-              activeViewableGuids={activeViewableGuids}
-              onLoadView={handleLoadSpecificView}
-
-              onUpdate={handleModelUpdate}
-              onRelink={(model) => {
-                setRelinkTargetModel(model);
-                setImportModalOpen(true);
-              }}
-            />
-          )}
-          {activePanel === 'docs' && (
-            <DocumentPanel
-              documents={documents}
-              sprites={sprites}
-              activeSpriteId={activeSpriteId}
-              showSprites={showSprites}
-              spritePlacementActive={spritePlacementActive}
-              onSelectSprite={handleSpriteSelect}
-              onAddClick={() => setDocumentsModalOpen(true)}
-              onRemove={removeDocument}
-              onToggleSprites={toggleSpritesVisibility}
-              onRequestSprite={requestSpritePlacement}
-            />
-          )}
-          {activePanel === 'build' && (
-            <BuildPanel
-              buildUploads={buildUploads}
-              pins={buildPins}
-              selectedPinId={selectedPinId}
-              onPinSelect={handlePinSelect}
-              onFileUpload={handleBuildFileUpload}
-              uploading={buildUploading}
-              uploadError={buildUploadError}
-
-              models={models}
-              hiddenModels={hiddenModelUrns}
-              onImport={() => setImportModalOpen(true)}
-              onRemove={removeModel}
-              onToggleVisibility={handleToggleModelVisibility}
-
-              showPins={showBuildPins}
-              onTogglePins={() => setShowBuildPins(prev => !prev)}
-
-              placementMode={buildPlacementMode}
-              onTogglePlacement={(type) => {
-                // Ensure we set type FIRST, then toggle mode
-                // Also, if clicking the button while active, we might want to just ensure type is set if we are enabling.
-                // If disabling, type doesn't matter.
-                if (type) setBuildPinType(type);
-                setBuildPlacementMode(prev => !prev);
-              }}
-              onPinDelete={handlePinDelete}
-              onPinUpload={handleOpenAttachmentModal}
-              onCameraCapture={handleQuickCapture}
-            />
-          )}
-
-
-
-
-
-        </aside>
+          // Tracking / BuildPanel Props
+          trackingData={trackingData}
+          onTrackingPinClick={handleTrackingPinClick}
+          onTrackingPinDelete={(id) => handleTrackingPinDelete(trackingTab || 'restricciones', id)}
+          onTrackingPlacementToggle={handleTrackingPlacementToggle}
+          trackingPlacementMode={trackingPlacementMode}
+          selectedPinId={selectedProgressPin?.id || selectedDocPin?.id || selectedAlbumPin?.id}
+          onCameraCapture={handleCameraCapture}
+        />
 
         <div className="app-viewer">
           {activePanel === 'progress' && (
             <div style={{
               position: 'absolute',
               top: '20px',
-              // Shift center if panel is open: 25% if open, 50% if closed
-              left: (trackingTab === 'fotos' && photoAlbumOpen && selectedAlbumPin) ? '25%' : '50%',
+              // Shift center-left if any panel is docked (50% of remaining viewer space = 25%)
+              left: panelDocked && (
+                (trackingTab === 'fotos' && photoAlbumOpen && selectedAlbumPin) ||
+                (trackingTab === 'avance' && progressPanelOpen && selectedProgressPin) ||
+                (trackingTab === 'docs' && docPinPanelOpen && selectedDocPin) ||
+                (trackingTab === 'restricciones' && docPinPanelOpen && selectedDocPin)
+              ) ? '25%' : '50%',
               transform: 'translateX(-50%)',
               display: 'flex',
-              gap: '20px',
+              gap: '8px',
               zIndex: 100,
-              transition: 'left 0.3s ease'
+              transition: 'left 0.3s ease',
+              background: 'rgba(0,0,0,0.45)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              padding: '6px',
+              borderRadius: '12px',
+              border: '1px solid rgba(255,255,255,0.08)'
             }}>
               <button
                 className="secondary-btn"
                 style={{
-                  background: trackingTab === 'avance' ? '#22c55e' : 'rgba(0,0,0,0.6)', // Green if active
-                  color: 'white',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  padding: '8px 24px',
-                  borderRadius: '4px',
+                  background: trackingTab === 'avance' ? '#22c55e' : 'transparent',
+                  color: trackingTab === 'avance' ? '#fff' : '#bbb',
+                  border: 'none',
+                  padding: '8px 20px',
+                  borderRadius: '8px',
                   fontWeight: 600,
-                  backdropFilter: 'blur(4px)',
                   cursor: 'pointer',
-                  textTransform: 'uppercase'
+                  textTransform: 'uppercase',
+                  fontSize: '12px',
+                  letterSpacing: '0.05em',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
                 }}
                 onClick={() => setTrackingTab(prev => prev === 'avance' ? null : 'avance')}
               >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
                 AVANCE
               </button>
               <button
                 className="secondary-btn"
                 style={{
-                  background: trackingTab === 'fotos' ? '#3b82f6' : 'rgba(0,0,0,0.6)', // Blue if active
-                  color: 'white',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  padding: '8px 24px',
-                  borderRadius: '4px',
+                  background: trackingTab === 'fotos' ? '#3b82f6' : 'transparent',
+                  color: trackingTab === 'fotos' ? '#fff' : '#bbb',
+                  border: 'none',
+                  padding: '8px 20px',
+                  borderRadius: '8px',
                   fontWeight: 600,
-                  backdropFilter: 'blur(4px)',
                   cursor: 'pointer',
-                  textTransform: 'uppercase'
+                  textTransform: 'uppercase',
+                  fontSize: '12px',
+                  letterSpacing: '0.05em',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
                 }}
                 onClick={() => setTrackingTab(prev => prev === 'fotos' ? null : 'fotos')}
               >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
                 FOTOS
+              </button>
+              <button
+                className="secondary-btn"
+                style={{
+                  background: trackingTab === 'docs' ? '#8b5cf6' : 'transparent',
+                  color: trackingTab === 'docs' ? '#fff' : '#bbb',
+                  border: 'none',
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textTransform: 'uppercase',
+                  fontSize: '12px',
+                  letterSpacing: '0.05em',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                onClick={() => setTrackingTab(prev => prev === 'docs' ? null : 'docs')}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                  <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                DOC
+              </button>
+              <button
+                className="secondary-btn"
+                style={{
+                  background: trackingTab === 'restricciones' ? '#f59e0b' : 'transparent',
+                  color: trackingTab === 'restricciones' ? '#fff' : '#bbb',
+                  border: 'none',
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textTransform: 'uppercase',
+                  fontSize: '11px',
+                  letterSpacing: '0.05em',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                onClick={() => setTrackingTab(prev => prev === 'restricciones' ? null : 'restricciones')}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                  <line x1="12" y1="9" x2="12" y2="13"></line>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+                RESTR.
               </button>
 
               {/* Add Photo Button when Photos active */}
@@ -2569,18 +2295,18 @@ function App() {
                   style={{
                     background: trackingPlacementMode ? '#ef4444' : 'rgba(59, 130, 246, 0.8)',
                     color: 'white',
-                    border: '1px solid rgba(255,255,255,0.3)',
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '50%', // Circle
+                    border: 'none',
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '50%',
                     fontWeight: 600,
-                    backdropFilter: 'blur(4px)',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '20px',
-                    boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
+                    fontSize: '18px',
+                    transition: 'all 0.2s ease',
+                    boxShadow: trackingPlacementMode ? '0 0 12px rgba(239,68,68,0.4)' : 'none'
                   }}
                   onClick={() => setTrackingPlacementMode(prev => !prev)}
                 >
@@ -2594,20 +2320,73 @@ function App() {
                   className="secondary-btn"
                   title="Marcar Avance"
                   style={{
-                    background: trackingPlacementMode ? '#ef4444' : 'rgba(34, 197, 94, 0.8)', // Green base
+                    background: trackingPlacementMode ? '#ef4444' : 'rgba(34, 197, 94, 0.8)',
                     color: 'white',
-                    border: '1px solid rgba(255,255,255,0.3)',
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '50%', // Circle
+                    border: 'none',
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '50%',
                     fontWeight: 600,
-                    backdropFilter: 'blur(4px)',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '20px',
-                    boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
+                    fontSize: '18px',
+                    transition: 'all 0.2s ease',
+                    boxShadow: trackingPlacementMode ? '0 0 12px rgba(239,68,68,0.4)' : 'none'
+                  }}
+                  onClick={() => setTrackingPlacementMode(prev => !prev)}
+                >
+                  {trackingPlacementMode ? '✕' : '+'}
+                </button>
+              )}
+
+              {/* Add Doc Button when Docs active */}
+              {trackingTab === 'docs' && (
+                <button
+                  className="secondary-btn"
+                  title="Agregar Documento (PDF)"
+                  style={{
+                    background: trackingPlacementMode ? '#ef4444' : 'rgba(139, 92, 246, 0.8)',
+                    color: 'white',
+                    border: 'none',
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '50%',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '18px',
+                    transition: 'all 0.2s ease',
+                    boxShadow: trackingPlacementMode ? '0 0 12px rgba(239,68,68,0.4)' : 'none'
+                  }}
+                  onClick={() => setTrackingPlacementMode(prev => !prev)}
+                >
+                  {trackingPlacementMode ? '✕' : '+'}
+                </button>
+              )}
+              {/* Add Restriction Button when Alerta active */}
+              {trackingTab === 'restricciones' && (
+                <button
+                  className="secondary-btn"
+                  title="Marcar Restricción / Alerta"
+                  style={{
+                    background: trackingPlacementMode ? '#ef4444' : 'rgba(245, 158, 11, 0.8)',
+                    color: 'white',
+                    border: 'none',
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '50%',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '18px',
+                    transition: 'all 0.2s ease',
+                    boxShadow: trackingPlacementMode ? '0 0 12px rgba(239,68,68,0.4)' : 'none'
                   }}
                   onClick={() => setTrackingPlacementMode(prev => !prev)}
                 >
@@ -2647,47 +2426,20 @@ function App() {
                   onViewablesLoaded={handleViewablesLoaded}
                   activeViewableGuids={activeViewableGuids}
 
-                  // BUILD MODE INTEGRATION (Infraworks)
-                  buildMode={activePanel === 'build'}
-                  buildPlacementMode={buildPlacementMode}
-                  buildPinType={buildPinType}
-                  buildPins={buildPins}
-                  showBuildPins={showBuildPins} // Pass visibility state
-                  selectedBuildPinId={selectedPinId}
-                  onBuildPinCreate={handlePinCreated}
-                  onBuildPinSelect={handlePinSelect}
-                  onBuildPinUpdate={handlePinUpdate}
-                  arMode={false} // Use Dedicated ARView instead
-                  // onBuildPinDelete={handlePinDelete} // If needed later
+                  arMode={false}
 
                   // SEGUIMIENTO PROPS
                   trackingTab={trackingTab}
                   trackingData={trackingData}
                   trackingPlacementMode={trackingPlacementMode}
                   onTrackingPinCreate={handleTrackingPinCreate}
-                  onTrackingPinClick={(pin) => {
-                    if (trackingTab === 'fotos') {
-                      setSelectedAlbumPin(pin);
-                      setPhotoAlbumOpen(true);
-                    }
-                  }}
+                  onTrackingPinClick={handleTrackingPinClick}
+                  onSelectionChanged={setSelectedElement}
+                  aiModelCommand={aiModelCommand}
                 />
 
               </div>
 
-              {/* 2D PLAN / MAP (Build Mode Only) */}
-              {activePanel === 'build' && (
-                <BuildMapView
-                  userLocation={userLocation}
-                  pins={buildPins}
-                  selectedPinId={selectedPinId}
-                  onPinCreated={handlePinCreated}
-                  onPinSelect={handlePinSelect}
-                  onPinDelete={handlePinDelete}
-                  onPinUpdate={handlePinUpdate}
-                  onFileUpload={handleBuildFileUpload}
-                />
-              )}
             </div>
 
             {/* DEBUG: Log activeSheet render */}
@@ -2844,7 +2596,13 @@ function App() {
 
             {/* CASE D: PHOTO ALBUM SLIDER */}
             {trackingTab === 'fotos' && photoAlbumOpen && selectedAlbumPin && (
-              <div className="split-doc active parallel" style={{ background: '#1a1b1e', borderLeft: '1px solid #444', zIndex: 10 }}>
+              <div className={`split-doc active dark-float ${panelDocked ? 'parallel' : ''}`} style={panelDocked ? { background: '#1a1b1e', borderLeft: '1px solid #444', zIndex: 10 } : {}}>
+                {/* Dock/Undock toggle */}
+                {!panelDocked && (
+                  <button className="dock-toggle-btn" onClick={() => setPanelDocked(true)} title="Acoplar panel">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="12" y1="3" x2="12" y2="21" /></svg>
+                  </button>
+                )}
                 <PhotoAlbumModal
                   isOpen={true}
                   variant="panel"
@@ -2853,6 +2611,54 @@ function App() {
                   title={selectedAlbumPin ? `Zona: ${selectedAlbumPin.val || selectedAlbumPin.id}` : 'Album de Fotos'}
                   photos={selectedAlbumPin?.photos || []}
                   onAddPhoto={handleAddPhotoToPin}
+                  onDelete={(id) => handleTrackingPinDelete('fotos', id)}
+                  onRename={(id, newTitle) => handleTrackingPinUpdate('fotos', id, { val: newTitle })}
+                  modelUrn="global"
+                />
+              </div>
+            )}
+
+            {/* CASE E: PROGRESS DETAIL PANEL */}
+            {trackingTab === 'avance' && progressPanelOpen && selectedProgressPin && (
+              <div className={`split-doc active dark-float ${panelDocked ? 'parallel' : ''}`} style={panelDocked ? { background: '#1a1b1e', borderLeft: '1px solid #444', zIndex: 10 } : {}}>
+                <ProgressDetailPanel
+                  isOpen={true}
+                  onClose={() => setProgressPanelOpen(false)}
+                  pin={selectedProgressPin}
+                  elementProps={
+                    selectedProgressPin && selectedProgressPin.dbId
+                      ? allLoadedProperties.find(p => p.dbId === selectedProgressPin.dbId)?.properties
+                      : null
+                  }
+                  onDelete={(id) => handleTrackingPinDelete('avance', id)}
+                  isDocked={panelDocked}
+                  onToggleDock={() => setPanelDocked(prev => !prev)}
+                  onUpdatePin={(id, updates) => handleTrackingPinUpdate('avance', id, updates)}
+                  availablePartidas={availablePartidas}
+                />
+              </div>
+            )}
+
+            {/* CASE F: DOC PIN PANEL */}
+            {(trackingTab === 'docs' || trackingTab === 'restricciones') && docPinPanelOpen && selectedDocPin && (
+              <div className={`split-doc active dark-float ${panelDocked ? 'parallel' : ''}`} style={panelDocked ? { background: '#1a1b1e', borderLeft: '1px solid #444', zIndex: 10 } : {}}>
+                {!panelDocked && (
+                  <button className="dock-toggle-btn" onClick={() => setPanelDocked(true)} title="Acoplar panel">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="12" y1="3" x2="12" y2="21" /></svg>
+                  </button>
+                )}
+                <DocPinPanel
+                  isOpen={true}
+                  variant="panel"
+                  onClose={() => setDocPinPanelOpen(false)}
+                  pin={selectedDocPin}
+                  onDelete={(id) => handleTrackingPinDelete(trackingTab, id)}
+                  onAttachDoc={handleAttachDocToPin}
+                  onAttachBatchDocs={handleAttachBatchDocsToPin}
+                  onRemoveDoc={handleRemoveDocFromPin}
+                  onRename={(id, newTitle) => handleTrackingPinUpdate(trackingTab, id, { val: newTitle })}
+                  projectPrefix={selectedProject?.name ? `proyectos/${selectedProject.name.replace(/ /g, '_')}/` : 'proyectos/'}
+                  modelUrn="global"
                 />
               </div>
             )}
@@ -2883,17 +2689,13 @@ function App() {
           open={documentsModalOpen}
           onClose={() => setDocumentsModalOpen(false)}
           targetSpriteId={activeSpriteId}
+          selectedProject={selectedProject}
           onConfirm={(items) => {
             addDocuments(items);
             setDocumentsModalOpen(false);
           }}
         />
 
-        <AddAttachmentModal
-          open={attachmentModalOpen}
-          onClose={() => setAttachmentModalOpen(false)}
-          onAttach={handleAttachment}
-        />
 
         <FilterConfiguratorModal
           open={filterConfiguratorOpen}
@@ -2919,6 +2721,13 @@ function App() {
             }}
           />
         )}
+
+        {/* GESTOR DOCUMENTAL GCS */}
+        <DocumentManager
+          isOpen={showDocManager}
+          onClose={() => setShowDocManager(false)}
+        />
+
 
       </div >
     </div >

@@ -123,7 +123,7 @@ const BuildPanel = ({
         const typeMap = {
             'DOCS': 'docs',
             'AVANCE': 'avance',
-            'RESTRICCIONES': 'restriccion'
+            'RESTRICCIONES': 'restriction'
         };
         const targetType = typeMap[activeTab];
         return pins.filter(p => p.type === targetType);
@@ -304,7 +304,7 @@ const BuildPanel = ({
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         // Determine type based on tab
-                                        const typeMap = { 'DATA': 'data', 'DOCS': 'docs', 'AVANCE': 'avance', 'RESTRICCIONES': 'restriccion' };
+                                        const typeMap = { 'DATA': 'data', 'DOCS': 'docs', 'AVANCE': 'avance', 'RESTRICCIONES': 'restriction' };
                                         onTogglePlacement(typeMap[activeTab]);
                                     }}
                                     className="sfp-import-text-btn"
@@ -343,7 +343,7 @@ const BuildPanel = ({
                                             <div className="sfp-item-row">
                                                 {/* Index Badge Color based on Type matching Viewer colors */}
                                                 <span className="pin-index-badge" style={{
-                                                    background: pin.type === 'restriccion' ? '#f59e0b' : // Yellow/Orange
+                                                    background: pin.type === 'restriction' ? '#f59e0b' : // Yellow/Orange
                                                         pin.type === 'docs' ? '#3b82f6' :        // Blue
                                                             pin.type === 'avance' ? '#9ca3af' :      // Grey
                                                                 '#6b7280'                                // Default Grey
@@ -353,12 +353,14 @@ const BuildPanel = ({
                                                     */}
                                                     {index + 1}
                                                 </span>
-                                                <span className="sfp-label">{pin.name}</span>
+                                                <span className="sfp-label" title={pin.name || pin.val || pin.id}>
+                                                    {pin.name || pin.val || (pin.id && String(pin.id).substring(0, 8)) || 'Sin nombre'}
+                                                </span>
 
                                                 {/* Type Indicator Icon if in DATA tab */}
                                                 {activeTab === 'DATA' && pin.type && pin.type !== 'data' && (
                                                     <span style={{ fontSize: '10px', marginRight: '6px', opacity: 0.7 }}>
-                                                        {pin.type === 'docs' ? '📄' : pin.type === 'restriccion' ? '⚠️' : '✅'}
+                                                        {pin.type === 'docs' ? '📄' : pin.type === 'restriction' ? '⚠️' : '✅'}
                                                     </span>
                                                 )}
 

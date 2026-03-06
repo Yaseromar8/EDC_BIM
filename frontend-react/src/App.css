@@ -423,10 +423,56 @@ body,
   border: none;
   border-left: 1px solid #444;
   background: #202020;
-  /* Resets background to dark if needed, but inner content has own bg */
   box-shadow: none;
   transform: none;
   z-index: 1;
+}
+
+/* Dark Floating Mode (PiP for tracking panels) */
+.split-doc.dark-float:not(.parallel) {
+  background: rgba(26, 27, 30, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  width: 240px;
+  height: 200px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  top: 16px;
+  right: 16px;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.split-doc.dark-float:not(.parallel):hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px) scale(1.02);
+}
+
+/* Dock Toggle Button (for PhotoAlbum floating) */
+.dock-toggle-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ccc;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  transition: all 0.2s;
+}
+
+.dock-toggle-btn:hover {
+  background: rgba(58, 160, 255, 0.2);
+  color: #3aa0ff;
+  border-color: rgba(58, 160, 255, 0.4);
 }
 
 /* Ensure header looks good in parallel too, handled by inline styles mostly */

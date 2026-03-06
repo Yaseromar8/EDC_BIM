@@ -1,0 +1,136 @@
+.activity-panel-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    color: #e2e8f0;
+    font-family: 'Inter', sans-serif;
+}
+
+.activity-controls {
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.refresh-btn {
+    background: rgba(58, 160, 255, 0.2);
+    border: 1px solid #3aa0ff;
+    color: #3aa0ff;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+    background: #3aa0ff;
+    color: white;
+}
+
+.refresh-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.activity-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.activity-item {
+    display: flex;
+    gap: 12px;
+    position: relative;
+}
+
+/* Vertical line connecting items */
+.activity-item:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 14px;
+    top: 30px;
+    bottom: -16px;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.activity-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    z-index: 1;
+}
+
+.activity-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.activity-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 2px;
+}
+
+.activity-user {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #3aa0ff;
+}
+
+.activity-date {
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+.activity-description {
+    font-size: 0.8rem;
+    line-height: 1.4;
+    word-break: break-all;
+    color: #cbd5e1;
+}
+
+.activity-meta {
+    color: #94a3b8;
+    font-style: italic;
+    font-size: 0.75rem;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.activity-error {
+    padding: 10px;
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+    font-size: 0.8rem;
+    margin: 10px;
+    border-radius: 4px;
+}
+
+/* Scrollbar styling */
+.activity-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+.activity-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.activity-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+}

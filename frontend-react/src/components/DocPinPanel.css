@@ -1,0 +1,1899 @@
+/* ─────────────────────────────────────────────────────────
+   DocPinPanel – Styling for Document Pin Panel
+   ───────────────────────────────────────────────────────── */
+
+.docpin-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Inter', sans-serif;
+}
+
+.docpin-modal {
+    background: #1a1b1e;
+    border-radius: 12px;
+    width: 550px;
+    max-width: 90vw;
+    max-height: 85vh;
+    color: #fff;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.docpin-panel-content {
+    width: 100%;
+    height: 100%;
+    background: #1a1b1e;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 0;
+    box-shadow: none;
+    position: relative;
+    color: #e5e7eb;
+}
+
+/* ── HEADER ───────────────────────────────── */
+.docpin-header {
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #23252a;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+}
+
+.docpin-title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.docpin-icon {
+    font-size: 20px;
+}
+
+.docpin-title-group h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #e0e0e0;
+    margin: 0;
+}
+
+.docpin-id {
+    color: #666;
+    font-size: 12px;
+    font-weight: 400;
+    font-family: 'SF Mono', monospace;
+}
+
+.docpin-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.docpin-delete-btn {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    padding: 6px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    display: flex;
+    align-items: center;
+}
+
+.docpin-delete-btn:hover {
+    opacity: 1;
+}
+
+.docpin-close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: #888;
+    cursor: pointer;
+    transition: color 0.2s;
+    line-height: 1;
+}
+
+.docpin-close-btn:hover {
+    color: #fff;
+}
+
+/* ── CONTENT (Attached Docs List) ─────────── */
+.docpin-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.docpin-add-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    background: #0696d7;
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.docpin-add-btn:hover {
+    background: #0585bf;
+}
+
+.docpin-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    text-align: center;
+    border: 2px dashed rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    margin-top: 8px;
+}
+
+.docpin-empty-state .docpin-empty-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+    opacity: 0.4;
+}
+
+.docpin-empty-state p {
+    color: #999;
+    font-size: 14px;
+    margin: 0 0 4px;
+}
+
+.docpin-empty-state small {
+    color: #555;
+    font-size: 12px;
+    max-width: 280px;
+}
+
+/* ── DOC LIST ─────────────────────────────── */
+.docpin-doc-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.docpin-doc-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: #2a2d33;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.docpin-doc-item:hover {
+    background: #33363d;
+    border-color: rgba(139, 92, 246, 0.3);
+}
+
+.docpin-doc-icon {
+    font-size: 22px;
+    flex-shrink: 0;
+}
+
+.docpin-doc-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.docpin-doc-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #e5e7eb;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.docpin-doc-date {
+    font-size: 11px;
+    color: #666;
+}
+
+.docpin-doc-actions-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.docpin-remove-btn {
+    background: transparent;
+    border: none;
+    color: #777;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    transition: all 0.2s;
+}
+
+.docpin-doc-item:hover .docpin-remove-btn {
+    opacity: 1;
+}
+
+.docpin-remove-btn:hover {
+    color: #ef4444;
+}
+
+.docpin-doc-chevron {
+    color: #555;
+}
+
+/* ── BROWSER (Browsing GCS) ──────────────── */
+.docpin-browser {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.docpin-browser-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: #23252a;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+}
+
+.docpin-back-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border: none;
+    color: #a78bfa;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.docpin-back-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #c4b5fd;
+}
+
+.docpin-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 12px;
+    color: #999;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.docpin-breadcrumb-link {
+    cursor: pointer;
+    color: #999;
+    transition: color 0.2s;
+}
+
+.docpin-breadcrumb-link:hover {
+    color: #a78bfa;
+}
+
+.docpin-breadcrumb-sep {
+    color: #555;
+    margin: 0 3px;
+}
+
+.docpin-browser-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 12px;
+}
+
+.docpin-browser-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-size: 13px;
+    color: #d1d5db;
+}
+
+.docpin-browser-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.docpin-browser-item.file:hover {
+    background: rgba(139, 92, 246, 0.12);
+}
+
+.docpin-item-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.docpin-item-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.docpin-item-size {
+    font-size: 11px;
+    color: #666;
+    flex-shrink: 0;
+}
+
+.docpin-item-chevron {
+    color: #555;
+    flex-shrink: 0;
+}
+
+.docpin-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 0;
+    gap: 12px;
+    color: #888;
+    font-size: 13px;
+}
+
+.docpin-spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid rgba(139, 92, 246, 0.2);
+    border-top-color: #a78bfa;
+    border-radius: 50%;
+    animation: docpin-spin 0.8s linear infinite;
+}
+
+@keyframes docpin-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.docpin-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 0;
+    gap: 8px;
+    color: #666;
+    font-size: 13px;
+}
+
+.docpin-empty span {
+    font-size: 28px;
+    opacity: 0.4;
+}
+
+/* ── VIEWER ──────────────────────────────── */
+.docpin-viewer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.docpin-viewer-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: #23252a;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+}
+
+.docpin-viewer-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #e5e7eb;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.docpin-iframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #111;
+}
+
+.docpin-doc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 12px;
+}
+
+.docpin-pdf-card {
+    background: #2a2d33;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    cursor: pointer;
+    overflow: hidden;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    height: 170px;
+}
+
+.docpin-pdf-card:hover {
+    border-color: rgba(139, 92, 246, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.docpin-pdf-preview {
+    flex: 1;
+    background: #2a2d33;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.docpin-pdf-preview .react-pdf__Document {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.docpin-pdf-preview .react-pdf__Page canvas {
+    width: 100% !important;
+    height: auto !important;
+    border-radius: 8px 8px 0 0;
+}
+
+.docpin-pdf-info {
+    padding: 8px 10px;
+    background: #1a1b1e;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.docpin-pdf-name {
+    font-size: 11px;
+    font-weight: 500;
+    color: #e5e7eb;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.docpin-pdf-date {
+    font-size: 10px;
+    color: #888;
+    margin-top: 2px;
+}
+
+.docpin-remove-btn-card {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 50%;
+    color: #fff;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.docpin-remove-btn-card:hover {
+    background: #ef4444;
+}
+
+.docpin-pdf-card:hover .docpin-remove-btn-card {
+    opacity: 1;
+}
+
+/* Fallback icons inside preview */
+.docpin-preview-fallback {
+    font-size: 32px;
+    opacity: 0.5;
+}
+
+
+/* --- AI CHAT PANEL --- */
+.docpin-ai-chat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #11111a;
+}
+
+.docpin-ai-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 16px;
+    overflow: hidden;
+}
+
+.docpin-ai-instruction {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: #1a1b1e;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ai-sparkle {
+    font-size: 18px;
+}
+
+.docpin-ai-instruction p {
+    font-size: 12px;
+    margin: 0;
+    color: #888;
+    line-height: 1.4;
+}
+
+.docpin-ai-messages {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.docpin-ai-bubble {
+    background: #1a1b1e;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: fadeIn 0.3s ease;
+}
+
+.ai-bubble-header {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #a78bfa;
+    font-weight: 600;
+}
+
+.ai-bubble-text {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #e5e7eb;
+    white-space: pre-wrap;
+}
+
+.docpin-ai-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 40px 0;
+    color: #888;
+    font-size: 13px;
+}
+
+.docpin-ai-empty {
+    padding: 20px;
+    color: #666;
+    font-size: 13px;
+}
+
+.docpin-ai-empty ul {
+    margin-top: 10px;
+    padding-left: 18px;
+    color: #555;
+    font-size: 12px;
+}
+
+.docpin-ai-input-group {
+    display: flex;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.docpin-ai-input-group input {
+    flex: 1;
+    background: #1a1b1e;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: white;
+    font-size: 13px;
+    outline: none;
+}
+
+.docpin-ai-input-group input:focus {
+    border-color: #a78bfa;
+}
+
+.docpin-ai-input-group button {
+    background: #8b5cf6;
+    color: white;
+    border: none;
+    padding: 0 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.docpin-ai-input-group button:hover:not(:disabled) {
+    background: #7c3aed;
+    transform: translateY(-1px);
+}
+
+.docpin-ai-input-group button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* AI Button on card */
+.docpin-pdf-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+}
+
+.docpin-ai-btn-small {
+    background: rgba(139, 92, 246, 0.2);
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    color: #c4b5fd;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.docpin-ai-btn-small:hover {
+    background: rgba(139, 92, 246, 0.4);
+    color: white;
+}
+
+/* ══════════════════════════════════════════════════════
+   AUTOCAD-STYLE AI COMMAND BAR
+   Flota sobre el iframe del documento abierto
+   ══════════════════════════════════════════════════════ */
+
+/* El viewer-body ahora es relativo para anclar la barra */
+.docpin-viewer-body {
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Badge "IA activa" en la barra superior del viewer */
+.docpin-ai-badge {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    color: #a78bfa;
+    background: rgba(139, 92, 246, 0.12);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    padding: 3px 8px;
+    border-radius: 20px;
+    flex-shrink: 0;
+    transition: color 0.3s, background 0.3s, border-color 0.3s;
+}
+
+/* Estado: preparando / extrayendo texto */
+.docpin-ai-badge.is-warming {
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.1);
+    border-color: rgba(251, 191, 36, 0.3);
+    animation: badgePulse 1.4s ease-in-out infinite;
+}
+
+@keyframes badgePulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.55;
+    }
+}
+
+/* Contenedor principal de la command bar — anclado al fondo */
+.docpin-cmdbar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    /* ── ESTADO 1 por defecto: semi-fantasma ── */
+    opacity: 0.28;
+    transition: opacity 0.45s ease, max-height 0.35s ease;
+}
+
+/* Activo (hover / foco / respuesta) → visible */
+.docpin-cmdbar.is-active {
+    opacity: 1;
+}
+
+/* ── ESTADO 2: expandido → siempre opaco ── */
+.docpin-cmdbar.is-expanded {
+    opacity: 1;
+}
+
+/* ── Botón toggle historial ──────────────────────────────────── */
+.docpin-cmd-toggle {
+    align-self: flex-end;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(15, 15, 25, 0.82);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(139, 92, 246, 0.22);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    color: #a78bfa;
+    font-size: 10px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-weight: 600;
+    padding: 4px 10px 3px;
+    cursor: pointer;
+    letter-spacing: 0.4px;
+    transition: background 0.2s, color 0.2s;
+    margin-right: 12px;
+}
+
+.docpin-cmd-toggle:hover,
+.docpin-cmd-toggle.is-expanded {
+    background: rgba(139, 92, 246, 0.18);
+    color: #c4b5fd;
+}
+
+/* ── HISTORIAL — ESTADO 1 (flotante, filas resaltadas) ─────── */
+.docpin-cmd-history {
+    /* Solo las últimas 4 líneas visibles */
+    max-height: 108px;
+    overflow: hidden;
+    /* sin scroll en modo compacto */
+    padding: 4px 0 2px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    /* Gradiente fade hacia arriba */
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 40%);
+    mask-image: linear-gradient(to bottom, transparent 0%, black 40%);
+    transition: max-height 0.35s ease;
+}
+
+/* ── HISTORIAL — ESTADO 2 (panel completo, estilo terminal AutoCAD) ── */
+.docpin-cmd-history.is-expanded {
+    max-height: 300px;
+    overflow-y: auto;
+    -webkit-mask-image: none;
+    mask-image: none;
+    /* Fondo gris claro tipo AutoCAD — limpio y profesional */
+    background: #c8cace;
+    border-top: 2px solid #888a90;
+    padding: 6px 0 4px;
+}
+
+.docpin-cmd-history.is-expanded::-webkit-scrollbar {
+    width: 5px;
+}
+
+.docpin-cmd-history.is-expanded::-webkit-scrollbar-track {
+    background: #b8babe;
+}
+
+.docpin-cmd-history.is-expanded::-webkit-scrollbar-thumb {
+    background: #888a90;
+    border-radius: 2px;
+}
+
+/* ── Fila de mensaje individual ─────────────────────────────── */
+/* ESTADO 1: cada fila tiene fondo gris/plomo resaltado (como AutoCAD) */
+.docpin-cmd-msg {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    padding: 3px 12px;
+    /* Fondo gris/plomo tipo AutoCAD — visible en estado 1 */
+    background: rgba(55, 58, 72, 0.82);
+    border-left: 2px solid transparent;
+}
+
+/* Separación mínima entre filas */
+.docpin-cmd-msg+.docpin-cmd-msg {
+    margin-top: 1px;
+}
+
+/* En estado expandido: filas con fondo gris claro, texto oscuro — estilo terminal */
+.docpin-cmd-history.is-expanded .docpin-cmd-msg {
+    background: transparent;
+    /* sin fondo por fila en modo expandido */
+    border-left: none;
+    padding: 1px 10px;
+    gap: 4px;
+}
+
+/* Línea actualmente resaltada (la última) */
+.docpin-cmd-history.is-expanded .docpin-cmd-msg:last-child {
+    border-left: 3px solid #555a6a;
+    padding-left: 7px;
+    background: rgba(0, 0, 0, 0.06);
+}
+
+/* Texto oscuro en modo expandido — igual para usuario e IA */
+.docpin-cmd-history.is-expanded .docpin-cmd-msg .docpin-cmd-prefix {
+    color: #2a2d38;
+}
+
+.docpin-cmd-history.is-expanded .docpin-cmd-msg .docpin-cmd-text {
+    color: #1a1c26;
+}
+
+/* ── Prefijo (› usuario, ✦ IA) ──────────────────────────────── */
+.docpin-cmd-prefix {
+    flex-shrink: 0;
+    font-size: 11px;
+    margin-top: 1px;
+}
+
+/* ── Texto del mensaje ──────────────────────────────────────── */
+.docpin-cmd-text {
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Usuario */
+.docpin-cmd-msg--user .docpin-cmd-prefix {
+    color: #60a5fa;
+}
+
+.docpin-cmd-msg--user .docpin-cmd-text {
+    color: #bfdbfe;
+}
+
+/* IA */
+.docpin-cmd-msg--ai .docpin-cmd-prefix {
+    color: #a78bfa;
+}
+
+.docpin-cmd-msg--ai .docpin-cmd-text {
+    color: #ede9fe;
+}
+
+/* ── Puntos animados (Gemini pensando) ──────────────────────── */
+.docpin-cmd-typing {
+    opacity: 0.75;
+}
+
+.docpin-cmd-dots {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0;
+}
+
+.docpin-cmd-dots span {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #a78bfa;
+    animation: cmdDotPulse 1.2s ease-in-out infinite;
+}
+
+.docpin-cmd-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.docpin-cmd-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes cmdDotPulse {
+
+    0%,
+    80%,
+    100% {
+        opacity: 0.25;
+        transform: scale(0.8);
+    }
+
+    40% {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+}
+
+/* ── Barra de input fija (siempre visible) ──────────────────── */
+.docpin-cmd-input-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: rgba(10, 10, 18, 0.92);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-top: 1px solid rgba(139, 92, 246, 0.28);
+    padding: 7px 12px;
+}
+
+/* Label "Gemini›" */
+.docpin-cmd-label {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: #a78bfa;
+    margin-right: 8px;
+    flex-shrink: 0;
+    letter-spacing: 0.5px;
+}
+
+/* Input */
+.docpin-cmd-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e2e8f0;
+    font-size: 12px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    caret-color: #a78bfa;
+    padding: 2px 0;
+}
+
+.docpin-cmd-input::placeholder {
+    color: rgba(167, 139, 250, 0.3);
+    font-style: italic;
+}
+
+.docpin-cmd-input:disabled {
+    opacity: 0.5;
+}
+
+/* Botón enviar ↵ */
+.docpin-cmd-send {
+    background: none;
+    border: none;
+    color: #a78bfa;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: color 0.2s, background 0.2s;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.docpin-cmd-send:hover:not(:disabled) {
+    color: #fff;
+    background: rgba(139, 92, 246, 0.25);
+}
+
+.docpin-cmd-send:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+}
+
+/* Estado activo: hover, foco, scroll, o respuesta nueva */
+.docpin-cmdbar.is-active {
+    opacity: 1;
+}
+
+/* Historial de mensajes flotante */
+.docpin-cmd-history {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 8px 12px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    /* Gradiente de fade hacia arriba para efecto fantasma */
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 35%);
+    mask-image: linear-gradient(to bottom, transparent 0%, black 35%);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(139, 92, 246, 0.3) transparent;
+}
+
+.docpin-cmd-history::-webkit-scrollbar {
+    width: 4px;
+}
+
+.docpin-cmd-history::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.docpin-cmd-history::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 246, 0.3);
+    border-radius: 4px;
+}
+
+/* Línea de mensaje individual */
+.docpin-cmd-msg {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 12px;
+    line-height: 1.5;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    padding: 2px 0;
+}
+
+/* Prefijo (› para usuario, ✦ para IA) */
+.docpin-cmd-prefix {
+    flex-shrink: 0;
+    font-size: 11px;
+    margin-top: 1px;
+}
+
+/* Texto del mensaje */
+.docpin-cmd-text {
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Mensaje del usuario */
+.docpin-cmd-msg--user .docpin-cmd-prefix {
+    color: #60a5fa;
+}
+
+.docpin-cmd-msg--user .docpin-cmd-text {
+    color: #93c5fd;
+}
+
+/* Respuesta de IA */
+.docpin-cmd-msg--ai .docpin-cmd-prefix {
+    color: #a78bfa;
+}
+
+.docpin-cmd-msg--ai .docpin-cmd-text {
+    color: #e2d9f3;
+}
+
+/* Puntos animados mientras Gemini piensa */
+.docpin-cmd-typing {
+    opacity: 0.7;
+}
+
+.docpin-cmd-dots {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0;
+}
+
+.docpin-cmd-dots span {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #a78bfa;
+    animation: cmdDotPulse 1.2s ease-in-out infinite;
+}
+
+.docpin-cmd-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.docpin-cmd-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes cmdDotPulse {
+
+    0%,
+    80%,
+    100% {
+        opacity: 0.25;
+        transform: scale(0.8);
+    }
+
+    40% {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+}
+
+/* Fila de input — la parte siempre visible */
+.docpin-cmd-input-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: rgba(13, 13, 20, 0.88);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(139, 92, 246, 0.25);
+    padding: 8px 12px;
+}
+
+/* Label "Gemini›" */
+.docpin-cmd-label {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: #a78bfa;
+    margin-right: 8px;
+    flex-shrink: 0;
+    letter-spacing: 0.5px;
+}
+
+/* Input de texto */
+.docpin-cmd-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e2e8f0;
+    font-size: 12px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    caret-color: #a78bfa;
+    padding: 2px 0;
+}
+
+.docpin-cmd-input::placeholder {
+    color: rgba(167, 139, 250, 0.35);
+    font-style: italic;
+}
+
+.docpin-cmd-input:disabled {
+    opacity: 0.5;
+}
+
+/* Botón enviar (↵) */
+.docpin-cmd-send {
+    background: none;
+    border: none;
+    color: #a78bfa;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: color 0.2s, background 0.2s;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.docpin-cmd-send:hover:not(:disabled) {
+    color: #fff;
+    background: rgba(139, 92, 246, 0.25);
+}
+
+.docpin-cmd-send:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+}
+
+/* ── SEARCH BAR STYLES ──────────────────────── */
+.docpin-search-row {
+    padding: 10px 16px;
+    background: #1e2024;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.docpin-search-form {
+    display: flex;
+    align-items: center;
+    background: #111214;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 2px 10px;
+}
+
+.docpin-search-form input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #e5e7eb;
+    font-size: 13px;
+    padding: 8px 4px;
+    outline: none;
+}
+
+.search-submit-btn,
+.search-clear-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px;
+}
+
+.search-clear-btn:hover {
+    color: #f87171;
+}
+
+/* ── PROFESSIONAL LIST VIEW (TABLE STYLE) ───── */
+.docpin-list-header {
+    display: grid;
+    grid-template-columns: 1fr 40px 100px;
+    gap: 12px;
+    padding: 8px 12px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #64748b;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.docpin-browser-item {
+    display: grid !important;
+    grid-template-columns: 1fr 40px 100px !important;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    text-decoration: none;
+}
+
+.docpin-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    overflow: hidden;
+    min-width: 0;
+}
+
+/* Custom layout for search results (stacked) */
+.docpin-search-results .docpin-list-header,
+.docpin-search-results .docpin-browser-item {
+    grid-template-columns: 1fr 40px !important;
+}
+
+.docpin-item-details-stacked {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.docpin-item-path {
+    font-size: 10px;
+    color: #94a3b8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+    font-family: 'SF Mono', monospace;
+}
+
+.col-version,
+.col-size {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+/* STATUS CHIPS */
+.col-status {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-align: center;
+    text-transform: uppercase;
+    width: fit-content;
+}
+
+.status-approved {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.status-review {
+    background: rgba(234, 179, 8, 0.15);
+    color: #facc15;
+    border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.status-draft {
+    background: rgba(148, 163, 184, 0.1);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.status-archived {
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* ── FILTERS & SEARCH CONTROLS ────────────── */
+.docpin-browser-controls {
+    padding: 12px 16px;
+    background: #1e2024;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.docpin-status-filters {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.filter-chip {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.filter-chip:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+}
+
+.filter-chip.is-active {
+    background: #8b5cf6;
+    color: white;
+    border-color: #a78bfa;
+}
+
+/* ── HISTORY DRAWER/PANEL ─────────────────── */
+.docpin-history-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 100;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.docpin-history-panel {
+    width: 280px;
+    height: 100%;
+    background: #1e2024;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+    }
+
+    to {
+        transform: translateX(0);
+    }
+}
+
+.docpin-history-panel header {
+    padding: 16px;
+    background: #23252a;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.docpin-history-panel h4 {
+    margin: 0;
+    font-size: 13px;
+    color: #e5e7eb;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.docpin-history-panel header button {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.docpin-history-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.history-event {
+    position: relative;
+    padding-left: 20px;
+}
+
+.history-marker {
+    position: absolute;
+    left: 0;
+    top: 4px;
+    width: 6px;
+    height: 6px;
+    background: #8b5cf6;
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+}
+
+.history-event::before {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 14px;
+    bottom: -16px;
+    width: 2px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.history-event:last-child::before {
+    display: none;
+}
+
+
+/* History info button in rows */
+
+.col-size-group {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+/* ── NOTIFICATION TOASTS ──────────────────── */
+.docpin-toast {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #23252a;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    z-index: 2000;
+    min-width: 250px;
+    animation: toastPop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.docpin-toast.success {
+    border-left: 4px solid #4ade80;
+}
+
+.docpin-toast.error {
+    border-left: 4px solid #f87171;
+}
+
+.docpin-toast p {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.toast-icon {
+    font-size: 16px;
+}
+
+@keyframes toastPop {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+/* Row hover polish */
+.docpin-browser-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+/* ── BATCH TOOLBAR ────────────────────────── */
+.docpin-batch-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #8b5cf6;
+    padding: 8px 16px;
+    border-radius: 6px;
+    color: white;
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+    animation: fadeInDown 0.2s ease-out;
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.batch-count {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.batch-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.batch-actions button {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.batch-actions button:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: white;
+}
+
+.batch-actions button.btn-success {
+    background: #10b981;
+    border-color: #34d399;
+}
+
+.batch-actions button.btn-success:hover {
+    background: #059669;
+}
+
+.batch-actions button.btn-danger {
+    background: #ef4444;
+    border-color: #f87171;
+}
+
+.batch-actions button.btn-danger:hover {
+    background: #dc2626;
+}
+
+.batch-actions button.btn-cancel {
+    background: transparent;
+    border-color: transparent;
+    opacity: 0.8;
+}
+
+/* ── CHECKBOX STYLES ──────────────────────── */
+.docpin-checkbox {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #8b5cf6;
+    margin-right: 8px;
+}
+
+.docpin-browser-item.is-selected {
+    background: rgba(139, 92, 246, 0.08) !important;
+    border-left: 2px solid #8b5cf6 !important;
+}
+
+.docpin-browser-controls-top {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* ── ADMIN ACTIONS ────────────────────────── */
+.docpin-admin-actions {
+    display: flex;
+    gap: 12px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.admin-btn {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #cbd5e1;
+    height: 32px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.admin-btn span {
+    font-size: 14px;
+    color: #8b5cf6;
+}
+
+.admin-btn:hover {
+    background: rgba(139, 92, 246, 0.1);
+    border-color: #8b5cf6;
+    color: white;
+}
+
+/* ── ROW ACTIONS ──────────────────────────── */
+.row-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.row-actions button {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    color: #64748b;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.row-actions button:hover {
+    background: rgba(139, 92, 246, 0.15);
+    color: #a78bfa;
+    border-color: #8b5cf6;
+}
+
+/* ─────────────────────────────────────────────────────────
+   VIEW TOGGLE & LIST MODE PREMIUM
+   ───────────────────────────────────────────────────────── */
+
+.docpin-content-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+
+.docpin-view-toggle {
+    display: flex;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+}
+
+.view-btn {
+    background: transparent;
+    border: none;
+    color: #888;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.view-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ccc;
+}
+
+.view-btn.active {
+    background: #0696d7;
+    color: white;
+}
+
+/* --- LIST MODE VERTICAL (Simulando Tabla ACC) --- */
+.docpin-doc-list-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+}
+
+.docpin-list-row {
+    background: #1a1b1e;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.docpin-list-row:hover {
+    background: #25262b;
+    border-left: 3px solid #0696d7;
+}
+
+.col-icon-name {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+    min-width: 0;
+}
+
+.doc-type-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+.doc-id-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.doc-filename {
+    font-size: 13px;
+    font-weight: 500;
+    color: #e5e7eb;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.doc-plano-titulo {
+    font-size: 11px;
+    color: #0696d7;
+    font-weight: 400;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: -2px;
+}
+
+.col-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.docpin-ai-btn-round {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #0696d7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.docpin-ai-btn-round:hover {
+    background: #8b5cf6;
+    transform: scale(1.1);
+}
+
+.docpin-remove-btn-list {
+    background: transparent;
+    border: none;
+    font-size: 16px;
+    padding: 6px;
+    cursor: pointer;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+}
+
+.docpin-list-row:hover .docpin-remove-btn-list {
+    opacity: 1;
+}
+
+.docpin-remove-btn-list:hover {
+    opacity: 1;
+    color: #ef4444;
+    transform: scale(1.2);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

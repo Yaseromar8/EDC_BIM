@@ -77,7 +77,7 @@ export function tryGetProperty(record, ...aliases) {
     for (const alias of aliases) {
         if (record.properties) {
             for (const prop of record.properties) {
-                if (prop.displayName.toLowerCase().replace(/\s/g, '') === alias.toLowerCase().replace(/\s/g, '')) {
+                if (prop.displayName && alias && prop.displayName.toLowerCase().replace(/\s/g, '') === alias.toLowerCase().replace(/\s/g, '')) {
                     return prop.displayValue;
                 }
             }

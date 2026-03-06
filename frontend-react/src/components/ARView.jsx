@@ -95,7 +95,6 @@ const ARView = ({ models, initialCamera, onExit }) => {
                     >
                         🚀 Iniciar AR (Scan)
                     </button>
-                    )}
 
                     {/* ... Panel ... */}
                 </div>

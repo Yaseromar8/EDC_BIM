@@ -1,0 +1,26 @@
+/* CSS for IconMarkupExtension */
+.icon-markup {
+    position: absolute;
+    /* Default to hidden if coordinates are invalid to avoid top-left pile up */
+    /* top: 0; left: 0; is default if transform not set */
+    transform: translate(-50%, -50%);
+    /* Centered */
+    z-index: 100;
+    /* Ensure above canvas */
+    pointer-events: auto;
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.1s linear, opacity 0.2s;
+}
+
+.icon-markup:hover {
+    transform: translate(-50%, -50%) scale(1.1);
+    z-index: 110;
+}
+
+/* Ensure markers are hidden when they go behind camera or are invalid */
+.icon-markup.hidden {
+    display: none !important;
+    opacity: 0;
+    pointer-events: none;
+}

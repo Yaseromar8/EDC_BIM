@@ -32,7 +32,10 @@ def get_internal_token():
             response.raise_for_status()
             token_data = response.json()
             token = token_data['access_token']
-            cache.set('internal_token', token, timeout=token_data['expires_in'])
+            # Safety buffer: expire the token from cache 5 minutes BEFORE it actually expires on Autodesk's side
+            # This prevents sending a dying token to the frontend Viewer.
+            safe_timeout = max(60, int(token_data.get('expires_in', 3599)) - 300)
+            cache.set('internal_token', token, timeout=safe_timeout)
         except requests.exceptions.RequestException as e:
             if 'response' in locals() and response is not None:
                 print(f"APS Token Error: {response.status_code} - {response.text}")

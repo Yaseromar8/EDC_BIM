@@ -5,19 +5,19 @@
 
 [[redirects]]
   from = "/api/*"
-  to = "https://CHANGE-ME-TO-YOUR-RENDER-URL.onrender.com/api/:splat"
+  to = "https://visor-ecd-backend.onrender.com/api/:splat"
   status = 200
   force = true
 
 [[redirects]]
   from = "/maps/*"
-  to = "https://CHANGE-ME-TO-YOUR-RENDER-URL.onrender.com/maps/:splat"
+  to = "https://visor-ecd-backend.onrender.com/maps/:splat"
   status = 200
   force = true
 
 [[redirects]]
   from = "/docs/*"
-  to = "https://CHANGE-ME-TO-YOUR-RENDER-URL.onrender.com/docs/:splat"
+  to = "https://visor-ecd-backend.onrender.com/docs/:splat"
   status = 200
   force = true
 

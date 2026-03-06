@@ -1,28 +1,28 @@
 [
   {
-    "id": "1766380826761",
-    "name": "PLANOS",
+    "id": "1771473617175",
+    "name": "Protocolizado",
     "viewerState": {
       "viewport": {
         "aspectRatio": 2.2731768317265866,
         "isOrthographic": true,
         "name": "",
         "eye": [
-          192927.28010463557,
-          -297623.68346291827,
-          222277.0847567718
+          176330.7994592505,
+          -312209.38471705525,
+          224262.87682138963
         ],
         "target": [
-          11978.698743575631,
-          6232.593489097781,
-          -1224.6519126179337
+          -32256.354455375462,
+          -37323.52775298478,
+          -14773.655015114666
         ],
         "up": [
-          -0.2733435689810565,
-          0.4590097284798845,
-          0.8453362422477348
+          -0.3442189109344829,
+          0.45362769729430613,
+          0.8220311755660753
         ],
-        "distanceToOrbit": 418358.7604364874,
+        "distanceToOrbit": 419772.91323940794,
         "projection": "orthographic",
         "worldUpVector": [
           0,
@@ -30,16 +30,16 @@
           1
         ],
         "pivotPoint": [
-          0.02612900733947754,
-          0.0023062117397785187,
-          0.00015352503396570683
+          0.046875,
+          0.015625,
+          0
         ],
-        "orthographicHeight": 418358.7604364866
+        "orthographicHeight": 419772.9132394078
       },
       "renderOptions": {
         "environment": "Boardwalk",
         "ambientOcclusion": {
-          "enabled": false,
+          "enabled": true,
           "radius": 250,
           "intensity": 1
         },
@@ -50,8 +50,8 @@
         },
         "appearance": {
           "ghostHidden": true,
-          "ambientShadow": false,
-          "antiAliasing": false,
+          "ambientShadow": true,
+          "antiAliasing": true,
           "progressiveDisplay": true,
           "swapBlackAndWhite": false,
           "displayLines": true,
@@ -61,109 +61,125 @@
     },
     "filterState": {
       "filterSelections": {
-        "__revit__::ElementId": [],
-        "__category__::Category": [
-          "Revit Muros",
-          "Revit Modelos gen\u00e9ricos",
-          "Revit Bordes de losa",
-          "Revit Eje",
-          "Revit Tuber\u00edas",
-          "Revit Cotas de elevaci\u00f3n",
-          "Revit Puertas",
-          "Revit Refuerzo de \u00e1rea estructural",
-          "Revit Suelos"
-        ],
-        "__categoryId__::CategoryId": [],
-        "__parent__::parent": []
+        "Standard::Sources": [],
+        "Tandem Category": [],
+        "Construcci\u00f3n::04_01_DSI_ControlesCalidad": [
+          "ET-F03-C11B-SCL-0024",
+          "ET-F03-C11B-SCL-0027",
+          "ET-F03-C11B-SCL-0026",
+          "ET-F02-C11B-SCL-0008",
+          "TP-F01-C11B-SCL-0128",
+          "TP-F01-C11B-SCL-0130",
+          "TP-F01-C11B-SCL-0018",
+          "TP-F01-C11B-SCL-0050",
+          "TP-F01-C11B-SCL-0064",
+          "TP-F01-C11B-SCL-0088",
+          "TP-F01-C11B-SCL-0125",
+          "TP-F01-C11B-SCL-0129",
+          "TP-F01-C11B-SCL-0070",
+          "TP-F01-C11B-SCL-0080",
+          "TP-F01-C11B-SCL-0081",
+          "TP-F01-C11B-SCL-0087",
+          "TP-F01-C11B-SCL-0093",
+          "TP-F01-C11B-SCL-0109",
+          "TP-F01-C11B-SCL-0120",
+          "ET-F01-C11B-SCL-0001",
+          "ET-F01-C11B-SCL-0003",
+          "ET-F01-C11B-SCL-0004",
+          "ET-F01-C11B-SCL-0006",
+          "ET-F01-C11B-SCL-0007",
+          "ET-F01-C11B-SCL-0008",
+          "ET-F01-C11B-SCL-0009",
+          "ET-F01-C11B-SCL-0010",
+          "ET-F01-C11B-SCL-0011",
+          "ET-F01-C11B-SCL-0012",
+          "ET-F01-C11B-SCL-0013",
+          "ET-F01-C11B-SCL-0014",
+          "ET-F01-C11B-SCL-0015",
+          "ET-F01-C11B-SCL-0016",
+          "ET-F02-C11B-SCL-0003",
+          "ET-F02-C11B-SCL-0005",
+          "ET-F02-C11B-SCL-0006",
+          "ET-F02-C11B-SCL-0007",
+          "TP-F01-C11B-SCL-0001",
+          "TP-F01-C11B-SCL-0002",
+          "TP-F01-C11B-SCL-0003",
+          "TP-F01-C11B-SCL-0004",
+          "TP-F01-C11B-SCL-0005",
+          "TP-F01-C11B-SCL-0006",
+          "TP-F01-C11B-SCL-0008",
+          "TP-F01-C11B-SCL-0013",
+          "TP-F01-C11B-SCL-0019",
+          "TP-F01-C11B-SCL-0022",
+          "TP-F01-C11B-SCL-0024",
+          "TP-F01-C11B-SCL-0027",
+          "TP-F01-C11B-SCL-0030",
+          "TP-F01-C11B-SCL-0032",
+          "TP-F01-C11B-SCL-0033",
+          "TP-F01-C11B-SCL-0035",
+          "TP-F01-C11B-SCL-0038",
+          "TP-F01-C11B-SCL-0042",
+          "TP-F01-C11B-SCL-0049",
+          "TP-F01-C11B-SCL-0051",
+          "TP-F01-C11B-SCL-0052",
+          "TP-F01-C11B-SCL-0053",
+          "TP-F01-C11B-SCL-0055",
+          "TP-F01-C11B-SCL-0056",
+          "TP-F01-C11B-SCL-0058",
+          "TP-F01-C11B-SCL-0059",
+          "TP-F01-C11B-SCL-0061",
+          "TP-F01-C11B-SCL-0062",
+          "TP-F01-C11B-SCL-0065",
+          "TP-F01-C11B-SCL-0067",
+          "TP-F01-C11B-SCL-0068",
+          "TP-F01-C11B-SCL-0072",
+          "TP-F01-C11B-SCL-0074",
+          "TP-F01-C11B-SCL-0075",
+          "TP-F01-C11B-SCL-0077",
+          "TP-F01-C11B-SCL-0079",
+          "TP-F01-C11B-SCL-0083",
+          "TP-F01-C11B-SCL-0084",
+          "TP-F01-C11B-SCL-0085",
+          "TP-F01-C11B-SCL-0086",
+          "TP-F01-C11B-SCL-0092",
+          "TP-F01-C11B-SCL-0094",
+          "TP-F01-C11B-SCL-0095",
+          "TP-F01-C11B-SCL-0096",
+          "TP-F01-C11B-SCL-0098",
+          "TP-F01-C11B-SCL-0099",
+          "TP-F01-C11B-SCL-0102",
+          "TP-F01-C11B-SCL-0103",
+          "TP-F01-C11B-SCL-0104",
+          "TP-F01-C11B-SCL-0105",
+          "TP-F01-C11B-SCL-0108",
+          "TP-F01-C11B-SCL-0111",
+          "TP-F01-C11B-SCL-0113",
+          "TP-F01-C11B-SCL-0114",
+          "TP-F01-C11B-SCL-0115",
+          "TP-F01-C11B-SCL-0117",
+          "TP-F01-C11B-SCL-0118",
+          "TP-F01-C11B-SCL-0119",
+          "TP-F01-C11B-SCL-0122",
+          "TP-F01-C11B-SCL-0124",
+          "TP-F01-C11B-SCL-0126",
+          "TP-F01-C11B-SCL-0127",
+          "TP-F01-C11B-SCL-0131",
+          "TP-F01-C11B-SCL-0132"
+        ]
       },
-      "filterColors": {},
+      "filterColors": {
+        "Construcci\u00f3n::04_01_DSI_ControlesCalidad": true,
+        "Construcci\u00f3n::04_09_DSI_MesEjecutado": true
+      },
       "filterProperties": [
-        "__revit__::ElementId",
-        "__category__::Category",
-        "__categoryId__::CategoryId",
-        "__parent__::parent"
+        "Standard::Sources",
+        "Tandem Category",
+        "Construcci\u00f3n::04_01_DSI_ControlesCalidad",
+        "Construcci\u00f3n::04_09_DSI_MesEjecutado"
       ]
     },
     "config": {},
-    "createdAt": "2025-12-22T05:20:26Z",
-    "projectId": null
-  },
-  {
-    "id": "1766381044697",
-    "name": "CANAL PLANOS",
-    "viewerState": {
-      "viewport": {
-        "aspectRatio": 2.2731768317265866,
-        "isOrthographic": true,
-        "name": "",
-        "eye": [
-          -658352.0532825269,
-          583757.7168817655,
-          551144.8738985286
-        ],
-        "target": [
-          103580.07166764808,
-          218948.64962506082,
-          -1724.568742630002
-        ],
-        "up": [
-          0.49391749838022336,
-          -0.23648508310059385,
-          0.8367319225801818
-        ],
-        "distanceToOrbit": 1009599.3458744618,
-        "projection": "orthographic",
-        "worldUpVector": [
-          0,
-          0,
-          1
-        ],
-        "pivotPoint": [
-          -0.06558257341384888,
-          -0.12151461839675903,
-          0.002784096635878086
-        ],
-        "orthographicHeight": 1009599.3458744618
-      },
-      "renderOptions": {
-        "environment": "Boardwalk",
-        "ambientOcclusion": {
-          "enabled": false,
-          "radius": 250,
-          "intensity": 1
-        },
-        "toneMap": {
-          "method": 1,
-          "exposure": -7,
-          "lightMultiplier": -1e-20
-        },
-        "appearance": {
-          "ghostHidden": false,
-          "ambientShadow": false,
-          "antiAliasing": false,
-          "progressiveDisplay": true,
-          "swapBlackAndWhite": false,
-          "displayLines": true,
-          "displayPoints": true
-        }
-      }
-    },
-    "filterState": {
-      "filterSelections": {
-        "__categoryId__::CategoryId": [],
-        "__parent__::parent": [],
-        "__revit__::ElementId": []
-      },
-      "filterColors": {},
-      "filterProperties": [
-        "__revit__::ElementId",
-        "__category__::Category",
-        "__categoryId__::CategoryId",
-        "__parent__::parent"
-      ]
-    },
-    "config": {},
-    "createdAt": "2025-12-22T05:24:04Z",
+    "createdAt": "2026-02-19T04:00:17Z",
     "projectId": null
   }
 ]

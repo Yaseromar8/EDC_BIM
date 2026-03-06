@@ -1,5 +1,8 @@
 import React from 'react';
 import './TopBar.css';
+import { Capacitor } from '@capacitor/core';
+
+const DOCS_URL = import.meta.env.VITE_DOCS_URL || 'http://localhost:5174';
 
 // SVGs for Tandem-like icons
 const LogoIcon = () => (
@@ -70,35 +73,134 @@ const HelpIcon = () => (
     </svg>
 );
 
+const SignOutIcon = () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+        <polyline points="16 17 21 12 16 7" />
+        <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+);
+
 const TopBar = ({
+    user,
+    onLogout,
     activePanel,
     togglePanel,
     isViewsActive,
-    onLogoClick
+    onLogoClick,
+    selectedProject,
+    onUniversalSearch
 }) => {
+    const [timer, setTimer] = React.useState(null);
+    const [isLongPress, setIsLongPress] = React.useState(false);
+
+    const handleStart = () => {
+        setIsLongPress(false);
+        const t = setTimeout(() => {
+            setIsLongPress(true);
+            togglePanel('search'); // Activar IA en pulsación larga
+        }, 800);
+        setTimer(t);
+    };
+
+    const handleEnd = (e) => {
+        if (timer) clearTimeout(timer);
+        if (!isLongPress && e.type === 'click') {
+            onLogoClick(); // Clic corto: Inicio
+        } else if (isLongPress) {
+            // Pulsación larga: Toggle IA
+            if (activePanel === 'search') {
+                togglePanel(null); // Desactivar si ya está activo
+            } else {
+                togglePanel('search'); // Activar si no está activo
+            }
+        }
+    };
+
     return (
         <header className="top-bar">
             <div className="top-bar-left">
-                <div className="logo-section" onClick={onLogoClick} style={{ cursor: 'pointer' }}>
-                    <img src="/logo.png" alt="Logo" style={{ height: '32px' }} />
+                <div
+                    className="logo-section"
+                    onMouseDown={handleStart}
+                    onMouseUp={handleEnd}
+                    onTouchStart={handleStart}
+                    onTouchEnd={handleEnd}
+                    onClick={handleEnd}
+                    title="Clic para inicio / Mantener para IA"
+                    style={{ position: 'relative' }}
+                >
+                    <div className={`logo-wrapper ${activePanel === 'search' ? 'ai-active-glow' : ''}`}>
+                        <img src="/logo.png" alt="Logo" style={{ height: '28px', display: 'block', zIndex: 2, position: 'relative' }} />
+                    </div>
+
+                    {selectedProject && (
+                        <div className="top-bar-breadcrumb">
+                            <span className="breadcrumb-project">{selectedProject.baseName || selectedProject.name}</span>
+                            <span className="breadcrumb-sep">/</span>
+                            <span className="breadcrumb-view">{selectedProject.frontName}</span>
+                        </div>
+                    )}
                 </div>
             </div>
 
             <div className="top-bar-center">
-                {/* Search removed */}
+                <div className="top-search" style={{ maxWidth: '400px' }}>
+                    <div className="search-icon-wrapper">
+                        <SearchIcon />
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Preguntar a la IA sobre el proyecto..."
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && onUniversalSearch) {
+                                onUniversalSearch(e.target.value);
+                            }
+                        }}
+                    />
+                </div>
             </div>
 
             <div className="top-bar-right">
                 <button
+                    className="tool-btn"
+                    onClick={() => window.open(DOCS_URL, '_blank')}
+                    title="Gestión Documental (ACC)"
+                    style={{ marginRight: '8px', color: '#0696d7' }}
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+                    </svg>
+                    <span style={{ fontSize: '11px', fontWeight: 700, marginLeft: '4px' }}>DOCS</span>
+                </button>
+
+                <button
                     className={`tool-btn view-trigger ${isViewsActive ? 'active' : ''}`}
                     onClick={() => togglePanel('views')}
-                    title="Saved Views"
+                    title="Vistas Guardadas"
                 >
                     <BookmarkIcon />
                 </button>
+
+                {user && (
+                    <div className="user-profile-section" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '12px', borderLeft: '1px solid #444', paddingLeft: '12px' }}>
+                        <div className="user-info" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                            <span style={{ color: '#fff', fontSize: '13px', fontWeight: 500 }}>{user.name}</span>
+                            <span style={{ color: '#888', fontSize: '11px' }}>{user.role === 'admin' ? 'Administrador' : 'Usuario'}</span>
+                        </div>
+                        <button
+                            className="tool-btn logout-btn"
+                            onClick={onLogout}
+                            title="Cerrar Sesión"
+                            style={{ color: '#ff4d4d' }}
+                        >
+                            <SignOutIcon />
+                        </button>
+                    </div>
+                )}
             </div>
         </header>
     );
 };
 
-export default TopBar;
+export default React.memo(TopBar);

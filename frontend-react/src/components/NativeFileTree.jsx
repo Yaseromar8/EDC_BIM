@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
+import './NativeFileTree.css';
 
 const BACKEND_URL = Capacitor.isNativePlatform()
     ? 'https://visor-ecd-backend.onrender.com'
@@ -39,7 +40,7 @@ const useFetch = (url) => {
     return { data, error, loading };
 };
 
-const TreeNode = ({ node, selectedFiles, onFileSelect, hubId }) => {
+const TreeNode = ({ node, selectedFiles, onFileSelect, hubId, projectId: contextProjectId }) => {
     const [isOpen, setIsOpen] = useState(false);
     let url = null;
     if (isOpen) {
@@ -51,21 +52,12 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId }) => {
                 url = API_ENDPOINTS.topFolders(hubId, node.id);
                 break;
             case 'folders':
-                let projectId = null;
-                try {
-                    const match = node.links.self.href.match(/projects\/(b\.[a-zA-Z0-9\-_]+)/);
-                    if (match) {
-                        projectId = match[1];
-                    } else if (node.links.self.href.includes('folders')) {
-                        const pMatch = node.links.self.href.match(/projects\/([a-zA-Z0-9\.\-_]+)\/folders/);
-                        if (pMatch) projectId = pMatch[1];
-                    }
-                } catch (e) { }
-                url = API_ENDPOINTS.folderContents(projectId, node.id);
+                const pid = contextProjectId || node.links.self.href.match(/projects\/(b\.[a-zA-Z0-9\-_]+)/)?.[1];
+                url = API_ENDPOINTS.folderContents(pid, node.id);
                 break;
             case 'items':
-                const projId = node.links.self.href.match(/projects\/(b\.[a-zA-Z0-9\-_]+)/)[1];
-                url = API_ENDPOINTS.itemVersions(projId, node.id);
+                const itemPid = contextProjectId || node.links.self.href.match(/projects\/(b\.[a-zA-Z0-9\-_]+)/)?.[1];
+                url = API_ENDPOINTS.itemVersions(itemPid, node.id);
                 break;
             default: break;
         }
@@ -74,10 +66,9 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId }) => {
     const { data: children, error, loading } = useFetch(url);
     const isFolder = node.type !== 'items' && node.type !== 'versions';
 
-    const handleToggle = async () => {
+    const handleToggle = () => {
         if (isFolder) {
             setIsOpen(!isOpen);
-            return;
         }
     };
 
@@ -85,21 +76,16 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId }) => {
         e.stopPropagation();
         if (isFolder) return;
 
-        // Fetch details if checking an item (to get version)
         const projectMatch = node.links.self.href.match(/projects\/(b\.[a-zA-Z0-9\-_]+)/);
-        const projectId = projectMatch ? projectMatch[1] : null;
-        if (!projectId) return;
+        const pid = contextProjectId || (projectMatch ? projectMatch[1] : null);
+        if (!pid) return;
 
-        // If explicitly checking, we need the version details.
-        // Optimization: If unchecking, we don't need to fetch.
         const isSelected = selectedFiles.some(f => f.itemId === node.id);
 
         if (isSelected) {
-            // Uncheck
             onFileSelect(node.id, null);
         } else {
-            // Check - need to fetch latest version
-            const versionsUrl = API_ENDPOINTS.itemVersions(projectId, node.id);
+            const versionsUrl = API_ENDPOINTS.itemVersions(pid, node.id);
             try {
                 const res = await fetch(versionsUrl);
                 const json = await res.json();
@@ -109,20 +95,19 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId }) => {
                 const latestVersion = sortedVersions[0];
                 const versionUrn = latestVersion.id;
                 const urn = btoa(versionUrn).replace(/=+$/, '');
-                const label = node.attributes.displayName;
 
                 onFileSelect(node.id, {
                     urn,
-                    name: label,
+                    name: node.attributes.displayName,
                     itemId: node.id,
                     versionId: latestVersion.id,
-                    projectId: projectId,
+                    projectId: pid,
                     versionNumber: latestVersion.attributes.versionNumber,
                     lastModifiedTime: latestVersion.attributes.lastModifiedTime,
                     webView: latestVersion.links?.webView || null
                 });
             } catch (e) {
-                console.error('Error fetching version for check:', e);
+                console.error('Error fetching version:', e);
             }
         }
     };
@@ -131,40 +116,67 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId }) => {
 
     const getIcon = () => {
         switch (node.type) {
-            case 'hubs': return 'fas fa-server';
-            case 'projects': return 'fas fa-archive';
+            case 'hubs': return 'fas fa-building';
+            case 'projects': return 'fas fa-project-diagram';
             case 'folders': return isOpen ? 'fas fa-folder-open' : 'fas fa-folder';
-            case 'items': return 'fas fa-file-alt'; // Revit icon replacement
-            default: return 'fas fa-question-circle';
+            case 'items': {
+                const name = (node.attributes.displayName || '').toLowerCase();
+                if (name.endsWith('.rvt')) return 'fas fa-cube';
+                if (name.endsWith('.pdf')) return 'fas fa-file-pdf';
+                if (name.endsWith('.dwg')) return 'fas fa-drafting-compass';
+                return 'fas fa-file-alt';
+            }
+            default: return 'fas fa-circle';
         }
     };
 
     return (
-        <li>
-            <div className="tree-node-row">
-                <span onClick={handleToggle} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+        <li style={{ listStyle: 'none' }}>
+            <div className={`tree-node-row ${isOpen ? 'is-open' : ''}`} style={{ padding: '6px 4px', borderRadius: '4px', display: 'flex', alignItems: 'center', transition: 'background 0.2s' }}>
+                <span onClick={handleToggle} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
                     {isFolder ? (
-                        <i className={`fas fa-caret-${isOpen ? 'down' : 'right'}`} style={{ width: '15px' }}></i>
+                        <i className={`fas fa-caret-${isOpen ? 'down' : 'right'}`} style={{ width: '16px', fontSize: '12px', opacity: 0.5 }}></i>
                     ) : (
-                        <span style={{ width: '15px' }}></span>
+                        <span style={{ width: '16px' }}></span>
                     )}
 
                     {!isFolder && (
-                        <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={handleCheck}
-                            style={{ marginRight: '8px', cursor: 'pointer' }}
-                        />
+                        <div
+                            onClick={handleCheck}
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '16px',
+                                height: '16px',
+                                borderRadius: '3px',
+                                border: `1.5px solid ${isChecked ? '#3aa0ff' : '#555'}`,
+                                background: isChecked ? '#3aa0ff' : 'transparent',
+                                marginRight: '8px',
+                                cursor: 'pointer',
+                                flexShrink: 0,
+                            }}
+                        >
+                            {isChecked && (
+                                <svg viewBox="0 0 24 24" width="12" height="12">
+                                    <path fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" d="M6,11.3 L10.3,16 L18,6.2" />
+                                </svg>
+                            )}
+                        </div>
                     )}
 
-                    <i className={getIcon()} style={{ marginRight: '5px', color: isFolder ? '#FFC107' : '#2196F3' }}></i>
-                    {node.attributes.displayName || node.attributes.name}
+                    <i className={getIcon()} style={{ marginRight: '8px', color: isFolder ? '#FFC107' : (isChecked ? '#3aa0ff' : '#aaa'), fontSize: '14px' }}></i>
+                    <span style={{ fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: isFolder ? 0.9 : 0.8 }}>
+                        {node.attributes.displayName || node.attributes.name}
+                    </span>
                 </span>
             </div>
             {isOpen && (
-                <ul style={{ paddingLeft: '20px' }}>
-                    {loading && <li><small>Loading...</small></li>}
+                <ul style={{ paddingLeft: '18px', borderLeft: '1px solid rgba(255,255,255,0.05)', marginLeft: '8px' }}>
+                    {loading && <li style={{ padding: '4px 0', fontSize: '11px', color: '#666' }}><i className="fas fa-spinner fa-spin"></i> Cargando...</li>}
+                    {!loading && children && children.length === 0 && (
+                        <li style={{ padding: '4px 8px', fontSize: '11px', color: '#555' }}>Vacio</li>
+                    )}
                     {children && children.map(child => (
                         <TreeNode
                             key={child.id}
@@ -172,6 +184,7 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId }) => {
                             selectedFiles={selectedFiles}
                             onFileSelect={onFileSelect}
                             hubId={node.type === 'hubs' ? node.id : hubId}
+                            projectId={contextProjectId}
                         />
                     ))}
                 </ul>
@@ -180,11 +193,8 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId }) => {
     );
 };
 
-const NativeFileTree = ({ onSelectionChange, forcedHubId, forcedProjectId }) => {
-    // If we have a forced project, we start fetching folders for it immediately.
-    // Otherwise we fetch hubs list.
-
-    // Determine initial URL
+const NativeFileTree = ({ onSelectionChange, forcedHubId, forcedProjectId, onFileSelect: singleSelect }) => {
+    // If singleSelect is provided, we only allow one file selection at a time
     let initialUrl = API_ENDPOINTS.hubs;
     if (forcedHubId && forcedProjectId) {
         initialUrl = API_ENDPOINTS.topFolders(forcedHubId, forcedProjectId);
@@ -194,6 +204,18 @@ const NativeFileTree = ({ onSelectionChange, forcedHubId, forcedProjectId }) => 
     const [selectedFiles, setSelectedFiles] = useState([]);
 
     const handleFileSelect = (itemId, fileData) => {
+        if (singleSelect) {
+            // Single Selection Mode for specialized modals (like linking a pin)
+            if (fileData) {
+                setSelectedFiles([fileData]);
+                singleSelect(fileData);
+            } else {
+                setSelectedFiles([]);
+                singleSelect(null);
+            }
+            return;
+        }
+
         if (fileData) {
             setSelectedFiles(prev => [...prev.filter(f => f.itemId !== itemId), fileData]);
         } else {
@@ -205,36 +227,38 @@ const NativeFileTree = ({ onSelectionChange, forcedHubId, forcedProjectId }) => 
         onSelectionChange?.(selectedFiles);
     }, [selectedFiles, onSelectionChange]);
 
-    if (loading) return <div style={{ padding: 10, color: '#aaa' }}>Loading...</div>;
-    if (error) return <div style={{ padding: 10, color: '#f55' }}>Error loading data.</div>;
+    if (loading) return <div style={{ padding: '20px', color: '#666', fontSize: '13px' }}><i className="fas fa-spinner fa-spin"></i> Cargando navegador...</div>;
+    if (error) return <div style={{ padding: '20px', color: '#e74c3c', fontSize: '13px' }}>Error al cargar datos de Autodesk.</div>;
 
     return (
-        <ul className="native-file-tree" style={{ listStyle: 'none', padding: 0 }}>
-            {/* If controlled Project mode, render folder nodes directly */}
-            {forcedProjectId && initialData ? (
-                initialData.map(folder => (
-                    <TreeNode
-                        key={folder.id}
-                        node={folder}
-                        selectedFiles={selectedFiles}
-                        onFileSelect={handleFileSelect}
-                        hubId={forcedHubId} // Pass down context
-                    />
-                ))
-            ) : (
-                /* Standard Hubs mode */
-                initialData && initialData.map(hub => (
-                    <TreeNode
-                        key={hub.id}
-                        node={hub}
-                        selectedFiles={selectedFiles}
-                        onFileSelect={handleFileSelect}
-                        hubId={hub.id}
-                    />
-                ))
-            )}
-        </ul>
+        <div className="native-file-tree-container" style={{ color: '#ccc' }}>
+            <ul className="native-file-tree" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {forcedProjectId && initialData ? (
+                    initialData.map(folder => (
+                        <TreeNode
+                            key={folder.id}
+                            node={folder}
+                            selectedFiles={selectedFiles}
+                            onFileSelect={handleFileSelect}
+                            hubId={forcedHubId}
+                            projectId={forcedProjectId}
+                        />
+                    ))
+                ) : (
+                    initialData && initialData.map(hub => (
+                        <TreeNode
+                            key={hub.id}
+                            node={hub}
+                            selectedFiles={selectedFiles}
+                            onFileSelect={handleFileSelect}
+                            hubId={hub.id}
+                        />
+                    ))
+                )}
+            </ul>
+        </div>
     );
 };
+
 
 export default NativeFileTree;

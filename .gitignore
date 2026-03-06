@@ -3,3 +3,13 @@ node_modules/
 .DS_Store
 __pycache__/
 *.pyc
+
+# Ignore environment and sensitive files
+backend/venv/
+backend/gcp_sa.json
+gcp_sa.json
+*.env
+push_err*.txt
+push_error.txt
+status.txt
+test_out.txt

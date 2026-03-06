@@ -117,6 +117,112 @@
     color: #fff;
 }
 
+.album-filter-toggle {
+    background: transparent;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 60%;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.album-filter-toggle:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #e0e0e0;
+}
+
+.album-filter-toggle.active {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
+}
+
+.album-filter-bar {
+    background: #23252a;
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.filter-group label {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.filter-group input[type="date"] {
+    background: #1a1b1e;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.filter-group input[type="date"]:focus {
+    border-color: #3b82f6;
+}
+
+.filter-clear-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #aaa;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.filter-clear-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.filter-results-count {
+    margin-left: auto;
+    font-size: 11px;
+    color: #666;
+    font-weight: 500;
+}
+
+.text-btn {
+    background: none;
+    border: none;
+    color: #3b82f6;
+    text-decoration: underline;
+    cursor: pointer;
+    margin-top: 10px;
+    font-size: 13px;
+}
+
 .album-content {
     padding: 24px;
     overflow-y: auto;
@@ -168,11 +274,31 @@
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
-.photo-item img {
+.photo-item img,
+.photo-item video {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
+}
+
+.video-play-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    pointer-events: none;
+    /* Let clicks pass through to the container */
 }
 
 .photo-desc {
@@ -180,20 +306,33 @@
     bottom: 0;
     left: 0;
     right: 0;
-    background: rgba(0, 0, 0, 0.7);
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
     color: #fff;
-    font-size: 11px;
-    padding: 4px 8px;
-    opacity: 0;
+    padding: 12px 8px 6px;
+    opacity: 1;
+    /* Always show for context, or fade in on hover? User might want to see dates always */
     transition: opacity 0.2s;
-    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.p-desc-text {
+    font-size: 11px;
+    font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
+.p-date-text {
+    font-size: 9px;
+    color: #aaa;
+    font-weight: 400;
+}
+
 .photo-item:hover .photo-desc {
-    opacity: 1;
+    background: rgba(0, 0, 0, 0.85);
 }
 
 /* Lightbox Styling */
@@ -259,4 +398,44 @@
 
 .lightbox-close:hover {
     background: rgba(255, 255, 255, 0.2);
+}
+
+.album-title-input {
+    background: #1a1b1e;
+    border: 1px solid #3b82f6;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    outline: none;
+    width: 200px;
+}
+
+.rename-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+    padding: 4px;
+}
+
+.rename-btn:hover {
+    opacity: 1;
+}
+
+.confirm-btn {
+    background: #22c55e;
+    border: none;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.confirm-btn:hover {
+    background: #16a34a;
 }

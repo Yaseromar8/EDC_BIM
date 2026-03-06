@@ -24,7 +24,6 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal }) => {
 
   // Docs State - Real Data
   const [selectedDocs, setSelectedDocs] = useState([]);
-  const [selectedPhase, setSelectedPhase] = useState("Default View");
 
   const [accounts, setAccounts] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -45,6 +44,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [isGemeloActive, setIsGemeloActive] = useState(false);
 
   // Fetch Hubs on Mount
   useEffect(() => {
@@ -97,15 +97,15 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal }) => {
       setActiveTab('UPLOAD');
       setUploading(false);
       setProgress(0);
-      setSelectedPhase("Default View");
       setAccountMenuOpen(false);
       setProjectMenuOpen(false);
+      setIsGemeloActive(false);
     }
   }, [open]);
 
-  const handleDocSelection = (files) => {
+  const handleDocSelection = useCallback((files) => {
     setSelectedDocs(files);
-  };
+  }, []);
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
@@ -129,7 +129,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal }) => {
 
   const handleConfirmDocs = () => {
     if (!selectedDocs || selectedDocs.length === 0) return;
-    onLinkDocs?.(selectedDocs);
+    onLinkDocs?.(selectedDocs, isGemeloActive);
     onClose();
   };
 
@@ -223,13 +223,13 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal }) => {
                       onDrop={handleDrop}
                       onClick={() => document.getElementById('file-upload-input').click()}
                     >
-                      <input type="file" id="file-upload-input" hidden accept=".rvt,.ifc,.nwd" onChange={handleFileChange} />
+                      <input type="file" id="file-upload-input" hidden accept=".rvt,.ifc,.nwd,.laz,.las,.e57,.rcp,.rcs,.pts" onChange={handleFileChange} />
                       {localFile ? (
                         <div className="file-info"><span className="file-name">{localFile.name}</span></div>
                       ) : (
                         <div className="drop-hint">
                           <div className="upload-icon-circle"><UploadIcon /></div>
-                          <p>Drag and drop a file here, or click to select a file<br /><span style={{ fontSize: 12, color: '#6b7280' }}>(only files with extension ".ifc, .rvt" are accepted)</span></p>
+                          <p>Drag and drop a file here, or click to select a file<br /><span style={{ fontSize: 12, color: '#6b7280' }}>Modelos BIM: .rvt .ifc .nwd &nbsp;|&nbsp; Nubes de Puntos: .laz .las .e57 .rcp .rcs</span></p>
                         </div>
                       )}
                     </div>
@@ -247,9 +247,16 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal }) => {
                   </div>
 
                   <div className="checkbox-container">
-                    <label className="tandem-checkbox">
-                      <input type="checkbox" defaultChecked />
-                      <span className="checkmark"></span>
+                    <label className="tandem-checkbox" style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px' }}>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: '18px', height: '18px', borderRadius: '3px',
+                        border: '1.5px solid #2d8fa5', background: '#2d8fa5', flexShrink: 0
+                      }}>
+                        <svg viewBox="0 0 24 24" width="14" height="14">
+                          <path fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M6,11.3 L10.3,16 L18,6.2" />
+                        </svg>
+                      </span>
                       Visible in default view
                     </label>
                   </div>
@@ -322,32 +329,71 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal }) => {
                 />
               </div>
 
-              <div className="form-group" style={{ marginTop: 16 }}>
-                <label>Import elements from phase or view: <span className="required">*</span></label>
-                <div className="select-wrapper">
-                  <select
-                    className="modal-select full-width"
-                    value={selectedPhase}
-                    onChange={(e) => setSelectedPhase(e.target.value)}
-                    disabled={selectedDocs.length === 0}
-                  >
-                    <option value="Default View">Default View</option>
-                    <option value="New Construction">Phase: New Construction</option>
-                    <option value="Existing">Phase: Existing</option>
-                    <option value="3D View">3D View</option>
-                  </select>
-                  <span className="select-arrow"><ChevronDownIcon /></span>
+              {/* Vista publicada: siempre es la vista 3D configurada en Revit */}
+              {selectedDocs.length > 0 && (
+                <div style={{
+                  marginTop: 16,
+                  padding: '10px 14px',
+                  background: 'rgba(46, 204, 113, 0.08)',
+                  border: '1px solid rgba(46, 204, 113, 0.25)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px'
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <div>
+                    <div style={{ color: '#2ecc71', fontWeight: 600, fontSize: '12px' }}>Vista 3D publicada desde Revit</div>
+                    <div style={{ color: '#999', fontSize: '11px', marginTop: '2px' }}>Se cargará la vista 3D que configuraste al publicar en ACC</div>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="checkbox-container">
-                <label className="tandem-checkbox">
-                  <input type="checkbox" defaultChecked />
-                  <span className="checkmark"></span>
+                <label className="tandem-checkbox" onClick={() => { }} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px' }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: '18px', height: '18px', borderRadius: '3px',
+                    border: '1.5px solid #2d8fa5', background: '#2d8fa5', flexShrink: 0
+                  }}>
+                    <svg viewBox="0 0 24 24" width="14" height="14">
+                      <path fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M6,11.3 L10.3,16 L18,6.2" />
+                    </svg>
+                  </span>
                   Visible in default view
                 </label>
               </div>
 
+              {/* MODO GEMELO DIGITAL TOGGLE */}
+              <div className="checkbox-container" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                <label
+                  className="tandem-checkbox"
+                  onClick={() => setIsGemeloActive(!isGemeloActive)}
+                  style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px' }}
+                >
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: '18px', height: '18px', borderRadius: '3px',
+                    border: '1.5px solid #e67e22',
+                    background: isGemeloActive ? '#e67e22' : 'transparent',
+                    flexShrink: 0,
+                    transition: 'all 0.2s'
+                  }}>
+                    {isGemeloActive && (
+                      <svg viewBox="0 0 24 24" width="14" height="14">
+                        <path fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M6,11.3 L10.3,16 L18,6.2" />
+                      </svg>
+                    )}
+                  </span>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ color: isGemeloActive ? '#e67e22' : '#eee', fontWeight: 600, fontSize: '13px' }}>Activar Operación y Mantenimiento (Gemelo)</span>
+                    <span style={{ color: '#888', fontSize: '11px' }}>Habilita una base de datos paralela para este modelo (Estilo Tandem)</span>
+                  </div>
+                </label>
+              </div>
             </div>
           )}
         </div>
@@ -362,7 +408,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal }) => {
           )}
         </div>
       </div>
-    </div>
+    </div >
   );
 };
 

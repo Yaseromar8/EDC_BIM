@@ -1,0 +1,41 @@
+/* ── NativeFileTree styles ── */
+.native-file-tree {
+    font-family: 'Inter', sans-serif;
+    user-select: none;
+}
+
+.tree-node-row {
+    cursor: pointer;
+    border-radius: 4px;
+    margin-bottom: 2px;
+}
+
+.tree-node-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.tree-node-row.is-open {
+    background: rgba(68, 136, 204, 0.05);
+}
+
+.tree-node-row i {
+    width: 20px;
+    text-align: center;
+}
+
+.native-file-tree-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.native-file-tree-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.native-file-tree-container::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 3px;
+}
+
+.native-file-tree-container::-webkit-scrollbar-thumb:hover {
+    background: #444;
+}

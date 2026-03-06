@@ -45,7 +45,7 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose }) =>
     };
 
     const filteredViews = views.filter(v =>
-        v.name.toLowerCase().includes(searchTerm.toLowerCase())
+        (v.name && v.name.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
     return (

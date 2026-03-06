@@ -3,12 +3,15 @@ import NativeFileTree from './NativeFileTree';
 
 const ACCEPTED_TYPES = '.apng,.avif,.csv,.doc,.docx,.gif,.jpeg,.jpg,.odp,.ods,.odt,.pdf,.png,.ppt,.pptx,.svg,.txt,.webp,.xls,.xlsx';
 
-const AddDocumentModal = ({ open, onClose, onConfirm, targetSpriteId }) => {
+const AddDocumentModal = ({ open, onClose, onConfirm, targetSpriteId, selectedProject }) => {
   const [tab, setTab] = useState('upload');
   const [files, setFiles] = useState([]);
   const [selectedAccDoc, setSelectedAccDoc] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+
+  const hubId = selectedProject?.hub_id;
+  const projectId = selectedProject?.id?.split('_')[0]; // Extract base project ID if composite
 
   useEffect(() => {
     if (!open) {
@@ -129,8 +132,12 @@ const AddDocumentModal = ({ open, onClose, onConfirm, targetSpriteId }) => {
         {tab === 'docs' && (
           <div className="modal-body">
             <p>Select a document from Autodesk Docs to link it.</p>
-            <div className="modal-tree">
-              <NativeFileTree onFileSelect={setSelectedAccDoc} />
+            <div className="modal-tree" style={{ maxHeight: '400px', overflowY: 'auto', background: '#25272a', borderRadius: '8px', padding: '12px', border: '1px solid #444' }}>
+              <NativeFileTree
+                onFileSelect={setSelectedAccDoc}
+                forcedHubId={hubId}
+                forcedProjectId={projectId}
+              />
             </div>
           </div>
         )}

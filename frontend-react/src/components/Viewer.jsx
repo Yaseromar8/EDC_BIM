@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './viewer.css';
+import './IconMarkup.css'; // Add this line
 import { BaseExtension } from '../aps/extensions/BaseExtension';
 import { LoggerExtension } from '../aps/extensions/LoggerExtension';
 import { HistogramExtension } from '../aps/extensions/HistogramExtension';
@@ -12,6 +13,36 @@ import { Capacitor } from '@capacitor/core';
 const BACKEND_URL = Capacitor.isNativePlatform()
     ? 'https://visor-ecd-backend.onrender.com'
     : (import.meta.env.VITE_BACKEND_URL || '');
+
+// --- Shared texture helpers (extracted to avoid duplication inside useEffects) ---
+const getDocTexture = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.beginPath(); ctx.arc(64, 64, 60, 0, 2 * Math.PI);
+    ctx.fillStyle = '#F59E0B'; ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(44, 34, 40, 60);
+    ctx.fillStyle = '#E5E7EB'; ctx.fillRect(44, 34, 40, 10);
+    ctx.fillStyle = '#F59E0B';
+    ctx.fillRect(50, 50, 28, 4); ctx.fillRect(50, 60, 28, 4); ctx.fillRect(50, 70, 20, 4);
+    const tex = new window.THREE.Texture(canvas); tex.needsUpdate = true;
+    return tex;
+};
+
+const getDaluxTexture = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.beginPath(); ctx.arc(64, 64, 50, 0, 2 * Math.PI);
+    ctx.fillStyle = '#ffffff'; ctx.fill();
+    ctx.beginPath(); ctx.arc(64, 64, 42, 0, 2 * Math.PI);
+    ctx.fillStyle = '#60a5fa'; ctx.fill();
+    ctx.beginPath(); ctx.arc(64, 64, 15, 0, 2 * Math.PI);
+    ctx.fillStyle = '#ffffff'; ctx.fill();
+    const tex = new window.THREE.Texture(canvas); tex.needsUpdate = true;
+    return tex;
+};
 
 const Viewer = ({
     models,
@@ -50,8 +81,13 @@ const Viewer = ({
     trackingData = { avance: [], fotos: [] },
     trackingPlacementMode = false,
     onTrackingPinCreate,
-    onTrackingPinClick
+    onTrackingPinClick,
+
+    // Gemelo / General Selection (removed - was only used for GemeloPropertiesPanel)
+    onSelectionChanged,
+    aiModelCommand
 }) => {
+    // --- Refs ---
     const viewerRef = useRef(null);
     const containerRef = useRef(null);
     const loadedModelsRef = useRef({});
@@ -60,26 +96,74 @@ const Viewer = ({
     const spriteViewRef = useRef(null);
     const spriteStylesRef = useRef(null);
     const spriteMeshesRef = useRef({});
-    const buildPinMeshesRef = useRef({}); // New ref for Build Pins
+    const buildPinMeshesRef = useRef({});
     const sheetsMapRef = useRef({});
     const hiddenModelUrnsRef = useRef(hiddenModelUrns);
     const lastFilterDetailRef = useRef(null);
+    const longPressTimerRef = useRef(null);
+    const isLongPressRef = useRef(false);
+    const ghostMeshRef = useRef(null);
+
+    // --- States ---
+    const [viewerReady, setViewerReady] = useState(false);
+    const [mobileToolsVisible, setMobileToolsVisible] = useState(false);
+    const [contextMenu, setContextMenu] = useState(null);
 
     // Sync hiddenModelUrnsRef
     useEffect(() => {
         hiddenModelUrnsRef.current = hiddenModelUrns;
     }, [hiddenModelUrns]);
-    const [viewerReady, setViewerReady] = useState(false);
-    const [mobileToolsVisible, setMobileToolsVisible] = useState(false);
-    // ...
 
-    const [contextMenu, setContextMenu] = useState(null);
-    const longPressTimerRef = useRef(null);
-    const isLongPressRef = useRef(false);
+    // AI-Driven Model Isolation (Aislamiento Inteligente)
+    useEffect(() => {
+        const viewer = viewerRef.current;
+        if (!viewer || !viewerReady || !aiModelCommand) return;
 
-    const ghostMeshRef = useRef(null);
+        console.log('[AI] Recibiendo comando:', aiModelCommand);
+        const { parameter, value, operator, action } = aiModelCommand;
 
-    // ... (existing refs)
+        // Limpiar selección previa
+        viewer.clearSelection();
+        viewer.isolate([]);
+
+        const executeAiCommand = async () => {
+            // Utilizamos viewer.search que es más robusto a nivel de vista
+            // Busca en la base de datos de propiedades de todo lo que está visible
+            const doSearch = (attrNames) => {
+                viewer.search(
+                    value,
+                    (dbIds) => {
+                        if (dbIds && dbIds.length > 0) {
+                            console.log(`[AI] Se encontraron ${dbIds.length} elementos coincidentes.`);
+                            // Aislar resultados en el visor
+                            viewer.isolate(dbIds);
+                            // Hacer un Fit to View a los elementos seleccionados
+                            viewer.fitToView(dbIds);
+                        } else if (attrNames !== null) {
+                            console.warn('[AI] No se encontraron elementos en el parámetro específico. Intentando búsqueda general...');
+                            // Fallback: Si no lo encuentra, buscar en todas las propiedades
+                            doSearch(null);
+                        } else {
+                            console.warn('[AI] No se encontraron elementos coincidentes completos.');
+                            // Fallback: restablecer
+                            viewer.isolate();
+                        }
+                    },
+                    (error) => {
+                        console.error('[AI] Error en búsqueda global:', error);
+                        viewer.isolate();
+                    },
+                    attrNames,
+                    { searchHidden: true }
+                );
+            };
+
+            const initialAttrs = (parameter && parameter.trim() !== '') ? [parameter] : null;
+            doSearch(initialAttrs);
+        };
+
+        executeAiCommand();
+    }, [viewerReady, aiModelCommand]);
 
     // --- Ghost Pin Logic (Hover Preview) ---
     useEffect(() => {
@@ -98,48 +182,13 @@ const Viewer = ({
             return;
         }
 
-        // Helper: Create Document Icon Texture
-        const getDocTexture = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = 128;
-            canvas.height = 128;
-            const ctx = canvas.getContext('2d');
 
-            // 1. Orange Circle Background
-            ctx.beginPath();
-            ctx.arc(64, 64, 60, 0, 2 * Math.PI);
-            ctx.fillStyle = '#F59E0B'; // Orange
-            ctx.fill();
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = '#ffffff';
-            ctx.stroke();
-
-            // 2. White Document Icon
-            ctx.fillStyle = '#ffffff';
-            // Draw a simple document shape (rect)
-            ctx.fillRect(44, 34, 40, 60);
-
-            // Folded corner effect (simple lines)
-            ctx.fillStyle = '#E5E7EB';
-            ctx.fillRect(44, 34, 40, 10); // Header strip
-
-            // Lines/Text
-            ctx.fillStyle = '#F59E0B';
-            ctx.fillRect(50, 50, 28, 4);
-            ctx.fillRect(50, 60, 28, 4);
-            ctx.fillRect(50, 70, 20, 4);
-
-            const tex = new THREE.Texture(canvas);
-            tex.needsUpdate = true;
-            return tex;
-        };
-
-        // Create Ghost Sprite if needed
+        // Create Ghost Sprite if needed (uses module-level getDocTexture)
         if (!ghostMeshRef.current) {
             const size = getOptimalPinSize() * 2.5; // Slightly larger for icon
 
             const tex = getDocTexture();
-            const mat = new THREE.SpriteMaterial({
+            const mat = new window.THREE.SpriteMaterial({
                 map: tex,
                 color: 0xffffff,
                 opacity: 0.7,
@@ -148,7 +197,7 @@ const Viewer = ({
                 depthWrite: false
             });
 
-            const sprite = new THREE.Sprite(mat);
+            const sprite = new window.THREE.Sprite(mat);
             sprite.scale.set(size, size, 1);
             sprite.visible = false;
 
@@ -200,26 +249,45 @@ const Viewer = ({
 
             // Priority: Doc Placement Mode
             if (docPlacementMode) {
-                // Optimize: If we have a visible ghost, use its position directly!
-                if (ghostMeshRef.current && ghostMeshRef.current.visible) {
-                    const pos = ghostMeshRef.current.position;
-                    console.log('[Viewer] Fast Placement via Ghost at:', pos);
-                    onDocPlacementComplete({
-                        x: pos.x,
-                        y: pos.y,
-                        z: pos.z
-                    });
-                    return;
-                }
-
-                // Fallback to raycast
+                // Siempre usar hitTest para garantizar el anclaje exacto al elemento BIM
                 const result = viewer.impl.hitTest(event.clientX, event.clientY, true);
                 if (result && onDocPlacementComplete) {
-                    onDocPlacementComplete({
-                        x: result.intersectPoint.x,
-                        y: result.intersectPoint.y,
-                        z: result.intersectPoint.z
-                    });
+                    const { intersectPoint, dbId, model } = result;
+
+                    if (model && dbId) {
+                        try {
+                            // Extraer parámetros estables (externalId, nombre) para el anclaje a largo plazo
+                            model.getProperties(dbId, (props) => {
+                                console.log('[Viewer] Pin anclado a elemento BIM:', props.name, 'ExternalId:', props.externalId);
+                                onDocPlacementComplete({
+                                    x: intersectPoint.x,
+                                    y: intersectPoint.y,
+                                    z: intersectPoint.z,
+                                    dbId: dbId,
+                                    externalId: props.externalId,
+                                    objectName: props.name
+                                });
+                            }, () => {
+                                // Fallback espacial puro
+                                onDocPlacementComplete({
+                                    x: intersectPoint.x,
+                                    y: intersectPoint.y,
+                                    z: intersectPoint.z
+                                });
+                            });
+                        } catch (e) {
+                            onDocPlacementComplete({
+                                x: intersectPoint.x, y: intersectPoint.y, z: intersectPoint.z
+                            });
+                        }
+                    } else {
+                        // Fallback puramente espacial si se hace click al vacío o background
+                        onDocPlacementComplete({
+                            x: intersectPoint.x,
+                            y: intersectPoint.y,
+                            z: intersectPoint.z
+                        });
+                    }
                 }
                 return;
             }
@@ -271,17 +339,37 @@ const Viewer = ({
                 const hit = viewer.impl.hitTest(event.clientX, event.clientY, false); // Allow transparent hits
                 if (hit) {
                     const pos = hit.intersectPoint;
-                    console.log('[Viewer] Creating Tracking Pin at', pos);
-                    const newPin = {
-                        id: Date.now(),
-                        x: pos.x,
-                        y: pos.y,
-                        z: pos.z,
-                        val: trackingTab === 'avance' ? '0%' : null // Default val
-                    };
-                    if (onTrackingPinCreate) {
-                        onTrackingPinCreate(newPin);
-                    }
+                    console.log('[Viewer] Creating Tracking Pin at', pos, 'dbId:', hit.dbId);
+
+                    // Read CodigoDePartida and NombreDePartida from element properties
+                    const getPartidaInfo = (model, dbId) => new Promise((resolve) => {
+                        if (!model || !dbId) return resolve({ code: null, name: null });
+                        model.getProperties(dbId, (result) => {
+                            const codeProp = result.properties?.find(p => p.displayName === '03_05_DSI_CodigoDePartida');
+                            const nameProp = result.properties?.find(p => p.displayName === '03_04_DSI_NombreDePartida');
+                            resolve({
+                                code: codeProp ? codeProp.displayValue : null,
+                                name: nameProp ? nameProp.displayValue : null
+                            });
+                        }, () => resolve({ code: null, name: null }));
+                    });
+
+                    getPartidaInfo(hit.model, hit.dbId).then(({ code, name }) => {
+                        console.log('[Viewer] Partida detected:', code, name);
+                        const newPin = {
+                            id: Date.now(),
+                            x: pos.x,
+                            y: pos.y,
+                            z: pos.z,
+                            dbId: hit.dbId || null,
+                            codigoPartida: code,
+                            partidaNombre: name,
+                            val: trackingTab === 'avance' ? '0%' : null
+                        };
+                        if (onTrackingPinCreate) {
+                            onTrackingPinCreate(newPin);
+                        }
+                    });
                 } else {
                     console.warn('[Viewer] Hit Test failed to find intersection');
                 }
@@ -302,12 +390,38 @@ const Viewer = ({
         };
 
     }, [viewerReady, trackingPlacementMode, trackingTab]);
+    // Ref to track if component is mounted - MOVED TO TOP for safety
+    const mountedRef = useRef(true);
+    const isInitializingRef = useRef(false);
+
     useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        let initTimeout;
+
         const initializeViewer = () => {
-            if (!window.Autodesk) {
-                setTimeout(initializeViewer, 500);
+            // 1. Prevent overlapping initializations
+            if (isInitializingRef.current) return;
+            if (!mountedRef.current) return;
+
+            // 2. Strict check: If viewer exists, do NOT re-initialize.
+            if (viewerRef.current) {
+                // Determine if we need to clean up existing one or just reuse
+                // For now, let's assume if it exists, it's valid.
                 return;
             }
+
+            if (!window.Autodesk) {
+                initTimeout = setTimeout(initializeViewer, 500);
+                return;
+            }
+
+            isInitializingRef.current = true;
 
             const options = {
                 env: 'AutodeskProduction',
@@ -324,66 +438,94 @@ const Viewer = ({
             };
 
             Autodesk.Viewing.Initializer(options, () => {
+                isInitializingRef.current = false; // Init finished
+
+                // 3. Check if unmounted during async init
+                if (!mountedRef.current) {
+                    console.warn("[Viewer] Initializer finished but component unmounted. Aborting.");
+                    return;
+                }
+
+                if (!containerRef.current) return;
+
+                // 4. Double check parallel creation
+                if (viewerRef.current) {
+                    viewerRef.current.finish();
+                    viewerRef.current = null;
+                }
+
                 Autodesk.Viewing.theExtensionManager.registerExtension('BaseExtension', BaseExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('LoggerExtension', LoggerExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('HistogramExtension', HistogramExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('PhasingExtension', PhasingExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('DeviceOrientationExtension', DeviceOrientationExtension);
+                Autodesk.Viewing.theExtensionManager.registerExtension('IconMarkupExtension', IconMarkupExtension);
 
                 const config = {
                     extensions: [
                         'BaseExtension',
-                        // 'LoggerExtension', // Removed to prevent potential crash in cached envs
+                        // 'LoggerExtension',
                         'PhasingExtension',
                         'Autodesk.BIM360.Extension.PushPin',
                         'Autodesk.PDF',
                         'Autodesk.AEC.LevelsExtension',
                         'Autodesk.AEC.Minimap3DExtension',
-                        'DeviceOrientationExtension'
+                        'DeviceOrientationExtension',
+                        // 'Autodesk.PointCloud'  // Nube de puntos: LAZ, LAS, E57, RCP
                     ]
                 };
-
 
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);
                 viewer.start();
 
-                viewer.setGhosting(true); // Essential for filter logic
+                // 5. Final check before state update
+                if (!mountedRef.current) {
+                    console.warn("[Viewer] Viewer started but component unmounted. Destroying immediately.");
+                    viewer.finish();
+                    return;
+                }
 
+                viewer.setGhosting(true);
                 viewerRef.current = viewer;
-
-                // Expose globally for AR camera capture
                 window.NOP_VIEWER = viewer;
-
                 setViewerReady(true);
             });
         };
 
-        if (accessToken && !viewerRef.current) {
+        if (accessToken) {
             initializeViewer();
-        } else if (viewerRef.current) {
-            // Ensure ghosting is enabled if viewer already exists
-            viewerRef.current.prefs.set('ghosting', true);
         }
 
         return () => {
-            // Only cleanup if we are truly unmounting or changing specific critical props
+            clearTimeout(initTimeout);
+            // 6. ROBUST CLEANUP
             if (viewerRef.current) {
-                viewerRef.current.finish();
-                viewerRef.current = null;
+                console.log("[Viewer] Cleaning up viewer instance");
+                const v = viewerRef.current;
+                viewerRef.current = null; // Detach ref immediately
                 setViewerReady(false);
+
+                try {
+                    v.finish();
+                } catch (e) {
+                    console.warn("Error finishing viewer:", e);
+                }
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [accessToken]);
 
-    const handleModelLoaded = async (event, retryCount = 1) => {
+    const handleModelLoaded = useCallback(async (event, retryCount = 0) => {
+        if (!mountedRef.current) return; // Prevent if unmounted
+
         const viewer = viewerRef.current;
         if (!viewer) return;
 
-        const model = event?.model || viewer?.model;
+        const model = event.model;
         if (!model) return;
 
-        let urn = model.getData()?.urn;
+        let urn = model.getData().urn;
+        console.log(`[Viewer] Model Loaded Event: ${urn}`);
 
         // Try to find the exact URN key from our loadedModelsRef that matches this model instance
         const foundUrn = Object.keys(loadedModelsRef.current).find(key => {
@@ -396,33 +538,32 @@ const Viewer = ({
             console.log(`[Viewer] Matched Model URN: ${urn}`);
         } else if (Object.keys(loadedModelsRef.current).length === 1) {
             // FALLBACK: If only one model is loaded, assume they match.
-            // This fixes mismatched IDs or references (e.g. SVF vs SVF2, or Proxy objects).
             urn = Object.keys(loadedModelsRef.current)[0];
             console.log(`[Viewer] Fuzzy Matched Single Model URN: ${urn}`);
         } else {
             console.warn(`[Viewer] Model Loaded but URN not mapped in loadedModelsRef yet. Raw: ${urn}`);
 
-            // RETRY MECHANISM: loadedModelsRef implies manual load hasn't finished mapping yet.
-            // We retry up to 5 times (2.5 seconds) to allow the loader to finish.
-            // This is critical for Filter Properties to stick to the correct URN.
-            if (retryCount <= 5) {
+            // RETRY MECHANISM
+            if (retryCount <= 5 && mountedRef.current) {
                 console.log(`[Viewer] Retrying property sync (Attempt ${retryCount})...`);
-                setTimeout(() => handleModelLoaded(event, retryCount + 1), 500);
+                setTimeout(() => {
+                    if (mountedRef.current) handleModelLoaded(event, retryCount + 1);
+                }, 500);
                 return;
             }
-            // If failed after retries, we proceed with Raw URN and hope for the best, 
-            // but likely filters won't work if App.jsx uses different URNs.
             console.error(`[Viewer] Failed to map URN after retries. Using Raw: ${urn}`);
         }
 
         let props = model.allProps || [];
 
-        // ON-DEMAND FETCH: If extension missed the event (race condition), fetch manually.
+        // ON-DEMAND FETCH
         if (!props || props.length === 0) {
             console.warn('[Viewer] Properties missing. Fetching on-demand...');
             try {
                 const leafIds = await findLeafNodes(model);
+                if (!mountedRef.current) return;
                 props = await getBulkProperties(model, leafIds);
+                if (!mountedRef.current) return;
                 model.allProps = props; // Cache it
                 console.log('[Viewer] On-demand properties fetched:', props.length);
             } catch (err) {
@@ -433,23 +574,69 @@ const Viewer = ({
 
         console.log(`[Viewer] Dispatching ${props.length} properties for model: ${urn}`);
         onModelProperties?.({ urn, props });
-    };
 
-    // Handle Model Loaded Event
+        // Ensure model is visible (centered)
+        setTimeout(() => {
+            if (mountedRef.current && viewer && viewer.model && viewer.impl) {
+                try {
+                    viewer.fitToView();
+                } catch (e) {
+                    console.warn("[Viewer] Could not fit to view (viewer might be closing):", e);
+                }
+            }
+        }, 500);
+    }, [onModelProperties]);
+
+    // Cleanup and Event Listeners
     useEffect(() => {
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
 
         viewer.addEventListener('model.loaded', handleModelLoaded);
-        // In case BaseExtension already populated props before we subscribed
+
+        // Initial check
         if (viewer?.model?.allProps?.length) {
             handleModelLoaded({ model: viewer.model });
         }
 
         return () => {
-            if (viewer) viewer.removeEventListener('model.loaded', handleModelLoaded);
+            if (viewer) {
+                viewer.removeEventListener('model.loaded', handleModelLoaded);
+            }
         };
-    }, [viewerReady, onModelProperties]);
+    }, [viewerReady, handleModelLoaded]);
+
+    // Selection Event
+    useEffect(() => {
+        const viewer = viewerRef.current;
+        if (!viewer || !viewerReady) return;
+
+        const handleSelection = (event) => {
+            const dbIdArray = event.dbIdArray;
+            const model = event.model;
+
+            if (dbIdArray.length > 0 && model) {
+                const dbId = dbIdArray[0];
+                const urn = model.getData().urn;
+
+                // Extraemos las propiedades de Revit del elemento
+                model.getProperties(dbId, (result) => {
+                    const props = result.properties || [];
+                    if (onSelectionChanged) {
+                        onSelectionChanged({ dbId, urn, props, model });
+                    }
+                });
+            } else {
+                if (onSelectionChanged) onSelectionChanged(null);
+            }
+        };
+
+        viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, handleSelection);
+
+        return () => {
+            viewer.removeEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, handleSelection);
+        }
+    }, [viewerReady, onSelectionChanged]);
 
     useEffect(() => {
         if (models.length === 0) {
@@ -468,6 +655,27 @@ const Viewer = ({
             }
         }
     }, [models.length, onModelProperties, onSheetsLoaded]);
+
+    // External Custom Event Listener for Component Selection
+    useEffect(() => {
+        const handleViewerSelect = (e) => {
+            const { dbIds, urn } = e.detail;
+            const viewer = viewerRef.current;
+            if (!viewer || !dbIds || dbIds.length === 0 || !urn) return;
+
+            // Find the correct model in the viewer
+            const models = viewer.impl.modelQueue().getModels();
+            const targetModel = models.find(m => m.getData().urn === urn || (m.urn && m.urn === urn));
+
+            if (targetModel) {
+                viewer.select(dbIds, targetModel);
+                viewer.fitToView(dbIds, targetModel);
+            }
+        };
+
+        window.addEventListener('viewer-select', handleViewerSelect);
+        return () => window.removeEventListener('viewer-select', handleViewerSelect);
+    }, [viewerReady]);
 
     // Handle Active Sheet Change
     // Helper to calculate robust pin size based on Model Extents
@@ -535,7 +743,7 @@ const Viewer = ({
 
                             // 2. If no default is marked, try 'master' (Infraworks) or fallback to first
                             if (!viewable) {
-                                viewable = viewables.find(v => v.name().toLowerCase() === 'master') || viewables[0];
+                                viewable = viewables.find(v => v.name() && v.name().toLowerCase() === 'master') || viewables[0];
                             }
                         }
 
@@ -571,7 +779,8 @@ const Viewer = ({
                         const loadOptions = {
                             keepCurrentModels: true,
                             applyScaling: 'mm',
-                            applyRefPoint: true
+                            applyRefPoint: true,
+                            modelNameOverride: model.label || 'model.rvt'
                         };
 
                         console.log(`[Viewer] Loading model: ${model.label || model.urn}`);
@@ -580,7 +789,26 @@ const Viewer = ({
                             loadOptions.globalOffset = baseOffsetRef.current;
                         }
 
-                        const loadedModel = await viewer.loadDocumentNode(doc, viewable, loadOptions);
+                        // Hotfix para Autodesk Viewer: Evitar "Cannot read properties of null (reading 'toLowerCase')" 
+                        // cuando el archivo derivado falla (404) y el visor intenta buscar la unidad base o la extensión.
+                        try {
+                            if (viewable && viewable.data && !viewable.data.unit) {
+                                viewable.data.unit = 'm';
+                            }
+                            if (doc.getRoot() && doc.getRoot().data && !doc.getRoot().data.unit) {
+                                doc.getRoot().data.unit = 'm';
+                            }
+                        } catch (e) { }
+
+                        // Evitar que el panel de Carga se congele infinitamente si falla internamente el Visor de Autodesk
+                        const timeoutPromise = new Promise((_, reject) => {
+                            setTimeout(() => reject(new Error('Model load timeout triggered to prevent UI freeze')), 120000); // 120s
+                        });
+
+                        const loadedModel = await Promise.race([
+                            viewer.loadDocumentNode(doc, viewable, loadOptions),
+                            timeoutPromise
+                        ]);
                         loadedModelsRef.current[model.urn] = loadedModel;
 
                         if (loadedModel) {
@@ -659,23 +887,23 @@ const Viewer = ({
 
 
     // --- SEGUIMIENTO: Icon Markup Extension Integration ---
+    // --- Dynamic Extension Loading for Tracking ---
+
     useEffect(() => {
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
 
-        let ext = null;
+        let ext = viewer.getExtension('IconMarkupExtension');
 
-        const loadMarkupExtension = async () => {
-            // Define fresh handler
-            const currentClickHandler = (item) => {
-                console.log('[Viewer] Click handler triggering prop', item);
-                if (onTrackingPinClick) {
-                    onTrackingPinClick(item);
-                }
-            };
+        // Handler wrapper
+        const currentClickHandler = (item) => {
+            console.log('[Viewer] Pin Clicked:', item);
+            if (onTrackingPinClick) onTrackingPinClick(item);
+        };
 
-            // Load extension if not loaded
-            ext = viewer.getExtension('IconMarkupExtension');
+        const updateExtension = async () => {
+            console.log(`[Viewer] updateExtension called with trackingTab: ${trackingTab}, docs length: ${trackingData?.docs?.length}`);
+            // 1. Load if not present
             if (!ext) {
                 try {
                     ext = await viewer.loadExtension('IconMarkupExtension', {
@@ -683,16 +911,16 @@ const Viewer = ({
                     });
                 } catch (e) {
                     console.error('Failed to load IconMarkupExtension', e);
-                }
-            } else {
-                // CRITICAL: Update the handler on existing extension to avoid stale closures
-                if (ext.options) {
-                    console.log('[Viewer] Updating IconMarkupExtension click handler');
-                    ext.options.onClick = currentClickHandler;
+                    return;
                 }
             }
 
-            // Prepare Data
+            // 2. Update Options (Handler)
+            if (ext && ext.options) {
+                ext.options.onClick = currentClickHandler;
+            }
+
+            // 3. Prepare Data
             const currentProgress = trackingData?.avance || [];
             const currentPhotos = trackingData?.fotos || [];
 
@@ -700,22 +928,30 @@ const Viewer = ({
             if (trackingTab === 'avance') {
                 icons = currentProgress.map(i => ({ ...i, type: 'text', color: i.color || '#fbbf24' }));
             } else if (trackingTab === 'fotos') {
-                icons = currentPhotos.map(i => ({ ...i, type: 'icon' }));
+                icons = currentPhotos.map(i => ({ ...i, type: 'icon', color: '#3b82f6' }));
+            } else if (trackingTab === 'docs') {
+                const currentDocs = trackingData?.docs || [];
+                icons = currentDocs.map(i => ({ ...i, type: 'doc', color: i.color || '#8b5cf6' }));
+            } else if (trackingTab === 'restricciones') {
+                const currentRestrictions = trackingData?.restricciones || [];
+                icons = currentRestrictions.map(i => ({ ...i, type: 'restriction', color: i.color || '#f59e0b' }));
             }
 
-            // Update Extension
+            // 4. Set Icons
             if (ext && ext.setIcons) {
+                console.log(`[Viewer] Setting ${icons.length} icons for tab: ${trackingTab}`);
                 ext.setIcons(icons);
             }
+
+            // 5. Force ONE resize if needed (e.g. sidebar opened)
+            // But do NOT loop it. Just validatation.
+            viewer.impl.invalidate(true, true, true);
         };
 
-        loadMarkupExtension();
+        updateExtension();
 
         return () => {
-            // Optional cleanup: clear icons when unmounting or changing tabs
-            if (ext && ext.clearIcons) {
-                ext.clearIcons();
-            }
+            // Optional cleanup
         };
 
     }, [viewerReady, trackingTab, trackingData, onTrackingPinClick]);
@@ -918,7 +1154,7 @@ const Viewer = ({
             '#A855F7',
             '#0EA5E9',
             '#EAB308'
-        ].map(color => new THREE.Color(color));
+        ].map(color => new window.THREE.Color(color));
 
 
 
@@ -1012,12 +1248,12 @@ const Viewer = ({
             detail.groups?.forEach((group, index) => {
                 let color;
                 if (group.color) {
-                    color = new THREE.Color(group.color);
+                    color = new window.THREE.Color(group.color);
                 } else {
                     color = palette[index % palette.length];
                 }
 
-                const vector = new THREE.Vector4(color.r, color.g, color.b, 1);
+                const vector = new window.THREE.Vector4(color.r, color.g, color.b, 1);
 
                 group.dbIds.forEach(item => {
                     group.dbIds.forEach(item => {
@@ -1067,22 +1303,36 @@ const Viewer = ({
 
         window.addEventListener('filters-apply', handleFiltersApply);
 
+        // --- CUSTOM ESCAPE KEY BEHAVIOR ---
+        // Prevents "Esc" from unhiding elements (APS default is Show All on Esc).
+        // We want Esc to ONLY clear selection.
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                // 1. Block APS Viewer default (which shows all hidden items)
+                event.stopImmediatePropagation();
+
+                // 2. Clear Selection if exists
+                if (viewer.getSelection().length > 0) {
+                    viewer.clearSelection();
+                }
+
+                // 3. Optional: Cancel tools if needed, but DO NOT Unhide.
+            }
+        };
+        // Use capture phase to intercept before Viewer gets it
+        window.addEventListener('keydown', handleKeyDown, true);
+
         // --- SELECTION ISOLATION LOGIC ---
         const handleSelectionChanged = (event) => {
             const selection = event.dbIdArray;
-            const model = event.model;
+            // const model = event.model; // Unused now
 
             if (selection.length === 1) {
-                // Single item selected -> Ghost everything else
-                viewer.setGhosting(true);
-                viewer.impl.visibilityManager.isolate(selection, model);
-
-                Object.values(loadedModelsRef.current).forEach(m => {
-                    if (m !== model) {
-                        viewer.impl.visibilityManager.isolate([-1], m);
-                    }
-                });
-
+                // REMOVED: Auto-isolation causes issues with "Hide" context menu.
+                // Single item selected -> Just let it be selected (standard behavior)
+                // viewer.setGhosting(true);
+                // viewer.impl.visibilityManager.isolate(selection, model);
+                // ...
             } else if (selection.length === 0) {
                 // Selection Cleared
                 // Check if we should restore filters
@@ -1091,17 +1341,12 @@ const Viewer = ({
 
                 if (isFiltering) {
                     console.log('[Viewer] selection cleared, restoring active filters...');
-                    // Re-apply filters
-                    // We can't just call handleFiltersApply directly because it expects an Event.
-                    // But we can extract the logic or just dispatch the event again? 
-                    // Or just call the logic if we extract it.
-                    // Easiest: Dispatch event locally or call the handler with a mock event
                     handleFiltersApply({ detail: lastFilter });
                 } else {
-                    // No filters active -> Show All
-                    console.log('[Viewer] selection cleared, showing all.');
-                    viewer.impl.visibilityManager.isolate([]);
-                    viewer.setGhosting(true);
+                    // REMOVED: Do NOT force showAll/isolate([]). 
+                    // This resets manually hidden items (via 'Hide' context menu).
+                    // viewer.impl.visibilityManager.isolate([]);
+                    // viewer.setGhosting(true); 
                 }
             }
         };
@@ -1122,14 +1367,39 @@ const Viewer = ({
         const handleCanvasClick = (event) => {
             // Priority: Sprite Placement Mode
             if (placementMode) {
-                const result = viewer.impl.hitTest(event.clientX, event.clientY, true);
+                let result = viewer.impl.hitTest(event.clientX, event.clientY, true);
+
+                // FALLBACK: If no geometry hit, try to hit the "Ground Plane" (Z=0)
+                // This ensures we can place pins even if the user clicks "off" the model on the floor level.
+                if (!result) {
+                    const rect = viewer.canvas.getBoundingClientRect();
+                    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+                    const camera = viewer.impl.camera;
+                    const raycaster = new window.THREE.Raycaster();
+                    raycaster.setFromCamera(new window.THREE.Vector2(x, y), camera);
+
+                    // Assume Z=0 ground plane for fallback
+                    const plane = new window.THREE.Plane(new window.THREE.Vector3(0, 0, 1), 0);
+                    const target = new window.THREE.Vector3();
+                    const hit = raycaster.ray.intersectPlane(plane, target);
+
+                    if (hit) {
+                        console.log('[Viewer] HitTest failed. Using Fallback hit on ground plane:', target);
+                        // Mock a result object
+                        result = { intersectPoint: target, dbId: 0 };
+                    }
+                }
+
                 if (result) {
                     onPlacementComplete({
                         x: result.intersectPoint.x,
                         y: result.intersectPoint.y,
                         z: result.intersectPoint.z,
-                        dbId: result.dbId
+                        dbId: result.dbId || 0
                     });
+                } else {
+                    console.warn('[Viewer] Could not determine placement point. Please click on the model or the ground.');
                 }
                 return;
             }
@@ -1180,46 +1450,10 @@ const Viewer = ({
         // Geometries/Materials
         if (!spriteStylesRef.current) spriteStylesRef.current = {};
 
-        // Helper: Create Document Icon Texture (Duplicated for availability)
-        // Ideally moved to a common helper outside
-        const getDocTexture = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = 128;
-            canvas.height = 128;
-            const ctx = canvas.getContext('2d');
-
-            // 1. Orange Circle Background
-            ctx.beginPath();
-            ctx.arc(64, 64, 60, 0, 2 * Math.PI);
-            ctx.fillStyle = '#F59E0B'; // Orange
-            ctx.fill();
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = '#ffffff';
-            ctx.stroke();
-
-            // 2. White Document Icon
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(44, 34, 40, 60);
-
-            // Folded corner
-            ctx.fillStyle = '#E5E7EB';
-            ctx.fillRect(44, 34, 40, 10);
-
-            // Lines
-            ctx.fillStyle = '#F59E0B';
-            ctx.fillRect(50, 50, 28, 4);
-            ctx.fillRect(50, 60, 28, 4);
-            ctx.fillRect(50, 70, 20, 4);
-
-            const tex = new THREE.Texture(canvas);
-            tex.needsUpdate = true;
-            return tex;
-        };
-
-        // 1. Doc Pin: Document Icon Sprite
+        // 1. Doc Pin: Document Icon Sprite (uses module-level getDocTexture)
         if (!spriteStylesRef.current.docMat) {
             const tex = getDocTexture();
-            spriteStylesRef.current.docMat = new THREE.SpriteMaterial({
+            spriteStylesRef.current.docMat = new window.THREE.SpriteMaterial({
                 map: tex,
                 color: 0xffffff,
                 depthTest: false, // Always on top
@@ -1229,48 +1463,18 @@ const Viewer = ({
 
         // 2. Alert Pin: Sphere (Red)
         if (!spriteStylesRef.current.redMat) {
-            spriteStylesRef.current.alertGeom = new THREE.SphereGeometry(1, 16, 16);
-            spriteStylesRef.current.redMat = new THREE.MeshBasicMaterial({
+            spriteStylesRef.current.alertGeom = new window.THREE.SphereGeometry(1, 16, 16);
+            spriteStylesRef.current.redMat = new window.THREE.MeshBasicMaterial({
                 color: 0xff0000,
                 depthTest: false,
                 depthWrite: false
             });
         }
 
-        // Helper: Create Dalux-style Pin Texture (Light Blue + White Border)
-        const getDaluxTexture = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = 128;
-            canvas.height = 128;
-            const ctx = canvas.getContext('2d');
-
-            // White Border
-            ctx.beginPath();
-            ctx.arc(64, 64, 50, 0, 2 * Math.PI);
-            ctx.fillStyle = '#ffffff';
-            ctx.fill();
-
-            // Blue Inner Circle
-            ctx.beginPath();
-            ctx.arc(64, 64, 42, 0, 2 * Math.PI);
-            ctx.fillStyle = '#60a5fa'; // Light Blue
-            ctx.fill();
-
-            // Optional: Inner Dot
-            ctx.beginPath();
-            ctx.arc(64, 64, 15, 0, 2 * Math.PI);
-            ctx.fillStyle = '#ffffff';
-            ctx.fill();
-
-            const tex = new THREE.Texture(canvas);
-            tex.needsUpdate = true;
-            return tex;
-        };
-
-        // 3. Build Pin: Sprite (Dalux Style)
+        // 3. Build Pin: Sprite (Dalux Style, uses module-level getDaluxTexture)
         if (!spriteStylesRef.current.blueMat) {
             const tex = getDaluxTexture();
-            spriteStylesRef.current.blueMat = new THREE.SpriteMaterial({
+            spriteStylesRef.current.blueMat = new window.THREE.SpriteMaterial({
                 map: tex,
                 color: 0xffffff,
                 depthTest: false,
@@ -1281,7 +1485,7 @@ const Viewer = ({
         const docMat = spriteStylesRef.current.docMat;
         const redMat = spriteStylesRef.current.redMat;
         const blueMat = spriteStylesRef.current.blueMat; // Now a SpriteMaterial
-        const alertGeom = spriteStylesRef.current.alertGeom || new THREE.SphereGeometry(1, 16, 16);
+        const alertGeom = spriteStylesRef.current.alertGeom || new window.THREE.SphereGeometry(1, 16, 16);
 
         const currentMeshes = spriteMeshesRef.current;
         const allItems = [
@@ -1315,13 +1519,13 @@ const Viewer = ({
 
                 if (isDoc) {
                     // Sprite for Docs
-                    mesh = new THREE.Sprite(docMat);
+                    mesh = new window.THREE.Sprite(docMat);
                     // Scale Sprite
                     const s = pinSize * 2.5;
                     mesh.scale.set(s, s, 1);
                 } else if (isBuild) {
                     // Sprite for Build (Dalux Style)
-                    mesh = new THREE.Sprite(blueMat);
+                    mesh = new window.THREE.Sprite(blueMat);
                     // Scale Sprite: Huge scale for Infraworks (often KM based)
                     // Try a very large base scale, or make it relative to model bounds if possible.
                     // For now, let's try 50x general pin size.
@@ -1329,7 +1533,7 @@ const Viewer = ({
                     mesh.scale.set(s, s, 1);
                 } else {
                     // Sphere for Alerts (Red)
-                    mesh = new THREE.Mesh(alertGeom, redMat);
+                    mesh = new window.THREE.Mesh(alertGeom, redMat);
                     mesh.scale.set(pinSize, pinSize, pinSize);
                 }
 
@@ -1400,14 +1604,14 @@ const Viewer = ({
 
             // Raycast for sprites
             const camera = viewer.impl.camera;
-            const pointer = new THREE.Vector3(
+            const pointer = new window.THREE.Vector3(
                 (canvasX / rect.width) * 2 - 1,
                 -(canvasY / rect.height) * 2 + 1,
                 0.5
             );
             pointer.unproject(camera);
 
-            const raycaster = new THREE.Raycaster(camera.position, pointer.sub(camera.position).normalize());
+            const raycaster = new window.THREE.Raycaster(camera.position, pointer.sub(camera.position).normalize());
 
             const meshes = Object.values(spriteMeshesRef.current);
             const intersects = raycaster.intersectObjects(meshes);
@@ -1614,14 +1818,14 @@ const Viewer = ({
             ctx.fillStyle = 'white';
             ctx.fill();
 
-            const texture = new THREE.CanvasTexture(canvas);
-            const material = new THREE.SpriteMaterial({
+            const texture = new window.THREE.CanvasTexture(canvas);
+            const material = new window.THREE.SpriteMaterial({
                 map: texture,
                 transparent: true,
                 depthTest: false,  // Always visible, even behind objects
                 depthWrite: false
             });
-            const spriteMesh = new THREE.Sprite(material);
+            const spriteMesh = new window.THREE.Sprite(material);
             spriteMesh.position.set(position.x, position.y, position.z);
             spriteMesh.scale.set(20, 20, 20);  // Much larger
             spriteMesh.userData.sprite = sprite;
@@ -1828,7 +2032,7 @@ const Viewer = ({
 
             buildPins.forEach(pin => {
                 if (pin.x === undefined || pin.y === undefined || pin.z === undefined) return;
-                const screenPos = viewer.worldToClient(new THREE.Vector3(pin.x, pin.y, pin.z));
+                const screenPos = viewer.worldToClient(new window.THREE.Vector3(pin.x, pin.y, pin.z));
                 const dx = screenPos.x - x;
                 const dy = screenPos.y - y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
@@ -1931,7 +2135,7 @@ const Viewer = ({
             targetZ = pin.z;
         }
 
-        const target = new THREE.Vector3(targetX, targetY, targetZ);
+        const target = new window.THREE.Vector3(targetX, targetY, targetZ);
 
         // Dynamic Distance based on model scale
         // Default to a reasonable standoff if calculation fails
@@ -1949,7 +2153,7 @@ const Viewer = ({
         const camera = viewer.impl.camera;
         const currentPos = camera.position.clone();
         let direction = currentPos.clone().sub(target).normalize();
-        if (direction.lengthSq() < 0.0001) direction = new THREE.Vector3(0, 0, 1);
+        if (direction.lengthSq() < 0.0001) direction = new window.THREE.Vector3(0, 0, 1);
         const newPos = target.clone().add(direction.multiplyScalar(standoffDist));
         viewer.navigation.setPosition(newPos);
         */
@@ -1992,7 +2196,7 @@ const Viewer = ({
 
                 // Consistency with Rendering Logic
                 const isWorldCoord = Math.abs(pin.x) > 10000;
-                const point = new THREE.Vector3(pin.x, pin.y, pin.z);
+                const point = new window.THREE.Vector3(pin.x, pin.y, pin.z);
 
                 if (isWorldCoord) {
                     point.sub(globalOffset);
@@ -2081,13 +2285,32 @@ const Viewer = ({
                 }
 
                 if (trackingPlacementMode && onTrackingPinCreate) {
-                    const newPin = {
-                        id: Date.now().toString(),
-                        x: hit.point.x,
-                        y: hit.point.y,
-                        z: hit.point.z
-                    };
-                    onTrackingPinCreate(newPin);
+                    // Read CodigoDePartida from element properties
+                    const getPartidaInfo = (model, dbId) => new Promise((resolve) => {
+                        if (!model || !dbId) return resolve({ code: null, name: null });
+                        model.getProperties(dbId, (result) => {
+                            const codeProp = result.properties?.find(p => p.displayName === '03_05_DSI_CodigoDePartida');
+                            const nameProp = result.properties?.find(p => p.displayName === '03_04_DSI_NombreDePartida');
+                            resolve({
+                                code: codeProp ? codeProp.displayValue : null,
+                                name: nameProp ? nameProp.displayValue : null
+                            });
+                        }, () => resolve({ code: null, name: null }));
+                    });
+
+                    getPartidaInfo(hit.model, hit.dbId).then(({ code, name }) => {
+                        console.log('[Viewer] Partida detected (placement):', code, name);
+                        const newPin = {
+                            id: Date.now().toString(),
+                            x: hit.point.x,
+                            y: hit.point.y,
+                            z: hit.point.z,
+                            dbId: hit.dbId || null,
+                            codigoPartida: code,
+                            partidaNombre: name
+                        };
+                        onTrackingPinCreate(newPin);
+                    });
                     return;
                 }
 

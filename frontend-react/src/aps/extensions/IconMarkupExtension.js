@@ -4,11 +4,9 @@ import { BaseExtension } from './BaseExtension';
 class IconMarkupExtension extends BaseExtension {
     constructor(viewer, options) {
         super(viewer, options);
-        // Ensure options is set
         this.options = options || {};
         this._group = null;
         this._icons = [];
-        this._button = null;
         this.onCameraChange = this.onCameraChange.bind(this);
     }
 
@@ -17,23 +15,22 @@ class IconMarkupExtension extends BaseExtension {
         console.log('IconMarkupExtension loaded');
         this._group = document.createElement('div');
         this._group.className = 'icon-markup-group';
-        // Ensure the container covers the viewer and allows clicks to pass through
         this._group.style.position = 'absolute';
         this._group.style.top = '0';
         this._group.style.left = '0';
         this._group.style.width = '100%';
         this._group.style.height = '100%';
-        this._group.style.pointerEvents = 'none'; // Crucial: clicks pass through container
-        this._group.style.zIndex = '100'; // High z-index to sit on top
+        this._group.style.pointerEvents = 'none'; // Clicks pass through container
+        this._group.style.zIndex = '100';
 
         const container = this.viewer.container;
-        // Append to viewer container
         container.appendChild(this._group);
 
         this.viewer.addEventListener(Autodesk.Viewing.CAMERA_CHANGE_EVENT, this.onCameraChange);
         this.viewer.addEventListener(Autodesk.Viewing.ISOLATE_EVENT, this.onCameraChange);
         this.viewer.addEventListener(Autodesk.Viewing.HIDE_EVENT, this.onCameraChange);
         this.viewer.addEventListener(Autodesk.Viewing.SHOW_EVENT, this.onCameraChange);
+        this.viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, this.onCameraChange);
 
         return true;
     }
@@ -48,17 +45,17 @@ class IconMarkupExtension extends BaseExtension {
         this.viewer.removeEventListener(Autodesk.Viewing.ISOLATE_EVENT, this.onCameraChange);
         this.viewer.removeEventListener(Autodesk.Viewing.HIDE_EVENT, this.onCameraChange);
         this.viewer.removeEventListener(Autodesk.Viewing.SHOW_EVENT, this.onCameraChange);
+        this.viewer.removeEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, this.onCameraChange);
         return true;
     }
 
     setIcons(icons) {
         this._icons = icons || [];
         this.renderIcons();
-    }
-
-    addIcon(iconData) {
-        this._icons.push(iconData);
-        this.renderIcons();
+        // Force an update on next frame to ensure positions are calculated after DOM insertion
+        requestAnimationFrame(() => {
+            this.onCameraChange();
+        });
     }
 
     clearIcons() {
@@ -75,148 +72,288 @@ class IconMarkupExtension extends BaseExtension {
         this._icons.forEach(iconData => {
             const el = document.createElement('div');
             el.className = 'icon-markup';
-            el.id = `markup-${iconData.id}`;
+
             // Base styles
             el.style.position = 'absolute';
+            el.style.top = '0';
+            el.style.left = '0';
             el.style.pointerEvents = 'auto'; // Enable clicks on the icon itself
             el.style.cursor = 'pointer';
             el.style.transform = 'translate(-50%, -50%)'; // Center pivot
+            el.style.display = 'none'; // Hidden initially until camera update
 
-            // Custom styling based on type (Progress text vs Photo icon)
+            // Custom styling based on type
             if (iconData.type === 'text') {
-                // Parse percentage
                 const valStr = iconData.val || "0";
                 const valNum = parseInt(valStr.replace(/\D/g, ''), 10) || 0;
 
                 // Determine Dynamic Color
                 let dynamicColor = '#ef4444'; // Red (< 50)
-                if (valNum >= 100) {
-                    dynamicColor = '#22c55e'; // Green (100+)
-                } else if (valNum >= 50) {
-                    dynamicColor = '#eab308'; // Yellow (50-99)
-                }
+                if (valNum >= 100) dynamicColor = '#22c55e'; // Green
+                else if (valNum >= 50) dynamicColor = '#eab308'; // Yellow
 
-                el.innerHTML = `<span>📈 ${iconData.val}</span>`;
+                el.innerHTML = `
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block;">
+                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                        <polyline points="17 6 23 6 23 12"></polyline>
+                    </svg>
+                    <span style="font-weight: 800; font-family: Inter, sans-serif;">${valStr}</span>
+                `;
 
-                // Transparent Background Style
+                // Wrapper Styles (Reverted to Box/Arrow style)
                 el.style.color = dynamicColor;
-                el.style.backgroundColor = 'transparent'; // No background
-                el.style.padding = '2px 6px';
-                // Remove border for cleaner look, or keep it subtle? Let's keep it minimal like the thermometer example.
-                // el.style.border = `2px solid ${dynamicColor}`; 
-                el.style.fontWeight = '900';
-                el.style.fontSize = '18px'; // Slightly larger for visibility
-                el.style.fontFamily = 'Inter, sans-serif';
-                el.style.whiteSpace = 'nowrap';
-                // Strong text shadow for contrast against 3D model
-                el.style.textShadow = '0 2px 4px rgba(0,0,0,0.8), 0 0 10px rgba(0,0,0,0.5)';
+                el.style.backgroundColor = 'rgba(20, 20, 20, 0.8)'; // Darker bg
+                el.style.padding = '4px 8px';
+                el.style.borderRadius = '6px';
+                el.style.border = `1px solid ${dynamicColor}`;
                 el.style.display = 'flex';
                 el.style.alignItems = 'center';
                 el.style.gap = '6px';
-            } else {
-                // Photo Icon - Camera Only (No Background)
-                el.innerHTML = '<div style="font-size:36px; filter: drop-shadow(0 4px 4px rgba(0,0,0,0.5)); transition: transform 0.2s;">📷</div>';
+                el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.5)';
+                // Note: transform is handled in onCameraChange for performance
+            } else if (iconData.type === 'doc') {
+                // Document Icon (Purple)
+                el.innerHTML = `
+                    <div style="
+                        width: 32px;
+                        height: 32px;
+                        background: rgba(139, 92, 246, 0.7);
+                        backdrop-filter: blur(4px);
+                        border: 1.5px solid rgba(196, 181, 253, 0.6);
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 12px rgba(139, 92, 246, 0.3);
+                        transition: all 0.2s ease;
+                        cursor: pointer;
+                    ">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                        </svg>
+                    </div>
+                `;
 
-                // Add hover effect via JS since inline styles are tricky for hover
-                el.onmouseenter = () => el.firstChild.style.transform = 'scale(1.2)';
-                el.onmouseleave = () => el.firstChild.style.transform = 'scale(1)';
+                el.onmouseenter = () => {
+                    const div = el.firstElementChild;
+                    if (div) {
+                        div.style.transform = 'scale(1.15)';
+                        div.style.background = 'rgba(139, 92, 246, 0.9)';
+                        div.style.border = '1.5px solid rgba(255, 255, 255, 0.8)';
+                        div.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.5)';
+                    }
+                };
+                el.onmouseleave = () => {
+                    const div = el.firstElementChild;
+                    if (div) {
+                        div.style.transform = 'scale(1)';
+                        div.style.background = 'rgba(139, 92, 246, 0.7)';
+                        div.style.border = '1.5px solid rgba(196, 181, 253, 0.6)';
+                        div.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 12px rgba(139, 92, 246, 0.3)';
+                    }
+                };
+                el.onmouseleave = () => {
+                    const div = el.firstElementChild;
+                    if (div) {
+                        div.style.transform = 'scale(1)';
+                        div.style.background = 'rgba(30, 30, 30, 0.6)';
+                        div.style.border = '1px solid rgba(255, 255, 255, 0.3)';
+                    }
+                };
+            } else if (iconData.type === 'restriction') {
+                // Restriction / Warning Icon (Orange/Yellow)
+                el.innerHTML = `
+                    <div style="
+                        width: 32px;
+                        height: 32px;
+                        background: rgba(245, 158, 11, 0.8);
+                        backdrop-filter: blur(4px);
+                        border: 1.5px solid rgba(254, 215, 170, 0.7);
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 12px rgba(245, 158, 11, 0.4);
+                        transition: all 0.2s ease;
+                        cursor: pointer;
+                    ">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                    </div>
+                `;
+
+                el.onmouseenter = () => {
+                    const div = el.firstElementChild;
+                    if (div) {
+                        div.style.transform = 'scale(1.15)';
+                        div.style.background = 'rgba(245, 158, 11, 1)';
+                        div.style.border = '1.5px solid rgba(255, 255, 255, 0.8)';
+                        div.style.boxShadow = '0 6px 12px rgba(245, 158, 11, 0.6)';
+                    }
+                };
+                el.onmouseleave = () => {
+                    const div = el.firstElementChild;
+                    if (div) {
+                        div.style.transform = 'scale(1)';
+                        div.style.background = 'rgba(245, 158, 11, 0.8)';
+                        div.style.border = '1.5px solid rgba(254, 215, 170, 0.7)';
+                        div.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 12px rgba(245, 158, 11, 0.4)';
+                    }
+                };
+            } else {
+                // Photo Icon (Minimalist)
+                el.innerHTML = `
+                    <div style="
+                        width: 32px;
+                        height: 32px;
+                        background: rgba(30, 30, 30, 0.6);
+                        backdrop-filter: blur(4px);
+                        border: 1px solid rgba(255, 255, 255, 0.3);
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                        transition: all 0.2s ease;
+                        cursor: pointer;
+                    ">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                            <circle cx="12" cy="13" r="4"></circle>
+                        </svg>
+                    </div>
+                `;
+
+                // Add hover effect via JS since inline styles are tricky for pseudo-classes
+                el.onmouseenter = () => {
+                    const div = el.firstElementChild;
+                    if (div) {
+                        div.style.transform = 'scale(1.1)';
+                        div.style.background = 'rgba(30, 30, 30, 0.8)';
+                        div.style.border = '1px solid rgba(255, 255, 255, 0.8)';
+                    }
+                };
+                el.onmouseleave = () => {
+                    const div = el.firstElementChild;
+                    if (div) {
+                        div.style.transform = 'scale(1)';
+                        div.style.background = 'rgba(30, 30, 30, 0.6)';
+                        div.style.border = '1px solid rgba(255, 255, 255, 0.3)';
+                    }
+                };
             }
 
             // Click Handler
             el.onclick = (e) => {
-                console.log('[IconMarkupExtension] Icon clicked:', iconData);
-                e.stopPropagation(); // Stop viewer selection
+                e.stopPropagation();
                 e.preventDefault();
-
-                // Try this.options.onClick
                 if (this.options && this.options.onClick) {
-                    console.log('[IconMarkupExtension] Triggering options.onClick');
                     this.options.onClick(iconData);
-                } else {
-                    console.warn('[IconMarkupExtension] No onClick handler in options', this.options);
                 }
             };
 
-            // Store element reference in data for update loop? 
-            // Better to re-find or pass via closure? 
-            // Let's create the element and attach it.
             this._group.appendChild(el);
-            iconData._element = el; // Cache element
+            iconData._element = el;
         });
 
-        this.onCameraChange(); // Initial position update
+        // Trigger update
+        this.onCameraChange();
+        // Double Tap: Request animation frame to catch race conditions in initial mount
+        requestAnimationFrame(() => this.onCameraChange());
     }
 
     onCameraChange() {
-        if (!this._group || !this.viewer.model) return;
+        if (!this._group) return;
 
         const viewer = this.viewer;
+
+        // Safety check for model or navigation availability
+        if (!viewer.model || !viewer.navigation) return;
+
         const camera = viewer.navigation.getCamera();
-        const containerBytes = viewer.container.getBoundingClientRect(); // Use bounds if needed, or simple clientWidth/Height
+        const nav = viewer.navigation;
 
         this._icons.forEach(icon => {
             if (!icon._element) return;
 
-            // Convert to THREE.Vector3
+            // 1. Get World Point
             const p = new THREE.Vector3(icon.x, icon.y, icon.z);
 
-            // Check if behind camera
-            // We can project and check z
-            const pos = viewer.worldToClient(p);
+            // 2. Project to Screen
+            let pos = viewer.worldToClient(p);
 
-            // Visibility Check
-            // 1. Behind camera?
-            // worldToClient returns z as [0, 1] for visible? No, it returns screen Z.
-            // Actually, for worldToClient:
-            // "Note that the z component of the returned vector is 0.0 if the point is in front of the camera, and 1.0 if it is behind." - wait, need to verify docs or test.
-            // Actually, in Viewer implementation:
-            // var p = new THREE.Vector3();
-            // p.copy(point);
-            // p.project(camera); 
-            // p.x = ( p.x + 1 ) / 2 * width;
-            // p.y = - ( p.y - 1 ) / 2 * height;
-            // The result of `project` puts z in [-1, 1] (NDC). 
-            // If z > 1, it's behind far plane? If z < -1, behind near plane?
-            // `viewer.worldToClient` internally handles projection.
-            // Let's rely on standard practice: check if `point` is in front of camera plane.
-
-            // Simple check: direction from camera to point vs camera lookat
+            // 3. Visibility Check (Behind Camera?)
             const camPos = camera.position;
             const camDir = camera.getWorldDirection(new THREE.Vector3());
-            const pointDir = new THREE.Vector3().subVectors(p, camPos).normalize();
-            const dot = camDir.dot(pointDir);
+            const sub = new THREE.Vector3().subVectors(p, camPos); // Vector from Cam to Point
+            const dist = sub.length();
 
-            // Robust specific check for occlusion or behind camera
-            // If dot < 0, point is roughly behind camera.
-            // However, wide FOV might show points slightly "behind" the look vector but still in frustum.
-            // Better to trust `worldToClient` bounding or write a specific frustum check.
+            // Dot product: if > 0, point is roughly in front (angle < 90 deg)
+            let isFront = camDir.dot(sub) > 0;
 
-            // Let's try utilizing the viewer's built-in occlusion if we want, but for now just placement.
+            // Fix: If distance is very small (user is "on top" of the pin), force visibility
+            // This prevents icons disappearing when "approaching" them due to clipping or math precision.
+            if (dist < 30.0) {
+                isFront = true;
 
-            // If explicit z check logic failed before, let's keep it simple:
-            // Just use bounds check on screen X/Y. 
-            // BUT we must hide if behind camera.
+                // CRITICAL FIX: Manual Projection ignoring Viewport Near-Clipping
+                if (!pos) {
+                    // 1. Transform to Camera Space
+                    const pLocal = p.clone().applyMatrix4(camera.matrixWorldInverse);
 
-            // Using `viewer.impl.isPointVisible(p)`? No public API.
+                    // 2. Check if in front (ThreeJS camera looks down -Z)
+                    if (pLocal.z < 0) {
+                        if (camera.isPerspectiveCamera) {
+                            // 3. Manual Perspective Divide (Bypassing Projection Matrix Near Clip)
+                            const fovRad = camera.fov * (Math.PI / 180);
+                            const scale = 1 / Math.tan(fovRad / 2);
 
-            // Fallback:
-            // `worldToClient` generally returns valid screen coords. If z > 1 (NDC), it's bad?
+                            const ndcX = (pLocal.x / -pLocal.z) * scale / camera.aspect;
+                            const ndcY = (pLocal.y / -pLocal.z) * scale;
 
-            if (pos.z > 1) { // Behind far plane or handling weirdness
-                icon._element.style.display = 'none';
-            } else {
-                if (pos.x >= 0 && pos.x <= viewer.container.clientWidth &&
-                    pos.y >= 0 && pos.y <= viewer.container.clientHeight) {
-                    icon._element.style.display = 'block';
-                    icon._element.style.left = Math.floor(pos.x) + 'px';
-                    icon._element.style.top = Math.floor(pos.y) + 'px';
-                } else {
-                    icon._element.style.display = 'none'; // Off screen
+                            pos = new THREE.Vector3(
+                                (ndcX + 1) / 2 * viewer.container.clientWidth,
+                                (-ndcY + 1) / 2 * viewer.container.clientHeight,
+                                0
+                            );
+                        } else {
+                            // Orthographic fallback (Standard project)
+                            const pClone = p.clone();
+                            pClone.project(camera);
+                            pos = new THREE.Vector3(
+                                (pClone.x + 1) / 2 * viewer.container.clientWidth,
+                                (-pClone.y + 1) / 2 * viewer.container.clientHeight,
+                                0
+                            );
+                        }
+                    }
                 }
             }
 
-            // Extra: Occlusion culling (optional)
-            // if (viewer.model.rayIntersect(...)) ...
+            if (isFront && pos) {
+                // 4. Bounds check (optional, but good to hide if way off screen)
+                // Note: CSS absolute pos handles off-screen gracefully, but 'display: none' performs better.
+                const x = pos.x;
+                const y = pos.y;
+
+                // Display if somewhat within bounds (allow partial visibility)
+                // Relaxed bounds (-100 instead of -50) to catch edge cases
+                if (x > -100 && y > -100 && x < viewer.container.clientWidth + 100 && y < viewer.container.clientHeight + 100) {
+                    icon._element.style.display = icon.type === 'text' ? 'flex' : 'block';
+                    icon._element.style.left = Math.floor(x) + 'px';
+                    icon._element.style.top = Math.floor(y) + 'px';
+                } else {
+                    icon._element.style.display = 'none';
+                }
+            } else {
+                icon._element.style.display = 'none';
+            }
         });
     }
 }

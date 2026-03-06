@@ -38,6 +38,52 @@
     cursor: pointer;
 }
 
+.logo-wrapper {
+    position: relative;
+    padding: 6px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.logo-wrapper.ai-active-glow {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.logo-wrapper.ai-active-glow::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, transparent, #4db8ff, transparent 50%, #4db8ff, transparent);
+    animation: rotateGlow 2s linear infinite;
+    z-index: 1;
+}
+
+.logo-wrapper.ai-active-glow::after {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    background: #2a2a2a;
+    border-radius: 50%;
+    z-index: 1;
+}
+
+@keyframes rotateGlow {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 /* Tools */
 .tool-btn {
     background: transparent;
@@ -145,12 +191,37 @@
 }
 
 /* User Profile */
+/* User Profile & Logout */
+.logout-btn:hover {
+    background: rgba(255, 77, 77, 0.1) !important;
+    color: #ff4d4d !important;
+}
+
+.user-info span {
+    transition: color 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.user-profile-section {
+    animation: fadeIn 0.3s ease-out;
+}
+
 .user-profile .avatar {
     width: 28px;
     height: 28px;
     border-radius: 50%;
     background-color: #7289DA;
-    /* Approx user color */
     color: white;
     display: flex;
     align-items: center;
@@ -159,4 +230,33 @@
     font-weight: 600;
     border: 2px solid #202020;
     cursor: pointer;
+}
+
+.top-bar-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-left: 1px solid #444;
+    padding-left: 16px;
+    margin-left: 16px;
+    height: 24px;
+}
+
+.breadcrumb-project {
+    color: #888;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.breadcrumb-sep {
+    color: #444;
+    font-size: 14px;
+}
+
+.breadcrumb-view {
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
 }
