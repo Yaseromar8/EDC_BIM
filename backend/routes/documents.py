@@ -113,7 +113,9 @@ def proxy_document():
         if content:
             return Response(content, mimetype=content_type or 'image/jpeg')
             
-    # Para PDFs o archivos grandes, redirigir a URL firmada local o pública
+    import requests
+
+    # Para PDFs o archivos grandes, proxy streaming para esquivar bloqueos de CORS del navegador
     signed_url = generate_signed_url(gcs_urn)
     if not signed_url:
         # Fallback de emergencia, extraerlo a la fuerza
@@ -122,9 +124,30 @@ def proxy_document():
              return Response(content, mimetype=content_type or 'application/octet-stream')
         return f"File not found in storage for URN: {gcs_urn}", 404
 
-    # Redirect to GCS explicitly for PDF Range Requests 
-    # and native browser caching + thumbnail optimization.
-    return redirect(signed_url)
+    try:
+        req_headers = {}
+        if 'Range' in request.headers:
+            req_headers['Range'] = request.headers['Range']
+            
+        r = requests.get(signed_url, headers=req_headers, stream=True, timeout=15)
+        r.raise_for_status()
+        
+        def generate():
+            for chunk in r.iter_content(chunk_size=1024 * 512): # 512KB chunks
+                yield chunk
+                
+        resp_headers = {}
+        for h in ['Content-Type', 'Content-Length', 'Accept-Ranges', 'Content-Range']:
+            if h in r.headers:
+                resp_headers[h] = r.headers[h]
+                
+        resp_headers['Access-Control-Allow-Origin'] = '*'
+        resp_headers['Access-Control-Expose-Headers'] = 'Accept-Ranges, Content-Range, Content-Length'
+        
+        return Response(generate(), status=r.status_code, headers=resp_headers)
+    except Exception as e:
+        print(f"[Proxy] Error streaming {gcs_urn}: {e}")
+        return "Error fetching document from storage", 502
 
 
 @documents_bp.route('/api/docs/list', methods=['GET'])
