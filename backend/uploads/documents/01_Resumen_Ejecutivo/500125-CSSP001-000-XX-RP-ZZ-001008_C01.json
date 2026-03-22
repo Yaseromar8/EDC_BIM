@@ -1,0 +1,75 @@
+{
+    "document_metadata": {
+        "title": "RESUMEN EJECUTIVO (EJECUCIÓN FINAL)",
+        "project_name": "Mejoramiento del Servicio de Drenaje Pluvial en los sectores Jesús María y Humano Jesús María, distrito de Pariñas - Talara - Piura",
+        "project_location": "Talara, Piura"
+    },
+    "project_components": [
+        {
+            "component_id": "COMP-01",
+            "component_name": "Drenaje Urbano Jesús María",
+            "constraints": [
+                {
+                    "constraint_id": "C-001",
+                    "description": "Superficie de área de influencia directa",
+                    "numeric_value": "45.68",
+                    "unit": "hectáreas",
+                    "geographic_scope": "Quebrada Jesús María",
+                    "context_quote": "adyacente a la quebrada Jesús María de Talara, que cubre una superficie de 45.68 hectáreas."
+                },
+                {
+                    "constraint_id": "C-002",
+                    "description": "Longitud total de tubería proyectada",
+                    "numeric_value": "1779.62",
+                    "unit": "metros",
+                    "geographic_scope": "Red de drenaje pluvial",
+                    "context_quote": "recolección y evacuación de las aguas pluviales con una longitud de 1779.62 metros."
+                }
+            ]
+        },
+        {
+            "component_id": "COMP-02",
+            "component_name": "Canal Jesús María",
+            "constraints": [
+                {
+                    "constraint_id": "C-003",
+                    "description": "Superficie de área de influencia directa",
+                    "numeric_value": "23.28",
+                    "unit": "hectáreas",
+                    "geographic_scope": "Sector Humano Jesús María",
+                    "context_quote": "Humano Jesús María, que cubre una superficie de 23.28 hectáreas."
+                },
+                {
+                    "constraint_id": "C-004",
+                    "description": "Longitud del canal revestido proyectado",
+                    "numeric_value": "1024.12",
+                    "unit": "metros",
+                    "geographic_scope": "Trazado del canal",
+                    "context_quote": "conducción de caudales mediante un canal revestido de 1024.12 m."
+                }
+            ]
+        },
+        {
+            "component_id": "COMP-03",
+            "component_name": "Presupuesto y Cronograma",
+            "constraints": [
+                {
+                    "constraint_id": "C-005",
+                    "description": "Costo Directo del Proyecto",
+                    "numeric_value": "35850942.30",
+                    "unit": "Soles",
+                    "geographic_scope": "Global",
+                    "context_quote": "Costo Directo: S/ 35,850,942.30"
+                },
+                {
+                    "constraint_id": "C-006",
+                    "description": "Plazo de ejecución total",
+                    "numeric_value": "730",
+                    "unit": "días calendario",
+                    "geographic_scope": "Global",
+                    "context_quote": "El plazo de ejecución total es de 730 días calendario."
+                }
+            ]
+        }
+    ]
+}

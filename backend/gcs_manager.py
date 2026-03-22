@@ -32,6 +32,7 @@ def upload_file_to_gcs(file_object, destination_blob_name):
         if not bucket_name or bucket_name == "TU_BUCKET_AQUI":
             raise ValueError("GCS_BUCKET_NAME no esta configurado correctamente en el .env")
         
+        print(f"[GCS] Initializing upload for {destination_blob_name} to bucket {bucket_name}")
         client = get_storage_client()
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(destination_blob_name)
@@ -45,17 +46,27 @@ def upload_file_to_gcs(file_object, destination_blob_name):
             new_version = 1
             
         # Sube el contenido
-        blob.upload_from_file(file_object, timeout=600)  # Timeout de 10 min para archivos CAD pesados
+        print(f"[GCS] Starting transfer... (version {new_version})")
+        
+        # Asegurar puntero al inicio antes de leer
+        file_object.seek(0)
+        content = file_object.read()
+        print(f"[GCS] Bytes read from file object: {len(content)}")
+        
+        blob.upload_from_string(content, content_type=getattr(file_object, 'content_type', 'application/octet-stream'), timeout=300)
+        
+        print(f"[GCS] Transfer complete.")
         
         # Patch the metadata to store version
         blob.metadata = {"version": str(new_version)}
         blob.patch()
         
-        # Preferiremos URLs firmadas para seguridad en lugar del public_url si el bucket es cerrado
         return generate_signed_url(destination_blob_name)
 
     except Exception as e:
-        print(f"Error subiendo a GCS: {str(e)}")
+        print(f"[GCS] CRITICAL ERROR during upload: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def generate_upload_url(blob_name, content_type=None, expiration_minutes=60):
@@ -93,6 +104,7 @@ def generate_signed_url(blob_name, expiration_minutes=60*24):
             expiration=datetime.timedelta(minutes=expiration_minutes),
             method="GET",
             response_disposition="inline",
+            # response_type is the correct parameter for v4 signed URLs Content-Type
             response_type="application/pdf" if is_pdf else None
         )
         return url
@@ -137,10 +149,12 @@ def list_gcs_contents(prefix=""):
             version = f"V{blob.metadata.get('version', '1')}" if blob.metadata and "version" in blob.metadata else "V1"
             
             try:
-                if blob.name.lower().endswith('.pdf'):
-                    signed_url = blob.generate_signed_url(version="v4", expiration=datetime.timedelta(minutes=1440), method="GET", response_disposition="inline", response_type="application/pdf")
-                else:
-                    signed_url = blob.generate_signed_url(version="v4", expiration=datetime.timedelta(minutes=1440), method="GET", response_disposition="inline")
+                signed_url = blob.generate_signed_url(
+                    version="v4", 
+                    expiration=datetime.timedelta(minutes=1440), 
+                    method="GET", 
+                    response_disposition="inline"
+                )
             except Exception:
                 signed_url = blob.public_url
                 

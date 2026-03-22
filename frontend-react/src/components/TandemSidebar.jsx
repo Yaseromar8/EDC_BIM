@@ -4,6 +4,7 @@ import SourceFilesPanel from './SourceFilesPanel';
 import DocumentPanel from './DocumentPanel';
 import DiscoverySearchPanel from './DiscoverySearchPanel';
 import BuildPanel from './BuildPanel';
+import SchedulePanel from './SchedulePanel';
 
 
 const TandemSidebar = ({
@@ -64,7 +65,10 @@ const TandemSidebar = ({
     onTrackingPlacementToggle,
     trackingPlacementMode,
     selectedPinId,
-    onCameraCapture
+    onCameraCapture,
+    BACKEND_URL,
+    scheduleData,
+    setScheduleData
 }) => {
     return (
         <aside className={`app-sidebar ${panelVisible && activePanel !== 'views' ? '' : 'hidden'}`}>
@@ -171,6 +175,17 @@ const TandemSidebar = ({
                     onTogglePins={() => { }} // Placeholder
                     selectedPinId={selectedPinId}
                     onCameraCapture={onCameraCapture}
+                />
+            )}
+
+            {activePanel === 'schedule' && (
+                <SchedulePanel 
+                    BACKEND_URL={BACKEND_URL}
+                    scheduleData={scheduleData}
+                    setScheduleData={setScheduleData}
+                    onUploadSuccess={(data) => {
+                        console.log('Schedule uploaded:', data);
+                    }}
                 />
             )}
 

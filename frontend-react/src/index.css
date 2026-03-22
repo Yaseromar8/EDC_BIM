@@ -1,23 +1,47 @@
+/* index.css - Zero Interference Reset */
+
+/* 
+   PROTECT AUTODESK INTERNAL CSS 
+   We explicitly tell the browser that inside the viewer UI, 
+   all inputs should use their default/native styles.
+*/
+.adsk-viewing-viewer-ui input,
+.adsk-viewing-viewer-ui input[type="checkbox"],
+.adsk-viewing-viewer-ui input[type="radio"],
+.docking-panel input {
+  appearance: auto !important;
+  -webkit-appearance: checkbox !important;
+  width: auto !important;
+  height: auto !important;
+  background: none !important;
+  border: none !important;
+  margin: 3px !important; /* Standard browser margin */
+}
+
+/* Hide any injected checkmark icons from our app-level CSS accidentally hitting the viewer */
+.adsk-viewing-viewer-ui input::after,
+.adsk-viewing-viewer-ui input::before {
+  content: none !important;
+}
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  background-color: #0f1116;
 }
 
 body {
   margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow: hidden;
 }
 
 #root {
-  width: 100vw;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
+  width: 100%;
+  height: 100%;
 }

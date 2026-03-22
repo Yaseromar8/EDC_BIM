@@ -1,0 +1,20 @@
+# COMANDOS PARA INICIAR EL PROYECTO (VISOR APS)
+
+## 1. Permisos de PowerShell (Ejecutar una vez)
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+## 2. Iniciar BACKEND
+cd d:\VISOR_APS_TL\backend
+.\venv\Scripts\Activate.ps1
+python server.py
+
+## 3. Iniciar FRONTEND (VISOR)
+cd d:\VISOR_APS_TL\frontend-react
+npm run dev
+
+## 4. Iniciar GESTIÓN DOCUMENTAL (ECD)
+cd d:\VISOR_APS_TL\frontend-docs
+npm run dev
+
+---
+Nota: Recuerda que para el backend debes ver el prefijo '(venv)' en tu terminal antes de correr python server.py.

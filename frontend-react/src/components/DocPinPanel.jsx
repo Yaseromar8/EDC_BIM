@@ -206,14 +206,28 @@ const DocPinPanel = ({
     const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
     const attachedDocs = pin.docs || [];
 
-    // Limpiar estados cuando cambia el proyecto (modelUrn)
+    // Limpiar estados cuando cambia el proyecto (modelUrn) o el pin
     useEffect(() => {
+        if (!pin) return;
+        
+        // Mapeo inteligente de carpetas por tipo de pin
+        const folderMap = {
+            'avance': '01_AVANCE/',
+            'fotos': '02_FOTOS/',
+            'docs': '03_DOCUMENTOS/',
+            'rfi': '04_RFI/',
+            'restriction': '05_RESTRICCIONES/'
+        };
+        
+        const subFolder = folderMap[pin.type] || '';
+        const initialPath = projectPrefix + '05_SEGUIMIENTO/' + subFolder;
+
         setBrowsing(false);
-        setCurrentPath(projectPrefix);
+        setCurrentPath(initialPath);
         setIsSearching(false);
         setSearchResults([]);
         setSelectedItems(new Set());
-    }, [modelUrn, projectPrefix]);
+    }, [pin?.id, pin?.type, modelUrn, projectPrefix]);
 
     const showNotify = (message, type = 'success') => {
         setNotification({ message, type });

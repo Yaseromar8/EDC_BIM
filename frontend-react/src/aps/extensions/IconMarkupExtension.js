@@ -163,6 +163,49 @@ class IconMarkupExtension extends BaseExtension {
                         div.style.border = '1px solid rgba(255, 255, 255, 0.3)';
                     }
                 };
+            } else if (iconData.type === 'rfi') {
+                // RFI Icon (Red)
+                el.innerHTML = `
+                    <div style="
+                        width: 32px;
+                        height: 32px;
+                        background: rgba(239, 68, 68, 0.8);
+                        backdrop-filter: blur(4px);
+                        border: 1.5px solid rgba(252, 165, 165, 0.7);
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 12px rgba(239, 68, 68, 0.4);
+                        transition: all 0.2s ease;
+                        cursor: pointer;
+                    ">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                    </div>
+                `;
+
+                el.onmouseenter = () => {
+                    const div = el.firstElementChild;
+                    if (div) {
+                        div.style.transform = 'scale(1.15)';
+                        div.style.background = 'rgba(239, 68, 68, 1)';
+                        div.style.border = '1.5px solid rgba(255, 255, 255, 0.8)';
+                        div.style.boxShadow = '0 6px 12px rgba(239, 68, 68, 0.6)';
+                    }
+                };
+                el.onmouseleave = () => {
+                    const div = el.firstElementChild;
+                    if (div) {
+                        div.style.transform = 'scale(1)';
+                        div.style.background = 'rgba(239, 68, 68, 0.8)';
+                        div.style.border = '1.5px solid rgba(252, 165, 165, 0.7)';
+                        div.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 0 12px rgba(239, 68, 68, 0.3)';
+                    }
+                };
             } else if (iconData.type === 'restriction') {
                 // Restriction / Warning Icon (Orange/Yellow)
                 el.innerHTML = `
@@ -297,41 +340,38 @@ class IconMarkupExtension extends BaseExtension {
             // Dot product: if > 0, point is roughly in front (angle < 90 deg)
             let isFront = camDir.dot(sub) > 0;
 
-            // Fix: If distance is very small (user is "on top" of the pin), force visibility
-            // This prevents icons disappearing when "approaching" them due to clipping or math precision.
-            if (dist < 30.0) {
-                isFront = true;
+            // Fallback for APS Near-Clipping frustration:
+            // APS Viewer dynamically scales the Camera Near Plane based on the entire building size.
+            // In large models, walls closer than 50 meters might get "clipped" by the near plane, 
+            // returning !pos. We manually bypass the projection matrix if it's physically in front.
+            if (!pos && isFront) {
+                // 1. Transform to Camera Space
+                const pLocal = p.clone().applyMatrix4(camera.matrixWorldInverse);
 
-                // CRITICAL FIX: Manual Projection ignoring Viewport Near-Clipping
-                if (!pos) {
-                    // 1. Transform to Camera Space
-                    const pLocal = p.clone().applyMatrix4(camera.matrixWorldInverse);
+                // 2. Check if in front (ThreeJS camera looks down -Z)
+                if (pLocal.z < 0) {
+                    if (camera.isPerspectiveCamera) {
+                        // 3. Manual Perspective Divide (Bypassing Projection Matrix Near Clip)
+                        const fovRad = camera.fov * (Math.PI / 180);
+                        const scale = 1 / Math.tan(fovRad / 2);
 
-                    // 2. Check if in front (ThreeJS camera looks down -Z)
-                    if (pLocal.z < 0) {
-                        if (camera.isPerspectiveCamera) {
-                            // 3. Manual Perspective Divide (Bypassing Projection Matrix Near Clip)
-                            const fovRad = camera.fov * (Math.PI / 180);
-                            const scale = 1 / Math.tan(fovRad / 2);
+                        const ndcX = (pLocal.x / -pLocal.z) * scale / camera.aspect;
+                        const ndcY = (pLocal.y / -pLocal.z) * scale;
 
-                            const ndcX = (pLocal.x / -pLocal.z) * scale / camera.aspect;
-                            const ndcY = (pLocal.y / -pLocal.z) * scale;
-
-                            pos = new THREE.Vector3(
-                                (ndcX + 1) / 2 * viewer.container.clientWidth,
-                                (-ndcY + 1) / 2 * viewer.container.clientHeight,
-                                0
-                            );
-                        } else {
-                            // Orthographic fallback (Standard project)
-                            const pClone = p.clone();
-                            pClone.project(camera);
-                            pos = new THREE.Vector3(
-                                (pClone.x + 1) / 2 * viewer.container.clientWidth,
-                                (-pClone.y + 1) / 2 * viewer.container.clientHeight,
-                                0
-                            );
-                        }
+                        pos = new THREE.Vector3(
+                            (ndcX + 1) / 2 * viewer.container.clientWidth,
+                            (-ndcY + 1) / 2 * viewer.container.clientHeight,
+                            0
+                        );
+                    } else {
+                        // Orthographic fallback (Standard project)
+                        const pClone = p.clone();
+                        pClone.project(camera);
+                        pos = new THREE.Vector3(
+                            (pClone.x + 1) / 2 * viewer.container.clientWidth,
+                            (-pClone.y + 1) / 2 * viewer.container.clientHeight,
+                            0
+                        );
                     }
                 }
             }

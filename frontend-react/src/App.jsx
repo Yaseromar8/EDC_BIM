@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { Capacitor } from '@capacitor/core';
 import './App.css';
 import TopBar from './components/TopBar';
 import ViewsPanel from './components/ViewsPanel';
@@ -10,7 +9,6 @@ import SecondaryViewer from './components/SecondaryViewer';
 import ImportModelModal from './components/ImportModelModal';
 import DocumentPanel from './components/DocumentPanel';
 import AddDocumentModal from './components/AddDocumentModal';
-import MobileFloatingToolbar from './components/MobileFloatingToolbar';
 import LandingPage from './components/LandingPage'; // Import Landing Page
 import LoginScreen from './components/LoginScreen';
 import FilterConfiguratorModal from './components/FilterConfiguratorModal';
@@ -22,6 +20,8 @@ import DocPinPanel from './components/DocPinPanel';
 import TandemSidebar from './components/TandemSidebar';
 import TandemFilterPanel from './components/TandemFilterPanel';
 import PdfViewer from './components/PdfViewer';
+import ScheduleDetailedView from './components/ScheduleDetailedView';
+import { uploadFile } from './services/uploadService';
 
 
 
@@ -154,6 +154,25 @@ const ProgressIcon = () => (
     <line x1="18" y1="20" x2="18" y2="10"></line>
     <line x1="12" y1="20" x2="12" y2="4"></line>
     <line x1="6" y1="20" x2="6" y2="14"></line>
+  </svg>
+);
+
+const ScheduleIcon = () => (
+  <svg
+    className="rail-icon"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+    <line x1="16" y1="2" x2="16" y2="6"></line>
+    <line x1="8" y1="2" x2="8" y2="6"></line>
+    <line x1="3" y1="10" x2="21" y2="10"></line>
   </svg>
 );
 
@@ -503,6 +522,7 @@ function App() {
   const [spritePlacementActive, setSpritePlacementActive] = useState(false);
   const [activePanel, setActivePanel] = useState(null);
   const [panelVisible, setPanelVisible] = useState(false);
+  const [scheduleData, setScheduleData] = useState(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
   const [filterConfiguratorOpen, setFilterConfiguratorOpen] = useState(false);
@@ -525,7 +545,26 @@ function App() {
     docs: [],
     restricciones: []
   });
-  const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedProject, setSelectedProject] = useState(() => {
+    const saved = localStorage.getItem('visor_selectedProject');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.warn('Failed to parse saved project', e);
+      }
+    }
+    return null;
+  });
+
+  // 💾 Persistencia local: Guardar el proyecto cuando cambie
+  useEffect(() => {
+    if (selectedProject) {
+      localStorage.setItem('visor_selectedProject', JSON.stringify(selectedProject));
+    } else {
+      localStorage.removeItem('visor_selectedProject');
+    }
+  }, [selectedProject]);
 
   const [showSplash, setShowSplash] = useState(false);
   const [selectedPinId, setSelectedPinId] = useState(null);
@@ -623,7 +662,12 @@ function App() {
             loading: false
           }));
         } else {
-          const assistantMsg = { role: 'assistant', content: data.answer, results: data.results };
+          const assistantMsg = { 
+            role: 'assistant', 
+            content: data.answer, 
+            results: data.results,
+            agentSteps: data.agent_steps // Capture from backend
+          };
           setUniversalSearch(prev => ({
             ...prev,
             answer: data.answer,
@@ -695,9 +739,21 @@ function App() {
   // --- UI Helpers for Mobile Logic ---
   const togglePanel = useCallback((panelName) => {
     if (activePanel === panelName) {
+      const isClosing = panelVisible;
       setPanelVisible(!panelVisible);
+      // Reset tracking if we are toggling off the progress panel
+      if (isClosing && panelName === 'progress') {
+        setTrackingTab(null);
+        setTrackingPlacementMode(false);
+      }
     } else {
       setActivePanel(panelName);
+      // Reset tracking state when switching away from progress
+      if (activePanel === 'progress' || panelName !== 'progress') {
+        setTrackingTab(null);
+        setTrackingPlacementMode(false);
+      }
+      
       // Ocultar el panel lateral automáticamente si es Seguimiento (Progreso)
       // para que solo aparezcan los botones superiores
       if (panelName === 'progress') {
@@ -743,7 +799,8 @@ function App() {
     getToken();
   }, []);
 
-  const handleDocPinComplete = (position) => {
+  const handleDocPinComplete = async (position) => {
+    const urn = selectedProject?.id || 'global';
     const newPin = {
       id: 'doc-' + Date.now(),
       x: position.x,
@@ -756,6 +813,24 @@ function App() {
     };
     setDocPins(prev => [...prev, newPin]);
     setDocPlacementMode(false);
+
+    try {
+      await fetch(`${BACKEND_URL}/api/pins`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+           id: newPin.id,
+           type: 'doc',
+           x_coord: newPin.x,
+           y_coord: newPin.y,
+           z_coord: newPin.z,
+           projectId: urn,
+           name: position.objectName || 'Document Pin'
+        })
+      });
+    } catch (e) {
+      console.error("Failed to save doc pin", e);
+    }
     // Automatically select the new pin to add docs?
     // setSelectedDocPinId(newPin.id); // State not defined, removed to fix crash
     // Initialize with correct structure
@@ -1182,32 +1257,26 @@ function App() {
     }
   }, [selectedProject]);
 
-  const handleLocalUpload = useCallback(async (file, label) => {
+  const handleLocalUpload = useCallback(async (file, label, onProgress) => {
     if (!selectedProject) return alert("Error: No project context.");
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('label', label);
-    formData.append('project', selectedProject.id); // Add project context
-
     try {
-      // Show loading indicator?
-      const res = await fetch(`${BACKEND_URL}/api/config/project/upload`, {
-        method: 'POST',
-        body: formData
-      });
-      if (res.ok) {
-        const data = await res.json();
-        // data.config, data.model
-        if (data.config && data.config.models) {
-          setModels(data.config.models.map(m => ({ ...m, label: m.name })));
+      const url = `${BACKEND_URL}/api/config/project/upload`;
+      const data = await uploadFile(file, url, {
+        onProgress,
+        formData: {
+          label: label,
+          project: selectedProject.id
         }
-      } else {
-        alert("Upload failed. See console.");
+      });
+
+      if (data.config && data.config.models) {
+        setModels(data.config.models.map(m => ({ ...m, label: m.name })));
       }
     } catch (e) {
       console.error("Upload error:", e);
       alert("Error uploading file.");
+      throw e; // Rethrow to allow component to handle error state
     }
   }, [selectedProject]);
 
@@ -1366,7 +1435,9 @@ function App() {
           setTrackingData({
             avance: data.avance || [],
             fotos: data.fotos || [],
-            docs: data.docs || []
+            docs: data.docs || [],
+            rfis: data.rfis || [],
+            restricciones: data.restricciones || []
           });
         } else {
           console.error(`[App] Failed to fetch tracking data. Status: ${res.status}`);
@@ -1375,7 +1446,29 @@ function App() {
         console.error("Failed to load tracking data", e);
       }
     };
+
+    const fetchDocPins = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/pins?project=${urn}`);
+        if(res.ok) {
+            const data = await res.json();
+            const loadedDocs = data.filter(p => p.type === 'doc').map(p => ({
+               id: p.id,
+               x: p.x_coord,
+               y: p.y_coord,
+               z: p.z_coord,
+               objectName: p.name,
+               docs: p.attachment_url ? [{ url: p.attachment_url, name: 'Adjunto' }] : []
+            }));
+            setDocPins(loadedDocs);
+        }
+      } catch (e) {
+         console.error("Error fetching doc pins", e);
+      }
+    };
+
     fetchTracking();
+    fetchDocPins();
   }, [selectedProject]);
 
   // Save Tracking Data Helper
@@ -1392,19 +1485,24 @@ function App() {
     }
   };
 
+  const VALID_TRACKING_CATEGORIES = ['avance', 'fotos', 'docs', 'rfis', 'restricciones'];
+
   const handleTrackingPinCreate = (newPin) => {
-    if (!trackingTab) return; // Guard clause
+    // 🔒 Defensa estructural: Evita inyección de categorías no reconocidas
+    if (!trackingTab || !VALID_TRACKING_CATEGORIES.includes(trackingTab)) {
+      console.warn(`[Seguridad] Intento de creación de pin en pestaña no registrada: ${trackingTab}`);
+      return;
+    }
 
     let pinsToAdd = [newPin];
 
     if (trackingTab === 'avance') {
-      // Show detected partida in the prompt if available
       const partidaInfo = newPin.codigoPartida ? ` (Partida: ${newPin.codigoPartida})` : '';
       const val = prompt(`Ingrese el porcentaje de avance${partidaInfo} (ej: 50%):`, "0%");
-      if (val === null) return; // Cancelled
+      if (val === null) return; 
       pinsToAdd = [{ ...newPin, val, color: '#fbbf24' }];
     } else if (trackingTab === 'docs') {
-      pinsToAdd = [{ ...newPin, docs: [], color: '#8b5cf6' }]; // Purple or specific color for docs
+      pinsToAdd = [{ ...newPin, docs: [], color: '#8b5cf6' }]; 
     } else if (trackingTab === 'rfis') {
       const val = prompt("Asunto del RFI:", "Nuevo RFI");
       if (val === null) return;
@@ -1414,6 +1512,7 @@ function App() {
       if (val === null) return;
       pinsToAdd = [{ ...newPin, val, docs: [], color: '#f59e0b', type: 'restriction' }];
     }
+
 
     setTrackingData(prev => {
       const currentList = prev[trackingTab] || [];
@@ -1427,6 +1526,11 @@ function App() {
   };
 
   const handleTrackingPinDelete = async (type, id) => {
+    if (!VALID_TRACKING_CATEGORIES.includes(type)) {
+      console.warn(`[Seguridad] Operación DELETE abortada, categoría no válida: ${type}`);
+      return;
+    }
+
     // Optimistic Update
     setTrackingData(prev => {
       const currentList = prev[type] || [];
@@ -1451,8 +1555,10 @@ function App() {
 
   // Update a specific tracking pin (e.g., change codigoPartida, val/name, etc.)
   const handleTrackingPinUpdate = (type, pinId, updates) => {
+    if (!VALID_TRACKING_CATEGORIES.includes(type)) return;
+
     setTrackingData(prev => {
-      // Ensure we are operating on the correct category (avance/docs/fotos/restricciones)
+      // Ensure we are operating on the correct category (avance/docs/fotos/restricciones/rfis)
       const pins = prev[type] || [];
       const updatedPins = pins.map(pin =>
         String(pin.id) === String(pinId) ? { ...pin, ...updates } : pin
@@ -1488,7 +1594,7 @@ function App() {
       setSelectedProgressPin(pin);
       setProgressPanelOpen(true);
       setPanelDocked(false); // Start floating (PiP)
-    } else if (trackingTab === 'docs' || trackingTab === 'restricciones') {
+    } else if (trackingTab === 'docs' || trackingTab === 'restricciones' || trackingTab === 'rfis') {
       setSelectedDocPin(pin);
       setDocPinPanelOpen(true);
       setPanelDocked(false);
@@ -1556,30 +1662,59 @@ function App() {
     });
   };
 
-  // Attach multiple docs to a pin in one go
-  const handleAttachBatchDocsToPin = (pinId, newDocs) => {
+  const handleDeletePhotoFromPin = (pinId, photoId) => {
     setTrackingData(prev => {
-      const updatedDocs = (prev.docs || []).map(pin => {
-        if (pin.id === pinId) {
+      const updatedFotos = prev.fotos.map(pin => {
+        if (String(pin.id) === String(pinId)) {
+          return {
+            ...pin,
+            photos: (pin.photos || []).filter(p => String(p.id) !== String(photoId))
+          };
+        }
+        return pin;
+      });
+      const newState = { ...prev, fotos: updatedFotos };
+      saveTrackingData(newState); // Sincroniza al backend (el backend detectará el faltante y borrará de GCS)
+      return newState;
+    });
+
+    setSelectedAlbumPin(prev => {
+      if (prev && String(prev.id) === String(pinId)) {
+        return {
+          ...prev,
+          photos: (prev.photos || []).filter(p => String(p.id) !== String(photoId))
+        };
+      }
+      return prev;
+    });
+  };
+
+  // Attach multiple docs to a pin in one go
+  const handleAttachBatchDocsToPin = (pinId, newDocs, pinType = 'docs') => {
+    setTrackingData(prev => {
+      const targetArray = prev[pinType] || [];
+      const updatedList = targetArray.map(pin => {
+        if (String(pin.id) === String(pinId)) {
           return { ...pin, docs: [...(pin.docs || []), ...newDocs] };
         }
         return pin;
       });
-      const newState = { ...prev, docs: updatedDocs };
+      const newState = { ...prev, [pinType]: updatedList };
       saveTrackingData(newState);
       return newState;
     });
 
     setSelectedDocPin(prev => {
-      if (!prev || prev.id !== pinId) return prev;
+      if (!prev || String(prev.id) !== String(pinId)) return prev;
       return { ...prev, docs: [...(prev.docs || []), ...newDocs] };
     });
   };
 
   // Attach a doc (PDF) to a doc pin
-  const handleAttachDocToPin = (pinId, doc, isUpdate = false) => {
+  const handleAttachDocToPin = (pinId, doc, isUpdate = false, pinType = 'docs') => {
     setTrackingData(prev => {
-      const updatedDocs = (prev.docs || []).map(pin => {
+      const targetArray = prev[pinType] || [];
+      const updatedDocs = targetArray.map(pin => {
         if (pin.id === pinId) {
           let newDocs;
           if (isUpdate) {
@@ -1593,7 +1728,7 @@ function App() {
         }
         return pin;
       });
-      const newState = { ...prev, docs: updatedDocs };
+      const newState = { ...prev, [pinType]: updatedDocs };
       saveTrackingData(newState);
       return newState;
     });
@@ -1613,15 +1748,16 @@ function App() {
   };
 
   // Remove a doc from a doc pin
-  const handleRemoveDocFromPin = (pinId, docId) => {
+  const handleRemoveDocFromPin = (pinId, docId, pinType = 'docs') => {
     setTrackingData(prev => {
-      const updatedDocs = (prev.docs || []).map(pin => {
+      const targetArray = prev[pinType] || [];
+      const updatedDocs = targetArray.map(pin => {
         if (pin.id === pinId) {
           return { ...pin, docs: (pin.docs || []).filter(d => d.id !== docId) };
         }
         return pin;
       });
-      const newState = { ...prev, docs: updatedDocs };
+      const newState = { ...prev, [pinType]: updatedDocs };
       saveTrackingData(newState);
       return newState;
     });
@@ -2018,19 +2154,6 @@ function App() {
         {/* Navigation Rail */}
         {isRailExpanded && (
           <nav className="app-left-rail" aria-label="Primary tools">
-            {/* Close Rail Button (Mobile Only) */}
-            <button
-              className="rail-button mobile-only-close"
-              onClick={toggleRail}
-              style={{
-                height: '40px',
-                marginBottom: '10px',
-                display: window.innerWidth < 1024 ? 'flex' : 'none', // Simple inline check, better done via CSS class
-                color: '#888'
-              }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            </button>
 
             <button
               type="button"
@@ -2062,6 +2185,16 @@ function App() {
               <span className="rail-label" style={{ fontWeight: 700 }}>Seguimiento</span>
             </button>
 
+            <button
+              type="button"
+              className={`rail-button ${activePanel === 'schedule' && panelVisible ? 'active' : ''}`}
+              onClick={() => togglePanel('schedule')}
+              title="Cronograma"
+            >
+              <ScheduleIcon />
+              <span className="rail-label" style={{ fontWeight: 700 }}>Cronograma</span>
+            </button>
+
 
 
 
@@ -2070,32 +2203,6 @@ function App() {
 
         )}
 
-        {/* MOBILE FLOATING TOOLBAR */}
-        <MobileFloatingToolbar
-          items={[
-            {
-              id: 'files',
-              label: 'Archivos',
-              icon: <FolderIcon />,
-              active: activePanel === 'files' && panelVisible,
-              onClick: () => togglePanel('files')
-            },
-            {
-              id: 'filters',
-              label: 'Filtros',
-              icon: <FilterIcon />,
-              active: activePanel === 'filters' && panelVisible,
-              onClick: () => togglePanel('filters')
-            },
-            {
-              id: 'progress',
-              label: 'Seguimiento',
-              icon: <ProgressIcon />,
-              active: activePanel === 'progress' && panelVisible,
-              onClick: () => togglePanel('progress')
-            }
-          ]}
-        />
 
         <TandemSidebar
           activePanel={activePanel}
@@ -2143,6 +2250,9 @@ function App() {
           universalSearch={universalSearch}
           onOpenDocument={handleOpenDocByNodeId}
           onCloseUniversalSearch={() => setPanelVisible(false)}
+          BACKEND_URL={BACKEND_URL}
+          scheduleData={scheduleData}
+          setScheduleData={setScheduleData}
 
           // Tracking / BuildPanel Props
           trackingData={trackingData}
@@ -2320,11 +2430,8 @@ function App() {
           )}
           <div className="split-view-container">
             <div className="split-3d" style={{ position: 'relative' }}>
-              <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 9999, background: 'rgba(55, 65, 81, 0.4)', color: '#9ca3af', fontSize: '10px', padding: '3px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', pointerEvents: 'none', backdropFilter: 'blur(4px)' }}>
-                Sistema Actualizado v1.0.4
-              </div>
-              {/* 3D VIEWER - Keep mounted but hide in Build mode to preserve state */}
-              <div style={{ width: '100%', height: '100%', display: activePanel === 'build' ? 'none' : 'block' }}>
+              {/* 3D VIEWER - Hide when schedule or build is active */}
+              <div style={{ width: '100%', height: '100%', display: (activePanel === 'build' || activePanel === 'schedule') ? 'none' : 'block' }}>
                 <Viewer
                   accessToken={accessToken}
                   models={models}
@@ -2367,6 +2474,13 @@ function App() {
 
               </div>
 
+              {/* SCHEDULE DETAILED VIEW - Full width interaction */}
+              {activePanel === 'schedule' && (
+                <div style={{ width: '100%', height: '100%' }}>
+                  <ScheduleDetailedView scheduleData={scheduleData} initialTab="Activities" />
+                </div>
+              )}
+
             </div>
 
             {/* DEBUG: Log activeSheet render */}
@@ -2408,6 +2522,7 @@ function App() {
                       <label className="parallel-toggle" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#ccc', background: 'rgba(255,255,255,0.1)', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', userSelect: 'none' }}>
                         <span>En Paralelo</span>
                         <input
+                          className="tandem-checkbox"
                           type="checkbox"
                           checked={parallelMode}
                           onChange={(e) => setParallelMode(e.target.checked)}
@@ -2539,8 +2654,11 @@ function App() {
                   photos={selectedAlbumPin?.photos || []}
                   onAddPhoto={handleAddPhotoToPin}
                   onDelete={(id) => handleTrackingPinDelete('fotos', id)}
-                  onRename={(id, newTitle) => handleTrackingPinUpdate('fotos', id, { val: newTitle })}
-                  modelUrn="global"
+                  onDeletePhoto={handleDeletePhotoFromPin}
+                  onRename={(id, newTitle, extras) => handleTrackingPinUpdate('fotos', id, { val: newTitle, ...extras })}
+                  modelUrn={selectedProject?.id || 'global'}
+                  targetPath={selectedAlbumPin?.targetPath}
+                  projectPrefix={selectedProject?.name ? `proyectos/${selectedProject.name.replace(/ /g, '_')}/` : 'proyectos/'}
                 />
               </div>
             )}
@@ -2580,12 +2698,12 @@ function App() {
                   onClose={() => setDocPinPanelOpen(false)}
                   pin={selectedDocPin}
                   onDelete={(id) => handleTrackingPinDelete(trackingTab, id)}
-                  onAttachDoc={handleAttachDocToPin}
-                  onAttachBatchDocs={handleAttachBatchDocsToPin}
-                  onRemoveDoc={handleRemoveDocFromPin}
+                  onAttachDoc={(id, doc, isUp) => handleAttachDocToPin(id, doc, isUp, trackingTab)}
+                  onAttachBatchDocs={(id, docs) => handleAttachBatchDocsToPin(id, docs, trackingTab)}
+                  onRemoveDoc={(id, docId) => handleRemoveDocFromPin(id, docId, trackingTab)}
                   onRename={(id, newTitle) => handleTrackingPinUpdate(trackingTab, id, { val: newTitle })}
                   projectPrefix={selectedProject?.name ? `proyectos/${selectedProject.name.replace(/ /g, '_')}/` : 'proyectos/'}
-                  modelUrn="global"
+                  modelUrn={selectedProject?.id || 'global'}
                 />
               </div>
             )}

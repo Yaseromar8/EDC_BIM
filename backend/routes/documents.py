@@ -6,6 +6,8 @@ from werkzeug.utils import secure_filename
 from gcs_manager import generate_signed_url, upload_file_to_gcs
 
 documents_bp = Blueprint('documents', __name__)
+print("[DEBUG] documents_bp loaded from routes/documents.py")
+
 
 # ─── Tipos MIME → Content-Disposition hint ───────────────────────────────────
 INLINE_MIMES = {'application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'}
@@ -178,6 +180,49 @@ def list_documents():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@documents_bp.route('/api/docs/versions', methods=['GET'])
+def get_versions():
+    """
+    Obtiene el historial de versiones de un archivo específico.
+    Requiere id (node_id) y model_urn.
+    """
+    file_id = request.args.get('id')
+    model_urn = request.args.get('model_urn', 'global')
+    
+    if not file_id:
+        return jsonify({"success": False, "error": "ID de archivo no proporcionado"}), 400
+        
+    try:
+        from file_system_db import get_file_versions
+        versions = get_file_versions(model_urn, file_id)
+        return jsonify({"success": True, "versions": versions}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@documents_bp.route('/api/docs/versions/promote', methods=['POST'])
+def promote_document_version():
+    """Promociona una versión antigua a la actual (Crea una nueva versión con el mismo URN)."""
+    data = request.get_json()
+    node_id = data.get('id')
+    version_id = data.get('version_id')
+    model_urn = data.get('model_urn', 'global')
+    performed_by = data.get('user')
+    
+    if not node_id or not version_id:
+        return jsonify({"success": False, "error": "Faltan IDs"}), 400
+        
+    try:
+        from file_system_db import promote_version
+        success = promote_version(model_urn, node_id, version_id, performed_by=performed_by)
+        if success:
+            return jsonify({"success": True}), 200
+        return jsonify({"success": False, "error": "No se pudo promocionar la versión"}), 500
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @documents_bp.route('/api/docs/folder', methods=['POST'])
 def create_folder():
     """Crea una carpeta virtual en base de datos PostgreSQL."""
@@ -192,7 +237,7 @@ def create_folder():
     try:
         from file_system_db import resolve_path_to_node_id
         from db import log_activity
-        resolve_path_to_node_id(folder_path, model_urn)
+        resolve_path_to_node_id(folder_path, model_urn, created_by=performed_by)
         log_activity(model_urn, 'create_folder', 'folder',
                      entity_name=folder_path, performed_by=performed_by)
         return jsonify({"success": True, "message": f"Folder '{folder_path}' created"}), 201
@@ -206,16 +251,22 @@ def upload_document():
     Sube a GCS con nombre ofuscado y guarda metadatos en file_nodes.
     Valida: tipo MIME, extension, tamanio maximo permitido.
     """
+    print(f"[Upload] Request received at /api/docs/upload")
     if 'file' not in request.files:
+        print("[Upload] Error: No file part in request.files")
         return jsonify({"success": False, "error": "No file part in request"}), 400
 
     file = request.files['file']
+    print(f"[Upload] File received: {file.filename} (content_type: {file.content_type})")
+    
     if not file or file.filename == '':
+        print("[Upload] Error: No selected file")
         return jsonify({"success": False, "error": "No selected file"}), 400
 
     folder_path = request.form.get('path', '')
     model_urn = request.form.get('model_urn', 'global')
     performed_by = request.form.get('user', None)
+    print(f"[Upload] Meta: path='{folder_path}', model_urn='{model_urn}', user='{performed_by}'")
 
     if folder_path and not folder_path.endswith('/'):
         folder_path += '/'
@@ -239,22 +290,26 @@ def upload_document():
         from db import log_activity
 
         # ── 2. Resolver path logico en BD ─────────────────────────────────────
-        parent_id = resolve_path_to_node_id(folder_path, model_urn)
+        parent_id = resolve_path_to_node_id(folder_path, model_urn, created_by=performed_by)
 
         # ── 3. Generar nombre ofuscado en GCS (nunca el nombre real del archivo) ─
         # Formato: multi-tenant/{project_id}/{timestamp}_{uuid8}_{filename}
         gcs_uuid = f"multi-tenant/{model_urn}/{int(time.time())}_{uuid.uuid4().hex[:8]}_{filename}"
 
         # ── 4. Subir blob fisico a GCS ────────────────────────────────────────
+        print(f"[Upload] Attempting GCS upload to: {gcs_uuid}")
         gcs_url = upload_file_to_gcs(file, gcs_uuid)
         if not gcs_url:
+            print("[Upload] Error: GCS upload failed (upload_file_to_gcs returned None)")
             return jsonify({"success": False, "error": "GCS upload failed"}), 500
 
+        print(f"[Upload] GCS upload success: {gcs_url}")
         # ── 5. Registrar en PostgreSQL con metadatos completos ────────────────
         create_file_record(
             model_urn, parent_id, filename,
             file_info['size_bytes'], gcs_uuid,
-            mime_type=file_info.get('mime_type')
+            mime_type=file_info.get('mime_type'),
+            created_by=performed_by
         )
 
         # ── 6. Auditoria ─────────────────────────────────────────────────────
@@ -285,6 +340,21 @@ def upload_document():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@documents_bp.route('/api/docs/dev/wipe', methods=['POST'])
+def dev_wipe_ecd():
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('TRUNCATE TABLE file_nodes CASCADE;')
+            cursor.execute('TRUNCATE TABLE activity_log CASCADE;')
+            conn.commit()
+        return jsonify({"success": True, "message": "ECD Wiped"})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @documents_bp.route('/api/docs/delete', methods=['DELETE'])
 def delete_document():
     """Soft-delete recursivo en BD (carpetas borran todos sus hijos)."""
@@ -309,15 +379,38 @@ def delete_document():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@documents_bp.route('/api/docs/rename', methods=['PUT'])
+@documents_bp.route('/api/docs/rename', methods=['POST', 'PUT'])
 def rename_document():
-    """Renombra un archivo o carpeta en PostgreSQL."""
+    """Renombra un archivo o carpeta. Soporta ID-based (POST) y Path-based (PUT)."""
     data = request.get_json()
-    if not data or 'fullName' not in data or 'newName' not in data:
+    if not data:
+        return jsonify({"success": False, "error": "No data provided"}), 400
+
+    # CASE A: ID-based (POST) - New way for inline editing
+    if request.method == 'POST':
+        node_id = data.get('node_id')
+        new_name = data.get('new_name')
+        if not node_id or not new_name:
+            return jsonify({"success": False, "error": "node_id and new_name are required"}), 400
+        try:
+            from file_system_db import rename_node
+            # Cast to int if possible
+            try:
+                node_id = int(node_id)
+            except: pass
+            rename_node(node_id, new_name)
+            return jsonify({"success": True}), 200
+        except Exception as e:
+            print(f"[RENAME POST] Error: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    # CASE B: Path-based (PUT) - Legacy way for onRowMenu
+    node_path = data.get('fullName')
+    new_name_raw = data.get('newName')
+    if not node_path or not new_name_raw:
         return jsonify({"success": False, "error": "Requires fullName and newName"}), 400
 
-    node_path = data['fullName']
-    new_name = secure_filename(data['newName'])
+    new_name = secure_filename(new_name_raw)
     model_urn = data.get('model_urn', 'global')
     performed_by = data.get('user', None)
 
@@ -328,19 +421,16 @@ def rename_document():
         from file_system_db import resolve_path_to_node_id
         from db import get_db_connection, log_activity
 
-        # Descomponer el path para encontrar el nombre actual y el parent_id real
         parts = [p for p in node_path.strip('/').split('/') if p]
         if not parts:
             return jsonify({"success": False, "error": "Invalid path"}), 400
             
         old_name = parts[-1]
         parent_path = '/'.join(parts[:-1])
-        parent_id = resolve_path_to_node_id(parent_path, model_urn) if parent_path else None
+        parent_id = resolve_path_to_node_id(parent_path, model_urn, created_by=performed_by) if parent_path else None
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            
-            # Buscamos el nodo específico que cuelga del mismo padre
             if parent_id:
                 cursor.execute("""
                     UPDATE file_nodes SET name = %s, updated_at = CURRENT_TIMESTAMP
@@ -353,7 +443,6 @@ def rename_document():
                     WHERE model_urn = %s AND name = %s AND parent_id IS NULL AND is_deleted = FALSE
                     RETURNING id
                 """, (new_name, model_urn, old_name))
-                
             updated = cursor.fetchone()
             conn.commit()
 
@@ -367,6 +456,7 @@ def rename_document():
         return jsonify({"success": False, "error": "Item not found in specified location"}), 404
 
     except Exception as e:
+        print(f"[RENAME PUT] Error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -397,7 +487,7 @@ def move_document():
 
         # 2. Resolver el ID del nodo destino (donde va a vivir)
         # resolve_path_to_node_id creará la ruta si no existe
-        new_parent_id = resolve_path_to_node_id(dest_path, model_urn) if dest_path else None
+        new_parent_id = resolve_path_to_node_id(dest_path, model_urn, created_by=performed_by) if dest_path else None
         
         # 3. Evitar mover dentro de sí mismo
         if target_node_id == new_parent_id:
@@ -433,39 +523,6 @@ def move_document():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@documents_bp.route('/api/docs/versions', methods=['GET'])
-def get_file_versions():
-    """Obtiene el historial de versiones consultando el log de actividad."""
-    path = request.args.get('path')
-    model_urn = request.args.get('model_urn', 'global')
-    
-    if not path:
-        return jsonify({"success": False, "error": "Path required"}), 400
-        
-    try:
-        from db import get_db_connection
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT performed_by, details, created_at
-                FROM activity_log
-                WHERE model_urn = %s AND entity_name = %s AND action = 'upload'
-                ORDER BY created_at DESC
-            """, (model_urn, path))
-            rows = cursor.fetchall()
-            
-            versions = []
-            total = len(rows)
-            for i, r in enumerate(rows):
-                versions.append({
-                    "version": f"V{total - i}",
-                    "performed_by": r[0] or "Sistema",
-                    "details": r[1] or {},
-                    "created_at": r[2].isoformat() if r[2] else None
-                })
-        return jsonify({"success": True, "data": versions}), 200
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @documents_bp.route('/api/activity', methods=['GET'])
@@ -663,12 +720,13 @@ def finalize_upload():
         from file_system_db import resolve_path_to_node_id, create_file_record
         from db import log_activity
 
-        parent_id = resolve_path_to_node_id(folder_path, model_urn)
+        parent_id = resolve_path_to_node_id(folder_path, model_urn, created_by=performed_by)
         
         create_file_record(
             model_urn, parent_id, filename,
             size_bytes, gcs_urn,
-            mime_type=data.get('contentType')
+            mime_type=data.get('contentType'),
+            created_by=performed_by
         )
 
         log_activity(
@@ -679,5 +737,139 @@ def finalize_upload():
         )
 
         return jsonify({"success": True, "message": "File registered"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+@documents_bp.route('/api/docs/description', methods=['POST', 'PUT'])
+def update_node_description_route():
+    """Actualiza la descripción de un archivo o carpeta en PostgreSQL."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "error": "No data provided"}), 400
+
+    # Soporta 'id' (legacy/PUT) o 'node_id' (new/POST)
+    node_id = data.get('node_id') or data.get('id')
+    description = data.get('description')
+    model_urn = data.get('model_urn', 'global')
+    performed_by = data.get('user', None)
+
+    if not node_id:
+        return jsonify({"success": False, "error": "node_id or id is required"}), 400
+
+    try:
+        from db import get_db_connection, log_activity
+        # Cast to int if possible
+        try:
+            node_id = int(node_id)
+        except: pass
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE file_nodes 
+                SET description = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s AND model_urn = %s AND is_deleted = FALSE
+                RETURNING name
+            """, (description, node_id, model_urn))
+            row = cursor.fetchone()
+            conn.commit()
+
+        if row:
+            log_activity(model_urn, 'update_description', 'file_or_folder',
+                         entity_id=str(node_id),
+                         entity_name=row[0],
+                         performed_by=performed_by,
+                         details={'description': description})
+            return jsonify({"success": True, "message": "Description updated"}), 200
+
+        return jsonify({"success": False, "error": "Item not found"}), 404
+
+    except Exception as e:
+        print(f"[DESCRIPTION UPDATE] Error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@documents_bp.route('/api/docs/search', methods=['POST'])
+def search_docs():
+    """Búsqueda global por nombre o descripción."""
+    data = request.get_json()
+    model_urn = str(data.get('model_urn', 'global'))
+    query = data.get('query', '')
+    
+    if not query:
+        return jsonify([])
+        
+    try:
+        from file_system_db import search_nodes
+        results = search_nodes(model_urn, query)
+        return jsonify(results)
+    except Exception as e:
+        print(f"[SEARCH ERROR] {e}")
+        return jsonify({"error": str(e)}), 500
+
+@documents_bp.route('/api/docs/deleted', methods=['GET'])
+def get_deleted_docs():
+    """Lista todos los elementos en la papelera del proyecto."""
+    model_urn = request.args.get('model_urn', 'global')
+    try:
+        from file_system_db import list_deleted_contents
+        results = list_deleted_contents(model_urn)
+        folders = [r for r in results if r.get('node_type') == 'FOLDER']
+        files = [r for r in results if r.get('node_type') == 'FILE']
+        return jsonify({"success": True, "data": {"folders": folders, "files": files}}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@documents_bp.route('/api/docs/restore', methods=['POST'])
+def restore_doc():
+    """Restaura un elemento de la papelera."""
+    data = request.get_json()
+    node_id = data.get('id')
+    model_urn = data.get('model_urn', 'global')
+    performed_by = data.get('user')
+
+    if not node_id:
+        return jsonify({"success": False, "error": "Missing ID"}), 400
+
+    try:
+        from file_system_db import restore_node
+        from db import log_activity
+        success = restore_node(model_urn, node_id)
+        if success:
+            log_activity(model_urn, 'restore', 'file_or_folder', 
+                         entity_id=node_id, performed_by=performed_by)
+            return jsonify({"success": True, "message": "Elemento restaurado"}), 200
+        return jsonify({"success": False, "error": "No se pudo restaurar"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@documents_bp.route('/api/docs/permanent-delete', methods=['DELETE'])
+def permanent_delete_doc():
+    """Borra físicamente de GCS y de la BD."""
+    data = request.get_json()
+    node_id = data.get('id')
+    model_urn = data.get('model_urn', 'global')
+    performed_by = data.get('user')
+
+    if not node_id:
+        return jsonify({"success": False, "error": "Missing ID"}), 400
+
+    try:
+        from file_system_db import permanent_delete_node_internal
+        from db import log_activity
+        # Necesitamos el nombre antes de borrarlo para el log
+        from db import get_db_connection
+        name = "Unknown"
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM file_nodes WHERE id = %s", (node_id,))
+            row = cursor.fetchone()
+            if row: name = row[0]
+
+        success = permanent_delete_node_internal(model_urn, node_id)
+        if success:
+            log_activity(model_urn, 'permanent_delete', 'file_or_folder', 
+                         entity_id=node_id, entity_name=name, performed_by=performed_by)
+            return jsonify({"success": True, "message": "Elemento eliminado permanentemente"}), 200
+        return jsonify({"success": False, "error": "No se pudo eliminar"}), 404
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

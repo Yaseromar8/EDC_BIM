@@ -63,10 +63,12 @@ def ensure_tracking_pins_table():
                 CREATE TABLE IF NOT EXISTS photo_evidences (
                     id SERIAL PRIMARY KEY,
                     pin_id TEXT, gcs_url TEXT, filename TEXT, uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    model_urn VARCHAR(255) DEFAULT 'global'
+                    model_urn VARCHAR(255) DEFAULT 'global',
+                    gcs_urn TEXT
                 )
             ''')
             cursor.execute("ALTER TABLE photo_evidences ADD COLUMN IF NOT EXISTS model_urn VARCHAR(255) DEFAULT 'global'")
+            cursor.execute("ALTER TABLE photo_evidences ADD COLUMN IF NOT EXISTS gcs_urn TEXT")
  
             # 3. Tabla de Partes Diarios (PRO EXECUTION)
             cursor.execute('''
@@ -97,7 +99,7 @@ except Exception:
 
 def get_tracking_data(model_urn='global'):
     """Construye el JSON de tracking desde la base de datos PostgreSQL"""
-    data = {"avance": [], "fotos": [], "docs": [], "detalles": {}}
+    data = {"avance": [], "fotos": [], "docs": [], "rfis": [], "restricciones": [], "detalles": {}}
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -131,16 +133,22 @@ def get_tracking_data(model_urn='global'):
                 })
                 
             # --- 3. Cargar Evidencias (Fotos legacy) ---
-            cursor.execute("SELECT pin_id, gcs_url, filename, uploaded_at FROM photo_evidences WHERE model_urn = %s", (model_urn,))
+            cursor.execute("SELECT pin_id, gcs_url, filename, uploaded_at, gcs_urn FROM photo_evidences WHERE model_urn = %s", (model_urn,))
             fotos_dict = {}
             for row in cursor.fetchall():
                 pin_id = str(row[0])
                 if pin_id not in fotos_dict:
                     fotos_dict[pin_id] = {"pinId": pin_id, "photos": []}
+                
+                # Use proxy URL if possible
+                urn = row[4] or (row[1].split('?')[0].split('.com/')[1] if '?' in row[1] else None)
+                final_url = f"/api/docs/proxy?urn={urn}" if urn else row[1]
+                
                 fotos_dict[pin_id]["photos"].append({
-                    "url": row[1],
+                    "url": final_url,
                     "name": row[2],
-                    "date": row[3].isoformat() if row[3] else None
+                    "date": row[3].isoformat() if row[3] else None,
+                    "gcs_urn": urn
                 })
             
             # --- 4. Cargar PINS de tracking (3D coordinates) ---
@@ -157,39 +165,21 @@ def get_tracking_data(model_urn='global'):
                 }
                 extra = row[7] or {}
                 
-                # REFRESH DOCS (Signed URLs for GCS)
+                # REFRESH DOCS (Use Permanent Proxy URLs)
                 if "docs" in extra and isinstance(extra["docs"], list):
                     for doc in extra["docs"]:
                         if "fullPath" in doc:
-                            fresh_url = generate_signed_url(doc["fullPath"])
-                            if fresh_url:
-                                doc["url"] = fresh_url
-                        elif "url" in doc:
-                            # Fallback: attempt refresh if bucket is in URL
-                            bucket_name = os.environ.get("GCS_BUCKET_NAME")
-                            if bucket_name and bucket_name in doc["url"]:
-                                try:
-                                    url_path = doc["url"].split(bucket_name + "/")[1].split("?")[0]
-                                    fresh = generate_signed_url(url_path)
-                                    if fresh: doc["url"] = fresh
-                                except Exception: pass
+                            doc["url"] = f"/api/docs/proxy?urn={doc['fullPath']}"
+                        elif "gcs_urn" in doc:
+                            doc["url"] = f"/api/docs/proxy?urn={doc['gcs_urn']}"
                 
                 # REFRESH PHOTOS
                 if "photos" in extra and isinstance(extra["photos"], list):
                     for photo in extra["photos"]:
-                        # Refresh by path if available
                         if "fullPath" in photo:
-                            fresh = generate_signed_url(photo["fullPath"])
-                            if fresh: photo["url"] = fresh
-                        # Fallback: recover from URL
-                        elif "url" in photo:
-                             bucket_name = os.environ.get("GCS_BUCKET_NAME")
-                             if bucket_name and bucket_name in photo["url"]:
-                                try:
-                                    url_path = photo["url"].split(bucket_name + "/")[1].split("?")[0]
-                                    fresh = generate_signed_url(url_path)
-                                    if fresh: photo["url"] = fresh
-                                except Exception: pass
+                            photo["url"] = f"/api/docs/proxy?urn={photo['fullPath']}"
+                        elif "gcs_urn" in photo:
+                             photo["url"] = f"/api/docs/proxy?urn={photo['gcs_urn']}"
                 
                 pin.update(extra)  # Merge any extra JSONB data (dbId, codigoPartida, docs, photos, etc.)
                 
@@ -219,6 +209,10 @@ def get_tracking_data(model_urn='global'):
                     data["fotos"].append(pin)
                 elif pin_type == 'docs':
                     data["docs"].append(pin)
+                elif pin_type == 'rfis':
+                    data["rfis"].append(pin)
+                elif pin_type == 'restricciones':
+                    data["restricciones"].append(pin)
             
             # Add remaining legacy fotos that don't have a tracking_pin entry
             for pin_id, pin_group in fotos_dict.items():
@@ -254,12 +248,39 @@ def update_tracking():
         if not new_data:
             return jsonify({"error": "No data provided"}), 400
         
+        # --- GARBAGE COLLECTION: Detect orphaned photos before overwriting ---
+        try:
+            old_data = get_tracking_data(model_urn)
+            old_photos = set()
+            for p in old_data.get("fotos", []):
+                for ph in p.get("photos", []):
+                    if ph.get("fullPath"): old_photos.add(ph["fullPath"])
+                    
+            new_photos = set()
+            for p in new_data.get("fotos", []):
+                for ph in p.get("photos", []):
+                    if ph.get("fullPath"): new_photos.add(ph["fullPath"])
+                    
+            orphans = old_photos - new_photos
+            if orphans:
+                from file_system_db import soft_delete_node
+                from db import log_activity
+                print(f"[Garbage Collector] Purgando {len(orphans)} fotos huérfanas de GCS/ECD: {orphans}")
+                for orphan_path in orphans:
+                    # Avoid deleting if it's external or a local placeholder
+                    if orphan_path and "Subiendo" not in orphan_path and not orphan_path.startswith("http"):
+                        soft_delete_node(model_urn, orphan_path)
+                        log_activity(model_urn, 'delete_orphan_photo', 'file', entity_name=orphan_path, performed_by='TrackingSync')
+        except Exception as gc_err:
+            print(f"[Garbage Collector] Error: {gc_err}")
+
         with get_db_connection() as conn:
             cursor = conn.cursor()
             
             # 1. Sincronizar 'avance' (tabla original Excel)
             if 'avance' in new_data:
                 cursor.execute("DELETE FROM tracking_progress WHERE model_urn = %s", (model_urn,))
+                cursor.execute("DELETE FROM tracking_pins WHERE pin_type = 'avance' AND model_urn = %s", (model_urn,))
                 # Separate Excel-imported avance (no x,y,z) from 3D pin avance (has x,y,z)
                 for item in new_data['avance']:
                     if item.get('x') is not None:
@@ -313,6 +334,18 @@ def update_tracking():
                 cursor.execute("DELETE FROM tracking_pins WHERE pin_type = 'docs' AND model_urn = %s", (model_urn,))
                 for pin_item in new_data['docs']:
                     _upsert_pin(cursor, pin_item, 'docs', model_urn)
+
+            # 5. Sincronizar 'rfis'
+            if 'rfis' in new_data:
+                cursor.execute("DELETE FROM tracking_pins WHERE pin_type = 'rfis' AND model_urn = %s", (model_urn,))
+                for pin_item in new_data['rfis']:
+                    _upsert_pin(cursor, pin_item, 'rfis', model_urn)
+
+            # 6. Sincronizar 'restricciones'
+            if 'restricciones' in new_data:
+                cursor.execute("DELETE FROM tracking_pins WHERE pin_type = 'restricciones' AND model_urn = %s", (model_urn,))
+                for pin_item in new_data['restricciones']:
+                    _upsert_pin(cursor, pin_item, 'restricciones', model_urn)
                         
             conn.commit()
             
@@ -379,9 +412,9 @@ def add_photo_to_pin():
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO photo_evidences (pin_id, gcs_url, filename, model_urn)
-                VALUES (%s, %s, %s, %s)
-            ''', (pin_id, gcs_url, filename, model_urn))
+                INSERT INTO photo_evidences (pin_id, gcs_url, filename, model_urn, gcs_urn)
+                VALUES (%s, %s, %s, %s, %s)
+            ''', (pin_id, gcs_url, filename, model_urn, gcs_uuid))
             conn.commit()
             
         # Devolver data sincronizada

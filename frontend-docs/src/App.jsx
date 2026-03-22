@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { FixedSizeList as List } from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
 import { Capacitor } from '@capacitor/core';
+import MatrixTable from './MatrixTable';
 
 const API = Capacitor.isNativePlatform()
   ? 'https://visor-ecd-backend.onrender.com'
@@ -766,7 +769,7 @@ function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSel
 // ─────────────────────────────────────
 // 3.5 RECURSIVE FOLDER NODE
 // ─────────────────────────────────────
-function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1, defaultExpanded = false, onCreateSubfolder, isAdmin, onTreeRefresh, onGlobalRefresh, refreshSignal = 0, onInitiateMove }) {
+function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1, defaultExpanded = false, onCreateSubfolder, isAdmin, onTreeRefresh, onGlobalRefresh, refreshSignal = 0, onInitiateMove, collapseSignal = 0, onReset }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [children, setChildren] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -860,6 +863,12 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
     }
   }, [defaultExpanded]);
 
+  useEffect(() => {
+    if (collapseSignal > 0 && level > 0) {
+      setExpanded(false);
+    }
+  }, [collapseSignal, level]);
+
   // Sincronizar recarga desde el exterior
   useEffect(() => {
     if (expanded && refreshSignal > 0) {
@@ -907,7 +916,10 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
       <div
         className={`folder-tree-item ${isActive ? 'active' : ''} ${isChildrenActive ? 'child-active' : ''}`}
         style={{ paddingLeft: `${8 + (level * 28)}px`, color: isActive ? '#0696D7' : '#3c3c3c' }}
-        onClick={() => onNavigate(folder.fullName)}
+        onClick={() => {
+          onNavigate(folder.fullName);
+          if (level === 0 && onReset) onReset();
+        }}
       >
         <div className="tree-toggle" onClick={handleToggle} style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (children && children.length === 0 && expanded) ? 0 : 1 }}>
           {loading ? (
@@ -927,9 +939,18 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
 
         {isRenaming ? (
           <div className="inline-edit-box" onClick={e => e.stopPropagation()}>
-            <input autoFocus value={renameValue} onChange={e => setRenameValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') setIsRenaming(false); }} />
-            <button onClick={(e) => { e.stopPropagation(); setIsRenaming(false); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
-            <button onClick={(e) => { e.stopPropagation(); submitRename(); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"></path></svg></button>
+            <input 
+              autoFocus 
+              value={renameValue} 
+              onChange={e => setRenameValue(e.target.value)} 
+              onBlur={() => submitRename()}
+              onKeyDown={e => { 
+                if (e.key === 'Enter') submitRename(); 
+                if (e.key === 'Escape') setIsRenaming(false); 
+              }} 
+            />
+            <button onMouseDown={(e) => { e.preventDefault(); setIsRenaming(false); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
+            <button onMouseDown={(e) => { e.preventDefault(); submitRename(); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"></path></svg></button>
           </div>
         ) : (
           <div className="tree-name" style={{ fontWeight: 400, flex: 1, whiteSpace: 'nowrap', fontSize: 14, paddingRight: 8 }} title={folder.name.replace(/\/$/, '')}>
@@ -949,8 +970,8 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
             }}
             title="Opciones de carpeta"
           >
-            <svg height="24" width="24" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M13.5,6A1.5,1.5,0,1,1,12,4.5,1.5,1.5,0,0,1,13.5,6ZM12,10.5A1.5,1.5,0,1,0,13.5,12,1.5,1.5,0,0,0,12,10.5Zm0,6A1.5,1.5,0,1,0,13.5,18,1.5,1.5,0,0,0,12,16.5Z"></path>
+            <svg height="20" width="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path>
             </svg>
           </button>
         )}
@@ -987,6 +1008,8 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
               onGlobalRefresh={(newP) => { if (onGlobalRefresh) onGlobalRefresh(newP || currentPath) }}
               refreshSignal={refreshSignal}
               onInitiateMove={onInitiateMove}
+              collapseSignal={collapseSignal}
+              onReset={onReset}
             />
           ))}
           {isCreatingChild && (
@@ -996,9 +1019,22 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
                 <svg fill="currentColor" viewBox="0 0 24 24" width="24" height="24"><path d="M18,20.45H6a3.6,3.6,0,0,1-3.6-3.6V7.15A3.6,3.6,0,0,1,6,3.55h4.84a.71.71,0,0,1,.53.22l2.12,2.1H18a3.61,3.61,0,0,1,3.6,3.61v7.37A3.6,3.6,0,0,1,18,20.45ZM3.89,9.48v7.37A2.1,2.1,0,0,0,6,19H18a2.1,2.1,0,0,0,2.1-2.1V9.48A2.1,2.1,0,0,0,18,7.37H13.17a.75.75,0,0,1-.53-.22l-2.12-2.1H6a2.1,2.1,0,0,0-2.1,2.1Z"></path></svg>
               </div>
               <div className="inline-edit-box" onClick={e => e.stopPropagation()}>
-                <input autoFocus value={newChildName} onChange={e => setNewChildName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitCreateChild(); if (e.key === 'Escape') setIsCreatingChild(false); }} placeholder="Carpeta nueva" />
-                <button onClick={(e) => { e.stopPropagation(); setIsCreatingChild(false); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
-                <button onClick={(e) => { e.stopPropagation(); submitCreateChild(); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"></path></svg></button>
+                <input 
+                  autoFocus 
+                  value={newChildName} 
+                  onChange={e => setNewChildName(e.target.value)} 
+                  onBlur={() => {
+                    if (newChildName.trim()) submitCreateChild();
+                    else setIsCreatingChild(false);
+                  }}
+                  onKeyDown={e => { 
+                    if (e.key === 'Enter') submitCreateChild(); 
+                    if (e.key === 'Escape') setIsCreatingChild(false); 
+                  }} 
+                  placeholder="Carpeta nueva" 
+                />
+                <button onMouseDown={(e) => { e.preventDefault(); setIsCreatingChild(false); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
+                <button onMouseDown={(e) => { e.preventDefault(); submitCreateChild(); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"></path></svg></button>
               </div>
             </div>
           )}
@@ -1009,11 +1045,13 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
 }
 
 // ─────────────────────────────────────
-// 4. FILES PAGE (Dentro del Proyecto)
+// 3. TABLE COMPONENTS (Virtualized)
 // ─────────────────────────────────────
+
 function FilesPage({ project, user, onBack }) {
   const projectPrefix = `proyectos/${project.name.replace(/ /g, '_')}/`;
   const [currentPath, setCurrentPath] = useState(projectPrefix);
+  const [isTrashMode, setIsTrashMode] = useState(false);
   const [folders, setFolders] = useState([]);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1023,143 +1061,389 @@ function FilesPage({ project, user, onBack }) {
   const [uploading, setUploading] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [sidebarFolders, setSidebarFolders] = useState([]);
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [activeFile, setActiveFile] = useState(null);
   const [showVersions, setShowVersions] = useState(false);
-  const [viewedVersionInfo, setViewedVersionInfo] = useState(null); // { version, urn }
+  const [viewedVersionInfo, setViewedVersionInfo] = useState(null);
   const [versionHistory, setVersionHistory] = useState([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ total: 0, current: 0 });
 
-  // Move Modal State
+  const [showSopToast, setShowSopToast] = useState(false);
+  const [sopHasReappeared, setSopHasReappeared] = useState(false);
+  const [sopCompletionTime, setSopCompletionTime] = useState('');
+  const [sopQueue, setSopQueue] = useState([]); // [{id, file, status, progress, time, batchId}]
+  const [sopBatches, setSopBatches] = useState([]); // [{id, timestamp}]
+  const [sopMinimized, setSopMinimized] = useState(false);
+  const [uploadSopStep, setUploadSopStep] = useState('IDLE');
+  const [collapseSignal, setCollapseSignal] = useState(0);
+  const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [moveState, setMoveState] = useState({ step: 0, items: [], destPath: '' });
-
   const fileRef = useRef(null);
-
+  const [activeRowMenu, setActiveRowMenu] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedVersions, setSelectedVersions] = useState(new Set());
+  const [versionRowMenu, setVersionRowMenu] = useState(null);
   const isAdmin = user.role === 'admin';
 
-  const fetchContents = useCallback(async (path, silent = false) => {
-    if (!silent) setLoading(true);
+  const formatSize = (bytes) => {
+    if (!bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  const getInitials = (name) => {
+    if (!name) return '??';
+    const parts = name.split(' ');
+    if (parts.length >= 2) return (parts[0][0] + (parts[1][0] || '')).toUpperCase();
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  // --- SIDEBARS WIDTH STATE ---
+  const [globalSidebarWidth, setGlobalSidebarWidth] = useState(240);
+  const [treeSidebarWidth, setTreeSidebarWidth] = useState(300);
+  const isResizingGlobal = useRef(false);
+  const isResizingTree = useRef(false);
+
+  const startGlobalResize = (e) => { isResizingGlobal.current = true; document.addEventListener('mousemove', handleGlobalResize); document.addEventListener('mouseup', stopGlobalResize); document.body.style.cursor = 'col-resize'; };
+  const handleGlobalResize = (e) => { if (!isResizingGlobal.current) return; setGlobalSidebarWidth(Math.max(160, Math.min(400, e.clientX))); };
+  const stopGlobalResize = () => { isResizingGlobal.current = false; document.removeEventListener('mousemove', handleGlobalResize); document.removeEventListener('mouseup', stopGlobalResize); document.body.style.cursor = 'default'; };
+
+  const startTreeResize = (e) => { isResizingTree.current = true; document.addEventListener('mousemove', handleTreeResize); document.addEventListener('mouseup', stopTreeResize); document.body.style.cursor = 'col-resize'; };
+  const handleTreeResize = (e) => { if (!isResizingTree.current) return; setTreeSidebarWidth(Math.max(200, Math.min(600, e.clientX - globalSidebarWidth))); };
+  const stopTreeResize = () => { isResizingTree.current = false; document.removeEventListener('mousemove', handleTreeResize); document.removeEventListener('mouseup', stopTreeResize); document.body.style.cursor = 'default'; };
+
+  const [columnWidths, setColumnWidths] = useState({
+    checkbox: 40, name: 400, description: 150, version: 80, indicators: 150, markup: 100, issues: 80, size: 100, updated: 180, user: 150, status: 120, action: 60
+  });
+
+  const [tableShowVersions, setTableShowVersions] = useState(false);
+  const [versionPanelWidth, setVersionPanelWidth] = useState(450);
+  const isResizingVersion = useRef(false);
+
+  const startVersionResize = (e) => {
+    isResizingVersion.current = true;
+    document.addEventListener('mousemove', handleVersionResize);
+    document.addEventListener('mouseup', stopVersionResize);
+    document.body.style.cursor = 'col-resize';
+  };
+  const handleVersionResize = (e) => {
+    if (!isResizingVersion.current) return;
+    const newWidth = window.innerWidth - e.clientX;
+    setVersionPanelWidth(Math.max(400, Math.min(window.innerWidth * 0.95, newWidth)));
+  };
+  const stopVersionResize = () => {
+    isResizingVersion.current = false;
+    document.removeEventListener('mousemove', handleVersionResize);
+    document.removeEventListener('mouseup', stopVersionResize);
+    document.body.style.cursor = 'default';
+  };
+  const [versionAnchor, setVersionAnchor] = useState({ x: 0, y: 0 });
+  const [versionTarget, setVersionTarget] = useState(null);
+
+  const startResizing = (e, column) => {
+    e.preventDefault();
+    const startX = e.pageX;
+    const startWidth = columnWidths[column];
+    const onMouseMove = (moveEvent) => {
+      const currentWidth = startWidth + (moveEvent.pageX - startX);
+      setColumnWidths(prev => ({ ...prev, [column]: Math.max(currentWidth, 40) }));
+    };
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+
+  const totalTableWidth = Object.values(columnWidths).reduce((a, b) => a + b, 0);
+
+  const onShowVersions = (f, e) => {
+    setVersionTarget(f);
+    setTableShowVersions(true);
+    setVersionAnchor({ x: e.clientX - 350, y: Math.min(e.clientY, window.innerHeight - 400) });
+    fetchVersionHistory(f);
+  };
+
+  const fetchVersionHistory = async (item) => {
+    setLoadingVersions(true);
+    setVersionHistory([]);
     try {
-      const res = await fetch(`${API}/api/docs/list?path=${encodeURIComponent(path)}`);
+      const resp = await fetch(`${API}/api/docs/versions?id=${item.id || encodeURIComponent(item.fullName)}`);
+      const data = await resp.json();
+      if (data.success) setVersionHistory(data.versions || []);
+    } catch (e) { console.error(e); }
+    finally { setLoadingVersions(false); }
+  };
+
+  const handlePromote = async (version) => {
+    if (!versionTarget) return;
+    try {
+      const resp = await fetch(`${API}/api/docs/versions/promote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: versionTarget.id, version_id: version.id, user: user?.name })
+      });
+      if (resp.ok) {
+        setTableShowVersions(false);
+        triggerRefresh();
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchContents = useCallback(async (path, trash = false, silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setFolders([]);
+      setFiles([]);
+    }
+    try {
+      const endpoint = trash ? '/api/docs/deleted' : `/api/docs/list?path=${encodeURIComponent(path)}`;
+      const res = await fetch(`${API}${endpoint}`);
       if (res.ok) {
         const response = await res.json();
         const data = response.data || {};
-        const sortedFolders = (data.folders || []).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-        const sortedFiles = (data.files || []).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-        setFolders(sortedFolders);
-        setFiles(sortedFiles);
+        setFolders((data.folders || []).map(f => ({...f, type: 'folder'})).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
+        setFiles((data.files || []).map(f => ({...f, type: 'file'})).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
       }
     } catch (e) { console.error(e); }
-    finally {
-      if (!silent) setLoading(false);
-    }
+    finally { if (!silent) setLoading(false); }
   }, []);
 
-  const triggerRefresh = (path = currentPath) => { fetchContents(path, true); setRefreshSignal(prev => prev + 1); };
+  const triggerRefresh = (path = currentPath) => { fetchContents(path, isTrashMode, true); setRefreshSignal(prev => prev + 1); };
 
-  useEffect(() => { fetchContents(currentPath); }, [currentPath]);
+  useEffect(() => { fetchContents(currentPath, isTrashMode); }, [currentPath, isTrashMode, fetchContents]);
 
   const navigate = (path) => {
     if (path === currentPath) return;
-    setFolders([]);
-    setFiles([]);
-    setCurrentPath(path);
-    setSelected(new Set());
+    setLoading(true);
+    setFolders([]); 
+    setFiles([]); 
+    setCurrentPath(path); 
+    setSelected(new Set()); 
+    setIsTrashMode(false);
   };
 
-  const handleUpload = async (fileList) => {
-    if (!isAdmin || !fileList?.length) return;
-    setUploading(true);
-    setUploadProgress({ total: fileList.length, current: 0 });
+  const getSopFileIcon = (filename) => {
+    if (!filename) return { color: '#888', type: 'file' };
+    const ext = filename.split('.').pop().toLowerCase();
+    if (ext === 'pdf') return { color: '#5C7896', type: 'pdf' };
+    if (['doc', 'docx'].includes(ext)) return { color: '#2b579a', type: 'word' };
+    if (['xls', 'xlsx', 'csv'].includes(ext)) return { color: '#217346', type: 'excel' };
+    if (['ppt', 'pptx'].includes(ext)) return { color: '#d24726', type: 'ppt' };
+    if (['jpg', 'jpeg', 'png', 'svg', 'webp', 'gif'].includes(ext)) return { color: '#5C7896', type: 'image' };
+    if (ext === 'txt') return { color: '#5C7896', type: 'txt' };
+    return { color: '#5C7896', type: 'file' };
+  };
 
-    for (let i = 0; i < fileList.length; i++) {
-      const file = fileList[i];
-      let uploadSuccess = false;
+  const renderFileIconSop = (filename, size = 24) => {
+    const { type } = getSopFileIcon(filename);
+    const lowerName = filename?.toLowerCase() || '';
 
-      try {
-        // MÉTODO 1: Subida Directa (Estilo ACC)
-        const urlRes = await fetch(`${API}/api/docs/upload-url`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            filename: file.name,
-            contentType: file.type || 'application/octet-stream',
-            model_urn: 'global'
-          })
-        });
-        const { uploadUrl, gcsUrn } = await urlRes.json();
-
-        if (uploadUrl) {
-          await fetch(uploadUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': file.type || 'application/octet-stream' },
-            body: file
-          });
-
-          await fetch(`${API}/api/docs/upload-complete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              filename: file.name,
-              gcsUrn: gcsUrn,
-              sizeBytes: file.size,
-              contentType: file.type || 'application/octet-stream',
-              path: currentPath,
-              user: user.name,
-              model_urn: 'global'
-            })
-          });
-          uploadSuccess = true;
-        }
-      } catch (error) {
-        console.warn("Subida directa bloqueada. Usando modo respaldo...", file.name);
-      }
-
-      // MÉTODO 2: Backup tradicional (Si falla el directo o hay CORS)
-      if (!uploadSuccess) {
-        try {
-          const fd = new FormData();
-          fd.append('file', file);
-          fd.append('path', currentPath);
-          fd.append('user', user.name);
-          fd.append('model_urn', 'global');
-
-          const resp = await fetch(`${API}/api/docs/upload`, {
-            method: 'POST',
-            body: fd
-          });
-          if (resp.ok) uploadSuccess = true;
-        } catch (err) {
-          console.error("Fallo total de subida:", file.name, err);
-          alert(`No se pudo subir ${file.name}.`);
-        }
-      }
-      setUploadProgress(prev => ({ ...prev, current: i + 1 }));
+    // EXCEL
+    if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+      return (
+        <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img src="https://res.cdn.office.net/files/fabric-cdn-prod_20251107.003/assets/item-types/16_1.5x/xlsx.svg" style={{ width: '100%', height: '100%' }} alt="xlsx" />
+        </div>
+      );
     }
 
-    setUploading(false);
-    setUploadProgress({ total: 0, current: 0 });
-    triggerRefresh();
+    // WORD
+    if (lowerName.endsWith('.docx') || lowerName.endsWith('.doc')) {
+      return (
+        <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img src="https://res.cdn.office.net/files/fabric-cdn-prod_20251107.003/assets/item-types/16_1.5x/docx.svg" style={{ width: '100%', height: '100%' }} alt="docx" />
+        </div>
+      );
+    }
+
+    // PPT
+    if (lowerName.endsWith('.pptx') || lowerName.endsWith('.ppt')) {
+      return (
+        <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img src="https://res.cdn.office.net/files/fabric-cdn-prod_20251107.003/assets/item-types/16_1.5x/pptx.svg" style={{ width: '100%', height: '100%' }} alt="pptx" />
+        </div>
+      );
+    }
+
+    // PDF (Extracted from ACC Source)
+    if (type === 'pdf') {
+       return (
+         <div style={{ width: size, height: size, flexShrink: 0 }}>
+           <svg viewBox="0 0 32 32" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+             <path fill="#5C7896" d="M3 1v30h26V8h-7V1z"></path>
+             <path fill="#FFF" d="M4 2v20h24V8h-6V2z"></path>
+             <path fill="#1B3F63" d="m29 15-7-7h7z" opacity="0.3"></path>
+             <path fill="#769CC2" d="m22 1 7 7h-7z"></path>
+             <g fill="#FFF">
+               <path d="M10.1 29v-4.7h1.7c1 0 1.9.4 1.9 1.4 0 1.1-.9 1.5-1.9 1.5h-.6V29zm1-2.4h.4c.6 0 1.1-.1 1.1-.8 0-.6-.4-.8-1-.8h-.4v1.6zM14.3 29v-4.7h1.6c1.5 0 2.5.7 2.5 2.3S17.3 29 15.8 29zm1-.7h.3c1.1 0 1.7-.6 1.7-1.7 0-1-.6-1.6-1.5-1.6h-.4v3.3zM19.2 29v-4.7h3v.7h-2v1.3h1.9v.7h-1.9v2z"></path>
+             </g>
+             <g fill="#5C7896">
+               <path d="M16 5h5v2h-5zM16 9h8v2h-8zM8 13h16v2H8zM8 17h12v2H8zM8 5h6v6H8z"></path>
+             </g>
+           </svg>
+         </div>
+       );
+    }
+
+    // IMAGE / GIF (Authentic Paths from Image 1)
+    if (type === 'image') {
+       return (
+         <div style={{ width: size, height: size }}>
+           <svg viewBox="0 0 32 32" width="100%" height="100%">
+             <path fill="#5C7896" d="M3 1v30h26V8h-7V1z"></path>
+             <path fill="#1B3F63" d="m29 15-7-7h7z" opacity="0.3"></path>
+             <path fill="#769CC2" d="m22 1 7 7h-7z"></path>
+             <rect fill="#FFF" x="6" y="11" width="18" height="15"></rect>
+             <path fill="#5C7896" d="M7 12h16v13H7z"></path>
+             <circle fill="#FFF" cx="19.5" cy="15" r="1.5"></circle>
+             <path fill="#FFF" d="m9 23 4-4 2 2 3-3 4 4v1H9z"></path>
+           </svg>
+         </div>
+       );
+    }
+
+    // TXT (Authentic Paths from Image 1)
+    if (type === 'txt') {
+      return (
+        <div style={{ width: size, height: size }}>
+          <svg viewBox="0 0 32 32" width="100%" height="100%">
+            <path fill="#5C7896" d="M3 1v30h26V8h-7V1z"></path>
+            <path fill="#FFF" d="M4 2v20h24V8h-6V2z"></path>
+            <path fill="#1B3F63" d="m29 15-7-7h7z" opacity="0.3"></path>
+            <path fill="#769CC2" d="m22 1 7 7h-7z"></path>
+            <g fill="#5C7896">
+              <path d="M8 11h16v2H8zM8 15h16v2H8zM8 19h10v2H8z"></path>
+            </g>
+          </svg>
+        </div>
+      );
+    }
+
+    // DEFAULT FALLBACK
+    return (
+      <div style={{ width: size, height: size }}>
+        <svg viewBox="0 0 32 32" width="100%" height="100%">
+          <path fill="#769CC2" d="m22 1 7 7h-7z"></path>
+          <path fill="#5C7896" d="M3 1v30h26V8h-7V1z"></path>
+          <path fill="#1B3F63" d="m29 15-7-7h7z" opacity="0.3"></path>
+          <path fill="#FFF" d="M4 2v20h24V8h-6V2z"></path>
+           <g fill="#FFF">
+             <text x="16" y="28" textAnchor="middle" fontSize="6px" fontWeight="800" fontFamily="sans-serif">{type.toUpperCase()}</text>
+           </g>
+        </svg>
+      </div>
+    );
   };
+
+  const handleSopUpload = async (fileList) => {
+    if (!isAdmin || !fileList?.length) return;
+    const batchId = Date.now().toString();
+    const newItems = Array.from(fileList).map(file => ({
+      id: Math.random().toString(36).substr(2, 9),
+      file,
+      status: 'PROCESANDO_1',
+      progress: 0,
+      time: '',
+      batchId
+    }));
+
+    setSopBatches(prev => [{ id: batchId, timestamp: new Date().toLocaleString() }, ...prev]);
+    setSopQueue(prev => [...newItems, ...prev]);
+    setUploadSopStep('PROCESANDO_1');
+    setShowUploadModal(true);
+
+    newItems.forEach(item => {
+      const fd = new FormData(); 
+      fd.append('file', item.file); 
+      fd.append('path', currentPath); 
+      fd.append('user', user.name); 
+      fd.append('model_urn', 'global');
+
+      const xhr = new XMLHttpRequest();
+      console.log(`[Upload] Starting POST to ${API}/api/docs/upload for ${item.file.name} (${item.file.size} bytes)`);
+      xhr.open('POST', `${API}/api/docs/upload`, true);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.floor((e.loaded / e.total) * 100);
+          console.log(`[Upload Progress] ${item.file.name}: ${percent}% (${e.loaded}/${e.total})`);
+          
+          if (percent >= 100) {
+            // Already at 100% physical transfer, show "Syncing" indeterminate bar
+            setSopQueue(q => q.map(it => it.id === item.id ? { ...it, progress: 100, status: 'PROCESANDO_1' } : it));
+          } else {
+            setSopQueue(q => q.map(it => it.id === item.id ? { ...it, progress: percent, status: 'BARRA_AZUL' } : it));
+          }
+        } else {
+          console.log(`[Upload Progress] ${item.file.name}: progress not computable`);
+        }
+      };
+
+      xhr.onload = async () => {
+        console.log(`[Upload Finish] ${item.file.name}: Status ${xhr.status}`);
+        if (xhr.status === 200 || xhr.status === 201) {
+          try {
+            const resp = JSON.parse(xhr.responseText);
+            console.log(`[Upload Success] ${item.file.name}:`, resp);
+          } catch(e) {}
+          
+          // Ensure we are in PROCESANDO_1 state
+          setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'PROCESANDO_1', progress: 100 } : it));
+          
+          // These are the "Fake" processing delays that happen AFTER physical GCS upload is done
+          await new Promise(r => setTimeout(r, 4000));
+          
+          setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'PROCESO_PENDIENTE', progress: 100 } : it));
+          await new Promise(r => setTimeout(r, 4000));
+
+          const now = new Date();
+          const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const dateStr = now.toLocaleDateString();
+          setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'LISTO_1', progress: 100, time: `el ${dateStr} a las ${timeStr}` } : it));
+          setUploadSopStep('LISTO_1');
+          triggerRefresh();
+        } else {
+          console.error(`[Upload Error] ${item.file.name}: ${xhr.status} - ${xhr.responseText}`);
+          setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR' } : it));
+        }
+      };
+
+      xhr.onerror = () => {
+        console.error(`[Upload Fatal Error] ${item.file.name}: Network failure`);
+        setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR' } : it));
+      };
+
+      setTimeout(() => {
+        xhr.send(fd);
+      }, 500);
+    });
+  };
+
+  const handleSopListo = () => {
+    setShowUploadModal(false);
+    setUploadSopStep('IDLE');
+    setSopQueue([]);
+    setSopBatches([]);
+    triggerRefresh();
+    if (uploadSopStep === 'LISTO_1') {
+      setShowSopToast(true);
+      setTimeout(() => setShowSopToast(false), 3000);
+    }
+  };
+
+  const onDragOver = (e) => { e.preventDefault(); setDragOver(true); };
+  const onDragLeave = () => setDragOver(false);
+  const onDrop = (e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files) handleSopUpload(e.dataTransfer.files); };
 
   const createFolder = async () => {
     if (!isAdmin || !folderName.trim()) return;
-    try {
-      await fetch(`${API}/api/docs/folder`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: currentPath + folderName.trim() }) });
-    } catch (e) { }
+    try { await fetch(`${API}/api/docs/folder`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: currentPath + folderName.trim() }) }); } catch (e) { }
     setShowNewFolder(false); setFolderName(''); triggerRefresh();
-  };
-
-  const handleDelete = async () => {
-    if (!isAdmin || !selected.size) return;
-    setLoading(true);
-    for (const name of selected) {
-      try { await fetch(`${API}/api/docs/delete`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fullName: name }) }); } catch (e) { }
-    }
-    setLoading(false);
-    setSelected(new Set()); triggerRefresh();
   };
 
   const deleteSpecificItem = async (fullName) => {
@@ -1172,528 +1456,573 @@ function FilesPage({ project, user, onBack }) {
   const renameSpecificItem = async (fullName) => {
     if (!isAdmin) return;
     const isFolder = fullName.endsWith('/');
-    let baseName = fullName;
-    if (isFolder) baseName = baseName.slice(0, -1);
+    let baseName = isFolder ? fullName.slice(0, -1) : fullName;
     const parts = baseName.split('/');
     const oldName = parts[parts.length - 1];
-
     const newNameRaw = window.prompt(`Renombrar '${oldName}' a:`, oldName);
     if (!newNameRaw || newNameRaw.trim() === '' || newNameRaw === oldName) return;
-
     parts[parts.length - 1] = newNameRaw.trim();
-    let newNamePath = parts.join('/');
-    if (isFolder) newNamePath += '/';
-
-    try {
-      await fetch(`${API}/api/docs/rename`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldName: fullName, newName: newNamePath })
-      });
-    } catch (e) { console.error(e); }
+    let newNamePath = parts.join('/') + (isFolder ? '/' : '');
+    try { await fetch(`${API}/api/docs/rename`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldName: fullName, newName: newNamePath }) }); } catch (e) { }
     triggerRefresh();
-    if (currentPath === fullName || currentPath.startsWith(fullName)) navigate(projectPrefix);
-  };
-
-  const handleRename = async () => {
-    if (!isAdmin || selected.size !== 1) return;
-    const oldNamePath = Array.from(selected)[0];
-    const isFolder = oldNamePath.endsWith('/');
-
-    // Extract name
-    let baseName = oldNamePath;
-    if (isFolder) baseName = baseName.slice(0, -1);
-    const parts = baseName.split('/');
-    const oldName = parts[parts.length - 1];
-
-    const newNameRaw = window.prompt(`Renombrar '${oldName}' a:`, oldName);
-    if (!newNameRaw || newNameRaw.trim() === '' || newNameRaw === oldName) return;
-
-    parts[parts.length - 1] = newNameRaw.trim();
-    let newNamePath = parts.join('/');
-    if (isFolder) newNamePath += '/';
-
-    try {
-      await fetch(`${API}/api/docs/rename`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldName: oldNamePath, newName: newNamePath })
-      });
-    } catch (e) { console.error(e); }
-
-    setSelected(new Set());
-    triggerRefresh();
-  };
-
-  const handleInitiateMove = (itemsToMove) => {
-    if (!isAdmin || !itemsToMove.length) return;
-    setMoveState({ step: 1, items: itemsToMove, destPath: '' });
   };
 
   const handleExecuteMove = async () => {
-    if (!isAdmin || typeof moveState.destPath !== 'string' || !moveState.items.length) return;
-
-    // Solo bloqueamos via un estado "soft" si es necesario, pero quitamos el setLoading global
+    if (!isAdmin || !moveState.destPath || !moveState.items.length) return;
     for (const fullName of moveState.items) {
-      try {
-        await fetch(`${API}/api/docs/move`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fullName: fullName, destPath: moveState.destPath, user: user?.email })
-        });
-      } catch (e) { console.error(e); }
+      try { await fetch(`${API}/api/docs/move`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fullName: fullName, destPath: moveState.destPath, user: user?.email }) }); } catch (e) { }
     }
-    setMoveState({ step: 0, items: [], destPath: '' });
-    setSelected(new Set());
-    triggerRefresh();
+    setMoveState({ step: 0, items: [], destPath: '' }); setSelected(new Set()); triggerRefresh();
   };
 
-  const toggle = (name) => { setSelected(prev => { const s = new Set(prev); s.has(name) ? s.delete(name) : s.add(name); return s; }); };
-  const relativePath = currentPath.replace(projectPrefix, '');
-  const breadcrumbs = relativePath ? relativePath.replace(/\/$/, '').split('/') : [];
+  const toggle = (name) => {
+    setSelected(prev => {
+      const s = new Set(prev);
+      if (s.has(name)) s.delete(name); else s.add(name);
+      return s;
+    });
+  };
 
-  useEffect(() => {
-    if (showVersions && activeFile) {
-      const fetchVersions = async () => {
-        setLoadingVersions(true);
-        try {
-          const res = await fetch(`${API}/api/docs/versions?path=${encodeURIComponent(activeFile.fullName)}`);
-          if (res.ok) {
-            const data = await res.json();
-            setVersionHistory(data.data || []);
-          }
-        } catch (e) { console.error(e); }
-        setLoadingVersions(false);
-      };
-      fetchVersions();
-    }
-  }, [showVersions, activeFile]);
+  const filteredFolders = folders.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredFiles = files.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
-    <div className="acc-root">
-      <div className="acc-top-strip"></div>
-      <header className="acc-top-header">
-        <div className="header-left">
-          <span className="header-logo" style={{ cursor: 'pointer', fontWeight: 600, fontSize: 16 }} onClick={onBack}>
-            <strong>AUTODESK</strong> Construction Cloud
-          </span>
-        </div>
-        <div className="acc-header-center" style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-          <div className="module-selector" style={{ background: '#f0f0f0', borderRadius: 4, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginRight: 8, cursor: 'pointer', fontWeight: 600 }}>
-            <span style={{ fontSize: 14 }}>📁</span> Docs
+    <div className="acc-root" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', background: '#fff' }}>
+      <div className="acc-top-strip" style={{ height: 24, background: '#000', flexShrink: 0 }} />
+      <header className="acc-top-header" style={{ height: 48, borderBottom: '1px solid #dcdcdc', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', flexShrink: 0 }}>
+        <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="module-selector" onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', color: '#0696d7', fontWeight: 600 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2L2 12l2.12 2.12L12 6.24l7.88 7.88L22 12 12 2z"/>
+            </svg>
+            <span style={{ fontSize: 14 }}>Docs</span>
           </div>
-          <div className="project-selector" style={{ cursor: 'pointer', fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #dcdcdc', padding: '0 12px', height: 32, borderRadius: 4 }} onClick={onBack} title="Volver a proyectos">
-            {project.name} <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"></path></svg>
+          <div className="separator-line" style={{ width: 1, height: 20, background: '#eee', margin: '0 8px' }} />
+          <div className="project-selector" style={{ fontSize: 14, fontWeight: 600, color: '#333', textTransform: 'uppercase' }}>
+            <span>{project.name}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 4 }}><path d="M7 10l5 5 5-5H7z"/></svg>
           </div>
         </div>
-        <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <a href="http://localhost:5173" className="header-nav-item" target="_blank" rel="noreferrer" style={{ fontSize: 13, textDecoration: 'none', color: '#0696D7', fontWeight: 500 }}>Visor 3D</a>
-          <div className="header-user" style={{ display: 'flex', alignItems: 'center' }}>
-            <span style={{ fontSize: 13, marginRight: 8, opacity: 0.8 }}>{user.name.split(' ')[0]}</span>
-            <div className="header-avatar" style={{ background: '#dcdcdc', color: '#000', borderRadius: '50%', width: 25, height: 25, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 'bold' }}>{getInitials(user.name)}</div>
+        <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="header-nav-item" style={{ width: 24, height: 24, borderRadius: '50%', background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#666', cursor: 'pointer' }}>?</div>
+          <div className="header-user">
+             <div className="header-avatar" style={{ width: 32, height: 32, borderRadius: '50%', background: '#ff6b35', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600 }}>{getInitials(user.name)}</div>
           </div>
         </div>
       </header>
-      <div className="acc-main-layout">
-        <aside className="acc-left-sidebar">
-          <div className="sidebar-item active">
-            <span className="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 6h4l2 2h14v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z"></path><path d="M2 13h20"></path></svg></span>
-            Archivos
+
+      <main className="acc-main-layout" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* GLOBAL SIDEBAR */}
+        <div className="Box__StyledBox-sc-1gnk1ba-0 cFPGUB" style={{ width: globalSidebarWidth, flexShrink: 0, borderRight: '1px solid #dcdcdc', background: '#fff', display: 'flex', flexDirection: 'column' }}>
+          <div className="Box__StyledBox-sc-1gnk1ba-0 hhhhUH" style={{ flex: 1, overflowY: 'auto' }}>
+            <ul data-testid="SideNavigationList" style={{ listStyle: 'none', padding: '8px 0', margin: 0 }}>
+              {[
+                { label: 'Archivos', icon: 'files.svg', active: true },
+                { label: 'Informes', icon: 'reports.svg' },
+                { label: 'Miembros', icon: 'members.svg' },
+                { label: 'Configuración', icon: 'settings.svg' }
+              ].map((item, idx) => (
+                <li key={idx} style={{ marginBottom: 2 }}>
+                  <a 
+                    href="#" 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 12, 
+                      padding: '10px 16px', 
+                      textDecoration: 'none', 
+                      background: item.active ? '#e6f4fb' : 'transparent', 
+                      color: item.active ? '#0696d7' : '#333', 
+                      borderLeft: `4px solid ${item.active ? '#0696d7' : 'transparent'}`,
+                      fontSize: 13,
+                      fontWeight: item.active ? 600 : 400
+                    }}
+                  >
+                    <div style={{ width: 22, height: 22, background: item.active ? '#0696d7' : '#666', maskImage: `url('https://bim360-ea-ue1-prod-storage.s3.amazonaws.com/tools/${item.icon}')`, maskSize: '100% 100%', WebkitMaskImage: `url('https://bim360-ea-ue1-prod-storage.s3.amazonaws.com/tools/${item.icon}')`, WebkitMaskSize: '100% 100%', WebkitMaskRepeat: 'no-repeat' }} />
+                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
-          <div className="sidebar-item"><span className="icon" style={{ opacity: 0.5 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg></span> Especificaciones</div>
-          <div className="sidebar-item"><span className="icon" style={{ opacity: 0.5 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path><polyline points="12 6 12 12 16 14"></polyline></svg></span> Revisiones</div>
-          <div className="sidebar-item"><span className="icon" style={{ opacity: 0.5 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></span> Informes de transmisión</div>
-          <div className="sidebar-item"><span className="icon" style={{ opacity: 0.5 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span> Incidencias</div>
-          <div className="sidebar-item"><span className="icon" style={{ opacity: 0.5 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span> Informes</div>
-          <div className="sidebar-item"><span className="icon" style={{ opacity: 0.5 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span> Miembros</div>
-          <div className="sidebar-item"><span className="icon" style={{ opacity: 0.5 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></span> Configuración</div>
-        </aside>
+          <div className="sidebar-bottom" style={{ padding: '12px 16px', borderTop: '1px solid #eee' }}>
+            <button onClick={() => setGlobalSidebarWidth(globalSidebarWidth > 100 ? 60 : 240)} style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer' }}>
+               <svg height="24" width="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20.75,12a.75.75,0,0,1-.75.75H10.49L12.76,15a.74.74,0,0,1,0,1.06.75.75,0,0,1-.53.22.79.79,0,0,1-.53-.22L8.15,12.53A.78.78,0,0,1,8,12.29a.73.73,0,0,1,0-.58.78.78,0,0,1,.16-.24L11.7,7.92a.75.75,0,0,1,1.06,0,.74.74,0,0,1,0,1.06l-2.27,2.27H20A.76.76,0,0,1,20.75,12Zm-16,8V4a.75.75,0,0,0-1.5,0V20a.75.75,0,0,0,1.5,0Z"></path></svg>
+            </button>
+          </div>
+        </div>
 
-        <main className="acc-content-wrapper">
-
-          <div className="acc-internal-header">
-            <h1>Archivos</h1>
-            <div className="acc-tabs">
-              <div className="acc-tab active">Carpetas</div>
-              <div className="acc-tab">Conjuntos</div>
+        {/* CONTENT AREA */}
+        <div className="acc-docs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <header style={{ padding: '24px 24px 0 24px', flexShrink: 0 }}>
+            <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 16 }}>Archivos</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #dcdcdc' }}>
+              <div style={{ display: 'flex', gap: 32 }}>
+                <div style={{ paddingBottom: 8, fontSize: 13, borderBottom: '2px solid #0696d7', color: '#0696d7', fontWeight: 600, cursor: 'pointer' }}>Carpetas</div>
+                <div style={{ paddingBottom: 8, fontSize: 13, color: '#999', cursor: 'pointer' }}>Conjuntos</div>
+              </div>
+              <div style={{ display: 'flex', gap: 20, paddingBottom: 8 }}>
+                 {(isTrashMode && selected.size > 0) ? (
+                   <button style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0696d7', border: 'none', color: '#fff', fontSize: 13, cursor: 'pointer', padding: '6px 16px', borderRadius: 4, fontWeight: 500 }}>
+                     Restaurar ({selected.size})
+                   </button>
+                 ) : (
+                   <button onClick={() => setIsTrashMode(!isTrashMode)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: isTrashMode ? '#e6f4fb' : 'none', border: 'none', color: isTrashMode ? '#0696d7' : '#666', fontSize: 13, cursor: 'pointer', padding: '4px 8px', borderRadius: 4 }}>
+                     <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11 15H5a2.25 2.25 0 0 1-2.25-2.25V5.72a.75.75,0,0,1 1.5 0v7.07a.74.74,0,0,0 .75.75h6a.74.74,0,0,0 .75-.75V5.72a.75.75,0,0,1 1.5 0v7.07A2.25 2.25 0 0 1 11 15Zm3-12h-3a2.26 2.26 0 0 0-2.24-2h-1.5A2.26 2.26 0 0 0 5 3H2a.75.75,0,0,0 0 1.5h12A.75.75,0,0,0,14 3Zm-3.75 8V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Zm-3 0V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Z"></path></svg>
+                     Elementos suprimidos
+                   </button>
+                 )}
+                 <button style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer' }}>
+                   <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M14.75 3.53a.76.76,0,0,1-.75.75H7.18a1.78,1.78,0,0,1-3.25,0H2a.75.75,0,0,1,0-1.5h1.93a1.78,1.78,0,0,1,3.25,0H14a.75.75,0,0,1,.75.75ZM14 12.1H7.18a1.79,1.79,0,0,0-3.25,0H2a.75.75,0,0,0,0,1.5h1.93a1.78,1.78,0,0,0,3.25,0H14a.75.75,0,0,0,0-1.5Zm0-4.64h-1.91a1.8,1.8,0,0,0-1.64-1.06 1.78,1.78,0,0,0-1.63,1.06H2A.75.75,0,0,0,2,9h6.84a1.77,1.77,0,0,0,1.61,1 1.8,1.8,0,0,0,1.62-1H14a.75.75,0,0,0,0-1.5Z"></path></svg>
+                   Configuración
+                   <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M2.9 4.61a.73.73,0,0,1 .54.23L8 9.57l4.56-4.73a.75.75,0,1,1,1.08 1l-5.1 5.29a.78.78,0,0,1-.54.27.78.78,0,0,1-.54-.23l-5.1-5.29a.75.75,0,0,1,0-1.06.73.73,0,0,1,.54-.21Z"></path></svg>
+                 </button>
+              </div>
             </div>
-          </div>
-          <hr className="acc-divider" />
+          </header>
 
-          <div className="acc-workspace">
-            {/* TREE PANEL */}
-            <div className="acc-tree-panel">
+          <div className="acc-workspace" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+            {/* TREE SECTION */}
+            <aside style={{ width: treeSidebarWidth, flexShrink: 0, borderRight: '1px solid #dcdcdc', background: '#fff', overflowY: 'auto', padding: '16px 0' }}>
               <FolderNode
                 folder={{ name: 'Archivos de proyecto', fullName: projectPrefix }}
                 currentPath={currentPath}
                 onNavigate={navigate}
+                onReset={() => setCollapseSignal(s => s+1)}
+                collapseSignal={collapseSignal}
                 projectPrefix={projectPrefix}
                 level={0}
                 defaultExpanded={true}
                 isAdmin={isAdmin}
                 onTreeRefresh={() => { }}
-                onGlobalRefresh={(newPath) => { triggerRefresh(currentPath); if (newPath) navigate(newPath); }}
+                onGlobalRefresh={(p) => { triggerRefresh(currentPath); if (p) navigate(p); }}
                 refreshSignal={refreshSignal}
-                onInitiateMove={handleInitiateMove}
+                onInitiateMove={(items) => setMoveState({ step: 1, items: items, destPath: '' })}
               />
+            </aside>
+
+            {/* RESIZER */}
+            <div onMouseDown={startTreeResize} style={{ width: 8, cursor: 'col-resize', background: '#fcfcfc', borderRight: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 2, height: 24, background: '#eee', borderRadius: 1 }} />
             </div>
 
             {/* DATA PANEL */}
-            <div className={`acc-data-panel ${dragOver && isAdmin ? 'dropzone-active' : ''}`}
-              onDragOver={e => { if (isAdmin) { e.preventDefault(); setDragOver(true); } }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={e => { if (isAdmin) { e.preventDefault(); setDragOver(false); handleUpload(e.dataTransfer.files); } }}>
+            <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div className="acc-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#fff', borderBottom: '1px solid #eee', flexShrink: 0 }}>
+                <div style={{ display: 'flex' }}>
+                   <button onClick={() => { setShowUploadModal(true); setUploadSopStep('IDLE'); }} style={{ padding: '6px 16px', background: '#0696D7', color: '#fff', border: 'none', borderRadius: '4px 0 0 4px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                      Cargar archivos
+                   </button>
+                   <button onClick={() => { setShowUploadModal(true); setUploadSopStep('IDLE'); }} style={{ padding: '6px 8px', background: '#0696D7', color: '#fff', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.3)', borderRadius: '0 4px 4px 0', cursor: 'pointer' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5H7z"/></svg>
+                   </button>
+                </div>
 
-              <div className="acc-toolbar">
-                {isAdmin ? (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <div className="btn-group-blue">
-                      <button className="btn-main-blue" onClick={() => setShowUploadModal(true)} disabled={uploading}>
-                        {uploading ? (
-                          <><span>...</span> Subiendo</>
-                        ) : (
-                          <><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> Cargar archivos</>
-                        )}
-                      </button>
-                      <button className="btn-split-blue" onClick={() => setShowUploadModal(true)} disabled={uploading}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                      </button>
-                    </div>
-                    <input ref={fileRef} type="file" multiple hidden onChange={e => handleUpload(e.target.files)} />
-                    {selected.size === 1 && (
-                      <button className="btn btn-outline" style={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, padding: '8px 16px', cursor: 'pointer', color: '#333' }} onClick={handleRename} title="Renombrar">Renombrar</button>
-                    )}
-                    {selected.size > 0 && (
-                      <>
-                        <button className="btn btn-outline" style={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, padding: '8px 16px', cursor: 'pointer', color: '#333' }} onClick={() => handleInitiateMove(Array.from(selected))} title="Desplazar">Desplazar</button>
-                        <button className="btn btn-outline" style={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, padding: '8px 16px', cursor: 'pointer', color: '#333' }} onClick={handleDelete} title="Suprimir">Eliminar</button>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Solo lectura. Los administradores pueden subir archivos.</span>
-                )}
-                <div style={{ flex: 1 }} />
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <button className="btn-icon" title="Filtro">
-                    <svg height="20" width="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.59,19.53l-5.32-5.32a6.76,6.76,0,1,0-1.06,1.06l5.32,5.32a.74.74,0,0,0,.53.22.71.71,0,0,0,.53-.22A.74.74,0,0,0,20.59,19.53ZM4.75,10A5.25,5.25,0,1,1,10,15.25,5.26,5.26,0,0,1,4.75,10Z"></path></svg>
-                  </button>
-                  <div style={{ display: 'flex', border: '1px solid #dcdcdc', borderRadius: 4, overflow: 'hidden' }}>
-                    <button className="btn-icon" style={{ borderRadius: 0, padding: '4px 8px', background: '#f5f5f5' }} title="Miniaturas">
-                      <svg height="20" width="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8,10.75H5A2.75,2.75,0,0,1,2.27,8V5A2.76,2.76,0,0,1,5,2.27H8A2.76,2.76,0,0,1,10.75,5V8A2.75,2.75,0,0,1,8,10.75Zm-3-7A1.25,1.25,0,0,0,3.77,5V8A1.25,1.25,0,0,0,5,9.25H8A1.25,1.25,0,0,0,9.25,8V5A1.25,1.25,0,0,0,8,3.77Zm14,7H16A2.75,2.75,0,0,1,13.25,8V5A2.75,2.75,0,0,1,16,2.27h3A2.76,2.76,0,0,1,21.73,5V8A2.75,2.75,0,0,1,19,10.75Zm-3-7A1.25,1.25,0,0,0,14.75,5V8A1.25,1.25,0,0,0,16,9.25h3A1.25,1.25,0,0,0,20.23,8V5A1.25,1.25,0,0,0,19,3.77Zm-8,18H5A2.76,2.76,0,0,1,2.27,19V16A2.75,2.75,0,0,1,5,13.25H8A2.75,2.75,0,0,1,10.75,16v3A2.76,2.76,0,0,1,8,21.73Zm-3-7A1.25,1.25,0,0,0,3.77,16v3A1.26,1.26,0,0,0,5,20.23H8A1.26,1.26,0,0,0,9.25,19V16A1.25,1.25,0,0,0,8,14.75Zm14,7H16A2.75,2.75,0,0,1,13.25,19V16A2.75,2.75,0,0,1,16,13.25h3A2.75,2.75,0,0,1,21.73,16v3A2.76,2.76,0,0,1,19,21.73Zm-3-7A1.25,1.25,0,0,0,14.75,16v3A1.26,1.26,0,0,0,16,20.23h3A1.26,1.26,0,0,0,20.23,19V16A1.25,1.25,0,0,0,19,14.75Z"></path></svg>
-                    </button>
-                    <button className="btn-icon" style={{ borderRadius: 0, padding: '4px 8px', background: '#ececec', color: '#0696D7' }} title="Lista">
-                      <svg height="20" width="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20,19.75H4a.75.75,0,0,1,0-1.5H20a.75.75,0,0,1,0,1.5Zm.75-5.42a.76.76,0,0,0-.75-.75H4a.75.75,0,1,0,0,1.5H20A.75.75,0,0,0,20.75,14.33Zm0-4.66A.75.75,0,0,0,20,8.92H4a.75.75,0,0,0,0,1.5H20A.76.76,0,0,0,20.75,9.67Zm0-4.67A.76.76,0,0,0,20,4.25H4a.75.75,0,0,0,0,1.5H20A.76.76,0,0,0,20.75,5Z"></path></svg>
-                    </button>
-                  </div>
-                  <button className="btn-icon" title="Configuración">
-                    <svg height="20" width="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2,8.86s0,0,0-.08a.53.53,0,0,0,0,.13S2,9,2,9ZM21.74,14.8a3.24,3.24,0,0,1-1.43-3.39,3.2,3.2,0,0,1,1.43-2.05.75.75,0,0,0,.25-1L20.14,5.19a.75.75,0,0,0-1-.3,3.25,3.25,0,0,1-2,.24,3.21,3.21,0,0,1-2.54-2.92.75.75,0,0,0-.75-.7H10.17a.74.74,0,0,0-.75.69,2.44,2.44,0,0,1-.07.46A3.17,3.17,0,0,1,8,4.68a3.24,3.24,0,0,1-2.41.45,3.7,3.7,0,0,1-.71-.23.75.75,0,0,0-1,.29L2,8.33a.72.72,0,0,0-.1.38v.07s0,.06,0,.08A.5.5,0,0,0,2,9a.58.58,0,0,0,.14.24.61.61,0,0,0,.15.12l.14.1a3.18,3.18,0,0,1,1.31,3.3A3.15,3.15,0,0,1,2.28,14.8a.75.75,0,0,0-.25,1v0L3.87,19a.75.75,0,0,0,1,.29,3.26,3.26,0,0,1,2-.24,3.21,3.21,0,0,1,2.53,2.8.75.75,0,0,0,.74.67h3.71a.76.76,0,0,0,.75-.67c0-.11,0-.22.05-.33A3.22,3.22,0,0,1,18.46,19a4.56,4.56,0,0,1,.71.24.75.75,0,0,0,1-.3L22,15.81A.75.75,0,0,0,21.74,14.8Zm-2.58,2.87a2.79,2.79,0,0,0-.39-.1A4.7,4.7,0,0,0,13.24,21H10.78a4.68,4.68,0,0,0-3.59-3.43,4.57,4.57,0,0,0-2.35.1l-1.17-2A4.69,4.69,0,0,0,5.2,13.06,4.72,4.72,0,0,0,3.66,8.51l1.19-2,.39.09A4.69,4.69,0,0,0,10.81,3h2.38a4.71,4.71,0,0,0,3.63,3.58,4.64,4.64,0,0,0,2.34-.1l1.2,2a4.7,4.7,0,0,0,0,7.1ZM12,8a4.09,4.09,0,1,0,4.09,4.09A4.1,4.1,0,0,0,12,8Zm0,6.68a2.59,2.59,0,1,1,2.59-2.59A2.6,2.6,0,0,1,12,14.67ZM2.42,9.45a.38.38,0,0,1-.13-.06.71.71,0,0,1-.35-.48.53.53,0,0,1,0-.13s0,.06,0,.08L2,9H2a.58.58,0,0,0,.14.24.61.61,0,0,0,.15.12Z"></path></svg>
-                  </button>
-                  <button className="btn-icon" style={{ marginLeft: 8 }} onClick={() => fetchContents(currentPath)} title="Actualizar">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
-                  </button>
+                <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" style={{ position: 'absolute', left: 8, top: 9 }}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  <input type="text" placeholder="Buscar y filtrar" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ width: '100%', height: 32, paddingLeft: 30, paddingRight: 8, border: '1px solid #ddd', borderRadius: 4, fontSize: 13, outline: 'none' }} />
+                </div>
+
+                <div style={{ display: 'flex', gap: 12, marginLeft: 'auto', alignItems: 'center' }}>
+                    <button className="row-action-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
+                    <button className="row-action-btn" style={{ color: '#0696D7' }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg></button>
                 </div>
               </div>
 
-              {loading ? <div className="loading"><div className="adsk-spinner" style={{ margin: '0 auto' }} /><span>Cargando...</span></div> :
-                (folders.length === 0 && files.length === 0) ? (
-                  <div className="empty-state">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>
-                    <p style={{ marginTop: 8 }}>Esta carpeta está vacía.</p>
-                  </div>
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                {loading ? (
+                    <div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
                 ) : (
-                  <div className="table-wrap">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th style={{ width: 40 }}></th>
-                          <th style={{ width: 387 }}>Nombre ↑</th>
-                          <th style={{ width: 160 }}>Descripción</th>
-                          <th style={{ width: 100 }}>Versión</th>
-                          <th style={{ width: 150 }}>Indicadores</th>
-                          <th style={{ width: 85 }}>Marcas de revisión</th>
-                          <th style={{ width: 85 }}>Incidencias</th>
-                          <th style={{ width: 85 }}>Tamaño</th>
-                          <th style={{ width: 150 }}>Últ. actualización</th>
-                          <th style={{ width: 150 }}>Actualizado por</th>
-                          <th style={{ width: 160 }}>Versión añadida por</th>
-                          <th style={{ width: 150 }}>Estado de revisión</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {folders.map(f => (
-                          <tr key={f.fullName} className={selected.has(f.fullName) ? 'selected' : ''}>
-                            <td>{isAdmin && <input type="checkbox" checked={selected.has(f.fullName)} onChange={() => toggle(f.fullName)} />}</td>
-                            <td><div className="name-cell" onClick={() => navigate(f.fullName)}>
-                              <span className="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.5"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg></span>
-                              <span>{f.name.replace(/\/$/, '')}</span>
-                            </div></td>
-                            <td></td>
-                            <td style={{ color: '#aaa' }}>--</td>
-                            <td></td>
-                            <td style={{ color: '#aaa' }}>--</td>
-                            <td style={{ color: '#aaa' }}>--</td>
-                            <td style={{ color: '#aaa' }}>--</td>
-                            <td style={{ color: '#aaa' }}>--</td>
-                            <td style={{ color: '#aaa' }}>--</td>
-                            <td style={{ color: '#aaa' }}>--</td>
-                            <td style={{ color: '#aaa' }}>--</td>
-                          </tr>
-                        ))}
-                        {files.map(f => (
-                          <tr key={f.fullName} className={selected.has(f.fullName) ? 'selected' : ''}>
-                            <td>{isAdmin && <input type="checkbox" checked={selected.has(f.fullName)} onChange={() => toggle(f.fullName)} />}</td>
-                            <td><div className="name-cell" onClick={() => { setActiveFile(f); setViewedVersionInfo(null); setShowVersions(false); }}>
-                              <span className="icon">
-                                {f.name.toLowerCase().endsWith('.pdf') ? (
-                                  <svg xmlns="http://www.w3.org/2000/svg" xmlSpace="preserve" viewBox="0 0 32 32" width="24" height="24">
-                                    <path fill="#5C7896" d="M3 1v30h26V8h-7V1z"></path>
-                                    <path fill="#FFF" d="M4 2v20h24V8h-6V2z"></path>
-                                    <path fill="#1B3F63" d="m29 15-7-7h7z" opacity="0.3"></path>
-                                    <path fill="#769CC2" d="m22 1 7 7h-7z"></path>
-                                    <g fill="#FFF">
-                                      <path d="M10.1 29v-4.7h1.7c1 0 1.9.4 1.9 1.4 0 1.1-.9 1.5-1.9 1.5h-.6V29zm1-2.4h.4c.6 0 1.1-.1 1.1-.8 0-.6-.4-.8-1-.8h-.4v1.6zM14.3 29v-4.7h1.6c1.5 0 2.5.7 2.5 2.3S17.3 29 15.8 29zm1-.7h.3c1.1 0 1.7-.6 1.7-1.7 0-1-.6-1.6-1.5-1.6h-.4v3.3zM19.2 29v-4.7h3v.7h-2v1.3h1.9v.7h-1.9v2z"></path>
-                                    </g>
-                                    <g fill="#5C7896">
-                                      <path d="M16 5h5v2h-5zM16 9h8v2h-8zM8 13h16v2H8zM8 17h12v2H8zM8 5h6v6H8z"></path>
-                                    </g>
-                                  </svg>
-                                ) : f.name.toLowerCase().endsWith('.docx') || f.name.toLowerCase().endsWith('.doc') ? (
-                                  <i style={{ width: 24, height: 24, display: 'inline-block' }}>
-                                    <img src="https://static2.sharepointonline.com/files/fabric-cdn-prod_20200430.002/assets/item-types/16/docx.svg" height="100%" width="100%" alt="docx" />
-                                  </i>
-                                ) : f.name.toLowerCase().endsWith('.xlsx') || f.name.toLowerCase().endsWith('.xls') ? (
-                                  <i style={{ width: 24, height: 24, display: 'inline-block' }}>
-                                    <img src="https://static2.sharepointonline.com/files/fabric-cdn-prod_20200430.002/assets/item-types/16/xlsx.svg" height="100%" width="100%" alt="xlsx" />
-                                  </i>
-                                ) : f.name.toLowerCase().endsWith('.pptx') || f.name.toLowerCase().endsWith('.ppt') ? (
-                                  <i style={{ width: 24, height: 24, display: 'inline-block' }}>
-                                    <img src="https://static2.sharepointonline.com/files/fabric-cdn-prod_20200430.002/assets/item-types/16/pptx.svg" height="100%" width="100%" alt="pptx" />
-                                  </i>
-                                ) : (
-                                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0696D7" strokeWidth="1.5">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline>
-                                  </svg>
-                                )}
-                              </span>
-                              <span>{f.name}</span>
-                            </div></td>
-                            <td></td>
-                            <td><span className="version-badge">{f.version || 'V1'}</span></td>
-                            <td></td>
-                            <td style={{ color: '#aaa' }}>--</td>
-                            <td style={{ color: '#aaa' }}>--</td>
-                            <td>{formatSize(f.size)}</td>
-                            <td>{formatDate(f.updated)}</td>
-                            <td><div className="user-cell"><div className="avatar">{getInitials(user.name)}</div><span>{user.name.toUpperCase()}</span></div></td>
-                            <td><div className="user-cell"><div className="avatar">{getInitials(user.name)}</div><span>{user.name.toUpperCase()}</span></div></td>
-                            <td style={{ color: '#aaa' }}>--</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                    <MatrixTable
+                        folders={filteredFolders}
+                        files={filteredFiles}
+                        selected={selected}
+                        columnWidths={columnWidths}
+                        totalTableWidth={totalTableWidth}
+                        toggle={toggle}
+                        navigate={navigate}
+                        setActiveFile={setActiveFile}
+                        onUpdateDescription={async (item, newDesc) => {
+                          // Optimistic update
+                          if (item.type === 'folder') {
+                            setFolders(prev => prev.map(f => f.id === item.id ? { ...f, description: newDesc } : f));
+                          } else {
+                            setFiles(prev => prev.map(f => f.id === item.id ? { ...f, description: newDesc } : f));
+                          }
+                          try {
+                            const res = await fetch(`${API}/api/docs/description`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ node_id: item.id, description: newDesc })
+                            });
+                            if (res.ok) triggerRefresh(currentPath);
+                            else triggerRefresh(currentPath); // Revert on error
+                          } catch (e) {
+                            console.error('Error updating description:', e);
+                            triggerRefresh(currentPath);
+                          }
+                        }}
+                        onRename={async (item, newName) => {
+                          console.log('Renaming item:', item.id, 'to:', newName);
+                          // Optimistic update
+                          if (item.type === 'folder') {
+                            setFolders(prev => prev.map(f => f.id === item.id ? { ...f, name: newName } : f));
+                          } else {
+                            setFiles(prev => prev.map(f => f.id === item.id ? { ...f, name: newName } : f));
+                          }
+                          try {
+                            const res = await fetch(`${API}/api/docs/rename`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ node_id: item.id, new_name: newName })
+                            });
+                            if (res.ok) {
+                              console.log('Rename success');
+                              triggerRefresh(currentPath);
+                            } else {
+                              console.error('Rename failed:', res.status);
+                              triggerRefresh(currentPath); // Revert
+                            }
+                          } catch (e) {
+                            console.error('Error renaming:', e);
+                            triggerRefresh(currentPath);
+                          }
+                        }}
+                        formatSize={formatSize}
+                        formatDate={formatDate}
+                        getInitials={getInitials}
+                        user={user}
+                        isAdmin={isAdmin}
+                        isTrashMode={isTrashMode}
+                        onShowVersions={onShowVersions}
+                        onRowMenu={(item, e) => { if (isAdmin) setActiveRowMenu({ item, x: e.clientX, y: e.clientY }); }}
+                        startResizing={startResizing}
+                        setSelected={setSelected}
+                        renderFileIconSop={renderFileIconSop}
+                    />
                 )}
-            </div>
-          </div>
-        </main>
-      </div>
-
-      {showNewFolder && isAdmin && (
-        <div className="modal-overlay" onClick={() => setShowNewFolder(false)}>
-          <div className="modal-box" onClick={e => e.stopPropagation()}>
-            <h3>📁 Nueva Carpeta</h3>
-            <input autoFocus placeholder="Nombre" value={folderName} onChange={e => setFolderName(e.target.value)} onKeyDown={e => e.key === 'Enter' && createFolder()} />
-            <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => setShowNewFolder(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={createFolder}>Crear</button>
-            </div>
+              </div>
+              <footer style={{ padding: '8px 16px', fontSize: 11, color: '#999', borderTop: '1px solid #eee', background: '#fff', flexShrink: 0 }}>
+                Mostrando {folders.length + files.length} elementos
+              </footer>
+            </section>
           </div>
         </div>
-      )}
+      </main>
 
-      {activeFile && (
-        <div className="file-viewer-overlay">
-          <div className="file-viewer-header">
-            <div className="file-viewer-title" style={{ position: 'relative' }}>
-              {activeFile.name}
-              <span
-                className="file-viewer-version"
-                onClick={() => setShowVersions(!showVersions)}
-                style={{ cursor: 'pointer', userSelect: 'none', background: (viewedVersionInfo && viewedVersionInfo.version !== (activeFile.version || 'V1')) ? '#333' : '#EBEBEB', color: (viewedVersionInfo && viewedVersionInfo.version !== (activeFile.version || 'V1')) ? '#fff' : '#333' }}
-              >
-                {viewedVersionInfo ? viewedVersionInfo.version : (activeFile.version || 'V1')}
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: showVersions ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', marginLeft: 4 }}>
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-              </span>
-
-              <span style={{
-                marginLeft: 8,
-                fontSize: 11,
-                fontWeight: 'bold',
-                color: (!viewedVersionInfo || viewedVersionInfo.version === (activeFile.version || 'V1')) ? '#52c41a' : '#ff4d4f',
-                background: (!viewedVersionInfo || viewedVersionInfo.version === (activeFile.version || 'V1')) ? '#f6ffed' : '#fff1f0',
-                border: `1px solid ${(!viewedVersionInfo || viewedVersionInfo.version === (activeFile.version || 'V1')) ? '#b7eb8f' : '#ffa39e'}`,
-                padding: '2px 8px',
-                borderRadius: 4,
-                textTransform: 'uppercase'
-              }}>
-                {(!viewedVersionInfo || viewedVersionInfo.version === (activeFile.version || 'V1')) ? '(ACTUAL)' : '(NO ACTUAL)'}
-              </span>
-
-              {showVersions && (
-                <div className="version-popover" onClick={e => e.stopPropagation()}>
+      {/* MODALS & OVERLAYS (STAY THE SAME) */}
+      <>
+      {tableShowVersions && versionTarget && (
+        <div className="side-panel-overlay" onClick={() => setTableShowVersions(false)} style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', justifyContent: 'flex-end', background: 'rgba(0,0,0,0.1)' }}>
+          <div className="right-side-panel" onClick={e => e.stopPropagation()} style={{ position: 'relative', width: versionPanelWidth, height: '100%', background: '#fff', borderLeft: '1px solid #dcdcdc', display: 'flex', flexDirection: 'column', animation: 'slideRight 0.3s ease-out' }}>
+            {/* Resize Handle */}
+            <div 
+              onMouseDown={startVersionResize}
+              style={{ position: 'absolute', left: -2, top: 0, bottom: 0, width: 6, cursor: 'col-resize', zIndex: 100 }}
+            />
+            <div className="right-panel-header" style={{ height: 48, borderBottom: '1px solid #dcdcdc', padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h1 style={{ fontSize: 16, fontWeight: 500, margin: 0, color: '#333' }}>Historial de versiones</h1>
+              <button onClick={() => setTableShowVersions(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#666' }}>×</button>
+            </div>
+            
+            <div className="panel-version-table-container" style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', background: '#fff' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
+                <thead>
+                  <tr style={{ background: '#f5f5f5', borderBottom: '1px solid #dcdcdc', height: 36 }}>
+                    <th style={{ width: 40, padding: '0 12px', position: 'sticky', left: 0, top: 0, background: '#f5f5f5', zIndex: 20, borderBottom: '1px solid #dcdcdc', whiteSpace: 'nowrap' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedVersions.size === versionHistory.length && versionHistory.length > 0} 
+                        onChange={() => {
+                          if (selectedVersions.size === versionHistory.length) setSelectedVersions(new Set());
+                          else setSelectedVersions(new Set(versionHistory.map(v => v.id)));
+                        }}
+                      />
+                    </th>
+                    <th style={{ width: 80, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', position: 'sticky', left: 40, top: 0, background: '#f5f5f5', zIndex: 20, borderBottom: '1px solid #dcdcdc', whiteSpace: 'nowrap' }}>Versión</th>
+                    <th style={{ minWidth: 300, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Nombre</th>
+                    <th style={{ width: 100, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Indicadores</th>
+                    <th style={{ width: 100, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Marcas de rev.</th>
+                    <th style={{ width: 100, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Tamaño</th>
+                    <th style={{ width: 150, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Última actualización</th>
+                    <th style={{ width: 220, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Actualizado por</th>
+                    <th style={{ width: 220, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Versión añadida por</th>
+                    <th style={{ width: 150, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Estado de revisión</th>
+                    <th style={{ width: 40, padding: '0 12px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
                   {loadingVersions ? (
-                    <div style={{ padding: 20, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
-                  ) : (
-                    <>
-                      {versionHistory.map((v, i) => (
-                        <div
-                          key={i}
-                          className="version-popover-item"
-                          onClick={() => { setViewedVersionInfo({ version: v.version, urn: v.details.gcs_urn }); setShowVersions(false); }}
-                          style={{
-                            cursor: 'pointer',
-                            borderLeftColor: (viewedVersionInfo ? viewedVersionInfo.version === v.version : i === 0) ? '#0696D7' : '#ccc',
-                            background: (viewedVersionInfo ? viewedVersionInfo.version === v.version : i === 0) ? '#f6faff' : '#fcfcfc',
-                            transition: 'background 0.2s'
-                          }}
-                        >
-                          <div className="v-tag">{v.version}</div>
-                          <div className="v-info">
-                            <div className="v-name" title={activeFile.name}>
-                              {activeFile.name.length > 25 ? activeFile.name.substring(0, 22) + '...' : activeFile.name}
-                            </div>
-                            <div className="v-meta">
-                              Cargado por <strong>{v.performed_by}</strong> el {new Date(v.created_at).toLocaleString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    <tr><td colSpan="11" style={{ textAlign: 'center', padding: 40 }}><div className="adsk-spinner" /></td></tr>
+                  ) : versionHistory.map((v, i) => {
+                    const isCurrent = i === 0;
+                    const isSelected = selectedVersions.has(v.id);
+                    return (
+                      <tr key={i} style={{ borderBottom: '1px solid #eee', verticalAlign: 'top', background: isSelected ? '#f6fbff' : '#fff' }}>
+                        <td style={{ padding: '16px 12px', position: 'sticky', left: 0, background: isSelected ? '#f6fbff' : '#fff', zIndex: 5 }}>
+                          <input 
+                            type="checkbox" 
+                            checked={isSelected} 
+                            onChange={() => {
+                              const next = new Set(selectedVersions);
+                              if (isSelected) next.delete(v.id); else next.add(v.id);
+                              setSelectedVersions(next);
+                            }} 
+                          />
+                        </td>
+                        <td style={{ padding: '16px 12px', position: 'sticky', left: 40, background: isSelected ? '#f6fbff' : '#fff', zIndex: 5 }}>
+                           <span className="version-link-acc">{v.version_number ? `V${v.version_number}` : 'V1'}</span>
+                        </td>
+                        <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', gap: 12 }}>
+                            {renderFileIconSop(versionTarget.name, 22)}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              <span style={{ fontSize: 13, fontWeight: 500, color: '#3c3c3c' }}>{versionTarget.name}</span>
+                              <span style={{ fontSize: 11, color: '#999' }}>Cargado por <span style={{ textTransform: 'uppercase' }}>{v.updated_by || 'ADMIN'}</span></span>
                             </div>
                           </div>
+                        </td>
+                        <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>--</td>
+                        <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>--</td>
+                        <td style={{ padding: '16px 12px', fontSize: 13, color: '#3c3c3c', whiteSpace: 'nowrap' }}>{formatSize(v.size || 0)}</td>
+                        <td style={{ padding: '16px 12px', fontSize: 13, color: '#3c3c3c', whiteSpace: 'nowrap' }}>{formatDate(v.updated)}</td>
+                        <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                             <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 10, flexShrink: 0 }}>{getInitials(v.updated_by || 'ADMIN')}</div>
+                             <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                               <span style={{ fontSize: 13, color: '#3c3c3c', textOverflow: 'ellipsis', overflow: 'hidden' }}>{v.updated_by || 'ADMIN'}</span>
+                               <span style={{ fontSize: 11, color: '#999', textOverflow: 'ellipsis', overflow: 'hidden' }}>Trial account ysan...</span>
+                             </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                             <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 10, flexShrink: 0 }}>{getInitials(v.updated_by || 'ADMIN')}</div>
+                             <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                               <span style={{ fontSize: 13, color: '#3c3c3c', textOverflow: 'ellipsis', overflow: 'hidden' }}>{v.updated_by || 'ADMIN'}</span>
+                               <span style={{ fontSize: 11, color: '#999', textOverflow: 'ellipsis', overflow: 'hidden' }}>Trial account ysan...</span>
+                             </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>--</td>
+                        <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>
+                          <button 
+                            className="row-menu-btn" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setVersionRowMenu({ v, x: rect.left - 180, y: rect.bottom + 5, isSelected });
+                            }}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            
+            <footer style={{ height: 40, borderTop: '1px solid #dcdcdc', padding: '0 16px', display: 'flex', alignItems: 'center', fontSize: 12, color: '#666', background: '#fff' }}>
+               {selectedVersions.size > 0 ? `${selectedVersions.size} de ${versionHistory.length} seleccionadas` : `Se están mostrando ${versionHistory.length} versiones`}
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {/* VERSION ROW CONTEXT MENU */}
+      {versionRowMenu && (
+        <div 
+          className="modal-overlay" 
+          onClick={() => setVersionRowMenu(null)}
+          style={{ background: 'transparent', zIndex: 11000 }}
+        >
+          <div 
+            className="row-context-menu" 
+            style={{ position: 'fixed', left: versionRowMenu.x, top: versionRowMenu.y, width: 220 }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button onClick={() => { /* Copiar logic */ setVersionRowMenu(null); }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+              Copiar
+            </button>
+            <button onClick={() => { /* Paquetes logic */ setVersionRowMenu(null); }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+              Añadir a paquetes
+            </button>
+            <button onClick={() => {
+              if (versionRowMenu.v.gcs_urn) window.open(`${API}/api/docs/view?urn=${encodeURIComponent(versionRowMenu.v.gcs_urn)}`, '_blank');
+              setVersionRowMenu(null);
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              Descargar archivo de origen
+            </button>
+            
+            {versionRowMenu.isSelected && versionRowMenu.v.version_number !== versionHistory[0]?.version_number && (
+              <>
+                <div className="menu-divider" />
+                <button 
+                  onClick={() => { handlePromote(versionRowMenu.v); setVersionRowMenu(null); }}
+                  style={{ fontWeight: 600 }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+                  Establecer como actual
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      </>
+
+      {activeRowMenu && (
+        <div className="modal-overlay" onClick={() => setActiveRowMenu(null)} style={{ background: 'transparent', zIndex: 10001 }}>
+          <div className="row-context-menu" style={{ position: 'absolute', top: activeRowMenu.y, left: activeRowMenu.x - 180, width: 180 }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => { setActiveRowMenu(null); setActiveFile(activeRowMenu.item); }}>Ver / Abrir</button>
+            <button onClick={() => { setActiveRowMenu(null); onShowVersions(activeRowMenu.item, { clientX: activeRowMenu.x, clientY: activeRowMenu.y }); }}>Historial</button>
+            <div className="menu-divider" />
+            <button onClick={() => { setActiveRowMenu(null); renameSpecificItem(activeRowMenu.item.fullName); }}>Renombrar</button>
+            <button onClick={() => { setActiveRowMenu(null); setMoveState({ step: 1, items: [activeRowMenu.item.fullName], destPath: '' }); }}>Desplazar</button>
+            <button className="delete" onClick={() => { setActiveRowMenu(null); deleteSpecificItem(activeRowMenu.item.fullName); }}>Suprimir</button>
+          </div>
+        </div>
+      )}
+
+      {showNewFolder && (
+        <div className="modal-overlay" onClick={() => setShowNewFolder(false)}>
+          <div className="modal-box">
+            <h3>Nueva Carpeta</h3>
+            <input autoFocus value={folderName} onChange={e => setFolderName(e.target.value)} onKeyDown={e => e.key === 'Enter' && createFolder()} />
+            <div className="modal-actions">
+              <button onClick={() => setShowNewFolder(false)}>Cancelar</button>
+              <button onClick={createFolder}>Crear</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeFile && activeFile.type !== 'folder' && (
+        <div className="file-viewer-overlay">
+          <div className="file-viewer-header">
+            <div className="file-viewer-title">{activeFile.name}</div>
+            <button className="file-viewer-close" onClick={() => { setActiveFile(null); setShowVersions(false); }}>✕</button>
+          </div>
+          <iframe className="file-viewer-content" src={`${API}/api/docs/view?path=${encodeURIComponent(activeFile.fullName)}`} title={activeFile.name} />
+        </div>
+      )}
+
+      {moveState.step > 0 && (
+        <div className="modal-overlay" onClick={() => setMoveState({ step: 0, items: [], destPath: '' })}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ width: moveState.step === 2 ? 500 : 400 }}>
+            <h3>{moveState.step === 1 ? '¿Mover?' : 'Seleccionar destino'}</h3>
+            {moveState.step === 1 ? <p>Mover estos elementos.</p> : (
+              <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                <SelectFolderNode folder={{ name: 'Archivos de proyecto', fullName: projectPrefix }} defaultExpanded={true} selectedPath={moveState.destPath} onSelect={(path) => setMoveState({ ...moveState, destPath: path })} />
+              </div>
+            )}
+            <div className="modal-actions">
+              <button onClick={() => setMoveState({ step: 0, items: [], destPath: '' })}>Cancelar</button>
+              <button onClick={() => moveState.step === 1 ? setMoveState({ ...moveState, step: 2 }) : handleExecuteMove()}>
+                {moveState.step === 1 ? 'Continuar' : 'Mover'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showUploadModal && !sopMinimized && (
+        <div className="modal-overlay" onClick={() => { if (sopQueue.length === 0) setShowUploadModal(false); }}>
+          <div className="acc-upload-modal" onClick={e => e.stopPropagation()}>
+            <div className="acc-upload-header">
+              <h3>Cargar archivos</h3>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button className="file-viewer-close" style={{ background: 'none' }} onClick={() => setSopMinimized(true)}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h14v14zm-2-2V7H7v10h10z"/></svg>
+                </button>
+                <button className="file-viewer-close" style={{ background: 'none' }} onClick={() => setShowUploadModal(false)}>✕</button>
+              </div>
+            </div>
+            
+            <div className="acc-upload-body" style={{ maxHeight: 600, overflowY: 'auto' }}>
+              {/* ENTRY POINTS (PERSISTENT) */}
+              <div className="acc-upload-entry-section" style={{ marginBottom: 20 }}>
+                <button className="acc-upload-btn-secondary" style={{ width: '100%', border: '1px solid #0696d7', color: '#000', padding: '8px', marginBottom: 12, borderRadius: 2 }} onClick={() => fileRef.current.click()}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#666"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+                  Desde su equipo
+                </button>
+                <div 
+                  className={`acc-upload-dropzone ${dragOver ? 'drag-over' : ''}`} 
+                  onClick={() => fileRef.current.click()}
+                  onDragOver={onDragOver}
+                  onDragLeave={onDragLeave}
+                  onDrop={onDrop}
+                  style={{ border: '1px dashed #ddd', padding: '40px 20px', borderRadius: 2, textAlign: 'center' }}
+                >
+                   <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ddd" strokeWidth="1"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></svg>
+                   <div style={{ color: '#999', fontSize: 13, marginTop: 12 }}>Arrastre archivos aquí o elija una opción arriba</div>
+                </div>
+                <input type="file" ref={fileRef} multiple style={{ display: 'none' }} onChange={e => handleSopUpload(e.target.files)} />
+              </div>
+
+              {sopQueue.length > 0 && (
+                <div style={{ marginTop: 20 }}>
+                  <div style={{ fontSize: 13, color: '#333', marginBottom: 16, fontWeight: 300 }}>
+                    Total de {sopQueue.length} {sopQueue.length === 1 ? 'archivo' : 'archivos'}, {sopBatches.length} {sopBatches.length === 1 ? 'lote' : 'lotes'}
+                  </div>
+                  
+                  {sopBatches.map(batch => (
+                    <div key={batch.id} className="acc-batch-group" style={{ marginBottom: 16 }}>
+                      <div className="acc-batch-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#fcfcfc', borderBottom: '1px solid #f0f0f0' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#333', fontWeight: 500 }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5H7z"/></svg>
+                          <span>{sopQueue.filter(f => f.batchId === batch.id).length} archivos</span>
                         </div>
-                      ))}
-                      {versionHistory.length === 0 && (
-                        <div style={{ fontSize: 11, color: '#999', textAlign: 'center', padding: 8 }}>No hay historial disponible</div>
-                      )}
-                    </>
-                  )}
+                        <div style={{ fontSize: 11, color: '#999' }}>Cargar en {batch.timestamp}</div>
+                      </div>
+                      <div className="acc-batch-content">
+                        {sopQueue.filter(f => f.batchId === batch.id).map(item => (
+                          <div key={item.id} className="acc-upload-file-row">
+                            {renderFileIconSop(item.file?.name, 32)}
+                            <div className="acc-upload-file-info">
+                              <div className="acc-upload-file-name">{item.file?.name}</div>
+                              <div className="acc-upload-file-status">
+                                {item.status === 'PROCESO_PENDIENTE' ? 'Proceso pendiente' : (item.status === 'PROCESANDO_1' || item.status === 'IDLE') ? 'Procesando' : ''}
+                                {(item.status === 'BARRA_AZUL' || item.status === 'PROCESANDO_1' || item.status === 'PROCESO_PENDIENTE') && (
+                                  <div className="acc-progress-container">
+                                    <div className={`acc-progress-bar ${item.status !== 'BARRA_AZUL' ? 'indeterminate' : ''}`} style={{ width: item.status === 'BARRA_AZUL' ? `${item.progress}%` : '100%' }} />
+                                  </div>
+                                )}
+                                {item.status === 'LISTO_1' && (
+                                  <div style={{ color: '#33691e', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                                    Cargado en la carpeta {currentPath.split('/').filter(Boolean).pop()} {item.time}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div style={{ fontSize: 12, color: '#999', display: 'flex', alignItems: 'center', gap: 12 }}>
+                              <span style={{ minWidth: 60, textAlign: 'right' }}>{formatSize(item.file?.size || 0)}</span>
+                              {item.status === 'LISTO_1' ? (
+                                <span style={{ color: '#0696d7', fontWeight: 600, cursor: 'pointer' }}>Ver</span>
+                              ) : (
+                                <span onClick={() => { setSopQueue(q => q.filter(it => it.id !== item.id)); if (sopQueue.length <= 1) setUploadSopStep('IDLE'); }} style={{ cursor: 'pointer', fontSize: 16 }}>✕</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-            <div className="file-viewer-center">
-              <span style={{ fontSize: 13, display: 'flex', alignItems: 'center' }}>Página <svg style={{ marginLeft: 6, marginRight: 2 }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="15 18 9 12 15 6"></polyline></svg> <input type="text" defaultValue="1" style={{ width: 32, height: 24, textAlign: 'center', border: '1px solid #ccc', margin: '0 4px', borderRadius: 2 }} disabled /> <svg style={{ marginRight: 6, marginLeft: 2 }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="9 18 15 12 9 6"></polyline></svg> de 1</span>
-            </div>
-            <div className="file-viewer-actions">
-              <button className="file-viewer-close" onClick={() => { setActiveFile(null); setShowVersions(false); }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6L6 18M6 6l12 12"></path></svg>
-              </button>
-            </div>
-          </div>
-          <iframe
-            className="file-viewer-content"
-            src={(() => {
-              const baseUrl = viewedVersionInfo
-                ? `${API}/api/docs/view?urn=${encodeURIComponent(viewedVersionInfo.urn)}`
-                : (activeFile.mediaLink || activeFile.url || `${API}/api/docs/view?path=${encodeURIComponent(activeFile.fullName)}`);
-              const ext = activeFile.name.toLowerCase().split('.').pop();
-              if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
-                return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(baseUrl)}`;
-              }
-              return baseUrl;
-            })()}
-            title={activeFile.name}
-          />
-        </div>
-      )}
-
-      {/* MOVE MODALS */}
-      {moveState.step === 1 && (
-        <div className="modal-overlay" onClick={() => setMoveState({ step: 0, items: [], destPath: '' })} style={{ zIndex: 999999 }}>
-          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ width: 450 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 400 }}>¿Mover carpeta?</h3>
-              <button onClick={() => setMoveState({ step: 0, items: [], destPath: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
-            </div>
-            <p style={{ fontSize: 13, color: '#333', lineHeight: 1.5, marginBottom: 24 }}>La carpeta conservará los permisos y los suscriptores de la carpeta de destino. Los suscriptores de la carpeta actual no se conservarán.</p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-              <button className="btn btn-outline" style={{ border: '1px solid #dcdcdc', padding: '6px 16px', borderRadius: 4, background: '#fff', cursor: 'pointer' }} onClick={() => setMoveState({ step: 0, items: [], destPath: '' })}>Cancelar</button>
-              <button className="btn-main-blue" style={{ padding: '6px 16px' }} onClick={() => setMoveState({ ...moveState, step: 2 })}>Continuar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {moveState.step === 2 && (
-        <div className="modal-overlay" onClick={() => setMoveState({ step: 0, items: [], destPath: '' })} style={{ zIndex: 999999 }}>
-          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ width: 500, padding: 0, display: 'flex', flexDirection: 'column', height: 500 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #e0e0e0' }}>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 400 }}>Seleccionar carpeta de destino</h3>
-              <button onClick={() => setMoveState({ step: 0, items: [], destPath: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px' }}>
-              <SelectFolderNode
-                folder={{ name: 'Archivos de proyecto', fullName: projectPrefix }}
-                defaultExpanded={true}
-                selectedPath={moveState.destPath}
-                onSelect={(path) => setMoveState({ ...moveState, destPath: path })}
-              />
-            </div>
-
-            <div style={{ padding: '16px 24px', borderTop: '1px solid #e0e0e0', display: 'flex', justifyContent: 'flex-end', gap: 12, alignItems: 'center', background: '#fcfcfc' }}>
-              <span style={{ fontSize: 12, color: '#0696D7', marginRight: 'auto', display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
-                <span>❓</span> ¿Estos archivos se sincronizan?
-              </span>
-              <button className="btn btn-outline" style={{ border: 'none', color: '#0696D7', fontSize: 13, background: 'transparent', cursor: 'pointer', fontWeight: 500 }} onClick={() => setMoveState({ step: 0, items: [], destPath: '' })}>Cancelar</button>
-              <button className="btn-main-blue" style={{ padding: '6px 16px', opacity: moveState.destPath ? 1 : 0.5 }} disabled={!moveState.destPath} onClick={handleExecuteMove}>
-                {loading ? 'Moviendo...' : 'Desplazar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {showUploadModal && isAdmin && (
-        <div className="modal-overlay" onClick={() => setShowUploadModal(false)} style={{ zIndex: 999999 }}>
-          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ width: 600, padding: 0, display: 'flex', flexDirection: 'column', height: 500 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #e0e0e0' }}>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 400 }}>Cargar archivos</h3>
-              <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
-                <button onClick={() => setShowUploadModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
-              </div>
-            </div>
-
-            <div style={{ padding: '24px' }}>
-              <button
-                className="btn btn-outline"
-                style={{ width: '100%', padding: '12px', border: '1px solid #ccc', borderRadius: 4, background: '#fff', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, fontSize: 14, color: '#333' }}
-                onClick={() => fileRef.current?.click()}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="15" x2="21" y2="15"></line></svg>
-                Desde su equipo
-              </button>
-            </div>
-
-            <div
-              style={{ flex: 1, margin: '0 24px 24px 24px', border: '1px dashed #ccc', borderRadius: 4, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: dragOver ? '#f0f8ff' : '#fafafa' }}
-              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={e => { e.preventDefault(); setDragOver(false); handleUpload(e.dataTransfer.files); setShowUploadModal(false); }}
-            >
-              {uploading ? (
-                <div className="loading"><div className="adsk-spinner" style={{ margin: '0 auto', marginBottom: 16 }} /><span>Subiendo archivos...</span></div>
-              ) : (
-                <>
-                  <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1" style={{ marginBottom: 16 }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                  <span style={{ color: '#888', fontSize: 14 }}>Arrastre archivos aquí o elija una opción arriba</span>
-                </>
-              )}
-            </div>
-
-            <div style={{ padding: '16px 24px', borderTop: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fcfcfc' }}>
-              <span style={{ fontSize: 13, color: '#0696D7', display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
-                <span style={{ border: '1px solid #0696D7', borderRadius: '50%', width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>?</span> ¿Estos archivos se sincronizan con el dispositivo móvil?
-              </span>
-              <button
-                className="btn btn-outline"
-                style={{ padding: '8px 24px', background: '#f0f0f0', border: '1px solid #dcdcdc', borderRadius: 4, cursor: 'pointer', color: '#999', fontWeight: 500 }}
-                onClick={() => setShowUploadModal(false)}
+            <div className="acc-upload-footer">
+              <button className="acc-btn-listo" 
+                disabled={uploadSopStep !== 'LISTO_1'} 
+                onClick={handleSopListo}
               >
                 Listo
               </button>
@@ -1701,10 +2030,68 @@ function FilesPage({ project, user, onBack }) {
           </div>
         </div>
       )}
-      {uploadProgress.total > 0 && (
-        <div className="upload-toast">
-          <div className="spinner"></div>
-          <span>Cargando {uploadProgress.current}/{uploadProgress.total} archivos...</span>
+
+      {showSopToast && (
+        <div className="acc-success-toast">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          Un archivo se ha cargado correctamente.
+        </div>
+      )}
+
+      {showUploadModal && sopMinimized && (
+        <div className="acc-upload-monitor" style={{ position: 'fixed', bottom: 20, right: 20, width: 320, background: '#fff', border: '1px solid #ddd', borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 10000, overflow: 'hidden' }}>
+          <div className="acc-monitor-header" style={{ padding: '8px 12px', background: '#fcfcfc', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 13, fontWeight: 500 }}>Cargar</span>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }} onClick={() => setSopMinimized(false)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#666"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+              </button>
+              <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#666"><path d="M7 10l5 5 5-5z"/></svg>
+              </button>
+              <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }} onClick={() => setShowUploadModal(false)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#666"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+              </button>
+            </div>
+          </div>
+          
+          <div className="acc-monitor-body" style={{ maxHeight: 400, overflowY: 'auto' }}>
+            <div style={{ padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f0f0f0' }}>
+              <span style={{ fontSize: 12, color: '#333' }}>Total de {sopQueue.length} {sopQueue.length === 1 ? 'archivo' : 'archivos'}, {sopBatches.length} {sopBatches.length === 1 ? 'lote' : 'lotes'}...</span>
+              <span style={{ fontSize: 12, color: '#0696d7', cursor: 'pointer', fontWeight: 600 }} onClick={() => { setSopQueue([]); setSopBatches([]); setShowUploadModal(false); }}>Cancelar todo</span>
+            </div>
+
+            {sopBatches.map(batch => (
+              <div key={batch.id}>
+                <div style={{ padding: '8px 12px', background: '#fafafa', fontSize: 12, color: '#666', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                   <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+                   {sopQueue.filter(f => f.batchId === batch.id).length} archivo
+                </div>
+                {sopQueue.filter(f => f.batchId === batch.id).map(item => (
+                  <div key={item.id} style={{ padding: '12px', borderBottom: '1px solid #f9f9f9', display: 'flex', gap: 12 }}>
+                        {renderFileIconSop(item.file?.name, 28)}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.file?.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                         {item.status !== 'LISTO_1' ? (
+                           <>
+                             <div className="acc-mini-spinner" style={{ width: 10, height: 10, border: '2px solid #0696d7', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                             <span style={{ fontSize: 11, color: '#666' }}>Cargando: {item.progress}%</span>
+                           </>
+                         ) : (
+                           <span style={{ fontSize: 11, color: '#33691e' }}>Listo</span>
+                         )}
+                         <span style={{ fontSize: 11, color: '#999' }}>• {formatSize(item.file?.size || 0)}</span>
+                      </div>
+                    </div>
+                    {item.status !== 'LISTO_1' && (
+                      <div style={{ fontSize: 12, color: '#0696d7', cursor: 'pointer', fontWeight: 600 }} onClick={() => setSopQueue(q => q.filter(it => it.id !== item.id))}>Cancelar</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

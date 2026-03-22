@@ -1,6 +1,5 @@
 import React from 'react';
 import './TopBar.css';
-import { Capacitor } from '@capacitor/core';
 
 const DOCS_URL = import.meta.env.VITE_DOCS_URL || 'http://localhost:5174';
 
@@ -78,6 +77,30 @@ const SignOutIcon = () => (
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
         <polyline points="16 17 21 12 16 7" />
         <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+);
+
+// Engineering Icons (Tandem Style)
+const OrbitIcon = () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" strokeOpacity="0.2"/>
+        <path d="M12 6v12M6 12h12" />
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19 12a7 7 0 0 0-7-7" />
+    </svg>
+);
+
+const RulerIcon = () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2z" />
+        <path d="M7 3v4M11 3v2M15 3v4M19 3v2M3 7h18" />
+    </svg>
+);
+
+const SectionIcon = () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M21 3H3v18h18V3zM3 12h18" />
+        <path d="M12 3v18" strokeDasharray="2 2"/>
     </svg>
 );
 

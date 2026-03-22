@@ -28,7 +28,7 @@ from aps import get_internal_token, get_api_data
 
 # Flask app setup
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB (Failsafe para archivos CAD/Civil pesados)
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB (Failsafe para archivos CAD/Civil pesados)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Register Blueprints
@@ -677,6 +677,7 @@ from routes.documents import documents_bp
 from routes.auth import auth_bp
 from routes.projects import projects_bp
 from routes.ai import ai_bp
+from routes.schedule import schedule_bp
 
 app.register_blueprint(digital_twin_bp)
 app.register_blueprint(maps_bp)
@@ -687,15 +688,18 @@ app.register_blueprint(documents_bp)
 app.register_blueprint(projects_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(ai_bp)
+app.register_blueprint(schedule_bp, url_prefix='/api/schedule')
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
     return send_from_directory(MAP_UPLOAD_FOLDER, filename)
 
 # Inicializar tablas maestras de la BD
-from db import ensure_file_nodes_table
+from db import ensure_file_nodes_table, ensure_ai_brain_schema
 ensure_file_nodes_table()
-
+ensure_ai_brain_schema()
+ 
+ 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 3000))
     app.run(host='0.0.0.0', port=port, debug=True)

@@ -78,13 +78,31 @@ def ensure_file_nodes_table():
                     mime_type VARCHAR(100),
                     status VARCHAR(50) DEFAULT 'DRAFT', -- DRAFT, REVIEW, APPROVED, ARCHIVED
                     tags TEXT[],                        -- Array de etiquetas (Postgres)
-                    metadata JSONB DEFAULT '{}'         -- Para datos extra de ingenieria
+                    metadata JSONB DEFAULT '{}',        -- Para datos extra de ingenieria
+                    current_version_id UUID             -- Puntero a la version actual activa
+                );
+            """)
+            
+            # ── 1.1 Tabla Histórica de Versiones (ESTILO ACC / PROFESIONAL) ──
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS file_versions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    file_node_id UUID REFERENCES file_nodes(id) ON DELETE CASCADE,
+                    version_number INTEGER NOT NULL,
+                    gcs_urn TEXT NOT NULL,
+                    size_bytes BIGINT,
+                    mime_type VARCHAR(100),
+                    metadata JSONB DEFAULT '{}',        -- Atributos especificos de la version
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                 );
             """)
             # Migraciones incrementales
             cursor.execute("ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'DRAFT';")
             cursor.execute("ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS tags TEXT[];")
             cursor.execute("ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';")
+            cursor.execute("ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS description TEXT;")
+            cursor.execute("ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS current_version_id UUID;")
 
             # ── 2. Indices para consultas frecuentes (CRITICO para escalar) ─
             # Sin estos indices, con 100.000 archivos las queries se vuelven lentas
@@ -141,6 +159,69 @@ def ensure_file_nodes_table():
             print("[DB] Tablas e indices maestros verificados/creados exitosamente.")
     except Exception as e:
         print(f"Error inicializando esquema maestro: {e}")
+
+def ensure_ai_brain_schema():
+    """Crea el esquema y las tablas para el Cerebro de IA y HITL."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # 1. Esquema dedicado
+            cursor.execute('CREATE SCHEMA IF NOT EXISTS ai_brain;')
+            
+            # 2. Tabla de Conocimiento Global
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ai_brain.global_knowledge (
+                    id SERIAL PRIMARY KEY,
+                    subject VARCHAR(255) NOT NULL,
+                    rule_description TEXT NOT NULL,
+                    source_project_id VARCHAR(255),
+                    confidence_score FLOAT DEFAULT 1.0, 
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
+            # 3. Tabla Maestras de Triples Semánticos (Fase 4 - ETL)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ai_brain.semantic_triples (
+                    id BIGSERIAL PRIMARY KEY,
+                    subject TEXT NOT NULL,
+                    predicate TEXT NOT NULL,
+                    object TEXT,
+                    value_numeric FLOAT,
+                    unit VARCHAR(50),
+                    context_quote TEXT,
+                    source_file VARCHAR(255),
+                    metadata JSONB DEFAULT '{}',
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_semantic_subject ON ai_brain.semantic_triples(subject);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_semantic_predicate ON ai_brain.semantic_triples(predicate);")
+
+            # 4. Buffer de Feedback (HITL)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ai_brain.feedback_buffer (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    model_urn VARCHAR(255) NOT NULL,
+                    device_id VARCHAR(100),
+                    user_query TEXT NOT NULL,
+                    ai_response TEXT NOT NULL,
+                    human_correction TEXT,
+                    reward_value FLOAT DEFAULT 0.0,
+                    metadata JSONB DEFAULT '{}',
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_fb_buffer_project ON ai_brain.feedback_buffer(model_urn);")
+            
+            conn.commit()
+            print("[DB] Esquema ai_brain (HITL) verificado/creado exitosamente.")
+    except Exception as e:
+        print(f"Error inicializando esquema AI: {e}")
 
 
 def log_activity(model_urn, action, entity_type, entity_id=None, entity_name=None, performed_by=None, details=None):

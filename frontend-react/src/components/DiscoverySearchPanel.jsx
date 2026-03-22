@@ -39,7 +39,17 @@ const DiscoverySearchPanel = ({ results, answer, loading, query, messages, onOpe
                     {chatMessages.map((msg, idx) => (
                         <div key={idx} className={`chat-message ${msg.role}`}>
                             <div className="message-bubble">
-                                {msg.content}
+                                {msg.agentSteps && msg.agentSteps.length > 0 && (
+                                    <details className="agent-reasoning">
+                                        <summary>Pensamiento del Agente ({msg.agentSteps.length} pasos)</summary>
+                                        <ul className="reasoning-steps">
+                                            {msg.agentSteps.map((step, sIdx) => (
+                                                <li key={sIdx}>{step}</li>
+                                            ))}
+                                        </ul>
+                                    </details>
+                                )}
+                                <div className="answer-text">{msg.content}</div>
                             </div>
                             {msg.results && msg.results.length > 0 && (
                                 <div className="message-citations">

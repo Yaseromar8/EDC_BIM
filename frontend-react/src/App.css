@@ -1669,78 +1669,10 @@ div[class*="bim360-visual-style-group"] * {
   }
 }
 
-/* --- MOBILE TOOLBAR TOGGLE (Matches previous logic) --- */
-.mobile-tools-toggle {
-  display: none;
-}
 
-@media (max-width: 1366px) {
 
-  /* Show Toggle Button on Mobile/Tablet */
-  .mobile-tools-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: absolute;
-    bottom: 24px;
-    right: 24px;
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background-color: #1e293b;
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-    z-index: 100;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    backdrop-filter: blur(4px);
-  }
-
-  .mobile-tools-toggle:hover {
-    background-color: #3AA0FF;
-  }
-
-  .mobile-tools-toggle:active {
-    transform: scale(0.92);
-  }
-
-  /* DEFAULTS: Hide native toolbar on mobile initially */
-  .viewer-container.mobile-tools-hidden .adsk-viewing-viewer .adsk-toolbar,
-  .secondary-viewer.mobile-tools-hidden .adsk-viewing-viewer .adsk-toolbar {
-    visibility: hidden !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-    transition: opacity 0.2s ease, visibility 0.2s;
-  }
-
-  /* VISIBLE STATE: Show toolbar container (Let children handle themselves) */
-  .viewer-container.mobile-tools-visible .adsk-viewing-viewer .adsk-toolbar,
-  .secondary-viewer.mobile-tools-visible .adsk-viewing-viewer .adsk-toolbar {
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    transition: opacity 0.2s ease, visibility 0.2s;
-  }
-
-  /* POSITIONING adjustments for mobile toolbars */
-  .viewer-container.mobile-tools-visible .adsk-viewing-viewer .adsk-toolbar,
-  .secondary-viewer.mobile-tools-visible .adsk-viewing-viewer .adsk-toolbar {
-    bottom: 80px !important;
-    /* Above the toggle button */
-    right: 24px !important;
-    left: auto !important;
-    top: auto !important;
-    transform: none !important;
-    flex-direction: column !important;
-    /* Stack vertically for better mobile usage */
-    max-height: 60vh;
-    overflow-y: auto;
-  }
-}
-
-/* Override global checkbox styling for Tandem-like appearance */
-input[type='checkbox'] {
+/* Custom checkbox styling for our App's UI components ONLY */
+.app-checkbox {
   appearance: none;
   -webkit-appearance: none;
   width: 14px;
@@ -1754,12 +1686,12 @@ input[type='checkbox'] {
   outline: none;
 }
 
-input[type='checkbox']:checked {
+.app-checkbox:checked {
   background-color: #383838;
   border-color: #666;
 }
 
-input[type='checkbox']:checked::after {
+.app-checkbox:checked::after {
   content: '';
   position: absolute;
   left: 4px;
@@ -1775,17 +1707,15 @@ input[type='checkbox']:hover {
   border-color: #777;
 }
 
-/* FORCE TANDEM CHECKBOX STYLE (Exact Match) */
-input[type='checkbox'] {
+/* Specific class for Tandem-like inputs used in panels */
+.tandem-checkbox {
   appearance: none !important;
   -webkit-appearance: none !important;
   width: 14px !important;
   height: 14px !important;
   border: 1px solid #555 !important;
   background-color: #222 !important;
-  /* Darker Unchecked */
   border-radius: 2px !important;
-  /* Slight radius, mostly square */
   cursor: pointer !important;
   position: relative !important;
   display: inline-flex !important;
@@ -1797,15 +1727,12 @@ input[type='checkbox'] {
   transition: all 0.1s ease;
 }
 
-/* Checked State - Matte Opaque Grey */
-input[type='checkbox']:checked {
+.tandem-checkbox:checked {
   background-color: #383838 !important;
-  /* Common dark grey UI element */
   border-color: #555 !important;
 }
 
-/* SVG Checkmark Background */
-input[type='checkbox']:checked::after {
+.tandem-checkbox:checked::after {
   content: '' !important;
   width: 14px !important;
   height: 14px !important;
@@ -1947,4 +1874,58 @@ input[type='checkbox']:hover {
     width: 12px;
     height: 12px;
   }
+}
+
+/* ========================================================================= */
+/* STRICT DESKTOP TOOLBAR FILTER - ENFORCING EXACTLY 7 BUTTONS               */
+/* ========================================================================= */
+
+/* Hide unwanted native tools in the viewer toolbar (Pan, Fit to view, Camera, Properties, Model Tree) */
+#toolbar-panTool,
+#toolbar-zoomTool,
+#toolbar-cameraSubmenuTool,
+#toolbar-propertiesTool,
+#toolbar-modelBrowserTool,
+#toolbar-modelBimStatsTool {
+    display: none !important;
+}
+
+/* Ensure the wanted tools are always visible (if they are loaded) */
+#toolbar-orbitTools,
+#toolbar-bimWalkerTool,
+#toolbar-measurementSubmenuTool,
+#toolbar-sectionTool,
+#toolbar-explodeTool,
+#toolbar-settingsTool,
+#toolbar-fullscreenTool {
+    display: flex !important;
+}
+
+/* ========================================================================= */
+/* STRICT DESKTOP TOOLBAR FILTER - ENFORCING EXACTLY 7 BUTTONS               */
+/* ========================================================================= */
+
+/* Hide unwanted native tools in the viewer toolbar (Pan, Fit to view, Camera, Properties, Model Tree, Levels) */
+#toolbar-panTool,
+#toolbar-zoomTool,
+#toolbar-cameraSubmenuTool,
+#toolbar-propertiesTool,
+#toolbar-modelTreeTool,
+#toolbar-modelBrowserTool,
+#toolbar-documentBrowserTool,
+#toolbar-modelStructureTool,
+#toolbar-levelsTool,
+#toolbar-bimWalkerTool,
+#toolbar-modelBimStatsTool {
+    display: none !important;
+}
+
+/* Ensure the wanted tools are always visible (if they are loaded) */
+#toolbar-orbitTools,
+#toolbar-measurementSubmenuTool,
+#toolbar-sectionTool,
+#toolbar-explodeTool,
+#toolbar-settingsTool,
+#toolbar-fullscreenTool {
+    display: flex !important;
 }

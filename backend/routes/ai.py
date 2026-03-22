@@ -8,7 +8,11 @@ from vertexai.generative_models import GenerativeModel, Part
 from google.cloud import storage
 import pdfplumber
 import fitz  # pymupdf
+import traceback
 from google.cloud import discoveryengine_v1beta as discoveryengine
+import json
+import re
+from skills.pdf_researcher import PDFResearcher
 
 
 ai_bp = Blueprint('ai', __name__)
@@ -209,19 +213,28 @@ def ask_document():
     node_id     = data.get('nodeId') or data.get('node_id')
     bucket_name = os.environ.get("GCS_BUCKET_NAME")
 
-    if not question or not (full_path or node_id):
-        return jsonify({"error": "Falta pregunta o identificador"}), 400
+    if not question:
+        return jsonify({"error": "Falta pregunta"}), 400
+
+    # Si no se provee un documento específico, redirigimos a la lógica de búsqueda universal
+    if not (full_path or node_id):
+        print("[AI] /api/ai/ask -> Redirigiendo a Búsqueda Universal (Global mode)")
+        # Llamamos internamente a la lógica de universal_search
+        return universal_search()
 
     # Resolución robusta por ID si está disponible
     gcs_urn = full_path
+    doc_desc = None
     if node_id:
         try:
             from db import get_db_connection
             with get_db_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT gcs_urn FROM file_nodes WHERE id = %s", (node_id,))
+                cursor.execute("SELECT gcs_urn, description FROM file_nodes WHERE id = %s", (node_id,))
                 row = cursor.fetchone()
-                if row: gcs_urn = row[0]
+                if row: 
+                    gcs_urn = row[0]
+                    doc_desc = row[1]
         except Exception: pass
 
     print(f"[AI] Pregunta sobre {gcs_urn}: '{question[:80]}...'")
@@ -229,6 +242,22 @@ def ask_document():
     try:
         model  = GenerativeModel("gemini-2.0-flash")
         cached = _get_cached(gcs_urn)
+        
+        # Log init interaction in buffer
+        interaction_id = None
+        try:
+            from db import get_db_connection
+            import uuid
+            interaction_id = str(uuid.uuid4())
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO ai_brain.feedback_buffer (id, model_urn, user_query, ai_response)
+                    VALUES (%s, %s, %s, %s)
+                """, (interaction_id, data.get('model_urn', 'unknown'), question, 'PENDING'))
+                conn.commit()
+        except Exception as db_err:
+            print(f"[AI] Error logging initial interaction: {db_err}")
 
         # ══════════════════════════════════════════════════════════════════
         # CAMINO 1 — Caché TEXT (documentos con texto rico)
@@ -241,6 +270,8 @@ Analiza el siguiente contenido de un documento técnico y responde en ESPAÑOL.
 
 DOCUMENTO:
 {doc_text}
+
+ETIQUETA MANUAL (Contexto experto): {doc_desc or 'Sin etiqueta'}
 
 PREGUNTA: {question}
 
@@ -257,6 +288,7 @@ Responde de forma precisa y técnica. Si hay tablas o listas, preséntala con fo
                 parts.append(Part.from_data(data=img_bytes, mime_type="image/png"))
 
             prompt = f"""Eres un experto en ingeniería civil especializado en lectura de planos técnicos.
+ETIQUETA MANUAL (Contexto experto): {doc_desc or 'Sin etiqueta'}
 Analiza las imágenes de este documento (plano o escaneo) y responde en ESPAÑOL.
 
 PREGUNTA: {question}
@@ -274,6 +306,7 @@ Si hay tablas o datos importantes, extráelos claramente."""
             pdf_uri  = f"gs://{bucket_name}/{gcs_urn}"
             pdf_part = Part.from_uri(uri=pdf_uri, mime_type="application/pdf")
             prompt   = f"""Eres un experto en ingeniería civil.
+ETIQUETA MANUAL (Contexto experto): {doc_desc or 'Sin etiqueta'}
 Analiza el documento PDF y responde en ESPAÑOL: {question}"""
             response = model.generate_content([pdf_part, prompt])
 
@@ -288,10 +321,55 @@ Analiza el documento PDF y responde en ESPAÑOL: {question}"""
                         print(f"[AI] Cache BG error: {bg_err}")
                 threading.Thread(target=cache_bg, daemon=True).start()
 
-        return jsonify({"answer": response.text, "success": True})
+        # Update buffer with final response
+        if interaction_id:
+            try:
+                from db import get_db_connection
+                with get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE ai_brain.feedback_buffer SET ai_response = %s WHERE id = %s", 
+                                   (response.text, interaction_id))
+                    conn.commit()
+            except Exception as db_err:
+                print(f"[AI] Error updating final response in buffer: {db_err}")
+
+        return jsonify({"answer": response.text, "success": True, "interaction_id": interaction_id})
 
     except Exception as e:
         print(f"[AI] Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@ai_bp.route('/api/ai/feedback', methods=['POST'])
+def save_ai_feedback():
+    """
+    Guarda la corrección humana (HITL) en el buffer de feedback.
+    """
+    data = request.get_json()
+    interaction_id = data.get('interaction_id')
+    human_correction = data.get('human_correction')
+    reward_value = data.get('reward_value', -1.0)
+    
+    if not interaction_id or not human_correction:
+        return jsonify({"error": "Falta interaction_id o human_correction"}), 400
+        
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE ai_brain.feedback_buffer 
+                SET human_correction = %s, reward_value = %s
+                WHERE id = %s
+            """, (human_correction, reward_value, interaction_id))
+            conn.commit()
+            
+            # TODO: Evaluar si se debe convertir esta corrección en una "Regla de Oro" inmediatamente
+            # en ai_brain.global_knowledge si el usuario tiene rol de admin/experto.
+            pass
+            
+        return jsonify({"success": True, "message": "Feedback guardado correctamente"})
+    except Exception as e:
+        print(f"[AI] Feedback Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -299,209 +377,247 @@ Analiza el documento PDF y responde en ESPAÑOL: {question}"""
 def universal_search():
     """
     Realiza una búsqueda inteligente en todo el proyecto usando el motor RAG de Vertex AI.
-    Esto consume el crédito de S/. 3,550.
     """
     data = request.get_json()
     if not data:
         return jsonify({"error": "Sin datos"}), 400
     
-    query = data.get('query')
+    query = (data.get('query') or data.get('question') or '').strip()
+    if query.startswith('"') and query.endswith('"'): query = query[1:-1].strip()
+    if query.startswith("'") and query.endswith("'"): query = query[1:-1].strip()
+
     if not query:
         return jsonify({"error": "Falta la consulta"}), 400
 
-    print(f"[AI] Búsqueda Universal: '{query}'")
+    print(f"[AI] Búsqueda Universal (Sanitized): '{query}'")
     
-    try:
-        # 1. Intent Detection with Gemini
-        # Determinamos si el usuario quiere BUSCAR información en documentos 
-        # o MANIPULAR el visor 3D (aislar, ocultar, filtrar).
-        router_model = GenerativeModel("gemini-2.0-flash")
-        router_prompt = f"""
-        Analiza la siguiente consulta del usuario de un visualizador BIM y decide si es una PREGUNTA sobre el contenido de los documentos del proyecto (document_query) 
-        o un COMANDO para aislar/filtrar elementos en el modelo 3D (model_command).
-
-        CONSULTA: "{query}"
-
-        Si es un COMANDO de modelo, responde ÚNICAMENTE con un JSON con este formato:
-        {{
-          "intent": "model_command",
-          "action": "isolate", 
-          "parameter": "nombre del parámetro a buscar (ej: 'Protocolo', 'Nivel', 'Categoría')",
-          "value": "valor del parámetro",
-          "operator": "equals" o "contains"
-        }}
-
-        Si es una PREGUNTA de documentos, responde ÚNICAMENTE:
-        {{ "intent": "document_query" }}
-        """
-        
-        router_res = router_model.generate_content(router_prompt)
-        import json
+    # --- 0. DEEP RESEARCH AGENT (IA 2 Style) ---
+    agent_reasoning = []
+    deep_context = ""
+    
+    # Detect if query needs specific point investigation (e.g. CP-APN, BP-, Section, etc)
+    expanded_query = query.upper().replace("PANAMERICANA", "APN").replace("PANEMIRCANA", "APN")
+    if any(term in expanded_query for term in ["CP-", "BP-", "APN", "PENDIENTE", "COTA", "TR-", "HIDRAULICO", "CAUDAL"]):
+        print(f"[AI] Iniciando Investigación Profunda para: {query} (Expanded: {expanded_query})")
+        agent_reasoning.append(f"Detectada consulta técnica específica sobre '{query}'. Aplicando diccionario técnico...")
         try:
-            # Clean possible markdown blocks from JSON response
-            clean_json = router_res.text.strip()
-            if "```json" in clean_json:
-                clean_json = clean_json.split("```json")[1].split("```")[0].strip()
-            elif "```" in clean_json:
-                clean_json = clean_json.split("```")[1].split("```")[0].strip()
+            doc_dir = os.path.join(BASE_DIR, "uploads", "documents")
+            researcher = PDFResearcher(doc_dir)
             
+            # Step 1: Search for specific codes in expanded query
+            codes = re.findall(r'[A-Z]{2,}-[A-Z0-9]{2,}-[0-9]{1,}', expanded_query)
+            if not codes: codes = re.findall(r'[A-Z]{2,}-[0-9]{1,}', expanded_query)
+            # Add APN specifically if Panamericana was mentioned
+            if "APN" in expanded_query and "APN" not in codes:
+                codes.insert(0, "APN") # Prioritize APN search
+            
+            # Prioritize CP (Primarios) over CS (Secundarios) if it's a "Panamericana" query
+            codes.sort(key=lambda x: ("CP-" in x or x == "APN"), reverse=True)
+            
+            distinct_results = []
+            for code in codes:
+                agent_reasoning.append(f"Buscando código '{code}' en el expediente...")
+                found = researcher.search_keyword(code)
+                
+                # REGLA ORO: Si buscamos APN, también buscamos explícitamente "Tabla 78"
+                if code == "APN":
+                    agent_reasoning.append("Buscando 'Tabla 78' para datos de Colector Primario...")
+                    found_78 = researcher.search_keyword("Tabla 78")
+                    if found_78: found = found_78 + found # Priorize page with Tabla 78
+                
+                if found:
+                    agent_reasoning.append(f"Encontrado '{code}' en {len(found)} ubicaciones.")
+                    # Take top 3 pages for more context
+                    for f in found[:3]:
+                        agent_reasoning.append(f"Extrayendo tabla de {f['file']} (Página {f['page']})...")
+                        page_text = researcher.extract_page(f['full_path'], f['page'])
+                        deep_context += f"\n--- EXTRACTO DE {f['file']} (PAGINA {f['page']}) ---\n{page_text}\n"
+            
+            if deep_context:
+                agent_reasoning.append("Análisis de tablas completado. Cruzando datos con el motor de búsqueda...")
+        except Exception as ae:
+            print(f"[AI] Agent Error: {ae}")
+            agent_reasoning.append(f"Error en investigación: {str(ae)}")
+
+    import traceback # Added import
+    try:
+        # --- 1. INTENT ROUTING (Safe Path) ---
+        intent_data = {"intent": "document_query"} # Default to document_query
+        try:
+            # Use gemini-1.5-flash-002 but don't fail if model not found
+            router_model = GenerativeModel("gemini-2.0-flash")
+            router_prompt = f"""
+            Eres un clasificador de intenciones para un Asistente de Ingeniería.
+            Pregunta: "{query}"
+            Responde ÚNICAMENTE en JSON: {{ "intent": "model_command" | "document_query", "target": "foco/objeto" }}
+            """
+            router_res = router_model.generate_content(router_prompt)
+            clean_json = router_res.text.strip()
+            if "```" in clean_json: clean_json = clean_json.split("```")[1].strip()
+            if clean_json.startswith("json"): clean_json = clean_json[4:].strip()
+            import json
             intent_data = json.loads(clean_json)
             if intent_data.get("intent") == "model_command":
-                print(f"[AI] 🚀 Comando de Modelo Detectado: {intent_data}")
-                return jsonify({
-                    "success": True,
-                    "intent": "model_command",
-                    "command": intent_data
-                })
-        except Exception as e:
-            print(f"[AI] Error parseando intent (continuando con RAG): {e}")
+                return jsonify({"success": True, "intent": "model_command", "command": intent_data})
+        except Exception as router_err:
+            print(f"[AI] Router Error (Ignorado): {router_err}")
 
-        # --- HISTORIAL DE CHAT PARA TRAZABILIDAD ---
+        # --- 2. CONTEXT PREPARATION (RAG) ---
         history = data.get('history', [])
         history_context = ""
         if history:
-            history_context = "HISTORIAL DE CONVERSACIÓN PREVIA:\n"
-            for msg in history[-6:]: # Tomar los últimos 6 mensajes para contexto
-                role = "Usuario" if msg.get('role') == 'user' else "Asistente"
-                history_context += f"{role}: {msg.get('content')}\n"
-            history_context += "\n--- FIN DEL HISTORIAL ---\n"
+            history_context = "HISTORIAL RECIENTE:\n" + "\n".join([f"{'Usuario' if m.get('role')=='user' else 'Asistente'}: {m.get('content')}" for m in history[-5:]])
 
-        # 2. Document Search (RAG) - Existing logic
-        # ID del motor de búsqueda configurado en Google Cloud Console
-        ENGINE_ID = "visor-inteligente-talara_1772391119562"
-        BUCKET_NAME = os.environ.get("GCS_BUCKET_NAME", "yaser-pqt08-talara")
+        # model_urn fallback al inicio para consultas DB (En Talara es '1')
+        model_urn = data.get('model_urn') or "1"
+        if model_urn == "global_pqt8": model_urn = "1" # Mapping user friendly urn to db urn
         
+        folder_context = "No detectada"
+        matches_context = ""
+        technical_paths = []
+        
+        try:
+            from file_system_db import get_node_full_path, find_nodes_by_description_match
+            from db import get_db_connection # Moved import here to avoid circular dependency if db is imported earlier
+            
+            # Fetch project metadata
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT metadata FROM projects WHERE id = %s", (model_urn,))
+                proj_row = cursor.fetchone()
+                if proj_row and proj_row[0]:
+                    technical_paths = proj_row[0].get('ai_technical_paths', [])
+
+            # Priority matches in descriptions
+            matches = find_nodes_by_description_match(query, model_urn, limit=8, priority_folders=technical_paths)
+            if matches:
+                matches_context = "ARCHIVOS PRIORITARIOS (Match en descripción):\n"
+                for m_id, m_name, m_desc in matches:
+                    matches_context += f"- [{m_desc or m_name}] {get_node_full_path(m_id)}\n"
+
+            # Recent files for general context
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, name, description FROM file_nodes WHERE model_urn = %s AND is_deleted = FALSE AND node_type = 'FILE' ORDER BY created_at DESC LIMIT 15", (model_urn,))
+                docs_list = cursor.fetchall()
+                if docs_list:
+                    folder_context = "\n".join([f"- [{d[2] or d[1]}] {get_node_full_path(d[0])}" for d in docs_list])
+        except Exception as e:
+            print(f"[AI] Context Error: {e}")
+
+        # --- 3. DISCOVERY ENGINE SEARCH ---
+        ENGINE_ID = "visor-inteligente-talara_1772391119562"
         client = discoveryengine.SearchServiceClient()
         serving_config = f"projects/{PROJECT_ID}/locations/global/collections/default_collection/engines/{ENGINE_ID}/servingConfigs/default_serving_config"
         
-        # --- NUEVA ESTRATEGIA: INYECTAR CONTEXTO DE CARPETAS ---
-        model_urn = data.get('model_urn')
-        folder_context = "No detectada"
-        try:
-            from file_system_db import get_node_full_path
-            from db import get_db_connection
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                if model_urn:
-                    cursor.execute("""
-                        SELECT name, id FROM file_nodes 
-                        WHERE model_urn = %s AND is_deleted = FALSE 
-                        AND node_type = 'FILE'
-                        ORDER BY created_at DESC LIMIT 50
-                    """, (model_urn,))
-                else:
-                    cursor.execute("""
-                        SELECT name, id FROM file_nodes 
-                        WHERE is_deleted = FALSE 
-                        AND node_type = 'FILE'
-                        ORDER BY created_at DESC LIMIT 50
-                    """)
-                
-                docs_list = cursor.fetchall()
-                if docs_list:
-                    folder_context = "\n".join([f"- {get_node_full_path(d[1])}" for d in docs_list])
-                else:
-                    # Fallback agresivo: intentar sin ningun filtro de URN si el anterior falló
-                    cursor.execute("SELECT name, id FROM file_nodes WHERE is_deleted = FALSE AND node_type = 'FILE' LIMIT 20")
-                    docs_list = cursor.fetchall()
-                    if docs_list:
-                        folder_context = "\n".join([f"- {get_node_full_path(d[1])}" for d in docs_list])
-
-        except Exception as ce:
-            print(f"[AI] Error recuperando contexto de carpetas: {ce}")
-
         search_request = discoveryengine.SearchRequest(
             serving_config=serving_config,
             query=query,
-            page_size=5,
-            content_search_spec={
-                "summary_spec": {
-                    "summary_result_count": 5,
-                    "include_citations": True,
-                    "model_spec": {"version": "stable"},
-                    "model_prompt_spec": {
-                        "preamble": f"ERES EL AUDITOR INTELIGENTE DEL PROYECTO TALARA.\n"
-                                    f"A continuación tienes la lista de documentos cargados en el sistema a los que tienes acceso total:\n"
-                                    f"{folder_context}\n\n"
-                                    f"{history_context}"
-                                    "INSTRUCCIONES CRÍTICAS:\n"
-                                    "1. Tu fuente de verdad son los fragmentos de documentos proporcionados por el motor de búsqueda.\n"
-                                    "2. Los archivos están en Google Cloud Storage. IGNORA rutas locales de disco C: que aparezcan en metadatos.\n"
-                                    "3. Si el usuario pregunta qué documentos tienes, usa la lista de ESTRUCTURA DE ARCHIVOS arriba para responder.\n"
-                                    "4. NUNCA digas que solo puedes ver un documento si ves varios en la lista de arriba.\n"
-                                    "5. Mantén la continuidad del chat. Responde siempre en español profesional."
-                    }
-                }
-            }
+            page_size=5
         )
         
         response = client.search(search_request)
         
-        # Extraer resultados y mapear con DB para botones de acción (Open Doc)
-        results = []
-        from file_system_db import find_node_by_gcs_urn, get_node_full_path
+        # --- DIAGNOSTIC TRACE ---
+        try:
+            with open(os.path.join(BASE_DIR, "rag_trace.json"), "w", encoding="utf-8") as f:
+                trace_data = {
+                    "query": query,
+                    "summary": response.summary.summary_text if response.summary else "NO SUMMARY",
+                    "results_count": len(response.results),
+                    "results": []
+                }
+                for r in response.results:
+                    trace_data["results"].append({
+                        "title": r.document.derived_struct_data.get('title'),
+                        "link": r.document.derived_struct_data.get('link'),
+                        "snippets": r.document.derived_struct_data.get('snippets')
+                    })
+                json.dump(trace_data, f, indent=2, ensure_ascii=False)
+            print(f"[AI] Diagnostic trace saved to rag_trace.json")
+        except Exception as te:
+            print(f"[AI] Trace Error: {te}")
         
-        # Intentamos extraer el model_urn del request o contexto (fallback global)
-        model_urn = data.get('model_urn') or "urn:adsk.viewing:fs.file:dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6eWFzZXItcHF0MDgtdGFsYXJhL1BRVDhfVEFMQVJBLmR3Zw"
+        # --- 4. RESULT PROCESSING & CONTEXT BUILDING ---
+        results = []
+        retrieved_context = ""
+        from file_system_db import find_node_by_gcs_urn, get_node_full_path
+        import db
 
         for res in response.results:
             struct_data = res.document.derived_struct_data
             gcs_link = struct_data.get('link', '') 
+            gcs_urn = gcs_link[5:].split('/', 1)[1] if gcs_link.startswith("gs://") and '/' in gcs_link[5:] else gcs_link
             
-            # Limpieza robusta de GCS_URN: gs://bucket/path -> path
-            # Buscamos la primera barra después de gs://...
-            if gcs_link.startswith("gs://"):
-                path_part = gcs_link[5:] # Quitar gs://
-                if "/" in path_part:
-                    gcs_urn = path_part[path_part.find("/")+1:] # Tomar todo despues del bucket
-                else:
-                    gcs_urn = path_part
-            else:
-                gcs_urn = gcs_link
-            
-            # Buscar en DB
             node_info = find_node_by_gcs_urn(model_urn, gcs_urn)
+            node_id = node_info[0] if node_info else None
+            db_desc = node_info[4] if node_info else None
             
-            display_title = struct_data.get('title', res.document.name)
-            node_id = None
+            display_title = db_desc or get_node_full_path(node_id) or struct_data.get('title', res.document.name)
+            display_title = re.sub(r'^[0-9]{8,15}_[a-z0-9]{8,15}_', '', display_title)
             
-            if node_info:
-                node_id = node_info[0]
-                db_name = node_info[1]
-                db_metadata = node_info[2] or {}
-                # PRIORIDAD: Breadcrumb Path (para mostrar subcarpetas) > Título extraído por IA > Nombre en DB
-                display_title = get_node_full_path(node_id) or db_metadata.get('plano_titulo') or db_name or display_title
-
-            # LIMPIEZA FINAL DE RUIDO (DiRoots/LocalPaths debris)
-            if not node_info:
-                if "\\" in display_title: display_title = display_title.split("\\")[-1]
-                if "/" in display_title: display_title = display_title.split("/")[-1]
-                # Solo si parece un ID técnico muy feo y no tiene extensión de archivo
-                if len(display_title) > 40 and "." not in display_title:
-                   display_title = "Documento Técnico"
+            snippet = (struct_data.get('snippets') or [{}])[0].get('snippet', '')
+            retrieved_context += f"FUENTE: {display_title}\nCONTENIDO: {snippet}\n\n"
 
             results.append({
                 "id": res.id,
                 "nodeId": node_id,
                 "title": display_title,
+                "description": db_desc,
                 "link": gcs_link,
-                "snippet": struct_data.get('snippets', [{}])[0].get('snippet', '')
+                "snippet": snippet
             })
 
-        answer = "No se encontró información suficiente en los documentos para responder esta pregunta."
-        if response.summary and response.summary.summary_text:
-            answer = response.summary.summary_text
+        # --- 5. CUSTOM SYNTHESIS (Gemini 2.0 Flash) ---
+        synthesis_model = GenerativeModel("gemini-2.0-flash")
+        synthesis_prompt = f"""
+ERES UN ANALISTA TÉCNICO EXPERTO (AUDITOR SENIOR) EN EL PROYECTO TALARA.
+Tu objetivo es responder de forma EJECUTIVA y PROFESIONAL.
+
+--- INFORMACIÓN RETRIEVED (CDE) ---
+{retrieved_context}
+
+--- INVESTIGACIÓN DE CAMPO (AGENTIC) ---
+{deep_context}
+
+--- DICCIONARIO TÉCNICO ---
+- 'Panamericana' = 'APN'.
+- 'Buzón' = 'BP', 'Colector Primario' = 'CP', 'Colector Secundario' = 'CS'.
+*** IMPORTANTE: Para pendientes de la Panamericana (CP-APN), los datos están en la TABLA 78 (Pág. 262) del RP-HD-001008. ***
+
+INSTRUCCIONES DE RESPUESTA:
+1. **RESPUESTA DIRECTA**: Empieza con el dato o tabla solicitada. Sin preámbulos.
+2. **TABLAS EXCEL**: Usa MarkDown con líneas en blanco antes y después. Formato:
+   | TRAMO | PENDIENTE | ... |
+   |:---|:---|:---|
+   CADA FILA DEBE ESTAR EN UNA LÍNEA NUEVA.
+3. **DIVISOR**: Después de la respuesta, escribe la etiqueta `[INTERNAL_ANALYSIS]` en su propia línea.
+4. **ANEXO**: Explica tu lógica después de la etiqueta.
+
+PREGUNTA DEL USUARIO: {query}
+HISTORIAL: {history_context}
+
+Responde en ESPAÑOL:
+"""
+        try:
+            gen_response = synthesis_model.generate_content(synthesis_prompt)
+            answer = gen_response.text
+        except Exception as ge:
+            print(f"[AI] Synthesis Error: {ge}")
+            answer = "Error al sintetizar respuesta técnica."
 
         return jsonify({
-            "success": True,
-            "intent": "document_query",
-            "answer": answer,
-            "results": results,
-            "model_urn": model_urn
+            "success": True, 
+            "intent": "document_query", 
+            "answer": answer, 
+            "results": results, 
+            "model_urn": model_urn,
+            "agent_steps": agent_reasoning
         })
 
     except Exception as e:
-        print(f"[AI] Universal Search Error: {e}")
+        print(f"[AI] Universal Search ERROR: {e}")
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 @ai_bp.route('/api/ai/analyze-title', methods=['POST'])
 def analyze_drawing_title():
@@ -533,7 +649,7 @@ def analyze_drawing_title():
 
     try:
         # Usamos flash para que sea instantáneo
-        model = GenerativeModel("gemini-1.5-flash")
+        model = GenerativeModel("gemini-1.5-pro") # Trying pro for title analysis if available
         
         # Descargamos solo para procesar la primera página
         pdf_bytes = _download_pdf(gcs_urn, bucket_name)

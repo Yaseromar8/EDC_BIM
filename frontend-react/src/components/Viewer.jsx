@@ -2,17 +2,10 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './viewer.css';
 import './IconMarkup.css'; // Add this line
 import { BaseExtension } from '../aps/extensions/BaseExtension';
-import { LoggerExtension } from '../aps/extensions/LoggerExtension';
-import { HistogramExtension } from '../aps/extensions/HistogramExtension';
-import { PhasingExtension } from '../aps/extensions/PhasingExtension';
-import { DeviceOrientationExtension } from '../aps/extensions/DeviceOrientationExtension';
-import IconMarkupExtension from '../aps/extensions/IconMarkupExtension';
 import { findLeafNodes, getBulkProperties } from '../aps/utils/model';
-import { Capacitor } from '@capacitor/core';
+import IconMarkupExtension from '../aps/extensions/IconMarkupExtension';
 
-const BACKEND_URL = Capacitor.isNativePlatform()
-    ? 'https://visor-ecd-backend.onrender.com'
-    : (import.meta.env.VITE_BACKEND_URL || '');
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
 // --- Shared texture helpers (extracted to avoid duplication inside useEffects) ---
 const getDocTexture = () => {
@@ -174,13 +167,15 @@ const Viewer = ({
         const setVisible = (isVisible) => {
             try {
                 // Logic A: Use Viewer API
-                viewer.setToolbarOff(!isVisible);
+                if (typeof viewer.setToolbarVisible === 'function') {
+                    viewer.setToolbarVisible(isVisible);
+                }
 
-                // Logic B: Force CSS Override (Sometimes API is not enough after startup)
-                const toolbar = document.querySelector('.adsk-viewing-viewer .adsk-toolbar');
-                if (toolbar) {
-                    toolbar.style.display = isVisible ? 'flex' : 'none';
-                    toolbar.style.visibility = isVisible ? 'visible' : 'hidden';
+                // Logic B: Force CSS Override
+                const toolbarContainer = document.querySelector('.adsk-viewing-viewer .adsk-toolbar');
+                if (toolbarContainer) {
+                    toolbarContainer.style.display = isVisible ? 'flex' : 'none';
+                    toolbarContainer.style.visibility = isVisible ? 'visible' : 'hidden';
                 }
             } catch (e) {
                 console.warn('[Viewer] Error toggling toolbar:', e);
@@ -192,9 +187,12 @@ const Viewer = ({
 
         // Retry a few times in case the toolbar was not yet created when the effect ran
         if (hideToolbar) {
-            const intv = setInterval(() => setVisible(false), 1000);
-            const tm = setTimeout(() => clearInterval(intv), 10000); // 10s of retries
-            return () => { clearInterval(intv); clearTimeout(tm); };
+            setVisible(false);
+            // One retry after a short delay is usually enough
+            const tm = setTimeout(() => setVisible(false), 2000);
+            return () => clearTimeout(tm);
+        } else {
+            setVisible(true);
         }
     }, [viewerReady, hideToolbar]);
 
@@ -261,120 +259,24 @@ const Viewer = ({
 
 
     // Handle Canvas Click for Pin Creation (Normal & Docs)
+
+
+    // --- UNIFIED CANVAS CLICK HANDLER (Sprites, Docs, Tracking, Build) ---
     useEffect(() => {
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
-
-        const handleCanvasClick = (event) => {
-            // Priority: Sprite Placement Mode
-            if (placementMode) {
-                const result = viewer.impl.hitTest(event.clientX, event.clientY, true);
-                if (result) {
-                    onPlacementComplete({
-                        x: result.intersectPoint.x,
-                        y: result.intersectPoint.y,
-                        z: result.intersectPoint.z,
-                        dbId: result.dbId
-                    });
-                }
-                return;
-            }
-
-            // Priority: Doc Placement Mode
-            if (docPlacementMode) {
-                // Siempre usar hitTest para garantizar el anclaje exacto al elemento BIM
-                const result = viewer.impl.hitTest(event.clientX, event.clientY, true);
-                if (result && onDocPlacementComplete) {
-                    const { intersectPoint, dbId, model } = result;
-
-                    if (model && dbId) {
-                        try {
-                            // Extraer parámetros estables (externalId, nombre) para el anclaje a largo plazo
-                            model.getProperties(dbId, (props) => {
-                                console.log('[Viewer] Pin anclado a elemento BIM:', props.name, 'ExternalId:', props.externalId);
-                                onDocPlacementComplete({
-                                    x: intersectPoint.x,
-                                    y: intersectPoint.y,
-                                    z: intersectPoint.z,
-                                    dbId: dbId,
-                                    externalId: props.externalId,
-                                    objectName: props.name
-                                });
-                            }, () => {
-                                // Fallback espacial puro
-                                onDocPlacementComplete({
-                                    x: intersectPoint.x,
-                                    y: intersectPoint.y,
-                                    z: intersectPoint.z
-                                });
-                            });
-                        } catch (e) {
-                            onDocPlacementComplete({
-                                x: intersectPoint.x, y: intersectPoint.y, z: intersectPoint.z
-                            });
-                        }
-                    } else {
-                        // Fallback puramente espacial si se hace click al vacío o background
-                        onDocPlacementComplete({
-                            x: intersectPoint.x,
-                            y: intersectPoint.y,
-                            z: intersectPoint.z
-                        });
-                    }
-                }
-                return;
-            }
-        };
-
         const container = viewer.container;
-        if (placementMode || docPlacementMode) {
-            container.addEventListener('click', handleCanvasClick);
-            container.style.cursor = 'crosshair';
-        } else {
-            container.style.cursor = 'default';
-        }
 
-        return () => {
-            container.removeEventListener('click', handleCanvasClick);
-            container.style.cursor = 'default';
-        };
-    }, [viewerReady, placementMode, docPlacementMode, onPlacementComplete, onDocPlacementComplete]);
+        const handleUnifiedClick = (event) => {
+            const rect = container.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
 
-
-    // SEGUIMIENTO: Handle Tracking Pin Placement (Photos)
-    useEffect(() => {
-        const viewer = viewerRef.current;
-        if (!viewer || !viewerReady) return;
-
-        const handleTrackingClick = (event) => {
-            console.log('[Viewer] Click detected in Tracking Mode', trackingPlacementMode);
-            if (!trackingPlacementMode) return;
-
-            // Improved Raycast - clientToWorld handles the nuances
-            const result = viewer.clientToWorld(event.clientX, event.clientY);
-
-            if (result) {
-                const pos = result.point || result;
-                // clientToWorld sometimes returns direct point or null, depending on version. 
-                // But usually it returns a THREE.Vector3 if hit, or null.
-                // Let's safe check for .point property if it returns a hit result object.
-                // Actually in recent Viewer APIs, clientToWorld(x,y) returns THREE.Vector3 or null.
-
-                // Let's use hitTest directly if clientToWorld is confusing, but standard is:
-                // var hit = viewer.impl.hitTest(x, y, true);
-
-                // If it fails, maybe it's because we need to clear selection? No.
-
-                // Let's try `viewer.impl.hitTest` again but double check coordinates.
-                // The issue might be `ignoreTransparent`. Let's try putting it to FALSE or removing it.
-                // Also, let's try `viewer.clientToWorld` as a backup.
-
-                const hit = viewer.impl.hitTest(event.clientX, event.clientY, false); // Allow transparent hits
+            // Priority 1: Tracking Pins
+            if (trackingPlacementMode) {
+                const hit = viewer.impl.hitTest(x, y, false);
                 if (hit) {
                     const pos = hit.intersectPoint;
-                    console.log('[Viewer] Creating Tracking Pin at', pos, 'dbId:', hit.dbId);
-
-                    // Read CodigoDePartida and NombreDePartida from element properties
                     const getPartidaInfo = (model, dbId) => new Promise((resolve) => {
                         if (!model || !dbId) return resolve({ code: null, name: null });
                         model.getProperties(dbId, (result) => {
@@ -388,41 +290,80 @@ const Viewer = ({
                     });
 
                     getPartidaInfo(hit.model, hit.dbId).then(({ code, name }) => {
-                        console.log('[Viewer] Partida detected:', code, name);
-                        const newPin = {
-                            id: Date.now(),
-                            x: pos.x,
-                            y: pos.y,
-                            z: pos.z,
+                        onTrackingPinCreate?.({
+                            id: Date.now().toString(),
+                            x: pos.x, y: pos.y, z: pos.z,
                             dbId: hit.dbId || null,
                             codigoPartida: code,
                             partidaNombre: name,
                             val: trackingTab === 'avance' ? '0%' : null
-                        };
-                        if (onTrackingPinCreate) {
-                            onTrackingPinCreate(newPin);
-                        }
+                        });
                     });
-                } else {
-                    console.warn('[Viewer] Hit Test failed to find intersection');
                 }
-            } else {
-                console.warn('[Viewer] clientToWorld failed');
+                return;
+            }
+
+            // Priority 2: Doc Pins
+            if (docPlacementMode) {
+                const hit = viewer.impl.hitTest(x, y, false);
+                if (hit && onDocPlacementComplete) {
+                    const { intersectPoint, dbId, model } = hit;
+                    if (model && dbId) {
+                        model.getProperties(dbId, (props) => {
+                            onDocPlacementComplete({
+                                x: intersectPoint.x, y: intersectPoint.y, z: intersectPoint.z,
+                                dbId, externalId: props.externalId, objectName: props.name
+                            });
+                        }, () => onDocPlacementComplete({ x: intersectPoint.x, y: intersectPoint.y, z: intersectPoint.z }));
+                    } else {
+                        onDocPlacementComplete({ x: intersectPoint.x, y: intersectPoint.y, z: intersectPoint.z });
+                    }
+                }
+                return;
+            }
+
+            // Priority 3: Build Mode Pins
+            if (buildPlacementMode && onBuildPinCreate) {
+                const hit = viewer.impl.hitTest(x, y, false);
+                if (hit && hit.point) {
+                    onBuildPinCreate({
+                        x: hit.point.x, y: hit.point.y, z: hit.point.z,
+                        objectId: hit.dbId,
+                        modelUrn: hit.model?.getData().urn
+                    });
+                }
+                return;
+            }
+
+            // Priority 4: Sprites
+            if (placementMode) {
+                const hit = viewer.impl.hitTest(x, y, false);
+                if (hit) {
+                    onPlacementComplete({
+                        x: hit.intersectPoint.x, y: hit.intersectPoint.y, z: hit.intersectPoint.z,
+                        dbId: hit.dbId
+                    });
+                }
+                return;
             }
         };
 
-        const container = viewer.container;
-        if (trackingPlacementMode) {
-            container.addEventListener('click', handleTrackingClick);
-            container.style.cursor = 'copy'; // Different cursor
+        const isAnyPlacementActive = trackingPlacementMode || docPlacementMode || placementMode || buildPlacementMode;
+
+        if (isAnyPlacementActive) {
+            container.addEventListener('click', handleUnifiedClick, true); // Capture phase
+            container.style.cursor = 'crosshair';
+            if (viewer.setCursor) viewer.setCursor('crosshair');
+        } else {
+            container.style.cursor = 'default';
+            if (viewer.setCursor) viewer.setCursor('default');
         }
 
         return () => {
-            container.removeEventListener('click', handleTrackingClick);
+            container.removeEventListener('click', handleUnifiedClick, true);
             container.style.cursor = 'default';
         };
-
-    }, [viewerReady, trackingPlacementMode, trackingTab]);
+    }, [viewerReady, trackingPlacementMode, docPlacementMode, placementMode, buildPlacementMode, trackingTab, onTrackingPinCreate, onDocPlacementComplete, onPlacementComplete, onBuildPinCreate]);
     // Ref to track if component is mounted - MOVED TO TOP for safety
     const mountedRef = useRef(true);
     const isInitializingRef = useRef(false);
@@ -488,28 +429,36 @@ const Viewer = ({
                 }
 
                 Autodesk.Viewing.theExtensionManager.registerExtension('BaseExtension', BaseExtension);
-                Autodesk.Viewing.theExtensionManager.registerExtension('LoggerExtension', LoggerExtension);
-                Autodesk.Viewing.theExtensionManager.registerExtension('HistogramExtension', HistogramExtension);
-                Autodesk.Viewing.theExtensionManager.registerExtension('PhasingExtension', PhasingExtension);
-                Autodesk.Viewing.theExtensionManager.registerExtension('DeviceOrientationExtension', DeviceOrientationExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('IconMarkupExtension', IconMarkupExtension);
+                // Custom extensions removed to simplify UI
 
                 const config = {
                     extensions: [
                         'BaseExtension',
-                        // 'LoggerExtension',
-                        'PhasingExtension',
                         'Autodesk.BIM360.Extension.PushPin',
                         'Autodesk.PDF',
                         'Autodesk.AEC.LevelsExtension',
-                        'Autodesk.AEC.Minimap3DExtension',
-                        'DeviceOrientationExtension',
-                        // 'Autodesk.PointCloud'  // Nube de puntos: LAZ, LAS, E57, RCP
+                        'Autodesk.AEC.Minimap3DExtension'
+                    ],
+                    // PERFORMANCE FLAGS (To match reference image settings)
+                    disabledExtensions: {
+                        measure: false,
+                        section: false
+                    },
+                    experimental: [
+                        'Autodesk.Viewing.WebGPU' 
                     ]
                 };
 
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);
                 viewer.start();
+
+                // 🚀 FORCE OFFICIAL ACC/BIM360 LOOK & FEEL
+                viewer.setTheme('light-theme'); // Use light theme as in reference image 2/4
+                
+                if (Autodesk.Viewing.Profile && Autodesk.Viewing.Profile.AEC) {
+                    viewer.setProfile(Autodesk.Viewing.Profile.AEC);
+                }
 
                 // 5. Final check before state update
                 if (!mountedRef.current) {
@@ -518,7 +467,14 @@ const Viewer = ({
                     return;
                 }
 
-                viewer.setGhosting(true);
+                // 🚀 PERFORMANCE OPTIMIZATIONS
+                viewer.setGhosting(false); // Desactiva renderizado transparente pesado
+                viewer.setProgressiveRendering(true); // Carga progresiva anti-congelamiento
+                viewer.setQualityLevel(false, false); // Apaga antialiasing y oclusión ambiental (maximiza FPS)
+                viewer.setGroundShadow(false);
+                viewer.setGroundReflection(false);
+                viewer.setEnvMapBackground(false);
+
                 viewerRef.current = viewer;
                 window.NOP_VIEWER = viewer;
                 setViewerReady(true);
@@ -813,7 +769,8 @@ const Viewer = ({
                             keepCurrentModels: true,
                             applyScaling: 'mm',
                             applyRefPoint: true,
-                            modelNameOverride: model.label || 'model.rvt'
+                            modelNameOverride: model.label || 'model.rvt',
+                            memoryLimit: 512      // ⚡ Fuerza a limpiar memoria de geometría lejana
                         };
 
                         console.log(`[Viewer] Loading model: ${model.label || model.urn}`);
@@ -968,6 +925,9 @@ const Viewer = ({
             } else if (trackingTab === 'restricciones') {
                 const currentRestrictions = trackingData?.restricciones || [];
                 icons = currentRestrictions.map(i => ({ ...i, type: 'restriction', color: i.color || '#f59e0b' }));
+            } else if (trackingTab === 'rfis') {
+                const currentRfis = trackingData?.rfis || [];
+                icons = currentRfis.map(i => ({ ...i, type: 'rfi', color: i.color || '#ef4444' }));
             }
 
             // 4. Set Icons
@@ -1123,58 +1083,7 @@ const Viewer = ({
         navigation.setReverseZoomDirection(false);
     }, [viewerReady, models]);
 
-    useEffect(() => {
-        const viewer = viewerRef.current;
-        if (!viewer || !viewerReady) return;
-        const navigation = viewer.getNavigation?.();
-        if (!navigation) return;
-
-        navigation.setUsePivotAlways?.(true);
-        navigation.setPivotVisible?.(false);
-
-        const hidePivotAfterDelay = () => {
-            if (navigation.setPivotVisible) {
-                navigation.setPivotVisible(false);
-            }
-        };
-
-        const canvas = viewer.canvas || viewer.impl?.canvas || viewer.container;
-        const updatePivotFromEvent = event => {
-            if (!canvas) return;
-            const hit = viewer.impl?.hitTest(event.clientX, event.clientY, true);
-            const pivot = hit?.intersectPoint || hit?.point;
-            if (pivot) {
-                navigation.setPivotPoint(pivot);
-                navigation.setPivotVisible?.(true);
-                if (viewer._pivotTimeout) {
-                    clearTimeout(viewer._pivotTimeout);
-                }
-                viewer._pivotTimeout = setTimeout(hidePivotAfterDelay, 1500);
-            }
-        };
-
-        const handleDoubleClick = event => updatePivotFromEvent(event);
-        const handleMiddleClick = event => {
-            if (event.button === 1) {
-                event.preventDefault();
-                updatePivotFromEvent(event);
-            }
-        };
-
-        canvas?.addEventListener('dblclick', handleDoubleClick, true);
-        canvas?.addEventListener('mousedown', handleMiddleClick, true);
-        canvas?.addEventListener('auxclick', handleMiddleClick, true);
-
-        return () => {
-            canvas?.removeEventListener('dblclick', handleDoubleClick, true);
-            canvas?.removeEventListener('mousedown', handleMiddleClick, true);
-            canvas?.removeEventListener('auxclick', handleMiddleClick, true);
-            if (viewer._pivotTimeout) {
-                clearTimeout(viewer._pivotTimeout);
-                viewer._pivotTimeout = null;
-            }
-        };
-    }, [viewerReady]);
+    // (Custom pivot behavior reverted by user request)
 
     useEffect(() => {
         const viewer = viewerRef.current;
@@ -2209,8 +2118,8 @@ const Viewer = ({
 
         // Manual Hit Test for Build Pins (Fallback for extension events/HTML labels)
         const handleCanvasClick = (event) => {
-            // If we are in placement mode, do not select pins
-            if (placementMode) return;
+            // If we are in ANY placement mode, do not select pins
+            if (placementMode || docPlacementMode || trackingPlacementMode || buildPlacementMode) return;
 
             // 1. Check if we clicked on an HTML Label directly (if accessible)
             // Sometimes labels consume events. If we catch it in capture phase, we can check target.
@@ -2292,109 +2201,6 @@ const Viewer = ({
     }, [buildPins, showBuildPins, viewerReady, placementMode, onBuildPinSelect]);
 
 
-    useEffect(() => {
-        const viewer = viewerRef.current;
-        if (!viewer || !viewerReady) return;
-        if (!placementMode && !buildPlacementMode && !trackingPlacementMode) {
-            viewer.setCursor && viewer.setCursor('default');
-            return;
-        }
-        viewer.setCursor && viewer.setCursor('crosshair');
-        const target = viewer.canvas || viewer.impl?.canvas || viewer.container;
-        if (!target) return;
-        const handlePlacement = event => {
-            event.stopPropagation();
-            event.preventDefault();
-            const rect = target.getBoundingClientRect();
-            const x = event.clientX - rect.left;
-            const y = event.clientY - rect.top;
-            const hit = viewer.impl.hitTest(x, y, true);
-            console.log('Sprite placement - Hit test result:', hit);
-
-            if (hit && hit.point) {
-                let modelUrn = null;
-                if (hit.model) {
-                    modelUrn = hit.model.getData().urn;
-                }
-
-                if (trackingPlacementMode && onTrackingPinCreate) {
-                    // Read CodigoDePartida from element properties
-                    const getPartidaInfo = (model, dbId) => new Promise((resolve) => {
-                        if (!model || !dbId) return resolve({ code: null, name: null });
-                        model.getProperties(dbId, (result) => {
-                            const codeProp = result.properties?.find(p => p.displayName === '03_05_DSI_CodigoDePartida');
-                            const nameProp = result.properties?.find(p => p.displayName === '03_04_DSI_NombreDePartida');
-                            resolve({
-                                code: codeProp ? codeProp.displayValue : null,
-                                name: nameProp ? nameProp.displayValue : null
-                            });
-                        }, () => resolve({ code: null, name: null }));
-                    });
-
-                    getPartidaInfo(hit.model, hit.dbId).then(({ code, name }) => {
-                        console.log('[Viewer] Partida detected (placement):', code, name);
-                        const newPin = {
-                            id: Date.now().toString(),
-                            x: hit.point.x,
-                            y: hit.point.y,
-                            z: hit.point.z,
-                            dbId: hit.dbId || null,
-                            codigoPartida: code,
-                            partidaNombre: name
-                        };
-                        onTrackingPinCreate(newPin);
-                    });
-                    return;
-                }
-
-
-                console.log('✓ Hit placed at:', {
-                    position: { x: hit.point.x, y: hit.point.y, z: hit.point.z },
-                    dbId: hit.dbId,
-                    modelUrn: modelUrn
-                });
-
-                // Branch based on Mode
-                if (placementMode && onPlacementComplete) {
-                    // SPRITE
-                    onPlacementComplete({
-                        position: { x: hit.point.x, y: hit.point.y, z: hit.point.z },
-                        dbId: hit.dbId,
-                        modelUrn: modelUrn
-                    });
-                } else if (buildPlacementMode && onBuildPinCreate) {
-                    // BUILD PIN
-                    // Convert to World Coordinates automatically? 
-                    // No, our stored pins seem to use Local now? Or we should normalize?
-                    // Let's use Local + Model Link.
-                    // But if we want Global, we should add globalOffset.
-                    const globalOffset = hit.model?.getData()?.globalOffset || { x: 0, y: 0, z: 0 };
-                    const worldPoint = {
-                        x: hit.point.x, // + globalOffset.x, // Keeping consistent with current local logic?
-                        y: hit.point.y, // + globalOffset.y, 
-                        z: hit.point.z, // + globalOffset.z,
-                        // Actually, previously we were converting to World in extension handler.
-                        // But `View` uses local.
-                        // Let's pass the raw hit point which is Viewer-Local.
-                        // If we need world, we can add it.
-                        // The existing extension handler acted on `newItem.position` which is local usually.
-                        // Let's pass Local.
-                        objectId: hit.dbId,
-                        modelUrn: modelUrn
-                    };
-                    onBuildPinCreate(worldPoint);
-                }
-
-            } else {
-                console.warn('✗ No geometry detected at click position.');
-            }
-        };
-        target.addEventListener('click', handlePlacement, true);
-        return () => {
-            target.removeEventListener('click', handlePlacement, true);
-            viewer.setCursor && viewer.setCursor('default');
-        };
-    }, [placementMode, buildPlacementMode, trackingPlacementMode, onPlacementComplete, onBuildPinCreate, onTrackingPinCreate, viewerReady]);
 
     // Context menu for sprite creation (right-click / long-press)
     // AND existing sprite interaction
@@ -2554,24 +2360,10 @@ const Viewer = ({
             <div
                 id="viewer-container"
                 ref={containerRef}
-                className={`viewer-container ${mobileToolsVisible ? 'mobile-tools-visible' : 'mobile-tools-hidden'}`}
+                className="viewer-container"
                 style={{ width: '100%', height: '100%', position: 'relative', zIndex: 1 }}
             />
 
-
-
-            {/* Mobile Tools Toggle */}
-            <button
-                className="mobile-tools-toggle"
-                onClick={() => setMobileToolsVisible(prev => !prev)}
-                title={mobileToolsVisible ? "Hide Tools" : "Show Tools"}
-            >
-                {mobileToolsVisible ? (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
-                ) : (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>
-                )}
-            </button>
 
             {/* Sprite Context Menu */}
             {contextMenu && contextMenu.visible && (

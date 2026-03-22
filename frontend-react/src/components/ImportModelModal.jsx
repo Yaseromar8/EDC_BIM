@@ -138,25 +138,21 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal }) => {
     setUploading(true);
     setProgress(0);
 
-    const interval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 90) return 90;
-        return prev + Math.random() * 5;
-      });
-    }, 400);
-
     try {
-      await onUploadLocal?.(localFile, uploadLabel || localFile.name);
-      clearInterval(interval);
+      await onUploadLocal?.(localFile, uploadLabel || localFile.name, (p) => {
+        setProgress(p);
+      });
+      
       setProgress(100);
+      // Wait a bit to show 100% before closing, as model translation starts in backend
       setTimeout(() => {
         onClose();
         setUploading(false);
         setLocalFile(null);
         setProgress(0);
-      }, 800);
+      }, 1500);
     } catch (e) {
-      clearInterval(interval);
+      console.error("Modal upload error:", e);
       setUploading(false);
     }
   };
@@ -196,7 +192,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal }) => {
               {uploading ? (
                 <div className="upload-progress-container">
                   <div className="upload-spinner"></div>
-                  <p>Uploading...</p>
+                  <p>{progress < 100 ? 'Uploading...' : 'Processing & Translating...'}</p>
                   <div className="progress-bar-track">
                     <div className="progress-bar-fill" style={{ width: `${progress}%` }}></div>
                   </div>

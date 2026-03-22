@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './DocumentManager.css';
 import { Document, Page, pdfjs } from 'react-pdf';
+import { uploadFile } from '../services/uploadService';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -44,6 +45,7 @@ export default function DocumentManager({ isOpen, onClose }) {
     const [showNewFolder, setShowNewFolder] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
     const [uploading, setUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
     const [dragOver, setDragOver] = useState(false);
 
     // Sidebar: track opened tree paths for expand/collapse
@@ -106,24 +108,62 @@ export default function DocumentManager({ isOpen, onClose }) {
     const handleUpload = async (fileList) => {
         if (!fileList || fileList.length === 0) return;
         setUploading(true);
+        setUploadProgress(0);
+
+        const totalFiles = fileList.length;
+        let filesProcessed = 0;
 
         for (const file of fileList) {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('path', currentPath);
-
             try {
-                await fetch(`${BACKEND_URL}/api/docs/upload`, {
+                // 1. Get Signed URL
+                const urlResp = await fetch(`${BACKEND_URL}/api/docs/upload-url`, {
                     method: 'POST',
-                    body: formData
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: file.name,
+                        contentType: file.type || 'application/octet-stream',
+                        model_urn: 'global' // Or actual model URN
+                    })
                 });
+                const urlData = await urlResp.json();
+                if (!urlData.success) throw new Error(urlData.error);
+
+                // 2. Direct Upload to GCS
+                await uploadFile(file, urlData.uploadUrl, {
+                    isDirect: true,
+                    onProgress: (p) => {
+                        const overall = Math.round(((filesProcessed / totalFiles) * 100) + (p / totalFiles));
+                        setUploadProgress(overall);
+                    }
+                });
+
+                // 3. Finalize upload in DB
+                await fetch(`${BACKEND_URL}/api/docs/upload-complete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: file.name,
+                        gcsUrn: urlData.gcsUrn,
+                        sizeBytes: file.size,
+                        contentType: file.type || 'application/octet-stream',
+                        path: currentPath,
+                        model_urn: 'global'
+                    })
+                });
+
+                filesProcessed++;
+                setUploadProgress(Math.round((filesProcessed / totalFiles) * 100));
             } catch (err) {
                 console.error('Upload error:', err);
+                alert(`Error subiendo ${file.name}: ${err.message}`);
             }
         }
 
-        setUploading(false);
-        fetchContents(currentPath);
+        setTimeout(() => {
+            setUploading(false);
+            setUploadProgress(0);
+            fetchContents(currentPath);
+        }, 500);
     };
 
     // Create new folder
@@ -265,13 +305,20 @@ export default function DocumentManager({ isOpen, onClose }) {
 
                         {/* Toolbar */}
                         <div className="dm-toolbar">
-                            <button
-                                className="dm-btn dm-btn-primary"
-                                onClick={() => fileInputRef.current?.click()}
-                                disabled={uploading}
-                            >
-                                {uploading ? '⏳ Subiendo...' : '📤 Cargar archivos'}
-                            </button>
+                            <div className="dm-upload-wrapper" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <button
+                                    className="dm-btn dm-btn-primary"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={uploading}
+                                >
+                                    {uploading ? `⏳ Subiendo (${uploadProgress}%)` : '📤 Cargar archivos'}
+                                </button>
+                                {uploading && (
+                                    <div className="dm-progress-track" style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                                        <div className="dm-progress-fill" style={{ width: `${uploadProgress}%`, height: '100%', background: '#3b82f6', transition: 'width 0.2s ease' }} />
+                                    </div>
+                                )}
+                            </div>
                             <input
                                 ref={fileInputRef}
                                 type="file"

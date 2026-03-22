@@ -30,10 +30,11 @@ def ensure_pins_table():
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
-            # Migración: Añadir project_id si no existe
+            # Migración: Añadir project_id y attachment_urn si no existen
             cursor.execute("ALTER TABLE control_pins ADD COLUMN IF NOT EXISTS project_id TEXT;")
+            cursor.execute("ALTER TABLE control_pins ADD COLUMN IF NOT EXISTS attachment_urn TEXT;")
             conn.commit()
-            print("[pins] Tabla control_pins verificada.")
+            print("[pins] Tabla control_pins verificada (con attachment_urn).")
     except Exception as e:
         print(f"[pins] Error en ensure_pins_table: {e}")
 
@@ -65,14 +66,15 @@ def get_pins():
             cursor = conn.cursor()
             # CRITICO: Filtrar por project_id para evitar fuga de datos
             cursor.execute("""
-                SELECT id, name, type, x_coord, y_coord, z_coord, created_at, updated_at 
+                SELECT id, name, type, x_coord, y_coord, z_coord, created_at, updated_at, attachment_urn 
                 FROM control_pins 
                 WHERE project_id = %s OR project_id IS NULL
                 ORDER BY created_at ASC
             """, (project_id,))
             rows = cursor.fetchall()
             for row in rows:
-                pins.append({
+                urn = row[8]
+                pin = {
                     "id": row[0],
                     "name": row[1],
                     "type": row[2],
@@ -80,8 +82,12 @@ def get_pins():
                     "y_coord": row[4],
                     "z_coord": row[5],
                     "createdAt": row[6].timestamp() if row[6] else time.time(),
-                    "projectId": project_id
-                })
+                    "projectId": project_id,
+                    "attachment_urn": urn
+                }
+                if urn:
+                    pin["attachment_url"] = f"/api/docs/proxy?urn={urn}"
+                pins.append(pin)
         return jsonify(pins), 200
     except Exception as e:
         print(f"Error GET pins: {e}")
@@ -104,6 +110,7 @@ def create_pin():
     x = data.get('x_coord', 0)
     y = data.get('y_coord', 0)
     z = data.get('z_coord', 0)
+    attachment_urn = data.get('attachment_urn')
     
     # Logica de Autonumeracion
     pin_name = data.get('name')
@@ -133,9 +140,9 @@ def create_pin():
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO control_pins (id, name, type, x_coord, y_coord, z_coord, project_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ''', (pin_id, pin_name, pin_type, x, y, z, project_id))
+                INSERT INTO control_pins (id, name, type, x_coord, y_coord, z_coord, project_id, attachment_urn)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (pin_id, pin_name, pin_type, x, y, z, project_id, attachment_urn))
             conn.commit()
     except Exception as e:
         print(f"Error POST pin: {e}")
@@ -153,6 +160,7 @@ def update_pin(pin_id):
 
     name = data.get('name')
     ptype = data.get('type')
+    attachment_urn = data.get('attachment_urn')
     
     try:
         with get_db_connection() as conn:
@@ -166,6 +174,9 @@ def update_pin(pin_id):
             if ptype is not None:
                 updates.append("type = %s")
                 values.append(ptype)
+            if attachment_urn is not None:
+                updates.append("attachment_urn = %s")
+                values.append(attachment_urn)
             
             updates.append("updated_at = CURRENT_TIMESTAMP")
             
@@ -212,17 +223,33 @@ def upload_pin_attachment():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
+    pin_id = request.form.get('pinId')
+    project_id = request.form.get('projectId', 'global')
+
     filename = secure_filename(f"{int(time.time())}_{file.filename}")
-    print(f"[PINS] Subiendo adjunto de pin a GCS: {filename}")
+    gcs_urn = f"multi-tenant/{project_id}/pin_attachments/{filename}"
+    
+    print(f"[PINS] Subiendo adjunto de pin a GCS: {gcs_urn}")
     
     # Subida pura a la Nube!
-    gcs_url = upload_file_to_gcs(file, f"attachments/{filename}")
+    gcs_url = upload_file_to_gcs(file, gcs_urn)
     
     if gcs_url:
+        # Si tenemos un pinId, lo guardamos de una vez
+        if pin_id:
+            try:
+                with get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE control_pins SET attachment_urn = %s WHERE id = %s", (gcs_urn, pin_id))
+                    conn.commit()
+            except Exception as e:
+                print(f"Error actualizando pin con URN: {e}")
+
         return jsonify({
-            'url': gcs_url,
+            'url': f"/api/docs/proxy?urn={gcs_urn}",
+            'urn': gcs_urn,
             'filename': filename,
-            'type': 'gcs' # Avisar al front
+            'type': 'gcs'
         })
     else:
         # Fallback local de rescate si Google Cloud falla o pierde acceso momentaneo
