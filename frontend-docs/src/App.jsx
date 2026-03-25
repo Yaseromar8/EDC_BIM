@@ -35,8 +35,8 @@ function fileIcon(name) {
 }
 
 function getInitials(name) {
-  if (!name) return 'U';
-  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  if (!name || typeof name !== 'string') return 'U';
+  return name.split(' ').filter(w => w).map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
 // ─── USER HOOK (localStorage & sessionStorage) ───
@@ -716,7 +716,7 @@ function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSel
   const loadChildren = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/docs/list?path=${encodeURIComponent(folder.fullName)}`);
+      const res = await fetch(`${API}/api/docs/list?path=${encodeURIComponent(folder.fullName)}&model_urn=${encodeURIComponent(import.meta.env.VITE_PROJECT_PREFIX || 'global')}`);
       if (res.ok) {
         const response = await res.json();
         const data = response.data || {};
@@ -743,7 +743,7 @@ function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSel
     <div style={{ marginLeft: 16 }}>
       <div
         style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', cursor: 'pointer', background: isSelected ? '#e6f3fa' : 'transparent', color: isSelected ? '#0696D7' : '#333', borderRadius: 4 }}
-        onClick={() => onSelect(folder.fullName)}
+        onClick={() => onSelect(folder.fullName, folder.id)}
       >
         <div style={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 4, cursor: 'pointer' }} onClick={handleToggle}>
           {loading ? <div className="adsk-spinner" style={{ width: 10, height: 10, borderWidth: 1 }} /> : (
@@ -769,7 +769,30 @@ function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSel
 // ─────────────────────────────────────
 // 3.5 RECURSIVE FOLDER NODE
 // ─────────────────────────────────────
-function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1, defaultExpanded = false, onCreateSubfolder, isAdmin, onTreeRefresh, onGlobalRefresh, refreshSignal = 0, onInitiateMove, collapseSignal = 0, onReset }) {
+function FolderNode({ 
+  user,
+  folder, 
+  currentPath, 
+  onNavigate, 
+  projectPrefix, 
+  level = 1, 
+  defaultExpanded = false, 
+  isAdmin, 
+  onTreeRefresh, 
+  onGlobalRefresh, 
+  refreshSignal = 0, 
+  onInitiateMove, 
+  collapseSignal = 0, 
+  onReset,
+  onRowMenu,
+  editingNodeId,
+  setEditingNodeId,
+  rightClickedId,
+  processingIds,
+  setProcessingIds,
+  creatingChildParentId,
+  setCreatingChildParentId
+}) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [children, setChildren] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -783,63 +806,80 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
   const [newChildName, setNewChildName] = useState('');
 
   const submitRename = async () => {
-    if (!renameValue.trim() || renameValue.trim() === folder.name.replace(/\/$/, '')) { setIsRenaming(false); return; }
-    const isFolder = folder.fullName.endsWith('/');
-    let baseName = folder.fullName;
-    if (isFolder) baseName = baseName.slice(0, -1);
-    const parts = baseName.split('/');
-    parts[parts.length - 1] = renameValue.trim();
-    let newNamePath = parts.join('/');
-    if (isFolder) newNamePath += '/';
-    setLoading(true);
+    const folderNameStr = folder.name || '';
+    if (!renameValue.trim() || renameValue.trim() === folderNameStr.replace(/\/$/, '')) {
+      setIsRenaming(false);
+      return;
+    }
+    const nodeName = folder.name || 'Folder';
+    const folderFullName = folder.fullName || '';
+    const nodeId = folder.id || folderFullName;
+    setProcessingIds(prev => ({ ...prev, [nodeId]: true }));
     try {
       const res = await fetch(`${API}/api/docs/rename`, {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName: folder.fullName,
-          newName: renameValue.trim()
-        })
+        body: JSON.stringify({ node_id: nodeId, new_name: renameValue.trim(), model_urn: projectPrefix })
       });
-
       if (res.ok) {
-        const data = await res.json();
-        const serverNewPath = data.newFullName + (folder.fullName.endsWith('/') ? '/' : '');
-
-        setLoading(false);
         setIsRenaming(false);
         if (onTreeRefresh) onTreeRefresh();
-        if (onGlobalRefresh) onGlobalRefresh(currentPath === folder.fullName ? serverNewPath : null);
+        // Sincronizar panel principal si estamos en esa carpeta
+        if (onGlobalRefresh) onGlobalRefresh();
       } else {
         const err = await res.json();
         alert("Error al renombrar: " + (err.error || 'Desconocido'));
-        setLoading(false);
       }
     } catch (e) {
       console.error(e);
-      setLoading(false);
+    } finally {
+      setProcessingIds(prev => { const n = { ...prev }; delete n[nodeId]; return n; });
     }
   };
 
   const submitCreateChild = async () => {
     if (!newChildName.trim()) { setIsCreatingChild(false); return; }
-    const newPath = folder.fullName + newChildName.trim() + '/';
+    const base = folder.fullName || '';
+    const newPath = base + (base.endsWith('/') ? '' : '/') + newChildName.trim() + '/';
     setLoading(true);
-    try { await fetch(`${API}/api/docs/folder`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: newPath }) }); } catch (e) { }
-    setLoading(false);
-    setIsCreatingChild(false);
-    setNewChildName('');
-    loadChildren();
-    if (onGlobalRefresh) onGlobalRefresh();
+    try { 
+      const res = await fetch(`${API}/api/docs/folder`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ 
+          path: newPath, 
+          model_urn: projectPrefix, 
+          user: user?.name 
+        }) 
+      });
+      if (res.ok) {
+        setIsCreatingChild(false);
+        setNewChildName('');
+        if (onTreeRefresh) onTreeRefresh();
+        if (onGlobalRefresh) onGlobalRefresh();
+      } else {
+        const err = await res.json();
+        alert("Error al crear carpeta: " + (err.error || 'Desconocido'));
+      }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   };
 
   const submitDelete = async () => {
     if (!isAdmin) return;
     setLoading(true);
-    try { await fetch(`${API}/api/docs/delete`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fullName: folder.fullName }) }); } catch (e) { }
-    setLoading(false);
-    if (onTreeRefresh) onTreeRefresh();
-    if (onGlobalRefresh) onGlobalRefresh((currentPath === folder.fullName || currentPath.startsWith(folder.fullName)) ? projectPrefix : null);
+    try { 
+      const res = await fetch(`${API}/api/docs/delete`, { 
+        method: 'DELETE', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ fullName: folder.fullName || '', model_urn: projectPrefix, user: user?.name }) 
+      });
+      if (res.ok) {
+        if (onTreeRefresh) onTreeRefresh();
+        if (onGlobalRefresh) onGlobalRefresh((currentPath === folder.fullName || currentPath.startsWith(folder.fullName)) ? projectPrefix : null);
+      }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   };
 
   useEffect(() => {
@@ -878,7 +918,8 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
 
   // Auto-expandir el árbol si el usuario navega a un hijo desde la tabla principal o breadcrumbs
   useEffect(() => {
-    if (currentPath.startsWith(folder.fullName) && currentPath !== folder.fullName) {
+    const folderFullName = folder.fullName || '';
+    if (folderFullName && currentPath.startsWith(folderFullName) && currentPath !== folderFullName) {
       if (!expanded) setExpanded(true);
       if (!children) loadChildren(true); // Cargar render silencioso
     }
@@ -887,7 +928,8 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
   const loadChildren = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await fetch(`${API}/api/docs/list?path=${encodeURIComponent(folder.fullName)}`);
+      const folderFullName = folder.fullName || '';
+      const res = await fetch(`${API}/api/docs/list?path=${encodeURIComponent(folderFullName)}&model_urn=${encodeURIComponent(projectPrefix)}`);
       if (res.ok) {
         const response = await res.json();
         const data = response.data || {};
@@ -908,26 +950,63 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
     setExpanded(!expanded);
   };
 
-  const isActive = currentPath === folder.fullName;
-  const isChildrenActive = currentPath.startsWith(folder.fullName) && !isActive;
+  const folderFullName = folder.fullName || '';
+  const isActive = currentPath === folderFullName;
+  const isChildrenActive = folderFullName && currentPath.startsWith(folderFullName) && !isActive;
+
+  // Sync inline edit from context menu
+  useEffect(() => {
+    const folderId = folder.id || folder.fullName || '';
+    if (editingNodeId && editingNodeId.source === 'sidebar' && editingNodeId.id === folderId) {
+      setIsRenaming(true);
+      setRenameValue((folder.name || '').replace(/\/$/, ''));
+      setEditingNodeId(null);
+    }
+  }, [editingNodeId, folder.id, folder.fullName, folder.name, setEditingNodeId]);
+
+  // Sync inline create from context menu
+  useEffect(() => {
+    const folderId = folder.id || folder.fullName || '';
+    if (creatingChildParentId === folderId) {
+      if (!expanded) setExpanded(true);
+      if (!children) loadChildren(true); // Load children silently if needed
+      setIsCreatingChild(true);
+      setNewChildName('');
+      setCreatingChildParentId(null); // Clear the trigger
+    }
+  }, [creatingChildParentId, folder.id, folder.fullName, expanded, children, setCreatingChildParentId]);
 
   return (
     <>
       <div
-        className={`folder-tree-item ${isActive ? 'active' : ''} ${isChildrenActive ? 'child-active' : ''}`}
+        className={`folder-tree-item ${isActive ? 'active' : ''} ${isChildrenActive ? 'child-active' : ''} ${(folder.id || folder.fullName) === rightClickedId ? 'context-active' : ''}`}
         style={{ paddingLeft: `${8 + (level * 28)}px`, color: isActive ? '#0696D7' : '#3c3c3c' }}
-        onClick={() => {
-          onNavigate(folder.fullName);
+        onClick={(e) => {
+          e.stopPropagation();
+          onNavigate(folder.fullName, folder.id);
           if (level === 0 && onReset) onReset();
+        }}
+        onContextMenu={(e) => {
+          if (isAdmin) {
+            e.preventDefault();
+            e.stopPropagation();
+            // We need a proper item object for onRowMenu
+            const item = { ...folder, type: 'folder', id: folder.id || folder.fullName }; 
+            onRowMenu(item, e);
+          }
         }}
       >
         <div className="tree-toggle" onClick={handleToggle} style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (children && children.length === 0 && expanded) ? 0 : 1 }}>
-          {loading ? (
+          {processingIds[folder.id || folder.fullName] ? (
             <div className="adsk-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
           ) : (
-            <svg height="24" width="24" viewBox="0 0 24 24" fill="currentColor" style={{ transform: expanded ? 'none' : 'rotate(-90deg)', transition: 'transform 0.2s', width: 20, height: 20 }}>
-              <path d="M12,16.17a.74.74,0,0,1-.54-.23L6.23,10.52a.75.75,0,0,1,1.08-1L12,14.34l4.69-4.86a.75.75,0,1,1,1.08,1l-5.23,5.42A.74.74,0,0,1,12,16.17Z"></path>
-            </svg>
+            loading ? (
+              <div className="adsk-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+            ) : (
+              <svg height="24" width="24" viewBox="0 0 24 24" fill="currentColor" style={{ transform: expanded ? 'none' : 'rotate(-90deg)', transition: 'transform 0.2s', width: 20, height: 20 }}>
+                <path d="M12,16.17a.74.74,0,0,1-.54-.23L6.23,10.52a.75.75,0,0,1,1.08-1L12,14.34l4.69-4.86a.75.75,0,1,1,1.08,1l-5.23,5.42A.74.74,0,0,1,12,16.17Z"></path>
+              </svg>
+            )
           )}
         </div>
 
@@ -938,23 +1017,47 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
         </div>
 
         {isRenaming ? (
-          <div className="inline-edit-box" onClick={e => e.stopPropagation()}>
+          <div className="inline-edit-box" style={{ margin: '0 8px', height: 28 }} onClick={e => e.stopPropagation()}>
             <input 
               autoFocus 
               value={renameValue} 
+              onFocus={(e) => e.target.select()}
               onChange={e => setRenameValue(e.target.value)} 
-              onBlur={() => submitRename()}
+              onBlur={(e) => {
+                // Evitar conflicto con los botones del propio box
+                if (e.relatedTarget && e.relatedTarget.closest('.inline-edit-box')) return;
+                submitRename();
+              }}
               onKeyDown={e => { 
                 if (e.key === 'Enter') submitRename(); 
                 if (e.key === 'Escape') setIsRenaming(false); 
-              }} 
+              }}
+              style={{ padding: '0 4px', fontSize: 13 }}
             />
-            <button onMouseDown={(e) => { e.preventDefault(); setIsRenaming(false); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
-            <button onMouseDown={(e) => { e.preventDefault(); submitRename(); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"></path></svg></button>
+            <button 
+              className="btn-cancel" 
+              style={{ width: 22, height: 22, marginLeft: 2 }}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => { e.stopPropagation(); setIsRenaming(false); }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+            <button 
+              className="btn-submit" 
+              style={{ width: 22, height: 22, marginLeft: 2 }}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => { e.stopPropagation(); submitRename(); }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </button>
           </div>
         ) : (
-          <div className="tree-name" style={{ fontWeight: 400, flex: 1, whiteSpace: 'nowrap', fontSize: 14, paddingRight: 8 }} title={folder.name.replace(/\/$/, '')}>
-            {folder.name.replace(/\/$/, '')}
+          <div className="tree-name" style={{ fontWeight: 400, flex: 1, whiteSpace: 'nowrap', fontSize: 14, paddingRight: 8 }} title={(folder.name || 'Folder').replace(/\/$/, '')}>
+            {(folder.name || 'Folder').replace(/\/$/, '')}
           </div>
         )}
 
@@ -965,8 +1068,7 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
             onClick={(e) => {
               e.stopPropagation();
               const rect = e.currentTarget.getBoundingClientRect();
-              setMenuPos({ top: rect.bottom, left: rect.left });
-              setShowMenu(!showMenu);
+              onRowMenu({ ...folder, type: 'folder', id: folder.id || folder.fullName }, { clientX: rect.left, clientY: rect.bottom });
             }}
             title="Opciones de carpeta"
           >
@@ -975,29 +1077,13 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
             </svg>
           </button>
         )}
-        {showMenu && (
-          <div className="tree-context-menu" ref={menuRef} style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 99999 }}>
-            {isAdmin && folder.fullName !== projectPrefix && (
-              <button className="tree-context-item" onClick={(e) => { e.stopPropagation(); setShowMenu(false); setIsRenaming(true); setRenameValue(folder.name.replace(/\/$/, '')); }}>
-                <svg fill="currentColor" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg> Cambiar nombre
-              </button>
-            )}
-            {isAdmin && (
-              <button className="tree-context-item" onClick={(e) => { e.stopPropagation(); setShowMenu(false); setExpanded(true); setIsCreatingChild(true); setNewChildName(''); }}>
-                <svg fill="currentColor" viewBox="0 0 24 24"><path d="M19,11H13V5a1,1,0,0,0-2,0v6H5a1,1,0,0,0,0,2h6v6a1,1,0,0,0,2,0V13h6a1,1,0,0,0,0-2Z" /></svg> Añadir subcarpeta
-              </button>
-            )}
-            <button className="tree-context-item" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }}>
-              <svg fill="currentColor" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z" /></svg> Compartir
-            </button>
-          </div>
-        )}
       </div>
-      {expanded && children && (
+      {expanded && (
         <div className="folder-children">
-          {children.map(child => (
+          {children && children.map(child => (
             <FolderNode
               key={child.fullName}
+              user={user}
               folder={child}
               currentPath={currentPath}
               onNavigate={onNavigate}
@@ -1010,20 +1096,29 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
               onInitiateMove={onInitiateMove}
               collapseSignal={collapseSignal}
               onReset={onReset}
+              onRowMenu={onRowMenu}
+              editingNodeId={editingNodeId}
+              setEditingNodeId={setEditingNodeId}
+              rightClickedId={rightClickedId}
+              processingIds={processingIds}
+              setProcessingIds={setProcessingIds}
+              creatingChildParentId={creatingChildParentId}
+              setCreatingChildParentId={setCreatingChildParentId}
             />
           ))}
           {isCreatingChild && (
-            <div className="folder-tree-item child-active" style={{ paddingLeft: `${8 + ((level + 1) * 28)}px` }}>
-              <div style={{ width: 24, height: 24 }}></div>
+            <div className="folder-tree-item child-active" style={{ paddingLeft: `${8 + ((level + 1) * 28)}px`, minHeight: 40 }}>
+              <div style={{ width: 24 }}></div>
               <div className="tree-icon" style={{ display: 'flex', alignItems: 'center', marginLeft: 4, marginRight: 8 }}>
                 <svg fill="currentColor" viewBox="0 0 24 24" width="24" height="24"><path d="M18,20.45H6a3.6,3.6,0,0,1-3.6-3.6V7.15A3.6,3.6,0,0,1,6,3.55h4.84a.71.71,0,0,1,.53.22l2.12,2.1H18a3.61,3.61,0,0,1,3.6,3.61v7.37A3.6,3.6,0,0,1,18,20.45ZM3.89,9.48v7.37A2.1,2.1,0,0,0,6,19H18a2.1,2.1,0,0,0,2.1-2.1V9.48A2.1,2.1,0,0,0,18,7.37H13.17a.75.75,0,0,1-.53-.22l-2.12-2.1H6a2.1,2.1,0,0,0-2.1,2.1Z"></path></svg>
               </div>
-              <div className="inline-edit-box" onClick={e => e.stopPropagation()}>
+              <div className="inline-edit-box" style={{ margin: '0 8px', height: 28 }} onClick={e => e.stopPropagation()}>
                 <input 
                   autoFocus 
                   value={newChildName} 
                   onChange={e => setNewChildName(e.target.value)} 
-                  onBlur={() => {
+                  onBlur={(e) => {
+                    if (e.relatedTarget && e.relatedTarget.closest('.inline-edit-box')) return;
                     if (newChildName.trim()) submitCreateChild();
                     else setIsCreatingChild(false);
                   }}
@@ -1032,9 +1127,28 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
                     if (e.key === 'Escape') setIsCreatingChild(false); 
                   }} 
                   placeholder="Carpeta nueva" 
+                  style={{ padding: '0 4px', fontSize: 13 }}
                 />
-                <button onMouseDown={(e) => { e.preventDefault(); setIsCreatingChild(false); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
-                <button onMouseDown={(e) => { e.preventDefault(); submitCreateChild(); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"></path></svg></button>
+                <button 
+                  className="btn-cancel"
+                  style={{ width: 22, height: 22, marginLeft: 2 }}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => { e.stopPropagation(); setIsCreatingChild(false); }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+                <button 
+                  className="btn-submit"
+                  style={{ width: 22, height: 22, marginLeft: 2 }}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => { e.stopPropagation(); submitCreateChild(); }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </button>
               </div>
             </div>
           )}
@@ -1048,16 +1162,118 @@ function FolderNode({ folder, currentPath, onNavigate, projectPrefix, level = 1,
 // 3. TABLE COMPONENTS (Virtualized)
 // ─────────────────────────────────────
 
+function DeletedTable({ items, selectedIds, onToggle, onRestore, getInitials, renderFileIconSop, restoringIds }) {
+  const colWidths = { checkbox: 40, name: 400, filename: 300, user: 250, date: 150 };
+  const totalWidth = Object.values(colWidths).reduce((a, b) => a + b, 0);
+
+  return (
+    <div className="table-wrap" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%', background: '#fff' }}>
+      <div style={{ width: totalWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid #eee' }}>
+        <div className="data-header" style={{ position: 'sticky', top: 0, zIndex: 30, width: totalWidth, background: '#f8f9fa' }}>
+          <div className="td-cell checkbox-cell" style={{ width: colWidths.checkbox }}>
+            <input 
+              type="checkbox" 
+              checked={selectedIds.length === items.length && items.length > 0} 
+              onChange={() => {
+                if (selectedIds.length === items.length) onToggle([]);
+                else onToggle(items.map(it => it.id));
+              }}
+            />
+          </div>
+          <div className="td-cell" style={{ width: colWidths.name }}>Nombre</div>
+          <div className="td-cell" style={{ width: colWidths.filename }}>Nombre de archivo</div>
+          <div className="td-cell" style={{ width: colWidths.user }}>Suprimido por</div>
+          <div className="td-cell" style={{ width: colWidths.date }}>Fecha de supresión</div>
+        </div>
+        <div className="deleted-rows" style={{ flex: 1 }}>
+          {items.map(item => {
+            const isSelected = selectedIds.includes(item.id);
+            const isRestoring = restoringIds[item.id];
+            return (
+              <div 
+                key={item.id} 
+                className={`data-row ${isSelected ? 'selected' : ''}`} 
+                style={{ 
+                  height: 48, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  borderBottom: '1px solid #f2f2f2',
+                  opacity: isRestoring ? 0.5 : 1,
+                  filter: isRestoring ? 'grayscale(1)' : 'none',
+                  transition: 'all 0.4s ease',
+                  width: totalWidth
+                }}
+              >
+                <div className="td-cell checkbox-cell" style={{ width: colWidths.checkbox }}>
+                  {!isRestoring && (
+                    <input 
+                      type="checkbox" 
+                      checked={isSelected} 
+                      onChange={() => {
+                        if (isSelected) onToggle(selectedIds.filter(id => id !== item.id));
+                        else onToggle([...selectedIds, item.id]);
+                      }}
+                    />
+                  )}
+                </div>
+                <div className="td-cell" style={{ width: colWidths.name, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {item.type === 'folder' ? (
+                     <svg width="20" height="20" viewBox="0 0 24 24" fill={isRestoring ? '#ccc' : "#666"}><path d="M18,20.45H6a3.6,3.6,0,0,1-3.6-3.6V7.15A3.6,3.6,0,0,1,6,3.55h4.84a.71.71,0,0,1,.53.22l2.12,2.1H18a3.61,3.61,0,0,1,3.6,3.61v7.37A3.6,3.6,0,0,1,18,20.45ZM3.89,9.48v7.37A2.1,2.1,0,0,0,6,19H18a2.1,2.1,0,0,0,2.1-2.1V9.48A2.1,2.1,0,0,0,18,7.37H13.17a.75.75,0,0,1-.53-.22l-2.12-2.1H6a2.1,2.1,0,0,0-2.1,2.1Z"/></svg>
+                  ) : (
+                    renderFileIconSop(item.name, 22)
+                  )}
+                  <span style={{ fontSize: 13, color: isRestoring ? '#aaa' : '#1f1f1f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                </div>
+                <div className="td-cell" style={{ width: colWidths.filename, fontSize: 13, color: isRestoring ? '#ccc' : '#666', borderRight: 'none' }}>{item.filename}</div>
+                <div className="td-cell" style={{ width: colWidths.user }}>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 10, background: isRestoring ? '#eee' : '#f5c6cb', color: isRestoring ? '#ccc' : 'white' }}>{item.deletedBy.initials}</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                        <span style={{ fontSize: 13, color: isRestoring ? '#aaa' : '#1f1f1f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.deletedBy.name}</span>
+                        <span style={{ fontSize: 11, color: isRestoring ? '#ddd' : '#999' }}>Trial account ysan...</span>
+                      </div>
+                   </div>
+                </div>
+                <div className="td-cell" style={{ width: colWidths.date, fontSize: 13, color: isRestoring ? '#ccc' : '#666', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: 12 }}>
+                   <span>{item.date}</span>
+                   {!isRestoring && (
+                     <button 
+                      onClick={() => onRestore(item.id)}
+                      className="restore-btn-acc"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#666', padding: 4 }}
+                      title="Restaurar"
+                     >
+                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 1 1 0 8h-1"/></svg>
+                     </button>
+                   )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ height: 32, borderTop: '1px solid #f2f2f2', display: 'flex', alignItems: 'center', padding: '0 16px', fontSize: 12, color: '#666', background: '#fff' }}>
+          Mostrando {items.length} elementos
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FilesPage({ project, user, onBack }) {
-  const projectPrefix = `proyectos/${project.name.replace(/ /g, '_')}/`;
-  const [currentPath, setCurrentPath] = useState(projectPrefix);
+  const projectPrefix = `proyectos/${project.name.replace(/ /g, '_')}`;
+  const [currentPath, setCurrentPath] = useState(projectPrefix + '/');
+  const [currentNodeId, setCurrentNodeId] = useState(null);
   const [isTrashMode, setIsTrashMode] = useState(false);
+  const [deletedItems, setDeletedItems] = useState([]);
+  const [selectedDeletedIds, setSelectedDeletedIds] = useState([]);
+  const [restoringIds, setRestoringIds] = useState({}); // { [id]: true }
   const [folders, setFolders] = useState([]);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [folderName, setFolderName] = useState('');
+  const [newFolderParentPath, setNewFolderParentPath] = useState('');
   const [uploading, setUploading] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -1078,9 +1294,62 @@ function FilesPage({ project, user, onBack }) {
   const [uploadSopStep, setUploadSopStep] = useState('IDLE');
   const [collapseSignal, setCollapseSignal] = useState(0);
   const [showUploadMenu, setShowUploadMenu] = useState(false);
-  const [moveState, setMoveState] = useState({ step: 0, items: [], destPath: '' });
+  const [moveState, setMoveState] = useState({ step: 0, items: [], itemIds: [], destPath: '', destId: null });
+  const [projectRootId, setProjectRootId] = useState(null);
+
+  useEffect(() => {
+    const fetchRootId = async () => {
+      try {
+        const res = await fetch(`${API}/api/docs/list?path=${encodeURIComponent(projectPrefix)}&model_urn=${encodeURIComponent(projectPrefix)}`);
+        if (res.ok) {
+          const resp = await res.json();
+          // Solo usar el ID si no es la raíz del proyecto para evitar discrepancias
+          if (resp.data?.current_node_id && resp.data.current_node_id !== 'null') {
+            setProjectRootId(resp.data.current_node_id);
+          } else {
+            setProjectRootId(null);
+          }
+        }
+      } catch (e) { }
+    };
+    fetchRootId();
+  }, [projectPrefix]);
   const fileRef = useRef(null);
-  const [activeRowMenu, setActiveRowMenu] = useState(null);
+  const [activeRowMenu, setActiveRowMenu] = useState(null); // { item, x, y, source }
+  const [editingNodeId, setEditingNodeId] = useState(null); // { id, source }
+  const [rightClickedId, setRightClickedId] = useState(null);
+  const [processingIds, setProcessingIds] = useState({}); // { [id]: true }
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareTarget, setShareTarget] = useState(null);
+  const [shareGeneralAccess, setShareGeneralAccess] = useState('restricted'); // 'restricted' | 'anyone'
+  const [shareGeneralRole, setShareGeneralRole] = useState('viewer'); // 'viewer' | 'commenter' | 'editor'
+  const [sharedUsers, setSharedUsers] = useState([]);
+  const [searchShareUser, setSearchShareUser] = useState('');
+  const [showShareResults, setShowShareResults] = useState(false);
+  
+  // Mock de usuarios para búsqueda híbrida
+  const allProjectUsers = [
+    { email: 'omarsanchezh8@gmail.com', name: 'Yaser Omar', initials: 'YO' },
+    { email: 'admin@visor.com', name: 'Administrador', initials: 'AD' },
+    { email: 'residente@obra.com', name: 'Juan Perez', initials: 'JP' },
+    { email: 'supervisor@aps.com', name: 'Maria Lopez', initials: 'ML' }
+  ];
+  const [creatingChildParentId, setCreatingChildParentId] = useState(null);
+  
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setActiveRowMenu(null);
+        setRightClickedId(null);
+      }
+    }
+    if (activeRowMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [activeRowMenu]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVersions, setSelectedVersions] = useState(new Set());
   const [versionRowMenu, setVersionRowMenu] = useState(null);
@@ -1168,11 +1437,19 @@ function FilesPage({ project, user, onBack }) {
     fetchVersionHistory(f);
   };
 
+  useEffect(() => {
+    if (activeFile && activeFile.type !== 'folder') {
+      fetchVersionHistory(activeFile);
+      // Initialize viewedVersionInfo with null so it defaults to latest path
+      setViewedVersionInfo(null);
+    }
+  }, [activeFile]);
+
   const fetchVersionHistory = async (item) => {
     setLoadingVersions(true);
     setVersionHistory([]);
     try {
-      const resp = await fetch(`${API}/api/docs/versions?id=${item.id || encodeURIComponent(item.fullName)}`);
+      const resp = await fetch(`${API}/api/docs/versions?id=${item.id || encodeURIComponent(item.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}`);
       const data = await resp.json();
       if (data.success) setVersionHistory(data.versions || []);
     } catch (e) { console.error(e); }
@@ -1180,49 +1457,91 @@ function FilesPage({ project, user, onBack }) {
   };
 
   const handlePromote = async (version) => {
-    if (!versionTarget) return;
+    const target = versionTarget || activeFile;
+    if (!target) return;
+    
     try {
       const resp = await fetch(`${API}/api/docs/versions/promote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: versionTarget.id, version_id: version.id, user: user?.name })
+        body: JSON.stringify({ id: target.id, version_id: version.id, user: user?.name, model_urn: projectPrefix })
       });
       if (resp.ok) {
         setTableShowVersions(false);
+        setShowVersions(false);
         triggerRefresh();
+        
+        // Si estamos viendo el archivo, cerrar y reabrir para refrescar el contenido
+        if (activeFile && activeFile.id === target.id) {
+          setActiveFile(null);
+          setViewedVersionInfo(null);
+        }
+        
+        alert(`Versión ${version.version_number} promocionada exitosamente.`);
+      } else {
+        const error = await resp.json();
+        alert(`Error al promocionar: ${error.error || 'Desconocido'}`);
       }
     } catch (e) { console.error(e); }
   };
 
-  const fetchContents = useCallback(async (path, trash = false, silent = false) => {
+  const fetchContents = useCallback(async (path, trash = false, silent = false, nodeId = null) => {
     if (!silent) {
       setLoading(true);
       setFolders([]);
       setFiles([]);
     }
     try {
-      const endpoint = trash ? '/api/docs/deleted' : `/api/docs/list?path=${encodeURIComponent(path)}`;
+      const endpoint = trash 
+        ? `/api/docs/deleted?model_urn=${encodeURIComponent(projectPrefix)}` 
+        : `/api/docs/list?path=${encodeURIComponent(path)}${nodeId ? `&id=${nodeId}` : ''}&model_urn=${encodeURIComponent(projectPrefix)}`;
       const res = await fetch(`${API}${endpoint}`);
       if (res.ok) {
         const response = await res.json();
         const data = response.data || {};
         setFolders((data.folders || []).map(f => ({...f, type: 'folder'})).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
         setFiles((data.files || []).map(f => ({...f, type: 'file'})).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
+        
+        if (trash) {
+          const allDel = [...(data.folders || []), ...(data.files || [])].map(it => ({
+            ...it,
+            type: it.node_type?.toLowerCase() || (it.fullName?.endsWith('/') ? 'folder' : 'file'),
+            filename: it.name,
+            deletedBy: { name: it.updated_by || 'Sistema', initials: getInitials(it.updated_by || 'Sistema') },
+            date: formatDate(it.updated)
+          }));
+          setDeletedItems(allDel);
+        }
       }
     } catch (e) { console.error(e); }
     finally { if (!silent) setLoading(false); }
   }, []);
 
-  const triggerRefresh = (path = currentPath) => { fetchContents(path, isTrashMode, true); setRefreshSignal(prev => prev + 1); };
+  const triggerRefresh = (path = currentPath) => { 
+    fetchContents(path, isTrashMode, true, isTrashMode ? null : currentNodeId); 
+    setRefreshSignal(prev => prev + 1); 
+  };
 
-  useEffect(() => { fetchContents(currentPath, isTrashMode); }, [currentPath, isTrashMode, fetchContents]);
+  useEffect(() => { 
+    fetchContents(currentPath, isTrashMode, false, isTrashMode ? null : currentNodeId); 
+  }, [currentPath, isTrashMode, currentNodeId, fetchContents]); 
+  // Actually, better to include it and make navigate only set the states.
 
-  const navigate = (path) => {
-    if (path === currentPath) return;
+  const navigate = (path, id = null) => {
+    // Normalizar path para comparar con raíz
+    const normalizedPath = path.replace(/\/$/, '');
+    const isRoot = normalizedPath === projectPrefix;
+    
+    const finalId = isRoot ? null : id;
+    const finalPath = path.endsWith('/') ? path : path + '/';
+
+    if (finalPath === currentPath && finalId === currentNodeId) return;
+    
     setLoading(true);
     setFolders([]); 
     setFiles([]); 
-    setCurrentPath(path); 
+    setCurrentPath(finalPath); 
+    setCurrentNodeId(finalId);
     setSelected(new Set()); 
     setIsTrashMode(false);
   };
@@ -1362,7 +1681,7 @@ function FilesPage({ project, user, onBack }) {
       fd.append('file', item.file); 
       fd.append('path', currentPath); 
       fd.append('user', user.name); 
-      fd.append('model_urn', 'global');
+      fd.append('model_urn', projectPrefix);
 
       const xhr = new XMLHttpRequest();
       console.log(`[Upload] Starting POST to ${API}/api/docs/upload for ${item.file.name} (${item.file.size} bytes)`);
@@ -1442,15 +1761,60 @@ function FilesPage({ project, user, onBack }) {
 
   const createFolder = async () => {
     if (!isAdmin || !folderName.trim()) return;
-    try { await fetch(`${API}/api/docs/folder`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: currentPath + folderName.trim() }) }); } catch (e) { }
-    setShowNewFolder(false); setFolderName(''); triggerRefresh();
+    const targetPath = (newFolderParentPath || currentPath) + ( (newFolderParentPath || currentPath).endsWith('/') ? '' : '/' ) + folderName.trim() + '/';
+    const parentId = newFolderParentPath || (currentPath.startsWith(projectPrefix) && (currentPath === projectPrefix || currentPath === projectPrefix + '/') ? null : currentPath);
+    if (parentId && parentId.length > 30) setProcessingIds(prev => ({ ...prev, [parentId]: true }));
+    try { 
+      const res = await fetch(`${API}/api/docs/folder`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ 
+          path: targetPath, 
+          model_urn: projectPrefix, 
+          user: user?.name 
+        }) 
+      }); 
+      if (res.ok) {
+        setShowNewFolder(false); 
+        setFolderName(''); 
+        setNewFolderParentPath('');
+        setRefreshSignal(s => s + 1);
+        triggerRefresh();
+      } else {
+        const err = await res.json();
+        alert("Error: " + (err.error || "No se pudo crear la carpeta"));
+      }
+    } catch (e) { console.error(e); }
+    finally {
+      if (parentId) setProcessingIds(prev => { const n = { ...prev }; delete n[parentId]; return n; });
+    }
   };
 
-  const deleteSpecificItem = async (fullName) => {
+  const deleteSpecificItem = async (fullName, id) => {
     if (!isAdmin) return;
-    try { await fetch(`${API}/api/docs/delete`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fullName }) }); } catch (e) { }
-    triggerRefresh();
-    if (currentPath === fullName || currentPath.startsWith(fullName)) navigate(projectPrefix);
+    const target = folders.find(f => f.id === id) || files.find(f => f.id === id);
+    if (!target) return;
+
+    if (id) setProcessingIds(prev => ({ ...prev, [id]: true }));
+    
+    try { 
+      const res = await fetch(`${API}/api/docs/delete`, { 
+        method: 'DELETE', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ fullName, id: id, model_urn: projectPrefix, user: user.name }) 
+      }); 
+      if (res.ok) {
+        setRefreshSignal(s => s + 1);
+        triggerRefresh(currentPath);
+        if (currentPath === fullName || currentPath.startsWith(fullName)) {
+          setCurrentPath(projectPrefix);
+          setCurrentNodeId(null);
+        }
+      }
+    } catch (e) { console.error(e); }
+    finally {
+      if (id) setProcessingIds(prev => { const n = { ...prev }; delete n[id]; return n; });
+    }
   };
 
   const renameSpecificItem = async (fullName) => {
@@ -1463,16 +1827,54 @@ function FilesPage({ project, user, onBack }) {
     if (!newNameRaw || newNameRaw.trim() === '' || newNameRaw === oldName) return;
     parts[parts.length - 1] = newNameRaw.trim();
     let newNamePath = parts.join('/') + (isFolder ? '/' : '');
-    try { await fetch(`${API}/api/docs/rename`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldName: fullName, newName: newNamePath }) }); } catch (e) { }
+    try { await fetch(`${API}/api/docs/rename`, { 
+      method: 'PUT', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ oldName: fullName, newName: newNamePath, model_urn: projectPrefix }) 
+    }); } catch (e) { }
     triggerRefresh();
   };
 
   const handleExecuteMove = async () => {
-    if (!isAdmin || !moveState.destPath || !moveState.items.length) return;
-    for (const fullName of moveState.items) {
-      try { await fetch(`${API}/api/docs/move`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fullName: fullName, destPath: moveState.destPath, user: user?.email }) }); } catch (e) { }
+    if (!isAdmin || !moveState.destPath || !moveState.itemIds?.length) return;
+    const idsToMove = [...moveState.itemIds];
+    setProcessingIds(prev => {
+       const n = { ...prev };
+       idsToMove.forEach(id => n[id] = true);
+       return n;
+    });
+    for (const nodeId of idsToMove) {
+      try { 
+        const res = await fetch(`${API}/api/docs/move`, { 
+          method: 'PUT', 
+          headers: { 'Content-Type': 'application/json' }, 
+          body: JSON.stringify({ 
+            node_id: nodeId, 
+            destNodeId: moveState.destId, 
+            model_urn: projectPrefix,
+            user: user?.email 
+          }) 
+        }); 
+        if (!res.ok) {
+          const errData = await res.json();
+          alert(errData.error || "Error al desplazar");
+          break;
+        }
+      } catch (e) { 
+        console.error(e);
+        alert("Error de red al desplazar");
+        break;
+      }
     }
-    setMoveState({ step: 0, items: [], destPath: '' }); setSelected(new Set()); triggerRefresh();
+    setProcessingIds(prev => {
+       const n = { ...prev };
+       idsToMove.forEach(id => delete n[id]);
+       return n;
+    });
+    setMoveState({ step: 0, items: [], itemIds: [], destPath: '', destId: null }); 
+    setSelected(new Set()); 
+    setRefreshSignal(s => s + 1);
+    triggerRefresh();
   };
 
   const toggle = (name) => {
@@ -1517,10 +1919,10 @@ function FilesPage({ project, user, onBack }) {
           <div className="Box__StyledBox-sc-1gnk1ba-0 hhhhUH" style={{ flex: 1, overflowY: 'auto' }}>
             <ul data-testid="SideNavigationList" style={{ listStyle: 'none', padding: '8px 0', margin: 0 }}>
               {[
-                { label: 'Archivos', icon: 'files.svg', active: true },
-                { label: 'Informes', icon: 'reports.svg' },
-                { label: 'Miembros', icon: 'members.svg' },
-                { label: 'Configuración', icon: 'settings.svg' }
+                { label: 'Archivos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5,5l2,2H20v12h-16V5H12.5 M13.17,3h-10.34A1.83,1.83,0,0,0,1,4.83v14.34A1.83,1.83,0,0,0,2.83,21h18.34A1.83,1.83,0,0,0,23,19.17V6.83A1.83,1.83,0,0,0,21.17,5H14.83Z"/></svg>, active: true },
+                { label: 'Informes', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg> },
+                { label: 'Miembros', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg> },
+                { label: 'Configuración', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg> }
               ].map((item, idx) => (
                 <li key={idx} style={{ marginBottom: 2 }}>
                   <a 
@@ -1538,7 +1940,7 @@ function FilesPage({ project, user, onBack }) {
                       fontWeight: item.active ? 600 : 400
                     }}
                   >
-                    <div style={{ width: 22, height: 22, background: item.active ? '#0696d7' : '#666', maskImage: `url('https://bim360-ea-ue1-prod-storage.s3.amazonaws.com/tools/${item.icon}')`, maskSize: '100% 100%', WebkitMaskImage: `url('https://bim360-ea-ue1-prod-storage.s3.amazonaws.com/tools/${item.icon}')`, WebkitMaskSize: '100% 100%', WebkitMaskRepeat: 'no-repeat' }} />
+                    {item.icon}
                     <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
                   </a>
                 </li>
@@ -1555,37 +1957,43 @@ function FilesPage({ project, user, onBack }) {
         {/* CONTENT AREA */}
         <div className="acc-docs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <header style={{ padding: '24px 24px 0 24px', flexShrink: 0 }}>
-            <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 16 }}>Archivos</div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #dcdcdc' }}>
-              <div style={{ display: 'flex', gap: 32 }}>
-                <div style={{ paddingBottom: 8, fontSize: 13, borderBottom: '2px solid #0696d7', color: '#0696d7', fontWeight: 600, cursor: 'pointer' }}>Carpetas</div>
-                <div style={{ paddingBottom: 8, fontSize: 13, color: '#999', cursor: 'pointer' }}>Conjuntos</div>
-              </div>
-              <div style={{ display: 'flex', gap: 20, paddingBottom: 8 }}>
-                 {(isTrashMode && selected.size > 0) ? (
-                   <button style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0696d7', border: 'none', color: '#fff', fontSize: 13, cursor: 'pointer', padding: '6px 16px', borderRadius: 4, fontWeight: 500 }}>
-                     Restaurar ({selected.size})
-                   </button>
-                 ) : (
-                   <button onClick={() => setIsTrashMode(!isTrashMode)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: isTrashMode ? '#e6f4fb' : 'none', border: 'none', color: isTrashMode ? '#0696d7' : '#666', fontSize: 13, cursor: 'pointer', padding: '4px 8px', borderRadius: 4 }}>
+            <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 16 }}>
+              {isTrashMode ? 'Elementos suprimidos' : 'Archivos'}
+            </div>
+            {!isTrashMode && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #dcdcdc' }}>
+                <div style={{ display: 'flex', gap: 32 }}>
+                  <div style={{ paddingBottom: 8, fontSize: 13, borderBottom: '2px solid #0696d7', color: '#0696d7', fontWeight: 600, cursor: 'pointer' }}>Carpetas</div>
+                  <div style={{ paddingBottom: 8, fontSize: 13, color: '#999', cursor: 'pointer' }}>Conjuntos</div>
+                </div>
+                <div style={{ display: 'flex', gap: 20, paddingBottom: 8 }}>
+                   <button onClick={() => setIsTrashMode(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer', padding: '4px 8px', borderRadius: 4 }}>
                      <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11 15H5a2.25 2.25 0 0 1-2.25-2.25V5.72a.75.75,0,0,1 1.5 0v7.07a.74.74,0,0,0 .75.75h6a.74.74,0,0,0 .75-.75V5.72a.75.75,0,0,1 1.5 0v7.07A2.25 2.25 0 0 1 11 15Zm3-12h-3a2.26 2.26 0 0 0-2.24-2h-1.5A2.26 2.26 0 0 0 5 3H2a.75.75,0,0,0 0 1.5h12A.75.75,0,0,0,14 3Zm-3.75 8V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Zm-3 0V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Z"></path></svg>
                      Elementos suprimidos
                    </button>
-                 )}
-                 <button style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer' }}>
-                   <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M14.75 3.53a.76.76,0,0,1-.75.75H7.18a1.78,1.78,0,0,1-3.25,0H2a.75.75,0,0,1,0-1.5h1.93a1.78,1.78,0,0,1,3.25,0H14a.75.75,0,0,1,.75.75ZM14 12.1H7.18a1.79,1.79,0,0,0-3.25,0H2a.75.75,0,0,0,0,1.5h1.93a1.78,1.78,0,0,0,3.25,0H14a.75.75,0,0,0,0-1.5Zm0-4.64h-1.91a1.8,1.8,0,0,0-1.64-1.06 1.78,1.78,0,0,0-1.63,1.06H2A.75.75,0,0,0,2,9h6.84a1.77,1.77,0,0,0,1.61,1 1.8,1.8,0,0,0,1.62-1H14a.75.75,0,0,0,0-1.5Z"></path></svg>
-                   Configuración
-                   <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M2.9 4.61a.73.73,0,0,1 .54.23L8 9.57l4.56-4.73a.75.75,0,1,1,1.08 1l-5.1 5.29a.78.78,0,0,1-.54.27.78.78,0,0,1-.54-.23l-5.1-5.29a.75.75,0,0,1,0-1.06.73.73,0,0,1,.54-.21Z"></path></svg>
+                   <button style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer' }}>
+                     <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M14.75 3.53a.76.76,0,0,1-.75.75H7.18a1.78,1.78,0,0,1-3.25,0H2a.75.75,0,0,1,0-1.5h1.93a1.78,1.78,0,0,1,3.25,0H14a.75.75,0,0,1,.75.75ZM14 12.1H7.18a1.79,1.79,0,0,0-3.25,0H2a.75.75,0,0,0,0,1.5h1.93a1.78,1.78,0,0,0,3.25,0H14a.75.75,0,0,0,0-1.5Zm0-4.64h-1.91a1.8,1.8,0,0,0-1.64-1.06 1.78,1.78,0,0,0-1.63,1.06H2A.75.75,0,0,0,2,9h6.84a1.77,1.77,0,0,0,1.61,1 1.8,1.8,0,0,0,1.62-1H14a.75.75,0,0,0,0-1.5Z"></path></svg>
+                     Configuración
+                   </button>
+                </div>
+              </div>
+            )}
+            {isTrashMode && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', borderBottom: '1px solid #dcdcdc', paddingBottom: 8 }}>
+                 <button onClick={() => setIsTrashMode(false)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer', padding: '4px 8px', borderRadius: 4 }}>
+                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
+                   Volver a archivos
                  </button>
               </div>
-            </div>
+            )}
           </header>
 
           <div className="acc-workspace" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
             {/* TREE SECTION */}
             <aside style={{ width: treeSidebarWidth, flexShrink: 0, borderRight: '1px solid #dcdcdc', background: '#fff', overflowY: 'auto', padding: '16px 0' }}>
               <FolderNode
-                folder={{ name: 'Archivos de proyecto', fullName: projectPrefix }}
+                user={user}
+                folder={{ id: projectRootId, name: 'Archivos de proyecto', fullName: projectPrefix }}
                 currentPath={currentPath}
                 onNavigate={navigate}
                 onReset={() => setCollapseSignal(s => s+1)}
@@ -1598,6 +2006,19 @@ function FilesPage({ project, user, onBack }) {
                 onGlobalRefresh={(p) => { triggerRefresh(currentPath); if (p) navigate(p); }}
                 refreshSignal={refreshSignal}
                 onInitiateMove={(items) => setMoveState({ step: 1, items: items, destPath: '' })}
+                onRowMenu={(item, e) => {
+                  if (isAdmin) {
+                    setRightClickedId(item.id);
+                    setActiveRowMenu({ item, x: e.clientX, y: e.clientY, source: 'sidebar' });
+                  }
+                }}
+                editingNodeId={editingNodeId}
+                setEditingNodeId={setEditingNodeId}
+                rightClickedId={rightClickedId}
+                processingIds={processingIds}
+                setProcessingIds={setProcessingIds}
+                creatingChildParentId={creatingChildParentId}
+                setCreatingChildParentId={setCreatingChildParentId}
               />
             </aside>
 
@@ -1618,6 +2039,73 @@ function FilesPage({ project, user, onBack }) {
                    </button>
                 </div>
 
+                {!isTrashMode && selected.size > 0 && (
+                  <>
+                    <button 
+                      onClick={() => {
+                        const itemsToMove = Array.from(selected);
+                        const itemIds = itemsToMove.map(fn => {
+                          const found = [...folders, ...files].find(i => i.fullName === fn);
+                          return found?.id;
+                        }).filter(id => id !== undefined);
+                        setMoveState({ step: 1, items: itemsToMove, itemIds, destPath: '', destId: null });
+                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#0696D7', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                        <path d="M12 11l3 3-3 3"></path>
+                        <path d="M9 14h6"></path>
+                      </svg>
+                      Desplazar
+                    </button>
+
+                  </>
+                )}
+                
+                {isTrashMode && selectedDeletedIds.length > 0 && (
+                  <button 
+                    onClick={() => {
+                      const ids = [...selectedDeletedIds];
+                      const newRestoring = { ...restoringIds };
+                      ids.forEach(id => { newRestoring[id] = true; });
+                      setRestoringIds(newRestoring);
+                      
+                      setTimeout(async () => {
+                        // Realizar restauración masiva en backend
+                        try {
+                          const res = await Promise.all(ids.map(id => 
+                            fetch(`${API}/api/docs/restore`, {
+                               method: 'POST',
+                               headers: { 'Content-Type': 'application/json' },
+                               body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name })
+                            })
+                          ));
+                          const allOk = res.every(r => r.ok);
+                          if (!allOk) {
+                            alert("No se pudieron restaurar algunos archivos. Verifique si ya existen elementos con el mismo nombre en el destino.");
+                          }
+                        } catch(e) {
+                          alert("Error de conexión al restaurar");
+                        }
+
+                        setDeletedItems(prev => prev.filter(it => !ids.includes(it.id)));
+                        setSelectedDeletedIds([]);
+                        setRestoringIds(prev => {
+                          const cleared = { ...prev };
+                          ids.forEach(id => { delete cleared[id]; });
+                          return cleared;
+                        });
+                        triggerRefresh(currentPath);
+                      }, 1000);
+                    }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #747775', borderRadius: 4, color: '#1f1f1f', fontSize: 13, fontWeight: 500, padding: '6px 12px', cursor: 'pointer' }}
+                  >
+                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 1 1 0 8h-1"/></svg>
+                     Restaurar ({selectedDeletedIds.length})
+                  </button>
+                )}
+
                 <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" style={{ position: 'absolute', left: 8, top: 9 }}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                   <input type="text" placeholder="Buscar y filtrar" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ width: '100%', height: 32, paddingLeft: 30, paddingRight: 8, border: '1px solid #ddd', borderRadius: 4, fontSize: 13, outline: 'none' }} />
@@ -1632,6 +2120,42 @@ function FilesPage({ project, user, onBack }) {
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 {loading ? (
                     <div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
+                ) : isTrashMode ? (
+                    <DeletedTable 
+                      items={deletedItems} 
+                      selectedIds={selectedDeletedIds} 
+                      onToggle={setSelectedDeletedIds}
+                      onRestore={(id) => {
+                        setRestoringIds(prev => ({ ...prev, [id]: true }));
+                        setTimeout(async () => {
+                          try {
+                            const res = await fetch(`${API}/api/docs/restore`, {
+                               method: 'POST',
+                               headers: { 'Content-Type': 'application/json' },
+                               body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name })
+                            });
+                            if (!res.ok) {
+                              const errData = await res.json().catch(() => ({}));
+                              alert(errData.error || "No se pudo restaurar el elemento. Verifique si ya existe uno con el mismo nombre en el destino.");
+                            }
+                          } catch(e) {
+                            alert("Error de conexión al restaurar");
+                          }
+
+                          setDeletedItems(prev => prev.filter(it => it.id !== id));
+                          setSelectedDeletedIds(prev => prev.filter(x => x !== id));
+                          setRestoringIds(prev => {
+                            const cleared = { ...prev };
+                            delete cleared[id];
+                            return cleared;
+                          });
+                          triggerRefresh(currentPath);
+                        }, 1000);
+                      }}
+                      getInitials={getInitials}
+                      renderFileIconSop={renderFileIconSop}
+                      restoringIds={restoringIds}
+                    />
                 ) : (
                     <MatrixTable
                         folders={filteredFolders}
@@ -1653,7 +2177,7 @@ function FilesPage({ project, user, onBack }) {
                             const res = await fetch(`${API}/api/docs/description`, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ node_id: item.id, description: newDesc })
+                              body: JSON.stringify({ node_id: item.id, description: newDesc, model_urn: projectPrefix })
                             });
                             if (res.ok) triggerRefresh(currentPath);
                             else triggerRefresh(currentPath); // Revert on error
@@ -1664,6 +2188,7 @@ function FilesPage({ project, user, onBack }) {
                         }}
                         onRename={async (item, newName) => {
                           console.log('Renaming item:', item.id, 'to:', newName);
+                          setProcessingIds(prev => ({ ...prev, [item.id]: true }));
                           // Optimistic update
                           if (item.type === 'folder') {
                             setFolders(prev => prev.map(f => f.id === item.id ? { ...f, name: newName } : f));
@@ -1674,7 +2199,7 @@ function FilesPage({ project, user, onBack }) {
                             const res = await fetch(`${API}/api/docs/rename`, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ node_id: item.id, new_name: newName })
+                              body: JSON.stringify({ node_id: item.id, new_name: newName, model_urn: projectPrefix })
                             });
                             if (res.ok) {
                               console.log('Rename success');
@@ -1686,6 +2211,8 @@ function FilesPage({ project, user, onBack }) {
                           } catch (e) {
                             console.error('Error renaming:', e);
                             triggerRefresh(currentPath);
+                          } finally {
+                            setProcessingIds(prev => { const n = { ...prev }; delete n[item.id]; return n; });
                           }
                         }}
                         formatSize={formatSize}
@@ -1695,15 +2222,27 @@ function FilesPage({ project, user, onBack }) {
                         isAdmin={isAdmin}
                         isTrashMode={isTrashMode}
                         onShowVersions={onShowVersions}
-                        onRowMenu={(item, e) => { if (isAdmin) setActiveRowMenu({ item, x: e.clientX, y: e.clientY }); }}
+                        onRowMenu={(item, e) => { 
+                          if (isAdmin) {
+                            setRightClickedId(item.id);
+                            setActiveRowMenu({ item, x: e.clientX, y: e.clientY, source: 'table' }); 
+                          }
+                        }}
+                        editingNodeId={editingNodeId}
+                        setEditingNodeId={setEditingNodeId}
+                        processingIds={processingIds}
+                        rightClickedId={rightClickedId}
                         startResizing={startResizing}
                         setSelected={setSelected}
                         renderFileIconSop={renderFileIconSop}
                     />
                 )}
               </div>
-              <footer style={{ padding: '8px 16px', fontSize: 11, color: '#999', borderTop: '1px solid #eee', background: '#fff', flexShrink: 0 }}>
-                Mostrando {folders.length + files.length} elementos
+              <footer style={{ padding: '8px 16px', fontSize: 13, color: '#666', borderTop: '1px solid #eee', background: '#fff', flexShrink: 0 }}>
+                {selected.size > 0 
+                  ? `${selected.size} de ${folders.length + files.length} seleccionados` 
+                  : `Mostrando ${folders.length + files.length} elementos`
+                }
               </footer>
             </section>
           </div>
@@ -1879,16 +2418,49 @@ function FilesPage({ project, user, onBack }) {
       </>
 
       {activeRowMenu && (
-        <div className="modal-overlay" onClick={() => setActiveRowMenu(null)} style={{ background: 'transparent', zIndex: 10001 }}>
-          <div className="row-context-menu" style={{ position: 'absolute', top: activeRowMenu.y, left: activeRowMenu.x - 180, width: 180 }} onClick={e => e.stopPropagation()}>
-            <button onClick={() => { setActiveRowMenu(null); setActiveFile(activeRowMenu.item); }}>Ver / Abrir</button>
-            <button onClick={() => { setActiveRowMenu(null); onShowVersions(activeRowMenu.item, { clientX: activeRowMenu.x, clientY: activeRowMenu.y }); }}>Historial</button>
+          <div className="row-context-menu" 
+            ref={menuRef}
+            style={{ 
+              position: 'fixed', 
+              top: activeRowMenu.y, 
+              left: Math.min(window.innerWidth - 230, activeRowMenu.x), 
+              width: 220,
+              zIndex: 10001
+            }} 
+          >
+            {activeRowMenu.item.type === 'folder' && (
+              <button onClick={() => { setActiveRowMenu(null); setRightClickedId(null); setCreatingChildParentId(activeRowMenu.item.id || activeRowMenu.item.fullName); }}>
+                <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></div>
+                Añadir subcarpeta
+              </button>
+            )}
+            <button onClick={() => { 
+                setActiveRowMenu(null); 
+                setRightClickedId(null); 
+                setEditingNodeId({ id: activeRowMenu.item.id || activeRowMenu.item.fullName, source: activeRowMenu.source }); 
+            }}>
+              <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></div>
+              Cambiar nombre
+            </button>
+            <button onClick={() => { 
+              setActiveRowMenu(null); 
+              setRightClickedId(null); 
+              setShareTarget(activeRowMenu.item);
+              setShowShareModal(true);
+            }}>
+              <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg></div>
+              Compartir
+            </button>
+            <button onClick={() => { setActiveRowMenu(null); setRightClickedId(null); setMoveState({ step: 1, items: [activeRowMenu.item.name], itemIds: [activeRowMenu.item.id || activeRowMenu.item.fullName], destPath: '', destId: null }); }}>
+               <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><path d="M12 11l3 3-3 3"></path><path d="M9 14h6"></path></svg></div>
+              Desplazar
+            </button>
             <div className="menu-divider" />
-            <button onClick={() => { setActiveRowMenu(null); renameSpecificItem(activeRowMenu.item.fullName); }}>Renombrar</button>
-            <button onClick={() => { setActiveRowMenu(null); setMoveState({ step: 1, items: [activeRowMenu.item.fullName], destPath: '' }); }}>Desplazar</button>
-            <button className="delete" onClick={() => { setActiveRowMenu(null); deleteSpecificItem(activeRowMenu.item.fullName); }}>Suprimir</button>
+            <button className="delete" onClick={() => { setActiveRowMenu(null); setRightClickedId(null); deleteSpecificItem(activeRowMenu.item.fullName, activeRowMenu.item.id); }}>
+              <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></div>
+              Suprimir
+            </button>
           </div>
-        </div>
       )}
 
       {showNewFolder && (
@@ -1907,26 +2479,199 @@ function FilesPage({ project, user, onBack }) {
       {activeFile && activeFile.type !== 'folder' && (
         <div className="file-viewer-overlay">
           <div className="file-viewer-header">
-            <div className="file-viewer-title">{activeFile.name}</div>
-            <button className="file-viewer-close" onClick={() => { setActiveFile(null); setShowVersions(false); }}>✕</button>
+            <div className="file-viewer-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 16, fontWeight: 500, color: '#0696D7', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {activeFile.name}
+              </span>
+              
+              <div style={{ position: 'relative' }}>
+                <div 
+                  className="version-link-acc" 
+                  onClick={() => setShowVersions(!showVersions)}
+                  style={{ fontSize: 13, padding: '2px 12px' }}
+                >
+                  {viewedVersionInfo ? `V${viewedVersionInfo.version_number}` : (activeFile.version ? `V${activeFile.version}` : 'V1')}
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 6, transform: showVersions ? 'rotate(180deg)' : 'none' }}>
+                    <path d="M7 10l5 5 5-5H7z"/>
+                  </svg>
+                </div>
+
+                {showVersions && (
+                  <div className="version-popover" style={{ top: 32, left: 0, width: 350 }}>
+                    <div style={{ padding: '8px 12px', borderBottom: '1px solid #eee', fontSize: 12, fontWeight: 600, color: '#666' }}>
+                      Versiones
+                    </div>
+                    <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                      {versionHistory.map((v, i) => {
+                        const isLatest = v.version_number === (versionHistory[0]?.version_number || activeFile.version);
+                        return (
+                          <div 
+                            key={i} 
+                            className="version-popover-item"
+                            style={{ 
+                              padding: '12px', 
+                              borderBottom: '1px solid #f5f5f5',
+                              background: viewedVersionInfo?.id === v.id ? '#f0faff' : 'transparent',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between'
+                            }}
+                          >
+                            <div 
+                              onClick={() => { setViewedVersionInfo(v); setShowVersions(false); }}
+                              style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flex: 1 }}
+                            >
+                               <div className="version-link-acc" style={{ minWidth: 32 }}>V{v.version_number || 1}</div>
+                               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                 <span style={{ fontSize: 13, fontWeight: 500, color: '#333' }}>{activeFile.name}</span>
+                                 <span style={{ fontSize: 11, color: '#999' }}>
+                                   Cargado por <span style={{ textTransform: 'uppercase' }}>{v.updated_by || 'ADMIN'}</span> el {formatDate(v.updated)}
+                                 </span>
+                               </div>
+                            </div>
+                            
+                            {!isLatest && isAdmin && (
+                              <button 
+                                className="acc-btn-promote"
+                                onClick={(e) => { e.stopPropagation(); handlePromote(v); }}
+                                title="Hacer versión actual"
+                                style={{ 
+                                  padding: '4px 8px', 
+                                  fontSize: 11, 
+                                  background: '#fff', 
+                                  border: '1px solid #0696D7', 
+                                  color: '#0696D7', 
+                                  borderRadius: 2,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Hacer actual
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {viewedVersionInfo && viewedVersionInfo.version_number !== (versionHistory[0]?.version_number || activeFile.version) && (
+                <div className="no-actual-badge">
+                  No actual
+                </div>
+              )}
+            </div>
+            <button className="file-viewer-close" onClick={() => { setActiveFile(null); setShowVersions(false); setViewedVersionInfo(null); }}>✕</button>
           </div>
-          <iframe className="file-viewer-content" src={`${API}/api/docs/view?path=${encodeURIComponent(activeFile.fullName)}`} title={activeFile.name} />
+          <div className="file-viewer-content" style={{ flex: 1, position: 'relative', background: '#f5f5f5', display: 'flex', justifyContent: 'center' }}>
+            {(() => {
+              const fileUrl = viewedVersionInfo && viewedVersionInfo.gcs_urn 
+                ? `${API}/api/docs/view?urn=${encodeURIComponent(viewedVersionInfo.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}` 
+                : `${API}/api/docs/view?path=${encodeURIComponent(activeFile.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}`;
+              
+              const lowerName = activeFile.name.toLowerCase();
+              
+              // 1. VIDEOS
+              if (lowerName.endsWith('.mp4') || lowerName.endsWith('.webm') || lowerName.endsWith('.ogg')) {
+                return (
+                  <video controls autoPlay style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', background: '#000' }}>
+                    <source src={fileUrl} type={`video/${lowerName.split('.').pop()}`} />
+                    Tu navegador no soporta la reproducción de video.
+                  </video>
+                );
+              }
+              
+              // 2. IMAGES
+              if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'].some(ext => lowerName.endsWith(ext))) {
+                return (
+                  <img src={fileUrl} alt={activeFile.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                );
+              }
+              
+              // 3. OFFICE (Word, Excel, PPT)
+              if (['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext))) {
+                // Need a FRESH ABSOLUTE URL for Microsoft Viewer.
+                // NOTE: This only works if 'API' is a publicly accessible URL or if we are in local.
+                // For signed GCS URLs, they ARE public temporarily.
+                const viewerUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(fileUrl)}`;
+                return (
+                  <iframe src={viewerUrl} title={activeFile.name} style={{ width: '100%', height: '100%', border: 'none' }} />
+                );
+              }
+              
+              // 4. PDF & DEFAULT (Iframe)
+              return (
+                <iframe 
+                  src={fileUrl} 
+                  title={activeFile.name} 
+                  style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }}
+                />
+              );
+            })()}
+          </div>
         </div>
       )}
 
       {moveState.step > 0 && (
         <div className="modal-overlay" onClick={() => setMoveState({ step: 0, items: [], destPath: '' })}>
-          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ width: moveState.step === 2 ? 500 : 400 }}>
-            <h3>{moveState.step === 1 ? '¿Mover?' : 'Seleccionar destino'}</h3>
-            {moveState.step === 1 ? <p>Mover estos elementos.</p> : (
-              <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-                <SelectFolderNode folder={{ name: 'Archivos de proyecto', fullName: projectPrefix }} defaultExpanded={true} selectedPath={moveState.destPath} onSelect={(path) => setMoveState({ ...moveState, destPath: path })} />
-              </div>
-            )}
-            <div className="modal-actions">
-              <button onClick={() => setMoveState({ step: 0, items: [], destPath: '' })}>Cancelar</button>
-              <button onClick={() => moveState.step === 1 ? setMoveState({ ...moveState, step: 2 }) : handleExecuteMove()}>
-                {moveState.step === 1 ? 'Continuar' : 'Mover'}
+          <div className="acc-modal-box" onClick={e => e.stopPropagation()} style={{ width: 500, borderRadius: 2, padding: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #eee' }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 300 }}>
+                {moveState.step === 1 ? (moveState.items.length > 1 ? '¿Mover elementos?' : '¿Mover carpeta?') : 'Seleccionar carpeta de destino'}
+              </h3>
+              <button 
+                onClick={() => setMoveState({ step: 0, items: [], destPath: '' })}
+                style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}
+              >✕</button>
+            </div>
+
+            <div style={{ padding: '24px', minHeight: moveState.step === 2 ? 300 : 'auto' }}>
+              {moveState.step === 1 ? (
+                <div style={{ fontSize: 14, color: '#333', lineHeight: 1.6 }}>
+                  La carpeta heredará los permisos y los suscriptores de la carpeta de destino. Los suscriptores de la carpeta actual no se conservarán.
+                </div>
+              ) : (
+                <div className="acc-move-tree-container" style={{ maxHeight: 400, overflowY: 'auto', border: '1px solid #eee', padding: '12px', borderRadius: 2 }}>
+                  <SelectFolderNode 
+                    folder={{ name: 'Archivos de proyecto', fullName: projectPrefix, id: projectRootId }} 
+                    defaultExpanded={true} 
+                    selectedPath={moveState.destPath} 
+                    onSelect={(path, id) => setMoveState({ ...moveState, destPath: path, destId: id })} 
+                  />
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 24px', borderTop: '1px solid #eee', background: '#fafafa' }}>
+              {moveState.step === 2 && (
+                <div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 8, color: '#0696d7', fontSize: 12 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2"/><path d="M12 16v-4m0-4h.01"/></svg>
+                  <span>¿Estos archivos se sincronizan...?</span>
+                </div>
+              )}
+              <button 
+                className="acc-btn-flat" 
+                onClick={() => setMoveState({ step: 0, items: [], destPath: '' })}
+                style={{ padding: '8px 16px', background: 'none', border: 'none', color: '#0696d7', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button 
+                className={moveState.step === 2 && !moveState.destPath ? 'acc-btn-disabled' : 'acc-btn-primary-2'} 
+                disabled={moveState.step === 2 && !moveState.destPath}
+                onClick={() => moveState.step === 1 ? setMoveState({ ...moveState, step: 2 }) : handleExecuteMove()}
+                style={{ 
+                  padding: '8px 24px', 
+                  background: (moveState.step === 2 && !moveState.destPath) ? '#eeeeee' : '#0696D7', 
+                  color: (moveState.step === 2 && !moveState.destPath) ? '#999' : '#fff', 
+                  border: 'none', 
+                  borderRadius: 4, 
+                  fontWeight: 600, 
+                  cursor: (moveState.step === 2 && !moveState.destPath) ? 'default' : 'pointer' 
+                }}
+              >
+                {moveState.step === 1 ? 'Continuar' : 'Desplazar'}
               </button>
             </div>
           </div>
@@ -1939,10 +2684,15 @@ function FilesPage({ project, user, onBack }) {
             <div className="acc-upload-header">
               <h3>Cargar archivos</h3>
               <div style={{ display: 'flex', gap: 12 }}>
-                <button className="file-viewer-close" style={{ background: 'none' }} onClick={() => setSopMinimized(true)}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h14v14zm-2-2V7H7v10h10z"/></svg>
+                <button 
+                  className="file-viewer-close" 
+                  style={{ background: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                  onClick={() => setSopMinimized(true)}
+                  title="Minimizar"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </button>
-                <button className="file-viewer-close" style={{ background: 'none' }} onClick={() => setShowUploadModal(false)}>✕</button>
+                <button className="file-viewer-close" style={{ background: 'none' }} onClick={() => { if (sopQueue.every(it => it.status === 'LISTO_1' || it.status === 'ERROR')) setShowUploadModal(false); else if (window.confirm("¿Cancelar carga en curso?")) setShowUploadModal(false); }}>✕</button>
               </div>
             </div>
             
@@ -1989,18 +2739,39 @@ function FilesPage({ project, user, onBack }) {
                             <div className="acc-upload-file-info">
                               <div className="acc-upload-file-name">{item.file?.name}</div>
                               <div className="acc-upload-file-status">
-                                {item.status === 'PROCESO_PENDIENTE' ? 'Proceso pendiente' : (item.status === 'PROCESANDO_1' || item.status === 'IDLE') ? 'Procesando' : ''}
-                                {(item.status === 'BARRA_AZUL' || item.status === 'PROCESANDO_1' || item.status === 'PROCESO_PENDIENTE') && (
-                                  <div className="acc-progress-container">
-                                    <div className={`acc-progress-bar ${item.status !== 'BARRA_AZUL' ? 'indeterminate' : ''}`} style={{ width: item.status === 'BARRA_AZUL' ? `${item.progress}%` : '100%' }} />
-                                  </div>
-                                )}
-                                {item.status === 'LISTO_1' && (
-                                  <div style={{ color: '#33691e', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-                                    Cargado en la carpeta {currentPath.split('/').filter(Boolean).pop()} {item.time}
-                                  </div>
-                                )}
+                               <div className="acc-upload-file-status" style={{ marginTop: 4 }}>
+                                 {item.status === 'LISTO_1' ? (
+                                   <div style={{ color: '#33691e', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                                     Cargado en la carpeta {currentPath.split('/').filter(Boolean).pop()} {item.time}
+                                   </div>
+                                 ) : (
+                                   <>
+                                     {item.status === 'BARRA_AZUL' ? (
+                                       <div className="acc-progress-container" style={{ marginTop: 10, height: 6, background: '#eee', borderRadius: 0 }}>
+                                         <div 
+                                           className="acc-progress-bar" 
+                                           style={{ width: `${item.progress}%`, borderRadius: 0, transition: 'width 0.3s ease' }} 
+                                         />
+                                       </div>
+                                     ) : (
+                                       <>
+                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                           {(item.status === 'PROCESANDO_1' || item.status === 'PROCESO_PENDIENTE') && (
+                                             <div className="acc-mini-spinner" style={{ width: 10, height: 10, border: '2px solid #0696d7', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1.5s linear infinite' }} />
+                                           )}
+                                           <span style={{ fontSize: 11, color: '#666' }}>
+                                             {item.status === 'PROCESO_PENDIENTE' ? 'Proceso pendiente' : 'Procesando...'}
+                                           </span>
+                                         </div>
+                                         <div className="acc-progress-container" style={{ marginTop: 8, height: 4, borderRadius: 0 }}>
+                                           <div className="acc-progress-bar indeterminate" style={{ width: '100%', borderRadius: 0 }} />
+                                         </div>
+                                       </>
+                                     )}
+                                   </>
+                                 )}
+                               </div>
                               </div>
                             </div>
                             <div style={{ fontSize: 12, color: '#999', display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -2043,14 +2814,21 @@ function FilesPage({ project, user, onBack }) {
           <div className="acc-monitor-header" style={{ padding: '8px 12px', background: '#fcfcfc', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 13, fontWeight: 500 }}>Cargar</span>
             <div style={{ display: 'flex', gap: 12 }}>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }} onClick={() => setSopMinimized(false)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="#666"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+              <button 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center' }} 
+                onClick={() => setSopMinimized(false)}
+                title="Expandir"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
               </button>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="#666"><path d="M7 10l5 5 5-5z"/></svg>
+              <button 
+                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center' }}
+                 onClick={() => setSopMinimized(false)}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
               </button>
               <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }} onClick={() => setShowUploadModal(false)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="#666"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
             </div>
           </div>
@@ -2075,14 +2853,23 @@ function FilesPage({ project, user, onBack }) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                          {item.status !== 'LISTO_1' ? (
                            <>
-                             <div className="acc-mini-spinner" style={{ width: 10, height: 10, border: '2px solid #0696d7', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                             <span style={{ fontSize: 11, color: '#666' }}>Cargando: {item.progress}%</span>
+                             <div className="acc-mini-spinner" style={{ width: 10, height: 10, border: '2px solid #0696d7', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1.5s linear infinite' }} />
+                             <span style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 8 }}>
+                               {item.status === 'PROCESO_PENDIENTE' ? 'Proceso pendiente' : 
+                                (item.status === 'PROCESANDO_1' || (item.progress === 100 && item.status !== 'BARRA_AZUL')) ? 'Procesando...' : 
+                                `Cargando: ${item.progress} %`}
+                             </span>
                            </>
                          ) : (
-                           <span style={{ fontSize: 11, color: '#33691e' }}>Listo</span>
+                           <span style={{ fontSize: 11, color: '#33691e', display: 'flex', alignItems: 'center', gap: 4 }}>
+                             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                             Listo
+                           </span>
                          )}
                          <span style={{ fontSize: 11, color: '#999' }}>• {formatSize(item.file?.size || 0)}</span>
                       </div>
+                      
+                      {/* NO BAR IN MONITOR AS PER LATEST AUTODESK IMAGE */}
                     </div>
                     {item.status !== 'LISTO_1' && (
                       <div style={{ fontSize: 12, color: '#0696d7', cursor: 'pointer', fontWeight: 600 }} onClick={() => setSopQueue(q => q.filter(it => it.id !== item.id))}>Cancelar</div>
@@ -2094,6 +2881,145 @@ function FilesPage({ project, user, onBack }) {
           </div>
         </div>
       )}
+
+      {/* SHARE MODAL (DRIVE STYLE REFINED) */}
+      {showShareModal && shareTarget && (
+        <div className="modal-overlay" onClick={() => setShowShareModal(false)}>
+          <div className="share-modal-box" onClick={e => e.stopPropagation()}>
+            <div className="share-header">
+              <h2>Compartir "{shareTarget.name.replace(/\/$/, '')}"</h2>
+              <div className="share-header-actions">
+                <button className="share-icon-btn" title="Ayuda"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></button>
+                <button className="share-icon-btn" title="Configuración"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
+              </div>
+            </div>
+
+            <div className="share-input-wrapper" style={{ position: 'relative' }}>
+              <span className="share-input-label">Añadir personas, grupos y eventos de calendario</span>
+              <input 
+                autoFocus
+                className="share-input-acc"
+                placeholder=" "
+                value={searchShareUser}
+                onChange={e => { setSearchShareUser(e.target.value); setShowShareResults(true); }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && searchShareUser.includes('@')) {
+                    setSharedUsers([...sharedUsers, { email: searchShareUser, name: searchShareUser.split('@')[0], initials: searchShareUser.slice(0,2).toUpperCase(), role: 'viewer', isExternal: true }]);
+                    setSearchShareUser('');
+                    setShowShareResults(false);
+                  }
+                }}
+              />
+              {showShareResults && searchShareUser && (
+                <div className="share-results-popover" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', borderRadius: 8, zIndex: 100, marginTop: 4, maxHeight: 200, overflowY: 'auto', padding: '8px 0' }}>
+                  {allProjectUsers.filter(u => u.name.toLowerCase().includes(searchShareUser.toLowerCase()) || u.email.toLowerCase().includes(searchShareUser.toLowerCase())).map(u => (
+                    <div key={u.email} className="share-result-item" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }} onClick={() => {
+                        if (!sharedUsers.find(ex => ex.email === u.email)) setSharedUsers([...sharedUsers, { ...u, role: 'viewer', isExternal: false }]);
+                        setSearchShareUser('');
+                        setShowShareResults(false);
+                    }}>
+                      <div className="user-avatar-acc" style={{ width: 28, height: 28, fontSize: 11 }}>{u.initials}</div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: 13, fontWeight: 500 }}>{u.name}</span>
+                        <span style={{ fontSize: 11, color: '#666' }}>{u.email}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {searchShareUser.includes('@') && (
+                    <div className="share-result-item" style={{ padding: '8px 16px', borderTop: '1px solid #eee', fontSize: 13, color: '#0696D7', cursor: 'pointer' }} onClick={() => {
+                      setSharedUsers([...sharedUsers, { email: searchShareUser, name: searchShareUser.split('@')[0], initials: searchShareUser.slice(0,2).toUpperCase(), role: 'viewer', isExternal: true }]);
+                      setSearchShareUser('');
+                      setShowShareResults(false);
+                    }}>
+                      Invitar a "{searchShareUser}" (Externo)
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 8 }}>
+              <div className="share-section-title">Personas con acceso</div>
+              <div className="share-access-list">
+                <div className="share-user-item">
+                  <div className="user-avatar-acc" style={{ width: 32, height: 32, fontSize: 13 }}>{getInitials(user?.email || 'OMAR SAN')}</div>
+                  <div className="share-user-info">
+                    <span className="share-user-name">{user?.name || 'Yaser Omar'} (tú)</span>
+                    <span className="share-user-email">{user?.email || 'omarsanchezh8@gmail.com'}</span>
+                  </div>
+                  <span className="share-user-role">Propietario</span>
+                </div>
+                {sharedUsers.map(su => (
+                  <div key={su.email} className="share-user-item">
+                    <div className="user-avatar-acc" style={{ width: 32, height: 32, fontSize: 13 }}>{su.initials}</div>
+                    <div className="share-user-info">
+                      <span className="share-user-name">{su.name} {su.isExternal && '(Externo)'}</span>
+                      <span className="share-user-email">{su.email}</span>
+                    </div>
+                    <select className="role-select-acc" value={su.role} onChange={e => setSharedUsers(sharedUsers.map(x => x.email === su.email ? { ...x, role: e.target.value } : x))}>
+                      <option value="viewer">Lector</option>
+                      <option value="commenter">Comentador</option>
+                      <option value="editor">Editor</option>
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 8 }}>
+              <div className="share-section-title">Acceso general</div>
+              <div className="share-general-access">
+                <div className="share-access-icon" style={{ background: shareGeneralAccess === 'restricted' ? '#f1f3f4' : '#e8f0fe', color: shareGeneralAccess === 'restricted' ? '#444746' : '#0b57d0' }}>
+                  {shareGeneralAccess === 'restricted' ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                  ) : (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                  )}
+                </div>
+                <div className="share-access-details">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div className="share-access-type-row" style={{ position: 'relative' }}>
+                      <select 
+                        style={{ background: 'transparent', border: 'none', fontSize: 14, fontWeight: 500, color: '#1f1f1f', cursor: 'pointer', outline: 'none', paddingRight: 20, appearance: 'none' }}
+                        value={shareGeneralAccess}
+                        onChange={e => setShareGeneralAccess(e.target.value)}
+                      >
+                        <option value="restricted">Restringido</option>
+                        <option value="anyone">Cualquier persona con el enlace</option>
+                      </select>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={{ position: 'absolute', right: 0, pointerEvents: 'none' }}><path d="M7 10l5 5 5-5H7z"/></svg>
+                    </div>
+                    {shareGeneralAccess === 'anyone' && (
+                      <select className="role-select-acc" style={{ color: '#0b57d0', fontWeight: 500 }} value={shareGeneralRole} onChange={e => setShareGeneralRole(e.target.value)}>
+                        <option value="viewer">Lector</option>
+                        <option value="commenter">Comentador</option>
+                        <option value="editor">Editor</option>
+                      </select>
+                    )}
+                  </div>
+                  <div className="share-access-desc">
+                    {shareGeneralAccess === 'restricted' 
+                      ? 'Solo los usuarios con acceso pueden abrir el enlace' 
+                      : `Cualquier usuario de Internet con el enlace puede verlo como ${shareGeneralRole === 'viewer' ? 'Lector' : shareGeneralRole === 'commenter' ? 'Comentador' : 'Editor'}`}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="share-footer">
+              <button className="btn-copy-link" onClick={() => {
+                const url = `${window.location.origin}/share/${shareTarget.id}?role=${shareGeneralRole}`;
+                navigator.clipboard.writeText(url);
+                alert("Enlace copiado al portapapeles: " + url);
+              }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                Copiar enlace
+              </button>
+              <button className="btn-share-done" onClick={() => setShowShareModal(false)}>Hecho</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2102,13 +3028,22 @@ function FilesPage({ project, user, onBack }) {
 // ─────────────────────────────────────
 export default function App() {
   const { user, saveUser, logout } = useUser();
-  const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedProject, setSelectedProject] = useState(() => {
+    const saved = localStorage.getItem('selected_project');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const handleSelectProject = (p) => {
+    if (p) localStorage.setItem('selected_project', JSON.stringify(p));
+    else localStorage.removeItem('selected_project');
+    setSelectedProject(p);
+  };
 
   if (!user) return <LoginScreen onLogin={saveUser} />;
 
   if (!selectedProject) {
-    return <SecureProjectsPage user={user} onSelectProject={setSelectedProject} onLogout={logout} />;
+    return <SecureProjectsPage user={user} onSelectProject={handleSelectProject} onLogout={logout} />;
   }
 
-  return <FilesPage project={selectedProject} user={user} onBack={() => setSelectedProject(null)} />;
+  return <FilesPage project={selectedProject} user={user} onBack={() => handleSelectProject(null)} />;
 }

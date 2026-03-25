@@ -158,16 +158,38 @@ def proxy_document():
 @documents_bp.route('/api/docs/list', methods=['GET'])
 def list_documents():
     """Devuelve el inventario (archivos y carpetas logicas) desde PostgreSQL."""
+    node_id = request.args.get('id')
     path = request.args.get('path', '')
     model_urn = request.args.get('model_urn', 'global')
 
-    if path and not path.endswith('/'):
-        path += '/'
-
     try:
         from file_system_db import resolve_path_to_node_id, list_contents
+        
+        # Si mandan ID, lo usamos directamente. Si no, resolvemos el path.
+        if node_id and node_id != 'null':
+            parent_id = node_id
+            # Verificar si el ID existe en el model_urn. Si no, fallback a global.
+            from db import get_db_connection
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT model_urn FROM file_nodes WHERE id = %s", (parent_id,))
+                row = cursor.fetchone()
+                if row:
+                    model_urn = row[0] # Usar la URN real del nodo
+        elif path:
+            if not path.endswith('/'): path += '/'
+            parent_id = resolve_path_to_node_id(path, model_urn, auto_create=False)
+            
+            # Si no se encontró y NO es el root del proyecto, intentar fallback a global
+            is_project_root = (path.strip('/') == model_urn.strip('/') or path.strip('/') == '')
+            if not parent_id and not is_project_root and model_urn != 'global':
+                # Try fallback to global
+                parent_id = resolve_path_to_node_id(path, 'global', auto_create=False)
+                if parent_id:
+                    model_urn = 'global'
+        else:
+            parent_id = None
 
-        parent_id = resolve_path_to_node_id(path, model_urn)
         contents = list_contents(parent_id, model_urn, path)
 
         # Generar URLs firmadas para los archivos listados
@@ -175,11 +197,10 @@ def list_documents():
             if f.get('gcs_urn'):
                 f['mediaLink'] = generate_signed_url(f['gcs_urn'])
 
-        return jsonify({"success": True, "data": contents}), 200
+        return jsonify({"success": True, "data": {**contents, "current_node_id": str(parent_id) if parent_id else None}}), 200
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -363,17 +384,24 @@ def delete_document():
         return jsonify({"success": False, "error": "No fullName provided"}), 400
 
     node_path = data['fullName']
+    node_id = data.get('id')
     model_urn = data.get('model_urn', 'global')
     performed_by = data.get('user', None)
 
     try:
-        from file_system_db import soft_delete_node
+        from file_system_db import soft_delete_node, resolve_path_to_node_id
         from db import log_activity
-        success = soft_delete_node(model_urn, node_path)
-        if success:
-            log_activity(model_urn, 'delete', 'file_or_folder',
-                         entity_name=node_path, performed_by=performed_by)
-            return jsonify({"success": True, "message": "Moved to Trash (soft delete)"}), 200
+        
+        target_id = node_id
+        if not target_id:
+            target_id = resolve_path_to_node_id(node_path, model_urn, auto_create=False)
+
+        if target_id:
+            success = soft_delete_node(target_id, model_urn, performed_by=performed_by)
+            if success:
+                log_activity(model_urn, 'delete', 'file_or_folder',
+                             entity_name=node_path, performed_by=performed_by)
+                return jsonify({"success": True, "message": "Moved to Trash (soft delete)"}), 200
         return jsonify({"success": False, "error": "Node not found or already deleted"}), 404
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -390,6 +418,7 @@ def rename_document():
     if request.method == 'POST':
         node_id = data.get('node_id')
         new_name = data.get('new_name')
+        model_urn = data.get('model_urn', 'global')
         if not node_id or not new_name:
             return jsonify({"success": False, "error": "node_id and new_name are required"}), 400
         try:
@@ -398,7 +427,7 @@ def rename_document():
             try:
                 node_id = int(node_id)
             except: pass
-            rename_node(node_id, new_name)
+            rename_node(model_urn, node_id, new_name)
             return jsonify({"success": True}), 200
         except Exception as e:
             print(f"[RENAME POST] Error: {e}")
@@ -462,58 +491,93 @@ def rename_document():
 
 @documents_bp.route('/api/docs/move', methods=['PUT'])
 def move_document():
-    """Mueve una carpeta o archivo a un nuevo directorio en PostgreSQL."""
+    """Mueve una carpeta o archivo a un nuevo directorio en PostgreSQL usando IDs."""
     data = request.get_json()
-    if not data or 'fullName' not in data or 'destPath' not in data:
-        return jsonify({"success": False, "error": "Requires fullName and destPath"}), 400
+    if not data:
+        return jsonify({"success": False, "error": "No data provided"}), 400
 
-    node_path = data['fullName']
-    dest_path = data['destPath']
+    # Soporte para IDs (Preferido) o Paths (Legacy/Fallback)
+    node_id = data.get('node_id')
+    dest_node_id = data.get('destNodeId')
+    
+    node_path = data.get('fullName')
+    dest_path = data.get('destPath')
+    
     model_urn = data.get('model_urn', 'global')
     performed_by = data.get('user', None)
 
-    print(f"[MOVE] Attempting to move '{node_path}' to '{dest_path}' (urn: {model_urn})")
+    print(f"[MOVE] Request: node_id={node_id}, dest_node_id={dest_node_id}, node_path='{node_path}', dest_path='{dest_path}'")
 
     try:
         from file_system_db import resolve_path_to_node_id
         from db import get_db_connection, log_activity
 
-        # 1. Resolver el ID del nodo que queremos mover
-        # resolve_path_to_node_id maneja bien si hay o no slash al final
-        target_node_id = resolve_path_to_node_id(node_path, model_urn)
+        target_node_id = node_id
+        if not target_node_id and node_path:
+            # Fallback a resolver por path (Ojo: resolve_path_to_node_id crea carpetas si no existen!)
+            target_node_id = resolve_path_to_node_id(node_path, model_urn)
+            
         if not target_node_id:
-            print(f"[MOVE] ERROR: Source not found: {node_path}")
-            return jsonify({"success": False, "error": f"Source item not found: {node_path}"}), 404
+            return jsonify({"success": False, "error": "Source item not found"}), 404
 
-        # 2. Resolver el ID del nodo destino (donde va a vivir)
-        # resolve_path_to_node_id creará la ruta si no existe
-        new_parent_id = resolve_path_to_node_id(dest_path, model_urn, created_by=performed_by) if dest_path else None
-        
-        # 3. Evitar mover dentro de sí mismo
+        # Resolver el ID del nodo destino
+        new_parent_id = dest_node_id
+        if new_parent_id is None and dest_path:
+            # Si dest_path es solo la raiz del proyecto o vacio, parent_id es None
+            if dest_path.strip('/') == '' or '/' not in dest_path.strip('/'):
+                 new_parent_id = None
+            else:
+                 new_parent_id = resolve_path_to_node_id(dest_path, model_urn, created_by=performed_by)
+
+        # Evitar mover dentro de sí mismo
         if target_node_id == new_parent_id:
             return jsonify({"success": False, "error": "Cannot move item into itself"}), 400
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
             
-            # Actualizar el parent_id
+            # 1. Obtener datos del nodo a mover (nombre y tipo para validar conflictos)
+            cursor.execute("SELECT name, node_type FROM file_nodes WHERE id = %s", (target_node_id,))
+            source_row = cursor.fetchone()
+            if not source_row:
+                return jsonify({"success": False, "error": "Source not found"}), 404
+            
+            s_name, s_type = source_row
+
+            # 2. Validar si ya existe un nodo con ese nombre en el destino
+            if new_parent_id:
+                cursor.execute("""
+                    SELECT id FROM file_nodes 
+                    WHERE model_urn = %s AND parent_id = %s AND name = %s AND node_type = %s AND is_deleted = FALSE
+                """, (model_urn, new_parent_id, s_name, s_type))
+            else:
+                cursor.execute("""
+                    SELECT id FROM file_nodes 
+                    WHERE model_urn = %s AND parent_id IS NULL AND name = %s AND node_type = %s AND is_deleted = FALSE
+                """, (model_urn, s_name, s_type))
+            
+            if cursor.fetchone():
+                return jsonify({"success": False, "error": f"Ya existe un {'archivo' if s_type == 'FILE' else 'folder'} llamado '{s_name}' en el destino."}), 409
+
+            # 3. Actualizar el parent_id
             cursor.execute("""
                 UPDATE file_nodes 
                 SET parent_id = %s, updated_at = CURRENT_TIMESTAMP
                 WHERE id = %s AND model_urn = %s AND is_deleted = FALSE
-                RETURNING id
+                RETURNING id, name
             """, (new_parent_id, target_node_id, model_urn))
             
             updated = cursor.fetchone()
             conn.commit()
 
         if updated:
-            print(f"[MOVE] SUCCESS: Moved {node_path} to {dest_path}")
+            t_id, t_name = updated
+            print(f"[MOVE] SUCCESS: Moved {t_name} (ID: {t_id}) to parent {new_parent_id}")
             log_activity(model_urn, 'move', 'file_or_folder',
-                         entity_id=str(target_node_id),
-                         entity_name=node_path, 
+                         entity_id=str(t_id),
+                         entity_name=t_name, 
                          performed_by=performed_by,
-                         details={'dest_path': dest_path})
+                         details={'dest_parent_id': str(new_parent_id)})
             return jsonify({"success": True, "message": "Item moved successfully"}), 200
 
         return jsonify({"success": False, "error": "Failed to update database record"}), 500
@@ -774,6 +838,7 @@ def update_node_description_route():
             conn.commit()
 
         if row:
+            from db import log_activity
             log_activity(model_urn, 'update_description', 'file_or_folder',
                          entity_id=str(node_id),
                          entity_name=row[0],

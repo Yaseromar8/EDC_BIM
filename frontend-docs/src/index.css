@@ -699,14 +699,14 @@ body {
 }
 
 .data-row:hover {
-  background: #fcfcfc;
+  background-color: #f5f5f5;
 }
 
-.data-row.selected {
-  background: #e8f4fd !important;
+.data-row.selected, .data-row.context-active {
+  background-color: #e8f4fd !important;
 }
 
-.data-row.selected .td-frozen-left {
+.data-row.selected .td-frozen-left, .data-row.context-active .td-frozen-left {
   background-color: #e8f4fd !important;
 }
 
@@ -762,6 +762,57 @@ body {
 }
 
 /* ─── ROW ACTIONS ─── */
+/* ─── ACC CONTEXT MENU ─── */
+.row-context-menu {
+  background: #fff;
+  border: 1px solid #dcdcdc;
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  z-index: 10002;
+  min-width: 220px;
+}
+
+.row-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: #333;
+  font-size: 13.5px;
+  font-weight: 400;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.row-context-menu button:hover {
+  background: #f5f5f5;
+}
+
+.row-context-menu button .menu-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+}
+
+.row-context-menu button:hover .menu-icon {
+  color: #0696d7;
+}
+
+.menu-divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 4px 0;
+}
+
 .row-action-btn {
   background: transparent;
   border: none;
@@ -1937,12 +1988,12 @@ th {
 }
 
 .folder-tree-item:hover {
-  background: var(--bg-hover);
+  background-color: #f5f5f5;
   color: var(--text-primary);
 }
 
-.folder-tree-item.active {
-  background: var(--bg-active);
+.folder-tree-item.active, .folder-tree-item.context-active {
+  background-color: #e8f4fd !important;
   color: var(--accent);
   border-left-color: var(--accent);
 }
@@ -2160,6 +2211,11 @@ th {
   margin: 20px 0;
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* ============== CUSTOM DRAG OVER ============ */
 .dropzone-active {
   background: rgba(6, 150, 215, 0.05);
@@ -2344,20 +2400,34 @@ th {
   border: 1px solid #dcdcdc;
   width: 320px;
   z-index: 10000;
-  padding: 12px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  overflow: hidden;
 }
 
 .version-popover-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px;
-  border-radius: 4px;
-  border-left: 3px solid #0696D7;
-  background: #f6faff;
+  padding: 12px;
+  border-bottom: 1px solid #f5f5f5;
+  transition: background 0.2s;
+}
+
+.version-popover-item:hover {
+  background: #f0f7ff;
+}
+
+.no-actual-badge {
+  background: #FEF0D4;
+  color: #333;
+  padding: 2px 10px;
+  border-radius: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
 }
 
 .version-popover-item .v-tag {
@@ -2906,6 +2976,297 @@ th {
 .breadcrumb-module {
   color: #0696D7;
   font-weight: 500;
+}
+
+/* ───────────────────────────────────── */
+/* SHARING MODAL (DRIVE STYLE)           */
+/* ───────────────────────────────────── */
+
+.share-modal-box {
+  width: 520px;
+  background: #fff;
+  border-radius: 28px; /* Drive style rounding */
+  padding: 24px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: modalPop 0.2s ease-out;
+}
+
+@keyframes modalPop {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.share-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.share-header h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 400;
+  color: #1f1f1f;
+  line-height: 1.2;
+}
+
+.share-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.share-icon-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  color: #444746;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.share-icon-btn:hover {
+  background: #f1f3f4;
+}
+
+.share-input-wrapper {
+  position: relative;
+  margin-top: 8px;
+}
+
+.share-input-acc {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #747775;
+  border-radius: 4px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s, border-width 0.1s;
+}
+
+.share-input-acc:focus {
+  border: 2px solid #0696D7;
+  padding: 11px 15px; /* Compensa el borde grosor */
+}
+
+.share-input-label {
+  position: absolute;
+  top: -10px;
+  left: 12px;
+  background: #fff;
+  padding: 0 4px;
+  font-size: 12px;
+  color: #0696D7;
+}
+
+.share-result-item:hover {
+  background: #f8f9fa;
+}
+
+.share-section-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #1f1f1f;
+  margin-bottom: 8px;
+}
+
+.share-access-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.share-user-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.share-user-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.share-user-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f1f1f;
+}
+
+.share-user-email {
+  font-size: 12px;
+  color: #444746;
+}
+
+.share-user-role {
+  font-size: 14px;
+  color: #444746;
+}
+
+.share-general-access {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.share-access-icon {
+  width: 40px;
+  height: 40px;
+  background: #f1f3f4;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #444746;
+  flex-shrink: 0;
+}
+
+.share-access-details {
+  flex: 1;
+}
+
+.share-access-type-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #1f1f1f;
+  font-weight: 500;
+}
+
+.share-access-desc {
+  font-size: 12px;
+  color: #444746;
+  margin-top: 2px;
+}
+
+.share-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
+.btn-copy-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid #747775;
+  border-radius: 20px;
+  padding: 8px 16px;
+  color: #0696D7;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-copy-link:hover {
+  background: #f0f7ff;
+  border-color: #0696D7;
+}
+
+.btn-share-done {
+  background: #0696D7;
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-share-done:hover {
+  background: #0585bf;
+}
+
+/* Custom Role Dropdown */
+.role-select-acc {
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  color: #444746;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.role-select-acc:hover {
+  background: #f1f3f4;
+}
+
+.restore-btn-acc:hover {
+  color: #0696D7 !important;
+}
+
+/* ==========================================================================
+   ACC MOVE MODAL STYLES (MATCHING IMAGES 01, 02, 03)
+   ========================================================================== */
+
+.acc-modal-box {
+  background: #fff;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.acc-move-tree-container {
+  background: #fff;
+  border: 1px solid #eee !important;
+  height: 350px;
+}
+
+/* Scrollbar para el arbol de movimiento */
+.acc-move-tree-container::-webkit-scrollbar {
+  width: 6px;
+}
+.acc-move-tree-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+.acc-move-tree-container::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 4px;
+}
+
+.acc-btn-flat:hover {
+  background: #f0faff !important;
+}
+
+.acc-btn-primary-2:hover {
+  background: #0585bf !important;
+}
+
+.acc-btn-disabled {
+  background: #eeeeee !important;
+  color: #999 !important;
+  cursor: default !important;
+}
+
+/* Ajustes para SelectFolderNode dentro de Move */
+.acc-move-tree-container .folder-tree-item {
+  padding: 6px 8px;
+  font-size: 13px;
 }
 
 .description-cell-editable {

@@ -6,124 +6,111 @@ from db import get_db_connection
 
 gcs_executor = ThreadPoolExecutor(max_workers=4)
 
-def resolve_path_to_node_id(path, model_urn, created_by=None):
+def resolve_path_to_node_id(path, model_urn, created_by=None, auto_create=True):
     """
-    Convierte un path del tipo 'folder1/folder2/' en el node_id correspondiente de la base de datos.
-    Crea las carpetas intermedias si no existen (ideal para migraciones y frontends que mandan texto).
-    Usa ON CONFLICT para evitar la creación de duplicados silenciosos.
+    Convierte un path del tipo 'folder1/folder2/' en el node_id correspondiente.
+    Normaliza slashes y maneja el model_urn como prefijo opcional.
     """
-    if not path or path == '/':
-        return None  # Directorio raiz del modelo
+    # Normalizar: quitar slashes y comparar con model_urn
+    p = path.strip('/') if path else ''
+    m = model_urn.strip('/') if model_urn else ''
+    
+    if not p or p == m:
+        return None
 
-    parts = [p for p in path.split('/') if p]
+    # Quitar model_urn si viene al inicio (ej: 'proyectos/PQT8_TALARA/Folder1' -> 'Folder1')
+    if p.startswith(m + '/'):
+        p = p[len(m)+1:]
+    
+    # Si después de quitar el prefijo queda vacío o es lo mismo, es la raíz
+    if not p or p == m:
+        return None
+
+    parts = [part for part in p.split('/') if part]
     parent_id = None
     
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        
         for part in parts:
-            # Buscar si el folder existe (con o sin model_urn para la búsqueda)
-            if parent_id is None:
-                cursor.execute(
-                    "SELECT id FROM file_nodes WHERE model_urn = %s AND name = %s AND parent_id IS NULL AND node_type = 'FOLDER' AND is_deleted = FALSE",
-                    (model_urn, part)
-                )
-            else:
-                cursor.execute(
-                    "SELECT id FROM file_nodes WHERE model_urn = %s AND name = %s AND parent_id = %s AND node_type = 'FOLDER' AND is_deleted = FALSE",
-                    (model_urn, part, parent_id)
-                )
+            cursor.execute("""
+                SELECT id FROM file_nodes 
+                WHERE model_urn = %s AND parent_id IS NOT DISTINCT FROM %s 
+                AND name = %s AND node_type = 'FOLDER' AND is_deleted = FALSE
+            """, (model_urn, parent_id, part))
             row = cursor.fetchone()
             
             if row:
                 parent_id = row[0]
-            else:
-                # El folder no existe, crearlo usando INSERT ... ON CONFLICT para evitar duplicados
+            elif auto_create:
                 cursor.execute("""
                     INSERT INTO file_nodes (model_urn, parent_id, node_type, name, created_by)
                     VALUES (%s, %s, 'FOLDER', %s, %s)
-                    ON CONFLICT DO NOTHING
                     RETURNING id
                 """, (model_urn, parent_id, part, created_by))
-                result = cursor.fetchone()
-                if result:
-                    parent_id = result[0]
-                    conn.commit()
-                else:
-                    # El INSERT falló por conflicto, buscar el existente
-                    if parent_id is None:
-                        cursor.execute(
-                            "SELECT id FROM file_nodes WHERE model_urn = %s AND name = %s AND parent_id IS NULL AND node_type = 'FOLDER' AND is_deleted = FALSE",
-                            (model_urn, part)
-                        )
-                    else:
-                        cursor.execute(
-                            "SELECT id FROM file_nodes WHERE model_urn = %s AND name = %s AND parent_id = %s AND node_type = 'FOLDER' AND is_deleted = FALSE",
-                            (model_urn, part, parent_id)
-                        )
-                    row = cursor.fetchone()
-                    if row:
-                        parent_id = row[0]
-                    
+                parent_id = cursor.fetchone()[0]
+                conn.commit()
+            else:
+                return None
     return parent_id
 
 
 def list_contents(parent_id, model_urn, base_path=""):
     """
-    Devuelve lista estructurada estilo GCS {"folders":[], "files":[]} pero instantánea desde BD
+    Devuelve inventario estructurado con metadata de auditoría (updated_by e iniciales).
     """
+    def get_initials(name):
+        if not name: return "??"
+        parts = name.split()
+        if len(parts) >= 2:
+            return (parts[0][0] + parts[1][0]).upper()
+        return name[:2].upper()
+
     folders = []
     files = []
     
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        
-        if parent_id is None:
-            cursor.execute("""
-                SELECT id, name, node_type, size_bytes, version_number, updated_at, gcs_urn, status, tags, metadata, description, mime_type, created_by 
-                FROM file_nodes 
-                WHERE model_urn = %s AND parent_id IS NULL AND is_deleted = FALSE
-                ORDER BY name
-            """, (model_urn,))
-        else:
-            cursor.execute("""
-                SELECT id, name, node_type, size_bytes, version_number, updated_at, gcs_urn, status, tags, metadata, description, mime_type, created_by 
-                FROM file_nodes 
-                WHERE model_urn = %s AND parent_id = %s AND is_deleted = FALSE
-                ORDER BY name
-            """, (model_urn, parent_id))
-            
+        query = """
+            SELECT id, name, node_type, size_bytes, version_number, updated_at, gcs_urn, status, tags, metadata, description, mime_type, 
+                   COALESCE(updated_by, created_by, 'Sistema') as u_by
+            FROM file_nodes 
+            WHERE model_urn = %s AND parent_id IS NOT DISTINCT FROM %s AND is_deleted = FALSE
+            ORDER BY node_type DESC, name ASC
+        """
+        cursor.execute(query, (model_urn, parent_id))
         rows = cursor.fetchall()
+        
         for row in rows:
-            r_id, r_name, r_type, r_size, r_version, r_updated, r_gcs, r_status, r_tags, r_metadata, r_description, r_mime, r_created_by = row
-            # Construir fullName conceptual para Frontend ('fotos/app/')
+            r_id, r_name, r_type, r_size, r_version, r_updated, r_gcs, r_status, r_tags, r_metadata, r_description, r_mime, r_u_by = row
             full_name = f"{base_path}{r_name}" + ("/" if r_type == 'FOLDER' else "")
             
+            audit_data = {
+                "name": r_u_by,
+                "initials": get_initials(r_u_by)
+            }
+
+            item = {
+                "id": r_id,
+                "name": r_name,
+                "fullName": full_name,
+                "updated": r_updated.isoformat() if r_updated else None,
+                "updated_by": audit_data,
+                "description": r_description
+            }
+
             if r_type == 'FOLDER':
-                folders.append({
-                    "id": r_id,
-                    "name": r_name,
-                    "fullName": full_name,
-                    "description": r_description,
-                    "updated": r_updated.isoformat() if r_updated else None,
-                    "updated_by": r_created_by
-                })
+                folders.append(item)
             else:
-                files.append({
-                    "id": r_id,
-                    "name": r_name,
-                    "fullName": full_name, # Frontend espera fullName como identificador en view
+                item.update({
                     "size": r_size,
                     "version": r_version,
-                    "updated": r_updated.isoformat() if r_updated else None,
                     "status": r_status,
                     "tags": r_tags or [],
                     "metadata": r_metadata or {},
-                    "description": r_description,
                     "mime_type": r_mime,
-                    "gcs_urn": r_gcs,
-                    "updated_by": r_created_by
+                    "gcs_urn": r_gcs
                 })
+                files.append(item)
                 
     return {"folders": folders, "files": files}
 
@@ -186,44 +173,19 @@ def find_node_by_gcs_urn(model_urn, gcs_urn):
         """, (model_urn, gcs_urn))
         return cursor.fetchone()
 
-def soft_delete_node(model_urn, node_path):
+def soft_delete_node(node_id, model_urn, performed_by=None, reason=None):
     """
-    Soft-delete de un nodo y TODOS sus hijos recursivamente.
-    Igual que ACC cuando borras una carpeta: todo desaparece sin perder el blob en GCS.
-    Usa CTE recursivo de PostgreSQL para eficiencia maxima.
+    Soft-delete recursivo (Carpeta y descendientes).
+    Maneja auditoría de tiempo y estado.
     """
-    # Primero obtener el node_id del nodo raiz a borrar
-    parts = [p for p in node_path.strip('/').split('/') if p]
-    if not parts:
-        return False
-
-    # Si tiene mas de un segmento, el 'nodo' es el archivo/carpeta final
-    # y el parent es el resto del path
-    target_name = parts[-1]
-    parent_path = '/'.join(parts[:-1])
-    parent_id = resolve_path_to_node_id(parent_path, model_urn) if parent_path else None
-
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        # Buscar el nodo objetivo
-        if parent_id:
-            cursor.execute(
-                "SELECT id FROM file_nodes WHERE model_urn = %s AND parent_id = %s AND name = %s AND is_deleted = FALSE",
-                (model_urn, parent_id, target_name)
-            )
-        else:
-            cursor.execute(
-                "SELECT id FROM file_nodes WHERE model_urn = %s AND parent_id IS NULL AND name = %s AND is_deleted = FALSE",
-                (model_urn, target_name)
-            )
-        row = cursor.fetchone()
-        if not row:
+        target_id = node_id
+        
+        if not target_id:
             return False
 
-        root_id = row[0]
-
-        # CTE recursivo: marca el nodo Y TODOS SUS DESCENDIENTES como borrados
-        # Equivale a borrar una carpeta completa con todas sus subcarpetas y archivos
+        # CTE Recursivo para marcar todo el subárbol
         cursor.execute("""
             WITH RECURSIVE subtree AS (
                 SELECT id FROM file_nodes WHERE id = %s
@@ -232,9 +194,9 @@ def soft_delete_node(model_urn, node_path):
                 INNER JOIN subtree st ON fn.parent_id = st.id
             )
             UPDATE file_nodes
-            SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP
+            SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP, updated_by = %s
             WHERE id IN (SELECT id FROM subtree)
-        """, (root_id,))
+        """, (target_id, performed_by))
         conn.commit()
         return True
 
@@ -437,12 +399,12 @@ def restore_node(model_urn, node_id):
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        # Obtener datos del nodo a restaurar
-        cursor.execute("SELECT name, parent_id, node_type FROM file_nodes WHERE id = %s AND model_urn = %s", (node_id, model_urn))
+        # Obtener datos del nodo a restaurar (incluyendo el model_urn real de la DB)
+        cursor.execute("SELECT name, parent_id, node_type, model_urn FROM file_nodes WHERE id = %s", (node_id,))
         node = cursor.fetchone()
         if not node: return False
         
-        name, parent_id, node_type = node
+        name, parent_id, node_type, model_urn = node
         
         # Verificar conflicto de nombres en el destino
         if parent_id:
@@ -587,28 +549,17 @@ def promote_version(model_urn, node_id, version_id, performed_by=None):
         
         conn.commit()
         return True
-def update_node_description(node_id, description):
+def update_node_description(model_urn, node_id, description):
     """
     Actualiza el campo descripción de un nodo (archivo o carpeta).
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE file_nodes SET description = %s WHERE id = %s",
-            (description, node_id)
+            "UPDATE file_nodes SET description = %s WHERE id = %s AND model_urn = %s",
+            (description, node_id, model_urn)
         )
         conn.commit()
     return True
     
-def rename_node(node_id, new_name):
-    """
-    Cambia el nombre de un nodo (archivo o carpeta).
-    """
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE file_nodes SET name = %s WHERE id = %s",
-            (new_name, node_id)
-        )
-        conn.commit()
     return True

@@ -6,7 +6,8 @@ import AutoSizer from 'react-virtualized-auto-sizer';
  * TableRow Component - Renders an individual row in the virtualized list.
  */
 const TableRow = ({ index, style, data }) => {
-  const { items, selected, toggle, navigate, setActiveFile, onUpdateDescription, onRename, formatSize, formatDate, getInitials, user, onRowMenu, isTrashMode, onShowVersions, columnWidths, renderFileIconSop } = data;
+  const { items, selected, toggle, navigate, setActiveFile, onUpdateDescription, onRename, formatSize, formatDate, getInitials, user, isAdmin, onRowMenu, isTrashMode, onShowVersions, columnWidths, renderFileIconSop, editingNodeId, setEditingNodeId, rightClickedId, processingIds } = data;
+  if (!items) return null;
   const item = items[index];
   if (!item) return null;
 
@@ -15,6 +16,21 @@ const TableRow = ({ index, style, data }) => {
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(item.name || '');
+
+  // Sync inline edit from context menu
+  React.useEffect(() => {
+    if (editingNodeId && editingNodeId.source === 'table' && editingNodeId.id === item.id) {
+      setIsEditingName(true);
+      let nameToEdit = item.name || '';
+      if (item.type !== 'folder' && nameToEdit.includes('.')) {
+        const parts = nameToEdit.split('.');
+        parts.pop();
+        nameToEdit = parts.join('.');
+      }
+      setTempName(nameToEdit);
+      setEditingNodeId(null); // Clear the trigger
+    }
+  }, [editingNodeId, item.id, item.name, item.type, setEditingNodeId]);
 
   // Reset state when item changes (for virtualized list reuse)
   React.useEffect(() => {
@@ -34,8 +50,9 @@ const TableRow = ({ index, style, data }) => {
 
   const handleRename = () => {
     let finalName = tempName;
-    if (!isFolder && item.name.includes('.')) {
-      const ext = item.name.split('.').pop();
+    const itemName = item.name || '';
+    if (!isFolder && itemName.includes('.')) {
+      const ext = itemName.split('.').pop();
       finalName = `${tempName}.${ext}`;
     }
     
@@ -53,9 +70,9 @@ const TableRow = ({ index, style, data }) => {
   const startEditingName = (e) => {
     e.stopPropagation();
     console.log('startEditingName for', item.id, item.name);
-    let nameToEdit = item.name;
-    if (!isFolder && item.name.includes('.')) {
-      const parts = item.name.split('.');
+    let nameToEdit = item.name || '';
+    if (!isFolder && nameToEdit.includes('.')) {
+      const parts = nameToEdit.split('.');
       parts.pop();
       nameToEdit = parts.join('.');
     }
@@ -65,8 +82,19 @@ const TableRow = ({ index, style, data }) => {
 
   return (
     <div 
-      className={`data-row ${isSelected ? 'selected' : ''}`} 
-      style={{ ...style, width: '100%' }}
+      className={`data-row ${isSelected ? 'selected' : ''} ${item.id === rightClickedId ? 'context-active' : ''}`} 
+      style={{ 
+        ...style, 
+        width: '100%',
+        opacity: processingIds[item.id] ? 0.5 : 1,
+        filter: processingIds[item.id] ? 'grayscale(1)' : 'none',
+        pointerEvents: processingIds[item.id] ? 'none' : 'auto',
+        transition: 'all 0.4s ease'
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onRowMenu(item, e);
+      }}
     >
       <div className="td-cell checkbox-cell td-frozen-left" style={{ width: columnWidths.checkbox, left: 0 }}>
         <input
@@ -83,15 +111,19 @@ const TableRow = ({ index, style, data }) => {
         className="td-cell name-cell td-frozen-left name-cell-editable" 
         style={{ width: columnWidths.name, left: columnWidths.checkbox }}
       >
-        {isFolder ? (
-          <svg className="adsk-icon" width="20" height="20" viewBox="0 0 24 24" fill="#666" style={{ marginRight: 8 }}>
-            <path d="M18,20.45H6a3.6,3.6,0,0,1-3.6-3.6V7.15A3.6,3.6,0,0,1,6,3.55h4.84a.71.71,0,0,1,.53.22l2.12,2.1H18a3.61,3.61,0,0,1,3.6,3.61v7.37A3.6,3.6,0,0,1,18,20.45ZM3.89,9.48v7.37A2.1,2.1,0,0,0,6,19H18a2.1,2.1,0,0,0,2.1-2.1V9.48A2.1,2.1,0,0,0,18,7.37H13.17a.75.75,0,0,1-.53-.22l-2.12-2.1H6a2.1,2.1,0,0,0-2.1,2.1Z"/>
-          </svg>
+        {processingIds[item.id] ? (
+          <div className="adsk-spinner" style={{ width: 14, height: 14, borderWidth: 2, marginRight: 8 }} />
         ) : (
-          renderFileIconSop ? renderFileIconSop(item.name, 22) : (
-            <svg className="adsk-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginRight: 8, color: '#999' }}>
-              <path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          isFolder ? (
+            <svg className="adsk-icon" width="20" height="20" viewBox="0 0 24 24" fill="#666" style={{ marginRight: 8 }}>
+              <path d="M18,20.45H6a3.6,3.6,0,0,1-3.6-3.6V7.15A3.6,3.6,0,0,1,6,3.55h4.84a.71.71,0,0,1,.53.22l2.12,2.1H18a3.61,3.61,0,0,1,3.6,3.61v7.37A3.6,3.6,0,0,1,18,20.45ZM3.89,9.48v7.37A2.1,2.1,0,0,0,6,19H18a2.1,2.1,0,0,0,2.1-2.1V9.48A2.1,2.1,0,0,0,18,7.37H13.17a.75.75,0,0,1-.53-.22l-2.12-2.1H6a2.1,2.1,0,0,0-2.1,2.1Z"/>
             </svg>
+          ) : (
+            renderFileIconSop ? renderFileIconSop(item.name, 22) : (
+              <svg className="adsk-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginRight: 8, color: '#999' }}>
+                <path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+            )
           )
         )}
         
@@ -141,19 +173,21 @@ const TableRow = ({ index, style, data }) => {
               style={{ marginLeft: isFolder ? 0 : 8, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               onClick={() => {
                 setActiveFile(item);
-                if (isFolder) navigate(item.fullName);
+                if (isFolder) navigate(item.fullName, item.id);
               }}
             >
-              {item.name}
+              {item.name || 'Sin nombre'}
             </span>
-            <svg 
-              className="pencil-icon-acc name-pencil" 
-              onClick={startEditingName}
-              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0696d7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
-              style={{ cursor: 'pointer' }}
-            >
-              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-            </svg>
+            {isAdmin && (
+              <svg 
+                className="pencil-icon-acc name-pencil" 
+                onClick={startEditingName}
+                width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0696d7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
+                style={{ cursor: 'pointer' }}
+              >
+                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+              </svg>
+            )}
           </div>
         )}
       </div>
@@ -233,10 +267,16 @@ const TableRow = ({ index, style, data }) => {
           <div className="td-cell" style={{ width: columnWidths.user }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 10, flexShrink: 0 }}>
-                 {getInitials(item.updated_by || 'ADMIN')}
+                  {typeof item.updated_by === 'object' && item.updated_by !== null
+                    ? (item.updated_by.initials || '??') 
+                    : getInitials(String(item.updated_by || 'ADMIN'))}
                </div>
                <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                 <span style={{ fontSize: 13, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{item.updated_by || 'ADMIN'}</span>
+                 <span style={{ fontSize: 13, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                    {typeof item.updated_by === 'object' && item.updated_by !== null
+                      ? (item.updated_by.name || 'Usuario') 
+                      : String(item.updated_by || 'ADMIN')}
+                 </span>
                  <span style={{ fontSize: 11, color: '#999', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>Trial account ysan...</span>
                </div>
             </div>
@@ -283,16 +323,19 @@ const MatrixTable = ({
   onRowMenu,
   startResizing,
   setSelected,
-  renderFileIconSop
+  renderFileIconSop,
+  editingNodeId,
+  setEditingNodeId,
+  rightClickedId,
+  processingIds
 }) => {
   const allItems = [...folders, ...files];
-
   return (
-    <div className="table-wrap" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%', background: '#fff' }}>
-      <div style={{ width: totalTableWidth, flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+    <div className="table-wrap" style={{ display: 'flex', flexDirection: 'column', overflowX: 'auto', overflowY: 'hidden', height: '100%', background: '#fff' }}>
+      <div style={{ width: totalTableWidth, flex: 1, display: 'flex', flexDirection: 'column' }}>
         
         {/* Cabecera Tipo Div (Sticky al tope) */}
-        <div className="data-header" style={{ width: totalTableWidth, position: 'sticky', top: 0, zIndex: 30, flexShrink: 0 }}>
+        <div className="data-header" style={{ width: totalTableWidth, flexShrink: 0 }}>
           <div className="td-cell checkbox-cell td-frozen-left" style={{ width: columnWidths.checkbox, left: 0 }}>
             <input
               type="checkbox"
@@ -358,7 +401,7 @@ const MatrixTable = ({
             </div>
           )}
         </div>
-
+ 
         {/* Cuerpo Virtualizado */}
         <div style={{ flex: 1, minHeight: 0 }}>
           <AutoSizer disableWidth>
@@ -368,7 +411,6 @@ const MatrixTable = ({
                 itemCount={allItems.length}
                 itemSize={48}
                 width={totalTableWidth}
-                style={{ overflow: 'visible' }}
                 itemData={{
                   items: allItems,
                   selected,
@@ -381,11 +423,16 @@ const MatrixTable = ({
                   formatDate,
                   getInitials,
                   user,
+                  isAdmin,
                   onRowMenu,
                   isTrashMode,
                   onShowVersions,
                   columnWidths,
-                  renderFileIconSop
+                  renderFileIconSop,
+                  editingNodeId,
+                  setEditingNodeId,
+                  rightClickedId,
+                  processingIds
                 }}
               >
                 {TableRow}

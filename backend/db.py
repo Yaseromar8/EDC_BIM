@@ -98,6 +98,8 @@ def ensure_file_nodes_table():
                 );
             """)
             # Migraciones incrementales
+            cursor.execute("ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS updated_by VARCHAR(255);")
+            cursor.execute("ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;")
             cursor.execute("ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'DRAFT';")
             cursor.execute("ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS tags TEXT[];")
             cursor.execute("ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';")

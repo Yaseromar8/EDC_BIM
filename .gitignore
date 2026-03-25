@@ -13,3 +13,5 @@ push_err*.txt
 push_error.txt
 status.txt
 test_out.txt
+
+backend/uploads/documents/*.mp4
