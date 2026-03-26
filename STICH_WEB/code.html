@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Revizto | Dynamic Demo</title>
+<link href="https://cdn.jsdelivr.net/npm/swiper@12/swiper-bundle.min.css" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style>
+        :root {
+            --cubic-default: cubic-bezier(.23, 1, .32, 1);
+            --duration-default: 0.735s;
+            --animation-default: var(--duration-default) var(--cubic-default);
+            --fade-edge: 5%;
+            --color--red-accent: #E40001;
+            --color--light: #FFFFFF;
+            --color--primary: #E40001;
+            --color--dark: #1E2E2E;
+            --color--focus: #009999;
+            --color--concrete: #2D2D2D;
+            --color--pale-teal: #CBDDDD;
+            --color--grey-teal: #98BBBB;
+            --color--cyan: #00FFFF;
+            --radius--xl: 2rem;
+            --space--xxxs: 0.5rem;
+            --space--xs: 1rem;
+            --container-padding: 2rem;
+        }
+
+        html {
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+            font-size: 16px;
+        }
+
+        *, *:before, *:after {
+            box-sizing: inherit;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: "Inter", sans-serif;
+            background-color: #000;
+            color: var(--color--dark);
+            overflow-x: hidden;
+        }
+
+        a { text-decoration: none; color: inherit; }
+        img, video { object-fit: cover; }
+
+        /* Navigation */
+        .c-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+            padding: 1.5rem 3.5rem;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            color: white;
+            transition: background 0.3s ease;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 100%);
+        }
+
+        .c-nav_menu {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+            align-items: center;
+        }
+
+        .c-nav_link {
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .c-btn {
+            background-color: var(--color--red-accent);
+            color: white;
+            padding: 0.65rem 1.5rem;
+            border-radius: 100vw;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            letter-spacing: 0.05em;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: transform 0.2s ease, background 0.2s ease;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .c-btn:hover { background-color: #B60000; transform: scale(1.02); }
+
+        /* Language Selector Styled Dropdown */
+        .c-lang-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .c-lang-trigger {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 0.5rem 0;
+        }
+
+        .c-lang-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+            min-width: 160px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            padding: 0.5rem;
+            display: none;
+            flex-direction: column;
+            margin-top: 0.5rem;
+            z-index: 1001;
+            overflow: hidden;
+        }
+
+        .c-lang-menu.is-active {
+            display: flex;
+        }
+
+        .c-lang-option {
+            padding: 0.6rem 0.8rem;
+            color: #1e2e2e;
+            font-size: 0.8rem;
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 0.5rem;
+            transition: background 0.2s;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .c-lang-option:hover {
+            background: rgba(0,0,0,0.05);
+        }
+
+        .c-lang-option.is-selected {
+            background: rgba(0,0,0,0.08);
+            font-weight: 700;
+        }
+
+        /* Hero Section */
+        .c-hero {
+            position: relative;
+            height: 100vh;
+            width: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+
+        .c-hero_video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        .c-hero_video video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .c-hero_overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.15);
+            z-index: 1;
+        }
+
+        .c-hero_content {
+            position: absolute;
+            z-index: 2;
+            inset: 0;
+            padding: 4rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        /* Glassmorphism Cards */
+        .c-card {
+            background: rgba(255, 255, 255, 0.015);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 2rem;
+            border-radius: 2rem;
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            width: 380px;
+            height: 400px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: flex-start;
+            box-sizing: border-box;
+            overflow: hidden;
+            flex-shrink: 0;
+            transition: all 0.4s var(--cubic-default);
+        }
+
+        .c-card--expanded {
+            width: 580px;
+            height: auto;
+            max-height: 85vh;
+            overflow-y: auto;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .c-hero_card {
+            justify-content: center;
+        }
+
+        /* Login Card specific styles */
+        .c-login_card {
+            padding: 1.75rem 2rem;
+            height: 400px; 
+            justify-content: center;
+            position: relative;
+        }
+
+        .c-login_card h2 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            margin-bottom: 0.25rem;
+        }
+
+        .c-login_card .subtitle {
+            font-size: 0.75rem;
+            margin-bottom: 1rem;
+            opacity: 0.8;
+        }
+
+        .c-login_card .subtitle a {
+            color: #0099ff;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .c-input_group {
+            width: 100%;
+            margin-bottom: 0.75rem;
+        }
+
+        .c-input_label {
+            display: block;
+            font-size: 0.65rem;
+            margin-bottom: 0.3rem;
+            opacity: 0.7;
+        }
+
+        .c-input_field {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 0.4rem;
+            padding: 0.5rem 0.75rem;
+            color: #1C1C1C;
+            outline: none;
+            font-size: 0.8rem;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .c-input_field::placeholder {
+            color: #1C1C1C;
+            opacity: 0.6;
+        }
+
+        .c-input_field:focus {
+            border-color: #007bff;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .c-btn-blue {
+            background-color: #007bff;
+            width: 100%;
+            padding: 0.65rem;
+            border-radius: 100vw;
+            color: white;
+            font-weight: 700;
+            text-align: center;
+            cursor: pointer;
+            margin-bottom: 0.75rem;
+            font-size: 0.75rem;
+            transition: transform 0.2s, background 0.2s;
+        }
+        .c-btn-blue:hover {
+            background-color: #0069d9;
+            transform: translateY(-1px);
+        }
+
+        .c-divider {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+            opacity: 0.2;
+        }
+
+        .c-divider::before, .c-divider::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: white;
+        }
+
+        .c-divider span { font-size: 0.65rem; }
+
+        .c-social_btn {
+            width: 100%;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 100vw;
+            padding: 0.5rem;
+            margin-bottom: 0.4rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            color: white;
+        }
+
+        .c-social_btn:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .c-login_links {
+            width: 100%;
+            text-align: center;
+            margin-top: 0.5rem;
+        }
+
+        .c-login_links a {
+            display: block;
+            font-size: 0.65rem;
+            color: #0099ff;
+            margin-bottom: 0.2rem;
+            text-decoration: none;
+        }
+
+        .u-sub-small {
+            font-size: 0.55rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.5rem;
+            display: block;
+            font-weight: 800;
+            flex-shrink: 0;
+            opacity: 0.8;
+        }
+
+        .u-heading-2 {
+            font-size: 2.5rem;
+            line-height: 1;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            letter-spacing: -0.01em;
+            display: block;
+            width: 100%;
+        }
+
+        .c-card p {
+            font-size: 0.8rem;
+            line-height: 1.4;
+            margin-bottom: 1.25rem;
+            opacity: 0.8;
+            width: 100%;
+            font-weight: 400;
+        }
+
+        /* Form Specific Styles (Dynamic Load) */
+        .form-input {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 0.5rem;
+            padding: 0.6rem 1rem;
+            width: 100%;
+            height: 42px;
+            font-size: 0.8rem;
+            color: #1C1C1C;
+        }
+
+        .form-input::placeholder {
+            color: #1C1C1C;
+            opacity: 0.6;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.65rem;
+            font-weight: 700;
+            margin-bottom: 0.35rem;
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+        .required-star { color: var(--color--red-accent); margin-left: 2px; }
+        .error-text { color: #ff6b6b; font-size: 0.6rem; margin-top: 0.2rem; }
+
+        /* Success State */
+        .c-success-wrap {
+            text-align: center;
+            padding: 2rem 0;
+            width: 100%;
+        }
+
+        /* Language Switch content scaling */
+        .u-scaling-content {
+            width: 100%;
+            display: flex; 
+            flex-direction: column;
+            height: 100%;
+            justify-content: center;
+        }
+
+        /* Registration Form Tweaks for fixed height card */
+        #registrationState {
+            padding: 0;
+        }
+        #registrationState h2 {
+            font-size: 1.35rem;
+            margin-top: 0.25rem;
+        }
+        #registrationState .subtitle {
+            margin-bottom: 0.75rem;
+            font-size: 0.7rem;
+        }
+        #registrationState .c-input_group {
+            margin-bottom: 0.45rem;
+        }
+        #registrationState .c-input_label {
+            font-size: 0.6rem;
+            margin-bottom: 0.2rem;
+        }
+        #registrationState .c-input_field {
+            padding: 0.4rem 0.65rem;
+            font-size: 0.75rem;
+        }
+        #registrationState .c-btn-blue {
+            margin-top: 0.25rem;
+            margin-bottom: 0.25rem;
+            padding: 0.55rem;
+        }
+        #registrationState .c-login_links {
+            margin-top: 0.25rem;
+        }
+
+        /* Close Button styling */
+        .c-close-btn {
+            position: absolute;
+            top: 1.15rem;
+            right: 1.25rem;
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.4);
+            cursor: pointer;
+            padding: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s, transform 0.2s;
+            z-index: 10;
+        }
+        .c-close-btn:hover {
+            color: white;
+            transform: scale(1.1);
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top: 2px solid #fff;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 1100px) {
+            .c-card {
+                width: 320px; 
+                height: 350px;
+                padding: 1.5rem;
+            }
+            .c-card--expanded { width: 90%; height: auto; }
+            .u-heading-2 { font-size: 2rem; }
+            .c-nav { padding: 1rem 2rem; }
+        }
+
+        @media (max-width: 920px) {
+            .c-hero_content {
+                flex-direction: column;
+                align-items: center;
+                gap: 1.5rem;
+                overflow-y: auto;
+                justify-content: flex-start;
+                padding-top: 5rem;
+            }
+            .c-card {
+                width: 100%;
+                max-width: 360px;
+                height: auto;
+                min-height: auto;
+            }
+        }
+
+        [data-i18n] {
+            transition: opacity 0.2s ease;
+        }
+
+        /* Hide logic */
+        .is-hidden { display: none !important; }
+    </style>
+</head>
+<body>
+<nav class="c-nav">
+<div style="display:flex; gap: 2rem; align-items: center;">
+<div class="c-lang-dropdown">
+<div class="c-lang-trigger" id="langTrigger">
+<span class="material-symbols-outlined" style="font-size: 1.1rem;">language</span>
+<span id="currentLang">EN</span>
+<span class="material-symbols-outlined" style="font-size: 1rem; opacity: 0.6;">keyboard_arrow_down</span>
+</div>
+<div class="c-lang-menu" id="langMenu">
+<div class="c-lang-option is-selected" data-lang="en">
+<span>English</span>
+<span style="color: rgb(152, 187, 187); font-size: 0.7rem; font-weight: 700;">EN</span>
+</div>
+<div class="c-lang-option" data-lang="es">
+<span>Español</span>
+<span style="color: rgb(152, 187, 187); font-size: 0.7rem; font-weight: 700;">ES</span>
+</div>
+<div class="c-lang-option" data-lang="zh">
+<span>简体中文</span>
+<span style="color: rgb(152, 187, 187); font-size: 0.7rem; font-weight: 700;">ZH</span>
+</div>
+</div>
+</div>
+<button class="c-btn js-demo-trigger">
+<span data-i18n="btn_demo">DEMO</span>
+<span class="material-symbols-outlined" style="font-size: 1rem; border: 1.2px solid white; border-radius: 50%; padding: 1px;">arrow_forward</span>
+</button>
+</div>
+</nav>
+<header class="c-hero">
+<div class="c-hero_video">
+<video autoplay="" loop="" muted="" playsinline="">
+<source src="https://s3.amazonaws.com/webflow-prod-assets/68dfb2221c50b9fb5b595fd7/695e368381db0cb279407245_Home%20page%20-%20hero%20video_15mb.mp4" type="video/mp4"/>
+</video>
+</div>
+<div class="c-hero_overlay"></div>
+<div class="c-hero_content">
+<!-- Left Card (Hero or Form) -->
+<div class="c-card c-hero_card" id="dynamicCard">
+<!-- Default Hero State -->
+<div class="u-scaling-content" id="heroState">
+<span class="u-sub-small" data-i18n="hero_sub">AECO Collaboration Software</span>
+<h1 class="u-heading-2" data-i18n="hero_title" id="heroHeadline">Your project.<br/>Made Right.</h1>
+<p data-i18n="hero_desc" id="heroDesc">Leading 2D/3D platform to deliver complex projects with greater confidence and control.</p>
+<button class="c-btn js-demo-trigger" style="width: fit-content;">
+<span data-i18n="btn_demo">DEMO</span>
+<span class="material-symbols-outlined" style="font-size: 1rem; border: 1.2px solid white; border-radius: 50%; padding: 1px;">arrow_forward</span>
+</button>
+</div>
+<!-- Form State -->
+<div class="is-hidden w-full" id="formState">
+<div class="flex justify-between items-center mb-6">
+<h2 class="text-xl font-bold tracking-tight">Request a Demo</h2>
+<button class="opacity-50 hover:opacity-100 js-home-trigger"><span class="material-symbols-outlined">close</span></button>
+</div>
+<form class="space-y-4" id="demoForm">
+<div class="space-y-1">
+<label class="form-label">Request Information<span class="required-star">*</span></label>
+<select class="form-input bg-black/20 focus:outline-none focus:border-cyan-400">
+<option class="text-black">Request a Demo</option>
+<option class="text-black">Request a Free Trial</option>
+</select>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<label class="form-label">First Name<span class="required-star">*</span></label>
+<input class="form-input bg-black/20 focus:outline-none" required="" type="text"/>
+</div>
+<div>
+<label class="form-label">Last Name<span class="required-star">*</span></label>
+<input class="form-input bg-black/20 focus:outline-none" required="" type="text"/>
+</div>
+</div>
+<div>
+<label class="form-label">Email<span class="required-star">*</span></label>
+<input class="form-input bg-black/20 focus:outline-none" placeholder="work@company.com" required="" type="email"/>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<label class="form-label">Business Revenue<span class="required-star">*</span></label>
+<select class="form-input bg-black/20">
+<option class="text-black">100m - 500m</option>
+<option class="text-black">$500m+</option>
+</select>
+</div>
+<div>
+<label class="form-label">Job Title<span class="required-star">*</span></label>
+<input class="form-input bg-black/20" required="" type="text"/>
+</div>
+</div>
+<div class="flex items-start gap-2 pt-2">
+<input class="mt-1" id="marketing" required="" type="checkbox"/>
+<label class="text-[0.65rem] opacity-70" for="marketing">I agree to receive marketing communications from Revizto.</label>
+</div>
+<div class="pt-4">
+<button class="c-btn w-full justify-center" type="submit">SUBMIT</button>
+</div>
+</form>
+</div>
+<!-- Success State -->
+<div class="is-hidden c-success-wrap" id="successState">
+<span class="u-sub-small text-red-500 font-bold mb-4 block">THANK YOU!</span>
+<h2 class="text-3xl font-bold mb-4">Thank you for requesting a demo!</h2>
+<p class="text-sm opacity-80 leading-relaxed mb-8">Our team will be in touch shortly to learn more about your needs and set up a time to share how <b>Revizto</b> can help address them.</p>
+<button class="c-btn js-home-trigger">
+<span class="material-symbols-outlined" style="font-size: 1rem;">home</span>
+<span>BACK TO HOME</span>
+</button>
+</div>
+</div>
+<!-- Right Card (Login or Registration or Step 2) -->
+<div class="c-card c-login_card" id="loginCard">
+<!-- Login State (Step 1) -->
+<div class="u-scaling-content" id="loginState">
+<h2 data-i18n="login_title">Log in</h2>
+<div class="subtitle">
+<span data-i18n="login_new_user">Are you a new user?</span>
+<a class="js-reg-trigger" data-i18n="login_create_account">Create an account</a>
+</div>
+<div class="c-input_group">
+<label class="c-input_label" data-i18n="login_email_label">Email address</label>
+<input class="c-input_field" id="loginEmailInput" type="email"/>
+</div>
+<div class="c-btn-blue" data-i18n="login_continue" id="loginContinueBtn">Continue</div>
+<div class="c-divider">
+<span data-i18n="login_or">or</span>
+</div>
+<button class="c-social_btn">
+<svg height="14" viewbox="0 0 18 18" width="14"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4"></path><path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"></path><path d="M3.964 10.706c-.18-.54-.282-1.117-.282-1.706s.102-1.166.282-1.706V4.962H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#FBBC05"></path><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.443 2.048.957 4.962l3.007 2.332c.708-2.127 2.692-3.711 5.036-3.711z" fill="#EA4335"></path></svg>
+<span data-i18n="login_google">Continue with Google</span>
+</button>
+<button class="c-social_btn">
+<svg fill="white" height="14" viewbox="0 0 18 18" width="14"><path d="M15.03 12.62c-.63 1.14-1.53 2.34-2.82 2.34-1.26 0-1.68-.81-3.21-.81-1.53 0-2.01.78-3.21.81-1.29.03-2.37-1.35-3-2.34-1.32-1.98-2.31-5.61-.96-7.83 1.23-2.01 3.24-2.16 4.32-2.16 1.05 0 2.04.66 2.67.66.63 0 1.86-.78 3.09-.66 1.26.12 2.31.6 3 1.5-2.58 1.47-2.16 4.86.51 5.82-.45 1.14-1.2 2.31-1.89 3.12zM11.16.27c0 1.29-.93 2.67-2.28 2.67-.18 0-.36-.03-.48-.06.06-1.53 1.17-2.88 2.31-2.88.15 0 .3.03.45.06v.21z"></path></svg>
+<span data-i18n="login_apple">Continue with Apple</span>
+</button>
+<div class="c-login_links">
+<a data-i18n="login_more_options" href="#">More login options</a>
+<a data-i18n="login_help" href="#">Get help signing in</a>
+</div>
+</div>
+<!-- Step 2 (Password) -->
+<div class="is-hidden u-scaling-content" id="passwordState">
+<div class="flex items-center gap-2 mb-4 cursor-pointer hover:opacity-70 transition-opacity" id="backToLogin">
+<span class="material-symbols-outlined text-sm">arrow_back</span>
+<span class="text-[0.65rem] font-bold uppercase tracking-wider" data-i18n="login_back">Back</span>
+</div>
+<h2 data-i18n="login_pass_title">Enter Password</h2>
+<div class="text-[0.75rem] opacity-60 mb-6 truncate" id="displayEmail">user@example.com</div>
+<div class="c-input_group">
+<label class="c-input_label" data-i18n="reg_pass_label">Password</label>
+<input class="c-input_field" placeholder="" type="password"/>
+</div>
+<div class="c-btn-blue mt-4" data-i18n="login_btn" id="loginSubmitBtn">Log In</div>
+<div class="c-login_links mt-4">
+<a data-i18n="login_help" href="#">Forgot password?</a>
+</div>
+</div>
+<!-- Step 3 (Access Simulation / Loading) -->
+<div class="is-hidden u-scaling-content text-center" id="accessState">
+<div class="py-8">
+<div class="spinner mb-6"></div>
+<h3 class="text-xl font-bold mb-2" data-i18n="welcome_back">Welcome back!</h3>
+<p class="text-[0.7rem] opacity-70" data-i18n="redirecting">Redirecting to your dashboard...</p>
+</div>
+</div>
+<!-- Registration State -->
+<div class="is-hidden u-scaling-content" id="registrationState">
+<button class="c-close-btn js-login-trigger" title="Close">
+<span class="material-symbols-outlined">close</span>
+</button>
+<div class="w-full" id="regFormContainer">
+<h2 class="mb-1" data-i18n="reg_title">Sign Up</h2>
+<div class="subtitle">
+<span data-i18n="reg_already_user">Already have an account?</span>
+<a class="js-login-trigger" data-i18n="reg_login_link">Log in</a>
+</div>
+<div class="c-input_group">
+<label class="c-input_label" data-i18n="reg_name_label">Full Name</label>
+<input class="c-input_field" placeholder="" type="text"/>
+</div>
+<div class="c-input_group">
+<label class="c-input_label" data-i18n="reg_email_label">Email address</label>
+<input class="c-input_field" placeholder="" type="email"/>
+</div>
+<div class="c-input_group">
+<label class="c-input_label" data-i18n="reg_pass_label">Password</label>
+<input class="c-input_field" placeholder="" type="password"/>
+</div>
+<div class="c-input_group">
+<label class="c-input_label" data-i18n="reg_confirm_label">Confirm Password</label>
+<input class="c-input_field" placeholder="" type="password"/>
+</div>
+<div class="c-btn-blue" data-i18n="reg_submit" id="regSubmitBtn">Sign Up</div>
+<div class="c-login_links"><a class="js-login-trigger" data-i18n="reg_back">Back to login</a></div>
+</div>
+<div class="is-hidden" id="regSuccessState">
+<div class="text-center py-6">
+<span class="material-symbols-outlined text-green-400 mb-4" style="font-size: 3rem;">check_circle</span>
+<h3 class="text-xl font-bold mb-2" data-i18n="reg_success_title">Account created!</h3>
+<p class="text-xs opacity-80 mb-6" data-i18n="reg_success_msg">Check your email to verify your account and get started.</p>
+<div class="c-btn-blue js-login-trigger" data-i18n="reg_back">Back to login</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</header>
+<script>
+    const translations = {
+        en: {
+            btn_demo: "DEMO",
+            hero_sub: "AECO Collaboration Software",
+            hero_title: "Your project.<br/>Made Right.",
+            hero_desc: "The leading 2D/3D platform to deliver complex projects with greater confidence and control.",
+            login_title: "Log in",
+            login_new_user: "Are you a new user?",
+            login_create_account: "Create an account",
+            login_email_label: "Email address",
+            login_continue: "Continue",
+            login_or: "or",
+            login_google: "Continue with Google",
+            login_apple: "Continue with Apple",
+            login_more_options: "More login options",
+            login_help: "Get help signing in",
+            login_back: "Back",
+            login_pass_title: "Enter Password",
+            login_btn: "Log In",
+            welcome_back: "Welcome back!",
+            redirecting: "Redirecting to your dashboard...",
+            reg_title: "Sign Up",
+            reg_already_user: "Already have an account?",
+            reg_login_link: "Log in",
+            reg_name_label: "Full Name",
+            reg_email_label: "Email address",
+            reg_pass_label: "Password",
+            reg_confirm_label: "Confirm Password",
+            reg_submit: "Sign Up",
+            reg_back: "Back to login",
+            reg_success_title: "Account created!",
+            reg_success_msg: "Check your email to verify your account and get started."
+        },
+        es: {
+            btn_demo: "DEMO",
+            hero_sub: "Software de Colaboración AECO",
+            hero_title: "Su proyecto.<br/>Bien hecho.",
+            hero_desc: "Plataforma 2D/3D para entregar proyectos complejos con mayor confianza y control.",
+            login_title: "Inicio de sesión",
+            login_new_user: "¿Eres un nuevo usuario?",
+            login_create_account: "Crear una cuenta",
+            login_email_label: "Correo electrónico",
+            login_continue: "Continuar",
+            login_or: "o",
+            login_google: "Continuar con Google",
+            login_apple: "Continuar con Apple",
+            login_more_options: "Más opciones",
+            login_help: "Ayuda para iniciar sesión",
+            login_back: "Volver",
+            login_pass_title: "Ingresar Contraseña",
+            login_btn: "Iniciar Sesión",
+            welcome_back: "¡Bienvenido de nuevo!",
+            redirecting: "Redirigiendo a su panel...",
+            reg_title: "Registrarse",
+            reg_already_user: "¿Ya tienes una cuenta?",
+            reg_login_link: "Iniciar sesión",
+            reg_name_label: "Nombre completo",
+            reg_email_label: "Correo electrónico",
+            reg_pass_label: "Contraseña",
+            reg_confirm_label: "Confirmar contraseña",
+            reg_submit: "Registrarse",
+            reg_back: "Volver al inicio",
+            reg_success_title: "¡Cuenta creada!",
+            reg_success_msg: "Revisa tu correo electrónico para verificar tu cuenta y comenzar."
+        },
+        zh: {
+            btn_demo: "演示",
+            hero_sub: "AECO 协作软件",
+            hero_title: "您的项目，<br/>成就非凡。",
+            hero_desc: "领先的 2D/3D 平台，助力更自信、更高效地交付复杂项目。",
+            login_title: "登录",
+            login_new_user: "是新用户吗？",
+            login_create_account: "创建账户",
+            login_email_label: "电子邮件地址",
+            login_continue: "继续",
+            login_or: "或",
+            login_google: "通过 Google 继续",
+            login_apple: "通过 Apple 继续",
+            login_more_options: "更多登录选项",
+            login_help: "获取登录帮助",
+            login_back: "返回",
+            login_pass_title: "输入密码",
+            login_btn: "登录",
+            welcome_back: "欢迎回来！",
+            redirecting: "正在重定向到您的仪表板...",
+            reg_title: "注册",
+            reg_already_user: "已有账户？",
+            reg_login_link: "登录",
+            reg_name_label: "全名",
+            reg_email_label: "电子邮件地址",
+            reg_pass_label: "密码",
+            reg_confirm_label: "确认密码",
+            reg_submit: "注册",
+            reg_back: "返回登录",
+            reg_success_title: "账户已创建！",
+            reg_success_msg: "请检查您的电子邮件以验证您的账户。"
+        }
+    };
+
+    const langTrigger = document.getElementById('langTrigger');
+    const langMenu = document.getElementById('langMenu');
+    const currentLangDisplay = document.getElementById('currentLang');
+    const langOptions = document.querySelectorAll('.c-lang-option');
+
+    const dynamicCard = document.getElementById('dynamicCard');
+    const heroState = document.getElementById('heroState');
+    const formState = document.getElementById('formState');
+    const successState = document.getElementById('successState');
+    const loginCard = document.getElementById('loginCard');
+    
+    // Login States
+    const loginState = document.getElementById('loginState');
+    const passwordState = document.getElementById('passwordState');
+    const accessState = document.getElementById('accessState');
+    const registrationState = document.getElementById('registrationState');
+    
+    const loginEmailInput = document.getElementById('loginEmailInput');
+    const displayEmail = document.getElementById('displayEmail');
+
+    function showState(state) {
+        heroState.classList.add('is-hidden');
+        formState.classList.add('is-hidden');
+        successState.classList.add('is-hidden');
+        
+        if(state === 'hero') {
+            heroState.classList.remove('is-hidden');
+            dynamicCard.classList.remove('c-card--expanded');
+            loginCard.style.opacity = '1';
+            loginCard.style.pointerEvents = 'auto';
+        } else if(state === 'form') {
+            formState.classList.remove('is-hidden');
+            dynamicCard.classList.add('c-card--expanded');
+            loginCard.style.opacity = '0'; 
+            loginCard.style.pointerEvents = 'none';
+        } else if(state === 'success') {
+            successState.classList.remove('is-hidden');
+            dynamicCard.classList.remove('c-card--expanded');
+            loginCard.style.opacity = '1';
+            loginCard.style.pointerEvents = 'auto';
+        }
+        adjustFontSize();
+    }
+
+    function toggleRightCard(state) {
+        // Reset all
+        loginState.classList.add('is-hidden');
+        passwordState.classList.add('is-hidden');
+        accessState.classList.add('is-hidden');
+        registrationState.classList.add('is-hidden');
+
+        if(state === 'registration') {
+            registrationState.classList.remove('is-hidden');
+            document.getElementById('regFormContainer').classList.remove('is-hidden');
+            document.getElementById('regSuccessState').classList.add('is-hidden');
+        } else if(state === 'password') {
+            displayEmail.textContent = loginEmailInput.value || 'user@example.com';
+            passwordState.classList.remove('is-hidden');
+        } else if(state === 'access') {
+            accessState.classList.remove('is-hidden');
+            // Mock redirect reset
+            setTimeout(() => {
+                toggleRightCard('login');
+            }, 3000);
+        } else {
+            loginState.classList.remove('is-hidden');
+        }
+    }
+
+    // Interaction triggers
+    document.querySelectorAll('.js-demo-trigger').forEach(btn => {
+        btn.onclick = () => showState('form');
+    });
+
+    document.querySelectorAll('.js-home-trigger').forEach(btn => {
+        btn.onclick = () => showState('hero');
+    });
+
+    document.querySelectorAll('.js-reg-trigger').forEach(btn => {
+        btn.onclick = () => toggleRightCard('registration');
+    });
+
+    document.querySelectorAll('.js-login-trigger').forEach(btn => {
+        btn.onclick = () => toggleRightCard('login');
+    });
+
+    // Login Flow
+    document.getElementById('loginContinueBtn').onclick = () => toggleRightCard('password');
+    document.getElementById('backToLogin').onclick = () => toggleRightCard('login');
+    document.getElementById('loginSubmitBtn').onclick = () => toggleRightCard('access');
+
+    document.getElementById('demoForm').onsubmit = (e) => {
+        e.preventDefault();
+        showState('success');
+    };
+
+    function adjustFontSize() {
+        const headline = document.getElementById('heroHeadline');
+        const desc = document.getElementById('heroDesc');
+        const lang = document.documentElement.lang;
+        const screenWidth = window.innerWidth;
+
+        if (!headline || !desc || headline.offsetParent === null) return;
+
+        headline.style.fontSize = '';
+        desc.style.fontSize = '';
+
+        let baseHSize = screenWidth > 1100 ? 2.5 : 2.0;
+        let baseDSize = 0.8;
+
+        if (lang === 'zh') {
+            headline.style.fontSize = (baseHSize * 1.05) + 'rem';
+            desc.style.fontSize = '0.85rem';
+        } else if (lang === 'es') {
+            headline.style.fontSize = (baseHSize * 0.85) + 'rem';
+        } else {
+            headline.style.fontSize = baseHSize + 'rem';
+            desc.style.fontSize = baseDSize + 'rem';
+        }
+    }
+
+    function updateLanguage(lang) {
+        const elements = document.querySelectorAll('[data-i18n]');
+        elements.forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (translations[lang] && translations[lang][key]) {
+                el.style.opacity = '0';
+                setTimeout(() => {
+                    el.innerHTML = translations[lang][key];
+                    el.style.opacity = '1';
+                    adjustFontSize();
+                }, 200);
+            }
+        });
+        document.documentElement.lang = lang;
+        currentLangDisplay.textContent = lang.toUpperCase();
+
+        langOptions.forEach(opt => {
+            if (opt.dataset.lang === lang) opt.classList.add('is-selected');
+            else opt.classList.remove('is-selected');
+        });
+    }
+
+    langTrigger.onclick = (e) => {
+        e.stopPropagation();
+        langMenu.classList.toggle('is-active');
+    };
+
+    langOptions.forEach(option => {
+        option.onclick = () => {
+            const lang = option.dataset.lang;
+            updateLanguage(lang);
+            langMenu.classList.remove('is-active');
+        };
+    });
+
+    document.onclick = () => langMenu.classList.remove('is-active');
+
+    window.addEventListener('load', adjustFontSize);
+    window.addEventListener('resize', adjustFontSize);
+
+    // Registration Flow script
+    (function() {
+        const regSubmitBtn = document.getElementById('regSubmitBtn');
+        const regFormContainer = document.getElementById('regFormContainer');
+        const regSuccessState = document.getElementById('regSuccessState');
+
+        if (regSubmitBtn) {
+          regSubmitBtn.addEventListener('click', () => {
+            regFormContainer.classList.add('is-hidden');
+            regSuccessState.classList.remove('is-hidden');
+          });
+        }
+    })();
+</script>
+</body></html>
