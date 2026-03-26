@@ -209,12 +209,12 @@
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 0.4rem;
     padding: 0.5rem 0.75rem;
-    color: white;
+    color: #1C1C1C;
     outline: none;
     font-size: 0.8rem;
     transition: border-color 0.2s, background 0.2s;
 }
-.c-input_field::placeholder { color: rgba(255,255,255,0.5); }
+.c-input_field::placeholder { color: #1C1C1C; opacity: 0.6; }
 .c-input_field:focus { border-color: #007bff; background: rgba(255, 255, 255, 0.08); }
 
 /* ── Blue Button ──────────────────────────────────────────────────── */
