@@ -122,6 +122,12 @@ def ensure_file_nodes_table():
                 ON file_nodes(model_urn, name, node_type)
                 WHERE is_deleted = FALSE;
             """)
+            # ── 2.1 UNIQUE constraint: evitar duplicados en misma ubicación ──
+            cursor.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_node_in_parent
+                ON file_nodes(model_urn, parent_id, name, node_type)
+                WHERE is_deleted = FALSE;
+            """)
 
             # ── 3. Activity Log — Auditoria al estilo ACC ──────────────────
             # Cada accion (subida, borrado, creacion) queda registrada

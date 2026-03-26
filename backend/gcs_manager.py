@@ -88,6 +88,25 @@ def generate_upload_url(blob_name, content_type=None, expiration_minutes=60):
         print(f"Error generando signed upload url: {str(e)}")
         return None
 
+
+# Mapa de extensiones → Content-Type para signed URLs
+_CONTENT_TYPE_MAP = {
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.mp4': 'video/mp4',
+    '.mov': 'video/quicktime',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.webp': 'image/webp',
+    '.gif': 'image/gif',
+}
+
 def generate_signed_url(blob_name, expiration_minutes=60*24):
     """Genera una URL temporal segura para ver la imagen/documento inline."""
     try:
@@ -96,16 +115,16 @@ def generate_signed_url(blob_name, expiration_minutes=60*24):
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(blob_name)
         
-        # Determinar si es PDF para forzar que el navegador lo muestre y no lo descargue
-        is_pdf = blob_name.lower().endswith('.pdf')
+        # Determinar Content-Type correcto basado en la extensión
+        ext = os.path.splitext(blob_name.lower())[1]
+        content_type = _CONTENT_TYPE_MAP.get(ext)
         
         url = blob.generate_signed_url(
             version="v4",
             expiration=datetime.timedelta(minutes=expiration_minutes),
             method="GET",
             response_disposition="inline",
-            # response_type is the correct parameter for v4 signed URLs Content-Type
-            response_type="application/pdf" if is_pdf else None
+            response_type=content_type
         )
         return url
     except Exception as e:

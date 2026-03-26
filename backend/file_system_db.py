@@ -48,9 +48,9 @@ def resolve_path_to_node_id(path, model_urn, created_by=None, auto_create=True):
                     RETURNING id
                 """, (model_urn, parent_id, part, created_by))
                 parent_id = cursor.fetchone()[0]
-                conn.commit()
             else:
                 return None
+        conn.commit()
     return parent_id
 
 
@@ -121,7 +121,7 @@ def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mim
         
         # 1. Buscar si el Ítem ya existe en la ubicación
         cursor.execute(
-            "SELECT id, version_number FROM file_nodes WHERE model_urn = %s AND parent_id = %s AND name = %s AND node_type = 'FILE' AND is_deleted = FALSE",
+            "SELECT id, version_number FROM file_nodes WHERE model_urn = %s AND parent_id IS NOT DISTINCT FROM %s AND name = %s AND node_type = 'FILE' AND is_deleted = FALSE",
             (model_urn, parent_id, filename)
         )
         existing = cursor.fetchone()
@@ -560,6 +560,4 @@ def update_node_description(model_urn, node_id, description):
             (description, node_id, model_urn)
         )
         conn.commit()
-    return True
-    
     return True
