@@ -459,20 +459,22 @@ def permanent_delete_node_internal(model_urn, node_id):
         
         to_delete = cursor.fetchall()
         
-        # 2. Borrar de BD inmediato (para que frontend reciba OK instantaneo)
+        # 2. Borrar de GCS PRIMERO (evitar blobs huérfanos)
+        gcs_errors = []
+        for rid, gcs_urn in to_delete:
+            if gcs_urn:
+                try:
+                    delete_gcs_blob(gcs_urn)
+                except Exception as e:
+                    gcs_errors.append((gcs_urn, str(e)))
+                    print(f"[WARNING] GCS delete failed for {gcs_urn}: {e}")
+
+        # 3. Borrar de BD (ON DELETE CASCADE eliminará hijos automáticamente)
         cursor.execute("DELETE FROM file_nodes WHERE id = %s", (node_id,))
         conn.commit()
 
-        # 3. Borrar de GCS en background (fire and forget)
-        def bg_delete(items):
-            for rid, gcs_urn in items:
-                if gcs_urn:
-                    try:
-                        delete_gcs_blob(gcs_urn)
-                    except Exception as e:
-                        print(f"Error background delete {gcs_urn}: {e}")
-
-        gcs_executor.submit(bg_delete, to_delete)
+        if gcs_errors:
+            print(f"[WARNING] {len(gcs_errors)} blobs could not be deleted from GCS. BD records already removed.")
         
         return True
 

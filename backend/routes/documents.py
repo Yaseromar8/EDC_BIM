@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+import requests
 from flask import Blueprint, request, jsonify, redirect, Response
 from werkzeug.utils import secure_filename
 from gcs_manager import generate_signed_url, upload_file_to_gcs
@@ -150,8 +151,6 @@ def proxy_document():
         content, content_type = get_blob_data(gcs_urn)
         if content:
             return Response(content, mimetype=content_type or 'image/jpeg')
-            
-    import requests
 
     # Para PDFs o archivos grandes, proxy streaming para esquivar bloqueos de CORS del navegador
     signed_url = generate_signed_url(gcs_urn)

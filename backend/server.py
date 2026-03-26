@@ -29,7 +29,14 @@ from aps import get_internal_token, get_api_data
 # Flask app setup
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB (Failsafe para archivos CAD/Civil pesados)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": [
+    "http://localhost:5173",   # frontend-docs (dev)
+    "http://localhost:5174",   # frontend-react (dev)
+    "http://localhost:3000",   # backend self
+    # Agregar aquí los dominios de producción:
+    # "https://tu-ecd.netlify.app",
+    # "https://tu-visor.netlify.app",
+]}})
 
 # Register Blueprints
 
