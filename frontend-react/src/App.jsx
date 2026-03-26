@@ -1449,7 +1449,8 @@ function App() {
 
     const fetchDocPins = async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/pins?project=${urn}`);
+        const projectUrn = selectedProject?.id || 'global';
+        const res = await fetch(`${BACKEND_URL}/api/pins?project=${projectUrn}`);
         if(res.ok) {
             const data = await res.json();
             const loadedDocs = data.filter(p => p.type === 'doc').map(p => ({
