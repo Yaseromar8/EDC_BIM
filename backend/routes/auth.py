@@ -247,6 +247,41 @@ def register():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@auth_bp.route('/api/auth/change-password', methods=['POST'])
+def change_password():
+    """Permite al usuario cambiar su contraseña (requiere contraseña actual)"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        current_password = data.get('current_password')
+        new_password = data.get('new_password')
+
+        if not user_id or not current_password or not new_password:
+            return jsonify({'error': 'Faltan campos requeridos'}), 400
+
+        if len(new_password) < 6:
+            return jsonify({'error': 'La nueva contraseña debe tener al menos 6 caracteres'}), 400
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT password_hash FROM users WHERE id = %s', (user_id,))
+            user = cursor.fetchone()
+
+            if not user:
+                return jsonify({'error': 'Usuario no encontrado'}), 404
+
+            if not check_password_hash(user[0], current_password):
+                return jsonify({'error': 'Contraseña actual incorrecta'}), 401
+
+            new_hash = generate_password_hash(new_password)
+            cursor.execute('UPDATE users SET password_hash = %s WHERE id = %s', (new_hash, user_id))
+            conn.commit()
+
+            return jsonify({'success': True, 'message': 'Contraseña actualizada correctamente'}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @auth_bp.route('/api/users', methods=['GET', 'POST'])
 def manage_users():
     """Lista todos los usuarios o crea uno nuevo por parte del admin"""
