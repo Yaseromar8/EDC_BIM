@@ -48,6 +48,39 @@ def view_document():
     return jsonify({"success": False, "error": "Failed to generate access URL"}), 500
 
 
+@documents_bp.route('/api/docs/signed-url', methods=['GET'])
+def get_signed_url_json():
+    """Retorna la URL firmada como JSON (útil para visores externos como Office)."""
+    path = request.args.get('path', '')
+    urn = request.args.get('urn', '')
+    node_id = request.args.get('id', '')
+    model_urn = request.args.get('model_urn', 'global')
+    
+    gcs_urn = None
+    if urn:
+        gcs_urn = urn
+    elif node_id:
+        try:
+            from db import get_db_connection
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT gcs_urn FROM file_nodes WHERE id = %s AND is_deleted = FALSE", (node_id,))
+                row = cursor.fetchone()
+                if row: gcs_urn = row[0]
+        except Exception: pass
+    elif path:
+        from file_system_db import get_file_gcs_urn
+        gcs_urn = get_file_gcs_urn(model_urn, path)
+    
+    if not gcs_urn:
+        return jsonify({"success": False, "error": "File not found"}), 404
+
+    url = generate_signed_url(gcs_urn)
+    if url:
+        return jsonify({"success": True, "url": url}), 200
+    return jsonify({"success": False, "error": "Failed to generate signed URL"}), 500
+
+
 @documents_bp.route('/api/documents/<int:node_id>', methods=['GET'])
 def get_document_by_id(node_id):
     """Obtiene metadata y URL de un documento por su ID de base de datos."""
@@ -718,7 +751,7 @@ def batch_update():
                 cursor.execute("""
                     UPDATE file_nodes 
                     SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ANY(%s) AND model_urn = %s
+                    WHERE id = ANY(%s::uuid[]) AND model_urn = %s
                 """, (items, model_urn))
                 
                 log_activity(model_urn, 'batch_delete', 'multiple', 

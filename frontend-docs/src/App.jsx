@@ -1280,10 +1280,14 @@ function FilesPage({ project, user, onBack }) {
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [activeFile, setActiveFile] = useState(null);
   const [showVersions, setShowVersions] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTask, setDeleteTask] = useState({ ids: [], count: 0 });
   const [viewedVersionInfo, setViewedVersionInfo] = useState(null);
   const [versionHistory, setVersionHistory] = useState([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ total: 0, current: 0 });
+  const [officeUrl, setOfficeUrl] = useState('');
+  const [loadingOffice, setLoadingOffice] = useState(false);
 
   const [showSopToast, setShowSopToast] = useState(false);
   const [sopHasReappeared, setSopHasReappeared] = useState(false);
@@ -1296,6 +1300,34 @@ function FilesPage({ project, user, onBack }) {
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [moveState, setMoveState] = useState({ step: 0, items: [], itemIds: [], destPath: '', destId: null });
   const [projectRootId, setProjectRootId] = useState(null);
+
+  useEffect(() => {
+    if (activeFile) {
+      const lowerName = activeFile.name.toLowerCase();
+      if (['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext))) {
+        setLoadingOffice(true);
+        const urn = viewedVersionInfo?.gcs_urn || activeFile.gcs_urn;
+        const url = urn 
+          ? `${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`
+          : `${API}/api/docs/signed-url?path=${encodeURIComponent(activeFile.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}`;
+
+        fetch(url)
+          .then(r => r.json())
+          .then(data => {
+            if (data.success) setOfficeUrl(data.url);
+            else console.error("Error fetching signed URL:", data.error);
+          })
+          .catch(err => console.error("Fetch Office URL error:", err))
+          .finally(() => setLoadingOffice(false));
+      } else {
+        setOfficeUrl('');
+        setLoadingOffice(false);
+      }
+    } else {
+      setOfficeUrl('');
+      setLoadingOffice(false);
+    }
+  }, [activeFile, viewedVersionInfo, projectPrefix]);
 
   useEffect(() => {
     const fetchRootId = async () => {
@@ -1435,6 +1467,21 @@ function FilesPage({ project, user, onBack }) {
     setTableShowVersions(true);
     setVersionAnchor({ x: e.clientX - 350, y: Math.min(e.clientY, window.innerHeight - 400) });
     fetchVersionHistory(f);
+  };
+
+  const switchMode = (trashMode) => {
+    setIsTrashMode(trashMode);
+    setSelected(new Set());
+    setSelectedDeletedIds([]); // También limpiar IDs de papelera
+  };
+
+  const handleFolderClick = (path) => {
+    switchMode(false); // Siempre volver a archivos normales al navegar por el árbol
+    setCurrentPath(path);
+    setSearchQuery('');
+    setTableShowVersions(false);
+    setSelected(new Set());
+    triggerRefresh(path);
   };
 
   useEffect(() => {
@@ -1877,6 +1924,66 @@ function FilesPage({ project, user, onBack }) {
     triggerRefresh();
   };
 
+  const handleExecuteBatchDelete = async () => {
+    if (!isAdmin || selected.size === 0) return;
+    
+    // Obtener IDs de los elementos seleccionados
+    const itemsToDelete = Array.from(selected);
+    const itemIds = itemsToDelete.map(fn => {
+      const found = [...folders, ...files].find(i => i.fullName === fn);
+      return found?.id;
+    }).filter(id => id !== undefined);
+
+    if (itemIds.length === 0) return;
+
+    setDeleteTask({ ids: itemIds, count: itemIds.length });
+    setShowDeleteModal(true);
+  };
+
+  const confirmBatchDelete = async () => {
+    const itemIds = deleteTask.ids;
+    if (itemIds.length === 0) return;
+
+    setShowDeleteModal(false);
+    setProcessingIds(prev => {
+      const n = { ...prev };
+      itemIds.forEach(id => n[id] = true);
+      return n;
+    });
+
+    try {
+      const res = await fetch(`${API}/api/docs/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: itemIds,
+          action: 'DELETE',
+          model_urn: projectPrefix,
+          user: user.name
+        })
+      });
+
+      if (res.ok) {
+        setSelected(new Set());
+        setRefreshSignal(s => s + 1);
+        triggerRefresh();
+      } else {
+        const errData = await res.json();
+        alert(errData.error || "Error al suprimir elementos");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error de conexión al suprimir elementos");
+    } finally {
+      setProcessingIds(prev => {
+        const n = { ...prev };
+        itemIds.forEach(id => delete n[id]);
+        return n;
+      });
+      setDeleteTask({ ids: [], count: 0 });
+    }
+  };
+
   const toggle = (name) => {
     setSelected(prev => {
       const s = new Set(prev);
@@ -1919,32 +2026,58 @@ function FilesPage({ project, user, onBack }) {
           <div className="Box__StyledBox-sc-1gnk1ba-0 hhhhUH" style={{ flex: 1, overflowY: 'auto' }}>
             <ul data-testid="SideNavigationList" style={{ listStyle: 'none', padding: '8px 0', margin: 0 }}>
               {[
-                { label: 'Archivos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5,5l2,2H20v12h-16V5H12.5 M13.17,3h-10.34A1.83,1.83,0,0,0,1,4.83v14.34A1.83,1.83,0,0,0,2.83,21h18.34A1.83,1.83,0,0,0,23,19.17V6.83A1.83,1.83,0,0,0,21.17,5H14.83Z"/></svg>, active: true },
+                { label: 'Archivos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5,5l2,2H20v12h-16V5H12.5 M13.17,3h-10.34A1.83,1.83,0,0,0,1,4.83v14.34A1.83,1.83,0,0,0,2.83,21h18.34A1.83,1.83,0,0,0,23,19.17V6.83A1.83,1.83,0,0,0,21.17,5H14.83Z"/></svg>, active: true, onClick: () => switchMode(false) },
                 { label: 'Informes', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg> },
                 { label: 'Miembros', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg> },
                 { label: 'Configuración', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg> }
               ].map((item, idx) => (
                 <li key={idx} style={{ marginBottom: 2 }}>
-                  <a 
-                    href="#" 
+                  <button 
+                    onClick={() => { if (item.onClick) item.onClick(); }}
                     style={{ 
                       display: 'flex', 
                       alignItems: 'center', 
                       gap: 12, 
-                      padding: '10px 16px', 
-                      textDecoration: 'none', 
-                      background: item.active ? '#e6f4fb' : 'transparent', 
-                      color: item.active ? '#0696d7' : '#333', 
-                      borderLeft: `4px solid ${item.active ? '#0696d7' : 'transparent'}`,
-                      fontSize: 13,
-                      fontWeight: item.active ? 600 : 400
+                      width: '100%',
+                      padding: '8px 12px', 
+                      background: item.active && !isTrashMode ? '#e8f0fe' : 'none', 
+                      border: 'none',
+                      color: item.active && !isTrashMode ? '#0696d7' : '#5f6368', 
+                      fontSize: '13px', 
+                      fontWeight: item.active && !isTrashMode ? '500' : '400', 
+                      borderRadius: '0 20px 20px 0',
+                      cursor: 'pointer' 
                     }}
                   >
                     {item.icon}
                     <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
-                  </a>
+                  </button>
                 </li>
               ))}
+              
+              <li style={{ marginBottom: 2 }}>
+                <button 
+                  onClick={() => switchMode(true)} 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 12, 
+                    width: '100%', 
+                    padding: '8px 12px', 
+                    background: isTrashMode ? '#e8f0fe' : 'none', 
+                    border: 'none', 
+                    color: isTrashMode ? '#0696d7' : '#5f6368', 
+                    fontSize: '13px', 
+                    fontWeight: isTrashMode ? '500' : '400', 
+                    cursor: 'pointer', 
+                    borderRadius: '0 20px 20px 0',
+                    transition: 'background 0.2s'
+                  }}
+                >
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M11 15H5a2.25 2.25 0 0 1-2.25-2.25V5.72a.75.75,0,0,1 1.5 0v7.07a.74.74,0,0,0 .75.75h6a.74.74,0,0,0 .75-.75V5.72a.75.75,0,0,1 1.5 0v7.07A2.25 2.25 0 0 1 11 15Zm3-12h-3a2.26 2.26 0 0 0-2.24-2h-1.5A2.26 2.26 0 0 0 5 3H2a.75.75,0,0,0 0 1.5h12A.75.75,0,0,0,14 3Zm-3.75 8V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Zm-3 0V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Z"></path></svg>
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Elementos suprimidos</span>
+                </button>
+              </li>
             </ul>
           </div>
           <div className="sidebar-bottom" style={{ padding: '12px 16px', borderTop: '1px solid #eee' }}>
@@ -1967,7 +2100,7 @@ function FilesPage({ project, user, onBack }) {
                   <div style={{ paddingBottom: 8, fontSize: 13, color: '#999', cursor: 'pointer' }}>Conjuntos</div>
                 </div>
                 <div style={{ display: 'flex', gap: 20, paddingBottom: 8 }}>
-                   <button onClick={() => setIsTrashMode(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer', padding: '4px 8px', borderRadius: 4 }}>
+                   <button onClick={() => switchMode(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer', padding: '4px 8px', borderRadius: 4 }}>
                      <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11 15H5a2.25 2.25 0 0 1-2.25-2.25V5.72a.75.75,0,0,1 1.5 0v7.07a.74.74,0,0,0 .75.75h6a.74.74,0,0,0 .75-.75V5.72a.75.75,0,0,1 1.5 0v7.07A2.25 2.25 0 0 1 11 15Zm3-12h-3a2.26 2.26 0 0 0-2.24-2h-1.5A2.26 2.26 0 0 0 5 3H2a.75.75,0,0,0 0 1.5h12A.75.75,0,0,0,14 3Zm-3.75 8V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Zm-3 0V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Z"></path></svg>
                      Elementos suprimidos
                    </button>
@@ -1980,7 +2113,7 @@ function FilesPage({ project, user, onBack }) {
             )}
             {isTrashMode && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', borderBottom: '1px solid #dcdcdc', paddingBottom: 8 }}>
-                 <button onClick={() => setIsTrashMode(false)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer', padding: '4px 8px', borderRadius: 4 }}>
+                 <button onClick={() => switchMode(false)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer', padding: '4px 8px', borderRadius: 4 }}>
                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
                    Volver a archivos
                  </button>
@@ -2058,6 +2191,19 @@ function FilesPage({ project, user, onBack }) {
                         <path d="M9 14h6"></path>
                       </svg>
                       Desplazar
+                    </button>
+
+                    <button 
+                      onClick={handleExecuteBatchDelete}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#ff4d4d', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M3 6h18"></path>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                      </svg>
+                      Suprimir
                     </button>
 
                   </>
@@ -2591,10 +2737,23 @@ function FilesPage({ project, user, onBack }) {
               
               // 3. OFFICE (Word, Excel, PPT)
               if (['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext))) {
-                // Need a FRESH ABSOLUTE URL for Microsoft Viewer.
-                // NOTE: This only works if 'API' is a publicly accessible URL or if we are in local.
-                // For signed GCS URLs, they ARE public temporarily.
-                const viewerUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(fileUrl)}`;
+                if (loadingOffice) {
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
+                      <div className="spinner-acc" style={{ width: 40, height: 40, border: '3px solid #f3f3f3', borderTop: '3px solid #0696d7', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' }}></div>
+                      <div style={{ fontSize: 14, color: '#666' }}>Cargando visor de Office...</div>
+                    </div>
+                  );
+                }
+                if (!officeUrl) {
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#666' }}>
+                      <div style={{ fontSize: 14 }}>No se pudo cargar la vista previa de Office.</div>
+                      <button onClick={() => window.open(fileUrl, '_blank')} style={{ marginTop: 12, padding: '8px 16px', background: '#0696d7', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Descargar archivo</button>
+                    </div>
+                  );
+                }
+                const viewerUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(officeUrl)}`;
                 return (
                   <iframe src={viewerUrl} title={activeFile.name} style={{ width: '100%', height: '100%', border: 'none' }} />
                 );
@@ -2609,6 +2768,36 @@ function FilesPage({ project, user, onBack }) {
                 />
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {showDeleteModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 11000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }}>
+          <div className="modal-content" style={{ width: 448, background: '#fff', borderRadius: 4, boxShadow: '0 8px 32px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
+            <div className="modal-header" style={{ height: 48, padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #eee' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 500, color: '#1f1f1f' }}>
+                {deleteTask.count === 1 ? '¿Suprimir elemento seleccionado?' : `¿Suprimir ${deleteTask.count} elementos seleccionados?`}
+              </h3>
+              <button onClick={() => setShowDeleteModal(false)} style={{ background: 'none', border: 'none', fontSize: 20, color: '#666', cursor: 'pointer' }}>×</button>
+            </div>
+            <div className="modal-body" style={{ padding: '24px 16px', fontSize: 13, color: '#3c3c3c' }}>
+              Los elementos seleccionados se suprimirán del proyecto.
+            </div>
+            <div className="modal-footer" style={{ padding: '16px', display: 'flex', justifyContent: 'flex-end', gap: 12, background: '#fcfcfc', borderTop: '1px solid #eee' }}>
+              <button 
+                onClick={() => setShowDeleteModal(false)} 
+                style={{ padding: '8px 16px', background: '#fff', border: '1px solid #dcdcdc', borderRadius: 4, fontSize: 13, fontWeight: 500, color: '#3c3c3c', cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={confirmBatchDelete}
+                style={{ padding: '8px 24px', background: '#d92c2c', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Suprimir
+              </button>
+            </div>
           </div>
         </div>
       )}
