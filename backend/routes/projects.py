@@ -93,6 +93,12 @@ def ensure_projects_schema():
                     UPDATE projects SET hub_id = %s WHERE hub_id IS NULL
                 """, (default_hub_id,))
 
+            # --- AUTO-RELLENAR model_urn para proyectos que no lo tengan ---
+            # Fuente de verdad: projects.model_urn conecta con file_nodes.model_urn
+            cursor.execute("""
+                UPDATE projects SET model_urn = id WHERE model_urn IS NULL
+            """)
+
             conn.commit()
             print("[projects] Schema Hub+Projects ACC-style verificado/migrado.")
     except Exception as e:
@@ -252,7 +258,7 @@ def create_hub_project(hub_id):
             """, (
                 proj_id, hub_id, data['name'],
                 data.get('description', ''),
-                data.get('model_urn'),
+                data.get('model_urn', proj_id),  # Fuente de verdad: model_urn = proj_id por defecto
                 data.get('thumbnail_url'),
                 data.get('status', 'active'),
                 data.get('project_type', 'Infraestructura'),
@@ -280,7 +286,8 @@ def create_hub_project(hub_id):
             except Exception as fe:
                 print(f"[projects] Warning: no se crearon carpetas raiz: {fe}")
 
-        return jsonify({"id": proj_id, "hub_id": hub_id, "name": data['name']}), 201
+        # Retornar model_urn para que los frontends lo usen como fuente de verdad
+        return jsonify({"id": proj_id, "hub_id": hub_id, "name": data['name'], "model_urn": data.get('model_urn', proj_id)}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
