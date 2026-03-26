@@ -3,6 +3,7 @@ import { FixedSizeList as List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { Capacitor } from '@capacitor/core';
 import MatrixTable from './MatrixTable';
+import LoginScreen from './LoginScreen';
 
 const API = Capacitor.isNativePlatform()
   ? 'https://visor-ecd-backend.onrender.com'
@@ -42,27 +43,27 @@ function getInitials(name) {
 // ─── USER HOOK (localStorage & sessionStorage) ───
 function useUser() {
   const [user, setUser] = useState(() => {
-    const savedLocal = localStorage.getItem('docs_user');
+    const savedLocal = localStorage.getItem('visor_user');
     if (savedLocal) return JSON.parse(savedLocal);
-    const savedSession = sessionStorage.getItem('docs_user');
+    const savedSession = sessionStorage.getItem('visor_user');
     if (savedSession) return JSON.parse(savedSession);
     return null;
   });
 
-  const saveUser = (data, remember = false) => {
+  const saveUser = (data, remember = true) => {
     if (remember) {
-      localStorage.setItem('docs_user', JSON.stringify(data));
-      sessionStorage.removeItem('docs_user');
+      localStorage.setItem('visor_user', JSON.stringify(data));
+      sessionStorage.removeItem('visor_user');
     } else {
-      sessionStorage.setItem('docs_user', JSON.stringify(data));
-      localStorage.removeItem('docs_user');
+      sessionStorage.setItem('visor_user', JSON.stringify(data));
+      localStorage.removeItem('visor_user');
     }
     setUser(data);
   };
 
   const logout = () => {
-    localStorage.removeItem('docs_user');
-    sessionStorage.removeItem('docs_user');
+    localStorage.removeItem('visor_user');
+    sessionStorage.removeItem('visor_user');
     setUser(null);
   };
 
@@ -70,186 +71,8 @@ function useUser() {
 }
 
 // ─────────────────────────────────────
-// 1. LOGIN SCREEN (SCL Dark Style)
+// 1. LOGIN SCREEN → Imported from Stitch (LoginScreen.jsx)
 // ─────────────────────────────────────
-function LoginScreen({ onLogin }) {
-  const [step, setStep] = useState(1); // 1: Login, 2: Create Account
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [companyId, setCompanyId] = useState('');
-  const [jobTitleId, setJobTitleId] = useState('');
-  const [terms, setTerms] = useState(false);
-  const [remember, setRemember] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const [companies, setCompanies] = useState([]);
-  const [jobTitles, setJobTitles] = useState([]);
-
-  useEffect(() => {
-    if (step === 2) {
-      fetch(`${API}/api/companies`).then(r => r.json()).then(setCompanies).catch(console.error);
-      fetch(`${API}/api/job_titles`).then(r => r.json()).then(setJobTitles).catch(console.error);
-    }
-  }, [step]);
-
-  const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      setError('Introduce correo y contraseña.'); return;
-    }
-
-    setLoading(true); setError('');
-    try {
-      const res = await fetch(`${API}/api/auth/login`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        onLogin(data, remember);
-      } else {
-        setError(data.error || 'Credenciales inválidas');
-      }
-    } catch (e) { setError('Error de red al conectar con el servidor.'); }
-    setLoading(false);
-  };
-
-  const handleRegister = async () => {
-    if (!name.trim() || !email.trim() || !password.trim()) {
-      setError('Por favor, completa todos los campos.'); return;
-    }
-    if (!companyId || !jobTitleId) {
-      setError('Por favor, selecciona Empresa y Cargo.'); return;
-    }
-    if (!terms) {
-      setError('Debes aceptar los términos para continuar.'); return;
-    }
-
-    setLoading(true); setError('');
-    try {
-      const res = await fetch(`${API}/api/auth/register`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), password, company_id: companyId, job_title_id: jobTitleId })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        onLogin(data, true);
-      } else {
-        setError(data.error || 'Error al crear cuenta');
-      }
-    } catch (e) { setError('Error de red al conectar con el servidor.'); }
-    setLoading(false);
-  };
-
-  const LogoSCL = () => (
-    <div className="adsk-logo" style={{ letterSpacing: '2px', fontSize: '20px' }}>SCL</div>
-  );
-
-  return (
-    <div className="adsk-login-screen">
-      <div className="adsk-card">
-        <LogoSCL />
-
-        {/* STEP 1: LOGIN */}
-        {step === 1 && (
-          <div>
-            <h2>Iniciar sesión</h2>
-            {error && <div style={{ color: '#d9534f', fontSize: 13, marginBottom: 16 }}>{error}</div>}
-
-            <div className="adsk-input-group">
-              <label>Correo electrónico</label>
-              <input autoFocus type="email" className="adsk-input" value={email}
-                onChange={e => setEmail(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleLogin()} />
-            </div>
-
-            <div className="adsk-input-group">
-              <label>Contraseña</label>
-              <input type="password" className="adsk-input" value={password}
-                onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleLogin()} />
-            </div>
-
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#555', marginBottom: 24, cursor: 'pointer' }}>
-              <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />
-              Mantener sesión iniciada
-            </label>
-
-            <button className="adsk-btn" onClick={handleLogin} disabled={loading}>
-              {loading ? 'Iniciando...' : 'Siguiente'}
-            </button>
-            <div className="adsk-link" style={{ marginTop: 24 }}>
-              ¿Es la primera vez que utiliza SCL? <a onClick={() => { setError(''); setPassword(''); setStep(2); }}>Crear una cuenta</a>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 2: CREATE */}
-        {step === 2 && (
-          <div>
-            <h2>Crear cuenta</h2>
-            {error && <div style={{ color: '#d9534f', fontSize: 13, marginBottom: 16 }}>{error}</div>}
-
-            <div className="adsk-input-group" style={{ marginBottom: 12 }}>
-              <label>Nombre y Apellidos</label>
-              <input autoFocus type="text" className="adsk-input" value={name}
-                onChange={e => setName(e.target.value)} />
-            </div>
-
-            <div className="adsk-input-group" style={{ marginBottom: 16 }}>
-              <label>Correo electrónico</label>
-              <input type="email" className="adsk-input" value={email}
-                onChange={e => setEmail(e.target.value)} />
-            </div>
-
-            <div className="adsk-input-group" style={{ marginBottom: 12 }}>
-              <label>Empresa</label>
-              <select className="adsk-input" style={{ width: '100%' }} value={companyId} onChange={e => setCompanyId(e.target.value)}>
-                <option value="">Seleccione una empresa</option>
-                {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-
-            <div className="adsk-input-group" style={{ marginBottom: 12 }}>
-              <label>Cargo</label>
-              <select className="adsk-input" style={{ width: '100%' }} value={jobTitleId} onChange={e => setJobTitleId(e.target.value)}>
-                <option value="">Seleccione un cargo</option>
-                {jobTitles.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
-              </select>
-            </div>
-
-            <div className="adsk-input-group" style={{ marginBottom: 16 }}>
-              <label>Contraseña</label>
-              <input type="password" className="adsk-input" value={password}
-                onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleRegister()} />
-            </div>
-
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 11, color: '#555', marginBottom: 24, cursor: 'pointer' }}>
-              <input type="checkbox" checked={terms} onChange={e => setTerms(e.target.checked)} style={{ marginTop: 2 }} />
-              Acepto los <span style={{ textDecoration: 'underline' }}>Términos de uso de SCL</span> y la <span style={{ textDecoration: 'underline' }}>Declaración de privacidad</span>.
-            </label>
-
-            <button className="adsk-btn" onClick={handleRegister} disabled={loading}>
-              {loading ? 'Creando...' : 'Crear Cuenta'}
-            </button>
-
-            <div className="adsk-link" style={{ marginTop: 24 }}>
-              ¿Ya dispone de una cuenta? <a onClick={() => { setError(''); setPassword(''); setStep(1); }}>Iniciar sesión</a>
-            </div>
-          </div>
-        )}
-
-      </div>
-
-      <div className="adsk-footer-links">
-        ¿Problemas para iniciar sesión?
-        <a>Obtenga ayuda</a>
-      </div>
-    </div>
-  );
-}
 
 // ─────────────────────────────────────
 // 2. ADMIN: USERS TAB

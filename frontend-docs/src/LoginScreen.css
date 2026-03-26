@@ -1,0 +1,415 @@
+/* ═══════════════════════════════════════════════════════════════════
+   LoginScreen.css — Stitch Design (Glassmorphism + Video Hero)
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+    --cubic-default: cubic-bezier(.23, 1, .32, 1);
+    --duration-default: 0.735s;
+    --color--red-accent: #E40001;
+    --color--primary: #E40001;
+    --color--dark: #1E2E2E;
+    --color--focus: #009999;
+}
+
+/* ── Base Reset ───────────────────────────────────────────────────── */
+.stitch-login {
+    font-family: "Inter", sans-serif;
+    background-color: #000;
+    color: var(--color--dark);
+    overflow-x: hidden;
+    height: 100vh;
+    width: 100vw;
+    position: relative;
+}
+
+.stitch-login a { text-decoration: none; color: inherit; }
+.stitch-login img, .stitch-login video { object-fit: cover; }
+
+/* ── Navigation Bar ───────────────────────────────────────────────── */
+.c-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 1000;
+    padding: 1.5rem 3.5rem;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    color: white;
+    transition: background 0.3s ease;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 100%);
+}
+
+/* ── Language Dropdown ────────────────────────────────────────────── */
+.c-lang-dropdown { position: relative; display: inline-block; }
+
+.c-lang-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 0.5rem 0;
+    color: white;
+    background: none;
+    border: none;
+}
+
+.c-lang-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 1rem;
+    min-width: 160px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    padding: 0.5rem;
+    display: none;
+    flex-direction: column;
+    margin-top: 0.5rem;
+    z-index: 1001;
+    overflow: hidden;
+}
+.c-lang-menu.is-active { display: flex; }
+
+.c-lang-option {
+    padding: 0.6rem 0.8rem;
+    color: #1e2e2e;
+    font-size: 0.8rem;
+    font-weight: 500;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 0.5rem;
+    transition: background 0.2s;
+    cursor: pointer;
+    border: none;
+    background: none;
+    width: 100%;
+}
+.c-lang-option:hover { background: rgba(0,0,0,0.05); }
+.c-lang-option.is-selected { background: rgba(0,0,0,0.08); font-weight: 700; }
+
+/* ── Red CTA Button ───────────────────────────────────────────────── */
+.c-btn {
+    background-color: var(--color--red-accent);
+    color: white;
+    padding: 0.65rem 1.5rem;
+    border-radius: 100vw;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: transform 0.2s ease, background 0.2s ease;
+    white-space: nowrap;
+    cursor: pointer;
+    border: none;
+}
+.c-btn:hover { background-color: #B60000; transform: scale(1.02); }
+
+/* ── Hero Section ─────────────────────────────────────────────────── */
+.c-hero {
+    position: relative;
+    height: 100vh;
+    width: 100%;
+    overflow: hidden;
+    background: #000;
+}
+
+.c-hero_video {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+}
+.c-hero_video video { width: 100%; height: 100%; object-fit: cover; }
+
+.c-hero_overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.15);
+    z-index: 1;
+}
+
+.c-hero_content {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    padding: 4rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+}
+
+/* ── Glassmorphism Cards ──────────────────────────────────────────── */
+.c-card {
+    background: rgba(255, 255, 255, 0.015);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    padding: 2rem;
+    border-radius: 2rem;
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    width: 380px;
+    height: 400px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: flex-start;
+    box-sizing: border-box;
+    overflow: hidden;
+    flex-shrink: 0;
+    transition: all 0.4s var(--cubic-default);
+}
+
+.c-card--expanded {
+    width: 580px;
+    height: auto;
+    max-height: 85vh;
+    overflow-y: auto;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.c-hero_card { justify-content: center; }
+
+/* ── Login Card ───────────────────────────────────────────────────── */
+.c-login_card {
+    padding: 1.75rem 2rem;
+    height: 400px;
+    justify-content: center;
+    position: relative;
+}
+
+.c-login_card h2 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.25rem; }
+.c-login_card .subtitle { font-size: 0.75rem; margin-bottom: 1rem; opacity: 0.8; }
+.c-login_card .subtitle a,
+.c-login_card .subtitle button {
+    color: #0099ff; font-weight: 600; cursor: pointer;
+    background: none; border: none; padding: 0; font-size: inherit;
+}
+
+/* ── Input Fields ─────────────────────────────────────────────────── */
+.c-input_group { width: 100%; margin-bottom: 0.75rem; }
+
+.c-input_label {
+    display: block; font-size: 0.65rem;
+    margin-bottom: 0.3rem; opacity: 0.7;
+}
+
+.c-input_field {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.4rem;
+    padding: 0.5rem 0.75rem;
+    color: #1C1C1C;
+    outline: none;
+    font-size: 0.8rem;
+    transition: border-color 0.2s, background 0.2s;
+}
+.c-input_field::placeholder { color: #1C1C1C; opacity: 0.6; }
+.c-input_field:focus { border-color: #007bff; background: rgba(255, 255, 255, 0.08); }
+
+/* ── Blue Button ──────────────────────────────────────────────────── */
+.c-btn-blue {
+    background-color: #007bff;
+    width: 100%;
+    padding: 0.65rem;
+    border-radius: 100vw;
+    color: white;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+    margin-bottom: 0.75rem;
+    font-size: 0.75rem;
+    transition: transform 0.2s, background 0.2s;
+    border: none;
+}
+.c-btn-blue:hover { background-color: #0069d9; transform: translateY(-1px); }
+.c-btn-blue:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Divider ──────────────────────────────────────────────────────── */
+.c-divider {
+    width: 100%;
+    display: flex; align-items: center; gap: 0.75rem;
+    margin-bottom: 0.75rem; opacity: 0.2;
+}
+.c-divider::before, .c-divider::after {
+    content: ""; flex: 1; height: 1px; background: white;
+}
+.c-divider span { font-size: 0.65rem; }
+
+/* ── Social Buttons ───────────────────────────────────────────────── */
+.c-social_btn {
+    width: 100%;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 100vw;
+    padding: 0.5rem;
+    margin-bottom: 0.4rem;
+    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    color: white;
+}
+.c-social_btn:hover { background: rgba(255, 255, 255, 0.05); }
+
+/* ── Login Links ──────────────────────────────────────────────────── */
+.c-login_links { width: 100%; text-align: center; margin-top: 0.5rem; }
+.c-login_links a,
+.c-login_links button {
+    display: block; font-size: 0.65rem; color: #0099ff;
+    margin-bottom: 0.2rem; text-decoration: none;
+    background: none; border: none; cursor: pointer; width: 100%;
+}
+
+/* ── Typography ───────────────────────────────────────────────────── */
+.u-sub-small {
+    font-size: 0.55rem; text-transform: uppercase;
+    letter-spacing: 0.1em; margin-bottom: 0.5rem;
+    display: block; font-weight: 800; flex-shrink: 0; opacity: 0.8;
+}
+.u-heading-2 {
+    font-size: 2.5rem; line-height: 1; font-weight: 800;
+    margin-bottom: 1rem; letter-spacing: -0.01em;
+    display: block; width: 100%;
+}
+.c-card p {
+    font-size: 0.8rem; line-height: 1.4;
+    margin-bottom: 1.25rem; opacity: 0.8; width: 100%; font-weight: 400;
+}
+
+/* ── Scaling Content ──────────────────────────────────────────────── */
+.u-scaling-content {
+    width: 100%; display: flex; flex-direction: column;
+    height: 100%; justify-content: center;
+}
+
+/* ── Form Specific Styles (Demo Form) ─────────────────────────────── */
+.form-input {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.5rem;
+    padding: 0.6rem 1rem;
+    width: 100%;
+    height: 42px;
+    font-size: 0.8rem;
+    color: #1C1C1C;
+}
+.form-input::placeholder { color: #1C1C1C; opacity: 0.6; }
+
+.form-label {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    margin-bottom: 0.35rem;
+    color: white;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+.required-star { color: var(--color--red-accent); margin-left: 2px; }
+.error-text { color: #ff6b6b; font-size: 0.6rem; margin-top: 0.2rem; }
+
+/* ── Success State ────────────────────────────────────────────────── */
+.c-success-wrap {
+    text-align: center;
+    padding: 2rem 0;
+    width: 100%;
+}
+
+/* ── Error Display ────────────────────────────────────────────────── */
+.c-error-msg {
+    background: rgba(255, 50, 50, 0.15);
+    border: 1px solid rgba(255, 50, 50, 0.3);
+    color: #ff6b6b;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.4rem;
+    font-size: 0.7rem;
+    margin-bottom: 0.75rem;
+    width: 100%;
+}
+
+/* ── Back Button ──────────────────────────────────────────────────── */
+.c-back-btn {
+    display: flex; align-items: center; gap: 0.5rem;
+    cursor: pointer; margin-bottom: 1rem;
+    background: none; border: none; color: white;
+    opacity: 0.7; transition: opacity 0.2s;
+    font-size: 0.65rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 0;
+}
+.c-back-btn:hover { opacity: 1; }
+
+/* ── Close Button ─────────────────────────────────────────────────── */
+.c-close-btn {
+    position: absolute; top: 1.15rem; right: 1.25rem;
+    background: none; border: none;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer; padding: 0.5rem;
+    display: flex; align-items: center; justify-content: center;
+    transition: color 0.2s, transform 0.2s;
+    z-index: 10;
+}
+.c-close-btn:hover { color: white; transform: scale(1.1); }
+
+/* ── Spinner ──────────────────────────────────────────────────────── */
+.spinner {
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top: 2px solid #fff;
+    border-radius: 50%;
+    width: 24px; height: 24px;
+    animation: stitch-spin 0.8s linear infinite;
+    margin: 0 auto;
+}
+@keyframes stitch-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ── Registration State ───────────────────────────────────────────── */
+#registrationState { padding: 0; }
+#registrationState h2 { font-size: 1.35rem; margin-top: 0.25rem; }
+#registrationState .subtitle { margin-bottom: 0.75rem; font-size: 0.7rem; }
+#registrationState .c-input_group { margin-bottom: 0.45rem; }
+#registrationState .c-input_label { font-size: 0.6rem; margin-bottom: 0.2rem; }
+#registrationState .c-input_field { padding: 0.4rem 0.65rem; font-size: 0.75rem; }
+#registrationState .c-btn-blue { margin-top: 0.25rem; margin-bottom: 0.25rem; padding: 0.55rem; }
+#registrationState .c-login_links { margin-top: 0.25rem; }
+
+/* ── Hidden ───────────────────────────────────────────────────────── */
+.is-hidden { display: none !important; }
+
+/* ── i18n Transitions ─────────────────────────────────────────────── */
+[data-i18n] { transition: opacity 0.2s ease; }
+
+/* ── Responsive ───────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+    .c-card { width: 320px; height: 350px; padding: 1.5rem; }
+    .c-card--expanded { width: 90%; height: auto; }
+    .u-heading-2 { font-size: 2rem; }
+    .c-nav { padding: 1rem 2rem; }
+}
+
+@media (max-width: 920px) {
+    .c-hero_content {
+        flex-direction: column;
+        align-items: center;
+        gap: 1.5rem;
+        overflow-y: auto;
+        justify-content: flex-start;
+        padding-top: 5rem;
+    }
+    .c-card {
+        width: 100%; max-width: 360px;
+        height: auto; min-height: auto;
+    }
+}
