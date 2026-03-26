@@ -293,6 +293,38 @@
     height: 100%; justify-content: center;
 }
 
+/* ── Form Specific Styles (Demo Form) ─────────────────────────────── */
+.form-input {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.5rem;
+    padding: 0.6rem 1rem;
+    width: 100%;
+    height: 42px;
+    font-size: 0.8rem;
+    color: #1C1C1C;
+}
+.form-input::placeholder { color: #1C1C1C; opacity: 0.6; }
+
+.form-label {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    margin-bottom: 0.35rem;
+    color: white;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+.required-star { color: var(--color--red-accent); margin-left: 2px; }
+.error-text { color: #ff6b6b; font-size: 0.6rem; margin-top: 0.2rem; }
+
+/* ── Success State ────────────────────────────────────────────────── */
+.c-success-wrap {
+    text-align: center;
+    padding: 2rem 0;
+    width: 100%;
+}
+
 /* ── Error Display ────────────────────────────────────────────────── */
 .c-error-msg {
     background: rgba(255, 50, 50, 0.15);
@@ -330,7 +362,7 @@
 .c-close-btn:hover { color: white; transform: scale(1.1); }
 
 /* ── Spinner ──────────────────────────────────────────────────────── */
-.stitch-spinner {
+.spinner {
     border: 2px solid rgba(255, 255, 255, 0.3);
     border-top: 2px solid #fff;
     border-radius: 50%;
@@ -344,13 +376,14 @@
 }
 
 /* ── Registration State ───────────────────────────────────────────── */
-.reg-state h2 { font-size: 1.35rem; margin-top: 0.25rem; }
-.reg-state .subtitle { margin-bottom: 0.75rem; font-size: 0.7rem; }
-.reg-state .c-input_group { margin-bottom: 0.45rem; }
-.reg-state .c-input_label { font-size: 0.6rem; margin-bottom: 0.2rem; }
-.reg-state .c-input_field { padding: 0.4rem 0.65rem; font-size: 0.75rem; }
-.reg-state .c-btn-blue { margin-top: 0.25rem; margin-bottom: 0.25rem; padding: 0.55rem; }
-.reg-state .c-login_links { margin-top: 0.25rem; }
+#registrationState { padding: 0; }
+#registrationState h2 { font-size: 1.35rem; margin-top: 0.25rem; }
+#registrationState .subtitle { margin-bottom: 0.75rem; font-size: 0.7rem; }
+#registrationState .c-input_group { margin-bottom: 0.45rem; }
+#registrationState .c-input_label { font-size: 0.6rem; margin-bottom: 0.2rem; }
+#registrationState .c-input_field { padding: 0.4rem 0.65rem; font-size: 0.75rem; }
+#registrationState .c-btn-blue { margin-top: 0.25rem; margin-bottom: 0.25rem; padding: 0.55rem; }
+#registrationState .c-login_links { margin-top: 0.25rem; }
 
 /* ── Hidden ───────────────────────────────────────────────────────── */
 .is-hidden { display: none !important; }
