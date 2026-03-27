@@ -212,13 +212,18 @@ def list_documents():
             if not path.endswith('/'): path += '/'
             parent_id = resolve_path_to_node_id(path, model_urn, auto_create=False)
             
-            # Si no se encontró y NO es el root del proyecto, intentar fallback a global
             is_project_root = (path.strip('/') == model_urn.strip('/') or path.strip('/') == '')
+            
+            # Si no se encontró y NO es el root del proyecto, intentar fallback a global
             if not parent_id and not is_project_root and model_urn != 'global':
                 # Try fallback to global
                 parent_id = resolve_path_to_node_id(path, 'global', auto_create=False)
                 if parent_id:
                     model_urn = 'global'
+            
+            # PREVENT FRACTAL BUG: Si piden un path especifico y no existe, no listar la raíz.
+            if not parent_id and not is_project_root:
+                return jsonify({"success": True, "data": {"folders": [], "files": [], "current_node_id": None}}), 200
         else:
             parent_id = None
 
@@ -968,5 +973,79 @@ def permanent_delete_doc():
                          entity_id=node_id, entity_name=name, performed_by=performed_by)
             return jsonify({"success": True, "message": "Elemento eliminado permanentemente"}), 200
         return jsonify({"success": False, "error": "No se pudo eliminar"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# ─────────────────────────────────────────────────────────────────
+# SHARE ENGINE ENDPOINTS (EXTERNAL FIELD ACCESS)
+# ─────────────────────────────────────────────────────────────────
+
+@documents_bp.route('/api/docs/share', methods=['POST'])
+def share_document():
+    """Generates a secure UUID link for a document."""
+    data = request.get_json()
+    node_id = data.get('node_id')
+    model_urn = data.get('model_urn')
+    shared_by = data.get('shared_by', 'system')
+    role = data.get('role', 'viewer')
+    access_type = data.get('access_type', 'restricted')
+    
+    if not node_id or not model_urn:
+        return jsonify({"success": False, "error": "Missing node_id or model_urn"}), 400
+        
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO document_shares (file_node_id, model_urn, shared_by, role, access_type)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
+            """, (node_id, model_urn, shared_by, role, access_type))
+            share_id = cursor.fetchone()[0]
+            conn.commit()
+            return jsonify({"success": True, "share_id": str(share_id)}), 200
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@documents_bp.route('/api/docs/shared/<share_id>', methods=['GET'])
+def get_shared_document(share_id):
+    """Retrieves a shared document metadata and a temporary signed URL for public viewing."""
+    try:
+        from db import get_db_connection
+        from gcs_manager import generate_signed_url
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT s.role, s.access_type, f.name, f.gcs_urn, f.size_bytes, f.mime_type
+                FROM document_shares s
+                JOIN file_nodes f ON s.file_node_id = f.id
+                WHERE s.id = %s
+            """, (share_id,))
+            row = cursor.fetchone()
+            
+            if not row:
+                return jsonify({"success": False, "error": "Enlace inválido o expirado"}), 404
+                
+            role, access_type, name, gcs_urn, size, mime = row
+            
+            if not gcs_urn:
+                return jsonify({"success": False, "error": "El archivo físico no existe"}), 404
+                
+            signed_url = generate_signed_url(gcs_urn)
+            
+            return jsonify({
+                "success": True, 
+                "data": {
+                    "name": name,
+                    "url": signed_url,
+                    "role": role,
+                    "access_type": access_type,
+                    "size": size,
+                    "mime_type": mime
+                }
+            }), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

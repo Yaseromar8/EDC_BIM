@@ -4,6 +4,9 @@ import AutoSizer from 'react-virtualized-auto-sizer';
 import { Capacitor } from '@capacitor/core';
 import MatrixTable from './MatrixTable';
 import LoginScreen from './LoginScreen';
+import { apiFetch } from './utils/apiFetch';
+import SharedViewer from './components/SharedViewer';
+import DocumentViewer from './components/DocumentViewer';
 
 const API = Capacitor.isNativePlatform()
   ? 'https://visor-ecd-backend.onrender.com'
@@ -40,6 +43,14 @@ function getInitials(name) {
   return name.split(' ').filter(w => w).map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
+// ─── AUTH HEADERS HELPER ───
+function getAuthHeaders(extra = {}) {
+  const saved = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
+  const headers = { 'Content-Type': 'application/json', ...extra };
+  if (saved) headers['Authorization'] = `Bearer ${saved}`;
+  return headers;
+}
+
 // ─── USER HOOK (localStorage & sessionStorage) ───
 function useUser() {
   const [user, setUser] = useState(() => {
@@ -51,6 +62,10 @@ function useUser() {
   });
 
   const saveUser = (data, remember = true) => {
+    // Store session token separately for easy access
+    if (data && data.session_token) {
+      localStorage.setItem('visor_session_token', data.session_token);
+    }
     if (remember) {
       localStorage.setItem('visor_user', JSON.stringify(data));
       sessionStorage.removeItem('visor_user');
@@ -61,9 +76,14 @@ function useUser() {
     setUser(data);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await apiFetch(`${API}/api/auth/logout`, { method: 'POST', headers: getAuthHeaders() });
+    } catch (e) { /* ignore */ }
     localStorage.removeItem('visor_user');
+    localStorage.removeItem('visor_session_token');
     sessionStorage.removeItem('visor_user');
+    sessionStorage.removeItem('visor_session_token');
     setUser(null);
   };
 
@@ -90,7 +110,7 @@ function UsersTab() {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/users`);
+      const res = await apiFetch(`${API}/api/users`);
       if (res.ok) setUsers(await res.json());
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
@@ -102,10 +122,9 @@ function UsersTab() {
     if (!email.trim()) return;
     setError('');
     try {
-      const res = await fetch(`${API}/api/users`, {
+      const res = await apiFetch(`${API}/api/users`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), role })
+                body: JSON.stringify({ email: email.trim(), role })
       });
       if (res.ok) {
         setShowCreate(false);
@@ -120,7 +139,7 @@ function UsersTab() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('¿Seguro que deseas eliminar este usuario?')) return;
-    await fetch(`${API}/api/users/${id}`, { method: 'DELETE' });
+    await apiFetch(`${API}/api/users/${id}`, { method: 'DELETE' });
     fetchUsers();
   };
 
@@ -208,9 +227,9 @@ function TagsTab() {
 
   const fetchTags = async () => {
     try {
-      const rc = await fetch(`${API}/api/companies`);
+      const rc = await apiFetch(`${API}/api/companies`);
       if (rc.ok) setCompanies(await rc.json());
-      const rj = await fetch(`${API}/api/job_titles`);
+      const rj = await apiFetch(`${API}/api/job_titles`);
       if (rj.ok) setJobTitles(await rj.json());
     } catch (e) { console.error(e); }
   };
@@ -219,23 +238,23 @@ function TagsTab() {
 
   const handleAddCompany = async () => {
     if (!newCompany.trim()) return;
-    await fetch(`${API}/api/companies`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newCompany }) });
+    await apiFetch(`${API}/api/companies`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newCompany }) });
     setNewCompany(''); fetchTags();
   };
 
   const handleAddJobTitle = async () => {
     if (!newJobTitle.trim()) return;
-    await fetch(`${API}/api/job_titles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newJobTitle }) });
+    await apiFetch(`${API}/api/job_titles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newJobTitle }) });
     setNewJobTitle(''); fetchTags();
   };
 
   const handleDeleteComp = async (id) => {
     if (!window.confirm('¿Borrar empresa?')) return;
-    await fetch(`${API}/api/companies/${id}`, { method: 'DELETE' }); fetchTags();
+    await apiFetch(`${API}/api/companies/${id}`, { method: 'DELETE' }); fetchTags();
   };
   const handleDeleteJob = async (id) => {
     if (!window.confirm('¿Borrar cargo?')) return;
-    await fetch(`${API}/api/job_titles/${id}`, { method: 'DELETE' }); fetchTags();
+    await apiFetch(`${API}/api/job_titles/${id}`, { method: 'DELETE' }); fetchTags();
   };
 
   return (
@@ -308,13 +327,13 @@ function SecureProjectsPage({ user, onSelectProject, onLogout }) {
     setLoading(true);
     try {
       // Fetch hubs first
-      const hRes = await fetch(`${API}/api/hubs`);
+      const hRes = await apiFetch(`${API}/api/hubs`);
       if (hRes.ok) {
         const hData = await hRes.json();
         setHubs(hData.hubs || []);
       }
 
-      const res = await fetch(`${API}/api/projects?user_id=${user.id}&role=${user.role}`);
+      const res = await apiFetch(`${API}/api/projects?user_id=${user.id}&role=${user.role}`);
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data) ? data : (data.projects || []);
@@ -330,10 +349,9 @@ function SecureProjectsPage({ user, onSelectProject, onLogout }) {
     if (!newName.trim()) return;
     const targetHub = selectedHub || (hubs[0]?.id) || 'b.mdc_default_legacy';
     try {
-      await fetch(`${API}/api/hubs/${targetHub}/projects`, {
+      await apiFetch(`${API}/api/hubs/${targetHub}/projects`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim(), number: newNumber, location: newLocation, account: user.email })
+                body: JSON.stringify({ name: newName.trim(), number: newNumber, location: newLocation, account: user.email })
       });
       setShowCreate(false);
       setNewName(''); setNewNumber(''); setNewLocation(''); setSelectedHub('');
@@ -345,10 +363,10 @@ function SecureProjectsPage({ user, onSelectProject, onLogout }) {
     e.stopPropagation();
     try {
       // 1. Fetch todos los usuarios
-      const r1 = await fetch(`${API}/api/users`);
+      const r1 = await apiFetch(`${API}/api/users`);
       if (r1.ok) setAllUsers(await r1.json());
       // 2. Fetch usuarios asignados a este proyecto
-      const r2 = await fetch(`${API}/api/projects/${proj.id}/users`);
+      const r2 = await apiFetch(`${API}/api/projects/${proj.id}/users`);
       if (r2.ok) setProjectUsers(await r2.json());
 
       setShowAccess(proj);
@@ -358,10 +376,9 @@ function SecureProjectsPage({ user, onSelectProject, onLogout }) {
   const saveAccess = async () => {
     if (!showAccess) return;
     try {
-      await fetch(`${API}/api/projects/${showAccess.id}/users`, {
+      await apiFetch(`${API}/api/projects/${showAccess.id}/users`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_ids: projectUsers })
+                body: JSON.stringify({ user_ids: projectUsers })
       });
       setShowAccess(null);
     } catch (e) { console.error(e); }
@@ -531,7 +548,7 @@ function SecureProjectsPage({ user, onSelectProject, onLogout }) {
 // ─────────────────────────────────────
 // 3.4 MINI SELECT FOLDER TREE
 // ─────────────────────────────────────
-function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSelect }) {
+function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSelect, modelUrn }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [children, setChildren] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -539,7 +556,7 @@ function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSel
   const loadChildren = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/docs/list?path=${encodeURIComponent(folder.fullName)}&model_urn=${encodeURIComponent(import.meta.env.VITE_PROJECT_PREFIX || 'global')}`);
+      const res = await apiFetch(`${API}/api/docs/list?path=${encodeURIComponent(folder.fullName)}&model_urn=${encodeURIComponent(modelUrn || 'global')}`);
       if (res.ok) {
         const response = await res.json();
         const data = response.data || {};
@@ -582,7 +599,7 @@ function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSel
       </div>
       {expanded && children && (
         <div>
-          {children.map(c => <SelectFolderNode key={c.fullName} folder={c} selectedPath={selectedPath} onSelect={onSelect} />)}
+          {children.map(c => <SelectFolderNode key={c.fullName} folder={c} selectedPath={selectedPath} onSelect={onSelect} modelUrn={modelUrn} />)}
         </div>
       )}
     </div>
@@ -639,14 +656,14 @@ function FolderNode({
     const nodeId = folder.id || folderFullName;
     setProcessingIds(prev => ({ ...prev, [nodeId]: true }));
     try {
-      const res = await fetch(`${API}/api/docs/rename`, {
+      const res = await apiFetch(`${API}/api/docs/rename`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ node_id: nodeId, new_name: renameValue.trim(), model_urn: projectPrefix })
       });
       if (res.ok) {
+        if (onTreeRefresh) await onTreeRefresh();
         setIsRenaming(false);
-        if (onTreeRefresh) onTreeRefresh();
         // Sincronizar panel principal si estamos en esa carpeta
         if (onGlobalRefresh) onGlobalRefresh();
       } else {
@@ -666,9 +683,9 @@ function FolderNode({
     const newPath = base + (base.endsWith('/') ? '' : '/') + newChildName.trim() + '/';
     setLoading(true);
     try { 
-      const res = await fetch(`${API}/api/docs/folder`, { 
+      const res = await apiFetch(`${API}/api/docs/folder`, { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: getAuthHeaders(), 
         body: JSON.stringify({ 
           path: newPath, 
           model_urn: projectPrefix, 
@@ -676,9 +693,9 @@ function FolderNode({
         }) 
       });
       if (res.ok) {
+        if (onTreeRefresh) await onTreeRefresh();
         setIsCreatingChild(false);
         setNewChildName('');
-        if (onTreeRefresh) onTreeRefresh();
         if (onGlobalRefresh) onGlobalRefresh();
       } else {
         const err = await res.json();
@@ -692,9 +709,9 @@ function FolderNode({
     if (!isAdmin) return;
     setLoading(true);
     try { 
-      const res = await fetch(`${API}/api/docs/delete`, { 
+      const res = await apiFetch(`${API}/api/docs/delete`, { 
         method: 'DELETE', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: getAuthHeaders(), 
         body: JSON.stringify({ fullName: folder.fullName || '', model_urn: projectPrefix, user: user?.name }) 
       });
       if (res.ok) {
@@ -752,7 +769,8 @@ function FolderNode({
     if (!silent) setLoading(true);
     try {
       const folderFullName = folder.fullName || '';
-      const res = await fetch(`${API}/api/docs/list?path=${encodeURIComponent(folderFullName)}&model_urn=${encodeURIComponent(projectPrefix)}`);
+      const folderId = folder.id || '';
+      const res = await apiFetch(`${API}/api/docs/list?path=${encodeURIComponent(folderFullName)}&model_urn=${encodeURIComponent(projectPrefix)}&node_id=${folderId}`);
       if (res.ok) {
         const response = await res.json();
         const data = response.data || {};
@@ -1082,7 +1100,7 @@ function DeletedTable({ items, selectedIds, onToggle, onRestore, getInitials, re
   );
 }
 
-function FilesPage({ project, user, onBack }) {
+function FilesPage({ project, user, onBack, onLogout }) {
   const projectPrefix = `proyectos/${project.name.replace(/ /g, '_')}`;
   const [currentPath, setCurrentPath] = useState(projectPrefix + '/');
   const [currentNodeId, setCurrentNodeId] = useState(null);
@@ -1109,8 +1127,7 @@ function FilesPage({ project, user, onBack }) {
   const [versionHistory, setVersionHistory] = useState([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ total: 0, current: 0 });
-  const [officeUrl, setOfficeUrl] = useState('');
-  const [loadingOffice, setLoadingOffice] = useState(false);
+  // office preview state extracted to DocumentViewer
 
   const [showSopToast, setShowSopToast] = useState(false);
   const [sopHasReappeared, setSopHasReappeared] = useState(false);
@@ -1123,39 +1140,17 @@ function FilesPage({ project, user, onBack }) {
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [moveState, setMoveState] = useState({ step: 0, items: [], itemIds: [], destPath: '', destId: null });
   const [projectRootId, setProjectRootId] = useState(null);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [sidebarView, setSidebarView] = useState('files');
+  const [membersList, setMembersList] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(false);
 
-  useEffect(() => {
-    if (activeFile) {
-      const lowerName = activeFile.name.toLowerCase();
-      if (['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext))) {
-        setLoadingOffice(true);
-        const urn = viewedVersionInfo?.gcs_urn || activeFile.gcs_urn;
-        const url = urn 
-          ? `${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`
-          : `${API}/api/docs/signed-url?path=${encodeURIComponent(activeFile.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}`;
-
-        fetch(url)
-          .then(r => r.json())
-          .then(data => {
-            if (data.success) setOfficeUrl(data.url);
-            else console.error("Error fetching signed URL:", data.error);
-          })
-          .catch(err => console.error("Fetch Office URL error:", err))
-          .finally(() => setLoadingOffice(false));
-      } else {
-        setOfficeUrl('');
-        setLoadingOffice(false);
-      }
-    } else {
-      setOfficeUrl('');
-      setLoadingOffice(false);
-    }
-  }, [activeFile, viewedVersionInfo, projectPrefix]);
+  // Office URL fetch effect extracted to DocumentViewer
 
   useEffect(() => {
     const fetchRootId = async () => {
       try {
-        const res = await fetch(`${API}/api/docs/list?path=${encodeURIComponent(projectPrefix)}&model_urn=${encodeURIComponent(projectPrefix)}`);
+        const res = await apiFetch(`${API}/api/docs/list?path=${encodeURIComponent(projectPrefix)}&model_urn=${encodeURIComponent(projectPrefix)}`);
         if (res.ok) {
           const resp = await res.json();
           // Solo usar el ID si no es la raíz del proyecto para evitar discrepancias
@@ -1178,6 +1173,7 @@ function FilesPage({ project, user, onBack }) {
   const [shareTarget, setShareTarget] = useState(null);
   const [shareGeneralAccess, setShareGeneralAccess] = useState('restricted'); // 'restricted' | 'anyone'
   const [shareGeneralRole, setShareGeneralRole] = useState('viewer'); // 'viewer' | 'commenter' | 'editor'
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
   const [sharedUsers, setSharedUsers] = useState([]);
   const [searchShareUser, setSearchShareUser] = useState('');
   const [showShareResults, setShowShareResults] = useState(false);
@@ -1319,7 +1315,7 @@ function FilesPage({ project, user, onBack }) {
     setLoadingVersions(true);
     setVersionHistory([]);
     try {
-      const resp = await fetch(`${API}/api/docs/versions?id=${item.id || encodeURIComponent(item.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}`);
+      const resp = await apiFetch(`${API}/api/docs/versions?id=${item.id || encodeURIComponent(item.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}`);
       const data = await resp.json();
       if (data.success) setVersionHistory(data.versions || []);
     } catch (e) { console.error(e); }
@@ -1331,10 +1327,9 @@ function FilesPage({ project, user, onBack }) {
     if (!target) return;
     
     try {
-      const resp = await fetch(`${API}/api/docs/versions/promote`, {
+      const resp = await apiFetch(`${API}/api/docs/versions/promote`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: target.id, version_id: version.id, user: user?.name, model_urn: projectPrefix })
+                body: JSON.stringify({ id: target.id, version_id: version.id, user: user?.name, model_urn: projectPrefix })
       });
       if (resp.ok) {
         setTableShowVersions(false);
@@ -1355,19 +1350,22 @@ function FilesPage({ project, user, onBack }) {
     } catch (e) { console.error(e); }
   };
 
+  const fetchSeqRef = useRef(0);
+
   const fetchContents = useCallback(async (path, trash = false, silent = false, nodeId = null) => {
+    const seq = ++fetchSeqRef.current;
     if (!silent) {
       setLoading(true);
-      setFolders([]);
-      setFiles([]);
     }
     try {
       const endpoint = trash 
         ? `/api/docs/deleted?model_urn=${encodeURIComponent(projectPrefix)}` 
         : `/api/docs/list?path=${encodeURIComponent(path)}${nodeId ? `&id=${nodeId}` : ''}&model_urn=${encodeURIComponent(projectPrefix)}`;
-      const res = await fetch(`${API}${endpoint}`);
+      const res = await apiFetch(`${API}${endpoint}`, { headers: getAuthHeaders() });
+      if (seq !== fetchSeqRef.current) return; // stale response, discard
       if (res.ok) {
         const response = await res.json();
+        if (seq !== fetchSeqRef.current) return; // stale response, discard
         const data = response.data || {};
         setFolders((data.folders || []).map(f => ({...f, type: 'folder'})).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
         setFiles((data.files || []).map(f => ({...f, type: 'file'})).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
@@ -1384,7 +1382,7 @@ function FilesPage({ project, user, onBack }) {
         }
       }
     } catch (e) { console.error(e); }
-    finally { if (!silent) setLoading(false); }
+    finally { if (!silent && seq === fetchSeqRef.current) setLoading(false); }
   }, []);
 
   const triggerRefresh = (path = currentPath) => { 
@@ -1554,62 +1552,55 @@ function FilesPage({ project, user, onBack }) {
       fd.append('model_urn', projectPrefix);
 
       const xhr = new XMLHttpRequest();
-      console.log(`[Upload] Starting POST to ${API}/api/docs/upload for ${item.file.name} (${item.file.size} bytes)`);
       xhr.open('POST', `${API}/api/docs/upload`, true);
+      const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const percent = Math.floor((e.loaded / e.total) * 100);
-          console.log(`[Upload Progress] ${item.file.name}: ${percent}% (${e.loaded}/${e.total})`);
-          
-          if (percent >= 100) {
-            // Already at 100% physical transfer, show "Syncing" indeterminate bar
-            setSopQueue(q => q.map(it => it.id === item.id ? { ...it, progress: 100, status: 'PROCESANDO_1' } : it));
-          } else {
-            setSopQueue(q => q.map(it => it.id === item.id ? { ...it, progress: percent, status: 'BARRA_AZUL' } : it));
-          }
-        } else {
-          console.log(`[Upload Progress] ${item.file.name}: progress not computable`);
-        }
-      };
+      // ── REAL PROGRESS: Estimate total time based on file size ──
+      // Average upload speed to GCS ~2MB/s + 1s base overhead
+      const fileSizeMB = item.file.size / (1024 * 1024);
+      const estimatedSeconds = Math.max(2, (fileSizeMB / 2) + 1);
+      let uploadDone = false;
+      let currentProgress = 0;
+
+      // Smooth progress animation: advance from 0→95% over estimated time
+      const progressInterval = setInterval(() => {
+        if (uploadDone) { clearInterval(progressInterval); return; }
+        // Ease-out curve: fast at start, slows near end
+        const target = 95;
+        const remaining = target - currentProgress;
+        const increment = Math.max(0.5, remaining * 0.08);
+        currentProgress = Math.min(currentProgress + increment, target);
+        setSopQueue(q => q.map(it => it.id === item.id ? { ...it, progress: Math.floor(currentProgress), status: 'BARRA_AZUL' } : it));
+      }, estimatedSeconds * 10); // Update every ~fraction of estimated time
 
       xhr.onload = async () => {
-        console.log(`[Upload Finish] ${item.file.name}: Status ${xhr.status}`);
+        uploadDone = true;
+        clearInterval(progressInterval);
+        
         if (xhr.status === 200 || xhr.status === 201) {
-          try {
-            const resp = JSON.parse(xhr.responseText);
-            console.log(`[Upload Success] ${item.file.name}:`, resp);
-          } catch(e) {}
+          // Upload truly complete — animate to 100%
+          setSopQueue(q => q.map(it => it.id === item.id ? { ...it, progress: 100, status: 'BARRA_AZUL' } : it));
+          await new Promise(r => setTimeout(r, 500));
           
-          // Ensure we are in PROCESANDO_1 state
-          setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'PROCESANDO_1', progress: 100 } : it));
-          
-          // These are the "Fake" processing delays that happen AFTER physical GCS upload is done
-          await new Promise(r => setTimeout(r, 4000));
-          
-          setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'PROCESO_PENDIENTE', progress: 100 } : it));
-          await new Promise(r => setTimeout(r, 4000));
-
           const now = new Date();
           const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           const dateStr = now.toLocaleDateString();
           setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'LISTO_1', progress: 100, time: `el ${dateStr} a las ${timeStr}` } : it));
           setUploadSopStep('LISTO_1');
-          triggerRefresh();
+          triggerRefresh(currentPath);
         } else {
-          console.error(`[Upload Error] ${item.file.name}: ${xhr.status} - ${xhr.responseText}`);
-          setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR' } : it));
+          setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR', progress: 0 } : it));
         }
       };
 
       xhr.onerror = () => {
-        console.error(`[Upload Fatal Error] ${item.file.name}: Network failure`);
-        setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR' } : it));
+        uploadDone = true;
+        clearInterval(progressInterval);
+        setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR', progress: 0 } : it));
       };
 
-      setTimeout(() => {
-        xhr.send(fd);
-      }, 500);
+      xhr.send(fd);
     });
   };
 
@@ -1635,10 +1626,9 @@ function FilesPage({ project, user, onBack }) {
     const parentId = newFolderParentPath || (currentPath.startsWith(projectPrefix) && (currentPath === projectPrefix || currentPath === projectPrefix + '/') ? null : currentPath);
     if (parentId && parentId.length > 30) setProcessingIds(prev => ({ ...prev, [parentId]: true }));
     try { 
-      const res = await fetch(`${API}/api/docs/folder`, { 
+      const res = await apiFetch(`${API}/api/docs/folder`, { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ 
+                body: JSON.stringify({ 
           path: targetPath, 
           model_urn: projectPrefix, 
           user: user?.name 
@@ -1668,10 +1658,9 @@ function FilesPage({ project, user, onBack }) {
     if (id) setProcessingIds(prev => ({ ...prev, [id]: true }));
     
     try { 
-      const res = await fetch(`${API}/api/docs/delete`, { 
+      const res = await apiFetch(`${API}/api/docs/delete`, { 
         method: 'DELETE', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ fullName, id: id, model_urn: projectPrefix, user: user.name }) 
+                body: JSON.stringify({ fullName, id: id, model_urn: projectPrefix, user: user.name }) 
       }); 
       if (res.ok) {
         setRefreshSignal(s => s + 1);
@@ -1697,10 +1686,9 @@ function FilesPage({ project, user, onBack }) {
     if (!newNameRaw || newNameRaw.trim() === '' || newNameRaw === oldName) return;
     parts[parts.length - 1] = newNameRaw.trim();
     let newNamePath = parts.join('/') + (isFolder ? '/' : '');
-    try { await fetch(`${API}/api/docs/rename`, { 
+    try { await apiFetch(`${API}/api/docs/rename`, { 
       method: 'PUT', 
-      headers: { 'Content-Type': 'application/json' }, 
-      body: JSON.stringify({ oldName: fullName, newName: newNamePath, model_urn: projectPrefix }) 
+            body: JSON.stringify({ oldName: fullName, newName: newNamePath, model_urn: projectPrefix }) 
     }); } catch (e) { }
     triggerRefresh();
   };
@@ -1715,10 +1703,9 @@ function FilesPage({ project, user, onBack }) {
     });
     for (const nodeId of idsToMove) {
       try { 
-        const res = await fetch(`${API}/api/docs/move`, { 
+        const res = await apiFetch(`${API}/api/docs/move`, { 
           method: 'PUT', 
-          headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify({ 
+                    body: JSON.stringify({ 
             node_id: nodeId, 
             destNodeId: moveState.destId, 
             model_urn: projectPrefix,
@@ -1775,10 +1762,9 @@ function FilesPage({ project, user, onBack }) {
     });
 
     try {
-      const res = await fetch(`${API}/api/docs/batch`, {
+      const res = await apiFetch(`${API}/api/docs/batch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+                body: JSON.stringify({
           items: itemIds,
           action: 'DELETE',
           model_urn: projectPrefix,
@@ -1837,8 +1823,25 @@ function FilesPage({ project, user, onBack }) {
         </div>
         <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div className="header-nav-item" style={{ width: 24, height: 24, borderRadius: '50%', background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#666', cursor: 'pointer' }}>?</div>
-          <div className="header-user">
-             <div className="header-avatar" style={{ width: 32, height: 32, borderRadius: '50%', background: '#ff6b35', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600 }}>{getInitials(user.name)}</div>
+          <div className="header-user" style={{ position: 'relative' }}>
+             <div className="header-avatar" onClick={() => setProfileMenuOpen(!profileMenuOpen)} style={{ width: 32, height: 32, borderRadius: '50%', background: '#ff6b35', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{getInitials(user.name)}</div>
+             {profileMenuOpen && (
+               <div style={{ position: 'absolute', top: 40, right: 0, background: '#fff', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,.15)', minWidth: 220, zIndex: 9999, border: '1px solid #e5e5e5', overflow: 'hidden' }}>
+                 <div style={{ padding: '14px 16px', borderBottom: '1px solid #eee' }}>
+                   <div style={{ fontWeight: 600, fontSize: 13, color: '#333' }}>{user.name}</div>
+                   <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>{user.email}</div>
+                   <div style={{ fontSize: 10, color: '#0696d7', marginTop: 4, textTransform: 'uppercase', fontWeight: 600 }}>{user.role || 'user'}</div>
+                 </div>
+                 <button onClick={() => { setProfileMenuOpen(false); onBack(); }} style={{ width: '100%', padding: '10px 16px', border: 'none', background: 'none', textAlign: 'left', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: '#333' }}
+                   onMouseOver={e => e.currentTarget.style.background = '#f5f5f5'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
+                   <span style={{ fontSize: 16 }}>🔄</span> Cambiar proyecto
+                 </button>
+                 <button onClick={() => { setProfileMenuOpen(false); if (onLogout) onLogout(); }} style={{ width: '100%', padding: '10px 16px', border: 'none', background: 'none', textAlign: 'left', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: '#e53935', borderTop: '1px solid #eee' }}
+                   onMouseOver={e => e.currentTarget.style.background = '#fff5f5'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
+                   <span style={{ fontSize: 16 }}>🚪</span> Cerrar sesión
+                 </button>
+               </div>
+             )}
           </div>
         </div>
       </header>
@@ -1849,10 +1852,10 @@ function FilesPage({ project, user, onBack }) {
           <div className="Box__StyledBox-sc-1gnk1ba-0 hhhhUH" style={{ flex: 1, overflowY: 'auto' }}>
             <ul data-testid="SideNavigationList" style={{ listStyle: 'none', padding: '8px 0', margin: 0 }}>
               {[
-                { label: 'Archivos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5,5l2,2H20v12h-16V5H12.5 M13.17,3h-10.34A1.83,1.83,0,0,0,1,4.83v14.34A1.83,1.83,0,0,0,2.83,21h18.34A1.83,1.83,0,0,0,23,19.17V6.83A1.83,1.83,0,0,0,21.17,5H14.83Z"/></svg>, active: true, onClick: () => switchMode(false) },
-                { label: 'Informes', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg> },
-                { label: 'Miembros', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg> },
-                { label: 'Configuración', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg> }
+                { label: 'Archivos', mode: 'files', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5,5l2,2H20v12h-16V5H12.5 M13.17,3h-10.34A1.83,1.83,0,0,0,1,4.83v14.34A1.83,1.83,0,0,0,2.83,21h18.34A1.83,1.83,0,0,0,23,19.17V6.83A1.83,1.83,0,0,0,21.17,5H14.83Z"/></svg>, onClick: () => { setSidebarView('files'); switchMode(false); } },
+                { label: 'Informes', mode: 'reports', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg>, onClick: () => setSidebarView('reports') },
+                { label: 'Miembros', mode: 'members', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>, onClick: () => { setSidebarView('members'); setMembersLoading(true); apiFetch(`${API}/api/users`).then(r => r.json()).then(d => setMembersList(d.users || d || [])).catch(() => setMembersList([])).finally(() => setMembersLoading(false)); } },
+                { label: 'Configuración', mode: 'settings', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>, onClick: () => setSidebarView('settings') }
               ].map((item, idx) => (
                 <li key={idx} style={{ marginBottom: 2 }}>
                   <button 
@@ -1863,11 +1866,11 @@ function FilesPage({ project, user, onBack }) {
                       gap: 12, 
                       width: '100%',
                       padding: '8px 12px', 
-                      background: item.active && !isTrashMode ? '#e8f0fe' : 'none', 
+                      background: sidebarView === item.mode && !isTrashMode ? '#e8f0fe' : 'none', 
                       border: 'none',
-                      color: item.active && !isTrashMode ? '#0696d7' : '#5f6368', 
+                      color: sidebarView === item.mode && !isTrashMode ? '#0696d7' : '#5f6368', 
                       fontSize: '13px', 
-                      fontWeight: item.active && !isTrashMode ? '500' : '400', 
+                      fontWeight: sidebarView === item.mode && !isTrashMode ? '500' : '400', 
                       borderRadius: '0 20px 20px 0',
                       cursor: 'pointer' 
                     }}
@@ -1912,6 +1915,130 @@ function FilesPage({ project, user, onBack }) {
 
         {/* CONTENT AREA */}
         <div className="acc-docs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+        {sidebarView === 'reports' && (
+          <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
+            <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 24 }}>Informes</div>
+            <div style={{ background: '#f8f9fa', borderRadius: 12, padding: 48, textAlign: 'center', border: '2px dashed #dcdcdc' }}>
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="#b0b0b0" style={{ marginBottom: 16 }}><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg>
+              <div style={{ fontSize: 16, fontWeight: 500, color: '#333', marginBottom: 8 }}>Informes del Proyecto</div>
+              <div style={{ fontSize: 13, color: '#888', maxWidth: 400, margin: '0 auto', lineHeight: 1.6 }}>
+                Los informes generados (análisis de documentos, reportes LSDTs, métricas del proyecto) aparecerán aquí.
+              </div>
+              <div style={{ marginTop: 24, padding: '10px 20px', background: '#e8f0fe', borderRadius: 6, display: 'inline-block', color: '#0696d7', fontSize: 13, fontWeight: 500 }}>
+                Próximamente disponible
+              </div>
+            </div>
+          </div>
+        )}
+
+        {sidebarView === 'members' && (
+          <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+              <div style={{ fontSize: 24, fontWeight: 300 }}>Miembros</div>
+              <div style={{ fontSize: 13, color: '#888' }}>{membersList.length} miembro{membersList.length !== 1 ? 's' : ''} registrado{membersList.length !== 1 ? 's' : ''}</div>
+            </div>
+            {membersLoading ? (
+              <div style={{ textAlign: 'center', padding: 48, color: '#888' }}>Cargando miembros...</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #eee', color: '#888', fontWeight: 500 }}>
+                    <th style={{ padding: '10px 12px', textAlign: 'left' }}>Nombre</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'left' }}>Email</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'left' }}>Rol</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'left' }}>Registro</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {membersList.map((m, i) => (
+                    <tr key={m.id || i} style={{ borderBottom: '1px solid #f0f0f0' }}
+                      onMouseOver={e => e.currentTarget.style.background = '#fafbfc'}
+                      onMouseOut={e => e.currentTarget.style.background = 'none'}>
+                      <td style={{ padding: '12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: m.role === 'admin' ? '#0696d7' : '#ff6b35', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+                          {getInitials(m.name || m.email || '?')}
+                        </div>
+                        <span style={{ fontWeight: 500 }}>{m.name || '—'}</span>
+                      </td>
+                      <td style={{ padding: '12px', color: '#666' }}>{m.email}</td>
+                      <td style={{ padding: '12px' }}>
+                        <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
+                          background: m.role === 'admin' ? '#e3f2fd' : '#f3e5f5',
+                          color: m.role === 'admin' ? '#1565c0' : '#7b1fa2'
+                        }}>{m.role || 'user'}</span>
+                      </td>
+                      <td style={{ padding: '12px', color: '#999', fontSize: 12 }}>{m.created_at ? new Date(m.created_at).toLocaleDateString() : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {sidebarView === 'settings' && (
+          <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
+            <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 24 }}>Configuración</div>
+            
+            {/* Info del Proyecto */}
+            <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8, padding: 24, marginBottom: 20 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#333', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="#0696d7"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                Información del Proyecto
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '12px 16px', fontSize: 13 }}>
+                <span style={{ color: '#888', fontWeight: 500 }}>Nombre:</span>
+                <span style={{ color: '#333' }}>{project.name}</span>
+                <span style={{ color: '#888', fontWeight: 500 }}>Número:</span>
+                <span style={{ color: '#333' }}>{project.number || '—'}</span>
+                <span style={{ color: '#888', fontWeight: 500 }}>Ubicación:</span>
+                <span style={{ color: '#333' }}>{project.location || '—'}</span>
+                <span style={{ color: '#888', fontWeight: 500 }}>Cuenta:</span>
+                <span style={{ color: '#333' }}>{project.account || project.hub_name || '—'}</span>
+                <span style={{ color: '#888', fontWeight: 500 }}>Creado:</span>
+                <span style={{ color: '#333' }}>{project.created_at ? new Date(project.created_at).toLocaleDateString() : '—'}</span>
+              </div>
+            </div>
+
+            {/* Almacenamiento */}
+            <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8, padding: 24, marginBottom: 20 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#333', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="#0696d7"><path d="M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z"/></svg>
+                Almacenamiento
+              </div>
+              <div style={{ fontSize: 13, color: '#888' }}>Google Cloud Storage — activo</div>
+              <div style={{ marginTop: 12, background: '#f5f5f5', borderRadius: 8, height: 8, overflow: 'hidden' }}>
+                <div style={{ width: '15%', height: '100%', background: 'linear-gradient(90deg, #0696d7, #4fc3f7)', borderRadius: 8 }} />
+              </div>
+              <div style={{ fontSize: 11, color: '#999', marginTop: 6 }}>Uso estimado del proyecto</div>
+            </div>
+
+            {/* Registro de Actividad */}
+            <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8, padding: 24, marginBottom: 20 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#333', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="#0696d7"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+                Registro de Actividad
+              </div>
+              <div style={{ fontSize: 13, color: '#888', padding: 24, textAlign: 'center', background: '#fafafa', borderRadius: 8 }}>
+                El historial de acciones (subidas, eliminaciones, renombrados) se mostrará aquí. Próximamente.
+              </div>
+            </div>
+
+            {/* Etiquetas */}
+            <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8, padding: 24 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#333', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="#0696d7"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/></svg>
+                Etiquetas
+              </div>
+              <div style={{ fontSize: 13, color: '#888', padding: 24, textAlign: 'center', background: '#fafafa', borderRadius: 8 }}>
+                Gestión de etiquetas y tags para documentos. Próximamente.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {sidebarView === 'files' && (<>
           <header style={{ padding: '24px 24px 0 24px', flexShrink: 0 }}>
             <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 16 }}>
               {isTrashMode ? 'Elementos suprimidos' : 'Archivos'}
@@ -1935,11 +2062,46 @@ function FilesPage({ project, user, onBack }) {
               </div>
             )}
             {isTrashMode && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', borderBottom: '1px solid #dcdcdc', paddingBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #dcdcdc', paddingBottom: 8 }}>
                  <button onClick={() => switchMode(false)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer', padding: '4px 8px', borderRadius: 4 }}>
                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
                    Volver a archivos
                  </button>
+                 {isAdmin && selectedDeletedIds.length > 0 && (
+                   <button 
+                     onClick={async () => {
+                       const count = selectedDeletedIds.length;
+                       if (!window.confirm('Eliminar PERMANENTEMENTE ' + count + ' elemento(s)?')) return;
+                       console.log('[PERM-DELETE] Starting for', count, 'items');
+                       let deleted = 0;
+                       for (const id of selectedDeletedIds) {
+                         try {
+                           console.log('[PERM-DELETE] Deleting:', id);
+                           const res = await apiFetch(`${API}/api/docs/permanent-delete`, {
+                             method: 'DELETE',
+                             body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name })
+                           });
+                           console.log('[PERM-DELETE] Response:', res.status);
+                           if (res.ok) {
+                             deleted++;
+                           } else {
+                             const errBody = await res.text();
+                             console.error('[PERM-DELETE] FAILED:', res.status, errBody);
+                             alert('Error eliminando: ' + errBody);
+                           }
+                         } catch (e) { console.error('[PERM-DELETE] Error:', e); alert('Error: ' + e.message); }
+                       }
+                       setDeletedItems(prev => prev.filter(it => !selectedDeletedIds.includes(it.id)));
+                       setSelectedDeletedIds([]);
+                       triggerRefresh(currentPath);
+                       alert(deleted + ' de ' + count + ' eliminado(s) permanentemente.');
+                     }}
+                     style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#d32f2f', color: '#fff', border: 'none', fontSize: 12, cursor: 'pointer', padding: '6px 14px', borderRadius: 4, fontWeight: 600 }}
+                   >
+                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                     Eliminar permanentemente ({selectedDeletedIds.length})
+                   </button>
+                 )}
               </div>
             )}
           </header>
@@ -2044,10 +2206,9 @@ function FilesPage({ project, user, onBack }) {
                         // Realizar restauración masiva en backend
                         try {
                           const res = await Promise.all(ids.map(id => 
-                            fetch(`${API}/api/docs/restore`, {
+                            apiFetch(`${API}/api/docs/restore`, {
                                method: 'POST',
-                               headers: { 'Content-Type': 'application/json' },
-                               body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name })
+                                                              body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name })
                             })
                           ));
                           const allOk = res.every(r => r.ok);
@@ -2098,9 +2259,9 @@ function FilesPage({ project, user, onBack }) {
                         setRestoringIds(prev => ({ ...prev, [id]: true }));
                         setTimeout(async () => {
                           try {
-                            const res = await fetch(`${API}/api/docs/restore`, {
+                            const res = await apiFetch(`${API}/api/docs/restore`, {
                                method: 'POST',
-                               headers: { 'Content-Type': 'application/json' },
+                               headers: getAuthHeaders(),
                                body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name })
                             });
                             if (!res.ok) {
@@ -2143,10 +2304,9 @@ function FilesPage({ project, user, onBack }) {
                             setFiles(prev => prev.map(f => f.id === item.id ? { ...f, description: newDesc } : f));
                           }
                           try {
-                            const res = await fetch(`${API}/api/docs/description`, {
+                            const res = await apiFetch(`${API}/api/docs/description`, {
                               method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ node_id: item.id, description: newDesc, model_urn: projectPrefix })
+                                                            body: JSON.stringify({ node_id: item.id, description: newDesc, model_urn: projectPrefix })
                             });
                             if (res.ok) triggerRefresh(currentPath);
                             else triggerRefresh(currentPath); // Revert on error
@@ -2158,24 +2318,24 @@ function FilesPage({ project, user, onBack }) {
                         onRename={async (item, newName) => {
                           console.log('Renaming item:', item.id, 'to:', newName);
                           setProcessingIds(prev => ({ ...prev, [item.id]: true }));
-                          // Optimistic update
+                          // Optimistic update — change name locally immediately
                           if (item.type === 'folder') {
                             setFolders(prev => prev.map(f => f.id === item.id ? { ...f, name: newName } : f));
                           } else {
                             setFiles(prev => prev.map(f => f.id === item.id ? { ...f, name: newName } : f));
                           }
                           try {
-                            const res = await fetch(`${API}/api/docs/rename`, {
+                            const res = await apiFetch(`${API}/api/docs/rename`, {
                               method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ node_id: item.id, new_name: newName, model_urn: projectPrefix })
                             });
                             if (res.ok) {
                               console.log('Rename success');
-                              triggerRefresh(currentPath);
+                              // Notificar al arbol lateral para que se sincronice el nombre
+                              setRefreshSignal(s => s + 1);
                             } else {
                               console.error('Rename failed:', res.status);
-                              triggerRefresh(currentPath); // Revert
+                              triggerRefresh(currentPath); // Revert to DB state
                             }
                           } catch (e) {
                             console.error('Error renaming:', e);
@@ -2214,7 +2374,8 @@ function FilesPage({ project, user, onBack }) {
                 }
               </footer>
             </section>
-          </div>
+        </div>
+        </>)}
         </div>
       </main>
 
@@ -2446,153 +2607,19 @@ function FilesPage({ project, user, onBack }) {
       )}
 
       {activeFile && activeFile.type !== 'folder' && (
-        <div className="file-viewer-overlay">
-          <div className="file-viewer-header">
-            <div className="file-viewer-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 16, fontWeight: 500, color: '#0696D7', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {activeFile.name}
-              </span>
-              
-              <div style={{ position: 'relative' }}>
-                <div 
-                  className="version-link-acc" 
-                  onClick={() => setShowVersions(!showVersions)}
-                  style={{ fontSize: 13, padding: '2px 12px' }}
-                >
-                  {viewedVersionInfo ? `V${viewedVersionInfo.version_number}` : (activeFile.version ? `V${activeFile.version}` : 'V1')}
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 6, transform: showVersions ? 'rotate(180deg)' : 'none' }}>
-                    <path d="M7 10l5 5 5-5H7z"/>
-                  </svg>
-                </div>
-
-                {showVersions && (
-                  <div className="version-popover" style={{ top: 32, left: 0, width: 350 }}>
-                    <div style={{ padding: '8px 12px', borderBottom: '1px solid #eee', fontSize: 12, fontWeight: 600, color: '#666' }}>
-                      Versiones
-                    </div>
-                    <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-                      {versionHistory.map((v, i) => {
-                        const isLatest = v.version_number === (versionHistory[0]?.version_number || activeFile.version);
-                        return (
-                          <div 
-                            key={i} 
-                            className="version-popover-item"
-                            style={{ 
-                              padding: '12px', 
-                              borderBottom: '1px solid #f5f5f5',
-                              background: viewedVersionInfo?.id === v.id ? '#f0faff' : 'transparent',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between'
-                            }}
-                          >
-                            <div 
-                              onClick={() => { setViewedVersionInfo(v); setShowVersions(false); }}
-                              style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flex: 1 }}
-                            >
-                               <div className="version-link-acc" style={{ minWidth: 32 }}>V{v.version_number || 1}</div>
-                               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                 <span style={{ fontSize: 13, fontWeight: 500, color: '#333' }}>{activeFile.name}</span>
-                                 <span style={{ fontSize: 11, color: '#999' }}>
-                                   Cargado por <span style={{ textTransform: 'uppercase' }}>{v.updated_by || 'ADMIN'}</span> el {formatDate(v.updated)}
-                                 </span>
-                               </div>
-                            </div>
-                            
-                            {!isLatest && isAdmin && (
-                              <button 
-                                className="acc-btn-promote"
-                                onClick={(e) => { e.stopPropagation(); handlePromote(v); }}
-                                title="Hacer versión actual"
-                                style={{ 
-                                  padding: '4px 8px', 
-                                  fontSize: 11, 
-                                  background: '#fff', 
-                                  border: '1px solid #0696D7', 
-                                  color: '#0696D7', 
-                                  borderRadius: 2,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                Hacer actual
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {viewedVersionInfo && viewedVersionInfo.version_number !== (versionHistory[0]?.version_number || activeFile.version) && (
-                <div className="no-actual-badge">
-                  No actual
-                </div>
-              )}
-            </div>
-            <button className="file-viewer-close" onClick={() => { setActiveFile(null); setShowVersions(false); setViewedVersionInfo(null); }}>✕</button>
-          </div>
-          <div className="file-viewer-content" style={{ flex: 1, position: 'relative', background: '#f5f5f5', display: 'flex', justifyContent: 'center' }}>
-            {(() => {
-              const fileUrl = viewedVersionInfo && viewedVersionInfo.gcs_urn 
-                ? `${API}/api/docs/view?urn=${encodeURIComponent(viewedVersionInfo.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}` 
-                : `${API}/api/docs/view?path=${encodeURIComponent(activeFile.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}`;
-              
-              const lowerName = activeFile.name.toLowerCase();
-              
-              // 1. VIDEOS
-              if (lowerName.endsWith('.mp4') || lowerName.endsWith('.webm') || lowerName.endsWith('.ogg')) {
-                return (
-                  <video controls autoPlay style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', background: '#000' }}>
-                    <source src={fileUrl} type={`video/${lowerName.split('.').pop()}`} />
-                    Tu navegador no soporta la reproducción de video.
-                  </video>
-                );
-              }
-              
-              // 2. IMAGES
-              if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'].some(ext => lowerName.endsWith(ext))) {
-                return (
-                  <img src={fileUrl} alt={activeFile.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                );
-              }
-              
-              // 3. OFFICE (Word, Excel, PPT)
-              if (['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext))) {
-                if (loadingOffice) {
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
-                      <div className="spinner-acc" style={{ width: 40, height: 40, border: '3px solid #f3f3f3', borderTop: '3px solid #0696d7', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' }}></div>
-                      <div style={{ fontSize: 14, color: '#666' }}>Cargando visor de Office...</div>
-                    </div>
-                  );
-                }
-                if (!officeUrl) {
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#666' }}>
-                      <div style={{ fontSize: 14 }}>No se pudo cargar la vista previa de Office.</div>
-                      <button onClick={() => window.open(fileUrl, '_blank')} style={{ marginTop: 12, padding: '8px 16px', background: '#0696d7', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Descargar archivo</button>
-                    </div>
-                  );
-                }
-                const viewerUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(officeUrl)}`;
-                return (
-                  <iframe src={viewerUrl} title={activeFile.name} style={{ width: '100%', height: '100%', border: 'none' }} />
-                );
-              }
-              
-              // 4. PDF & DEFAULT (Iframe)
-              return (
-                <iframe 
-                  src={fileUrl} 
-                  title={activeFile.name} 
-                  style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }}
-                />
-              );
-            })()}
-          </div>
-        </div>
+        <DocumentViewer 
+          file={activeFile}
+          projectPrefix={projectPrefix}
+          versionHistory={versionHistory}
+          viewedVersionInfo={viewedVersionInfo}
+          setViewedVersionInfo={setViewedVersionInfo}
+          showVersions={showVersions}
+          setShowVersions={setShowVersions}
+          isAdmin={isAdmin}
+          onPromote={handlePromote}
+          API={API}
+          onClose={() => { setActiveFile(null); setShowVersions(false); setViewedVersionInfo(null); }}
+        />
       )}
 
       {showDeleteModal && (
@@ -2650,6 +2677,7 @@ function FilesPage({ project, user, onBack }) {
                     defaultExpanded={true} 
                     selectedPath={moveState.destPath} 
                     onSelect={(path, id) => setMoveState({ ...moveState, destPath: path, destId: id })} 
+                    modelUrn={projectPrefix}
                   />
                 </div>
               )}
@@ -2757,30 +2785,35 @@ function FilesPage({ project, user, onBack }) {
                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
                                      Cargado en la carpeta {currentPath.split('/').filter(Boolean).pop()} {item.time}
                                    </div>
+                                 ) : item.status === 'ERROR' ? (
+                                   <div style={{ color: '#d32f2f', fontSize: 11 }}>Error al cargar</div>
                                  ) : (
                                    <>
-                                     {item.status === 'BARRA_AZUL' ? (
-                                       <div className="acc-progress-container" style={{ marginTop: 10, height: 6, background: '#eee', borderRadius: 0 }}>
+                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                         {(item.status === 'PROCESANDO_1' && item.progress >= 100) || item.status === 'PROCESO_PENDIENTE' ? (
+                                           <div className="acc-mini-spinner" style={{ width: 10, height: 10, border: '2px solid #0696d7', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1.5s linear infinite' }} />
+                                         ) : null}
+                                         <span style={{ fontSize: 11, color: '#666' }}>
+                                           {item.status === 'PROCESO_PENDIENTE' ? 'Proceso pendiente' : 
+                                            (item.status === 'PROCESANDO_1' && item.progress >= 100) ? 'Procesando...' :
+                                            item.progress < 100 ? 'Cargando...' : 'Procesando...'}
+                                         </span>
+                                       </div>
+                                       {item.progress < 100 && (
+                                         <span style={{ fontSize: 11, color: '#0696d7', fontWeight: 600 }}>{item.progress}%</span>
+                                       )}
+                                     </div>
+                                     <div className="acc-progress-container" style={{ marginTop: 6, height: 6, background: '#e8e8e8', borderRadius: 3, overflow: 'hidden' }}>
+                                       {(item.status === 'PROCESANDO_1' && item.progress >= 100) || item.status === 'PROCESO_PENDIENTE' ? (
+                                         <div className="acc-progress-bar indeterminate" style={{ height: '100%', borderRadius: 3 }} />
+                                       ) : (
                                          <div 
                                            className="acc-progress-bar" 
-                                           style={{ width: `${item.progress}%`, borderRadius: 0, transition: 'width 0.3s ease' }} 
+                                           style={{ width: `${item.progress}%`, height: '100%', borderRadius: 3, transition: 'width 0.3s ease', background: '#0696d7' }} 
                                          />
-                                       </div>
-                                     ) : (
-                                       <>
-                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                           {(item.status === 'PROCESANDO_1' || item.status === 'PROCESO_PENDIENTE') && (
-                                             <div className="acc-mini-spinner" style={{ width: 10, height: 10, border: '2px solid #0696d7', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1.5s linear infinite' }} />
-                                           )}
-                                           <span style={{ fontSize: 11, color: '#666' }}>
-                                             {item.status === 'PROCESO_PENDIENTE' ? 'Proceso pendiente' : 'Procesando...'}
-                                           </span>
-                                         </div>
-                                         <div className="acc-progress-container" style={{ marginTop: 8, height: 4, borderRadius: 0 }}>
-                                           <div className="acc-progress-bar indeterminate" style={{ width: '100%', borderRadius: 0 }} />
-                                         </div>
-                                       </>
-                                     )}
+                                       )}
+                                     </div>
                                    </>
                                  )}
                                </div>
@@ -3018,16 +3051,56 @@ function FilesPage({ project, user, onBack }) {
               </div>
             </div>
 
-            <div className="share-footer">
-              <button className="btn-copy-link" onClick={() => {
-                const url = `${window.location.origin}/share/${shareTarget.id}?role=${shareGeneralRole}`;
-                navigator.clipboard.writeText(url);
-                alert("Enlace copiado al portapapeles: " + url);
+            <div className="share-footer" style={{ position: 'relative' }}>
+              <button className="btn-copy-link" style={shareLinkCopied ? { outline: '2px solid #0b57d0', outlineOffset: '2px', background: '#e8f0fe' } : {}} onClick={async () => {
+                try {
+                  const res = await apiFetch(`${API}/api/docs/share`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      node_id: shareTarget.id,
+                      model_urn: projectPrefix,
+                      shared_by: user?.email || 'Unknown',
+                      role: shareGeneralRole,
+                      access_type: shareGeneralAccess
+                    })
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    const url = `${window.location.origin}/share/${data.share_id}`;
+                    navigator.clipboard.writeText(url);
+                    setShareLinkCopied(true);
+                    setTimeout(() => setShareLinkCopied(false), 3000);
+                  } else {
+                    alert("Error al generar el enlace.");
+                  }
+                } catch (e) {
+                  console.error(e);
+                  alert("Error de conexión al generar el enlace.");
+                }
               }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                 Copiar enlace
               </button>
-              <button className="btn-share-done" onClick={() => setShowShareModal(false)}>Hecho</button>
+              
+              {shareLinkCopied && (
+                <div style={{ position: 'absolute', top: 50, left: 24, background: '#323232', color: '#fff', padding: '12px 16px', borderRadius: 4, fontSize: 14, display: 'flex', alignItems: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', pointerEvents: 'none', zIndex: 9999 }}>
+                  Enlace copiado
+                </div>
+              )}
+
+              <button className="btn-share-done" onClick={() => {
+                setShowShareModal(false);
+                apiFetch(`${API}/api/docs/share`, {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    node_id: shareTarget.id,
+                    model_urn: projectPrefix,
+                    shared_by: user?.email || 'Unknown',
+                    role: shareGeneralRole,
+                    access_type: shareGeneralAccess
+                  })
+                }).catch(e => console.error(e));
+              }}>Hecho</button>
             </div>
           </div>
         </div>
@@ -3039,6 +3112,12 @@ function FilesPage({ project, user, onBack }) {
 // MAIN APP ROUTER
 // ─────────────────────────────────────
 export default function App() {
+  const path = window.location.pathname;
+  if (path.startsWith('/share/')) {
+    const shareId = path.split('/share/')[1];
+    return <SharedViewer shareId={shareId} />;
+  }
+
   const { user, saveUser, logout } = useUser();
   const [selectedProject, setSelectedProject] = useState(() => {
     const saved = localStorage.getItem('selected_project');
@@ -3057,5 +3136,5 @@ export default function App() {
     return <SecureProjectsPage user={user} onSelectProject={handleSelectProject} onLogout={logout} />;
   }
 
-  return <FilesPage project={selectedProject} user={user} onBack={() => handleSelectProject(null)} />;
+  return <FilesPage project={selectedProject} user={user} onBack={() => handleSelectProject(null)} onLogout={logout} />;
 }

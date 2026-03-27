@@ -3,6 +3,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from db import get_db_connection
+from auth_middleware import create_session, revoke_session
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -84,6 +85,7 @@ from google.auth.transport import requests as google_requests
 
 # Google Client ID (Debería estar en .env)
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', 'placeholder-google-client-id')
+print(f"[AUTH] Google Client ID loaded: {GOOGLE_CLIENT_ID[:20]}...{GOOGLE_CLIENT_ID[-15:]}")
 
 @auth_bp.route('/api/auth/google', methods=['POST'])
 def google_auth():
@@ -104,7 +106,9 @@ def google_auth():
             name = idinfo.get('name', 'Usuario Google')
             google_id = idinfo['sub'] # ID único de Google
             
-        except ValueError:
+        except ValueError as e:
+            print(f"[AUTH] Google token verification FAILED: {e}")
+            print(f"[AUTH] Using Client ID: {GOOGLE_CLIENT_ID}")
             return jsonify({'error': 'Token de Google inválido'}), 401
             
         with get_db_connection() as conn:
@@ -129,7 +133,8 @@ def google_auth():
                     'email': user[2],
                     'role': user[4],
                     'company': user[5],
-                    'job_title': user[6]
+                    'job_title': user[6],
+                    'session_token': create_session(user[0])
                 }), 200
             else:
                 # Usuario no existe, crear cuenta automáticamente (Registro rápido)
@@ -147,7 +152,8 @@ def google_auth():
                     'name': name,
                     'email': email,
                     'role': 'user',
-                    'is_new': True
+                    'is_new': True,
+                    'session_token': create_session(new_id)
                 }), 200
                 
     except Exception as e:
@@ -184,12 +190,22 @@ def login():
                     'email': user[2],
                     'role': user[4],
                     'company': user[5],
-                    'job_title': user[6]
+                    'job_title': user[6],
+                    'session_token': create_session(user[0])
                 }), 200
             else:
                 return jsonify({'error': 'Correo o contraseña incorrectos'}), 401
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@auth_bp.route('/api/auth/logout', methods=['POST'])
+def logout():
+    """Revoke the current session token"""
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:]
+        revoke_session(token)
+    return jsonify({'success': True}), 200
 
 @auth_bp.route('/api/auth/register', methods=['POST'])
 def register():
@@ -202,8 +218,8 @@ def register():
         company_id = data.get('company_id')
         job_title_id = data.get('job_title_id')
         
-        if not name or not email or not password or not company_id or not job_title_id:
-            return jsonify({'error': 'Faltan datos o selecciones en el formulario'}), 400
+        if not name or not email or not password:
+            return jsonify({'error': 'Nombre, correo y contraseña son requeridos'}), 400
             
         hashed_pw = generate_password_hash(password)
         

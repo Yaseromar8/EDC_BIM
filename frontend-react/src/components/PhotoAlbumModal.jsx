@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/apiFetch';
 
 import React, { useState } from 'react';
 import './PhotoAlbumModal.css';
@@ -148,7 +149,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
 
         try {
             // 1. Get Signed URL
-            const urlResp = await fetch(`${BACKEND_URL}/api/docs/upload-url`, {
+            const urlResp = await apiFetch(`${BACKEND_URL}/api/docs/upload-url`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -167,7 +168,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
             });
 
             // 3. Finalize upload in DB
-            const completeResp = await fetch(`${BACKEND_URL}/api/docs/upload-complete`, {
+            const completeResp = await apiFetch(`${BACKEND_URL}/api/docs/upload-complete`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

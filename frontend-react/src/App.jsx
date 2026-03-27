@@ -22,6 +22,7 @@ import TandemFilterPanel from './components/TandemFilterPanel';
 import PdfViewer from './components/PdfViewer';
 import ScheduleDetailedView from './components/ScheduleDetailedView';
 import { uploadFile } from './services/uploadService';
+import { apiFetch } from './utils/apiFetch';
 
 
 
@@ -502,11 +503,15 @@ function App() {
 
   const handleLoginSuccess = (userData) => {
     localStorage.setItem('visor_user', JSON.stringify(userData));
+    if (userData.session_token) {
+      localStorage.setItem('visor_session_token', userData.session_token);
+    }
     setUser(userData);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('visor_user');
+    localStorage.removeItem('visor_session_token');
     setUser(null);
     setSelectedProject(null);
   };
@@ -642,10 +647,9 @@ function App() {
       // Usamos el historial acumulado hasta ahora más el nuevo mensaje
       const fullHistory = [...(universalSearch.messages || []), userMsg];
 
-      const resp = await fetch(`${BACKEND_URL}/api/ai/universal-search`, {
+      const resp = await apiFetch(`${BACKEND_URL}/api/ai/universal-search`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+                body: JSON.stringify({
           query,
           model_urn: selectedProject?.urn || null,
           history: fullHistory
@@ -702,7 +706,7 @@ function App() {
 
     try {
       // Necesitamos obtener la URL real del archivo desde el backend
-      const resp = await fetch(`${BACKEND_URL}/api/documents/${result.nodeId}`);
+      const resp = await apiFetch(`${BACKEND_URL}/api/documents/${result.nodeId}`);
       const data = await resp.json();
 
       if (data.success && data.document) {
@@ -789,7 +793,7 @@ function App() {
   useEffect(() => {
     const getToken = async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/token`);
+        const res = await apiFetch(`${BACKEND_URL}/api/token`);
         const data = await res.json();
         setAccessToken(data.access_token);
       } catch (err) {
@@ -815,10 +819,9 @@ function App() {
     setDocPlacementMode(false);
 
     try {
-      await fetch(`${BACKEND_URL}/api/pins`, {
+      await apiFetch(`${BACKEND_URL}/api/pins`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+                body: JSON.stringify({
            id: newPin.id,
            type: 'doc',
            x_coord: newPin.x,
@@ -939,7 +942,7 @@ function App() {
     if (!selectedProject) return;
 
     const projectId = selectedProject?.id || selectedProject?.name || 'global';
-    fetch(`${BACKEND_URL}/api/views?project=${encodeURIComponent(projectId)}`)
+    apiFetch(`${BACKEND_URL}/api/views?project=${encodeURIComponent(projectId)}`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setSavedViews(data);
@@ -959,10 +962,9 @@ function App() {
         hiddenModelUrns
       };
 
-      fetch(`${BACKEND_URL}/api/views`, {
+      apiFetch(`${BACKEND_URL}/api/views`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+                body: JSON.stringify({
           name,
           viewerState,
           filterState,
@@ -982,7 +984,7 @@ function App() {
 
   const handleDeleteView = useCallback((viewId) => {
     if (!window.confirm("Delete this view?")) return;
-    fetch(`${BACKEND_URL}/api/views/${viewId}`, { method: 'DELETE' })
+    apiFetch(`${BACKEND_URL}/api/views/${viewId}`, { method: 'DELETE' })
       .then(res => res.ok ? setSavedViews(prev => prev.filter(v => v.id !== viewId)) : null)
       .catch(err => console.error("Error deleting view:", err));
   }, []);
@@ -1133,7 +1135,7 @@ function App() {
     setAvailableProperties([]);
     setHiddenModelUrns([]);
 
-    fetch(`${BACKEND_URL}/api/config/project?project=${selectedProject.id}`)
+    apiFetch(`${BACKEND_URL}/api/config/project?project=${selectedProject.id}`)
       .then(res => res.json())
       .then(data => {
         if (data.models && Array.isArray(data.models)) {
@@ -1160,10 +1162,9 @@ function App() {
         if (models.length === 0) return;
         const newModelData = models[0]; // Relink strictly one model
 
-        const res = await fetch(`${BACKEND_URL}/api/config/project/relink`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/config/project/relink`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+                    body: JSON.stringify({
             targetId: relinkTargetModel.id,
             oldUrn: relinkTargetModel.urn,
             project: selectedProject,
@@ -1208,10 +1209,9 @@ function App() {
           project: selectedProject.id
         };
 
-        const res = await fetch(`${BACKEND_URL}${endpoint}`, {
+        const res = await apiFetch(`${BACKEND_URL}${endpoint}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+                    body: JSON.stringify(payload)
         });
 
         if (res.ok) {
@@ -1234,10 +1234,9 @@ function App() {
   const handleModelUpdate = useCallback(async (urn) => {
     if (!selectedProject) return alert("Error: No project context.");
     try {
-      const res = await fetch(`${BACKEND_URL}/api/config/project/update`, {
+      const res = await apiFetch(`${BACKEND_URL}/api/config/project/update`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urn, project: selectedProject.id })
+                body: JSON.stringify({ urn, project: selectedProject.id })
       });
       if (res.ok) {
         const data = await res.json();
@@ -1291,16 +1290,15 @@ function App() {
     setHiddenModelUrns(prev => prev.filter(u => u !== urn));
 
     try {
-      await fetch(`${BACKEND_URL}/api/config/project/remove`, {
+      await apiFetch(`${BACKEND_URL}/api/config/project/remove`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urn, project: selectedProject.id })
+                body: JSON.stringify({ urn, project: selectedProject.id })
       });
       // Don't use the response to update state — local optimistic update already handled it
     } catch (e) {
       console.error("Error removing model:", e);
       // On error, reload from server to restore correct state
-      fetch(`${BACKEND_URL}/api/config/project?project=${selectedProject}`)
+      apiFetch(`${BACKEND_URL}/api/config/project?project=${selectedProject}`)
         .then(res => res.json())
         .then(data => {
           if (data.models) setModels(data.models.map(m => ({ ...m, label: m.name })));
@@ -1332,10 +1330,9 @@ function App() {
     const projectId = file.projectId || file.project_id;
     const versionId = file.versionId || file.version_id;
     const body = storageId ? { storageId } : { projectId, versionId };
-    const resp = await fetch(`${BACKEND_URL}/api/build/signed-read`, {
+    const resp = await apiFetch(`${BACKEND_URL}/api/build/signed-read`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+            body: JSON.stringify(body)
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
@@ -1425,7 +1422,7 @@ function App() {
       try {
         const urn = selectedProject?.id || 'global';
         console.log(`[App] Fetching tracking data for urn: ${urn}`);
-        const res = await fetch(`${BACKEND_URL}/api/tracking?model_urn=${urn}&t=${Date.now()}`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/tracking?model_urn=${urn}&t=${Date.now()}`, {
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' }
         });
@@ -1450,7 +1447,7 @@ function App() {
     const fetchDocPins = async () => {
       try {
         const projectUrn = selectedProject?.id || 'global';
-        const res = await fetch(`${BACKEND_URL}/api/pins?project=${projectUrn}`);
+        const res = await apiFetch(`${BACKEND_URL}/api/pins?project=${projectUrn}`);
         if(res.ok) {
             const data = await res.json();
             const loadedDocs = data.filter(p => p.type === 'doc').map(p => ({
@@ -1476,10 +1473,9 @@ function App() {
   const saveTrackingData = async (newData) => {
     try {
       const urn = selectedProject?.id || 'global';
-      await fetch(`${BACKEND_URL}/api/tracking?model_urn=${urn}`, {
+      await apiFetch(`${BACKEND_URL}/api/tracking?model_urn=${urn}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newData)
+                body: JSON.stringify(newData)
       });
     } catch (e) {
       console.error("Failed to save tracking data", e);

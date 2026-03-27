@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/apiFetch';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './viewer.css';
 import './IconMarkup.css'; // Add this line
@@ -403,7 +404,7 @@ const Viewer = ({
                     if (accessToken) {
                         onSuccess(accessToken, 3600);
                     } else {
-                        fetch(`${BACKEND_URL}/api/token`)
+                        apiFetch(`${BACKEND_URL}/api/token`)
                             .then(res => res.json())
                             .then(data => onSuccess(data.access_token, data.expires_in))
                             .catch(err => console.error("Token fetch error", err));

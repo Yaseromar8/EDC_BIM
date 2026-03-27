@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/apiFetch';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './DocumentManager.css';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -58,7 +59,7 @@ export default function DocumentManager({ isOpen, onClose }) {
     const fetchContents = useCallback(async (path) => {
         setLoading(true);
         try {
-            const res = await fetch(`${BACKEND_URL}/api/docs/list?path=${encodeURIComponent(path)}`);
+            const res = await apiFetch(`${BACKEND_URL}/api/docs/list?path=${encodeURIComponent(path)}`);
             const data = await res.json();
             if (res.ok) {
                 setFolders(data.folders || []);
@@ -76,7 +77,7 @@ export default function DocumentManager({ isOpen, onClose }) {
     // Fetch sidebar tree root
     const fetchSidebarRoot = useCallback(async () => {
         try {
-            const res = await fetch(`${BACKEND_URL}/api/docs/list?path=`);
+            const res = await apiFetch(`${BACKEND_URL}/api/docs/list?path=`);
             const data = await res.json();
             if (res.ok) {
                 setSidebarFolders(data.folders || []);
@@ -116,7 +117,7 @@ export default function DocumentManager({ isOpen, onClose }) {
         for (const file of fileList) {
             try {
                 // 1. Get Signed URL
-                const urlResp = await fetch(`${BACKEND_URL}/api/docs/upload-url`, {
+                const urlResp = await apiFetch(`${BACKEND_URL}/api/docs/upload-url`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -138,7 +139,7 @@ export default function DocumentManager({ isOpen, onClose }) {
                 });
 
                 // 3. Finalize upload in DB
-                await fetch(`${BACKEND_URL}/api/docs/upload-complete`, {
+                await apiFetch(`${BACKEND_URL}/api/docs/upload-complete`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -172,7 +173,7 @@ export default function DocumentManager({ isOpen, onClose }) {
         const fullPath = currentPath + newFolderName.trim();
 
         try {
-            await fetch(`${BACKEND_URL}/api/docs/folder`, {
+            await apiFetch(`${BACKEND_URL}/api/docs/folder`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: fullPath })
@@ -193,7 +194,7 @@ export default function DocumentManager({ isOpen, onClose }) {
 
         for (const fullName of selectedItems) {
             try {
-                await fetch(`${BACKEND_URL}/api/docs/delete`, {
+                await apiFetch(`${BACKEND_URL}/api/docs/delete`, {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ fullName })

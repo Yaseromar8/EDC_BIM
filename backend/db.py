@@ -10,8 +10,8 @@ def init_db_pool():
     global db_pool
     if db_pool is None:
         try:
-            db_pool = psycopg2.pool.SimpleConnectionPool(
-                1, 20, # Min, Max conexiones
+            db_pool = psycopg2.pool.ThreadedConnectionPool(
+                5, 20, # Min, Max conexiones
                 user=os.environ.get("DB_USER"),
                 password=os.environ.get("DB_PASS"),
                 host=os.environ.get("DB_HOST"),
@@ -19,7 +19,7 @@ def init_db_pool():
                 database=os.environ.get("DB_NAME"),
                 connect_timeout=10
             )
-            print("Pool de conexiones a PostgreSQL inicializado correctamente.")
+            print("Pool de conexiones a PostgreSQL inicializado correctamente (Threaded, Min: 5).")
         except Exception as e:
             print(f"CRITICAL: Error iniciando Pool SQL a {os.environ.get('DB_HOST')}: {str(e)}")
             import traceback
@@ -160,6 +160,21 @@ def ensure_file_nodes_table():
                     expires_in INTEGER,
                     token_type TEXT,
                     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
+            # ── 5. Share Engine (Acceso a Obra Externo) ────────────
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS document_shares (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    file_node_id UUID REFERENCES file_nodes(id) ON DELETE CASCADE,
+                    model_urn VARCHAR(255) NOT NULL,
+                    shared_by VARCHAR(255),
+                    role VARCHAR(50) DEFAULT 'viewer',
+                    access_type VARCHAR(50) DEFAULT 'restricted',
+                    target_emails TEXT[],
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP WITH TIME ZONE NULL
                 );
             """)
 

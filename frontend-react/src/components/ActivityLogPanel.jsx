@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/apiFetch';
 
 import React, { useState, useEffect } from 'react';
 import './ActivityLogPanel.css';
@@ -16,7 +17,7 @@ const ActivityLogPanel = ({ modelUrn }) => {
     const fetchActivities = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`${BACKEND_URL}/api/activity?model_urn=${encodeURIComponent(modelUrn)}&limit=50`);
+            const res = await apiFetch(`${BACKEND_URL}/api/activity?model_urn=${encodeURIComponent(modelUrn)}&limit=50`);
             const json = await res.json();
             if (json.success) {
                 setActivities(json.data || []);

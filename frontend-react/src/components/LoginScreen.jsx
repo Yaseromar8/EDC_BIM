@@ -178,7 +178,7 @@ const LoginScreen = ({ onLogin }) => {
             } catch { setError('Error de conexión'); }
             finally { setLoading(false); }
         };
-        if (window.google) {
+        if (window.google?.accounts?.id) {
             window.google.accounts.id.initialize({
                 client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || "tu-cliente-id.apps.googleusercontent.com",
                 callback: handleGoogleResponse
@@ -187,7 +187,7 @@ const LoginScreen = ({ onLogin }) => {
     }, [onLogin]);
 
     const handleGoogleClick = () => {
-        if (window.google) window.google.accounts.id.prompt();
+        if (window.google?.accounts?.id) window.google.accounts.id.prompt();
         else setError('Google Login no disponible');
     };
 

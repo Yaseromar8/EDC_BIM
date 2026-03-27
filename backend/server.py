@@ -38,6 +38,25 @@ CORS(app, resources={r"/*": {"origins": [
     # "https://tu-visor.netlify.app",
 ]}})
 
+# --- AUTH MIDDLEWARE ---
+from auth_middleware import init_auth_middleware
+init_auth_middleware(app)
+
+# --- RATE LIMITING ---
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=["200 per minute"],
+        storage_uri="memory://",
+    )
+    print("[security] Rate limiter initialized: 200 req/min general")
+except ImportError:
+    print("[security] WARNING: Flask-Limiter not installed. Run: pip install Flask-Limiter")
+    limiter = None
+
 # Register Blueprints
 
 

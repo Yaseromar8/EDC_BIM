@@ -563,3 +563,51 @@ def update_node_description(model_urn, node_id, description):
         )
         conn.commit()
     return True
+
+
+def rename_node(model_urn, node_id, new_name):
+    """
+    Renombra un nodo (archivo o carpeta) por su ID.
+    Valida que no exista otro nodo con el mismo nombre en el mismo padre.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        # 1. Obtener datos actuales del nodo
+        cursor.execute(
+            "SELECT parent_id, node_type, name FROM file_nodes WHERE id = %s AND model_urn = %s AND is_deleted = FALSE",
+            (node_id, model_urn)
+        )
+        node = cursor.fetchone()
+        if not node:
+            raise Exception(f"Nodo {node_id} no encontrado en proyecto {model_urn}")
+        
+        parent_id, node_type, old_name = node
+        
+        if old_name == new_name:
+            return True  # No change needed
+        
+        # 2. Verificar que no exista conflicto de nombres en el mismo padre
+        if parent_id:
+            cursor.execute("""
+                SELECT id FROM file_nodes 
+                WHERE model_urn = %s AND parent_id = %s AND name = %s AND node_type = %s AND is_deleted = FALSE AND id != %s
+            """, (model_urn, parent_id, new_name, node_type, node_id))
+        else:
+            cursor.execute("""
+                SELECT id FROM file_nodes 
+                WHERE model_urn = %s AND parent_id IS NULL AND name = %s AND node_type = %s AND is_deleted = FALSE AND id != %s
+            """, (model_urn, new_name, node_type, node_id))
+        
+        if cursor.fetchone():
+            raise Exception(f"Ya existe un elemento llamado '{new_name}' en esta ubicación")
+        
+        # 3. Actualizar el nombre
+        cursor.execute(
+            "UPDATE file_nodes SET name = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s AND model_urn = %s",
+            (new_name, node_id, model_urn)
+        )
+        conn.commit()
+    
+    print(f"[RENAME] Node {node_id}: '{old_name}' → '{new_name}'")
+    return True
