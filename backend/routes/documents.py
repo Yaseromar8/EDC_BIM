@@ -4,10 +4,40 @@ import uuid
 import requests
 from flask import Blueprint, request, jsonify, redirect, Response
 from werkzeug.utils import secure_filename
-from gcs_manager import generate_signed_url, upload_file_to_gcs
+from gcs_manager import generate_signed_url, upload_file_to_gcs, delete_gcs_blob
 
 documents_bp = Blueprint('documents', __name__)
 print("[DEBUG] documents_bp loaded from routes/documents.py")
+
+
+def verify_project_access(user_id, model_urn):
+    """
+    Verifica que el usuario tenga acceso al proyecto asociado a este model_urn.
+    Admins tienen acceso global. Usuarios normales deben estar en project_users.
+    model_urn == 'global' se permite sin verificación (datos compartidos).
+    """
+    if not user_id or not model_urn or model_urn == 'global':
+        return True  # Global namespace no requiere verificación
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Admins tienen acceso a todo
+            cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+            user_row = cursor.fetchone()
+            if user_row and user_row[0] == 'admin':
+                return True
+            # Usuarios normales: verificar tabla project_users
+            cursor.execute("""
+                SELECT 1 FROM project_users pu
+                JOIN projects p ON pu.project_id = p.id
+                WHERE pu.user_id = %s AND (p.model_urn = %s OR p.id = %s)
+                LIMIT 1
+            """, (user_id, model_urn, model_urn))
+            return cursor.fetchone() is not None
+    except Exception as e:
+        print(f"[ACL] Error checking project access: {e}")
+        return False
 
 
 # ─── Tipos MIME → Content-Disposition hint ───────────────────────────────────
@@ -194,6 +224,12 @@ def list_documents():
     path = request.args.get('path', '')
     model_urn = request.args.get('model_urn', 'global')
 
+    # ── TENANT ISOLATION: Verificar que el usuario tiene acceso al proyecto ──
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user.get('id'), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+
     try:
         from file_system_db import resolve_path_to_node_id, list_contents
         
@@ -292,6 +328,12 @@ def create_folder():
     model_urn = data.get('model_urn', 'global')
     performed_by = data.get('user', None)
 
+    # ── TENANT ISOLATION ──
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user.get('id'), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+
     try:
         from file_system_db import resolve_path_to_node_id
         from db import log_activity
@@ -325,6 +367,12 @@ def upload_document():
     model_urn = request.form.get('model_urn', 'global')
     performed_by = request.form.get('user', None)
     print(f"[Upload] Meta: path='{folder_path}', model_urn='{model_urn}', user='{performed_by}'")
+
+    # ── TENANT ISOLATION ──
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user.get('id'), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
 
     if folder_path and not folder_path.endswith('/'):
         folder_path += '/'
@@ -363,12 +411,22 @@ def upload_document():
 
         print(f"[Upload] GCS upload success: {gcs_url}")
         # ── 5. Registrar en PostgreSQL con metadatos completos ────────────────
-        create_file_record(
-            model_urn, parent_id, filename,
-            file_info['size_bytes'], gcs_uuid,
-            mime_type=file_info.get('mime_type'),
-            created_by=performed_by
-        )
+        # ROLLBACK: Si la BD falla, borramos el blob de GCS para evitar huérfanos
+        try:
+            create_file_record(
+                model_urn, parent_id, filename,
+                file_info['size_bytes'], gcs_uuid,
+                mime_type=file_info.get('mime_type'),
+                created_by=performed_by
+            )
+        except Exception as db_error:
+            print(f"[Upload] DB FAILED after GCS success. Rolling back blob: {gcs_uuid}")
+            try:
+                delete_gcs_blob(gcs_uuid)
+                print(f"[Upload] Orphan blob deleted successfully: {gcs_uuid}")
+            except Exception as cleanup_err:
+                print(f"[Upload] CRITICAL: Failed to delete orphan blob {gcs_uuid}: {cleanup_err}")
+            raise db_error
 
         # ── 6. Auditoria ─────────────────────────────────────────────────────
         log_activity(
@@ -400,6 +458,18 @@ def upload_document():
 
 @documents_bp.route('/api/docs/dev/wipe', methods=['POST'])
 def dev_wipe_ecd():
+    """DESTRUCTIVE: Wipe entire ECD. Protected by env flag + admin role."""
+    # ── GATE 1: Environment flag must be explicitly set ──
+    import os
+    if os.environ.get('ALLOW_DEV_WIPE') != 'true':
+        return jsonify({"success": False, "error": "Endpoint disabled. Set ALLOW_DEV_WIPE=true to enable."}), 403
+
+    # ── GATE 2: Must be authenticated admin ──
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if not user or user.get('role') != 'admin':
+        return jsonify({"success": False, "error": "Admin role required for destructive operations."}), 403
+
     try:
         from db import get_db_connection
         with get_db_connection() as conn:
@@ -407,6 +477,7 @@ def dev_wipe_ecd():
             cursor.execute('TRUNCATE TABLE file_nodes CASCADE;')
             cursor.execute('TRUNCATE TABLE activity_log CASCADE;')
             conn.commit()
+        print(f"[WIPE] ECD wiped by {user.get('email', 'unknown')}")
         return jsonify({"success": True, "message": "ECD Wiped"})
     except Exception as e:
         import traceback
@@ -424,6 +495,12 @@ def delete_document():
     node_id = data.get('id')
     model_urn = data.get('model_urn', 'global')
     performed_by = data.get('user', None)
+
+    # ── TENANT ISOLATION: Verificar acceso al proyecto ──
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user.get('id'), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
 
     try:
         from file_system_db import soft_delete_node, resolve_path_to_node_id
@@ -450,6 +527,14 @@ def rename_document():
     data = request.get_json()
     if not data:
         return jsonify({"success": False, "error": "No data provided"}), 400
+
+    model_urn = data.get('model_urn', 'global')
+
+    # ── TENANT ISOLATION ──
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user.get('id'), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
 
     # CASE A: ID-based (POST) - New way for inline editing
     if request.method == 'POST':
@@ -543,6 +628,12 @@ def move_document():
     model_urn = data.get('model_urn', 'global')
     performed_by = data.get('user', None)
 
+    # ── TENANT ISOLATION ──
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user.get('id'), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+
     print(f"[MOVE] Request: node_id={node_id}, dest_node_id={dest_node_id}, node_path='{node_path}', dest_path='{dest_path}'")
 
     try:
@@ -624,6 +715,67 @@ def move_document():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@documents_bp.route('/api/docs/upload-url', methods=['POST'])
+def get_upload_url():
+    """Generates a Signed URL for direct-to-bucket client uploads."""
+    data = request.get_json()
+    if not data: return jsonify({"success": False, "error": "No data"}), 400
+    model_urn = data.get('model_urn', 'global')
+    filename = data.get('filename')
+    content_type = data.get('contentType', 'application/octet-stream')
+    
+    # ── TENANT ISOLATION ──
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user.get('id'), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+
+    import uuid
+    gcs_urn = str(uuid.uuid4())
+    from gcs_manager import generate_upload_signed_url
+    upload_url = generate_upload_signed_url(gcs_urn, content_type)
+    
+    if upload_url:
+        return jsonify({"success": True, "uploadUrl": upload_url, "gcs_urn": gcs_urn}), 200
+    return jsonify({"success": False, "error": "Error generando URL"}), 500
+
+@documents_bp.route('/api/docs/upload-confirm', methods=['POST'])
+def confirm_upload():
+    """Validates the uploaded file exists and creates the DB record for the item."""
+    data = request.get_json()
+    if not data: return jsonify({"success": False, "error": "No data"}), 400
+    model_urn = data.get('model_urn', 'global')
+    folder_path = data.get('path', '')
+    filename = data.get('filename')
+    gcs_urn = data.get('gcs_urn')
+    size_bytes = data.get('size_bytes', 0)
+    mime_type = data.get('mime_type', 'application/octet-stream')
+    performed_by = data.get('user', None)
+
+    # ── TENANT ISOLATION ──
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user.get('id'), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+
+    if folder_path and not folder_path.endswith('/'):
+        folder_path += '/'
+
+    try:
+        from file_system_db import create_file_record, resolve_path_to_node_id
+        from db import log_activity
+
+        parent_id = resolve_path_to_node_id(folder_path, model_urn, created_by=performed_by) if folder_path else None
+        create_file_record(model_urn, parent_id, filename, size_bytes, gcs_urn, mime_type=mime_type, created_by=performed_by)
+
+        node_path = (folder_path + filename) if folder_path else filename
+        log_activity(model_urn, 'upload_file', 'file',
+                     entity_name=node_path, performed_by=performed_by)
+
+        return jsonify({"success": True, "message": "File record created"}), 201
+    except Exception as e:
+        print(f"[Upload Confirm] Error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @documents_bp.route('/api/activity', methods=['GET'])
@@ -670,6 +822,12 @@ def search_documents():
     """Buscador global dentro de un proyecto (model_urn)."""
     query = request.args.get('q', '').strip()
     model_urn = request.args.get('model_urn', 'global')
+
+    # ── TENANT ISOLATION ──
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user.get('id'), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
     
     if not query or len(query) < 2:
         return jsonify({"success": True, "data": []}), 200
@@ -718,7 +876,7 @@ def search_documents():
         return jsonify({"success": False, "error": str(e)}), 500
 @documents_bp.route('/api/docs/batch', methods=['POST'])
 def batch_update():
-    """Operaciones masivas: cambio de estado o eliminación de múltiples items."""
+    """Operaciones masivas: cambio de estado ISO 19650 o eliminación de múltiples items."""
     data = request.get_json()
     if not data or 'items' not in data or 'action' not in data:
         return jsonify({"success": False, "error": "Missing items or action"}), 400
@@ -729,8 +887,23 @@ def batch_update():
     model_urn = data.get('model_urn', 'global')
     performed_by = data.get('user', None)
 
+    # ── TENANT ISOLATION ──
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user.get('id'), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+
     if not items:
         return jsonify({"success": True, "message": "No items to process"}), 200
+
+    # ── ISO 19650 STATUS ENGINE ──────────────────────────────────────────
+    VALID_STATUSES = {'WIP', 'SHARED', 'PUBLISHED', 'ARCHIVED'}
+    VALID_TRANSITIONS = {
+        'WIP':       {'SHARED'},              # Borrador → Compartido
+        'SHARED':    {'WIP', 'PUBLISHED'},     # Compartido → Publicado o devolver a WIP
+        'PUBLISHED': {'SHARED', 'ARCHIVED'},   # Publicado → Archivar o devolver a SHARED
+        'ARCHIVED':  {'PUBLISHED'},            # Archivo → Re-publicar (recuperar)
+    }
 
     try:
         from db import get_db_connection, log_activity
@@ -738,17 +911,50 @@ def batch_update():
             cursor = conn.cursor()
             
             if action == 'SET_STATUS' and new_status:
+                if new_status not in VALID_STATUSES:
+                    return jsonify({"success": False, "error": f"Estado inválido: {new_status}. Válidos: {', '.join(VALID_STATUSES)}"}), 400
+
+                # Validar transiciones para cada item
                 cursor.execute("""
-                    UPDATE file_nodes 
-                    SET status = %s, updated_at = CURRENT_TIMESTAMP
+                    SELECT id, status FROM file_nodes 
                     WHERE id = ANY(%s) AND model_urn = %s
-                """, (new_status, items, model_urn))
+                """, (items, model_urn))
+                current_items = cursor.fetchall()
                 
-                # Loggear actividad masiva (resumida)
+                rejected = []
+                valid_ids = []
+                for item_id, current_status in current_items:
+                    current = current_status or 'WIP'  # Default para items sin status
+                    allowed = VALID_TRANSITIONS.get(current, set())
+                    if new_status == current:
+                        continue  # Ya tiene ese estado, skip silencioso
+                    if new_status not in allowed:
+                        rejected.append({"id": str(item_id), "from": current, "to": new_status})
+                    else:
+                        valid_ids.append(str(item_id))
+
+                if rejected and not valid_ids:
+                    return jsonify({
+                        "success": False, 
+                        "error": f"Transición no permitida: {rejected[0]['from']} → {rejected[0]['to']}",
+                        "rejected": rejected
+                    }), 400
+
+                if valid_ids:
+                    cursor.execute("""
+                        UPDATE file_nodes 
+                        SET status = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ANY(%s) AND model_urn = %s
+                    """, (new_status, valid_ids, model_urn))
+                
                 log_activity(model_urn, 'batch_status', 'multiple', 
-                             entity_name=f"{len(items)} items", 
+                             entity_name=f"{len(valid_ids)} items", 
                              performed_by=performed_by,
-                             details={'new_status': new_status, 'item_count': len(items)})
+                             details={
+                                 'new_status': new_status, 
+                                 'processed': len(valid_ids),
+                                 'rejected': len(rejected)
+                             })
 
             elif action == 'DELETE':
                 # Soft delete masivo

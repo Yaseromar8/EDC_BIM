@@ -1545,62 +1545,114 @@ function FilesPage({ project, user, onBack, onLogout }) {
     setShowUploadModal(true);
 
     newItems.forEach(item => {
-      const fd = new FormData(); 
-      fd.append('file', item.file); 
-      fd.append('path', currentPath); 
-      fd.append('user', user.name); 
-      fd.append('model_urn', projectPrefix);
+      const itemFile = item.file;
+      const filename = itemFile.name;
+      const fileType = itemFile.type || 'application/octet-stream';
+      const fileSize = itemFile.size;
 
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${API}/api/docs/upload`, true);
       const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
-      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      // ── REAL PROGRESS: Estimate total time based on file size ──
-      // Average upload speed to GCS ~2MB/s + 1s base overhead
-      const fileSizeMB = item.file.size / (1024 * 1024);
-      const estimatedSeconds = Math.max(2, (fileSizeMB / 2) + 1);
-      let uploadDone = false;
-      let currentProgress = 0;
+      // 1. Obtener URL Firmada
+      fetch(`${API}/api/docs/upload-url`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model_urn: projectPrefix,
+          filename: filename,
+          contentType: fileType
+        })
+      })
+      .then(res => res.json())
+      .then(urlData => {
+        if (!urlData.success) throw new Error(urlData.error || 'Fallo obtener URL firmada');
 
-      // Smooth progress animation: advance from 0→95% over estimated time
-      const progressInterval = setInterval(() => {
-        if (uploadDone) { clearInterval(progressInterval); return; }
-        // Ease-out curve: fast at start, slows near end
-        const target = 95;
-        const remaining = target - currentProgress;
-        const increment = Math.max(0.5, remaining * 0.08);
-        currentProgress = Math.min(currentProgress + increment, target);
-        setSopQueue(q => q.map(it => it.id === item.id ? { ...it, progress: Math.floor(currentProgress), status: 'BARRA_AZUL' } : it));
-      }, estimatedSeconds * 10); // Update every ~fraction of estimated time
+        const { uploadUrl, gcs_urn } = urlData;
 
-      xhr.onload = async () => {
-        uploadDone = true;
-        clearInterval(progressInterval);
+        // 2. Subida Directa a GCS (Upload con PUT)
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', uploadUrl, true);
+        xhr.setRequestHeader('Content-Type', fileType);
         
-        if (xhr.status === 200 || xhr.status === 201) {
-          // Upload truly complete — animate to 100%
-          setSopQueue(q => q.map(it => it.id === item.id ? { ...it, progress: 100, status: 'BARRA_AZUL' } : it));
-          await new Promise(r => setTimeout(r, 500));
-          
-          const now = new Date();
-          const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const dateStr = now.toLocaleDateString();
-          setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'LISTO_1', progress: 100, time: `el ${dateStr} a las ${timeStr}` } : it));
-          setUploadSopStep('LISTO_1');
-          triggerRefresh(currentPath);
-        } else {
+        // ── PROGRESS ANIMATION ──
+        const fileSizeMB = fileSize / (1024 * 1024);
+        const estimatedSeconds = Math.max(2, (fileSizeMB / 2) + 1);
+        let uploadDone = false;
+        let currentProgress = 0;
+
+        const progressInterval = setInterval(() => {
+          if (uploadDone) { clearInterval(progressInterval); return; }
+          const target = 95;
+          const remaining = target - currentProgress;
+          const increment = Math.max(0.5, remaining * 0.08);
+          currentProgress = Math.min(currentProgress + increment, target);
+          setSopQueue(q => q.map(it => it.id === item.id ? { ...it, progress: Math.floor(currentProgress), status: 'BARRA_AZUL' } : it));
+        }, estimatedSeconds * 10); 
+        
+        // Progreso real XHR (si el navegador lo reporta)
+        xhr.upload.onprogress = (e) => {
+           if (e.lengthComputable) {
+              const p = Math.floor((e.loaded / e.total) * 95); 
+              if (p > currentProgress) {
+                  currentProgress = p;
+                  setSopQueue(q => q.map(it => it.id === item.id ? { ...it, progress: p, status: 'BARRA_AZUL' } : it));
+              }
+           }
+        };
+
+        xhr.onload = async () => {
+          uploadDone = true;
+          clearInterval(progressInterval);
+          if (xhr.status === 200 || xhr.status === 201) {
+             // 3. Confirmar con el Backend (Metadatos a BD)
+             try {
+                const confRes = await fetch(`${API}/api/docs/upload-confirm`, {
+                  method: 'POST',
+                  headers,
+                  body: JSON.stringify({
+                    model_urn: projectPrefix,
+                    path: currentPath,
+                    filename: filename,
+                    gcs_urn: gcs_urn,
+                    size_bytes: fileSize,
+                    mime_type: fileType,
+                    user: user?.name
+                  })
+                });
+                const confData = await confRes.json();
+                if (!confData.success) throw new Error(confData.error);
+
+                setSopQueue(q => q.map(it => it.id === item.id ? { ...it, progress: 100, status: 'BARRA_AZUL' } : it));
+                await new Promise(r => setTimeout(r, 500));
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const dateStr = now.toLocaleDateString();
+                setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'LISTO_1', progress: 100, time: `el ${dateStr} a las ${timeStr}` } : it));
+                setUploadSopStep('LISTO_1');
+                triggerRefresh(currentPath);
+             } catch (ce) {
+                console.error("[App.jsx] Error confirmando upload", ce);
+                setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR', progress: 0 } : it));
+             }
+          } else {
+            console.error("[App.jsx] Error subiendo a GCS", xhr.status, xhr.responseText);
+            setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR', progress: 0 } : it));
+          }
+        };
+
+        xhr.onerror = () => {
+          uploadDone = true;
+          clearInterval(progressInterval);
           setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR', progress: 0 } : it));
-        }
-      };
+        };
 
-      xhr.onerror = () => {
-        uploadDone = true;
-        clearInterval(progressInterval);
-        setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR', progress: 0 } : it));
-      };
-
-      xhr.send(fd);
+        xhr.send(item.file);
+      })
+      .catch(err => {
+         console.error("[App.jsx] Error URL Firmada", err);
+         setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR', progress: 0 } : it));
+      });
     });
   };
 
@@ -2364,6 +2416,30 @@ function FilesPage({ project, user, onBack, onLogout }) {
                         startResizing={startResizing}
                         setSelected={setSelected}
                         renderFileIconSop={renderFileIconSop}
+                        onStatusChange={async (item, newStatus) => {
+                          // Optimistic update
+                          setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: newStatus } : f));
+                          try {
+                            const res = await apiFetch(`${API}/api/docs/batch`, {
+                              method: 'POST',
+                              body: JSON.stringify({
+                                items: [item.id],
+                                action: 'SET_STATUS',
+                                status: newStatus,
+                                model_urn: projectPrefix,
+                                user: user?.name
+                              })
+                            });
+                            if (!res.ok) {
+                              const err = await res.json().catch(() => ({}));
+                              alert(err.error || 'Error al cambiar estado');
+                              triggerRefresh(currentPath); // Revert
+                            }
+                          } catch (e) {
+                            console.error('Error updating status:', e);
+                            triggerRefresh(currentPath);
+                          }
+                        }}
                     />
                 )}
               </div>

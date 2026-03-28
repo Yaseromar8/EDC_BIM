@@ -26,7 +26,7 @@ def get_storage_client():
     return storage.Client()
 
 def upload_file_to_gcs(file_object, destination_blob_name):
-    """Sube un binario (foto/documento) al bucket de GCS."""
+    """Sube un binario (foto/documento) al bucket de GCS usando streaming (no carga todo a RAM)."""
     try:
         bucket_name = os.environ.get("GCS_BUCKET_NAME")
         if not bucket_name or bucket_name == "TU_BUCKET_AQUI":
@@ -45,16 +45,19 @@ def upload_file_to_gcs(file_object, destination_blob_name):
         else:
             new_version = 1
             
-        # Sube el contenido
-        print(f"[GCS] Starting transfer... (version {new_version})")
-        
-        # Asegurar puntero al inicio antes de leer
+        # ── STREAMING UPLOAD: No carga todo a RAM ──────────────────────────
+        # upload_from_file() transmite el contenido directamente al bucket
+        # sin leer todo el archivo en memoria. Soporta reintentos automáticos.
+        content_type = getattr(file_object, 'content_type', 'application/octet-stream')
         file_object.seek(0)
-        content = file_object.read()
-        print(f"[GCS] Bytes read from file object: {len(content)}")
         
-        blob.upload_from_string(content, content_type=getattr(file_object, 'content_type', 'application/octet-stream'), timeout=300)
-        
+        print(f"[GCS] Starting streaming transfer... (version {new_version})")
+        blob.upload_from_file(
+            file_object,
+            content_type=content_type,
+            timeout=300,
+            num_retries=3    # Reintentos automáticos en fallos transitorios
+        )
         print(f"[GCS] Transfer complete.")
         
         # Patch the metadata to store version
