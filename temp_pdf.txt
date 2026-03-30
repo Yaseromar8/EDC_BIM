@@ -1,0 +1,622 @@
+Análisis Técnico Exhaustivo: Lógica de 
+Negocio y Arquitectura de la API de Data 
+Management y BIM 360/ACC en 
+Autodesk Platform Services 
+La convergencia de la gestión de datos en el sector de la Arquitectura, Ingeniería y 
+Construcción (AEC) ha encontrado un pilar fundamental en Autodesk Platform Services (APS), 
+un ecosistema en la nube precedentemente conocido bajo la nomenclatura de Autodesk Forge. 
+La industria moderna, caracterizada por la generación masiva de modelos tridimensionales, 
+metadatos y documentación técnica, requiere de Entornos de Datos Comunes (CDE) robustos 
+y altamente programables. En este contexto, el ecosistema de APS expone una arquitectura 
+orientada a servicios que permite a los integradores de sistemas y desarrolladores de software 
+interactuar de manera programática con repositorios de datos complejos alojados en la nube, 
+abarcando una multiplicidad de plataformas subyacentes como BIM 360 Document 
+Management, Autodesk Construction Cloud (ACC), Fusion Team, A360 Personal y Autodesk 
+Docs.1 
+Este informe técnico desglosa con exhaustividad la capa de abstracción lógica que proporciona 
+la API de Data Management (Data Management API), analizando en profunda extensión su 
+ontología y jerarquía de objetos, los estrictos requisitos de metadatos impuestos para la 
+creación de versiones y flujos transaccionales, el modelo arquitectónico de Control de Acceso 
+Basado en Roles (RBAC) a nivel de carpeta, y la intrincada lógica de negocio subyacente que 
+orquesta el comportamiento de estos puntos finales (endpoints). A través de un desglose 
+analítico, se revelará cómo las decisiones de diseño en la API reflejan directamente los 
+paradigmas de colaboración, seguridad y estandarización documental que rigen los proyectos 
+de infraestructura y manufactura a escala global. 
+1. Fundamentos Arquitectónicos de la API de Data 
+Management 
+La API de Data Management no es un servicio monolítico, sino una federación de 
+microservicios lógicamente acoplados que proporcionan una interfaz unificada y consistente 
+para acceder a datos a través de diversas plataformas de Software as a Service (SaaS) de 
+Autodesk.2 Esta unificación es un logro de ingeniería notable, dado que abstrae las 
+considerables diferencias subyacentes entre el almacenamiento de datos de manufactura 
+(como modelos paramétricos de Fusion 360) y los datos de construcción (como modelos 
+federados de Revit en BIM 360). 
+Para lograr esta abstracción, la arquitectura de la API de Data Management se ha deconstruido 
+fundamentalmente en cuatro servicios cardinales interdependientes, cada uno responsable de 
+un dominio específico del ciclo de vida de la información 2: 
+1.​ Project Service (Servicio de Proyectos): Actúa como la capa de identidad y navegación 
+de más alto nivel. Es el responsable de anclar la topología de la información 
+proporcionando el contexto de la organización (el inquilino o "tenant") y el contenedor del 
+proyecto específico.3 Sin este servicio, el acceso a datos carecería de un límite de 
+autorización corporativa. 
+2.​ Data Service (Servicio de Datos): Representa el núcleo neurálgico para la navegación 
+de la ontología documental. Gestiona exclusivamente los metadatos y la estructura de las 
+jerarquías relacionales en términos de carpetas (Folders), elementos lógicos (Items) y sus 
+iteraciones históricas (Versions), así como las intrincadas redes de relaciones 
+(Relationships y Refs) entre estas entidades.3 
+3.​ Schema Service (Servicio de Esquemas): Un componente crucial para la extensibilidad 
+paramétrica de la plataforma. Este servicio permite a las aplicaciones del cliente 
+comprender la estructura, las restricciones de validación y la semántica de los tipos de 
+datos extendidos introducidos por diferentes productos.3 Como se analizará 
+posteriormente, la validación de los atributos de extensión durante la carga de archivos 
+depende de las definiciones de JSON Schema alojadas y gobernadas por este servicio.4 
+4.​ Object Storage Service (OSS): La capa de infraestructura física subyacente. Mientras 
+que el Data Service gestiona el "puntero lógico" y los metadatos de un archivo, el OSS 
+proporciona la capacidad de transmisión, carga, descarga y persistencia de los archivos 
+binarios crudos (tales como PDF, XLS, DWG, RVT, y formatos multimedia) aislados de 
+cualquier aplicación SaaS de Autodesk.1 
+La sinergia de estos cuatro pilares permite flujos de trabajo altamente complejos, desde la 
+superposición de un modelo mecánico de Fusion sobre un modelo arquitectónico de 
+construcción en el Autodesk Viewer, hasta la generación autónoma de Listas de Materiales (Bill 
+of Materials) interceptando y analizando la estructura de ítems mediante scripts de servidor.1 
+Además, el acceso a estos servicios está estrictamente regido por flujos de autenticación 
+OAuth 2.0. Dependiendo del contexto de los datos, el sistema requiere un contexto de usuario 
+interactivo mediante un flujo OAuth de 3 vías (3-legged) común para entornos A360 y Fusion 
+Team, o permite un flujo de máquina a máquina de 2 vías (2-legged) para interacciones directas 
+entre servidores, especialmente en entornos empresariales de BIM 360 donde los 
+administradores pueden pre-aprovisionar aplicaciones y utilizar la cabecera x-user-id para la 
+suplantación asimétrica de identidad de usuarios.4 
+2. Topología y Jerarquía Exacta de Objetos en el 
+Ecosistema APS 
+El diseño topológico de la API de Data Management se fundamenta en un modelo de dominio 
+fuertemente tipado. Esta jerarquía garantiza que cualquier integración de software pueda 
+atravesar el árbol de datos de manera predecible, determinista y recursiva, partiendo desde el 
+contenedor organizativo supremo hasta descender a nivel del bloque binario individual.1 La 
+jerarquía matemática y lógica sigue la secuencia inmutable de: Hubs -> Projects -> Folders -> 
+Items -> Versions.1 
+2.1. La Cúspide Organizativa: Hubs 
+En el cenit de la estructura de datos se encuentran los Hubs (Centros). Un Hub es la 
+representación abstracta de una identidad inquilina corporativa, una suscripción empresarial o 
+una cuenta individual dentro de la infraestructura global de Autodesk.4 Desde el punto de vista 
+arquitectónico, los Hubs operan como espacios lógicos fundamentales donde se alojan 
+conjuntos aislados de proyectos, aislando criptográficamente y lógicamente la información entre 
+diferentes corporaciones o grupos de interés.8 
+La API normaliza la representación de diversos ecosistemas bajo el tipo base hubs. De esta 
+manera, un Hub proporciona una representación común e indiferenciada sin importar si la 
+infraestructura subyacente corresponde a un Hub de BIM 360 Team, un Hub de Fusion Team, 
+una cuenta corporativa de BIM 360 Docs o un centro personal de A360.4 Para que las 
+aplicaciones clientes diferencien programáticamente el entorno en el que se encuentran 
+operando, el objeto JSON de respuesta del Hub incluye un bloque de metadatos anidados bajo 
+attributes.extension. Este bloque especifica el esquema subyacente (por ejemplo, 
+hubs:autodesk.core:Hub para plataformas estándar o sus contrapartes específicas) validado 
+mediante un enlace hipertexto (HREF) al Schema Service.4 
+Es imperativo destacar que el acceso inicial a la red de datos siempre comienza interrogando el 
+endpoint GET hubs, el cual evalúa el token de autenticación del usuario o la aplicación y 
+retorna un vector (array) estricto conteniendo únicamente los identificadores de cuenta a los 
+cuales el contexto de seguridad tiene autorización explícita de lectura.10 
+2.2. El Contenedor de la Iniciativa: Projects 
+Descendiendo directamente desde el nivel del Hub en la jerarquía, encontramos colecciones de 
+entidades denominadas Projects (Proyectos).4 Un Project encapsula la totalidad de la 
+información, el repositorio documental, las directrices de acceso y los metadatos operativos 
+asociados a una iniciativa de diseño arquitectónico, de ingeniería civil o de manufactura 
+específica.4 
+Para obtener la lista de proyectos, un desarrollador debe inyectar el identificador del Hub en el 
+enrutamiento de la URI mediante el endpoint GET hubs/:hub_id/projects.11 En el contexto del 
+diseño de integraciones para el sector de la construcción, es vital comprender las sutilezas de 
+los identificadores de proyecto (project_id). El ecosistema de APIs de Autodesk opera con 
+diferentes nomenclaturas de identificación cruzada. Específicamente, al interactuar con el 
+entorno de BIM 360 Document Management a través de la Data Management API, los 
+identificadores de proyecto requieren arquitectónicamente la concatenación del prefijo literal b. 
+antes del UUID (Identificador Único Universal) estándar del proyecto.5 Por ejemplo, un UUID de 
+proyecto crudo alojado en BIM 360 como c8b0c73d-3ae9 debe transmutarse obligatoriamente a 
+b.c8b0c73d-3ae9 para ser procesado sin errores por los endpoints del servicio de datos.5 
+Inversamente, al interactuar con las nuevas APIs exclusivas de Autodesk Construction Cloud 
+(ACC) o Forma, las llamadas a la red requieren despojar activamente este prefijo b. para que el 
+motor de enrutamiento identifique correctamente la instancia del contenedor.7 
+A nivel de esquema de datos, un objeto Project almacena atributos corporativos críticos de alto 
+nivel. Mediante operaciones de escritura (POST), los sistemas ERP o CRM pueden 
+aprovisionar automáticamente proyectos en la nube configurando parámetros vitales como el 
+job_number (código de proyecto financiero), la dirección geográfica desglosada 
+(address_line_1, city, postal_code, country), el huso horario operativo (timezone), fechas 
+estrictas de inicio y término (start_date, end_date), el valor monetario estimado (value en 
+formato flotante) y la divisa subyacente (currency).15 
+La función más crítica del objeto Project dentro de la arquitectura de la API es servir como el 
+puente indispensable entre el entorno organizativo (Project Service) y el entorno documental 
+(Data Service). Esto se logra gracias a un atributo inmutable que devuelve la llamada al 
+proyecto: el rootFolder (Carpeta Raíz).4 Este puntero URN dirige la aplicación cliente hacia la 
+cúspide del árbol de directorios donde residen físicamente los metadatos y los archivos. 
+2.3. Estructura Documental: Folders 
+Al cruzar el umbral del rootFolder, la orquestación de la navegación transiciona integralmente 
+hacia el Data Service. Los Folders (Carpetas) actúan como contenedores organizativos lógicos 
+anidados dentro de los límites del proyecto.4 La naturaleza recursiva y polimórfica de las 
+carpetas permite que estas alberguen tanto otras carpetas hijas (sub-folders) como elementos 
+lógicos (Items), posibilitando la construcción de estructuras de árboles de directorios de 
+n-profundidad.9 
+La representación JSON de un objeto Folder proporciona metadatos forenses detallados sobre 
+su ciclo de vida. Incluye identificadores rastreables del usuario creador (createUserId, 
+createUserName), marcas de tiempo de modificación (lastModifiedTime) e incluso un rollup de 
+tiempo de modificación (lastModifiedTimeRollup) que indica de manera agregada la última 
+alteración ocurrida en cualquier nodo descendiente dentro de su jerarquía, una métrica 
+excepcionalmente útil para sistemas de sincronización de datos locales (Desktop Connectors).9 
+Adicionalmente, reporta conteos operativos masivos (objectCount) para facilitar rutinas de 
+paginación o balanceo de carga en las interfaces de cliente.9 
+En el análisis de las carpetas, es mandatorio abordar la evolución estructural entre BIM 360 
+Document Management y su sucesor, Autodesk Construction Cloud (ACC/Forma Docs). 
+Históricamente, el entorno BIM 360 imponía arquitectónicamente dos carpetas raíces de nivel 
+superior segregadas: Plans (Planos) y Project Files (Archivos de Proyecto).5 La carpeta de 
+Planos incorporaba una lógica de procesamiento intensivo de fondo, optimizada para extraer 
+dinámicamente hojas de dibujo individuales desde archivos compuestos en formatos PDF o 
+RVT, convirtiéndolos en documentos bidimensionales independientes en el navegador.5 La 
+carpeta de Archivos de Proyecto, por otro lado, servía como un repositorio de diseño general 
+sin fragmentación impuesta. 
+En la transición tecnológica hacia la plataforma unificada ACC, Autodesk determinó que esta 
+partición estática a nivel de carpeta limitaba la flexibilidad operativa. Consecuentemente, el 
+paradigma de ACC disolvió lógicamente estas carpetas en herramientas de software 
+independientes dentro de la interfaz: la herramienta Files (heredera funcional de Project Files) y 
+la herramienta Sheets (sucesora funcional del procesamiento de la carpeta Plans).16 Aunque la 
+API de Data Management conserva soporte completo y retrocompatible para la manipulación 
+programática del sistema Files (o Project Files), interacciones específicas con el procesamiento 
+de planos ahora requieren llamadas a la API especializada de Sheets, que opera 
+asincrónicamente dividiendo la información a través de trabajos en segundo plano manejados 
+por el endpoint POST projects/{projectId}/uploads exclusivo de la plataforma de construcción.6 
+2.4. La Abstracción Lógica: Items y Versions 
+En el estrato más profundo de la lógica documental de APS se encuentra la dicotomía 
+arquitectónica entre Items y Versions, un paradigma de diseño que garantiza la trazabilidad y la 
+inmutabilidad histórica. 
+Un Item (Elemento) representa la abstracción lógica y permanente de un archivo dentro del 
+ecosistema.3 En la semántica de la API de Data Management, el Item no contiene los bytes del 
+archivo per se. Por el contrario, es un contenedor lógico persistente, un registro constante e 
+inamovible que agrupa unívocamente una o múltiples iteraciones de un archivo específico (ya 
+sea un diseño mecánico DWG, un informe PDF, o un ensamblaje complejo de Revit) a lo largo 
+de la extensión del ciclo de vida del proyecto.3 Cuando un colaborador visualiza y selecciona un 
+archivo nombrado "Plano_Estructural_V1.rvt" en la interfaz gráfica web de Autodesk Docs, el 
+componente subyacente que reacciona a los clics del usuario es estructuralmente un Item. 
+Las Versions (Versiones), por contraste, representan estados inmutables, estáticos y 
+temporalmente fijados de un Item subyacente.3 Cada evento en el cual un desarrollador o 
+usuario final interviene para subir, actualizar, o sobrescribir un archivo preexistente en el 
+sistema, la API de Data Management responde generando programáticamente una nueva 
+versión lógica.5 Esta nueva iteración de versión es posteriormente inyectada y entrelazada 
+matemáticamente como descendiente del Item matriz. Esta separación de responsabilidades 
+asegura un control de versiones a prueba de manipulaciones: mientras que los nombres o la 
+ubicación (traslado de carpetas) pueden ser alterados al nivel del Item, el bloque binario 
+histórico y los datos de la auditoría de modificación de las versiones individuales permanecen 
+congelados y recuperables forensemente en cualquier etapa futura. 
+2.5. La Capa de Persistencia Física: Object Storage Service (OSS) 
+Mientras que Hubs, Projects, Folders, Items y Versions dictan la ontología lógica, constituyendo 
+el "qué" y el "dónde" conceptual en el que piensan los usuarios, la plataforma en sí misma 
+requiere una base física para albergar los volúmenes de petabytes de datos generados. Este 
+papel recae en el Object Storage Service (OSS).3 
+El servicio OSS opera de manera desacoplada e independiente del Data Service, permitiendo 
+su uso incluso como una infraestructura pura en la nube para aplicaciones de terceros que 
+deseen almacenar datos genéricos y arbitrarios.1 La jerarquía de OSS está construida sobre 
+conceptos de contenedores masivos: los Buckets (contenedores perimetrales de 
+almacenamiento designados mediante claves de nombramiento globalmente únicas) y los 
+Objects (cúmulos de información binaria cruda identificada mediante un Uniform Resource 
+Name o URN).4 
+El vínculo arquitectónico entre el nivel lógico y el físico ocurre en el momento de la descarga o 
+visualización. Cuando una aplicación cliente invoca a la red solicitando la descarga de una 
+versión de un documento específico, el Data Service interviene, procesando una traducción de 
+direcciones internas. Localiza el identificador URN del objeto almacenado en el Bucket 
+subyacente correspondiente y devuelve a la aplicación una URL firmada de corta duración, 
+frecuentemente enrutada a través del almacenamiento en Amazon S3 subyacente, para llevar a 
+cabo la transferencia directa de los bytes. Este diseño de red elude inteligentemente los cuellos 
+de botella del servidor central, optimizando la latencia de transferencia al establecer un túnel de 
+conexión directa entre la máquina local del cliente y la zona de disponibilidad del 
+almacenamiento en la nube.3 
+ 
+ 
+ 
+3. Ingeniería de Metadatos Obligatorios y el Ciclo de 
+Vida de las Versiones 
+La inyección de información hacia la nube de construcción no se trata de una simple operación 
+de carga pasiva; exige el acatamiento de rigurosas reglas de estructuración que determinan el 
+tratamiento del archivo aguas abajo (como visualización, extracción de metadatos o 
+coordinación de interferencias). El acto de subir una nueva iteración de un documento a través 
+de la API es una orquestación distribuida de múltiples pasos, cuyo diseño arquitectónico refleja 
+la necesidad intrínseca de proteger la integridad del dato durante la ingesta en infraestructuras 
+masivas concurrentes. 
+3.1. Orquestación Distribuida del Flujo de Carga (Upload Workflow) 
+Reemplazar una versión existente no se realiza enviando el archivo local como un volcado 
+ciego al endpoint POST projects/:project_id/versions.5 Por el contrario, la API exige una 
+coreografía de protocolo estricta consistente en las siguientes fases operacionales, a menudo 
+conocidas como enfoque de "reserva, carga, y consolidación": 
+1.​ Resolución Estructural: La aplicación cliente inicializa el flujo determinando 
+unívocamente el contexto topológico, localizando el identificador del Hub propietario y el 
+identificador del Proyecto específico mediante llamadas progresivas de lectura al servicio 
+de red.10 
+2.​ Aprovisionamiento de Almacenamiento Cifrado (Reserva): La lógica de la aplicación 
+requiere imperativamente instruir al OSS a abrir un contenedor vacío para la inminente 
+llegada de los datos binarios. Se efectúa una llamada POST projects/:project_id/storage al 
+Object Storage Service, comunicando el nombre del archivo previsto.8 Esta acción 
+orquesta el ecosistema de fondo para que pre-aloje y aprovisione recursos, respondiendo 
+a la aplicación con un Uniform Resource Name de almacenamiento (OSS URN) temporal.5 
+3.​ Generación de Túnel Seguro S3: Dado el peso volumétrico de modelos AEC (con 
+frecuencia superior a los gigabytes), el servidor central delega el ancho de banda enviando 
+a la aplicación cliente URL pre-firmadas temporalmente del servicio Amazon S3 mediante 
+el comando signeds3upload.3 
+4.​ Transferencia de Bloques (Carga): La máquina local ejecuta transferencias en red (a 
+menudo multi-parte o chunking) dirigiendo el binario puramente al túnel S3 evadiendo 
+sobrecargar los clústeres computacionales lógicos de Data Management.5 
+5.​ Confirmación y Resolución S3: Una vez completada la migración asíncrona de los 
+paquetes binarios al almacenamiento en red, el cliente emite una directiva hacia la API (a 
+menudo mediante endpoints o comandos de estado) para que esta verifique 
+criptográficamente el tamaño de los bytes ensamblados, sellando la carga transitoria.10 
+6.​ Consolidación Lógica en Data Management: Aquí reside el corazón del mecanismo 
+transaccional de metadatos. Con el archivo físicamente seguro en los repositorios de OSS, 
+el desarrollador finalmente invoca el endpoint POST projects/:project_id/versions (o POST 
+items si es la iteración fundacional del archivo en una carpeta virgen).5 Esta llamada no 
+contiene binarios, sino que es una orden pura de metadatos instruyendo a la base de 
+datos a indexar el archivo, vincularlo algorítmicamente al historial del ítem e imponerle una 
+semántica. 
+Esta separación arquitectónica profunda permite a la plataforma proporcionar alta disponibilidad 
+global, reanudación ante fallos de red en conexiones de construcción limitadas y prevención 
+absoluta contra la creación de objetos "huérfanos" (ítems registrados que carecen de binarios 
+de respaldo o viceversa). Adicionalmente, este mismo endpoint lógico permite la creación de 
+copias o "clones" de versiones de elementos existentes empujándolos hacia directorios 
+disimiles de destino a través de atributos de consulta de hipertexto sin implicar cargas dobles 
+de bytes de red, aunque con restricciones firmes de cruzamiento de proyectos u organizaciones 
+(tenant boundaries) para prevenir la exfiltración masiva.5 
+3.2. Estructura Anatómica Estricta del Payload JSON para Versiones 
+Al invocar el endpoint de consolidación de la versión, el servidor de APS rechaza 
+agresivamente las cargas que no se sometan a especificaciones arquitectónicas sumamente 
+formales dictadas por el estándar JSON:API. La cabecera (Header) de petición Content-Type 
+debe estipular ineludiblemente el tipo de medio (MIME) application/vnd.api+json para advertir al 
+controlador REST del formato de validación estricto venidero.5 
+La anatomía subyacente del bloque JSON exigido incluye ramificaciones mandatorias sin las 
+cuales la plataforma de construcción Autodesk arrojará códigos de error de estado 400 Bad 
+Input.18 Para asegurar una vinculación correcta en un repositorio BIM 360/ACC, los bloques 
+constituyentes son: 
+1.​ Bloque de Declaración Estructural (jsonapi): El nivel superficial del árbol exige un 
+objeto declarativo donde el atributo version es un parámetro string fijado estáticamente a 
+"1.0". Este candado numérico le indica al servicio del servidor qué iteración del motor de 
+análisis léxico debe invocar sobre el cuerpo de la cadena de caracteres entrante.9 
+2.​ Definición Topológica del Objeto (data): Un nodo objeto en cuyo núcleo reside la 
+declaración inmutable de su propia identidad semántica. El atributo base type debe ser 
+rígidamente instanciado como el valor plural "versions" para asegurar que los 
+controladores orientados a versiones procesen el evento en lugar del despachador 
+genérico de directorios.17 
+3.​ Metadatos Topológicos Referenciales (relationships): Este objeto diccionarial complejo 
+cimenta los puentes vinculantes del ecosistema de la plataforma de la nube. Dentro del 
+sub-objeto estructural relationships, se exige crear ramas anidadas direccionales explícitas 
+y matemáticamente comprobables tanto hacia el item progenitor al cual esta nueva versión 
+se encadenará para la eternidad, como hacia el objeto abstracto de almacenamiento 
+transitorio previamente gestionado en el servicio storage dentro de la etapa asíncrona 
+temprana (OSS URN).9 Estos datos entrelazan de manera indisoluble el dominio abstracto 
+con el volumen atómico físico. 
+4.​ Carga de Atributos Funcionales de Esquema (attributes.extension): La complejidad 
+más refinada del requerimiento de la carga asoma en la jerarquía del árbol de atributos, 
+donde la API se comunica a su vez internamente con el Schema Service transversal.3 Este 
+servicio dicta el comportamiento interpretativo y procesal que el sistema receptor asignará 
+al registro binario. El nodo attributes contiene a su vez un objeto polimórfico denominado 
+extension, que consta de llaves cardinales: 
+○​ type: Un string semántico crucial. Si el destino final corresponde a una estructura de la 
+plataforma moderna ACC (Autodesk Construction Cloud) o su antecesor BIM 360 
+Docs, el integrador debe suministrar imperativamente la cadena técnica de caracteres 
+exacta "versions:autodesk.bim360:File".3 En un escenario asimétrico para la 
+publicación inicial de un ítem virgen primario (POST items), el homólogo 
+estructuralmente exigido resultará "items:autodesk.bim360:File".17 Si un script 
+programático incurre en la transgresión de declarar un marco genérico o alternativo 
+(como versions:autodesk.core:File apto para ecosistemas A360 o Fusion), el 
+documento transferido experimentará fallos de compatibilidad catastróficos dentro de 
+la plataforma UI de ACC, perdiendo los visores interactivos bidimensionales 
+incrustados o el control documental perimetral intrínseco. 
+○​ version: El sub-elemento dictando la iteración estática que el Schema Service 
+validará. Debe mantenerse invariablemente codificado al string "1.0" en los estándares 
+contemporáneos operativos de Data Management V2.9 
+La ejecución orquestada en sincronía absoluta de esta estructura JSON, provista 
+simultáneamente de portadores válidos OAuth 2.0 y suplantaciones de control adecuadas de 
+administración 5, precipita la germinación exitosa en la bóveda inmutable de la aplicación. 
+4. Gobernanza Documental: Cumplimiento de ISO 
+19650 y el Área de Retención (Holding Area) 
+La modernización en la ingeniería ha forzado a las firmas de construcción a perseguir normas 
+inquebrantables de disciplina metadatos y rigor alfabético centralizado. El estándar 
+internacional ISO 19650 prescribe metodologías exhaustivas relativas al diseño, gestión y 
+organización analítica rigurosa en el modelado colaborativo de la información para 
+edificaciones, imponiendo convenciones de nombramiento únicas, invariables y estandarizadas 
+en los "contenedores de información" a nivel local y global.19 BIM 360 y Autodesk Construction 
+Cloud absorbieron plenamente estas demandas internacionales introduciendo capacidades 
+coercitivas de nivel de proyecto para que los directores de infraestructura impongan 
+convenciones de nomenclatura personalizables como ley dentro de sus carpetas alojadas.19 
+Consecuentemente, la ingeniería programática a nivel de la API interactúa drásticamente con 
+esta arquitectura impositiva. 
+4.1. Parametrización Programática del Estándar 
+La lógica subyacente a esta imposición normativa no es puramente textual; reside en modelos 
+de metadatos computacionales fuertemente parametrizados alojados y controlados a través del 
+subsistema de Naming Standards API incorporado a la plataforma global. Un desarrollador 
+interactuando contra la ruta de recurso base GET 
+/bim360/docs/v1/projects/:projectId/naming-standards/:id recuperará las directivas estructurales 
+exactas de nombramiento configuradas artificialmente por los mandos corporativos de 
+construcción en su interfaz visual.14 
+El objeto codificado en la respuesta detalla secuencialmente el modelo condicional. Diferencia 
+arquitectónicamente los atributos como esenciales o flexibles a través de una bandera 
+booleana (optional: true/false).14 Limita los perímetros geográficos de entrada estipulando 
+márgenes restrictivos numéricos mediante minLength (comúnmente a partir de 1 carácter como 
+piso fundamental) y maxLength limitadores.14 Además, categoriza el flujo transaccional de 
+entrada mediante enumeraciones estrictas de clase paramétrica en la clave type 14: 
+●​ ALPHANUMERIC: Tolerancia computacional total a matrices abstractas e integrales de 
+caracteres alfanuméricos en la banda.14 
+●​ NONNUMERIC_TEXT: Análisis de bloqueo restrictivo que filtra algorítmicamente y 
+penaliza numéricos codificados [0-9].14 
+●​ NUMERIC: Admite exclusivamente matrices numéricas codificadas y operadores 
+simbólicos definidos limitados (coma, adición, sustracción, porcentajes o subrayado 
+separador).14 
+●​ ARRAY: Genera paramétricamente en los entornos cliente menús o listas restrictivas 
+("drop-down lists") de colecciones de enumeradores, limitando la entropía documental. 
+Estructuralmente carece de contornos de longitud predeterminados en sus repuestas dada 
+su índole fija dictaminada de sistema cerrado.14 
+4.2. Topología Lógica del Área de Retención (Holding Area) 
+Cuando una automatización o script remoto, ajeno a estas validaciones complejas en la interfaz 
+frontal, transmite ciegamente un mandato operativo hacia el endpoint creador (POST versions o 
+POST items) que interseca lógicamente con una estructura de directorios provista por el 
+administrador con dichas reglas de gobernanza coercitivas, la API reacciona.21 La resolución 
+adoptada por el sistema backend de la nube depende críticamente del parámetro configurado 
+dentro del software designado como Área de Retención (Holding Area abreviada 
+computacionalmente como HA).21 
+Flujo Operativo Asíncrono con Área de Retención Habilitada 
+Si el arquitecto del proyecto activó el HA (una praxis corporativa global altamente recomendada 
+debido a su fluidez asíncrona), la invocación creadora contra las bases de datos de la Data 
+Management API se completará reportando un código HTTP 2xx como respuesta 
+predeterminada.23 Sin embargo, un evento lógico interno desvía el material transferido hacia 
+una zona transitoria (cuarentena), debido íntegramente a la falta de parámetros requeridos o 
+una desviación en la nomenclatura exigida por el naming-standards.21 
+En este limbo, cualquier orden de rastreo GET revelará un estado explícito implantado en la 
+matriz de respuesta: data.attributes.extension.data.conformingStatus reflejará el valor 
+"NON_CONFORMING".21 Para sanear esta infracción, el programador debe ejecutar una 
+llamada asíncrona al endpoint complementario custom-attributesbatch-update, introduciendo 
+los valores correctos.23 Tras validar esta actualización, el motor de Autodesk re-despachará 
+orgánicamente el archivo, insertándolo inmutablemente en la carpeta objetivo visible y 
+cambiando su estado a "CONFORMING".21 
+ 
+ 
+ 
+Aborto Computacional sin Área de Retención 
+Si el administrador configuró la desactivación absoluta de la barrera de retención (HA 
+apagada), el entorno instituye un blindaje hermético.23 Al no existir una fosa transitoria para 
+depurar asincrónicamente el archivo, cualquier envío a POST items o POST versions que 
+contravenga las reglas estipuladas detonará una interrupción inmediata, devolviendo un error 
+HTTP de la familia "4xx" (comúnmente 400 Bad Request).23 Al bloquearse la creación inicial, el 
+script se queda sin un identificador (URN) válido, haciéndole imposible invocar una 
+subsanación posterior y forzando al integrador a validar el formato en origen antes de intentar 
+cualquier transacción. 
+5. Arquitectura Criptográfica y Control de Acceso 
+Basado en Roles (RBAC) a Nivel de Carpeta 
+La seguridad y segregación colaborativa en las redes infraestructurales globales demandan un 
+control de acceso granular y robusto. El núcleo programático de permisos para BIM 360 y 
+Autodesk Construction Cloud (ACC) permite a los arquitectos e integradores gestionar 
+programáticamente el Control de Acceso Basado en Roles (RBAC) a través del árbol de 
+carpetas.25 
+La API traslada las capacidades administrativas de la interfaz de usuario hacia enrutadores 
+automatizados enfocados en el procesamiento transaccional por lotes (batch operations): 
+batch-create para añadir accesos, batch-update para suplantar o modificar privilegios y 
+batch-delete para la remoción forzada de los vínculos.13 
+5.1. Ontología de la Identidad Organizacional: El atributo subjectType 
+La topología del motor de permisos clasifica sistémicamente a las entidades receptoras de 
+acceso mediante una taxonomía tripartita. Al despachar el payload JSON a los endpoints de 
+control, el esquema exige inyectar obligatoriamente la tipificación de la entidad bajo el atributo 
+subjectType:26 
+●​ USER (Individuo): Concede un acceso discrecional, enlazado criptográficamente en 
+relación uno a uno con el Autodesk ID o correo electrónico de un colaborador atómico.25 
+●​ ROLE (Rol Disciplinario): Habilita la delegación estandarizada, permitiendo asignar 
+privilegios masivos a grupos funcionales (ej. 'Arquitecto' o 'Coordinador Estructural'). 
+Cualquier usuario adherido a este rol hereda automáticamente dichos permisos.25 
+●​ COMPANY (Segmentación Corporativa): Centraliza orgánicamente el acceso para 
+socios empresariales y subcontratistas completos, posibilitando compartir repositorios 
+documentales sin necesidad de enumerar a cada usuario individual del consorcio.25 
+De manera paralela a esta tipificación, toda transacción requiere referenciar invariablemente el 
+atributo subjectId.26 Este UUID irrepetible es originario de las infraestructuras de Account Admin 
+de la nube y ancla firmemente la lógica de permisos a la entidad real subyacente en el servidor 
+maestro.26 
+5.2. El Paradigma de la Herencia Aditiva Irrevocable (Top-Down) 
+El principio rector del sistema RBAC tanto en BIM 360 como en ACC es el modelo de herencia 
+estricta en cascada ("top-down inheritance").27 
+Bajo esta lógica algorítmica fundamental, cualquier subcarpeta hija asimila y clona 
+incondicionalmente todos los privilegios asignados en su carpeta matriz inmediata o en la raíz 
+generacional primaria (el rootFolder).4 La restricción computacional más severa de este diseño 
+es su naturaleza estrictamente aditiva: los permisos en ramas inferiores únicamente pueden 
+expandirse o sumar nuevas facultades, mas nunca restringirse ni denegarse.32 
+En términos prácticos, es matemáticamente y operativamente imposible asignar a un nodo 
+subordinado un nivel de acceso más limitante que el conferido en su estrato superior.32 Si un 
+usuario (subjectType: USER) adquiere el permiso algorítmico de edición (EDIT) sobre una 
+carpeta raíz, dicho usuario ostentará ineludiblemente el mismo poder de modificación en la 
+totalidad de subcarpetas anidadas.32 Ninguna llamada automatizada a través de batch-update 
+intentando confinarlo a acceso de "Solo Lectura" en una carpeta hija progresará; la API 
+interceptará la orden, bloqueando el proceso y retornando un mensaje nativo de error tipificado 
+expresamente como: "Inherited permissions must expand".33 
+En consecuencia, para ejecutar una poda estructural de accesos o mitigar un privilegio en 
+profundidad, el arquitecto de datos se ve forzado a revocar el nivel amplio desde el estrato 
+perimetral superior (matriz original) y reconstruir progresiva y selectivamente los permisos 
+ascendentes en las bifurcaciones colaterales deseadas.33 
+5.3. Divergencia Estructural y Mapeo Bidireccional de Lógica de UI a 
+Estructuras de API Action 
+La experiencia visual en la plataforma enmascara intencionalmente la complejidad sistémica 
+ofreciendo agrupaciones amigables conocidas como "Niveles de Permiso" (Permission Levels), 
+que van desde accesos de observador básicos hasta un control administrativo rotundo.25 Sin 
+embargo, a nivel de la infraestructura REST, el Data Management API fragmenta estos niveles 
+abstractos en colecciones paramétricas discretas o arreglos vectoriales alfanuméricos (arrays 
+of strings) bajo las claves de atributos actions o inheritActions.26 
+Una distinción arquitectónica crucial emergió con la evolución desde la plataforma matriz BIM 
+360 Document Management hacia la arquitectura unificada Autodesk Construction Cloud 
+(ACC/Forma Docs).13 Para flexibilizar flujos de trabajo en ACC, los ingenieros de Autodesk 
+introdujeron una acción algorítmica exclusiva e independiente: PUBLISH_MARKUP.13 Esta 
+adición desvincula exitosamente el acto de alterar documentos o repositorios físicos del acto 
+meramente visual de crear anotaciones o trazos (markups), lo cual previamente requería 
+engorrosos permisos combinados.31 
+La siguiente tabla forense expone el cruce exacto entre el nivel visual seleccionado en la 
+interfaz del producto y el arreglo de cadenas que la API de Autodesk requiere imperativamente 
+al momento de evaluar los permisos (vía GET) o de orquestar operaciones asíncronas de 
+inserción por lotes (batch-create / batch-update): 
+Nivel Semántico de Interfaz 
+de Usuario (UI) 
+Matriz de Acciones API 
+Subyacentes en BIM 360 
+Matriz de Acciones API 
+Subyacentes en Autodesk 
+Construction Cloud (ACC) 
+View Only 
+VIEW, COLLABORATE 
+VIEW, COLLABORATE 
+View/Download 
+VIEW, DOWNLOAD, 
+COLLABORATE 
+VIEW, DOWNLOAD, 
+COLLABORATE 
+Upload Only 
+PUBLISH 
+N/A (No aplicable 
+aisladamente) 
+View/Download + Publish 
+Markups 
+N/A (Inexistente en BIM 360) 
+VIEW, DOWNLOAD, 
+COLLABORATE, 
+PUBLISH_MARKUP 
+View/Download + Upload 
+PUBLISH, VIEW, 
+DOWNLOAD, 
+COLLABORATE 
+PUBLISH, VIEW, DOWNLOAD, 
+COLLABORATE, 
+PUBLISH_MARKUP 
+View/Download + Upload + 
+Edit 
+PUBLISH, VIEW, 
+DOWNLOAD, 
+COLLABORATE, EDIT 
+PUBLISH, VIEW, DOWNLOAD, 
+COLLABORATE, 
+PUBLISH_MARKUP, EDIT 
+Full Controller (Gestor de 
+Nivel Folder Control) 
+PUBLISH, VIEW, 
+DOWNLOAD, 
+COLLABORATE, EDIT, 
+CONTROL 
+PUBLISH, VIEW, DOWNLOAD, 
+COLLABORATE, 
+PUBLISH_MARKUP, EDIT, 
+CONTROL 
+Síntesis estructural derivada de las directrices de migración oficial entre plataformas. 
+13 
+Obras citadas 
+1.​ Data Management API - Autodesk Platform Services, fecha de acceso: marzo 30, 
+2026, https://aps.autodesk.com/data-management-api 
+2.​ Data Management API | Autodesk Platform Services (APS), fecha de acceso: 
+marzo 30, 2026, 
+https://aps.autodesk.com/developer/overview/data-management-api 
+3.​ Data Management API - Autodesk Platform Services, fecha de acceso: marzo 30, 
+2026, https://aps.autodesk.com/en/docs/data/v2 
+4.​ API Basics | Data Management API - Autodesk Platform Services, fecha de 
+acceso: marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/data/v2/overview/basics 
+5.​ POST projects/:project_id/versions | Data Management API - Autodesk Platform 
+Services, fecha de acceso: marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/data/v2/reference/http/projects-project_id-versio
+ns-POST 
+6.​ POST uploads | Forma APIs - Autodesk Platform Services, fecha de acceso: 
+marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/acc/v1/reference/http/sheets-uploads-POST 
+7.​ GET metadata | Forma APIs - Autodesk Platform Services, fecha de acceso: 
+marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/acc/v1/reference/http/submittals-metadata-GET 
+8.​ Reference Guide | Data Management API - Autodesk Platform Services, fecha de 
+acceso: marzo 30, 2026, https://aps.autodesk.com/en/docs/data/v2/reference/ 
+9.​ Field Guide | Data Management API - Autodesk Platform Services, fecha de 
+acceso: marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/data/v2/overview/field-guide 
+10.​Upload a File | Data Management API - Autodesk Platform Services, fecha de 
+acceso: marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/data/v2/tutorials/upload-file/ 
+11.​How-to Guide | Data Management API - Autodesk Platform Services, fecha de 
+acceso: marzo 30, 2026, https://aps.autodesk.com/en/docs/data/v2/tutorials/ 
+12.​POST items | Forma APIs - Autodesk Platform Services, fecha de acceso: marzo 
+30, 2026, 
+https://aps.autodesk.com/en/docs/acc/v1/reference/http/submittals-items-POST 
+13.​POST projects/:project_id/folders/:folder_id/permissions:batch-update | Autodesk 
+Construction Cloud APIs, fecha de acceso: marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/acc/v1/reference/http/document-management-p
+rojects-project_id-folders-folder_id-permissionsbatch-update-POST 
+14.​GET naming-standards/:id | Forma APIs - Autodesk Platform Services, fecha de 
+acceso: marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/acc/v1/reference/http/document-management-n
+aming-standards-id-GET 
+15.​POST projects | BIM 360 API - Autodesk Platform Services, fecha de acceso: 
+marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/bim360/v1/reference/http/projects-POST/ 
+16.​Forma Data Management Compatibility With BIM 360 APIs - Autodesk Platform 
+Services, fecha de acceso: marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/acc/v1/overview/bim-360-compatibility/docs-co
+mpatibility 
+17.​POST projects/:project_id/items | Data Management API - Autodesk Platform 
+Services, fecha de acceso: marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/data/v2/reference/http/projects-project_id-items-
+POST 
+18.​PublishModel | Data Management API - Autodesk Platform Services, fecha de 
+acceso: marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/data/v2/reference/http/PublishModel 
+19.​CONNECT Ajuda | Naming Standards - Autodesk product documentation, fecha 
+de acceso: marzo 30, 2026, 
+https://help.autodesk.com/view/CONNECT/PTB/?guid=File_Naming_Standard_Do
+cs 
+20.​ISO 19650, the Common Data Environment, and Autodesk Construction Cloud, 
+fecha de acceso: marzo 30, 2026, 
+https://www.autodesk.com/autodesk-university/article/ISO-19650-Common-Data-E
+nvironment-and-Autodesk-Construction-Cloud 
+21.​File Naming Standards API of BIM360 Docs and Autodesk Forma Data 
+Management, fecha de acceso: marzo 30, 2026, 
+https://aps.autodesk.com/blog/file-naming-standards-api-bim360-docs-and-autode
+sk-docs 
+22.​Configure and standardize ISO 19650 project naming conventions on a connected 
+document management solution. - Autodesk Construction Cloud, fecha de acceso: 
+marzo 30, 2026, 
+https://construction.autodesk.com/tools/construction-document-management-iso-1
+9650/ 
+23.​How Required Custom Attributes Influences Uploading Documents ..., fecha de 
+acceso: marzo 30, 2026, 
+https://aps.autodesk.com/blog/how-required-custom-attributes-influences-uploadin
+g-documents-autodesk-docs 
+24.​Validate Files Names and Required Attribute Values | Autodesk, fecha de acceso: 
+marzo 30, 2026, 
+https://help.autodesk.com/view/DOCS/KOR/?guid=Add_Files_To_Naming_Standa
+rd_Enforced_Folder 
+25.​Folder Permissions - BIM 360 Help - Autodesk product documentation, fecha de 
+acceso: marzo 30, 2026, 
+https://help.autodesk.com/view/BIM360D/ENU/?guid=GUID-2643FEEF-B48A-45A
+1-B354-797DAD628C37 
+26.​POST projects/:project_id/folders/:folder_id/permissions:batch-create | Autodesk 
+Construction Cloud APIs, fecha de acceso: marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/acc/v1/reference/http/document-management-p
+rojects-project_id-folders-folder_id-permissionsbatch-create-POST 
+27.​POST projects/:project_id/folders/:folder_id/permissions:batch-delete | Autodesk 
+Construction Cloud APIs, fecha de acceso: marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/acc/v1/reference/http/document-management-p
+rojects-project_id-folders-folder_id-permissionsbatch-delete-POST 
+28.​Folder Permission API (BIM 360) is released! | Autodesk Platform ..., fecha de 
+acceso: marzo 30, 2026, 
+https://aps.autodesk.com/blog/folder-permission-api-bim-360-released 
+29.​Update a User's Folder Permissions | BIM 360 API - Autodesk Platform Services, 
+fecha de acceso: marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/bim360/v1/tutorials/document-management/upd
+ate-permissions 
+30.​Retrieve a User's Folder Permissions | BIM 360 API - Autodesk Platform Services, 
+fecha de acceso: marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/bim360/v1/tutorials/document-management/retri
+eve-user-permissions 
+31.​GET projects/:project_id/folders/:folder_id/permissions | Forma APIs, fecha de 
+acceso: marzo 30, 2026, 
+https://aps.autodesk.com/en/docs/acc/v1/reference/http/document-management-p
+rojects-project_id-folders-folder_id-permissions-GET 
+32.​Cannot decrease permissions in a subfolder with inherited permissions in BIM 360 
+Document Management/Forma Data Management - Autodesk, fecha de acceso: 
+marzo 30, 2026, 
+https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/C
+annot-decrease-permissions-in-a-sub-folder-with-inherited-permissions-in-BIM-36
+0-Document-Management.html 
+33.​"Inherited permissions must expand" when trying to change member's permission 
+within BIM 360 folder - Autodesk, fecha de acceso: marzo 30, 2026, 
+https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/B
+IM-360-Docs-Inherited-permissions-must-expand-error-displayed-when-trying-to-c
+hange-member-s-permission.html 
+34.​BUILD Aide | Manage Folder Permissions | Autodesk, fecha de acceso: marzo 30, 
+2026, 
+https://help.autodesk.com/view/BUILD/FRC/?guid=Folder_Permissions&p=DOCS
+&l=ENU 

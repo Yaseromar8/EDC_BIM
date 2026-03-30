@@ -60,6 +60,7 @@ except ImportError:
 # Register Blueprints
 
 
+
 MAP_PREPARATION_SECONDS = int(os.getenv('MAPS_PREPARATION_SECONDS', '5'))
 DEFAULT_TILESET_URL = os.getenv(
     'MAPS_DEFAULT_TILESET_URL',
@@ -704,6 +705,7 @@ from routes.auth import auth_bp
 from routes.projects import projects_bp
 from routes.ai import ai_bp
 from routes.schedule import schedule_bp
+from routes.uploads import uploads_bp
 
 app.register_blueprint(digital_twin_bp)
 app.register_blueprint(maps_bp)
@@ -715,6 +717,7 @@ app.register_blueprint(projects_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(ai_bp)
 app.register_blueprint(schedule_bp, url_prefix='/api/schedule')
+app.register_blueprint(uploads_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
@@ -724,6 +727,9 @@ def serve_map_file(filename):
 from db import ensure_file_nodes_table, ensure_ai_brain_schema
 ensure_file_nodes_table()
 ensure_ai_brain_schema()
+
+from folder_permissions import init_folder_permissions_table
+init_folder_permissions_table()
  
  
 if __name__ == '__main__':

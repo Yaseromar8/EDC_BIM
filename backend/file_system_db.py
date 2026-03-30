@@ -8,55 +8,37 @@ gcs_executor = ThreadPoolExecutor(max_workers=4)
 
 def resolve_path_to_node_id(path, model_urn, created_by=None, auto_create=True):
     """
+    [ENTERPRISE REFACTOR]
     Convierte un path del tipo 'folder1/folder2/' en el node_id correspondiente.
-    Normaliza slashes y maneja el model_urn como prefijo opcional.
+    Utiliza la función PL/pgSQL 'resolve_folder_path' que procesa el loop internamente 
+    en la Base de Datos para evitar el problema de roundtrips (N+1 Queries).
     """
-    # Normalizar: quitar slashes y comparar con model_urn
-    p = path.strip('/') if path else ''
-    m = model_urn.strip('/') if model_urn else ''
-    
-    if not p or p == m:
+    if not path or not model_urn:
         return None
 
-    # Quitar model_urn si viene al inicio (ej: 'proyectos/PQT8_TALARA/Folder1' -> 'Folder1')
-    if p.startswith(m + '/'):
-        p = p[len(m)+1:]
-    
-    # Si después de quitar el prefijo queda vacío o es lo mismo, es la raíz
-    if not p or p == m:
+    # Normalización básica para evitar errores de tipo
+    p_path = path.strip('/')
+    m_urn = model_urn.strip('/')
+
+    if not p_path or p_path == m_urn:
         return None
 
-    parts = [part for part in p.split('/') if part]
-    parent_id = None
-    
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        for part in parts:
-            cursor.execute("""
-                SELECT id FROM file_nodes 
-                WHERE model_urn = %s AND parent_id IS NOT DISTINCT FROM %s 
-                AND name = %s AND node_type = 'FOLDER' AND is_deleted = FALSE
-            """, (model_urn, parent_id, part))
-            row = cursor.fetchone()
-            
-            if row:
-                parent_id = row[0]
-            elif auto_create:
-                cursor.execute("""
-                    INSERT INTO file_nodes (model_urn, parent_id, node_type, name, created_by)
-                    VALUES (%s, %s, 'FOLDER', %s, %s)
-                    RETURNING id
-                """, (model_urn, parent_id, part, created_by))
-                parent_id = cursor.fetchone()[0]
-            else:
-                return None
+        cursor.execute(
+            "SELECT resolve_folder_path(%s, %s, %s, %s)",
+            (p_path, model_urn, created_by, auto_create)
+        )
+        row = cursor.fetchone()
         conn.commit()
-    return parent_id
+        return row[0] if row else None
 
 
-def list_contents(parent_id, model_urn, base_path=""):
+def list_contents(parent_id, model_urn, base_path="", user=None):
     """
     Devuelve inventario estructurado con metadata de auditoría (updated_by e iniciales).
+    Aplica filtro ISO 19650 Invisibility Mode para carpetas sin acceso.
+    Optimizado: permisos resueltos en una sola consulta SQL (batch JOIN).
     """
     def get_initials(name):
         if not name: return "??"
@@ -68,26 +50,72 @@ def list_contents(parent_id, model_urn, base_path=""):
     folders = []
     files = []
     
+    # Determinar datos del usuario una sola vez
+    u_id = user.get('id') if user else None
+    u_role = user.get('role', 'viewer') if user else None
+    is_admin = (u_role == 'admin') if u_role else False
+    
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        query = """
-            SELECT id, name, node_type, size_bytes, version_number, updated_at, gcs_urn, status, tags, metadata, description, mime_type, 
-                   COALESCE(updated_by, created_by, 'Sistema') as u_by
-            FROM file_nodes 
-            WHERE model_urn = %s AND parent_id IS NOT DISTINCT FROM %s AND is_deleted = FALSE
-            ORDER BY node_type DESC, name ASC
-        """
-        cursor.execute(query, (model_urn, parent_id))
+        
+        # ── QUERY OPTIMIZADA: JOIN con folder_permissions en una sola consulta ──
+        # Si el usuario no es admin y tiene ID, hacemos LEFT JOIN para traer permisos.
+        # Si es admin o no hay user, no necesitamos JOIN (admin = acceso total).
+        if u_id and not is_admin:
+            query = """
+                SELECT fn.id, fn.name, fn.node_type, fn.size_bytes, fn.version_number, 
+                       fn.updated_at, fn.gcs_urn, fn.status, fn.tags, fn.metadata, 
+                       fn.description, fn.mime_type,
+                       COALESCE(fn.updated_by, fn.created_by, 'Sistema') as u_by,
+                       fp.permission_level,
+                       EXISTS(SELECT 1 FROM file_nodes c WHERE c.parent_id = fn.id AND c.is_deleted = FALSE) AS has_children
+                FROM file_nodes fn
+                LEFT JOIN folder_permissions fp 
+                    ON fn.id = fp.folder_node_id AND fp.user_id = %s
+                WHERE fn.model_urn = %s AND fn.parent_id IS NOT DISTINCT FROM %s AND fn.is_deleted = FALSE
+                ORDER BY fn.node_type DESC, fn.name ASC
+            """
+            cursor.execute(query, (u_id, model_urn, parent_id))
+        else:
+            query = """
+                SELECT id, name, node_type, size_bytes, version_number, updated_at, gcs_urn, 
+                       status, tags, metadata, description, mime_type, 
+                       COALESCE(updated_by, created_by, 'Sistema') as u_by,
+                       NULL as permission_level,
+                       EXISTS(SELECT 1 FROM file_nodes c WHERE c.parent_id = file_nodes.id AND c.is_deleted = FALSE) AS has_children
+                FROM file_nodes 
+                WHERE model_urn = %s AND parent_id IS NOT DISTINCT FROM %s AND is_deleted = FALSE
+                ORDER BY node_type DESC, name ASC
+            """
+            cursor.execute(query, (model_urn, parent_id))
+        
         rows = cursor.fetchall()
         
         for row in rows:
-            r_id, r_name, r_type, r_size, r_version, r_updated, r_gcs, r_status, r_tags, r_metadata, r_description, r_mime, r_u_by = row
-            full_name = f"{base_path}{r_name}" + ("/" if r_type == 'FOLDER' else "")
+            r_id, r_name, r_type, r_size, r_version, r_updated, r_gcs, r_status, r_tags, r_metadata, r_description, r_mime, r_u_by, r_perm, r_has_children = row
+            bp = base_path if base_path.endswith('/') else (base_path + '/' if base_path else '')
+            full_name = f"{bp}{r_name}" + ("/" if r_type == 'FOLDER' else "")
             
             audit_data = {
                 "name": r_u_by,
                 "initials": get_initials(r_u_by)
             }
+
+            # ── Resolver permisos en base al resultado del JOIN ──
+            if is_admin:
+                perm_level = 'admin'
+                has_access = True
+            elif u_id and r_type == 'FOLDER':
+                if r_perm:
+                    perm_level = r_perm
+                    has_access = r_perm != 'none'
+                else:
+                    # Sin permiso explícito → ISO 19650 Fail-Closed
+                    perm_level = 'none'
+                    has_access = False
+            else:
+                perm_level = 'view_only'
+                has_access = True
 
             item = {
                 "id": r_id,
@@ -95,24 +123,74 @@ def list_contents(parent_id, model_urn, base_path=""):
                 "fullName": full_name,
                 "updated": r_updated.isoformat() if r_updated else None,
                 "updated_by": audit_data,
-                "description": r_description
+                "description": r_description,
+                "permission_level": perm_level,
+                "has_access": has_access
             }
 
             if r_type == 'FOLDER':
+                item["has_children"] = bool(r_has_children)
                 folders.append(item)
             else:
-                item.update({
-                    "size": r_size,
-                    "version": r_version,
-                    "status": r_status,
-                    "tags": r_tags or [],
-                    "metadata": r_metadata or {},
-                    "mime_type": r_mime,
-                    "gcs_urn": r_gcs
-                })
-                files.append(item)
+                if has_access:  # Los archivos sin acceso se excluyen por completo
+                    item.update({
+                        "size": r_size,
+                        "version": r_version,
+                        "status": r_status,
+                        "tags": r_tags or [],
+                        "metadata": r_metadata or {},
+                        "mime_type": r_mime,
+                        "gcs_urn": r_gcs
+                    })
+                    files.append(item)
                 
     return {"folders": folders, "files": files}
+
+
+def ensure_project_root_node(model_urn):
+    """
+    Asegura que exista un nodo raíz real ('Archivos de proyecto') para el proyecto dado.
+    Si no existe, lo crea y re-asigna como padre de las carpetas huérfanas (parent_id=NULL).
+    Retorna el UUID del nodo raíz.
+    """
+    if not model_urn or model_urn == 'global':
+        return None
+    
+    ROOT_NAME = 'Archivos de proyecto'
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        # 1. Buscar nodo raíz existente (folder_type='PROJECT_ROOT')
+        cursor.execute("""
+            SELECT id FROM file_nodes 
+            WHERE model_urn = %s AND folder_type = 'PROJECT_ROOT' AND is_deleted = FALSE
+            LIMIT 1
+        """, (model_urn,))
+        row = cursor.fetchone()
+        
+        if row:
+            return row[0]
+        
+        # 2. No existe → Crear nodo raíz
+        cursor.execute("""
+            INSERT INTO file_nodes (model_urn, parent_id, node_type, name, folder_type, created_by)
+            VALUES (%s, NULL, 'FOLDER', %s, 'PROJECT_ROOT', 'SYSTEM')
+            RETURNING id
+        """, (model_urn, ROOT_NAME))
+        root_id = cursor.fetchone()[0]
+        
+        # 3. Re-parent: mover carpetas huérfanas (parent_id=NULL) bajo el nuevo root
+        cursor.execute("""
+            UPDATE file_nodes 
+            SET parent_id = %s
+            WHERE model_urn = %s AND parent_id IS NULL AND id != %s AND is_deleted = FALSE
+        """, (root_id, model_urn, root_id))
+        moved = cursor.rowcount
+        
+        conn.commit()
+        print(f"[DB] Nodo raíz creado para {model_urn}: {root_id} ({moved} carpetas re-asignadas)")
+        return root_id
 
 def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mime_type=None, created_by=None):
     """Inserta/Actualiza el Ítem y crea una nueva Versión histórica (Estilo ACC)"""
@@ -157,6 +235,7 @@ def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mim
         cursor.execute("UPDATE file_nodes SET current_version_id = %s WHERE id = %s", (v_id, f_id))
         
         conn.commit()
+    return f_id, new_v
 
 def find_node_by_gcs_urn(model_urn, gcs_urn):
     """

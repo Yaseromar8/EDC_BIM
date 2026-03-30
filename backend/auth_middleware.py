@@ -29,13 +29,20 @@ PUBLIC_ENDPOINTS = {
 #   (managed by the backend, not by user session)
 # 
 # PROTECTED by session token (NOT listed here):
-#   /api/docs/*    → ECD document CRUD
-#   /api/users     → User listing
+#   /api/docs/*      → ECD document CRUD
+#   /api/users       → User listing
+#   /api/tracking/*  → Construction progress tracking
+#   /api/pins/*      → 3D annotation pins
+#   /api/digital-twin/* → Digital twin data
+#   /api/views/*     → Saved views
+#   /api/maps/*      → GIS maps
+#   /api/ai/*        → AI assistant
+#   /api/schedule/*  → Project schedule
 PUBLIC_PREFIXES = (
-    # Static
+    # Static file serving
     '/maps/',                 # Static map tiles
     '/docs/uploads/',         # Static uploaded file serving
-    # Autodesk APS proxy (uses internal Autodesk tokens)
+    # Autodesk APS proxy (uses internal Autodesk tokens, not user sessions)
     '/api/auth/aps/',         # APS OAuth callbacks
     '/api/hubs',              # ACC hubs (2-legged token)
     '/api/projects',          # ACC projects (2-legged token)
@@ -44,14 +51,6 @@ PUBLIC_PREFIXES = (
     '/api/documents/',        # ACC document linking (2-legged token)
     # ── Secure Share Engine ────────────────────────
     '/api/docs/shared/',      # Public UUID-based document viewer links
-    # Visor 3D data (no user session, uses project-scoped access)
-    '/api/schedule',          # Schedule data
-    '/api/pins',              # 3D pins
-    '/api/tracking',          # Tracking/progress
-    '/api/digital-twin',      # Digital twin
-    '/api/views',             # Saved views
-    '/api/maps',              # GIS/maps
-    '/api/ai',                # AI assistant
 )
 
 

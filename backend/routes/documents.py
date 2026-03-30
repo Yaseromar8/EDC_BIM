@@ -10,6 +10,11 @@ documents_bp = Blueprint('documents', __name__)
 print("[DEBUG] documents_bp loaded from routes/documents.py")
 
 
+# ── RBAC: Control de Acceso Basado en Roles (ISO 19650) ──────────────
+# ── RBAC: Control de Acceso Basado en Roles (ISO 19650) ──────────────
+from folder_permissions import check_folder_permission
+
+
 def verify_project_access(user_id, model_urn):
     """
     Verifica que el usuario tenga acceso al proyecto asociado a este model_urn.
@@ -28,12 +33,14 @@ def verify_project_access(user_id, model_urn):
             if user_row and user_row[0] == 'admin':
                 return True
             # Usuarios normales: verificar tabla project_users
+            # Extraer nombre del proyecto del model_urn (puede venir como 'proyectos/PQT8_TALARA')
+            project_name = model_urn.split('/')[-1] if '/' in model_urn else model_urn
             cursor.execute("""
                 SELECT 1 FROM project_users pu
                 JOIN projects p ON pu.project_id = p.id
-                WHERE pu.user_id = %s AND (p.model_urn = %s OR p.id = %s)
+                WHERE pu.user_id = %s AND (p.model_urn = %s OR p.id = %s OR p.name = %s)
                 LIMIT 1
-            """, (user_id, model_urn, model_urn))
+            """, (user_id, model_urn, model_urn, project_name))
             return cursor.fetchone() is not None
     except Exception as e:
         print(f"[ACL] Error checking project access: {e}")
@@ -231,10 +238,18 @@ def list_documents():
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
 
     try:
-        from file_system_db import resolve_path_to_node_id, list_contents
+        from file_system_db import resolve_path_to_node_id, list_contents, ensure_project_root_node
         
-        # Si mandan ID, lo usamos directamente. Si no, resolvemos el path.
-        if node_id and node_id != 'null':
+        import uuid
+        def is_valid_uuid(val):
+            try:
+                uuid.UUID(str(val))
+                return True
+            except ValueError:
+                return False
+
+        # Si mandan ID valido, lo usamos directamente. Si no, resolvemos el path.
+        if node_id and node_id != 'null' and is_valid_uuid(node_id):
             parent_id = node_id
             # Verificar si el ID existe en el model_urn. Si no, fallback a global.
             from db import get_db_connection
@@ -250,6 +265,12 @@ def list_documents():
             
             is_project_root = (path.strip('/') == model_urn.strip('/') or path.strip('/') == '')
             
+            # Si es la raíz del proyecto, asegurar que existe el nodo raíz real
+            if is_project_root and model_urn != 'global':
+                root_id = ensure_project_root_node(model_urn)
+                if root_id:
+                    parent_id = root_id
+            
             # Si no se encontró y NO es el root del proyecto, intentar fallback a global
             if not parent_id and not is_project_root and model_urn != 'global':
                 # Try fallback to global
@@ -263,7 +284,7 @@ def list_documents():
         else:
             parent_id = None
 
-        contents = list_contents(parent_id, model_urn, path)
+        contents = list_contents(parent_id, model_urn, path, user=user)
 
         # Generar URLs firmadas para los archivos listados
         for f in contents['files']:
@@ -333,14 +354,37 @@ def create_folder():
     user = getattr(g, 'current_user', None)
     if user and not verify_project_access(user.get('id'), model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+        
+    import os
+    from file_system_db import resolve_path_to_node_id
+
+    # El parent del nuevo folder se usa para validar permisos
+    # folder_path = 'ARCHIVOS_01/01/nuevo' -> parent_path = 'ARCHIVOS_01/01'
+    parent_path = os.path.dirname(folder_path.rstrip('/'))
+    parent_node_id = resolve_path_to_node_id(parent_path, model_urn, auto_create=False)
+    
+    rbac = check_folder_permission(user, parent_node_id, model_urn, 'create_upload', 'crear carpetas')
+    if rbac: return rbac
+
+    # ── VALIDACIONES ENTERPRISE (Estilo ACC / ISO 19650) ──
+    # Extraer solo el nombre de la carpeta nueva (última parte del path)
+    folder_name = folder_path.rstrip('/').split('/')[-1]
+    
+    from folder_validators import validate_folder_creation
+    validation = validate_folder_creation(folder_name, parent_node_id, model_urn)
+    if not validation['valid']:
+        return jsonify({
+            "success": False, 
+            "error": validation['message'], 
+            "code": validation['code']
+        }), 422
 
     try:
-        from file_system_db import resolve_path_to_node_id
         from db import log_activity
-        resolve_path_to_node_id(folder_path, model_urn, created_by=performed_by)
+        node_id = resolve_path_to_node_id(folder_path, model_urn, created_by=performed_by)
         log_activity(model_urn, 'create_folder', 'folder',
-                     entity_name=folder_path, performed_by=performed_by)
-        return jsonify({"success": True, "message": f"Folder '{folder_path}' created"}), 201
+                     entity_name=folder_path, entity_id=str(node_id) if node_id else None, performed_by=performed_by)
+        return jsonify({"success": True, "id": str(node_id) if node_id else None, "message": f"Folder '{folder_path}' created"}), 201
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -373,6 +417,11 @@ def upload_document():
     user = getattr(g, 'current_user', None)
     if user and not verify_project_access(user.get('id'), model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+        
+    from file_system_db import resolve_path_to_node_id
+    parent_node_id = resolve_path_to_node_id(folder_path, model_urn, auto_create=False)
+    rbac = check_folder_permission(user, parent_node_id, model_urn, 'create_upload', 'subir archivos')
+    if rbac: return rbac
 
     if folder_path and not folder_path.endswith('/'):
         folder_path += '/'
@@ -501,6 +550,8 @@ def delete_document():
     user = getattr(g, 'current_user', None)
     if user and not verify_project_access(user.get('id'), model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+    rbac = check_folder_permission(user, node_id, model_urn, 'admin', 'eliminar archivos')
+    if rbac: return rbac
 
     try:
         from file_system_db import soft_delete_node, resolve_path_to_node_id
@@ -535,12 +586,16 @@ def rename_document():
     user = getattr(g, 'current_user', None)
     if user and not verify_project_access(user.get('id'), model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+    
+    # ── Extraer node_id antes del RBAC check ──
+    req_node_id = data.get('node_id') or data.get('id')
+    rbac = check_folder_permission(user, req_node_id, model_urn, 'edit', 'renombrar archivos')
+    if rbac: return rbac
 
     # CASE A: ID-based (POST) - New way for inline editing
     if request.method == 'POST':
         node_id = data.get('node_id')
         new_name = data.get('new_name')
-        model_urn = data.get('model_urn', 'global')
         if not node_id or not new_name:
             return jsonify({"success": False, "error": "node_id and new_name are required"}), 400
         try:
@@ -633,6 +688,8 @@ def move_document():
     user = getattr(g, 'current_user', None)
     if user and not verify_project_access(user.get('id'), model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+    rbac = check_folder_permission(user, node_id, model_urn, 'edit', 'mover archivos')
+    if rbac: return rbac
 
     print(f"[MOVE] Request: node_id={node_id}, dest_node_id={dest_node_id}, node_path='{node_path}', dest_path='{dest_path}'")
 
@@ -729,11 +786,13 @@ def get_upload_url():
     user = getattr(g, 'current_user', None)
     if user and not verify_project_access(user.get('id'), model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+    rbac = check_folder_permission(user, None, model_urn, 'create_upload', 'obtener URL de subida')
+    if rbac: return rbac
 
     import uuid
     gcs_urn = str(uuid.uuid4())
-    from gcs_manager import generate_upload_signed_url
-    upload_url = generate_upload_signed_url(gcs_urn, content_type)
+    from gcs_manager import generate_upload_url
+    upload_url = generate_upload_url(gcs_urn, content_type=content_type)
     
     if upload_url:
         return jsonify({"success": True, "uploadUrl": upload_url, "gcs_urn": gcs_urn}), 200
@@ -757,6 +816,11 @@ def confirm_upload():
     user = getattr(g, 'current_user', None)
     if user and not verify_project_access(user.get('id'), model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+        
+    from file_system_db import resolve_path_to_node_id
+    parent_node_id = resolve_path_to_node_id(folder_path, model_urn, auto_create=False)
+    rbac = check_folder_permission(user, parent_node_id, model_urn, 'create_upload', 'confirmar subidas')
+    if rbac: return rbac
 
     if folder_path and not folder_path.endswith('/'):
         folder_path += '/'
@@ -892,6 +956,10 @@ def batch_update():
     user = getattr(g, 'current_user', None)
     if user and not verify_project_access(user.get('id'), model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+        
+    req_node_id = items[0] if items else None
+    rbac = check_folder_permission(user, req_node_id, model_urn, 'edit', 'modificar documentos')
+    if rbac: return rbac
 
     if not items:
         return jsonify({"success": True, "message": "No items to process"}), 200
@@ -913,6 +981,10 @@ def batch_update():
             if action == 'SET_STATUS' and new_status:
                 if new_status not in VALID_STATUSES:
                     return jsonify({"success": False, "error": f"Estado inválido: {new_status}. Válidos: {', '.join(VALID_STATUSES)}"}), 400
+                # ── RBAC: Solo admin puede aprobar a PUBLISHED o ARCHIVED ──
+                if new_status in ('PUBLISHED', 'ARCHIVED'):
+                    rbac_pub = check_folder_permission(user, req_node_id, model_urn, 'admin', f'aprobar documentos como {new_status}')
+                    if rbac_pub: return rbac_pub
 
                 # Validar transiciones para cada item
                 cursor.execute("""
@@ -921,24 +993,27 @@ def batch_update():
                 """, (items, model_urn))
                 current_items = cursor.fetchall()
                 
-                rejected = []
+                ERROR_MSGS = {
+                    ('WIP', 'PUBLISHED'): "No se puede publicar un documento que no ha pasado por el estado SHARED.",
+                    ('WIP', 'ARCHIVED'): "No se puede archivar un documento directamente desde estado WIP (Borrador).",
+                    ('SHARED', 'ARCHIVED'): "Un documento debe ser PUBLICADO antes de poder ser archivado.",
+                    ('PUBLISHED', 'WIP'): "Un documento publicado no puede volver a ser borrador. Envíelo a SHARED primero.",
+                    ('ARCHIVED', 'SHARED'): "Un documento archivado solo puede volver a estado PUBLISHED.",
+                    ('ARCHIVED', 'WIP'): "Un documento archivado no puede volver a Borrador de forma directa."
+                }
+                
                 valid_ids = []
                 for item_id, current_status in current_items:
                     current = current_status or 'WIP'  # Default para items sin status
-                    allowed = VALID_TRANSITIONS.get(current, set())
+                    allowed =VALID_TRANSITIONS.get(current, set())
                     if new_status == current:
                         continue  # Ya tiene ese estado, skip silencioso
+                        
                     if new_status not in allowed:
-                        rejected.append({"id": str(item_id), "from": current, "to": new_status})
-                    else:
-                        valid_ids.append(str(item_id))
-
-                if rejected and not valid_ids:
-                    return jsonify({
-                        "success": False, 
-                        "error": f"Transición no permitida: {rejected[0]['from']} → {rejected[0]['to']}",
-                        "rejected": rejected
-                    }), 400
+                        msg = ERROR_MSGS.get((current, new_status), f"Transición no permitida: de {current} a {new_status}.")
+                        return jsonify({"success": False, "error": msg}), 400
+                    
+                    valid_ids.append(str(item_id))
 
                 if valid_ids:
                     cursor.execute("""
@@ -952,8 +1027,7 @@ def batch_update():
                              performed_by=performed_by,
                              details={
                                  'new_status': new_status, 
-                                 'processed': len(valid_ids),
-                                 'rejected': len(rejected)
+                                 'processed': len(valid_ids)
                              })
 
             elif action == 'DELETE':
@@ -975,77 +1049,6 @@ def batch_update():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-
-@documents_bp.route('/api/docs/upload-url', methods=['POST'])
-def get_upload_url():
-    """Genera una Signed URL para subida directa (PUT) a GCS. Estilo profesional ACC."""
-    data = request.get_json()
-    filename = data.get('filename')
-    content_type = data.get('contentType', 'application/octet-stream')
-    model_urn = data.get('model_urn', 'global')
-
-    if not filename:
-        return jsonify({"success": False, "error": "Filename required"}), 400
-
-    # Generar la URN oculta (mismo proceso que upload normal)
-    safe_name = secure_filename(filename)
-    gcs_uuid = f"multi-tenant/{model_urn}/{int(time.time())}_{uuid.uuid4().hex[:8]}_{safe_name}"
-
-    try:
-        from gcs_manager import generate_upload_url
-        upload_url = generate_upload_url(gcs_uuid, content_type=content_type)
-        
-        if upload_url:
-            return jsonify({
-                "success": True, 
-                "uploadUrl": upload_url, 
-                "gcsUrn": gcs_uuid
-            }), 200
-        return jsonify({"success": False, "error": "Failed to generate upload URL"}), 500
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-
-@documents_bp.route('/api/docs/upload-complete', methods=['POST'])
-def finalize_upload():
-    """Confirma que la subida directa a GCS terminó y registra en BD."""
-    data = request.get_json()
-    filename = data.get('filename')
-    gcs_urn = data.get('gcsUrn')
-    size_bytes = data.get('sizeBytes')
-    folder_path = data.get('path', '')
-    model_urn = data.get('model_urn', 'global')
-    performed_by = data.get('user', None)
-
-    if not filename or not gcs_urn:
-        return jsonify({"success": False, "error": "Missing data"}), 400
-
-    if folder_path and not folder_path.endswith('/'):
-        folder_path += '/'
-
-    try:
-        from file_system_db import resolve_path_to_node_id, create_file_record
-        from db import log_activity
-
-        parent_id = resolve_path_to_node_id(folder_path, model_urn, created_by=performed_by)
-        
-        create_file_record(
-            model_urn, parent_id, filename,
-            size_bytes, gcs_urn,
-            mime_type=data.get('contentType'),
-            created_by=performed_by
-        )
-
-        log_activity(
-            model_urn, 'upload', 'file',
-            entity_name=f"{folder_path}{filename}",
-            performed_by=performed_by,
-            details={'gcs_urn': gcs_urn, 'method': 'direct_upload'}
-        )
-
-        return jsonify({"success": True, "message": "File registered"}), 200
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
 @documents_bp.route('/api/docs/description', methods=['POST', 'PUT'])
 def update_node_description_route():
     """Actualiza la descripción de un archivo o carpeta en PostgreSQL."""
@@ -1255,3 +1258,191 @@ def get_shared_document(share_id):
             }), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+# ── ENDPOINTS DE CONTROL DE PERMISOS (Fase 3 ISO 19650) ─────────────────
+
+@documents_bp.route('/api/docs/folder-permissions', methods=['GET'])
+def get_folder_permissions_endpoint():
+    """Lista todos los permisos asignados explícitamente a una carpeta."""
+    folder_id = request.args.get('folder_id')
+    model_urn = request.args.get('model_urn', 'global')
+    
+    if not folder_id:
+        return jsonify({"success": False, "error": "Falta folder_id"}), 400
+        
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user.get('id'), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso al proyecto."}), 403
+        
+    # Solo administradores pueden ver la tabla de permisos
+    from folder_permissions import check_folder_permission, list_folder_permissions
+    rbac = check_folder_permission(user, folder_id, model_urn, 'admin', 'ver permisos')
+    if rbac: return rbac
+    
+    try:
+        perms = list_folder_permissions(folder_id)
+        return jsonify({"success": True, "permissions": perms}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@documents_bp.route('/api/docs/folder-permissions', methods=['POST'])
+def set_folder_permission_endpoint():
+    """Añade o modifica el nivel de permiso de un usuario en una carpeta."""
+    data = request.get_json()
+    if not data: return jsonify({"success": False, "error": "No data"}), 400
+    
+    folder_id = data.get('folder_id')
+    user_email = data.get('user_email')
+    permission_level = data.get('permission_level')
+    model_urn = data.get('model_urn', 'global')
+    
+    if not folder_id or not user_email or not permission_level:
+        return jsonify({"success": False, "error": "Faltan parámetros (folder_id, user_email, permission_level)"}), 400
+        
+    from flask import g
+    current_user = getattr(g, 'current_user', None)
+    if current_user and not verify_project_access(current_user.get('id'), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso al proyecto."}), 403
+        
+    from folder_permissions import check_folder_permission, set_folder_permission
+    rbac = check_folder_permission(current_user, folder_id, model_urn, 'admin', 'modificar permisos')
+    if rbac: return rbac
+    
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM users WHERE email = %s", (user_email,))
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({"success": False, "error": f"Usuario no encontrado: {user_email}"}), 404
+            target_user_id = row[0]
+            
+        granted_by = current_user.get('id') if current_user else None
+        set_folder_permission(folder_id, target_user_id, permission_level, granted_by)
+        
+        return jsonify({"success": True, "message": "Permisos actualizados correctamente."}), 200
+    except ValueError as ve:
+        return jsonify({"success": False, "error": str(ve)}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@documents_bp.route('/api/docs/folder-permissions', methods=['DELETE'])
+def remove_folder_permission_endpoint():
+    """Elimina un permiso asignado de la tabla de permisos de una carpeta."""
+    data = request.get_json()
+    if not data: return jsonify({"success": False, "error": "No data"}), 400
+    
+    perm_id = data.get('permission_id')
+    folder_id = data.get('folder_id') # Necesario para chequear admin
+    model_urn = data.get('model_urn', 'global')
+    
+    if not perm_id or not folder_id:
+        return jsonify({"success": False, "error": "Faltan parámetros (permission_id, folder_id)"}), 400
+        
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user.get('id'), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso al proyecto."}), 403
+        
+    from folder_permissions import check_folder_permission, remove_folder_permission
+    rbac = check_folder_permission(user, folder_id, model_urn, 'admin', 'eliminar permisos')
+    if rbac: return rbac
+    
+    try:
+        success = remove_folder_permission(perm_id)
+        if success:
+            return jsonify({"success": True, "message": "Permiso eliminado correctamente."}), 200
+        else:
+            return jsonify({"success": False, "error": "Permiso no encontrado."}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@documents_bp.route('/api/docs/download_folder', methods=['GET'])
+def download_folder_endpoint():
+    """Descarga de forma recursiva todo el contenido de una carpeta como archivo ZIP."""
+    folder_id = request.args.get('folder_id')
+    model_urn = request.args.get('model_urn', 'global')
+    
+    if not folder_id:
+        return jsonify({"success": False, "error": "Falta folder_id"}), 400
+        
+    from flask import g, send_file, jsonify
+    user = getattr(g, 'current_user', None)
+    
+    # 1. Chequear permisos (mínimo view_download)
+    from folder_permissions import check_folder_permission
+    rbac = check_folder_permission(user, folder_id, model_urn, 'view_download', 'descargar_carpeta')
+    if rbac: return rbac
+    
+    import zipfile
+    import tempfile
+    import os
+    from db import get_db_connection
+    from gcs_manager import get_storage_client
+    
+    # 2. CTE recursivo para obtener todos los archivos de la carpeta
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        query = """
+            WITH RECURSIVE folder_tree AS (
+                SELECT id, name, parent_id, node_type, gcs_urn, CAST(name AS TEXT) as path
+                FROM file_nodes
+                WHERE id = %s AND is_deleted = FALSE
+                
+                UNION ALL
+                
+                SELECT fn.id, fn.name, fn.parent_id, fn.node_type, fn.gcs_urn, CAST(ft.path || '/' || fn.name AS TEXT)
+                FROM file_nodes fn
+                JOIN folder_tree ft ON fn.parent_id = ft.id
+                WHERE fn.is_deleted = FALSE
+            )
+            SELECT name, gcs_urn, path FROM folder_tree WHERE node_type = 'FILE'
+        """
+        cursor.execute(query, (folder_id,))
+        files = cursor.fetchall()
+        
+    # 3. Generar el ZIP
+    temp_file = tempfile.SpooledTemporaryFile(max_size=50*1024*1024)
+    if files:
+        bucket_name = os.environ.get("GCS_BUCKET_NAME")
+        client = get_storage_client()
+        bucket = client.bucket(bucket_name)
+        
+        with zipfile.ZipFile(temp_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for r_name, r_gcs_urn, r_path in files:
+                if not r_gcs_urn: continue
+                # Limpiar el path para que la raiz sea la primer carpeta
+                clean_path = r_path.split('/', 1)[-1] if '/' in r_path else r_path
+                try:
+                    blob = bucket.blob(r_gcs_urn)
+                    if blob.exists():
+                        data = blob.download_as_bytes()
+                        zf.writestr(clean_path, data)
+                except Exception as e:
+                    print(f"[ZIP] Error descargando {r_gcs_urn}: {e}")
+    else:
+        # ZIP vacio
+        with zipfile.ZipFile(temp_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            pass
+
+    temp_file.seek(0)
+    
+    return send_file(
+        temp_file,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name='Descarga_Carpeta.zip'
+    )
+
+@documents_bp.route('/api/docs/force-init-permissions', methods=['GET'])
+def force_init_permissions():
+    """Endpoint temporal para forzar la creación de la tabla usando el pool activo."""
+    from folder_permissions import init_folder_permissions_table
+    try:
+        init_folder_permissions_table()
+        return jsonify({"success": True, "message": "Tabla creada exitosamente."})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+

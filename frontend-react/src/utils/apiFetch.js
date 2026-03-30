@@ -16,6 +16,7 @@ function getToken() {
 function clearSession() {
   localStorage.removeItem('visor_user');
   localStorage.removeItem('visor_session_token');
+  localStorage.removeItem('visor_selectedProject'); // FIX: Previene reload loop si expira sesión
   sessionStorage.removeItem('visor_user');
   sessionStorage.removeItem('visor_session_token');
 }
@@ -43,12 +44,13 @@ export async function apiFetch(url, options = {}) {
   
   if (response.status === 401) {
     if (!isPublicAuth) {
-      console.warn('[apiFetch] 401 Unauthorized — session expired, redirecting to login');
+      console.warn('[apiFetch] 401 Unauthorized — session expired');
       clearSession();
       if (onUnauthorized) {
         onUnauthorized();
       } else {
-        window.location.reload();
+        // En vez de forzar reload y causar bucle infinito, informamos a React
+        window.dispatchEvent(new CustomEvent('auth-expired'));
       }
     }
   }

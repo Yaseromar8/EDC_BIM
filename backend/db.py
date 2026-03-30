@@ -1,6 +1,6 @@
 import os
 import psycopg2
-from psycopg2 import pool
+from psycopg2 import pool, extras
 from contextlib import contextmanager
 
 # Definimos un Connection Pool global
@@ -8,48 +8,130 @@ db_pool = None
 
 def init_db_pool():
     global db_pool
-    if db_pool is None:
-        try:
-            db_pool = psycopg2.pool.ThreadedConnectionPool(
-                5, 20, # Min, Max conexiones
-                user=os.environ.get("DB_USER"),
-                password=os.environ.get("DB_PASS"),
-                host=os.environ.get("DB_HOST"),
-                port=os.environ.get("DB_PORT", "5432"),
-                database=os.environ.get("DB_NAME"),
-                connect_timeout=10
-            )
-            print("Pool de conexiones a PostgreSQL inicializado correctamente (Threaded, Min: 5).")
-        except Exception as e:
-            print(f"CRITICAL: Error iniciando Pool SQL a {os.environ.get('DB_HOST')}: {str(e)}")
-            import traceback
-            traceback.print_exc()
+    if db_pool is not None:
+        return
+    try:
+        # ── TCP KEEPALIVE: Evita que firewalls de Cloud SQL maten conexiones idle ──
+        # keepalives=1         → Activa TCP keepalive
+        # keepalives_idle=30   → Envía primer probe después de 30s de inactividad
+        # keepalives_interval=10 → Re-intenta cada 10s
+        # keepalives_count=3   → Declara muerta después de 3 fallos (30+30=60s max)
+        db_pool = psycopg2.pool.ThreadedConnectionPool(
+            2, 15,  # Min 2, Max 15 conexiones
+            user=os.environ.get("DB_USER"),
+            password=os.environ.get("DB_PASS"),
+            host=os.environ.get("DB_HOST"),
+            port=os.environ.get("DB_PORT", "5432"),
+            database=os.environ.get("DB_NAME"),
+            connect_timeout=10,
+            options='-c statement_timeout=30000',  # 30s max per query
+            keepalives=1,
+            keepalives_idle=30,
+            keepalives_interval=10,
+            keepalives_count=3
+        )
+        print("[DB] Pool de conexiones PostgreSQL inicializado (Min:2, Max:15, Keepalive:ON)")
+    except Exception as e:
+        print(f"CRITICAL: Error iniciando Pool SQL a {os.environ.get('DB_HOST')}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+def _is_conn_alive(conn):
+    """Verifica si una conexión PostgreSQL sigue viva. Rápido y no-destructivo."""
+    if conn is None or conn.closed:
+        return False
+    try:
+        # Usar status check primero (sin roundtrip de red)
+        if conn.status == psycopg2.extensions.STATUS_READY:
+            return True
+        # Si está en transacción "idle in transaction", hacer rollback
+        if conn.status != psycopg2.extensions.STATUS_BEGIN:
+            conn.reset()
+            return True
+        # Probar con un query real ultra ligero
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.fetchone()
+        cur.close()
+        return True
+    except Exception:
+        return False
+
 
 @contextmanager
 def get_db_connection():
     """
-    Context manager para obtener una conexion segura del pool
-    y devolverla automaticamente despues de usarla.
+    Context manager robusto para obtener una conexión sana del pool.
+    - Verifica que la conexión esté viva antes de entregarla
+    - Si la conexión está muerta, la descarta y obtiene otra
+    - Siempre devuelve la conexión al pool (o la descarta si falló)
     """
     global db_pool
     if db_pool is None:
         init_db_pool()
         
     if db_pool is None:
-        raise Exception("El pool de conexiones no está inicializado. No se puede conectar a la base de datos.")
+        raise Exception("El pool de conexiones no está inicializado.")
 
     conn = None
+    conn_is_good = True
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            conn = db_pool.getconn()
+            
+            # ── HEALTH CHECK: Verificar que la conexión está viva ──
+            if not _is_conn_alive(conn):
+                print(f"[DB] Conexión stale detectada (intento {attempt+1}/{max_retries}), descartando...")
+                try:
+                    db_pool.putconn(conn, close=True)  # Cerrar y descartar
+                except Exception:
+                    pass
+                conn = None
+                continue
+            
+            # Conexión sana — usarla
+            break
+            
+        except pool.PoolError as e:
+            print(f"[DB] Pool agotado (intento {attempt+1}/{max_retries}): {e}")
+            conn = None
+            if attempt == max_retries - 1:
+                raise Exception(f"No hay conexiones disponibles en el pool: {e}")
+            import time
+            time.sleep(0.5)  # Esperar medio segundo antes de reintentar
+    
+    if conn is None:
+        raise Exception("No se pudo obtener una conexión sana del pool después de reintentos.")
+
     try:
-        conn = db_pool.getconn()
         yield conn
     except Exception as e:
+        conn_is_good = False
         print(f"Error de Base de Datos: {e}")
-        if conn:
+        try:
             conn.rollback()
+        except Exception:
+            pass
         raise e
     finally:
         if conn and db_pool:
-            db_pool.putconn(conn)
+            try:
+                if conn_is_good and not conn.closed:
+                    # Resetear la conexión a estado limpio antes de devolverla
+                    if conn.status != psycopg2.extensions.STATUS_READY:
+                        conn.rollback()
+                    db_pool.putconn(conn)
+                else:
+                    # Conexión dañada — cerrar y descartar
+                    db_pool.putconn(conn, close=True)
+            except Exception:
+                try:
+                    db_pool.putconn(conn, close=True)
+                except Exception:
+                    pass
 
 def ensure_file_nodes_table():
     """Crea la tabla maestra de archivos/carpetas e indices de rendimiento."""
@@ -176,6 +258,154 @@ def ensure_file_nodes_table():
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                     expires_at TIMESTAMP WITH TIME ZONE NULL
                 );
+            """)
+
+            # ── 6. Project Settings (Validaciones Enterprise / ISO 19650) ──
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS project_settings (
+                    id SERIAL PRIMARY KEY,
+                    model_urn VARCHAR(255) UNIQUE NOT NULL,
+                    
+                    -- Naming Conventions (ASCII estricto para compatibilidad BIM/Dynamo/Windows)
+                    naming_pattern VARCHAR(255) DEFAULT '^[A-Za-z0-9 _\\-\\.\\(\\)]+$',
+                    max_name_length INTEGER DEFAULT 100,
+                    reserved_names TEXT[] DEFAULT ARRAY['CON','PRN','AUX','NUL','COM1','COM2','COM3','COM4','LPT1','LPT2','LPT3','.','..'],
+                    
+                    -- Storage Quotas (solo archivos FILE, no metadata)
+                    storage_limit_bytes BIGINT DEFAULT 268435456000,  -- 250 GB
+                    
+                    -- Structure Limits
+                    max_folder_depth INTEGER DEFAULT 15,
+                    max_children_per_folder INTEGER DEFAULT 500,
+                    
+                    -- Feature Flags (on/off por proyecto)
+                    enforce_naming BOOLEAN DEFAULT TRUE,
+                    enforce_quota BOOLEAN DEFAULT TRUE,
+                    enforce_depth BOOLEAN DEFAULT TRUE,
+                    
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
+            # ── 7. Upload Sessions (Resumable Chunked Uploads) ─────────────
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS upload_sessions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    model_urn VARCHAR(255) NOT NULL,
+                    
+                    -- File metadata
+                    filename VARCHAR(255) NOT NULL,
+                    size_bytes BIGINT NOT NULL,
+                    mime_type VARCHAR(100) DEFAULT 'application/octet-stream',
+                    gcs_urn TEXT NOT NULL,
+                    
+                    -- GCS Resumable Session
+                    session_uri TEXT NOT NULL,
+                    
+                    -- Progress tracking
+                    bytes_uploaded BIGINT DEFAULT 0,
+                    status VARCHAR(20) DEFAULT 'active'
+                        CHECK (status IN ('active','completed','expired','cancelled')),
+                    
+                    -- Context
+                    folder_path TEXT,
+                    parent_node_id UUID,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP + INTERVAL '7 days')
+                );
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_upload_sessions_user
+                ON upload_sessions(created_by, status)
+                WHERE status = 'active';
+            """)
+
+            # ── 8. Funciones PL/pgSQL (Rendimiento Enterprise) ────────────
+            # Reemplaza el N+1 Problem de Python por una sola transaccion recursiva en memoria de DB
+            cursor.execute("""
+                CREATE OR REPLACE FUNCTION resolve_folder_path(
+                    p_path TEXT,
+                    p_model_urn VARCHAR,
+                    p_created_by VARCHAR,
+                    p_auto_create BOOLEAN
+                ) RETURNS UUID AS $$
+                DECLARE
+                    v_parts TEXT[];
+                    v_part TEXT;
+                    v_parent_id UUID := NULL;
+                    v_current_id UUID;
+                BEGIN
+                    -- 1. Si no hay path, retorna NULL
+                    IF p_path IS NULL OR p_path = '' THEN
+                        RETURN NULL;
+                    END IF;
+
+                    -- 2. Limpiar path respecto al model_urn
+                    IF p_path = p_model_urn THEN
+                        RETURN NULL;
+                    END IF;
+                    IF p_path LIKE p_model_urn || '/%' THEN
+                        p_path := substr(p_path, length(p_model_urn) + 2);
+                    END IF;
+
+                    -- 3. Extraer partes eliminando slashes extras
+                    v_parts := string_to_array(trim(both '/' FROM p_path), '/');
+
+                    -- 4. Buscar PROJECT_ROOT
+                    IF p_model_urn IS NOT NULL AND p_model_urn != 'global' THEN
+                        SELECT id INTO v_parent_id 
+                        FROM file_nodes 
+                        WHERE model_urn = p_model_urn 
+                          AND folder_type = 'PROJECT_ROOT' 
+                          AND is_deleted = FALSE 
+                        LIMIT 1;
+                    END IF;
+
+                    -- 5. Bucle sobre las partes (Concurrencia manejada con excepciones)
+                    FOREACH v_part IN ARRAY v_parts LOOP
+                        IF v_part = '' THEN CONTINUE; END IF;
+
+                        -- Intentar encontrar el nodo padre
+                        SELECT id INTO v_current_id
+                        FROM file_nodes
+                        WHERE model_urn = p_model_urn
+                          AND parent_id IS NOT DISTINCT FROM v_parent_id
+                          AND name = v_part
+                          AND node_type = 'FOLDER'
+                          AND is_deleted = FALSE;
+
+                        -- Si no existe, decidir si se crea o se aborta
+                        IF NOT FOUND THEN
+                            IF NOT p_auto_create THEN
+                                RETURN NULL;
+                            END IF;
+
+                            -- Crear con proteccion de concurrencia pura (Race Conditions)
+                            BEGIN
+                                INSERT INTO file_nodes (model_urn, parent_id, node_type, name, created_by)
+                                VALUES (p_model_urn, v_parent_id, 'FOLDER', v_part, p_created_by)
+                                RETURNING id INTO v_current_id;
+                            EXCEPTION WHEN unique_violation THEN
+                                -- Si alguien mas insertó exactamente la misma carpeta milisegundos despues de nuestra lectura
+                                -- El UNIQUE INDEX detiene el fallo y volvemos a leerla:
+                                SELECT id INTO v_current_id
+                                FROM file_nodes
+                                WHERE model_urn = p_model_urn
+                                  AND parent_id IS NOT DISTINCT FROM v_parent_id
+                                  AND name = v_part
+                                  AND node_type = 'FOLDER'
+                                  AND is_deleted = FALSE;
+                            END;
+                        END IF;
+
+                        v_parent_id := v_current_id;
+                    END LOOP;
+
+                    RETURN v_parent_id;
+                END;
+                $$ LANGUAGE plpgsql;
             """)
 
             conn.commit()

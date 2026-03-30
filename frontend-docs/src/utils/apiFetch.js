@@ -35,6 +35,7 @@ function getToken() {
 function clearSession() {
   localStorage.removeItem('visor_user');
   localStorage.removeItem('visor_session_token');
+  localStorage.removeItem('visor_selectedProject'); // FIX: Previene reload loop si expira sesión
   sessionStorage.removeItem('visor_user');
   sessionStorage.removeItem('visor_session_token');
 }

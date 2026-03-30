@@ -1060,7 +1060,16 @@ function FilesPage({ project, user, onBack, onLogout }) {
   const [showUploadMenu, setShowUploadMenu] = useState(false);
 
   // -- CHUNKED UPLOAD ENGINE (Resumable, 3 concurrent, 8MB chunks) --
-  const chunkedUpload = useChunkedUpload(API, projectPrefix, user);
+  const chunkedUpload = useChunkedUpload(API, projectPrefix, user, {
+    onUploadComplete: (item, res) => {
+      if (res.version && res.version > 1) {
+        toast.success(`Versión ${res.version} de ${item.filename} guardada exitosamente`);
+      } else {
+        toast.success(`${item.filename} guardado exitosamente`);
+      }
+      cacheMethods.invalidateNode(item.folderPath || '__root__');
+    }
+  });
   const { methods: cacheMethods, cacheVersion } = useFolderCache(API, projectPrefix);
   const [pendingBanner, setPendingBanner] = useState(null);
   const [moveState, setMoveState] = useState({ step: 0, items: [], itemIds: [], destPath: '', destId: null });
@@ -2428,7 +2437,9 @@ function FilesPage({ project, user, onBack, onLogout }) {
               Añadir a paquetes
             </button>
             <button onClick={() => {
-              if (versionRowMenu.v.gcs_urn) window.open(`${API}/api/docs/view?urn=${encodeURIComponent(versionRowMenu.v.gcs_urn)}`, '_blank');
+              const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
+              const tokenQuery = token ? `&session_token=${token}` : '';
+              if (versionRowMenu.v.gcs_urn) window.open(`${API}/api/docs/view?urn=${encodeURIComponent(versionRowMenu.v.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}${tokenQuery}`, '_blank');
               setVersionRowMenu(null);
             }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>

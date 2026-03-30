@@ -44,9 +44,11 @@ export default function DocumentViewer({
       // Lógica interna (plataforma)
       setLoadingOffice(true);
       const urn = viewedVersionInfo?.gcs_urn || file.gcs_urn;
+      const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
+      const tokenQuery = token ? `&session_token=${token}` : '';
       const url = urn 
-        ? `${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`
-        : `${API}/api/docs/signed-url?path=${encodeURIComponent(file.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}`;
+        ? `${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}${tokenQuery}`
+        : `${API}/api/docs/signed-url?path=${encodeURIComponent(file.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}${tokenQuery}`;
 
       fetch(url)
         .then(r => r.json())
@@ -165,10 +167,12 @@ export default function DocumentViewer({
       
       <div className="file-viewer-content" style={{ flex: 1, position: 'relative', background: '#f5f5f5', display: 'flex', justifyContent: 'center' }}>
         {(() => {
+          const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
+          const tokenQuery = token ? `&session_token=${token}` : '';
           const fileUrl = isShared && file.url ? file.url : (
             viewedVersionInfo && viewedVersionInfo.gcs_urn 
-            ? `${API}/api/docs/view?urn=${encodeURIComponent(viewedVersionInfo.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}` 
-            : `${API}/api/docs/view?path=${encodeURIComponent(file.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}`
+            ? `${API}/api/docs/view?urn=${encodeURIComponent(viewedVersionInfo.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}${tokenQuery}` 
+            : `${API}/api/docs/view?path=${encodeURIComponent(file.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}${tokenQuery}`
           );
           
           const lowerName = file.name.toLowerCase();

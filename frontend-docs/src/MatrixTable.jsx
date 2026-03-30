@@ -1,12 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
+
+// ── ISO 19650 Document Lifecycle ──────────────────────────────────────────
+const STATUS_CONFIG = {
+  WIP:       { label: 'WIP',        color: '#6b7280', bg: '#f3f4f6' },
+  SHARED:    { label: 'Compartido', color: '#2563eb', bg: '#dbeafe' },
+  PUBLISHED: { label: 'Publicado',  color: '#16a34a', bg: '#dcfce7' },
+  ARCHIVED:  { label: 'Archivado',  color: '#d97706', bg: '#fef3c7' },
+};
+
+const VALID_TRANSITIONS = {
+  WIP:       ['SHARED'],
+  SHARED:    ['WIP', 'PUBLISHED'],
+  PUBLISHED: ['SHARED', 'ARCHIVED'],
+  ARCHIVED:  ['PUBLISHED'],
+};
 
 /**
  * TableRow Component - Renders an individual row in the virtualized list.
  */
 const TableRow = ({ index, style, data }) => {
-  const { items, selected, toggle, navigate, setActiveFile, onUpdateDescription, onRename, formatSize, formatDate, getInitials, user, isAdmin, onRowMenu, isTrashMode, onShowVersions, columnWidths, renderFileIconSop, editingNodeId, setEditingNodeId, rightClickedId, processingIds } = data;
+  const { items, selected, toggle, navigate, setActiveFile, onUpdateDescription, onRename, formatSize, formatDate, getInitials, user, isAdmin, onRowMenu, isTrashMode, onShowVersions, columnWidths, renderFileIconSop, editingNodeId, setEditingNodeId, rightClickedId, processingIds, onStatusChange } = data;
   if (!items) return null;
   const item = items[index];
   if (!item) return null;
@@ -40,6 +55,7 @@ const TableRow = ({ index, style, data }) => {
 
   const isFolder = item.type === 'folder';
   const isSelected = selected.has(item.fullName);
+  const isGrey = item.has_access === false;
 
   const handleSave = () => {
     if (tempDesc !== (item.description || '')) {
@@ -82,16 +98,21 @@ const TableRow = ({ index, style, data }) => {
 
   return (
     <div 
-      className={`data-row ${isSelected ? 'selected' : ''} ${item.id === rightClickedId ? 'context-active' : ''}`} 
+      className={`data-row ${isSelected && !isGrey ? 'selected' : ''} ${item.id === rightClickedId && !isGrey ? 'context-active' : ''}`} 
       style={{ 
         ...style, 
         width: '100%',
-        opacity: processingIds[item.id] ? 0.5 : 1,
+        opacity: processingIds[item.id] ? 0.5 : (isGrey ? 0.6 : 1),
         filter: processingIds[item.id] ? 'grayscale(1)' : 'none',
         pointerEvents: processingIds[item.id] ? 'none' : 'auto',
+        color: isGrey ? '#999' : 'inherit',
         transition: 'all 0.4s ease'
       }}
       onContextMenu={(e) => {
+        if (isGrey) {
+          e.preventDefault();
+          return;
+        }
         e.preventDefault();
         onRowMenu(item, e);
       }}
@@ -170,15 +191,22 @@ const TableRow = ({ index, style, data }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, overflow: 'hidden' }}>
             <span 
               className="file-name-text" 
-              style={{ marginLeft: isFolder ? 0 : 8, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              style={{ 
+                marginLeft: isFolder ? 0 : 8, 
+                cursor: isGrey ? 'not-allowed' : 'pointer', 
+                overflow: 'hidden', 
+                textOverflow: 'ellipsis', 
+                whiteSpace: 'nowrap'
+              }}
               onClick={() => {
+                if (isGrey) return;
                 setActiveFile(item);
                 if (isFolder) navigate(item.fullName, item.id);
               }}
             >
               {item.name || 'Sin nombre'}
             </span>
-            {isAdmin && (
+            {isAdmin && !isGrey && (
               <svg 
                 className="pencil-icon-acc name-pencil" 
                 onClick={startEditingName}
@@ -281,17 +309,85 @@ const TableRow = ({ index, style, data }) => {
                </div>
             </div>
           </div>
-          <div className="td-cell" style={{ width: columnWidths.status }}>--</div>
+          <div className="td-cell" style={{ width: columnWidths.status }}>
+            {!isFolder && (() => {
+              const st = item.status || 'WIP';
+              const cfg = STATUS_CONFIG[st] || STATUS_CONFIG.WIP;
+              const transitions = VALID_TRANSITIONS[st] || [];
+              const [showDrop, setShowDrop] = useState(false);
+              const dropRef = useRef(null);
+              useEffect(() => {
+                const handleClickOutside = (e) => {
+                  if (dropRef.current && !dropRef.current.contains(e.target)) setShowDrop(false);
+                };
+                if (showDrop) document.addEventListener('mousedown', handleClickOutside);
+                return () => document.removeEventListener('mousedown', handleClickOutside);
+              }, [showDrop]);
+              return (
+                <div ref={dropRef} style={{ position: 'relative' }}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); if (isAdmin && transitions.length > 0) setShowDrop(!showDrop); }}
+                    style={{
+                      background: cfg.bg, color: cfg.color, border: 'none',
+                      borderRadius: 12, padding: '2px 10px', fontSize: 11, fontWeight: 600,
+                      cursor: isAdmin && transitions.length > 0 ? 'pointer' : 'default',
+                      whiteSpace: 'nowrap', lineHeight: '20px',
+                    }}
+                    title={isAdmin && transitions.length > 0 ? 'Clic para cambiar estado' : cfg.label}
+                  >
+                    {cfg.label}{isAdmin && transitions.length > 0 ? ' ▾' : ''}
+                  </button>
+                  {showDrop && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, zIndex: 9999,
+                      background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.12)', minWidth: 130, marginTop: 4,
+                      overflow: 'hidden',
+                    }}>
+                      {transitions.map(nextSt => {
+                        const nextCfg = STATUS_CONFIG[nextSt];
+                        return (
+                          <button
+                            key={nextSt}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowDrop(false);
+                              if (onStatusChange) onStatusChange(item, nextSt);
+                            }}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                              padding: '8px 12px', border: 'none', background: 'none',
+                              cursor: 'pointer', fontSize: 12, color: '#333', textAlign: 'left',
+                            }}
+                            onMouseEnter={(e) => e.target.style.background = '#f3f4f6'}
+                            onMouseLeave={(e) => e.target.style.background = 'none'}
+                          >
+                            <span style={{
+                              width: 8, height: 8, borderRadius: '50%',
+                              background: nextCfg.color, flexShrink: 0,
+                            }} />
+                            {nextCfg.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
         </>
       )}
 
       {!isTrashMode && (
         <div className="td-cell" style={{ width: columnWidths.action, textAlign: 'center', justifyContent: 'center' }}>
-          <button className="row-menu-btn" onClick={(e) => { e.stopPropagation(); onRowMenu(item, e); }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
-            </svg>
-          </button>
+          {!isGrey && (
+            <button className="row-menu-btn" onClick={(e) => { e.stopPropagation(); onRowMenu(item, e); }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+              </svg>
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -327,7 +423,8 @@ const MatrixTable = ({
   editingNodeId,
   setEditingNodeId,
   rightClickedId,
-  processingIds
+  processingIds,
+  onStatusChange
 }) => {
   const allItems = [...folders, ...files];
   return (
@@ -432,7 +529,8 @@ const MatrixTable = ({
                   editingNodeId,
                   setEditingNodeId,
                   rightClickedId,
-                  processingIds
+                  processingIds,
+                  onStatusChange
                 }}
               >
                 {TableRow}

@@ -501,20 +501,27 @@ function App() {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const handleLoginSuccess = (userData) => {
+  const handleLoginSuccess = useCallback((userData) => {
     localStorage.setItem('visor_user', JSON.stringify(userData));
     if (userData.session_token) {
       localStorage.setItem('visor_session_token', userData.session_token);
     }
     setUser(userData);
-  };
+  }, []);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem('visor_user');
     localStorage.removeItem('visor_session_token');
+    localStorage.removeItem('visor_selectedProject');
     setUser(null);
     setSelectedProject(null);
-  };
+  }, []);
+
+  useEffect(() => {
+    const onAuthExpired = () => handleLogout();
+    window.addEventListener('auth-expired', onAuthExpired);
+    return () => window.removeEventListener('auth-expired', onAuthExpired);
+  }, [handleLogout]);
 
   const [models, setModels] = useState([]);
   const [relinkTargetModel, setRelinkTargetModel] = useState(null); // Relink State
@@ -570,6 +577,36 @@ function App() {
       localStorage.removeItem('visor_selectedProject');
     }
   }, [selectedProject]);
+
+  // 🚀 INTERCEPTOR DE PASARELA (Gateway interceptor)
+  // Escucha los parámetros en la URL (ej: ?project=PQT8_TALARA&frente=CANAL)
+  // provenientes de la app de Docs (Plataforma BIM)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const projId = params.get('project');
+    const frenteId = params.get('frente');
+    const frontName = params.get('fn') || `Frente ${frenteId}`;
+
+    if (projId && frenteId) {
+      const compositeProject = {
+        id: `${projId}_${frenteId}`, // Isolated DB scope
+        baseName: projId,
+        frontId: frenteId,
+        frontName: frontName,
+        displayName: `${projId} - ${frontName}`,
+        name: projId // fallback
+      };
+      console.log("[Gateway] Setting project from URL params:", compositeProject);
+      setSelectedProject(compositeProject);
+
+      // Clean the URL so it doesn't get stuck upon page refresh
+      const url = new URL(window.location);
+      url.searchParams.delete('project');
+      url.searchParams.delete('frente');
+      url.searchParams.delete('fn');
+      window.history.replaceState({}, document.title, url.pathname + url.search);
+    }
+  }, []);
 
   const [showSplash, setShowSplash] = useState(false);
   const [selectedPinId, setSelectedPinId] = useState(null);
@@ -1418,6 +1455,8 @@ function App() {
 
   // Load Tracking Data on Mount or Project Change
   useEffect(() => {
+    if (!user) return; // Prevent fetching if not logged in
+
     const fetchTracking = async () => {
       try {
         const urn = selectedProject?.id || 'global';
