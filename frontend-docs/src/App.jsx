@@ -7,6 +7,10 @@ import LoginScreen from './LoginScreen';
 import { apiFetch } from './utils/apiFetch';
 import SharedViewer from './components/SharedViewer';
 import DocumentViewer from './components/DocumentViewer';
+import { useChunkedUpload } from './hooks/useChunkedUpload';
+import { useFolderCache } from './hooks/useFolderCache';
+import FolderPermissionsPanel from './components/FolderPermissionsPanel';
+import toast from 'react-hot-toast';
 
 const API = Capacitor.isNativePlatform()
   ? 'https://visor-ecd-backend.onrender.com'
@@ -631,19 +635,25 @@ function FolderNode({
   processingIds,
   setProcessingIds,
   creatingChildParentId,
-  setCreatingChildParentId
+  setCreatingChildParentId,
+  cacheMethods
 }) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const [children, setChildren] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
-  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
-  const menuRef = useRef(null);
+  const folderFullName = folder.fullName || '';
+  const nodeId = folder.id || folderFullName;
+  const isActive = currentPath === folderFullName;
+  const isChildrenActive = folderFullName && currentPath.startsWith(folderFullName) && !isActive;
 
-  const [isRenaming, setIsRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState('');
-  const [isCreatingChild, setIsCreatingChild] = useState(false);
-  const [newChildName, setNewChildName] = useState('');
+  const [expanded, setExpanded] = React.useState(defaultExpanded || isChildrenActive);
+  const [showMenu, setShowMenu] = React.useState(false);
+  const menuRef = React.useRef(null);
+
+  const [isRenaming, setIsRenaming] = React.useState(false);
+  const [renameValue, setRenameValue] = React.useState('');
+  const [isCreatingChild, setIsCreatingChild] = React.useState(false);
+  const [newChildName, setNewChildName] = React.useState('');
+
+  const { folders: cachedFolders, files: cachedFiles, stale, loading } = cacheMethods ? cacheMethods.getChildren(nodeId) : { folders: null, loading: false };
+  const children = cachedFolders || null;
 
   const submitRename = async () => {
     const folderNameStr = folder.name || '';
@@ -651,197 +661,157 @@ function FolderNode({
       setIsRenaming(false);
       return;
     }
-    const nodeName = folder.name || 'Folder';
-    const folderFullName = folder.fullName || '';
-    const nodeId = folder.id || folderFullName;
-    setProcessingIds(prev => ({ ...prev, [nodeId]: true }));
+    const newName = renameValue.trim();
+    if (cacheMethods) cacheMethods.optimisticRename(folder.parentId || null, nodeId, newName);
+    setIsRenaming(false);
+    
     try {
       const res = await apiFetch(`${API}/api/docs/rename`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ node_id: nodeId, new_name: renameValue.trim(), model_urn: projectPrefix })
+        body: JSON.stringify({ node_id: nodeId, new_name: newName, model_urn: projectPrefix })
       });
       if (res.ok) {
-        if (onTreeRefresh) await onTreeRefresh();
-        setIsRenaming(false);
-        // Sincronizar panel principal si estamos en esa carpeta
+        if (cacheMethods) cacheMethods.commitRename(folder.parentId || null, nodeId);
         if (onGlobalRefresh) onGlobalRefresh();
       } else {
+        if (cacheMethods) cacheMethods.rollbackRename(folder.parentId || null, nodeId, folderNameStr);
         const err = await res.json();
-        alert("Error al renombrar: " + (err.error || 'Desconocido'));
+        toast.error('Error al renombrar: ' + (err.error || 'Desconocido'));
       }
     } catch (e) {
-      console.error(e);
-    } finally {
-      setProcessingIds(prev => { const n = { ...prev }; delete n[nodeId]; return n; });
+      if (cacheMethods) cacheMethods.rollbackRename(folder.parentId || null, nodeId, folderNameStr);
+      toast.error('Error de conexión');
     }
   };
 
   const submitCreateChild = async () => {
     if (!newChildName.trim()) { setIsCreatingChild(false); return; }
-    const base = folder.fullName || '';
+    const base = folderFullName;
     const newPath = base + (base.endsWith('/') ? '' : '/') + newChildName.trim() + '/';
-    setLoading(true);
+    
+    const tempId = 'temp_' + Date.now();
+    const tempFolder = {
+      id: tempId,
+      name: newChildName.trim(),
+      fullName: newPath,
+      parentId: nodeId,
+      type: 'folder',
+      _syncing: true
+    };
+    
+    if (cacheMethods) cacheMethods.optimisticCreate(nodeId, tempFolder);
+    setIsCreatingChild(false);
+    setNewChildName('');
+    setExpanded(true);
+
     try { 
       const res = await apiFetch(`${API}/api/docs/folder`, { 
         method: 'POST', 
         headers: getAuthHeaders(), 
-        body: JSON.stringify({ 
-          path: newPath, 
-          model_urn: projectPrefix, 
-          user: user?.name 
-        }) 
+        body: JSON.stringify({ path: newPath, model_urn: projectPrefix, user: user?.name }) 
       });
       if (res.ok) {
-        if (onTreeRefresh) await onTreeRefresh();
-        setIsCreatingChild(false);
-        setNewChildName('');
+        const data = await res.json();
+        const realId = data.folder_id || newPath;
+        if (cacheMethods) cacheMethods.commitCreate(nodeId, tempId, realId);
         if (onGlobalRefresh) onGlobalRefresh();
       } else {
+        if (cacheMethods) cacheMethods.rollbackCreate(nodeId, tempId);
         const err = await res.json();
-        alert("Error al crear carpeta: " + (err.error || 'Desconocido'));
+        toast.error('Error al crear: ' + (err.error || 'Desconocido'));
       }
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  };
-
-  const submitDelete = async () => {
-    if (!isAdmin) return;
-    setLoading(true);
-    try { 
-      const res = await apiFetch(`${API}/api/docs/delete`, { 
-        method: 'DELETE', 
-        headers: getAuthHeaders(), 
-        body: JSON.stringify({ fullName: folder.fullName || '', model_urn: projectPrefix, user: user?.name }) 
-      });
-      if (res.ok) {
-        if (onTreeRefresh) onTreeRefresh();
-        if (onGlobalRefresh) onGlobalRefresh((currentPath === folder.fullName || currentPath.startsWith(folder.fullName)) ? projectPrefix : null);
-      }
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => {
-    if (expanded && refreshSignal > 0) {
-      loadChildren(true);
+    } catch (e) { 
+      if (cacheMethods) cacheMethods.rollbackCreate(nodeId, tempId);
+      toast.error('Error de red');
     }
-  }, [refreshSignal]);
+  };
 
-  useEffect(() => {
+  React.useEffect(() => {
+    if (expanded && refreshSignal > 0 && cacheMethods) {
+      cacheMethods.expandNode(nodeId, folderFullName);
+    }
+  }, [refreshSignal, expanded, cacheMethods, nodeId, folderFullName]);
+
+  React.useEffect(() => {
     function handleClickOutside(event) {
       if (menuRef.current && !menuRef.current.contains(event.target)) setShowMenu(false);
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Auto-fetch si viene expandido por defecto
-  useEffect(() => {
-    if (defaultExpanded && !children) {
-      loadChildren();
+  React.useEffect(() => {
+    if (defaultExpanded && !children && cacheMethods) {
+      cacheMethods.expandNode(nodeId, folderFullName);
     }
-  }, [defaultExpanded]);
+  }, [defaultExpanded, children, cacheMethods, nodeId, folderFullName]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (collapseSignal > 0 && level > 0) {
       setExpanded(false);
     }
   }, [collapseSignal, level]);
 
-  // Sincronizar recarga desde el exterior
-  useEffect(() => {
-    if (expanded && refreshSignal > 0) {
-      loadChildren(true);
-    }
-  }, [refreshSignal, expanded]);
-
-  // Auto-expandir el árbol si el usuario navega a un hijo desde la tabla principal o breadcrumbs
-  useEffect(() => {
-    const folderFullName = folder.fullName || '';
+  React.useEffect(() => {
     if (folderFullName && currentPath.startsWith(folderFullName) && currentPath !== folderFullName) {
       if (!expanded) setExpanded(true);
-      if (!children) loadChildren(true); // Cargar render silencioso
+      if (!children && cacheMethods) cacheMethods.expandNode(nodeId, folderFullName);
     }
-  }, [currentPath, folder.fullName, expanded, children]);
+  }, [currentPath, folderFullName, expanded, children, cacheMethods, nodeId]);
 
-  const loadChildren = async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const folderFullName = folder.fullName || '';
-      const folderId = folder.id || '';
-      const res = await apiFetch(`${API}/api/docs/list?path=${encodeURIComponent(folderFullName)}&model_urn=${encodeURIComponent(projectPrefix)}&node_id=${folderId}`);
-      if (res.ok) {
-        const response = await res.json();
-        const data = response.data || {};
-        const sorted = (data.folders || []).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-        setChildren(sorted);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    if (!silent) setLoading(false);
-  };
-
-  const handleToggle = async (e) => {
+  const handleToggle = (e) => {
     e.stopPropagation();
-    if (!expanded && !children) {
-      await loadChildren();
+    if (!expanded && !children && cacheMethods) {
+      cacheMethods.expandNode(nodeId, folderFullName);
     }
     setExpanded(!expanded);
   };
 
-  const folderFullName = folder.fullName || '';
-  const isActive = currentPath === folderFullName;
-  const isChildrenActive = folderFullName && currentPath.startsWith(folderFullName) && !isActive;
-
-  // Sync inline edit from context menu
-  useEffect(() => {
-    const folderId = folder.id || folder.fullName || '';
-    if (editingNodeId && editingNodeId.source === 'sidebar' && editingNodeId.id === folderId) {
+  React.useEffect(() => {
+    if (editingNodeId && editingNodeId.source === 'sidebar' && editingNodeId.id === nodeId) {
       setIsRenaming(true);
       setRenameValue((folder.name || '').replace(/\/$/, ''));
       setEditingNodeId(null);
     }
-  }, [editingNodeId, folder.id, folder.fullName, folder.name, setEditingNodeId]);
+  }, [editingNodeId, folder.name, nodeId, setEditingNodeId]);
 
-  // Sync inline create from context menu
-  useEffect(() => {
-    const folderId = folder.id || folder.fullName || '';
-    if (creatingChildParentId === folderId) {
-      if (!expanded) setExpanded(true);
-      if (!children) loadChildren(true); // Load children silently if needed
+  React.useEffect(() => {
+    if (creatingChildParentId === nodeId) {
+      if (!expanded) {
+         setExpanded(true);
+      }
+      if (cacheMethods) cacheMethods.expandNode(nodeId, folderFullName);
       setIsCreatingChild(true);
       setNewChildName('');
-      setCreatingChildParentId(null); // Clear the trigger
+      setCreatingChildParentId(null);
     }
-  }, [creatingChildParentId, folder.id, folder.fullName, expanded, children, setCreatingChildParentId]);
+  }, [creatingChildParentId, nodeId, folderFullName, expanded, cacheMethods, setCreatingChildParentId]);
 
   return (
     <>
       <div
-        className={`folder-tree-item ${isActive ? 'active' : ''} ${isChildrenActive ? 'child-active' : ''} ${(folder.id || folder.fullName) === rightClickedId ? 'context-active' : ''}`}
-        style={{ paddingLeft: `${8 + (level * 28)}px`, color: isActive ? '#0696D7' : '#3c3c3c' }}
+        className={`folder-tree-item ${isActive ? 'active' : ''} ${isChildrenActive ? 'child-active' : ''} ${nodeId === rightClickedId ? 'context-active' : ''}`}
+        style={{ paddingLeft: `${8 + (level * 28)}px`, color: isActive ? '#0696D7' : folder._syncing ? '#999' : '#3c3c3c' }}
         onClick={(e) => {
           e.stopPropagation();
-          onNavigate(folder.fullName, folder.id);
+          onNavigate(folderFullName, folder.id);
           if (level === 0 && onReset) onReset();
         }}
         onContextMenu={(e) => {
           if (isAdmin) {
             e.preventDefault();
             e.stopPropagation();
-            // We need a proper item object for onRowMenu
-            const item = { ...folder, type: 'folder', id: folder.id || folder.fullName }; 
+            const item = { ...folder, type: 'folder', id: nodeId }; 
             onRowMenu(item, e);
           }
         }}
       >
-        <div className="tree-toggle" onClick={handleToggle} style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (children && children.length === 0 && expanded) ? 0 : 1 }}>
-          {processingIds[folder.id || folder.fullName] ? (
+        <div className="tree-toggle" onClick={handleToggle} style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (!loading && children && children.length === 0 && expanded) ? 0 : 1 }}>
+          {processingIds[nodeId] ? (
             <div className="adsk-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
           ) : (
-            loading ? (
+            loading && expanded && !children ? (
               <div className="adsk-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
             ) : (
               <svg height="24" width="24" viewBox="0 0 24 24" fill="currentColor" style={{ transform: expanded ? 'none' : 'rotate(-90deg)', transition: 'transform 0.2s', width: 20, height: 20 }}>
@@ -851,7 +821,7 @@ function FolderNode({
           )}
         </div>
 
-        <div className="tree-icon" style={{ display: 'flex', alignItems: 'center', marginLeft: 4, marginRight: 8 }}>
+        <div className="tree-icon" style={{ display: 'flex', alignItems: 'center', marginLeft: 4, marginRight: 8, opacity: folder._syncing ? 0.5 : 1 }}>
           <svg fill="currentColor" viewBox="0 0 24 24" width="24" height="24">
             <path d="M18,20.45H6a3.6,3.6,0,0,1-3.6-3.6V7.15A3.6,3.6,0,0,1,6,3.55h4.84a.71.71,0,0,1,.53.22l2.12,2.1H18a3.61,3.61,0,0,1,3.6,3.61v7.37A3.6,3.6,0,0,1,18,20.45ZM3.89,9.48v7.37A2.1,2.1,0,0,0,6,19H18a2.1,2.1,0,0,0,2.1-2.1V9.48A2.1,2.1,0,0,0,18,7.37H13.17a.75.75,0,0,1-.53-.22l-2.12-2.1H6a2.1,2.1,0,0,0-2.1,2.1Z"></path>
           </svg>
@@ -865,7 +835,6 @@ function FolderNode({
               onFocus={(e) => e.target.select()}
               onChange={e => setRenameValue(e.target.value)} 
               onBlur={(e) => {
-                // Evitar conflicto con los botones del propio box
                 if (e.relatedTarget && e.relatedTarget.closest('.inline-edit-box')) return;
                 submitRename();
               }}
@@ -875,64 +844,64 @@ function FolderNode({
               }}
               style={{ padding: '0 4px', fontSize: 13 }}
             />
-            <button 
-              className="btn-cancel" 
-              style={{ width: 22, height: 22, marginLeft: 2 }}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={(e) => { e.stopPropagation(); setIsRenaming(false); }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
+            <button className="btn-cancel" style={{ width: 22, height: 22, marginLeft: 2 }} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); setIsRenaming(false); }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
-            <button 
-              className="btn-submit" 
-              style={{ width: 22, height: 22, marginLeft: 2 }}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={(e) => { e.stopPropagation(); submitRename(); }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
+            <button className="btn-submit" style={{ width: 22, height: 22, marginLeft: 2 }} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); submitRename(); }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
             </button>
           </div>
         ) : (
-          <div className="tree-name" style={{ fontWeight: 400, flex: 1, whiteSpace: 'nowrap', fontSize: 14, paddingRight: 8 }} title={(folder.name || 'Folder').replace(/\/$/, '')}>
-            {(folder.name || 'Folder').replace(/\/$/, '')}
+          <div className="tree-text" style={{ textDecoration: undefined }}>
+            {folder.name.replace(/\/$/, '')}
           </div>
         )}
-
-        {isAdmin && !isRenaming && (
-          <button
-            className="folder-icon-btn"
-            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-            onClick={(e) => {
-              e.stopPropagation();
-              const rect = e.currentTarget.getBoundingClientRect();
-              onRowMenu({ ...folder, type: 'folder', id: folder.id || folder.fullName }, { clientX: rect.left, clientY: rect.bottom });
-            }}
-            title="Opciones de carpeta"
-          >
-            <svg height="20" width="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path>
-            </svg>
-          </button>
-        )}
       </div>
+
       {expanded && (
-        <div className="folder-children">
+        <div className="folder-children" style={{ display: 'block' }}>
+          {isCreatingChild && (
+            <div className="folder-tree-item child-creating" style={{ paddingLeft: `${8 + ((level + 1) * 28)}px` }}>
+              <div className="tree-icon" style={{ display: 'flex', alignItems: 'center', marginLeft: 28, marginRight: 8 }}>
+                 <svg fill="#e0e0e0" viewBox="0 0 24 24" width="24" height="24"><path d="M18,20.45H6a3.6,3.6,0,0,1-3.6-3.6V7.15A3.6,3.6,0,0,1,6,3.55h4.84a.71.71,0,0,1,.53.22l2.12,2.1H18a3.61,3.61,0,0,1,3.6,3.61v7.37A3.6,3.6,0,0,1,18,20.45ZM3.89,9.48v7.37A2.1,2.1,0,0,0,6,19H18a2.1,2.1,0,0,0,2.1-2.1V9.48A2.1,2.1,0,0,0,18,7.37H13.17a.75.75,0,0,1-.53-.22l-2.12-2.1H6a2.1,2.1,0,0,0-2.1,2.1Z"></path></svg>
+              </div>
+              <div className="inline-edit-box" style={{ flex: 1, margin: '0 8px', height: 28 }}>
+                <input 
+                  autoFocus 
+                  value={newChildName} 
+                  onChange={e => setNewChildName(e.target.value)}
+                  onBlur={(e) => {
+                    if (e.relatedTarget && e.relatedTarget.closest('.inline-edit-box')) return;
+                    submitCreateChild();
+                  }}
+                  onKeyDown={e => { 
+                    if (e.key === 'Enter') submitCreateChild(); 
+                    if (e.key === 'Escape') setIsCreatingChild(false); 
+                  }}
+                  style={{ padding: '0 4px', fontSize: 13, width: '100%' }}
+                  placeholder="Nombre de carpeta..."
+                />
+                <button className="btn-cancel" style={{ width: 22, height: 22, marginLeft: 2 }} onMouseDown={(e) => e.preventDefault()} onClick={() => setIsCreatingChild(false)}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+                <button className="btn-submit" style={{ width: 22, height: 22, marginLeft: 2 }} onMouseDown={(e) => e.preventDefault()} onClick={submitCreateChild}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </button>
+              </div>
+            </div>
+          )}
           {children && children.map(child => (
-            <FolderNode
-              key={child.fullName}
+            <FolderNode 
+              key={child.id || child.fullName} 
               user={user}
-              folder={child}
-              currentPath={currentPath}
-              onNavigate={onNavigate}
-              projectPrefix={projectPrefix}
-              level={level + 1}
+              folder={child} 
+              currentPath={currentPath} 
+              onNavigate={onNavigate} 
+              projectPrefix={projectPrefix} 
+              level={level + 1} 
               isAdmin={isAdmin}
-              onTreeRefresh={loadChildren}
-              onGlobalRefresh={(newP) => { if (onGlobalRefresh) onGlobalRefresh(newP || currentPath) }}
+              onTreeRefresh={onTreeRefresh}
+              onGlobalRefresh={onGlobalRefresh}
               refreshSignal={refreshSignal}
               onInitiateMove={onInitiateMove}
               collapseSignal={collapseSignal}
@@ -945,59 +914,15 @@ function FolderNode({
               setProcessingIds={setProcessingIds}
               creatingChildParentId={creatingChildParentId}
               setCreatingChildParentId={setCreatingChildParentId}
+              cacheMethods={cacheMethods}
             />
           ))}
-          {isCreatingChild && (
-            <div className="folder-tree-item child-active" style={{ paddingLeft: `${8 + ((level + 1) * 28)}px`, minHeight: 40 }}>
-              <div style={{ width: 24 }}></div>
-              <div className="tree-icon" style={{ display: 'flex', alignItems: 'center', marginLeft: 4, marginRight: 8 }}>
-                <svg fill="currentColor" viewBox="0 0 24 24" width="24" height="24"><path d="M18,20.45H6a3.6,3.6,0,0,1-3.6-3.6V7.15A3.6,3.6,0,0,1,6,3.55h4.84a.71.71,0,0,1,.53.22l2.12,2.1H18a3.61,3.61,0,0,1,3.6,3.61v7.37A3.6,3.6,0,0,1,18,20.45ZM3.89,9.48v7.37A2.1,2.1,0,0,0,6,19H18a2.1,2.1,0,0,0,2.1-2.1V9.48A2.1,2.1,0,0,0,18,7.37H13.17a.75.75,0,0,1-.53-.22l-2.12-2.1H6a2.1,2.1,0,0,0-2.1,2.1Z"></path></svg>
-              </div>
-              <div className="inline-edit-box" style={{ margin: '0 8px', height: 28 }} onClick={e => e.stopPropagation()}>
-                <input 
-                  autoFocus 
-                  value={newChildName} 
-                  onChange={e => setNewChildName(e.target.value)} 
-                  onBlur={(e) => {
-                    if (e.relatedTarget && e.relatedTarget.closest('.inline-edit-box')) return;
-                    if (newChildName.trim()) submitCreateChild();
-                    else setIsCreatingChild(false);
-                  }}
-                  onKeyDown={e => { 
-                    if (e.key === 'Enter') submitCreateChild(); 
-                    if (e.key === 'Escape') setIsCreatingChild(false); 
-                  }} 
-                  placeholder="Carpeta nueva" 
-                  style={{ padding: '0 4px', fontSize: 13 }}
-                />
-                <button 
-                  className="btn-cancel"
-                  style={{ width: 22, height: 22, marginLeft: 2 }}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(e) => { e.stopPropagation(); setIsCreatingChild(false); }}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-                <button 
-                  className="btn-submit"
-                  style={{ width: 22, height: 22, marginLeft: 2 }}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(e) => { e.stopPropagation(); submitCreateChild(); }}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </>
   );
 }
+
 
 // ─────────────────────────────────────
 // 3. TABLE COMPONENTS (Virtualized)
@@ -1130,14 +1055,14 @@ function FilesPage({ project, user, onBack, onLogout }) {
   // office preview state extracted to DocumentViewer
 
   const [showSopToast, setShowSopToast] = useState(false);
-  const [sopHasReappeared, setSopHasReappeared] = useState(false);
-  const [sopCompletionTime, setSopCompletionTime] = useState('');
-  const [sopQueue, setSopQueue] = useState([]); // [{id, file, status, progress, time, batchId}]
-  const [sopBatches, setSopBatches] = useState([]); // [{id, timestamp}]
   const [sopMinimized, setSopMinimized] = useState(false);
-  const [uploadSopStep, setUploadSopStep] = useState('IDLE');
   const [collapseSignal, setCollapseSignal] = useState(0);
   const [showUploadMenu, setShowUploadMenu] = useState(false);
+
+  // -- CHUNKED UPLOAD ENGINE (Resumable, 3 concurrent, 8MB chunks) --
+  const chunkedUpload = useChunkedUpload(API, projectPrefix, user);
+  const { methods: cacheMethods, cacheVersion } = useFolderCache(API, projectPrefix);
+  const [pendingBanner, setPendingBanner] = useState(null);
   const [moveState, setMoveState] = useState({ step: 0, items: [], itemIds: [], destPath: '', destId: null });
   const [projectRootId, setProjectRootId] = useState(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -1170,6 +1095,7 @@ function FilesPage({ project, user, onBack, onLogout }) {
   const [rightClickedId, setRightClickedId] = useState(null);
   const [processingIds, setProcessingIds] = useState({}); // { [id]: true }
   const [showShareModal, setShowShareModal] = useState(false);
+  const [permissionsFolder, setPermissionsFolder] = useState(null);
   const [shareTarget, setShareTarget] = useState(null);
   const [shareGeneralAccess, setShareGeneralAccess] = useState('restricted'); // 'restricted' | 'anyone'
   const [shareGeneralRole, setShareGeneralRole] = useState('viewer'); // 'viewer' | 'commenter' | 'editor'
@@ -1527,145 +1453,47 @@ function FilesPage({ project, user, onBack, onLogout }) {
     );
   };
 
+  // -- CHUNKED UPLOAD: Handle file selection --
   const handleSopUpload = async (fileList) => {
     if (!isAdmin || !fileList?.length) return;
-    const batchId = Date.now().toString();
-    const newItems = Array.from(fileList).map(file => ({
-      id: Math.random().toString(36).substr(2, 9),
-      file,
-      status: 'PROCESANDO_1',
-      progress: 0,
-      time: '',
-      batchId
-    }));
-
-    setSopBatches(prev => [{ id: batchId, timestamp: new Date().toLocaleString() }, ...prev]);
-    setSopQueue(prev => [...newItems, ...prev]);
-    setUploadSopStep('PROCESANDO_1');
     setShowUploadModal(true);
-
-    newItems.forEach(item => {
-      const itemFile = item.file;
-      const filename = itemFile.name;
-      const fileType = itemFile.type || 'application/octet-stream';
-      const fileSize = itemFile.size;
-
-      const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
-      const headers = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      // 1. Obtener URL Firmada
-      fetch(`${API}/api/docs/upload-url`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model_urn: projectPrefix,
-          filename: filename,
-          contentType: fileType
-        })
-      })
-      .then(res => res.json())
-      .then(urlData => {
-        if (!urlData.success) throw new Error(urlData.error || 'Fallo obtener URL firmada');
-
-        const { uploadUrl, gcs_urn } = urlData;
-
-        // 2. Subida Directa a GCS (Upload con PUT)
-        const xhr = new XMLHttpRequest();
-        xhr.open('PUT', uploadUrl, true);
-        xhr.setRequestHeader('Content-Type', fileType);
-        
-        // ── PROGRESS ANIMATION ──
-        const fileSizeMB = fileSize / (1024 * 1024);
-        const estimatedSeconds = Math.max(2, (fileSizeMB / 2) + 1);
-        let uploadDone = false;
-        let currentProgress = 0;
-
-        const progressInterval = setInterval(() => {
-          if (uploadDone) { clearInterval(progressInterval); return; }
-          const target = 95;
-          const remaining = target - currentProgress;
-          const increment = Math.max(0.5, remaining * 0.08);
-          currentProgress = Math.min(currentProgress + increment, target);
-          setSopQueue(q => q.map(it => it.id === item.id ? { ...it, progress: Math.floor(currentProgress), status: 'BARRA_AZUL' } : it));
-        }, estimatedSeconds * 10); 
-        
-        // Progreso real XHR (si el navegador lo reporta)
-        xhr.upload.onprogress = (e) => {
-           if (e.lengthComputable) {
-              const p = Math.floor((e.loaded / e.total) * 95); 
-              if (p > currentProgress) {
-                  currentProgress = p;
-                  setSopQueue(q => q.map(it => it.id === item.id ? { ...it, progress: p, status: 'BARRA_AZUL' } : it));
-              }
-           }
-        };
-
-        xhr.onload = async () => {
-          uploadDone = true;
-          clearInterval(progressInterval);
-          if (xhr.status === 200 || xhr.status === 201) {
-             // 3. Confirmar con el Backend (Metadatos a BD)
-             try {
-                const confRes = await fetch(`${API}/api/docs/upload-confirm`, {
-                  method: 'POST',
-                  headers,
-                  body: JSON.stringify({
-                    model_urn: projectPrefix,
-                    path: currentPath,
-                    filename: filename,
-                    gcs_urn: gcs_urn,
-                    size_bytes: fileSize,
-                    mime_type: fileType,
-                    user: user?.name
-                  })
-                });
-                const confData = await confRes.json();
-                if (!confData.success) throw new Error(confData.error);
-
-                setSopQueue(q => q.map(it => it.id === item.id ? { ...it, progress: 100, status: 'BARRA_AZUL' } : it));
-                await new Promise(r => setTimeout(r, 500));
-                const now = new Date();
-                const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                const dateStr = now.toLocaleDateString();
-                setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'LISTO_1', progress: 100, time: `el ${dateStr} a las ${timeStr}` } : it));
-                setUploadSopStep('LISTO_1');
-                triggerRefresh(currentPath);
-             } catch (ce) {
-                console.error("[App.jsx] Error confirmando upload", ce);
-                setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR', progress: 0 } : it));
-             }
-          } else {
-            console.error("[App.jsx] Error subiendo a GCS", xhr.status, xhr.responseText);
-            setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR', progress: 0 } : it));
-          }
-        };
-
-        xhr.onerror = () => {
-          uploadDone = true;
-          clearInterval(progressInterval);
-          setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR', progress: 0 } : it));
-        };
-
-        xhr.send(item.file);
-      })
-      .catch(err => {
-         console.error("[App.jsx] Error URL Firmada", err);
-         setSopQueue(q => q.map(it => it.id === item.id ? { ...it, status: 'ERROR', progress: 0 } : it));
-      });
-    });
+    chunkedUpload.addFiles(fileList, currentPath);
   };
+
+  // -- Watch for completed uploads to trigger refresh --
+  const prevCompletedRef = useRef(0);
+  useEffect(() => {
+    if (chunkedUpload.completedCount > prevCompletedRef.current) {
+      triggerRefresh(currentPath);
+    }
+    prevCompletedRef.current = chunkedUpload.completedCount;
+  }, [chunkedUpload.completedCount]);
+
+  // -- Check for pending uploads on mount --
+  useEffect(() => {
+    const checkPending = async () => {
+      try {
+        const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
+        const headers = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await apiFetch(`${API}/api/uploads/pending?model_urn=${encodeURIComponent(projectPrefix)}&user=${encodeURIComponent(user?.name || '')}`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.sessions?.length > 0) {
+            setPendingBanner({ count: data.sessions.length, sessions: data.sessions });
+          }
+        }
+      } catch (_) { /* ignore */ }
+    };
+    checkPending();
+  }, [projectPrefix]);
 
   const handleSopListo = () => {
     setShowUploadModal(false);
-    setUploadSopStep('IDLE');
-    setSopQueue([]);
-    setSopBatches([]);
+    chunkedUpload.clearCompleted();
     triggerRefresh();
-    if (uploadSopStep === 'LISTO_1') {
-      setShowSopToast(true);
-      setTimeout(() => setShowSopToast(false), 3000);
-    }
+    setShowSopToast(true);
+    setTimeout(() => setShowSopToast(false), 3000);
   };
 
   const onDragOver = (e) => { e.preventDefault(); setDragOver(true); };
@@ -2189,6 +2017,7 @@ function FilesPage({ project, user, onBack, onLogout }) {
                 setProcessingIds={setProcessingIds}
                 creatingChildParentId={creatingChildParentId}
                 setCreatingChildParentId={setCreatingChildParentId}
+                cacheMethods={cacheMethods}
               />
             </aside>
 
@@ -2201,10 +2030,10 @@ function FilesPage({ project, user, onBack, onLogout }) {
             <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <div className="acc-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#fff', borderBottom: '1px solid #eee', flexShrink: 0 }}>
                 <div style={{ display: 'flex' }}>
-                   <button onClick={() => { setShowUploadModal(true); setUploadSopStep('IDLE'); }} style={{ padding: '6px 16px', background: '#0696D7', color: '#fff', border: 'none', borderRadius: '4px 0 0 4px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                   <button onClick={() => setShowUploadModal(true)} style={{ padding: '6px 16px', background: '#0696D7', color: '#fff', border: 'none', borderRadius: '4px 0 0 4px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
                       Cargar archivos
                    </button>
-                   <button onClick={() => { setShowUploadModal(true); setUploadSopStep('IDLE'); }} style={{ padding: '6px 8px', background: '#0696D7', color: '#fff', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.3)', borderRadius: '0 4px 4px 0', cursor: 'pointer' }}>
+                   <button onClick={() => setShowUploadModal(true)} style={{ padding: '6px 8px', background: '#0696D7', color: '#fff', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.3)', borderRadius: '0 4px 4px 0', cursor: 'pointer' }}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5H7z"/></svg>
                    </button>
                 </div>
@@ -2640,6 +2469,12 @@ function FilesPage({ project, user, onBack, onLogout }) {
                 Añadir subcarpeta
               </button>
             )}
+            {activeRowMenu.item.type === 'folder' && isAdmin && (
+              <button onClick={() => { setActiveRowMenu(null); setRightClickedId(null); setPermissionsFolder(activeRowMenu.item); }}>
+                <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
+                Configuración de permisos
+              </button>
+            )}
             <button onClick={() => { 
                 setActiveRowMenu(null); 
                 setRightClickedId(null); 
@@ -2680,6 +2515,15 @@ function FilesPage({ project, user, onBack, onLogout }) {
             </div>
           </div>
         </div>
+      )}
+
+      {permissionsFolder && (
+        <FolderPermissionsPanel
+          folder={permissionsFolder}
+          modelUrn={projectPrefix}
+          apiBaseUrl={API}
+          onClose={() => setPermissionsFolder(null)}
+        />
       )}
 
       {activeFile && activeFile.type !== 'folder' && (
@@ -2794,117 +2638,94 @@ function FilesPage({ project, user, onBack, onLogout }) {
         </div>
       )}
 
+
+      {/* -- PENDING UPLOADS BANNER -- */}
+      {pendingBanner && pendingBanner.count > 0 && (
+        <div style={{ position: 'fixed', top: 50, left: '50%', transform: 'translateX(-50%)', zIndex: 10001, background: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 8, padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', maxWidth: 500 }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#ff9800"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+          <span style={{ fontSize: 13, color: '#333' }}>
+            Tienes <strong>{pendingBanner.count}</strong> {pendingBanner.count === 1 ? 'subida pendiente' : 'subidas pendientes'} de una sesion anterior.
+          </span>
+          <button onClick={() => setPendingBanner(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#999', padding: '0 4px' }}>X</button>
+        </div>
+      )}
+
       {showUploadModal && !sopMinimized && (
-        <div className="modal-overlay" onClick={() => { if (sopQueue.length === 0) setShowUploadModal(false); }}>
+        <div className="modal-overlay" onClick={() => { if (!chunkedUpload.hasActiveUploads) setShowUploadModal(false); }}>
           <div className="acc-upload-modal" onClick={e => e.stopPropagation()}>
             <div className="acc-upload-header">
-              <h3>Cargar archivos</h3>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button 
-                  className="file-viewer-close" 
-                  style={{ background: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
-                  onClick={() => setSopMinimized(true)}
-                  title="Minimizar"
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                </button>
-                <button className="file-viewer-close" style={{ background: 'none' }} onClick={() => { if (sopQueue.every(it => it.status === 'LISTO_1' || it.status === 'ERROR')) setShowUploadModal(false); else if (window.confirm("¿Cancelar carga en curso?")) setShowUploadModal(false); }}>✕</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>Cargar archivos</span>
+                <span style={{ color: '#999', fontSize: 12 }}>{currentPath.split('/').filter(Boolean).pop()}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button className="file-viewer-close" style={{ background: 'none' }} onClick={() => setSopMinimized(true)}>-</button>
+                <button className="file-viewer-close" style={{ background: 'none' }} onClick={() => { if (!chunkedUpload.hasActiveUploads) setShowUploadModal(false); else if (window.confirm('Cancelar cargas en curso?')) { chunkedUpload.cancelAll(); setShowUploadModal(false); } }}>X</button>
               </div>
             </div>
-            
             <div className="acc-upload-body" style={{ maxHeight: 600, overflowY: 'auto' }}>
-              {/* ENTRY POINTS (PERSISTENT) */}
               <div className="acc-upload-entry-section" style={{ marginBottom: 20 }}>
                 <button className="acc-upload-btn-secondary" style={{ width: '100%', border: '1px solid #0696d7', color: '#000', padding: '8px', marginBottom: 12, borderRadius: 2 }} onClick={() => fileRef.current.click()}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="#666"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
                   Desde su equipo
                 </button>
-                <div 
-                  className={`acc-upload-dropzone ${dragOver ? 'drag-over' : ''}`} 
-                  onClick={() => fileRef.current.click()}
-                  onDragOver={onDragOver}
-                  onDragLeave={onDragLeave}
-                  onDrop={onDrop}
-                  style={{ border: '1px dashed #ddd', padding: '40px 20px', borderRadius: 2, textAlign: 'center' }}
-                >
-                   <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ddd" strokeWidth="1"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></svg>
-                   <div style={{ color: '#999', fontSize: 13, marginTop: 12 }}>Arrastre archivos aquí o elija una opción arriba</div>
+                <div className={`acc-upload-dropzone ${dragOver ? 'drag-over' : ''}`} onClick={() => fileRef.current.click()} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} style={{ border: '1px dashed #ddd', padding: '40px 20px', borderRadius: 2, textAlign: 'center' }}>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ddd" strokeWidth="1"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></svg>
+                  <div style={{ color: '#999', fontSize: 13, marginTop: 12 }}>Arrastre archivos aqui o elija una opcion arriba</div>
                 </div>
                 <input type="file" ref={fileRef} multiple style={{ display: 'none' }} onChange={e => handleSopUpload(e.target.files)} />
               </div>
-
-              {sopQueue.length > 0 && (
+              {chunkedUpload.uploads.length > 0 && (
                 <div style={{ marginTop: 20 }}>
                   <div style={{ fontSize: 13, color: '#333', marginBottom: 16, fontWeight: 300 }}>
-                    Total de {sopQueue.length} {sopQueue.length === 1 ? 'archivo' : 'archivos'}, {sopBatches.length} {sopBatches.length === 1 ? 'lote' : 'lotes'}
+                    Total de {chunkedUpload.uploads.length} {chunkedUpload.uploads.length === 1 ? 'archivo' : 'archivos'}
                   </div>
-                  
-                  {sopBatches.map(batch => (
-                    <div key={batch.id} className="acc-batch-group" style={{ marginBottom: 16 }}>
-                      <div className="acc-batch-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#fcfcfc', borderBottom: '1px solid #f0f0f0' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#333', fontWeight: 500 }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5H7z"/></svg>
-                          <span>{sopQueue.filter(f => f.batchId === batch.id).length} archivos</span>
-                        </div>
-                        <div style={{ fontSize: 11, color: '#999' }}>Cargar en {batch.timestamp}</div>
-                      </div>
-                      <div className="acc-batch-content">
-                        {sopQueue.filter(f => f.batchId === batch.id).map(item => (
-                          <div key={item.id} className="acc-upload-file-row">
-                            {renderFileIconSop(item.file?.name, 32)}
-                            <div className="acc-upload-file-info">
-                              <div className="acc-upload-file-name">{item.file?.name}</div>
-                              <div className="acc-upload-file-status">
-                               <div className="acc-upload-file-status" style={{ marginTop: 4 }}>
-                                 {item.status === 'LISTO_1' ? (
-                                   <div style={{ color: '#33691e', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-                                     Cargado en la carpeta {currentPath.split('/').filter(Boolean).pop()} {item.time}
-                                   </div>
-                                 ) : item.status === 'ERROR' ? (
-                                   <div style={{ color: '#d32f2f', fontSize: 11 }}>Error al cargar</div>
-                                 ) : (
-                                   <>
-                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                         {(item.status === 'PROCESANDO_1' && item.progress >= 100) || item.status === 'PROCESO_PENDIENTE' ? (
-                                           <div className="acc-mini-spinner" style={{ width: 10, height: 10, border: '2px solid #0696d7', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1.5s linear infinite' }} />
-                                         ) : null}
-                                         <span style={{ fontSize: 11, color: '#666' }}>
-                                           {item.status === 'PROCESO_PENDIENTE' ? 'Proceso pendiente' : 
-                                            (item.status === 'PROCESANDO_1' && item.progress >= 100) ? 'Procesando...' :
-                                            item.progress < 100 ? 'Cargando...' : 'Procesando...'}
-                                         </span>
-                                       </div>
-                                       {item.progress < 100 && (
-                                         <span style={{ fontSize: 11, color: '#0696d7', fontWeight: 600 }}>{item.progress}%</span>
-                                       )}
-                                     </div>
-                                     <div className="acc-progress-container" style={{ marginTop: 6, height: 6, background: '#e8e8e8', borderRadius: 3, overflow: 'hidden' }}>
-                                       {(item.status === 'PROCESANDO_1' && item.progress >= 100) || item.status === 'PROCESO_PENDIENTE' ? (
-                                         <div className="acc-progress-bar indeterminate" style={{ height: '100%', borderRadius: 3 }} />
-                                       ) : (
-                                         <div 
-                                           className="acc-progress-bar" 
-                                           style={{ width: `${item.progress}%`, height: '100%', borderRadius: 3, transition: 'width 0.3s ease', background: '#0696d7' }} 
-                                         />
-                                       )}
-                                     </div>
-                                   </>
-                                 )}
-                               </div>
+                  {chunkedUpload.uploads.map(item => (
+                    <div key={item.id} className="acc-upload-file-row">
+                      {renderFileIconSop(item.filename, 32)}
+                      <div className="acc-upload-file-info">
+                        <div className="acc-upload-file-name">{item.filename}</div>
+                        <div className="acc-upload-file-status" style={{ marginTop: 4 }}>
+                          {item.status === 'completed' ? (
+                            <div style={{ color: '#33691e', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                              {item.statusText}
+                            </div>
+                          ) : item.status === 'error' ? (
+                            <div style={{ color: '#d32f2f', fontSize: 11 }}>{item.statusText}</div>
+                          ) : item.status === 'paused' ? (
+                            <div style={{ color: '#f57c00', fontSize: 11 }}>{item.statusText}</div>
+                          ) : (
+                            <>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  {(item.status === 'confirming' || item.status === 'init') && (
+                                    <div className="acc-mini-spinner" style={{ width: 10, height: 10, border: '2px solid #0696d7', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1.5s linear infinite' }} />
+                                  )}
+                                  <span style={{ fontSize: 11, color: '#666' }}>
+                                    {item.status === 'queued' ? 'En cola...' : item.status === 'init' ? 'Validando...' : item.status === 'confirming' ? 'Procesando...' : `Cargando... (${formatSize(item.bytesUploaded || 0)} / ${formatSize(item.sizeBytes || 0)})`}
+                                  </span>
+                                </div>
+                                {item.status === 'uploading' && <span style={{ fontSize: 11, color: '#0696d7', fontWeight: 600 }}>{item.progress}%</span>}
                               </div>
-                            </div>
-                            <div style={{ fontSize: 12, color: '#999', display: 'flex', alignItems: 'center', gap: 12 }}>
-                              <span style={{ minWidth: 60, textAlign: 'right' }}>{formatSize(item.file?.size || 0)}</span>
-                              {item.status === 'LISTO_1' ? (
-                                <span style={{ color: '#0696d7', fontWeight: 600, cursor: 'pointer' }}>Ver</span>
-                              ) : (
-                                <span onClick={() => { setSopQueue(q => q.filter(it => it.id !== item.id)); if (sopQueue.length <= 1) setUploadSopStep('IDLE'); }} style={{ cursor: 'pointer', fontSize: 16 }}>✕</span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                              <div className="acc-progress-container" style={{ marginTop: 6, height: 6, background: '#e8e8e8', borderRadius: 3, overflow: 'hidden' }}>
+                                {item.status === 'confirming' || item.status === 'init' ? (
+                                  <div className="acc-progress-bar indeterminate" style={{ height: '100%', borderRadius: 3 }} />
+                                ) : (
+                                  <div className="acc-progress-bar" style={{ width: `${item.progress}%`, height: '100%', borderRadius: 3, transition: 'width 0.3s ease', background: item.status === 'paused' ? '#ff9800' : '#0696d7' }} />
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#999', display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <span style={{ minWidth: 60, textAlign: 'right' }}>{formatSize(item.sizeBytes || 0)}</span>
+                        {item.status === 'completed' ? (
+                          <span style={{ color: '#0696d7', fontWeight: 600, cursor: 'pointer' }}>Ver</span>
+                        ) : item.status !== 'cancelled' ? (
+                          <span onClick={() => chunkedUpload.cancelUpload(item.id)} style={{ cursor: 'pointer', fontSize: 16 }}>X</span>
+                        ) : null}
                       </div>
                     </div>
                   ))}
@@ -2912,12 +2733,7 @@ function FilesPage({ project, user, onBack, onLogout }) {
               )}
             </div>
             <div className="acc-upload-footer">
-              <button className="acc-btn-listo" 
-                disabled={uploadSopStep !== 'LISTO_1'} 
-                onClick={handleSopListo}
-              >
-                Listo
-              </button>
+              <button className="acc-btn-listo" disabled={chunkedUpload.hasActiveUploads} onClick={handleSopListo}>Listo</button>
             </div>
           </div>
         </div>
@@ -2926,82 +2742,46 @@ function FilesPage({ project, user, onBack, onLogout }) {
       {showSopToast && (
         <div className="acc-success-toast">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-          Un archivo se ha cargado correctamente.
+          {chunkedUpload.completedCount === 1 ? 'Un archivo se ha cargado correctamente.' : `${chunkedUpload.completedCount} archivos cargados.`}
         </div>
       )}
 
       {showUploadModal && sopMinimized && (
         <div className="acc-upload-monitor" style={{ position: 'fixed', bottom: 20, right: 20, width: 320, background: '#fff', border: '1px solid #ddd', borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 10000, overflow: 'hidden' }}>
-          <div className="acc-monitor-header" style={{ padding: '8px 12px', background: '#fcfcfc', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ padding: '8px 12px', background: '#fcfcfc', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 13, fontWeight: 500 }}>Cargar</span>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button 
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center' }} 
-                onClick={() => setSopMinimized(false)}
-                title="Expandir"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-              </button>
-              <button 
-                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center' }}
-                 onClick={() => setSopMinimized(false)}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
-              </button>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }} onClick={() => setShowUploadModal(false)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }} onClick={() => setSopMinimized(false)}>^</button>
+              <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }} onClick={() => setShowUploadModal(false)}>X</button>
             </div>
           </div>
-          
-          <div className="acc-monitor-body" style={{ maxHeight: 400, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
             <div style={{ padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f0f0f0' }}>
-              <span style={{ fontSize: 12, color: '#333' }}>Total de {sopQueue.length} {sopQueue.length === 1 ? 'archivo' : 'archivos'}, {sopBatches.length} {sopBatches.length === 1 ? 'lote' : 'lotes'}...</span>
-              <span style={{ fontSize: 12, color: '#0696d7', cursor: 'pointer', fontWeight: 600 }} onClick={() => { setSopQueue([]); setSopBatches([]); setShowUploadModal(false); }}>Cancelar todo</span>
+              <span style={{ fontSize: 12, color: '#333' }}>Total de {chunkedUpload.uploads.length} {chunkedUpload.uploads.length === 1 ? 'archivo' : 'archivos'}...</span>
+              <span style={{ fontSize: 12, color: '#0696d7', cursor: 'pointer', fontWeight: 600 }} onClick={() => { chunkedUpload.cancelAll(); setShowUploadModal(false); }}>Cancelar todo</span>
             </div>
-
-            {sopBatches.map(batch => (
-              <div key={batch.id}>
-                <div style={{ padding: '8px 12px', background: '#fafafa', fontSize: 12, color: '#666', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                   <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
-                   {sopQueue.filter(f => f.batchId === batch.id).length} archivo
-                </div>
-                {sopQueue.filter(f => f.batchId === batch.id).map(item => (
-                  <div key={item.id} style={{ padding: '12px', borderBottom: '1px solid #f9f9f9', display: 'flex', gap: 12 }}>
-                        {renderFileIconSop(item.file?.name, 28)}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.file?.name}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                         {item.status !== 'LISTO_1' ? (
-                           <>
-                             <div className="acc-mini-spinner" style={{ width: 10, height: 10, border: '2px solid #0696d7', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1.5s linear infinite' }} />
-                             <span style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 8 }}>
-                               {item.status === 'PROCESO_PENDIENTE' ? 'Proceso pendiente' : 
-                                (item.status === 'PROCESANDO_1' || (item.progress === 100 && item.status !== 'BARRA_AZUL')) ? 'Procesando...' : 
-                                `Cargando: ${item.progress} %`}
-                             </span>
-                           </>
-                         ) : (
-                           <span style={{ fontSize: 11, color: '#33691e', display: 'flex', alignItems: 'center', gap: 4 }}>
-                             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-                             Listo
-                           </span>
-                         )}
-                         <span style={{ fontSize: 11, color: '#999' }}>• {formatSize(item.file?.size || 0)}</span>
-                      </div>
-                      
-                      {/* NO BAR IN MONITOR AS PER LATEST AUTODESK IMAGE */}
-                    </div>
-                    {item.status !== 'LISTO_1' && (
-                      <div style={{ fontSize: 12, color: '#0696d7', cursor: 'pointer', fontWeight: 600 }} onClick={() => setSopQueue(q => q.filter(it => it.id !== item.id))}>Cancelar</div>
+            {chunkedUpload.uploads.map(item => (
+              <div key={item.id} style={{ padding: '12px', borderBottom: '1px solid #f9f9f9', display: 'flex', gap: 12 }}>
+                {renderFileIconSop(item.filename, 28)}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.filename}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    {item.status === 'completed' ? (
+                      <span style={{ fontSize: 11, color: '#33691e' }}>Listo</span>
+                    ) : item.status === 'error' ? (
+                      <span style={{ fontSize: 11, color: '#d32f2f' }}>Error</span>
+                    ) : (
+                      <span style={{ fontSize: 11, color: '#666' }}>{item.status === 'paused' ? 'Pausado' : item.status === 'queued' ? 'En cola' : `Cargando: ${item.progress}%`}</span>
                     )}
+                    <span style={{ fontSize: 11, color: '#999' }}>| {formatSize(item.sizeBytes || 0)}</span>
                   </div>
-                ))}
+                </div>
               </div>
             ))}
           </div>
         </div>
       )}
+
 
       {/* SHARE MODAL (DRIVE STYLE REFINED) */}
       {showShareModal && shareTarget && (
