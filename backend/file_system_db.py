@@ -4,6 +4,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from db import get_db_connection
 
+# --- ISO 19650 Naming Standard Constants ---
+# [PROJECT]-[ORIGINATOR]-[VOLUME]-[LEVEL]-[TYPE]-[ROLE]-[NUMBER]
+ISO_19650_REGEX = r"^[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[0-9]{4,6}$"
 gcs_executor = ThreadPoolExecutor(max_workers=4)
 
 def resolve_path_to_node_id(path, model_urn, created_by=None, auto_create=True):
@@ -193,7 +196,16 @@ def ensure_project_root_node(model_urn):
         return root_id
 
 def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mime_type=None, created_by=None):
-    """Inserta/Actualiza el Ítem y crea una nueva Versión histórica (Estilo ACC)"""
+    """Inserta/Actualiza el Ítem y crea una nueva Versión histórica con Holding Area (Estilo APS)"""
+    import re
+    
+    status = 'ACTIVE'
+    # Aislar extensión (ej. '.pdf') para validar solo la estricta base del nombre ISO
+    base_name = filename.rsplit('.', 1)[0] if '.' in filename else filename
+    
+    if not re.match(ISO_19650_REGEX, base_name.upper()):
+        status = 'NON_CONFORMING' # Desvío al Área de Retención (Holding Area)
+
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
@@ -210,16 +222,16 @@ def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mim
             # Actualizar el Ítem (puntero rápido a la versión actual)
             cursor.execute("""
                 UPDATE file_nodes 
-                SET gcs_urn = %s, version_number = %s, size_bytes = %s, mime_type = %s, updated_at = CURRENT_TIMESTAMP, created_by = %s
+                SET gcs_urn = %s, version_number = %s, size_bytes = %s, mime_type = %s, updated_at = CURRENT_TIMESTAMP, created_by = %s, status = %s
                 WHERE id = %s
-            """, (gcs_uuid, new_v, size_bytes, mime_type, created_by, f_id))
+            """, (gcs_uuid, new_v, size_bytes, mime_type, created_by, status, f_id))
         else:
             # Crear nuevo Ítem raíz
             cursor.execute("""
-                INSERT INTO file_nodes (model_urn, parent_id, node_type, name, size_bytes, gcs_urn, mime_type, created_by, version_number)
-                VALUES (%s, %s, 'FILE', %s, %s, %s, %s, %s, 1)
+                INSERT INTO file_nodes (model_urn, parent_id, node_type, name, size_bytes, gcs_urn, mime_type, created_by, version_number, status)
+                VALUES (%s, %s, 'FILE', %s, %s, %s, %s, %s, 1, %s)
                 RETURNING id
-            """, (model_urn, parent_id, filename, size_bytes, gcs_uuid, mime_type, created_by))
+            """, (model_urn, parent_id, filename, size_bytes, gcs_uuid, mime_type, created_by, status))
             f_id = cursor.fetchone()[0]
             new_v = 1
             

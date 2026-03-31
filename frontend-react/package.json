@@ -16,6 +16,7 @@
     "@tmcw/togeojson": "^3.2.0",
     "axios": "^1.13.5",
     "chart.js": "^4.5.1",
+    "file-saver": "^2.0.5",
     "frappe-gantt": "^0.6.1",
     "jszip": "^3.10.1",
     "react": "^19.1.1",

@@ -7,27 +7,25 @@ con herencia estricta padre→hijo y fallback al RBAC global.
 
 from db import get_db_connection
 
-# ── Los 7 niveles de permiso ACC (de menor a mayor) ──────────────────
+# ── Jerarquía de Permisos ACC (Refactorizado con Markups) ──
 PERMISSION_LEVELS = {
-    'none':          -1,  # Sin acceso (Gris en UI, no ve archivos)
-    'view_only':      0,  # Ver listado de archivos
-    'view_download':  1,  # Ver + descargar archivos
-    'create':         2,  # + publicar marcas de revisión
-    'create_upload':  3,  # + subir archivos nuevos
-    'edit':           4,  # + renombrar, mover, cambiar estados
-    'admin':          5,  # Control total incluida eliminación
+    'none': -1,
+    'viewer': 0,           # Leer (View)
+    'view_download': 1,    # Leer + Descargar (Download)
+    'view_markup': 2,      # NUEVO: Leer + Marcar (Markups / Comentar). NO Sube archivos.
+    'edit': 3,             # Sube Físicos (Upload)
+    'admin': 4             # Control total incluida eliminación
 }
 
 PERMISSION_LABELS = {
     'none':           'Restringido',
-    'view_only':      'Ver',
+    'viewer':         'Ver',
     'view_download':  'Ver y descargar',
-    'create':         'Crear',
-    'create_upload':  'Crear y cargar',
-    'edit':           'Editar',
-    'admin':          'Administrar',
+    'view_markup':    'Ver, descargar y marcar',
+    'edit':           'Editar y subir',
+    'admin':          'Administrar'
 }
-# Mapeo del RBAC global → nivel ACC (para fallback)
+
 # Por defecto, si eres 'viewer' o 'user' sin permiso explícito, estás ciego (modo paranoico ISO 19650)
 GLOBAL_ROLE_TO_PERMISSION = {
     'viewer': 'none',
@@ -115,8 +113,11 @@ def _get_effective_permission_impl(cursor, user_id, node_id, model_urn):
             else:
                 current_folder_id = None
         
-        # Paso 2: Caminar hacia arriba buscando permiso explícito
+        # Paso 2: Caminar hacia arriba acumulando el máximo nivel (Herencia Aditiva)
         visited = set()  # Protección contra ciclos infinitos
+        max_level_found = -1
+        effective_perm = 'none'
+
         while current_folder_id is not None:
             if current_folder_id in visited:
                 break  # Ciclo detectado
@@ -129,7 +130,12 @@ def _get_effective_permission_impl(cursor, user_id, node_id, model_urn):
             perm_row = cursor.fetchone()
             
             if perm_row:
-                return perm_row[0]  # ¡Encontramos permiso explícito!
+                level_str = perm_row[0]
+                level_val = PERMISSION_LEVELS.get(level_str, -1)
+                # HERENCIA ADITIVA: Solo importa si es MAYOR al nivel que ya traíamos
+                if level_val > max_level_found:
+                    max_level_found = level_val
+                    effective_perm = level_str
             
             # Subir al padre
             cursor.execute(
@@ -140,7 +146,11 @@ def _get_effective_permission_impl(cursor, user_id, node_id, model_urn):
             current_folder_id = parent_row[0] if parent_row else None
             
         # Paso 3: Fallback al RBAC global
-        return GLOBAL_ROLE_TO_PERMISSION.get(global_role, 'none')
+        global_fallback = GLOBAL_ROLE_TO_PERMISSION.get(global_role, 'none')
+        if PERMISSION_LEVELS.get(global_fallback, -1) > max_level_found:
+             return global_fallback
+             
+        return effective_perm
 
     except Exception as e:
         print(f"[permissions] Error en _get_effective_permission_impl: {e}")
@@ -174,16 +184,28 @@ def check_folder_permission(user, node_id, model_urn, required_level, action_nam
     return None
 
 
-def set_folder_permission(folder_node_id, user_id, permission_level, granted_by):
+def set_folder_permission(folder_node_id, user_id, permission_level, granted_by, model_urn=None):
     """
     Asigna o actualiza un permiso de usuario en una carpeta.
     Usa ON CONFLICT para upsert (insertar o actualizar).
+    Verifica que el permiso asignado no sea MENOR que el permiso heredado (Top-Down ISO rule).
     """
     if permission_level not in PERMISSION_LEVELS:
         raise ValueError(f"Nivel inválido: {permission_level}. Válidos: {list(PERMISSION_LEVELS.keys())}")
     
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        
+        # Validación Restrictiva de Autodesk: "Inherited permissions must expand"
+        # Subimos al padre para ver cuál es nuestro poder base.
+        cursor.execute("SELECT parent_id FROM file_nodes WHERE id = %s", (folder_node_id,))
+        parent_row = cursor.fetchone()
+        parent_id = parent_row[0] if parent_row else None
+        
+        inherited = _get_effective_permission_impl(cursor, user_id, parent_id, model_urn)
+        if PERMISSION_LEVELS.get(permission_level, -1) < PERMISSION_LEVELS.get(inherited, -1):
+            raise ValueError(f"Inherited permissions must expand: No puedes asignar un nivel '{permission_level}' que es menor alnivel ya heredado superior '{inherited}'.")
+
         cursor.execute("""
             INSERT INTO folder_permissions (folder_node_id, user_id, permission_level, granted_by)
             VALUES (%s, %s, %s, %s)

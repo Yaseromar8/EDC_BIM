@@ -592,77 +592,79 @@ def rename_document():
     rbac = check_folder_permission(user, req_node_id, model_urn, 'edit', 'renombrar archivos')
     if rbac: return rbac
 
-    # CASE A: ID-based (POST) - New way for inline editing
-    if request.method == 'POST':
-        node_id = data.get('node_id')
-        new_name = data.get('new_name')
-        if not node_id or not new_name:
-            return jsonify({"success": False, "error": "node_id and new_name are required"}), 400
-        try:
-            from file_system_db import rename_node
-            # Cast to int if possible
-            try:
-                node_id = int(node_id)
-            except: pass
-            rename_node(model_urn, node_id, new_name)
-            return jsonify({"success": True}), 200
-        except Exception as e:
-            print(f"[RENAME POST] Error: {e}")
-            return jsonify({"success": False, "error": str(e)}), 500
-
-    # CASE B: Path-based (PUT) - Legacy way for onRowMenu
-    node_path = data.get('fullName')
-    new_name_raw = data.get('newName')
-    if not node_path or not new_name_raw:
-        return jsonify({"success": False, "error": "Requires fullName and newName"}), 400
-
-    new_name = secure_filename(new_name_raw)
-    model_urn = data.get('model_urn', 'global')
-    performed_by = data.get('user', None)
-
-    if not new_name:
-        return jsonify({"success": False, "error": "Invalid new name"}), 400
-
+    # RESOLVER EL NODO OBJETIVO
     try:
-        from file_system_db import resolve_path_to_node_id
+        from file_system_db import resolve_path_to_node_id, ISO_19650_REGEX
+        import re
         from db import get_db_connection, log_activity
 
-        parts = [p for p in node_path.strip('/').split('/') if p]
-        if not parts:
-            return jsonify({"success": False, "error": "Invalid path"}), 400
-            
-        old_name = parts[-1]
-        parent_path = '/'.join(parts[:-1])
-        parent_id = resolve_path_to_node_id(parent_path, model_urn, created_by=performed_by) if parent_path else None
+        target_node_id = req_node_id
+        old_name = None
+        parent_id = None
+        node_type = None
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            if parent_id:
-                cursor.execute("""
-                    UPDATE file_nodes SET name = %s, updated_at = CURRENT_TIMESTAMP
-                    WHERE model_urn = %s AND name = %s AND parent_id = %s AND is_deleted = FALSE
-                    RETURNING id
-                """, (new_name, model_urn, old_name, parent_id))
+            
+            if not target_node_id and data.get('fullName'):
+                # Legacy Path Resolution
+                node_path = data.get('fullName').strip('/')
+                parts = [p for p in node_path.split('/') if p]
+                if not parts:
+                    return jsonify({"success": False, "error": "Invalid path"}), 400
+                old_name = parts[-1]
+                parent_path = '/'.join(parts[:-1])
+                parent_id = resolve_path_to_node_id(parent_path, model_urn, created_by=data.get('user')) if parent_path else None
+                
+                # Fetch node type and ID
+                if parent_id:
+                    cursor.execute("SELECT id, node_type FROM file_nodes WHERE model_urn = %s AND name = %s AND parent_id = %s AND is_deleted = FALSE", (model_urn, old_name, parent_id))
+                else:
+                    cursor.execute("SELECT id, node_type FROM file_nodes WHERE model_urn = %s AND name = %s AND parent_id IS NULL AND is_deleted = FALSE", (model_urn, old_name))
+                row = cursor.fetchone()
+                if row:
+                    target_node_id, node_type = row
             else:
-                cursor.execute("""
-                    UPDATE file_nodes SET name = %s, updated_at = CURRENT_TIMESTAMP
-                    WHERE model_urn = %s AND name = %s AND parent_id IS NULL AND is_deleted = FALSE
-                    RETURNING id
-                """, (new_name, model_urn, old_name))
+                # Modem ID Resolution
+                cursor.execute("SELECT name, parent_id, node_type FROM file_nodes WHERE id = %s AND model_urn = %s AND is_deleted = FALSE", (target_node_id, model_urn))
+                row = cursor.fetchone()
+                if row:
+                    old_name, parent_id, node_type = row
+
+            if not target_node_id or not old_name:
+                return jsonify({"success": False, "error": "Item not found in specified location"}), 404
+
+            # --- ISO 19650 HOLDING AREA SANEAMIENTO ---
+            new_status = 'ACTIVE' # Por defecto para FOLDER o si ya pasa
+            
+            if node_type == 'FILE':
+                base_name = new_name.rsplit('.', 1)[0] if '.' in new_name else new_name
+                if not re.match(ISO_19650_REGEX, base_name.upper()):
+                    return jsonify({
+                        "success": False, 
+                        "error": "El nombre no cumple con el estándar ISO 19650 (Ej: PRJ-ORG-VOL-LVL-TYP-RL-0001)"
+                    }), 400
+            
+            # EJECUTAR UPDATE APLICANDO EXTRACTO ISO
+            cursor.execute("""
+                UPDATE file_nodes 
+                SET name = %s, status = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s AND model_urn = %s AND is_deleted = FALSE
+                RETURNING id
+            """, (new_name, new_status, target_node_id, model_urn))
             updated = cursor.fetchone()
             conn.commit()
 
         if updated:
             log_activity(model_urn, 'rename', 'file_or_folder',
-                         entity_name=node_path, performed_by=performed_by,
+                         entity_name=new_name, performed_by=data.get('user'),
                          details={'old_name': old_name, 'new_name': new_name})
-            new_full_path = (parent_path + '/' if parent_path else '') + new_name
-            return jsonify({"success": True, "newFullName": new_full_path}), 200
+            return jsonify({"success": True}), 200
 
         return jsonify({"success": False, "error": "Item not found in specified location"}), 404
 
     except Exception as e:
-        print(f"[RENAME PUT] Error: {e}")
+        print(f"[RENAME] Error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -1320,7 +1322,7 @@ def set_folder_permission_endpoint():
             target_user_id = row[0]
             
         granted_by = current_user.get('id') if current_user else None
-        set_folder_permission(folder_id, target_user_id, permission_level, granted_by)
+        set_folder_permission(folder_id, target_user_id, permission_level, granted_by, model_urn)
         
         return jsonify({"success": True, "message": "Permisos actualizados correctamente."}), 200
     except ValueError as ve:
@@ -1359,16 +1361,16 @@ def remove_folder_permission_endpoint():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@documents_bp.route('/api/docs/download_folder', methods=['GET'])
-def download_folder_endpoint():
-    """Descarga de forma recursiva todo el contenido de una carpeta como archivo ZIP."""
+@documents_bp.route('/api/docs/download_folder_urls', methods=['GET'])
+def download_folder_urls():
+    """Descarga asíncrona (Túnel OSS): Devuelve URLs firmadas para que el cliente zipee."""
     folder_id = request.args.get('folder_id')
     model_urn = request.args.get('model_urn', 'global')
     
     if not folder_id:
         return jsonify({"success": False, "error": "Falta folder_id"}), 400
         
-    from flask import g, send_file, jsonify
+    from flask import g, jsonify
     user = getattr(g, 'current_user', None)
     
     # 1. Chequear permisos (mínimo view_download)
@@ -1376,11 +1378,8 @@ def download_folder_endpoint():
     rbac = check_folder_permission(user, folder_id, model_urn, 'view_download', 'descargar_carpeta')
     if rbac: return rbac
     
-    import zipfile
-    import tempfile
-    import os
     from db import get_db_connection
-    from gcs_manager import get_storage_client
+    from gcs_manager import generate_signed_url
     
     # 2. CTE recursivo para obtener todos los archivos de la carpeta
     with get_db_connection() as conn:
@@ -1403,38 +1402,25 @@ def download_folder_endpoint():
         cursor.execute(query, (folder_id,))
         files = cursor.fetchall()
         
-    # 3. Generar el ZIP
-    temp_file = tempfile.SpooledTemporaryFile(max_size=50*1024*1024)
+    manifest = []
     if files:
-        bucket_name = os.environ.get("GCS_BUCKET_NAME")
-        client = get_storage_client()
-        bucket = client.bucket(bucket_name)
-        
-        with zipfile.ZipFile(temp_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for r_name, r_gcs_urn, r_path in files:
-                if not r_gcs_urn: continue
-                # Limpiar el path para que la raiz sea la primer carpeta
-                clean_path = r_path.split('/', 1)[-1] if '/' in r_path else r_path
-                try:
-                    blob = bucket.blob(r_gcs_urn)
-                    if blob.exists():
-                        data = blob.download_as_bytes()
-                        zf.writestr(clean_path, data)
-                except Exception as e:
-                    print(f"[ZIP] Error descargando {r_gcs_urn}: {e}")
-    else:
-        # ZIP vacio
-        with zipfile.ZipFile(temp_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-            pass
-
-    temp_file.seek(0)
-    
-    return send_file(
-        temp_file,
-        mimetype='application/zip',
-        as_attachment=True,
-        download_name='Descarga_Carpeta.zip'
-    )
+        for r_name, r_gcs_urn, r_path in files:
+            if not r_gcs_urn: continue
+            # Limpiar el path para que la raiz sea la primer carpeta resolviendo correctamente anidacion
+            clean_path = r_path.split('/', 1)[-1] if '/' in r_path else r_path
+            
+            # Túnel OSS: Generar Signed URL de corta duración para descarga paralela local
+            try:
+                signed_url = generate_signed_url(r_gcs_urn)
+                if signed_url:
+                    manifest.append({
+                        "path": clean_path,
+                        "url": signed_url
+                    })
+            except Exception as e:
+                print(f"[TUNNEL] Error firmando {r_gcs_urn}: {e}")
+                
+    return jsonify({"success": True, "manifest": manifest}), 200
 
 @documents_bp.route('/api/docs/force-init-permissions', methods=['GET'])
 def force_init_permissions():
@@ -1445,4 +1431,47 @@ def force_init_permissions():
         return jsonify({"success": True, "message": "Tabla creada exitosamente."})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+
+
+@documents_bp.route('/api/docs/quarantine', methods=['GET'])
+def get_quarantine_files():
+    "\"\"
+    [ISO 19650 Holding Area]
+    Extrae estrictamente los archivos retenidos por fallar la validaci�n 
+    de nomenclatura (NON_CONFORMING) para ser curados con un renombramiento masivo.
+    El Auth Middleware asume la autenticaci�n autom�ticamente para todas las rutas /api/.
+    \"\""
+    model_urn = request.args.get('model_urn')
+    if not model_urn:
+        return jsonify({'error': 'Falta model_urn'}), 400
+
+    from db import get_db_connection
+
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Buscar archivos NON_CONFORMING limitados por el proyecto / modelo
+            cursor.execute("\"\"
+                SELECT 
+                    id, name, status, size_bytes, mime_type, updated_at, updated_by
+                FROM file_nodes
+                WHERE model_urn = %s 
+                  AND status = 'NON_CONFORMING' 
+                  AND is_deleted = false
+                ORDER BY updated_at DESC
+            \"\"", (model_urn,))
+            
+            columns = [desc[0] for desc in cursor.description]
+            quarantine_records = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            
+        return jsonify({
+            'success': True,
+            'count': len(quarantine_records),
+            'files': quarantine_records
+        })
+
+    except Exception as e:
+        print("Error al acceder al Holding Area:", e)
+        return jsonify({'error': str(e)}), 500
 
