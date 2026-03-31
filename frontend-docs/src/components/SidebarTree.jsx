@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-export default function SidebarTree({ currentPath, onNavigate, project, isAdmin, API }) {
+export default function SidebarTree({ currentPath, onNavigate, project, isAdmin, API, refreshTrigger }) {
   const [rootFolders, setRootFolders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [width, setWidth] = useState(280);
@@ -20,7 +20,7 @@ export default function SidebarTree({ currentPath, onNavigate, project, isAdmin,
       setLoading(false);
     };
     if (project) listRoot();
-  }, [project, API]);
+  }, [project, API, refreshTrigger]);
 
   const startResizing = (e) => {
     isResizing.current = true;

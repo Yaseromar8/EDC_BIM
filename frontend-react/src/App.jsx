@@ -17,6 +17,7 @@ import PhotoAlbumModal from './components/PhotoAlbumModal';
 import ProgressDetailPanel from './components/ProgressDetailPanel';
 import DocumentManager from './components/DocumentManager';
 import DocPinPanel from './components/DocPinPanel';
+import InventoryDataGrid from './components/InventoryDataGrid';
 import TandemSidebar from './components/TandemSidebar';
 import TandemFilterPanel from './components/TandemFilterPanel';
 import PdfViewer from './components/PdfViewer';
@@ -125,17 +126,12 @@ const DocumentIcon = () => (
     width="24"
     height="24"
     viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
+    fill="currentColor"
   >
-    <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93l-2.4-2.8A2 2 0 0 0 8.27 2H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2z" />
-    <path d="M9 20v-7h6v7" />
-    <path d="M12 13v-3" />
-    <path d="M12 20v-7" />
-    <rect x="10" y="15" width="4" height="2" />
+    <path d="M20.208,7.848H12.574l-.211-.21c-.141-.141-.331-.219-.529-.219H5.992c-1.988,0-3.606,1.618-3.606,3.606v9.693 c0,1.988,1.618,3.606,3.606,3.606h14.216c1.988,0,3.606-1.618,3.606-3.606V11.454C23.814,9.466,22.196,7.848,20.208,7.848z M22.314,20.733c0,1.161-.945,2.106-2.106,2.106H5.992c-1.161,0-2.106-.945-2.106-2.106V10.865c0-1.161,.945-2.106,2.106-2.106 h5.32l2.112,2.104c.141,.141,.331,.219,.529,.219h6.255c1.161,0,2.106,.945,2.106,2.106V20.733z" />
+    <path d="M15.5,12.5h-5c-.276,0-.5,.224-.5,.5v7.5h6v-7.5C16,12.724,15.776,12.5,15.5,12.5z M14.5,19h-3v-5h3V19z" />
+    <rect x="11.5" y="15" width="1" height="1" />
+    <rect x="13.5" y="15" width="1" height="1" />
   </svg>
 );
 
@@ -174,6 +170,18 @@ const ScheduleIcon = () => (
     <line x1="16" y1="2" x2="16" y2="6"></line>
     <line x1="8" y1="2" x2="8" y2="6"></line>
     <line x1="3" y1="10" x2="21" y2="10"></line>
+  </svg>
+);
+
+const InventoryIcon = () => (
+  <svg
+    className="rail-icon"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+  >
+    <path d="M20,3.5H4a2,2,0,0,0-2,2v13a2,2,0,0,0,2,2H20a2,2,0,0,0,2-2v-13A2,2,0,0,0,20,3.5ZM20.5,18.5a.5.5,0,0,1-.5.5H15.75V12.75h4.75ZM20.5,11.25H15.75V5h4.25a.5.5,0,0,1,.5.5ZM14.25,12.75v6.25H9.75v-6.25ZM9.75,11.25V5h4.5v6.25ZM8.25,12.75v6.25H4a.5.5,0,0,1-.5-.5v-5.75ZM3.5,11.25V5.5A.5.5,0,0,1,4,5H8.25v6.25Z" />
   </svg>
 );
 
@@ -259,49 +267,6 @@ const getPropertyKeyFromRaw = prop => {
   const category = prop.displayCategory || prop.category || 'General';
   const name = prop.displayName || 'Unnamed';
   return `${category}::${name}`;
-};
-
-const buildFilterBuckets = (modelProperties, selectedMetas) => {
-  if (!modelProperties.length || !selectedMetas.length) return {};
-  const metaMap = new Map(selectedMetas.map(meta => [meta.id, meta]));
-  const bucketMaps = new Map();
-  selectedMetas.forEach(meta => bucketMaps.set(meta.id, new Map()));
-
-  modelProperties.forEach(row => {
-    const props = row.properties || [];
-    props.forEach(prop => {
-      const key = getPropertyKeyFromRaw(prop);
-      if (!metaMap.has(key)) return;
-      const valueLabel = formatPropertyValue(prop.displayValue);
-      if (!valueLabel || !valueLabel.trim()) return;
-      const numLabel = valueLabel.trim();
-      const store = bucketMaps.get(key);
-      if (!store.has(numLabel)) {
-        store.set(numLabel, { value: numLabel, count: 0, dbIds: [] });
-      }
-      const entry = store.get(numLabel);
-      entry.count += 1;
-      // Store object { id, modelUrn } instead of just integer
-      entry.dbIds.push({ id: row.dbId, modelUrn: row.modelUrn });
-    });
-  });
-
-  const result = {};
-  bucketMaps.forEach((map, propId) => {
-    const values = Array.from(map.values()).sort((a, b) => {
-      if (b.count === a.count) return a.value.localeCompare(b.value);
-      return b.count - a.count;
-    });
-    const total = values.reduce((sum, item) => sum + item.count, 0);
-    const valueIndex = new Map(values.map(entry => [entry.value, entry]));
-    result[propId] = {
-      meta: metaMap.get(propId),
-      total,
-      values,
-      valueIndex
-    };
-  });
-  return result;
 };
 
 function FilterConfigurator({
@@ -540,7 +505,7 @@ function App() {
   const [filterConfiguratorOpen, setFilterConfiguratorOpen] = useState(false);
   const [availableProperties, setAvailableProperties] = useState([]);
   const [filterProperties, setFilterProperties] = useState(['Standard::Sources', 'Tandem Category']);
-  const [modelProperties, setModelProperties] = useState({}); // Changed to object {urn: props[]}
+
   const [filterSelections, setFilterSelections] = useState({});
   const [expandedFilters, setExpandedFilters] = useState({});
   const [facetSearch, setFacetSearch] = useState({}); // { [facetId]: { open: bool, query: string } }
@@ -904,74 +869,32 @@ function App() {
     }
   };
 
-  const handleModelProperties = useCallback(({ urn, props }) => {
-    if (!urn) {
-      // Legacy fallback
-      if (Array.isArray(props)) setModelProperties(prev => ({ ...prev, 'unknown': props }));
-      return;
-    }
-    setModelProperties(prev => ({
-      ...prev,
-      [urn]: props
-    }));
+  const handleModelProperties = useCallback(({ urn }) => {
+    console.log(`[App] Modelo ${urn} inicializado nativamente.`);
   }, []);
 
-  // Flatten all loaded properties for metadata extraction (stable list)
-  const allLoadedProperties = useMemo(() => {
-    return Object.values(modelProperties).flat();
-  }, [modelProperties]);
-
-  // Extract unique CodigoDePartida values for the dropdown selector
-  const availablePartidas = useMemo(() => {
-    const partidaMap = new Map(); // code -> { code, name, count }
-    for (const element of allLoadedProperties) {
-      if (!element.properties) continue;
-      const codigoProp = element.properties.find(p => p.displayName === '03_05_DSI_CodigoDePartida');
-      if (!codigoProp || !codigoProp.displayValue) continue;
-      const code = String(codigoProp.displayValue).trim();
-      if (!code) continue;
-      if (partidaMap.has(code)) {
-        partidaMap.get(code).count++;
-      } else {
-        // Try to find element name using the specific property
-        const nameProp = element.properties.find(p => p.displayName === '03_04_DSI_NombreDePartida') ||
-          element.properties.find(p => p.displayName === 'Name' || p.displayName === 'name');
-        partidaMap.set(code, {
-          code,
-          name: nameProp?.displayValue || '',
-          count: 1
-        });
-      }
-    }
-    // Sort by code
-    return Array.from(partidaMap.values()).sort((a, b) => a.code.localeCompare(b.code));
-  }, [allLoadedProperties]);
-
-  const activeProperties = useMemo(() => {
-    let all = [];
-    // Create a Set of currently loaded URNs for fast lookup
-    const activeUrns = new Set(models.map(m => m.urn));
-    const urnNames = new Map(models.map(m => [m.urn, m.name]));
-
-    Object.entries(modelProperties).forEach(([urn, props]) => {
-      // Only include properties from models that are currently in the list AND not hidden
-      if (activeUrns.has(urn) && !hiddenModelUrns.includes(urn)) {
-        const modelName = urnNames.get(urn) || 'Model';
-        // Tag each row with its model URN so we can distinguish DbIds from different models
-        const tagged = props.map(p => ({
-          ...p,
-          modelUrn: urn,
-          properties: [
-            ...(p.properties || []),
-            // Inject Synthetic "Sources" property for filtering by Model
-            { displayName: 'Sources', displayValue: modelName, category: 'Standard', type: 'String' }
-          ]
-        }));
-        all = all.concat(tagged);
-      }
-    });
-    return all;
-  }, [modelProperties, hiddenModelUrns, models]);
+  const [availablePartidas, setAvailablePartidas] = useState([]);
+  
+  useEffect(() => {
+    const handlePartidas = (e) => {
+      setAvailablePartidas(prev => {
+         // Merge in case we load multiple models over time
+         const map = new Map();
+         prev.forEach(p => map.set(p.code, p));
+         e.detail.partidas.forEach(p => {
+             if(map.has(p.code)) {
+                 map.get(p.code).count += p.count;
+                 if(!map.get(p.code).name && p.name) map.get(p.code).name = p.name;
+             } else {
+                 map.set(p.code, p);
+             }
+         });
+         return Array.from(map.values()).sort((a,b) => a.code.localeCompare(b.code));
+      });
+    };
+    window.addEventListener('viewer-partidas-extracted', handlePartidas);
+    return () => window.removeEventListener('viewer-partidas-extracted', handlePartidas);
+  }, []);
 
   // Load views on mount
   // Load views on mount
@@ -1122,33 +1045,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Initialize filterSelections with ALL values when filter properties change
-    // This implements the "All Selected by Default" behavior similar to Tandem
-    if (filterProperties.length === 0 || !modelProperties) return;
-
-    setFilterSelections(prev => {
-      const next = { ...prev };
-
-      filterProperties.forEach(propId => {
-        // Only initialize if not already set (preserve user selection if they switch panels)
-        // Or if we want to ensure new properties start selected
-        if (!next[propId]) {
-          // We need to look up values from 'filterBuckets' or re-calculate them
-          // Since 'filterBuckets' might depend on 'filterSelections', we can't fully rely on it here
-          // However, 'buildFilterBuckets' only needs modelProperties.
-          // Let's optimize: We can just use modelProperties again or just wait for user interaction to populate?
-          // User wants "Todo marcado por defecto".
-
-          // We can use a simpler approach: calculate values just for this property
-          const propValues = new Set();
-          Object.values(modelProperties).forEach(propsObj => {
-            if (propsObj[propId]) propValues.add(propsObj[propId]);
-          });
-          next[propId] = Array.from(propValues);
-        }
-      });
-      return next;
-    });
+    if (filterProperties.length === 0) return;
 
     setExpandedFilters(prev => {
       const next = {};
@@ -1157,7 +1054,7 @@ function App() {
       });
       return next;
     });
-  }, [filterProperties, modelProperties]);
+  }, [filterProperties]);
 
 
 
@@ -1168,8 +1065,8 @@ function App() {
     // CRITICAL: Clear models immediately before fetching to prevent old project's
     // models from briefly rendering in the new project viewer
     setModels([]);
-    setModelProperties({});
     setAvailableProperties([]);
+    setDynamicFilterBuckets({});
     setHiddenModelUrns([]);
 
     apiFetch(`${BACKEND_URL}/api/config/project?project=${selectedProject.id}`)
@@ -1319,11 +1216,6 @@ function App() {
   const removeModel = useCallback(async (urn) => {
     // 1. Optimistic local removal — avoids cross-project contamination from backend response
     setModels(prev => prev.filter(m => m.urn !== urn));
-    setModelProperties(prev => {
-      const next = { ...prev };
-      delete next[urn];
-      return next;
-    });
     setHiddenModelUrns(prev => prev.filter(u => u !== urn));
 
     try {
@@ -1747,7 +1639,43 @@ function App() {
   };
 
   // Attach a doc (PDF) to a doc pin
-  const handleAttachDocToPin = (pinId, doc, isUpdate = false, pinType = 'docs') => {
+  const handleAttachDocToPin = async (pinId, doc, isUpdate = false, pinType = 'docs') => {
+    
+    if (!isUpdate) {
+        // Encontrar el pin objetivo para extraer dbId y urn
+        const targetArray = trackingData[pinType] || [];
+        const targetPin = targetArray.find(p => p.id === pinId);
+        
+        if (targetPin && targetPin.dbId) {
+            try {
+                // Disparar Payload Simétrico al Backend para persistencia real (dataType: 25)
+                const payload = {
+                    urn: targetPin.modelUrn || targetPin.urn || 'global',
+                    dbId: targetPin.dbId,
+                    documentName: doc.name || doc.plano_titulo || 'Documento Adjunto',
+                    documentUrl: doc.nodeId || doc.url,
+                    dataType: 25
+                };
+                
+                const API_URL = import.meta.env.VITE_BACKEND_URL || '';
+                const response = await fetch(`${API_URL}/api/docs/mutate-bind`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    console.warn('[APS Bridge] Fallo la inyección del puntero en el servidor', await response.text());
+                    return; // Abort local UI update if server failed (as requested)
+                }
+                console.log('[APS Bridge] Inyección dataType: 25 persistida con éxito en BIM-Talara.');
+            } catch (e) {
+                console.error('[APS Bridge] API no disponible para mutate-bind u ocurrió un error de red:', e);
+                return; // Abort
+            }
+        }
+    }
+
     setTrackingData(prev => {
       const targetArray = prev[pinType] || [];
       const updatedDocs = targetArray.map(pin => {
@@ -1821,71 +1749,23 @@ function App() {
 
   const hasMoreProperties = selectedPropertyObjects.length > visiblePropertiesCount;
 
-  const filterBuckets = useMemo(
-    () => buildFilterBuckets(activeProperties, selectedPropertyObjects),
-    [activeProperties, selectedPropertyObjects]
-  );
+  const [dynamicFilterBuckets, setDynamicFilterBuckets] = useState({});
 
-  // Calculate dynamic counts (Faceted Search)
-  const dynamicFilterBuckets = useMemo(() => {
-    // 1. Pre-calculate the set of DbIds for each property's current selection
-    const propSelections = new Map();
-    Object.entries(filterSelections).forEach(([propId, values]) => {
-      if (!values || !values.length) return;
-      const bucket = filterBuckets[propId];
-      if (!bucket) return;
-      const unionIds = new Set();
-      values.forEach(val => {
-        const entry = bucket.valueIndex?.get(val);
-        if (entry) entry.dbIds.forEach(id => unionIds.add(id));
-      });
-      propSelections.set(propId, unionIds);
-    });
+  // 1. Recibir los resultados del Motor APS
+  useEffect(() => {
+    const handleFiltersCalculated = (e) => {
+      setDynamicFilterBuckets(e.detail);
+    };
+    window.addEventListener('filters-calculated', handleFiltersCalculated);
+    return () => window.removeEventListener('filters-calculated', handleFiltersCalculated);
+  }, []);
 
-    // 2. For each property, calculate the intersection of ALL OTHER properties
-    const result = {};
-    filterProperties.forEach(targetPropId => {
-      // Find intersection of all OTHER selections
-      let validIds = null;
-      propSelections.forEach((ids, propId) => {
-        if (propId === targetPropId) return; // Skip self
-        if (validIds === null) {
-          validIds = new Set(ids);
-        } else {
-          validIds = new Set([...validIds].filter(x => ids.has(x)));
-        }
-      });
-
-      // If validIds is null, it means no other filters are active -> All IDs are valid
-      // If validIds is empty set, it means intersection is empty -> No IDs are valid
-
-      const originalBucket = filterBuckets[targetPropId];
-      if (!originalBucket) return;
-
-      // Clone values with updated counts
-      const newValues = originalBucket.values.map(valEntry => {
-        let count = 0;
-        if (validIds === null) {
-          count = valEntry.count; // No other filters, keep original count
-        } else {
-          // Count how many of this value's DbIds are in validIds
-          count = valEntry.dbIds.filter(id => validIds.has(id)).length;
-        }
-        return { ...valEntry, count };
-      });
-
-      // Sort again if needed, or keep original order
-      // newValues.sort((a, b) => b.count - a.count); 
-
-      result[targetPropId] = {
-        ...originalBucket,
-        values: newValues,
-        total: newValues.reduce((sum, v) => sum + v.count, 0)
-      };
-    });
-
-    return result;
-  }, [filterBuckets, filterSelections, filterProperties]);
+  // 2. Disparar recálculos nativos sin colapsar React
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('recalculate-filters', {
+      detail: { filterProperties, filterSelections }
+    }));
+  }, [filterProperties, filterSelections]);
 
   const togglePropertyAll = useCallback((propId) => {
     const bucket = dynamicFilterBuckets[propId];
@@ -1955,121 +1835,14 @@ function App() {
 
   // ... existing code ...
 
-  const activeFilterDetail = useMemo(() => {
-    const activeProps = Object.entries(filterSelections).filter(([_, values]) => values && values.length > 0);
 
-    if (activeProps.length === 0) {
-      return { groups: [], dbIds: [], nonMatchingDbIds: [], isFiltering: false };
-    }
 
-    // 1. Calculate matching DbIds (Intersection of Unions)
-    // We use a Set of strings "urn#dbId" to perform set operations
-    let intersectionKeys = null;
-    const keyMap = new Map(); // "urn#dbId" -> { id, modelUrn }
-
-    activeProps.forEach(([propId, values]) => {
-      const bucket = filterBuckets[propId];
-      if (!bucket) return;
-
-      const propKeys = new Set();
-      values.forEach(value => {
-        const entry = bucket.valueIndex?.get(value);
-        if (entry) {
-          entry.dbIds.forEach(item => {
-            if (!hiddenModelUrns.includes(item.modelUrn)) {
-              const key = `${item.modelUrn}#${item.id}`;
-              propKeys.add(key);
-              if (!keyMap.has(key)) keyMap.set(key, item);
-            }
-          });
-        }
-      });
-
-      if (intersectionKeys === null) {
-        intersectionKeys = propKeys;
-      } else {
-        intersectionKeys = new Set([...intersectionKeys].filter(k => propKeys.has(k)));
-      }
-    });
-
-    const finalKeys = intersectionKeys ? Array.from(intersectionKeys) : [];
-    const finalKeySet = new Set(finalKeys);
-
-    // transform back to objects
-    const finalDbIds = finalKeys.map(k => keyMap.get(k));
-
-    // Calculate non-matching IDs for ghosting
-    // We need all known IDs from the buckets
-    const allKnownKeys = new Set();
-    Object.values(filterBuckets).forEach(bucket => {
-      bucket.values.forEach(v => v.dbIds.forEach(item => {
-        if (!hiddenModelUrns.includes(item.modelUrn)) {
-          const key = `${item.modelUrn}#${item.id}`;
-          allKnownKeys.add(key);
-          if (!keyMap.has(key)) keyMap.set(key, item);
-        }
-      }));
-    });
-
-    const nonMatchingKeys = Array.from(allKnownKeys).filter(k => !finalKeySet.has(k));
-    const nonMatchingDbIds = nonMatchingKeys.map(k => keyMap.get(k));
-
-    // 2. Prepare Groups for Coloring
-    const groups = [];
-
-    activeProps.forEach(([propId, values]) => {
-      const bucket = filterBuckets[propId];
-      if (!bucket) return;
-
-      const isColoringEnabled = filterColors[propId];
-
-      if (isColoringEnabled) {
-        values.forEach((value, valIndex) => {
-          const entry = bucket.valueIndex?.get(value);
-          if (!entry) return;
-
-          // Filter items to only those in the final intersection
-          const validItems = entry.dbIds.filter(item => finalKeySet.has(`${item.modelUrn}#${item.id}`));
-
-          if (validItems.length > 0) {
-            const originalIndex = bucket.values.findIndex(v => v.value === value);
-            const color = PALETTE[originalIndex % PALETTE.length];
-
-            groups.push({
-              propId,
-              value,
-              name: `${bucket.meta?.name}: ${value}`,
-              dbIds: validItems, // This is now array of {id, modelUrn}
-              color: color
-            });
-          }
-        });
-      }
-    });
-
-    return {
-      groups,
-      dbIds: finalDbIds,
-      nonMatchingDbIds,
-      isFiltering: activeProps.length > 0
-    };
-  }, [filterSelections, filterBuckets, filterColors, hiddenModelUrns]);
-
-  // ... existing code ...
-
-  const toggleColor = (propId) => {
+  const toggleColor = useCallback((propId) => {
     setFilterColors(prev => ({
       ...prev,
       [propId]: !prev[propId]
     }));
-  };
-
-  // ... inside render loop ...
-
-
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent('filters-apply', { detail: activeFilterDetail }));
-  }, [activeFilterDetail]);
+  }, []);
 
   const handleLogoClick = useCallback(() => {
     // Return to Landing Page immediately and clean up
@@ -2085,40 +1858,42 @@ function App() {
     setSprites([]);
     setHiddenModelUrns([]);
 
-    // CRITICAL FIX: Reset properties to prevent stale state on project switch
     setAvailableProperties([]);
-    setModelProperties({});
     setFilterSelections({});
-    // setFilterBuckets({}); // filterBuckets is computed via useMemo, no setter.
   }, []);
-
-
 
   const toggleExpandBlock = useCallback((propId) => {
     setExpandedFilters(prev => ({ ...prev, [propId]: !prev[propId] }));
   }, []);
-
-
-  // Calculate available properties dynamically from ALL LOADED properties (stable list for configuration)
+  // Escucha el esquema de propiedades extraído nativamente por el Viewer
   useEffect(() => {
-    const uniqueProps = new Map();
-    allLoadedProperties.forEach(row => {
-      (row.properties || []).forEach(p => {
-        const key = getPropertyKeyFromRaw(p);
-        if (!uniqueProps.has(key)) {
-          uniqueProps.set(key, {
-            id: key,
-            name: p.displayName || p.name || 'Unnamed',
-            category: p.displayCategory || p.category || 'General',
-            path: p.path
-          });
-        }
-      });
-    });
-    setAvailableProperties(Array.from(uniqueProps.values()));
-  }, [allLoadedProperties]);
+    const handleSchemaExtracted = (e) => {
+        console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: viewer-schema-extracted - Sincronizando propiedades disponibles.`);
+        setAvailableProperties(e.detail.schema);
+        // No dispatch aquí: el useEffect de filterProperties/filterSelections/availableProperties ya lo hará
+    };
+    window.addEventListener('viewer-schema-extracted', handleSchemaExtracted);
+    return () => window.removeEventListener('viewer-schema-extracted', handleSchemaExtracted);
+  }, [filterProperties, filterSelections]);
 
-
+  // Recalcular nativamente las cubetas cuando cambia la selección de filtros o de las categorías base
+  useEffect(() => {
+    if (availableProperties.length === 0) return; // No disparar si no ha cargado el esquema
+    console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Cambio en filtros (UI): Disparando recalculate-filters hacia LMV`);
+    window.dispatchEvent(new CustomEvent('recalculate-filters', {
+       detail: { filterProperties, filterSelections }
+    }));
+  }, [filterProperties, filterSelections, availableProperties.length, hiddenModelUrns]);
+  
+  // Guardar en la UI las nuevas cubetas calculadas asincrónicamente por el Viewer LMV Worker
+  useEffect(() => {
+     const handleFiltersCalculated = (e) => {
+         console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: filters-calculated - Actualizando UI de Paneles`);
+         setDynamicFilterBuckets(e.detail);
+     };
+     window.addEventListener('filters-calculated', handleFiltersCalculated);
+     return () => window.removeEventListener('filters-calculated', handleFiltersCalculated);
+  }, []);
 
   // --- RENDER: LOGIN -> LANDING -> APP ---
   if (!user) {
@@ -2151,6 +1926,9 @@ function App() {
         onUniversalSearch={handleUniversalSearch}
       />
       <div className="app-container" style={{ flex: 1, position: 'relative' }}>
+
+        {/* Portal for floating Tandem Overlays (e.g. Heatmaps) */}
+        <div id="viewer-top-portal" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 9999 }}></div>
 
         {/* Photo Album Modal Removed - Now Inserted in Split View below */}
 
@@ -2190,16 +1968,6 @@ function App() {
         {/* Navigation Rail */}
         {isRailExpanded && (
           <nav className="app-left-rail" aria-label="Primary tools">
-
-            <button
-              type="button"
-              className={`rail-button ${activePanel === 'files' && panelVisible ? 'active' : ''}`}
-              onClick={() => togglePanel('files')}
-              title="Models"
-            >
-              <FolderIcon />
-              <span className="rail-label" style={{ fontWeight: 700 }}>Files</span>
-            </button>
             <button
               type="button"
               className={`rail-button ${activePanel === 'filters' && panelVisible ? 'active' : ''}`}
@@ -2210,6 +1978,26 @@ function App() {
               <span className="rail-label" style={{ fontWeight: 700 }}>Filters</span>
             </button>
 
+            <button
+              type="button"
+              className={`rail-button ${activePanel === 'files' && panelVisible ? 'active' : ''}`}
+              onClick={() => togglePanel('files')}
+              title="Files"
+            >
+              <FolderIcon />
+              <span className="rail-label" style={{ fontWeight: 700 }}>Files</span>
+            </button>
+            
+            <button
+              type="button"
+              data-test-id="nav-item-docs"
+              className={`rail-button ${activePanel === 'accdocs' && panelVisible ? 'active' : ''}`}
+              onClick={() => togglePanel('accdocs')}
+              title="Docs"
+            >
+              <DocumentIcon />
+              <span className="rail-label" style={{ fontWeight: 700 }}>Docs</span>
+            </button>
 
             <button
               type="button"
@@ -2231,9 +2019,21 @@ function App() {
               <span className="rail-label" style={{ fontWeight: 700 }}>Cronograma</span>
             </button>
 
+            <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+              {/* SEPARATOR AS IN TANDEM */}
+              <div style={{ width: '40px', height: '1px', backgroundColor: '#444', margin: '8px auto' }}></div>
 
-
-
+              <button
+                type="button"
+                data-test-id="nav-item-inventory"
+                className={`rail-button ${activePanel === 'inventory' && panelVisible ? 'active' : ''}`}
+                onClick={() => togglePanel('inventory')}
+                title="Inventory"
+              >
+                <InventoryIcon />
+                <span className="rail-label" style={{ fontWeight: 700 }}>Inventory</span>
+              </button>
+            </div>
 
           </nav>
 
@@ -2245,7 +2045,8 @@ function App() {
           panelVisible={panelVisible}
           models={models}
           hiddenModelUrns={hiddenModelUrns}
-          filterBuckets={filterBuckets}
+          selectedElement={selectedElement}
+
           dynamicFilterBuckets={dynamicFilterBuckets}
           filterSelections={filterSelections}
           filterColors={filterColors}
@@ -2465,9 +2266,9 @@ function App() {
             </div>
           )}
           <div className="split-view-container">
-            <div className="split-3d" style={{ position: 'relative' }}>
+            <div className="split-3d" style={{ position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               {/* 3D VIEWER - Hide when schedule or build is active */}
-              <div style={{ width: '100%', height: '100%', display: (activePanel === 'build' || activePanel === 'schedule') ? 'none' : 'block' }}>
+              <div style={{ flex: 1, minHeight: 0, position: 'relative', display: (activePanel === 'build' || activePanel === 'schedule') ? 'none' : 'block' }}>
                 <Viewer
                   accessToken={accessToken}
                   models={models}
@@ -2512,8 +2313,15 @@ function App() {
 
               {/* SCHEDULE DETAILED VIEW - Full width interaction */}
               {activePanel === 'schedule' && (
-                <div style={{ width: '100%', height: '100%' }}>
+                <div style={{ flex: 1, minHeight: 0 }}>
                   <ScheduleDetailedView scheduleData={scheduleData} initialTab="Activities" />
+                </div>
+              )}
+
+              {/* INVENTORY DATA GRID - Bottom Panel */}
+              {activePanel === 'inventory' && panelVisible && (
+                <div style={{ height: '320px', flexShrink: 0, borderTop: '1px solid #444', zIndex: 11, background: '#1c2027', display: 'flex', flexDirection: 'column' }}>
+                  <InventoryDataGrid dynamicFilterBuckets={dynamicFilterBuckets} filterSelections={filterSelections} />
                 </div>
               )}
 
@@ -2706,11 +2514,7 @@ function App() {
                   isOpen={true}
                   onClose={() => setProgressPanelOpen(false)}
                   pin={selectedProgressPin}
-                  elementProps={
-                    selectedProgressPin && selectedProgressPin.dbId
-                      ? allLoadedProperties.find(p => p.dbId === selectedProgressPin.dbId)?.properties
-                      : null
-                  }
+                  elementProps={null}
                   onDelete={(id) => handleTrackingPinDelete('avance', id)}
                   isDocked={panelDocked}
                   onToggleDock={() => setPanelDocked(prev => !prev)}

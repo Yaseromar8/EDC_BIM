@@ -1,0 +1,706 @@
+from typing import Any, Callable, Dict, List, Literal
+import requests
+
+from .constants import (
+    COLUMN_FAMILIES_DTPROPERTIES,
+    COLUMN_FAMILIES_REFS,
+    COLUMN_FAMILIES_STANDARD,
+    COLUMN_FAMILIES_SYSTEMS,
+    COLUMN_FAMILIES_XREFS,
+    COLUMN_NAMES_CATEGORY_ID,
+    COLUMN_NAMES_CLASSIFICATION,
+    COLUMN_NAMES_ELEMENT_FLAGS,
+    COLUMN_NAMES_LEVEL,
+    COLUMN_NAMES_NAME,
+    COLUMN_NAMES_PARENT,
+    COLUMN_NAMES_ROOMS,
+    COLUMN_NAMES_TANDEM_CATEGORY,
+    COLUMN_NAMES_UNIFORMAT_CLASS,
+    ELEMENT_FLAGS_LEVEL,
+    ELEMENT_FLAGS_ROOM,
+    ELEMENT_FLAGS_STREAM,
+    ELEMENT_FLAGS_SYSTEM,
+    ELEMENT_FLAGS_TICKET,
+    MUTATE_ACTIONS_DELETE_ROW,
+    MUTATE_ACTIONS_INSERT,
+    QC_ELEMENT_FLAGS,
+    QC_IS_ASSET
+)
+
+class TandemClient:
+    """ A simple wrapper for Tandem Data API """
+
+    def __init__(self, callback: Callable[..., str], region: str | None = None, env: Literal['prod', 'stg'] = 'prod') -> None:
+        """
+        Creates new instance of TandemClient.
+        """
+
+        base_url = {
+            'prod': 'https://developer.api.autodesk.com',
+            'stg': 'https://developer-stg.api.autodesk.com'
+        }.get(env)
+        self.__authProvider = callback
+        self.__base_url = f'{base_url}/tandem/v1'
+        self.__region = region
+        pass
+
+    def __enter__(self) -> "TandemClient":
+        return self
+    
+    def __exit__(self, *args: Any)-> None:
+        pass
+
+    def confirm_document_upload(self, facility_id: str, upload_inputs: Any) -> Any:
+        """
+        Completes document upload for given facility.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'twins/{facility_id}/documents/confirmupload'
+        result = self.__post(token, endpoint, upload_inputs)
+        return result
+
+    def create_documents(self, facility_id: str, doc_inputs: List[Any]) -> Any:
+        """
+        Adds documents to the facility.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'twins/{facility_id}/documents'
+        response = self.__post(token, endpoint, doc_inputs)
+        return response
+    
+    def create_element(self, model_id: str, inputs: Dict[str, Any]) -> Any:
+        """
+        Adds new element to the model.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/create'
+        response = self.__post(token, endpoint, inputs)
+        return response
+
+    def create_stream(self,
+                      model_id: str,
+                      name: str,
+                      uniformat_class_id: str,
+                      category_id: int | None = None,
+                      tandem_category: str | None = None,
+                      classification: str | None = None,
+                      parent_xref: str | None = None,
+                      room_xref: str | None = None,
+                      level_key: str | None = None) -> str:
+        """
+        Creates new stream using provided data.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/create'
+        inputs = {
+            'muts': [
+                [ MUTATE_ACTIONS_INSERT, COLUMN_FAMILIES_STANDARD, COLUMN_NAMES_NAME, name ],
+                [ MUTATE_ACTIONS_INSERT, COLUMN_FAMILIES_STANDARD, COLUMN_NAMES_ELEMENT_FLAGS, ELEMENT_FLAGS_STREAM ],
+                [ MUTATE_ACTIONS_INSERT, COLUMN_FAMILIES_STANDARD, COLUMN_NAMES_UNIFORMAT_CLASS, uniformat_class_id ],
+                [ MUTATE_ACTIONS_INSERT, COLUMN_FAMILIES_STANDARD, COLUMN_NAMES_CATEGORY_ID, category_id ]
+            ],
+            'desc': 'Create stream'
+        }
+
+        if tandem_category is not None:
+            inputs['muts'].append([ MUTATE_ACTIONS_INSERT, COLUMN_FAMILIES_STANDARD, COLUMN_NAMES_TANDEM_CATEGORY, tandem_category ])
+        if classification is not None:
+            inputs['muts'].append([ MUTATE_ACTIONS_INSERT, COLUMN_FAMILIES_STANDARD, COLUMN_NAMES_CLASSIFICATION, classification ])
+        if parent_xref is not None:
+            inputs['muts'].append([ MUTATE_ACTIONS_INSERT, COLUMN_FAMILIES_XREFS, COLUMN_NAMES_PARENT, parent_xref ])
+        if room_xref is not None:
+            inputs['muts'].append([ MUTATE_ACTIONS_INSERT, COLUMN_FAMILIES_XREFS, COLUMN_NAMES_ROOMS, room_xref ])
+        if level_key is not None:
+            inputs['muts'].append([ MUTATE_ACTIONS_INSERT, COLUMN_FAMILIES_REFS, COLUMN_NAMES_LEVEL, level_key ])
+        response = self.__post(token, endpoint, inputs)
+        return response.get('key')
+
+    def create_view(self, facility_id: str, view_inputs: Dict[str, Any]) -> Any:
+        """
+        Adds view to the facility.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'twins/{facility_id}/views'
+        response = self.__post(token, endpoint, view_inputs)
+        return response
+    
+    def delete_elements(self, model_id: str, keys: List[str], desc: str):
+        """
+        Deletes given elements from the model.
+        """
+
+        mutations = []
+        mutations.extend([ MUTATE_ACTIONS_DELETE_ROW, '', '', '' ] for key in keys)
+        result = self.mutate_elements(model_id, keys, mutations, desc)
+
+        return result
+    
+    def delete_stream_data(self, model_id: str, keys: List[str], substreams: List[str] | None = None, from_date: str | None = None, to_date: str | None = None) -> None:
+        """
+        Deletes data from given streams. It can be used to delete specified substreams or all data from give streams.
+        It's also possible to delete data for given time range (from, to).
+        """
+
+        token = self.__authProvider()
+        endpoint = f'timeseries/models/{model_id}/deletestreamsdata'
+        inputs = {
+            'keys': keys
+        }
+        query_params = {
+        }
+        if substreams is not None:
+            query_params['substreams'] = ','.join(substreams)
+        if from_date is not None:
+            query_params['from'] = from_date
+        if to_date is not None:
+            query_params['to'] = to_date
+        # if there are no input parameters, then delete all stream data
+        if len(query_params) == 0:
+            query_params['allSubstreams'] = 1
+        self.__post(token, endpoint, inputs, query_params)
+
+    def get_element(self, model_id: str, key: str, column_families: List[str] = [ COLUMN_FAMILIES_STANDARD ]) -> Any:
+        """
+        Returns element for given key.
+        """
+
+        data = self.get_elements(model_id, [ key ], column_families)
+        return data[0]
+
+    def get_elements(self, model_id: str, element_ids: List[str] | None = None, column_families: List[str] | None = [ COLUMN_FAMILIES_STANDARD ], columns: List[str] | None = None, include_history: bool = False) -> Any:
+        """
+        Returns list of elements for given model.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/scan'
+        inputs: Dict[str, Any] = {
+            'includeHistory': include_history,
+            'skipArrays': True
+        }
+        if column_families is not None and len(column_families) > 0:
+            inputs['families'] = column_families
+        if columns is not None and len(columns) > 0:
+            inputs['qualifiedColumns'] = columns
+        if element_ids is not None and len(element_ids) > 0:
+            inputs['keys'] = element_ids
+        result = self.__post(token, endpoint, inputs)
+        return result[1:]
+    
+    def get_facility(self, facility_id: str) -> Any:
+        """
+        Retuns facility for given facility urn.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'twins/{facility_id}'
+        return self.__get(token, endpoint)
+    
+    def get_facility_history(self, facility_id: str, inputs: Any) -> Any:
+        """
+        Retuns history for given facility.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'twins/{facility_id}/history'
+        return self.__post(token, endpoint, inputs)
+    
+    def get_facility_template(self, facility_id: str) -> Any:
+        """
+        Retuns facility teplate for given facility urn.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'twins/{facility_id}/inlinetemplate'
+        return self.__get(token, endpoint)
+    
+    def get_facility_users(self, facility_id: str) -> Dict[str, Any]:
+        """
+        Returns dictionary of facility users.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'twins/{facility_id}/users'
+        return self.__get(token, endpoint)
+    
+    def get_group(self, group_id: str) -> Any:
+        """
+        Returns group details.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'groups/{group_id}'
+        result = self.__get(token, endpoint)
+        return result
+    
+    def get_group_facilities(self, group_id: str) -> Any:
+        """
+        Returns facilities for given group.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'groups/{group_id}/twins'
+        result = self.__get(token, endpoint)
+        return result
+    
+    def get_groups(self) -> Any:
+        """
+        Returns list of groups.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'groups'
+        result = self.__get(token, endpoint)
+        return result
+    
+    def get_levels(self, model_id: str, column_families: List[str] = [ COLUMN_FAMILIES_STANDARD ]) -> Any:
+        """
+        Returns level elements from given model.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/scan'
+        inputs = {
+            'families': column_families,
+            'includeHistory': False,
+            'skipArrays': True
+        }
+        data = self.__post(token, endpoint, inputs)
+        results = []
+
+        for elem in data:
+            if not isinstance(elem, dict):
+                continue
+            flags = elem.get(QC_ELEMENT_FLAGS, None)
+            if flags == ELEMENT_FLAGS_LEVEL:
+                results.append(elem)
+        return results
+    
+    def get_model(self, model_id: str) -> Any:
+        """
+        Returns model for given model URN.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/model'
+        return self.__get(token, endpoint)
+    
+    def get_model_attributes(self, model_id: str) -> Any:
+        """
+        Returns model attributes for given model URN.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/attrs'
+        return self.__get(token, endpoint)
+    
+    def get_model_history(self,
+                          model_id: str,
+                          min: int | None = None,
+                          max: int | None = None,
+                          timestamps: List[int] | None = None,
+                          include_changes: bool = False,
+                          use_full_keys: bool = False):
+        """
+        Returns model changes.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/history'
+        inputs: Dict[str, Any] = {
+            'includeChanges': include_changes,
+            'useFullKeys': use_full_keys
+        }
+        if min is not None:
+            inputs['min'] = min
+        if max is not None:
+            inputs['max'] = max
+        if timestamps is not None:
+            inputs['timestamps'] = timestamps
+        response = self.__post(token, endpoint, inputs)
+        return response
+    
+    def get_model_history_between_dates(self, model_id: str, from_date: int, to_date: int, include_changes: bool = True, use_full_keys: bool = True):
+        """
+        Returns model changes between two dates.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/history'
+        inputs = {
+            'min': from_date,
+            'max': to_date,
+            'includeChanges': include_changes,
+            'useFullKeys': use_full_keys
+        }
+        response = self.__post(token, endpoint, inputs)
+        return response
+    
+    def get_model_props(self, model_id: str) -> Any:
+        """
+        Returns model properties.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'models/{model_id}/props'
+        return self.__get(token, endpoint)
+
+    def get_model_schema(self, model_id: str) -> Any:
+        """
+        Returns schema for given model URN.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/schema'
+        return self.__get(token, endpoint)
+    
+    def get_rooms(self, model_id: str, column_families: List[str] = [ COLUMN_FAMILIES_STANDARD ]) -> Any:
+        """
+        Returns room elements from given model.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/scan'
+        inputs = {
+            'families': column_families,
+            'includeHistory': False,
+            'skipArrays': True
+        }
+        data = self.__post(token, endpoint, inputs)
+        results = []
+
+        for elem in data:
+            if not isinstance(elem, dict):
+                continue
+            flags = elem.get(QC_ELEMENT_FLAGS, None)
+            if flags == ELEMENT_FLAGS_ROOM:
+                results.append(elem)
+        return results
+    
+    def get_stream_config(self, model_id: str, stream_key: str) -> Any:
+        """
+        Returns stream configuration for given stream key.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'models/{model_id}/stream-configs/{stream_key}'
+        result = self.__get(token, endpoint)
+        return result
+    
+    def get_stream_configs(self, model_id: str) -> Any:
+        """
+        Returns all stream configurations for given model.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'models/{model_id}/stream-configs'
+        result = self.__get(token, endpoint)
+        return result
+
+    def get_stream_data(self, model_id: str, key: str, from_date: int | None = None, to_date: int | None = None) -> Any:
+        """
+        Returns data for given stream. It can be used to get data for given time range (from, to).
+        """
+    
+        token = self.__authProvider()
+        endpoint = f'timeseries/models/{model_id}/streams/{key}'
+        search_params = {}
+        if from_date is not None:
+            search_params['from'] = from_date
+        if to_date is not None:
+            search_params['to'] = to_date
+        result = self.__get(token, endpoint, search_params)
+        return result
+    
+    def get_stream_last_reading(self, model_id: str, keys: List[str]) -> Any:
+        """
+        Returns last stream readings.
+        """
+    
+        input = {
+            'keys': keys
+        }
+        token = self.__authProvider()
+        endpoint = f'timeseries/models/{model_id}/streams'
+        result = self.__post(token, endpoint, input)
+        return result
+
+    def get_stream_secrets(self, model_id: str, keys: List[str]) -> Any:
+        """
+        Returns secrets for streams.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'models/{model_id}/getstreamssecrets'
+        inputs = {
+            'keys': keys
+        }
+        result = self.__post(token, endpoint, inputs)
+        return result
+    
+    def get_streams(self, model_id: str, column_families: List[str] = [ COLUMN_FAMILIES_STANDARD, COLUMN_FAMILIES_REFS, COLUMN_FAMILIES_XREFS ]) -> Any:
+        """
+        Returns stream elements from given model.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/scan'
+        inputs = {
+            'families': column_families,
+            'includeHistory': False,
+            'skipArrays': True
+        }
+        data = self.__post(token, endpoint, inputs)
+        results = []
+
+        for elem in data:
+            if not isinstance(elem, dict):
+                continue
+            flags = elem.get(QC_ELEMENT_FLAGS, None)
+            if flags == ELEMENT_FLAGS_STREAM:
+                results.append(elem)
+        return results
+    
+    def get_systems(self, model_id: str, column_families: List[str] = [ COLUMN_FAMILIES_STANDARD, COLUMN_FAMILIES_REFS, COLUMN_FAMILIES_SYSTEMS ]) -> Any:
+        """
+        Returns system elements from given model.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/scan'
+        inputs = {
+            'families': column_families,
+            'includeHistory': False,
+            'skipArrays': True
+        }
+        data = self.__post(token, endpoint, inputs)
+        results = []
+
+        for elem in data:
+            if not isinstance(elem, dict):
+                continue
+            flags = elem.get(QC_ELEMENT_FLAGS, None)
+            if flags == ELEMENT_FLAGS_SYSTEM:
+                results.append(elem)
+        return results
+    
+    def get_tagged_assets(self, model_id: str,
+                          column_families: List[str] = [ COLUMN_FAMILIES_STANDARD, COLUMN_FAMILIES_DTPROPERTIES, COLUMN_FAMILIES_REFS ],
+                          include_history: bool = False) -> Any:
+        """
+        Returns list of tagged assets from given model.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/scan'
+        inputs = {
+            'families': column_families,
+            'includeHistory': include_history,
+            'skipArrays': True
+        }
+        data = self.__post(token, endpoint, inputs)
+        results = []
+
+        for elem in data:
+            if not isinstance(elem, dict):
+                continue
+            is_asset = elem.get(QC_IS_ASSET, None)
+            if is_asset:
+                results.append(elem)
+        return results
+    
+    def get_tickets(self, model_id: str, column_families: List[str] = [ COLUMN_FAMILIES_STANDARD, COLUMN_FAMILIES_REFS,COLUMN_FAMILIES_XREFS ]) -> Any:
+        """
+        Returns ticket elements from given model.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/scan'
+        inputs = {
+            'families': column_families,
+            'includeHistory': False,
+            'skipArrays': True
+        }
+        data = self.__post(token, endpoint, inputs)
+        results = []
+
+        for elem in data:
+            if not isinstance(elem, dict):
+                continue
+            flags = elem.get(QC_ELEMENT_FLAGS, None)
+            if flags == ELEMENT_FLAGS_TICKET:
+                results.append(elem)
+        return results
+    
+    def get_views(self, facility_id: str) -> Any:
+        """
+        Returns list of views for given facility.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'twins/{facility_id}/views'
+        result = self.__get(token, endpoint)
+        return result
+    
+    def mutate_elements(self, model_id: str, keys: List[str], mutations, description: str, correlation_id: str | None = None, additional_params: dict | None= None) -> Any:
+        """
+        Modifies given elements.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'modeldata/{model_id}/mutate'
+        inputs = {
+            'keys': keys,
+            'muts': mutations,
+            'desc': description
+        }
+        if correlation_id is not None:
+            inputs['correlation_id'] = correlation_id
+        if additional_params is not None:
+            inputs.update(additional_params)
+        result = self.__post(token, endpoint, inputs)
+        return result
+    
+    def query_stream_data(self, model_id: str, keys: list[str], attrs: list[str] | None = None, from_date: int | None = None, to_date: int | None = None, use_delta: bool = False) -> Any:
+        """
+        Returns data for given stream and optionally for given attributes. It can be used to get data for given time range (from, to).
+        """
+    
+        token = self.__authProvider()
+        endpoint = f'timeseries/models/{model_id}/querystreamsdata'
+        search_params = {
+            'delta': 1 if use_delta else 0
+        }
+        if from_date is not None:
+            search_params['from'] = from_date
+        if to_date is not None:
+            search_params['to'] = to_date
+        inputs = {
+            'keys': keys
+        }
+        if attrs is not None and len(attrs) > 0:
+            inputs['attrs'] = attrs
+        result = self.__post(token, endpoint, inputs, search_params)
+        return result
+    
+    def reset_stream_secrets(self, model_id, stream_ids: List[str], hard_reset: bool = False) -> Any:
+        """
+        Resets secrets for given streams.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'models/{model_id}/resetstreamssecrets'
+        inputs = {
+            'keys': stream_ids,
+            'hardReset': hard_reset
+        }
+        result = self.__post(token, endpoint, inputs)
+        return result
+    
+    def save_document_content(self, url: str, file_path: str) -> None:
+        """"
+        Downloads document to local file.
+        """
+
+        token = self.__authProvider()
+        headers = {
+            'Authorization': f'Bearer {token}'
+        }
+        response = requests.get(url, headers=headers)
+        if not response.ok:
+            raise Exception(f'Error while downloading document: {response.status_code} - {response.text}')
+        with open(file_path, 'wb') as file:
+            file.write(response.content)
+        return
+    
+    def save_stream_config(self, model_id: str, stream_key: str, inputs: Any) -> Any:
+        """"
+        Saves configuration for given stream.
+        """
+
+        token = self.__authProvider()
+        endpoint = f'models/{model_id}/stream-configs/{stream_key}'
+        result = self.__put(token, endpoint, inputs)
+        return result
+
+    def upload_document(self, facility_id: str, file_inputs: Any) -> Any:
+        """
+        Starts document upload for given facility.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'twins/{facility_id}/documents/upload'
+        result = self.__post(token, endpoint, file_inputs)
+        return result
+    
+    def update_stream_configs(self, model_id: str, inputs: Any) -> Any:
+        """
+        Updates configuration for provided streams.
+        """
+        
+        token = self.__authProvider()
+        endpoint = f'models/{model_id}/stream-configs'
+        result = self.__patch(token, endpoint, inputs)
+        return result
+    
+    def __get(self, token: str, endpoint: str, params: Dict[str, Any] | None = None) -> Any:
+        headers = {
+            'Authorization': f'Bearer {token}'
+        }
+        if (self.__region is not None):
+            headers['Region'] = self.__region
+        url = f'{self.__base_url}/{endpoint}'
+        response = requests.get(url, headers=headers, params=params)
+        if not response.ok:
+            raise Exception(f'Error while calling Tandem API: {response.status_code} - {response.text}')
+        return response.json()
+    
+    def __patch(self, token: str, endpoint: str, data: Any | None = None, params: Dict[str, Any] | None = None) -> Any:
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json',
+        }
+        if (self.__region is not None):
+            headers['Region'] = self.__region
+        url = f'{self.__base_url}/{endpoint}'
+        response = requests.patch(url, headers=headers, json=data, params=params)
+        if response.ok:
+            if len(response.content) == 0:
+                return None
+            return response.json()
+        raise Exception(f'Error while calling Tandem API: {response.status_code} - {response.text}')
+    
+    def __post(self, token: str, endpoint: str, data: Any | None = None, params: Dict[str, Any] | None = None) -> Any:
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json',
+        }
+        if (self.__region is not None):
+            headers['Region'] = self.__region
+        url = f'{self.__base_url}/{endpoint}'
+        response = requests.post(url, headers=headers, json=data, params=params)
+        if response.ok:
+            if len(response.content) == 0:
+                return None
+            return response.json()
+        raise Exception(f'Error while calling Tandem API: {response.status_code} - {response.text}')
+
+    def __put(self, token: str, endpoint: str, data: Any | None = None, params: Dict[str, Any] | None = None) -> Any:
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json',
+        }
+        if (self.__region is not None):
+            headers['Region'] = self.__region
+        url = f'{self.__base_url}/{endpoint}'
+        response = requests.put(url, headers=headers, json=data, params=params)
+        if response.ok:
+            if len(response.content) == 0:
+                return None
+            return response.json()
+        raise Exception(f'Error while calling Tandem API: {response.status_code} - {response.text}')

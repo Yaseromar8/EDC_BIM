@@ -222,10 +222,18 @@ const LoginScreen = ({ onLogin }) => {
                 body: JSON.stringify({ name: regName.trim(), email: regEmail.trim(), password: regPass })
             });
             const data = await res.json();
-            if (res.ok) setRightCardState('regSuccess');
-            else setError(data.error || 'Error al registrar');
-        } catch { setError('Error de conexión'); }
-        finally { setLoading(false); }
+            if (res.ok) {
+                // Auto login after reg
+                setRightCardState('access');
+                setTimeout(() => onLogin(data), 2000);
+            } else {
+                setError(data.error || 'Error al registrar');
+            }
+        } catch (err) {
+            setError('Error de conexión al registrar');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleDemoSubmit = (e) => { e.preventDefault(); showLeftState('success'); };

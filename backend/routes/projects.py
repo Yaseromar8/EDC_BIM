@@ -74,6 +74,9 @@ def ensure_projects_schema():
             cursor.execute("""
                 ALTER TABLE projects ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
             """)
+            cursor.execute("""
+                ALTER TABLE projects ADD COLUMN IF NOT EXISTS invite_code VARCHAR(10) UNIQUE;
+            """)
 
             # --- Insertar Hub y Project por defecto para projects legacy ---
             # Verificar si hay proyectos sin hub asignado
@@ -98,6 +101,19 @@ def ensure_projects_schema():
             cursor.execute("""
                 UPDATE projects SET model_urn = id WHERE model_urn IS NULL
             """)
+
+            # --- AUTO-RELLENAR invite_code ---
+            cursor.execute("SELECT id FROM projects WHERE invite_code IS NULL")
+            null_projects = cursor.fetchall()
+            import random, string
+            for row in null_projects:
+                p_id = row[0]
+                code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                try:
+                    # En caso exótico de colisión el try/except salva el loop
+                    cursor.execute("UPDATE projects SET invite_code = %s WHERE id = %s", (code, p_id))
+                except Exception as e:
+                    print(f"[projects] Colisión generando codigo para {p_id}: {e}")
 
             conn.commit()
             print("[projects] Schema Hub+Projects ACC-style verificado/migrado.")
@@ -179,7 +195,7 @@ def list_all_projects():
                 SELECT p.id, p.hub_id, p.name, p.description, p.model_urn,
                        p.thumbnail_url, p.status, p.project_type,
                        p.start_date, p.end_date, p.updated_at,
-                       h.name AS hub_name, h.region
+                       h.name AS hub_name, h.region, p.invite_code
                 FROM projects p
                 LEFT JOIN hubs h ON h.id = p.hub_id
                 WHERE p.status != 'archived'
@@ -203,7 +219,8 @@ def list_all_projects():
                 "end_date": r[9].isoformat() if r[9] else None,
                 "updated_at": r[10].isoformat() if r[10] else None,
                 "hub_name": r[11] or "Sin Municipalidad",
-                "region": r[12]
+                "region": r[12],
+                "invite_code": r[13]
             } for r in rows]
         return jsonify({"projects": projects}), 200
     except Exception as e:
@@ -247,24 +264,28 @@ def create_hub_project(hub_id):
         return jsonify({"error": "name is required"}), 400
 
     proj_id = f"b.proj_{re.sub(r'[^a-z0-9]', '_', data['name'].lower())}_{int(time.time()) % 100000}"
+    import random, string
+    invite_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO projects
                     (id, hub_id, name, description, model_urn, thumbnail_url,
-                     status, project_type, start_date, end_date, metadata)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     status, project_type, start_date, end_date, metadata, invite_code)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 proj_id, hub_id, data['name'],
                 data.get('description', ''),
-                data.get('model_urn', proj_id),  # Fuente de verdad: model_urn = proj_id por defecto
+                data.get('model_urn', proj_id),
                 data.get('thumbnail_url'),
                 data.get('status', 'active'),
                 data.get('project_type', 'Infraestructura'),
                 data.get('start_date'),
                 data.get('end_date'),
-                json.dumps(data.get('metadata', {}))
+                json.dumps(data.get('metadata', {})),
+                invite_code
             ))
             conn.commit()
 
@@ -324,8 +345,43 @@ def get_project(project_id):
                 "created_at": r[10].isoformat() if r[10] else None,
                 "updated_at": r[11].isoformat() if r[11] else None,
                 "metadata": r[12] or {},
-                "hub_name": r[13], "region": r[14]
+                "hub_name": r[13], "region": r[14], "invite_code": r[15] if len(r) > 15 else None
             }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@projects_bp.route('/api/projects/join', methods=['POST'])
+def join_project():
+    """Unirse a un proyecto usando su invite_code."""
+    data = request.get_json()
+    code = (data.get('invite_code') or '').strip().upper()
+    user_id = data.get('user_id')
+    
+    if not code or not user_id:
+        return jsonify({"error": "Código de invitación y usuario requeridos"}), 400
+        
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Buscar el proyecto y asegurar que no esté archivado
+            cursor.execute("SELECT id, name FROM projects WHERE invite_code = %s AND status != 'archived'", (code,))
+            proj = cursor.fetchone()
+            
+            if not proj:
+                return jsonify({"error": "Código de invitación inválido o caducado"}), 404
+                
+            project_id, project_name = proj
+            
+            # Asignar al usuario
+            cursor.execute('''
+                INSERT INTO project_users (project_id, user_id)
+                VALUES (%s, %s)
+                ON CONFLICT DO NOTHING
+            ''', (project_id, user_id))
+            conn.commit()
+            
+            return jsonify({"success": True, "project_id": project_id, "project_name": project_name}), 200
+            
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

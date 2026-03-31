@@ -1419,59 +1419,53 @@ def download_folder_urls():
                     })
             except Exception as e:
                 print(f"[TUNNEL] Error firmando {r_gcs_urn}: {e}")
-                
+
     return jsonify({"success": True, "manifest": manifest}), 200
 
 @documents_bp.route('/api/docs/force-init-permissions', methods=['GET'])
 def force_init_permissions():
-    """Endpoint temporal para forzar la creaci√≥n de la tabla usando el pool activo."""
-    from folder_permissions import init_folder_permissions_table
-    try:
-        init_folder_permissions_table()
-        return jsonify({"success": True, "message": "Tabla creada exitosamente."})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-
-@documents_bp.route('/api/docs/quarantine', methods=['GET'])
-def get_quarantine_files():
-    "\"\"
-    [ISO 19650 Holding Area]
-    Extrae estrictamente los archivos retenidos por fallar la validaciÛn 
-    de nomenclatura (NON_CONFORMING) para ser curados con un renombramiento masivo.
-    El Auth Middleware asume la autenticaciÛn autom·ticamente para todas las rutas /api/.
-    \"\""
+    from db.folder_permissions import init_folder_permissions_table
     model_urn = request.args.get('model_urn')
     if not model_urn:
         return jsonify({'error': 'Falta model_urn'}), 400
-
-    from db import get_db_connection
-
     try:
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Buscar archivos NON_CONFORMING limitados por el proyecto / modelo
-            cursor.execute("\"\"
-                SELECT 
-                    id, name, status, size_bytes, mime_type, updated_at, updated_by
+        from db import get_db_connection
+        conn = get_db_connection()
+        if conn:
+            init_folder_permissions_table(conn)
+            conn.close()
+            return jsonify({"success": True, "message": "Tabla creada exitosamente."}) 
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@documents_bp.route('/api/docs/quarantine', methods=['GET'])
+def get_quarantine_files():
+    try:
+        model_urn = request.args.get('model_urn')
+        if not model_urn:
+            return jsonify({'error': 'Falta model_urn'}), 400
+
+        from db import get_db_connection
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connect error'}), 500
+
+        with conn.cursor() as cursor:
+            # Extraemos data b√°sica sin CTE y sin updated_by para evitar errores de migraci√≥n
+            cursor.execute("""
+                SELECT id, name, node_type as type, node_type, '' as path, gcs_urn, size_bytes, mime_type, updated_at
                 FROM file_nodes
-                WHERE model_urn = %s 
-                  AND status = 'NON_CONFORMING' 
-                  AND is_deleted = false
+                WHERE model_urn = %s AND status = 'NON_CONFORMING' AND is_deleted = FALSE
                 ORDER BY updated_at DESC
-            \"\"", (model_urn,))
-            
+            """, (model_urn,))
             columns = [desc[0] for desc in cursor.description]
             quarantine_records = [dict(zip(columns, row)) for row in cursor.fetchall()]
-            
+        conn.close()
         return jsonify({
             'success': True,
             'count': len(quarantine_records),
             'files': quarantine_records
         })
-
     except Exception as e:
         print("Error al acceder al Holding Area:", e)
         return jsonify({'error': str(e)}), 500
-

@@ -194,9 +194,30 @@ export function useFolderCache(apiBase, projectPrefix) {
     if (entry) {
       removed = entry.folders.find(f => f.id === nodeId);
       entry.folders = entry.folders.filter(f => f.id !== nodeId);
+      // Also remove from files if it's a file
+      if (!removed && entry.files) {
+        removed = entry.files.find(f => f.id === nodeId);
+        entry.files = entry.files.filter(f => f.id !== nodeId);
+      }
     }
     bumpCache();
     return removed; // Caller keeps this for rollback
+  }, [bumpCache]);
+
+  // commitDelete: Confirms a delete that already succeeded on the server.
+  // Removes from all parent caches and also purges any child cache entries.
+  const commitDelete = useCallback((parentId, nodeId) => {
+    const key = parentId || '__root__';
+    const entry = cacheRef.current.get(key);
+    if (entry) {
+      entry.folders = entry.folders.filter(f => f.id !== nodeId);
+      if (entry.files) {
+        entry.files = entry.files.filter(f => f.id !== nodeId);
+      }
+    }
+    // Also remove the deleted node's own cache entry (its children are gone too)
+    cacheRef.current.delete(nodeId);
+    bumpCache();
   }, [bumpCache]);
 
   const rollbackDelete = useCallback((parentId, folderData) => {
@@ -223,12 +244,13 @@ export function useFolderCache(apiBase, projectPrefix) {
     commitRename,
     rollbackRename,
     optimisticDelete,
+    commitDelete,
     rollbackDelete,
   }), [
     getChildren, expandNode, fetchNode, invalidateNode, invalidateAll,
     optimisticCreate, commitCreate, rollbackCreate,
     optimisticRename, commitRename, rollbackRename,
-    optimisticDelete, rollbackDelete
+    optimisticDelete, commitDelete, rollbackDelete
   ]);
 
   // Return methods + cacheVersion separately so consumers can choose

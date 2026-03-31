@@ -5,6 +5,7 @@ import DocumentPanel from './DocumentPanel';
 import DiscoverySearchPanel from './DiscoverySearchPanel';
 import BuildPanel from './BuildPanel';
 import SchedulePanel from './SchedulePanel';
+import DocsPanel from './DocsPanel';
 
 
 const TandemSidebar = ({
@@ -12,7 +13,6 @@ const TandemSidebar = ({
     panelVisible,
     models,
     hiddenModelUrns,
-    filterBuckets,
     dynamicFilterBuckets,
     filterSelections,
     filterColors,
@@ -68,16 +68,16 @@ const TandemSidebar = ({
     onCameraCapture,
     BACKEND_URL,
     scheduleData,
-    setScheduleData
+    setScheduleData,
+    selectedElement
 }) => {
     return (
-        <aside className={`app-sidebar ${panelVisible && activePanel !== 'views' ? '' : 'hidden'}`}>
+        <aside className={`app-sidebar ${panelVisible && activePanel !== 'views' && activePanel !== 'inventory' ? '' : 'hidden'}`}>
 
             {activePanel === 'filters' && (
                 <TandemFilterPanel
                     models={models}
                     hiddenModelUrns={hiddenModelUrns}
-                    filterBuckets={filterBuckets}
                     dynamicFilterBuckets={dynamicFilterBuckets}
                     filterSelections={filterSelections}
                     filterColors={filterColors}
@@ -144,6 +144,10 @@ const TandemSidebar = ({
                     onClose={onCloseUniversalSearch}
                     onUniversalSearch={onUniversalSearch}
                 />
+            )}
+
+            {activePanel === 'accdocs' && (
+                <DocsPanel selectedElement={selectedElement} />
             )}
 
             {activePanel === 'progress' && (

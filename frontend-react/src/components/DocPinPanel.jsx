@@ -572,42 +572,64 @@ const DocPinPanel = ({
         }
     };
 
-    const handleBatchAttach = () => {
+    const handleBatchAttach = async () => {
         if (selectedItems.size === 0) return;
 
-        const selectedDocs = [];
         const allAvailableFiles = [...files, ...searchResults];
+        const muts = [];
 
         selectedItems.forEach(id => {
             const file = allAvailableFiles.find(f => f.id === id);
             if (file && file.type !== 'FOLDER') {
-                selectedDocs.push({
-                    id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                    nodeId: file.id,
-                    name: file.name,
-                    plano_titulo: file.metadata?.plano_titulo,
+                muts.push({
+                    urn: file.id,
                     url: `${DOCS_API}/view?id=${file.id}&model_urn=${encodeURIComponent(modelUrn)}`,
-                    fullPath: file.fullName || file.path,
-                    type: file.name.split('.').pop().toLowerCase(),
-                    addedAt: new Date().toISOString()
+                    type: file.name.split('.').pop().toLowerCase()
                 });
             }
         });
 
-        if (selectedDocs.length > 0) {
-            if (onAttachBatchDocs) {
-                onAttachBatchDocs(pin.id, selectedDocs);
-            } else {
-                selectedDocs.forEach(doc => {
-                    if (onAttachDoc) onAttachDoc(pin.id, doc);
-                });
-            }
-            showNotify(`${selectedDocs.length} documentos vinculados correctamente`);
-            setSelectedItems(new Set());
-            setBrowsing(false);
-        } else {
+        if (muts.length === 0) {
             showNotify('No se seleccionaron archivos válidos para vincular', 'error');
+            return;
         }
+
+        // 1. Arreglo unidimensional keys (Identificadores semánticos del modelo)
+        const keys = [pin.id]; // Si el pin agrupa varios dbIds, se enviarán todos: pin.targetIds || [pin.id]
+
+        // Payload simétrico y optimizado para la transacción REST
+        const payload = {
+            keys: keys,
+            muts: muts
+        };
+
+        try {
+            // Se despacha a la API remota que el backend Python procesará sin saturar React
+            const res = await fetch(`${BACKEND_URL}/api/docs/mutate-bind`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                showNotify(`${muts.length} URLs inyectadas al elemento (Inyección Simétrica exitosa)`);
+                // Si la Vista requiere enterarse del vínculo, mandamos una actualización local mínima
+                if (onAttachBatchDocs) {
+                    onAttachBatchDocs(pin.id, muts);
+                } else if (onAttachDoc) {
+                    // Fallback local ultraligero
+                    muts.forEach(m => onAttachDoc(pin.id, { id: m.urn, name: `🔗 Link: ${m.urn.substring(0,8)}`, ...m }));
+                }
+            } else {
+                showNotify('El servidor rechazó la inyección simétrica', 'error');
+            }
+        } catch (error) {
+            console.error('[Inyección Simétrica] Error de red:', error);
+            showNotify('Fallo de red al despachar payload.', 'error');
+        }
+
+        setSelectedItems(new Set());
+        setBrowsing(false);
     };
 
     const handleOpenDoc = (doc) => {

@@ -22,9 +22,8 @@ const VALID_TRANSITIONS = {
  */
 const TableRow = ({ index, style, data }) => {
   const { items, selected, toggle, navigate, setActiveFile, onUpdateDescription, onRename, formatSize, formatDate, getInitials, user, isAdmin, onRowMenu, isTrashMode, onShowVersions, columnWidths, renderFileIconSop, editingNodeId, setEditingNodeId, rightClickedId, processingIds, onStatusChange } = data;
-  if (!items) return null;
-  const item = items[index];
-  if (!item) return null;
+  
+  const item = items && items[index] ? items[index] : {};
 
   const [isEditing, setIsEditing] = useState(false);
   const [tempDesc, setTempDesc] = useState(item.description || '');
@@ -34,7 +33,7 @@ const TableRow = ({ index, style, data }) => {
 
   // Sync inline edit from context menu
   React.useEffect(() => {
-    if (editingNodeId && editingNodeId.source === 'table' && editingNodeId.id === item.id) {
+    if (item.id && editingNodeId && editingNodeId.source === 'table' && editingNodeId.id === item.id) {
       setIsEditingName(true);
       let nameToEdit = item.name || '';
       if (item.type !== 'folder' && nameToEdit.includes('.')) {
@@ -52,6 +51,8 @@ const TableRow = ({ index, style, data }) => {
     setTempDesc(item.description || '');
     if (!isEditingName) setTempName(item.name || '');
   }, [item.id, item.name, item.description, isEditingName]);
+
+  if (!items || !items[index]) return null;
 
   const isFolder = item.type === 'folder';
   const isSelected = selected.has(item.fullName);

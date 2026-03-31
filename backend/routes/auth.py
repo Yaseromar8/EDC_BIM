@@ -257,7 +257,8 @@ def register():
                 'id': new_id,
                 'name': name,
                 'email': email,
-                'role': 'user'
+                'role': 'user',
+                'session_token': create_session(new_id)
             }), 200
             
     except Exception as e:

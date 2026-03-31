@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './viewer.css';
 import './IconMarkup.css'; // Add this line
 import { BaseExtension } from '../aps/extensions/BaseExtension';
-import { findLeafNodes, getBulkProperties } from '../aps/utils/model';
+import { findLeafNodes, getBulkProperties, calculateDynamicFilterBucketsNative, extractPartidasNative, extractSchemaNative } from '../aps/utils/model';
 import IconMarkupExtension from '../aps/extensions/IconMarkupExtension';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
@@ -98,6 +98,8 @@ const Viewer = ({
     const longPressTimerRef = useRef(null);
     const isLongPressRef = useRef(false);
     const ghostMeshRef = useRef(null);
+    const viewerReadyRef = useRef(false);
+    const recalcDebounceRef = useRef(null);
 
     // --- States ---
     const [viewerReady, setViewerReady] = useState(false);
@@ -108,6 +110,11 @@ const Viewer = ({
     useEffect(() => {
         hiddenModelUrnsRef.current = hiddenModelUrns;
     }, [hiddenModelUrns]);
+
+    // Sync viewerReadyRef (para que closures estáticas con deps [] siempre lean el valor actual)
+    useEffect(() => {
+        viewerReadyRef.current = viewerReady;
+    }, [viewerReady]);
 
     // AI-Driven Model Isolation (Aislamiento Inteligente)
     useEffect(() => {
@@ -413,6 +420,7 @@ const Viewer = ({
             };
 
             Autodesk.Viewing.Initializer(options, () => {
+                console.log(`[APS LMV] ⏱️ ${performance.now().toFixed(2)}ms - Evento: INITIALIZATION_FINISHED - Entorno WebGL listo.`);
                 isInitializingRef.current = false; // Init finished
 
                 // 3. Check if unmounted during async init
@@ -454,6 +462,14 @@ const Viewer = ({
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);
                 viewer.start();
 
+                // INYECCIÓN DE EVENTOS DE CICLO DE VIDA (TRACING)
+                viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, () => {
+                     console.log(`[APS LMV] ⏱️ ${performance.now().toFixed(2)}ms - Evento: GEOMETRY_LOADED_EVENT - Geometría renderizada.`);
+                });
+                viewer.addEventListener(Autodesk.Viewing.OBJECT_TREE_CREATED_EVENT, () => {
+                     console.log(`[APS LMV] ⏱️ ${performance.now().toFixed(2)}ms - Evento: OBJECT_TREE_CREATED_EVENT - Base de datos de propiedades lista.`);
+                });
+
                 // 🚀 FORCE OFFICIAL ACC/BIM360 LOOK & FEEL
                 viewer.setTheme('light-theme'); // Use light theme as in reference image 2/4
                 
@@ -469,7 +485,7 @@ const Viewer = ({
                 }
 
                 // 🚀 PERFORMANCE OPTIMIZATIONS
-                viewer.setGhosting(false); // Desactiva renderizado transparente pesado
+                viewer.setGhosting(true); // Reactivamos Ghosting nativo según requerimiento (efecto Rayos-X en aislamiento)
                 viewer.setProgressiveRendering(true); // Carga progresiva anti-congelamiento
                 viewer.setQualityLevel(false, false); // Apaga antialiasing y oclusión ambiental (maximiza FPS)
                 viewer.setGroundShadow(false);
@@ -546,24 +562,20 @@ const Viewer = ({
 
         let props = model.allProps || [];
 
-        // ON-DEMAND FETCH
-        if (!props || props.length === 0) {
-            console.warn('[Viewer] Properties missing. Fetching on-demand...');
-            try {
-                const leafIds = await findLeafNodes(model);
-                if (!mountedRef.current) return;
-                props = await getBulkProperties(model, leafIds);
-                if (!mountedRef.current) return;
-                model.allProps = props; // Cache it
-                console.log('[Viewer] On-demand properties fetched:', props.length);
-            } catch (err) {
-                console.error('[Viewer] Failed to fetch on-demand properties:', err);
-                return;
-            }
-        }
+        // REMOVIDO: Ya no extraeremos propiedades dinámicas de toda la base de datos de manera bruta.
+        // Solo indicamos a App.jsx que el modelo ha cargado de manera ligera.
+        console.log(`[Viewer] Model Loaded: ${urn}. Native APS Processing applied.`);
+        onModelProperties?.({ urn, props: [] });
 
-        console.log(`[Viewer] Dispatching ${props.length} properties for model: ${urn}`);
-        onModelProperties?.({ urn, props });
+        // Extraer listado de Partidas (Liviano) en el Background
+        extractPartidasNative(model).then(partidas => {
+            window.dispatchEvent(new CustomEvent('viewer-partidas-extracted', { detail: { urn, partidas } }));
+        }).catch(err => console.error('[Viewer] Error extracting partidas', err));
+
+        // Extraer esquema general para popular Configurator
+        extractSchemaNative(model).then(schema => {
+            window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema } }));
+        }).catch(err => console.error('[Viewer] Error extracting schema', err));
 
         // Ensure model is visible (centered)
         setTimeout(() => {
@@ -576,6 +588,288 @@ const Viewer = ({
             }
         }, 500);
     }, [onModelProperties]);
+
+    // Recalcular Filtros nativamente desde el API de APS (con debounce para evitar double-fire)
+    useEffect(() => {
+        const handleRecalculateFilters = (event) => {
+            // Debounce: cancela ejecución previa si llega otra dentro de 50ms
+            if (recalcDebounceRef.current) clearTimeout(recalcDebounceRef.current);
+            recalcDebounceRef.current = setTimeout(async () => {
+            const detail = event.detail;
+            const models = Object.values(loadedModelsRef.current);
+            if(models.length === 0) return;
+            // Iterate over all models and merge buckets natively
+            let mergedResult = {};
+            let mergedValidIdsByUrn = {};
+
+            for(const model of models) {
+                if(!model.getPropertyDb()) continue;
+                try {
+                    // Extract structured response from Worker
+                    const calculationResult = await calculateDynamicFilterBucketsNative(model, detail.filterProperties, detail.filterSelections);
+                    const res = calculationResult.buckets;
+                    const validIds = calculationResult.globalValidDbIds || [];
+
+                    // Group intersected Global IDs by Model URN
+                    validIds.forEach(item => {
+                        if (!mergedValidIdsByUrn[item.modelUrn]) mergedValidIdsByUrn[item.modelUrn] = new Set();
+                        mergedValidIdsByUrn[item.modelUrn].add(item.id);
+                    });
+
+                    // Merge res into mergedResult
+                    for(let propId in res) {
+                         if(!mergedResult[propId]) mergedResult[propId] = { meta: res[propId].meta, total: 0, values: {}, valueIndex: {} };
+                         mergedResult[propId].total += res[propId].total;
+                         res[propId].values.forEach(v => {
+                             if(!mergedResult[propId].values[v.value]) {
+                                 mergedResult[propId].values[v.value] = { count: 0, dbIds: [] };
+                             }
+                             mergedResult[propId].values[v.value].count += v.count;
+                             mergedResult[propId].values[v.value].dbIds.push(...v.dbIds);
+                         });
+                    }
+                } catch(e) { console.error('[Viewer] Error on native calculation', e); }
+            }
+            
+            // Format to expected shapes
+            const finalBuckets = {};
+            for(let propId in mergedResult) {
+                 const arr = Object.keys(mergedResult[propId].values).map(val => ({
+                      value: val,
+                      count: mergedResult[propId].values[val].count,
+                      dbIds: mergedResult[propId].values[val].dbIds
+                 }));
+                 arr.sort((a,b) => b.count === a.count ? a.value.localeCompare(b.value) : b.count - a.count);
+                 
+                 const valueIndex = {};
+                 arr.forEach(entry => { valueIndex[entry.value] = entry; });
+
+                 finalBuckets[propId] = {
+                      meta: mergedResult[propId].meta,
+                      total: mergedResult[propId].total,
+                      values: arr,
+                      valueIndex: valueIndex
+                 };
+            }
+
+            // Enviar respuesta cruzada al App.jsx
+            window._lastCalculatedBuckets = finalBuckets;
+            // Almacenar valid IDs para Inventory filtrado
+            window._lastValidDbIds = mergedValidIdsByUrn;
+            window._lastHasActiveFilters = Object.keys(detail.filterSelections || {}).some(k => detail.filterSelections[k].length > 0);
+            window.dispatchEvent(new CustomEvent('filters-calculated', { detail: finalBuckets }));
+
+            // --- AUTO-ISOLATION INTERACTION WITH 3D MODEL ---
+            const viewer = viewerRef.current;
+            const isReady = viewerReadyRef.current;
+            console.log(`[VIEWER EXECUTE] ✅ viewerRef.current exists: ${!!viewer}, viewerReadyRef.current: ${isReady}`);
+            console.log(`[VIEWER CACHE] mergedValidIdsByUrn keys:`, Object.keys(mergedValidIdsByUrn), `total URNs:`, Object.keys(mergedValidIdsByUrn).length);
+            Object.entries(mergedValidIdsByUrn).forEach(([urn, ids]) => console.log(`[VIEWER CACHE]   URN ${urn}: ${ids.size} dbIds válidos`));
+            
+            if (viewer && isReady) {
+                const activeFilters = Object.keys(detail.filterSelections || {}).filter(k => detail.filterSelections[k].length > 0);
+                console.log(`[VIEWER EXECUTE] activeFilters count: ${activeFilters.length}`, activeFilters);
+                
+                if (activeFilters.length === 0) {
+                     console.log(`[VIEWER EXECUTE] 🔄 No active filters. Resetting isolation per-model.`);
+                     const modelsQueue = viewer.impl.modelQueue().getModels();
+                     modelsQueue.forEach(m => viewer.isolate([], m));
+                } else {
+                     // Forzar ghosting activo ANTES de aislar
+                     viewer.setGhosting(true);
+                     // Apply per-model isolation that respects setGhosting(true)
+                     // Modelos con IDs validos: se aislan esos IDs (el resto se ghostea)
+                     // Modelos SIN IDs: se aisla el nodo raiz invisible, ghosteando toda la geometria visible
+                     const modelsQueue = viewer.impl.modelQueue().getModels();
+                     let totalIsolated = 0;
+
+                     modelsQueue.forEach((m, idx) => {
+                         const urn = m.urn || m.getData()?.urn;
+                         
+                         // Omitimos modelos ocultos por SOURCES
+                         if (hiddenModelUrnsRef.current && hiddenModelUrnsRef.current.includes(urn)) {
+                             return;
+                         }
+
+                         const idsSet = mergedValidIdsByUrn[urn];
+                         if (idsSet && idsSet.size > 0) {
+                             // Modelo TIENE elementos que pasan el filtro: aislar solo esos
+                             const idsArray = Array.from(idsSet);
+                             viewer.isolate(idsArray, m);
+                             console.log(`[VIEWER EXECUTE]   Model ${idx}: ${idsArray.length} elements isolated (ghosting rest)`);
+                             totalIsolated += idsArray.length;
+                         } else {
+                             // Modelo NO tiene la propiedad: ghostear toda su geometria
+                             // Per-model isolate con ID inexistente: todo queda ghosteado
+                             viewer.isolate([-1], m);
+                             console.log(`[VIEWER EXECUTE]   Model ${idx}: fully ghosted (no matching property)`);
+                         }
+                     });
+
+                     console.log(`[VIEWER EXECUTE] \uD83C\uDFAF Per-model isolation complete: ${totalIsolated} total elements visible`);
+                     viewer.impl.invalidate(true, true, true);
+                }
+                
+                // Forzamos re-apagado inmediato para asegurar paridad con SOURCES 
+                if (hiddenModelUrnsRef.current && hiddenModelUrnsRef.current.length > 0) {
+                     const modelsQueue2 = viewer.impl.modelQueue().getModels();
+                     modelsQueue2.forEach(m => {
+                         const urn = m.urn || m.getData()?.urn;
+                         if (hiddenModelUrnsRef.current.includes(urn)) {
+                             viewer.hideModel(m.id);
+                         }
+                     });
+                }
+            }
+            }, 50); // debounce 50ms
+        };
+
+        window.addEventListener('recalculate-filters', handleRecalculateFilters);
+        return () => {
+            if (recalcDebounceRef.current) clearTimeout(recalcDebounceRef.current);
+            window.removeEventListener('recalculate-filters', handleRecalculateFilters);
+        };
+    }, []);
+
+    // --- LMV Native Event Listeners for Filters (Refactoring) ---
+    useEffect(() => {
+        const viewer = viewerRef.current;
+        if (!viewer || !viewerReady) return;
+
+        const handleIsolate = (e) => {
+            const { propId, values } = e.detail;
+            console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: isolate-property-bucket - propId: ${propId}, values:`, values);
+            if (!propId || !values || values.length === 0) {
+                console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Ejecutando: per-model isolate([]) [Reset]`);
+                const modelsQueue = viewer.impl.modelQueue().getModels();
+                modelsQueue.forEach(m => viewer.isolate([], m));
+                return;
+            }
+
+            const buckets = window._lastCalculatedBuckets;
+            if (buckets && buckets[propId]) {
+                // Group by model URN for multi-model aggregate isolation
+                const idsByUrn = {};
+                values.forEach(val => {
+                    const entry = buckets[propId].valueIndex[val];
+                    if (entry && entry.dbIds) {
+                        entry.dbIds.forEach(item => {
+                            if (!idsByUrn[item.modelUrn]) idsByUrn[item.modelUrn] = new Set();
+                            idsByUrn[item.modelUrn].add(item.id);
+                        });
+                    }
+                });
+                
+                viewer.setGhosting(true);
+                const modelsQueue = viewer.impl.modelQueue().getModels();
+                modelsQueue.forEach(m => {
+                    const urn = m.urn || m.getData?.()?.urn;
+                    const idsSet = idsByUrn[urn];
+                    if (idsSet && idsSet.size > 0) {
+                        viewer.isolate(Array.from(idsSet), m);
+                    } else {
+                        // Ghostear toda la geometria de este modelo
+                        viewer.isolate([-1], m);
+                    }
+                });
+                
+                viewer.impl.invalidate(true, true, true);
+                console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Per-model isolation applied to ${modelsQueue.length} modelo(s)`);
+                
+                // Collect all valid IDs for fitToView
+                const allIds = [];
+                Object.values(idsByUrn).forEach(set => set.forEach(id => allIds.push(id)));
+                if (allIds.length > 0) viewer.fitToView(allIds);
+            } else {
+                // Reset: Show all on every model
+                const modelsQueue = viewer.impl.modelQueue().getModels();
+                modelsQueue.forEach(m => viewer.isolate([], m));
+            }
+        };
+
+        const handleTheme = (e) => {
+            const { propId, values, active } = e.detail;
+            console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: theme-property-bucket - propId: ${propId}, active: ${active}`);
+            
+            const PALETTE = [
+                '#3AA0FF', '#F97316', '#10B981', '#F43F5E', '#A855F7', '#0EA5E9', '#EAB308',
+                '#EF4444', '#8B5CF6', '#EC4899', '#6366F1', '#14B8A6', '#84CC16', '#F59E0B'
+            ];
+
+            const modelsQueue = viewer.impl.modelQueue().getModels();
+            
+            if (!active) {
+                console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Ejecutando: viewer.clearThemingColors()`);
+                modelsQueue.forEach(m => viewer.clearThemingColors(m));
+                return;
+            }
+
+            const buckets = window._lastCalculatedBuckets;
+            if (buckets && buckets[propId]) {
+                const valsToTheme = (!values || values.length === 0) ? buckets[propId].values.map(v => v.value) : values;
+
+                // Operación no bloqueante asíncrona
+                requestAnimationFrame(() => {
+                    modelsQueue.forEach(m => viewer.clearThemingColors(m));
+                    valsToTheme.forEach((val) => {
+                        const originalIndex = buckets[propId].values.findIndex(v => v.value === val);
+                        const entry = buckets[propId].valueIndex[val];
+                        if (originalIndex !== -1 && entry) {
+                            const hexColor = PALETTE[originalIndex % PALETTE.length];
+                            
+                            // Parse hex to Vector4
+                            const rgb = parseInt(hexColor.replace('#', ''), 16);
+                            const r = ((rgb >> 16) & 255) / 255;
+                            const g = ((rgb >> 8) & 255) / 255;
+                            const b = (rgb & 255) / 255;
+                            const colorVector = new window.THREE.Vector4(r, g, b, 1);
+
+                            // Agrupar IDs por URN para asegurar Theming en multiples modelos LMV
+                            const dbIdsByUrn = {};
+                            let totalIds = 0;
+                            entry.dbIds.forEach(item => {
+                                if(!dbIdsByUrn[item.modelUrn]) dbIdsByUrn[item.modelUrn] = [];
+                                dbIdsByUrn[item.modelUrn].push(item.id);
+                                totalIds++;
+                            });
+                            console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Disparando: viewer.setThemingColor() en ${totalIds} elementos con color Hex: ${hexColor}`);
+
+                            modelsQueue.forEach(m => {
+                                const urn = m.urn || m.getData?.()?.urn;
+                                const ids = dbIdsByUrn[urn];
+                                if (ids && ids.length > 0) {
+                                    ids.forEach(id => viewer.setThemingColor(id, colorVector, m, true));
+                                }
+                            });
+                        }
+                    });
+                });
+            }
+        };
+
+        const handleReset = () => {
+             console.log(`[VIEWER EXECUTE] 🔄 RESET ALL triggered`);
+             const modelsQueue = viewer.impl.modelQueue().getModels();
+             modelsQueue.forEach(m => viewer.clearThemingColors(m));
+             if (viewer.setAggregateIsolation) {
+                 viewer.setAggregateIsolation([]);
+             } else {
+                 viewer.showAll();
+                 viewer.isolate();
+             }
+             viewer.fitToView();
+        };
+
+        window.addEventListener('isolate-property-bucket', handleIsolate);
+        window.addEventListener('theme-property-bucket', handleTheme);
+        window.addEventListener('filters-reset-all', handleReset);
+
+        return () => {
+            window.removeEventListener('isolate-property-bucket', handleIsolate);
+            window.removeEventListener('theme-property-bucket', handleTheme);
+            window.removeEventListener('filters-reset-all', handleReset);
+        };
+    }, [viewerReady]);
 
     // Cleanup and Event Listeners
     useEffect(() => {
@@ -612,9 +906,28 @@ const Viewer = ({
                 // Extraemos las propiedades de Revit del elemento
                 model.getProperties(dbId, (result) => {
                     const props = result.properties || [];
+                    
+                    // Recuperación Inmersiva: Buscar propiedad tipo hipervínculo (dataType: 25)
+                    const docLinkProp = props.find(p => p.dataType === 25 || (p.displayName && p.displayName.toLowerCase().includes('documento') && p.displayValue && String(p.displayValue).startsWith('http')));
+                    
+                    if (docLinkProp) {
+                        const url = docLinkProp.displayValue || docLinkProp.displayCategory;
+                        if (url && typeof url === 'string') {
+                            console.log('[Viewer] ¡DocLink Detectado! Despachando recuperación inmersiva:', url);
+                            window.dispatchEvent(new CustomEvent('viewer-open-doc-panel', {
+                                detail: { url, dbId, urn, propName: docLinkProp.displayName }
+                            }));
+                        }
+                    }
+
                     if (onSelectionChanged) {
                         onSelectionChanged({ dbId, urn, props, model });
                     }
+
+                    // Bidireccional: Notificar Inventory para highlight de fila correspondiente
+                    window.dispatchEvent(new CustomEvent('inventory-highlight-row', {
+                        detail: { dbId, urn }
+                    }));
                 });
             } else {
                 if (onSelectionChanged) onSelectionChanged(null);
