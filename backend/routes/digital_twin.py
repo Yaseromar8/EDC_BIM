@@ -222,55 +222,12 @@ def get_config_route():
         config['models'] = [m for m in config['models'] if m.get('appProjectId') == project_id]
     
     
-    # Auto-update logic: Check for latest versions of linked docs
-    # Activado: asegura que los modelos apuntan a la última versión (Tip Version)
-    token, error = get_internal_token()
-    if not error and token:
-        updated_any = False
-        models = config.get('models', [])
-        
-        for model in models:
-            # Solo actualizar modelos enlazados directamente desde ACC (DOCS), no GEMELOS estáticos ni LOCALES
-            if model.get('source') == 'DOCS' and model.get('projectId') and model.get('itemId'):
-                try:
-                    # Quick check for latest tip
-                    url = f"https://developer.api.autodesk.com/data/v1/projects/{model['projectId']}/items/{model['itemId']}"
-                    headers = {'Authorization': f'Bearer {token}'}
-                    resp = requests.get(url, headers=headers, timeout=3) # Timeout corto para no bloquear la carga
-                    
-                    if resp.ok:
-                        data = resp.json()
-                        latest_version_id = data['data']['relationships']['tip']['data']['id']
-                        current_version_id = model.get('versionId')
-                        
-                        if latest_version_id and latest_version_id != current_version_id:
-                            print(f"[AutoUpdate] Se detectó una nueva versión. Actualizando {model['name']} a {latest_version_id}")
-                            
-                            # Calcular nuevo URN base64 sin paddle
-                            urn_bytes = base64.urlsafe_b64encode(latest_version_id.encode('utf-8'))
-                            new_urn = urn_bytes.decode('utf-8').rstrip('=')
-                            
-                            model['urn'] = new_urn
-                            model['versionId'] = latest_version_id
-                            
-                            # Opcional: Extraer también la nueva fecha de modificación
-                            try:
-                                v_url = f"https://developer.api.autodesk.com/data/v1/projects/{model['projectId']}/versions/{latest_version_id}"
-                                v_resp = requests.get(v_url, headers=headers)
-                                if v_resp.ok:
-                                    v_data = v_resp.json()
-                                    model['lastModifiedTime'] = v_data['data']['attributes']['lastModifiedTime']
-                            except:
-                                pass
-                                
-                            updated_any = True
-                except Exception as e:
-                    print(f"[AutoUpdate] Check failed para {model.get('name')}: {e}")
-                    continue
-        
-        if updated_any:
-            # Si se actualizó algún URN, guardar los cambios en la BD para que la próxima carga sea rápida
-            save_project_config_internal(config)
+    # NOTA: Se eliminó el Auto-Update silencioso que existía aquí.
+    # Razón: Actualizaba el URN del modelo automáticamente al abrir la app,
+    # sin re-extraer metadata a PostgreSQL ni permitir elegir vista.
+    # Esto causaba desfase entre el visor 3D y los datos del inventario.
+    # Las actualizaciones ahora son controladas por el usuario via el botón "Update"
+    # en el menú de SourceFilesPanel, que usa POST /api/config/project/update.
             
     return jsonify(config)
 
@@ -296,6 +253,9 @@ def add_model_route():
         "added_at": datetime.now().isoformat(),
         "appProjectId": app_project_id # Segregation tag
     }
+    
+    if data.get('defaultViewGuid'):
+        new_model["defaultViewGuid"] = data.get('defaultViewGuid')
     
     config.setdefault('models', []).append(new_model)
     if save_project_config_internal(config):
@@ -469,6 +429,8 @@ def relink_model_route():
     data = request.json
     target_id = data.get('targetId')
     app_project_id = data.get('project') # Segregation
+    if isinstance(app_project_id, dict):
+        app_project_id = app_project_id.get('id')
     new_data = data.get('newModel')
 
     if not target_id or not new_data:
@@ -489,6 +451,8 @@ def relink_model_route():
             m['lastModifiedTime'] = new_data.get('lastModifiedTime')
             m['projectId'] = new_data.get('projectId')
             m['itemId'] = new_data.get('itemId')
+            if new_data.get('defaultViewGuid'):
+                m['defaultViewGuid'] = new_data.get('defaultViewGuid')
             # appProjectId stays same to keep it in same view
             break
     

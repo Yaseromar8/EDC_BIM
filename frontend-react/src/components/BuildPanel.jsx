@@ -85,7 +85,8 @@ const BuildPanel = ({
     // Pin Placement
     placementMode,
     onTogglePlacement,
-    onCameraCapture
+    onCameraCapture,
+    onPinMoveRequest // New Prop for moving pins
 }) => {
     const selectedPin = pins.find(p => p.id === selectedPinId);
     const [activeMenu, setActiveMenu] = useState(null);
@@ -123,7 +124,8 @@ const BuildPanel = ({
         const typeMap = {
             'DOCS': 'docs',
             'AVANCE': 'avance',
-            'RESTRICCIONES': 'restriction'
+            'RESTRICCIONES': 'restriction',
+            'MAQUINARIA': 'maquinaria'
         };
         const targetType = typeMap[activeTab];
         return pins.filter(p => p.type === targetType);
@@ -164,7 +166,7 @@ const BuildPanel = ({
         <div className="build-panel source-files-panel">
             {/* TABS NAVIGATION */}
             <div className="bp-tabs">
-                {['DATA', 'DOCS', 'AVANCE', 'RESTRICCIONES'].map((tab) => (
+                {['DATA', 'DOCS', 'AVANCE', 'RESTRICCIONES', 'MAQUINARIA'].map((tab) => (
                     <button
                         key={tab}
                         className={`bp-tab ${activeTab === tab ? 'active' : ''}`}
@@ -177,7 +179,7 @@ const BuildPanel = ({
 
 
             {/* SHARED CONTENT FOR ALL TABS (Filtered) */}
-            {(activeTab === 'DATA' || activeTab === 'DOCS' || activeTab === 'AVANCE' || activeTab === 'RESTRICCIONES') && (
+            {(activeTab === 'DATA' || activeTab === 'DOCS' || activeTab === 'AVANCE' || activeTab === 'RESTRICCIONES' || activeTab === 'MAQUINARIA') && (
                 <>
                     {/* Header... (Shared) - Only show Models in DATA tab though? User said "when in DATA all are seen". Implies structure might be different per tab.
                         Let's keep Models ONLY in DATA for now as per "DATA contains what we have".
@@ -297,14 +299,15 @@ const BuildPanel = ({
                             <span className="sfp-section-title">
                                 {activeTab === 'DATA' ? 'Puntos de Control' :
                                     activeTab === 'DOCS' ? 'Documentos' :
-                                        activeTab === 'AVANCE' ? 'Avance' : 'Restricciones'}
+                                        activeTab === 'AVANCE' ? 'Avance' : 
+                                            activeTab === 'MAQUINARIA' ? 'Maquinaria' : 'Restricciones'}
                             </span>
                             <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         // Determine type based on tab
-                                        const typeMap = { 'DATA': 'data', 'DOCS': 'docs', 'AVANCE': 'avance', 'RESTRICCIONES': 'restriction' };
+                                        const typeMap = { 'DATA': 'data', 'DOCS': 'docs', 'AVANCE': 'avance', 'RESTRICCIONES': 'restriction', 'MAQUINARIA': 'maquinaria' };
                                         onTogglePlacement(typeMap[activeTab]);
                                     }}
                                     className="sfp-import-text-btn"
@@ -345,8 +348,9 @@ const BuildPanel = ({
                                                 <span className="pin-index-badge" style={{
                                                     background: pin.type === 'restriction' ? '#f59e0b' : // Yellow/Orange
                                                         pin.type === 'docs' ? '#3b82f6' :        // Blue
-                                                            pin.type === 'avance' ? '#9ca3af' :      // Grey
-                                                                '#6b7280'                                // Default Grey
+                                                            pin.type === 'maquinaria' ? '#a855f7' :  // Purple
+                                                                pin.type === 'avance' ? '#9ca3af' :      // Grey
+                                                                    '#6b7280'                                // Default Grey
                                                 }}>
                                                     {/* In DATA tab, index might be confusing if we filter, but filteredPins updates index. 
                                                        Wait, index comes from map. If filtering, indices change relative to view. Perfect.
@@ -360,7 +364,7 @@ const BuildPanel = ({
                                                 {/* Type Indicator Icon if in DATA tab */}
                                                 {activeTab === 'DATA' && pin.type && pin.type !== 'data' && (
                                                     <span style={{ fontSize: '10px', marginRight: '6px', opacity: 0.7 }}>
-                                                        {pin.type === 'docs' ? '📄' : pin.type === 'restriction' ? '⚠️' : '✅'}
+                                                        {pin.type === 'docs' ? '📄' : pin.type === 'restriction' ? '⚠️' : pin.type === 'maquinaria' ? '🚜' : '✅'}
                                                     </span>
                                                 )}
 
@@ -397,6 +401,15 @@ const BuildPanel = ({
                                                                 }}>
                                                                     <span className="sfp-menu-icon" style={{ fontSize: '12px' }}>✏️</span> Renombrar
                                                                 </button>
+                                                                {pin.type === 'maquinaria' && (
+                                                                    <button onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (onPinMoveRequest) onPinMoveRequest(pin.id);
+                                                                        setActiveMenu(null);
+                                                                    }}>
+                                                                        <span className="sfp-menu-icon" style={{ fontSize: '12px' }}>📍</span> Mover
+                                                                    </button>
+                                                                )}
                                                                 {/* 
                                                                 <button onClick={(e) => {
                                                                     e.stopPropagation();

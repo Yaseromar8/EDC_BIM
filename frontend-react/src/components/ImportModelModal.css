@@ -1,433 +1,593 @@
-.import-modal {
-    width: 600px;
-    max-width: 90vw;
-    display: flex;
-    flex-direction: column;
-    background: #2a2a2a;
-    /* Slightly lighter than pure black */
-    color: #f1f1f1;
-    border-radius: 4px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-    font-family: "Artifakt Element", sans-serif;
-    border: 1px solid #444;
+/* ═══════════════════════════════════════════════════════════════
+   ImportModelModal — Tandem / ACC-Style Design System
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Overlay ── */
+.import-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: importFadeIn 0.2s ease-out;
 }
 
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px 24px;
-    /* No border bottom in some Tandem screens, but Image 02 implies a separation? Usually yes. */
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+@keyframes importFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
-.modal-header h3 {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    color: #fff;
-    text-transform: uppercase;
+/* ── Modal Panel ── */
+.import-modal-panel {
+  width: 540px;
+  max-width: 92vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: #1e2127;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  color: #e4e4e7;
+  overflow: hidden;
+  animation: importSlideUp 0.25s ease-out;
 }
 
-.modal-close {
-    background: none;
-    border: none;
-    color: #999;
-    cursor: pointer;
-    font-size: 14px;
-    padding: 4px;
+@keyframes importSlideUp {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.modal-close:hover {
-    color: #fff;
+/* ── Header ── */
+.import-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* Tabs */
-.import-tabs {
-    display: flex;
-    padding: 0 24px;
-    gap: 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-top: 10px;
+.import-header h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #fff;
+  text-transform: uppercase;
 }
 
-.import-tab {
-    background: transparent;
-    border: none;
-    color: #aaa;
-    padding: 10px 0;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 13px;
-    border-bottom: 2px solid transparent;
-    text-transform: uppercase;
+.import-close-btn {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s;
+}
+.import-close-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.import-tab:hover {
-    color: #ccc;
+/* ── Tabs ── */
+.import-tab-bar {
+  display: flex;
+  padding: 0 24px;
+  gap: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.import-tab.active {
-    color: #3899ec;
-    /* Tandem Blue */
-    border-bottom-color: #3899ec;
+.import-tab-btn {
+  background: transparent;
+  border: none;
+  color: #777;
+  padding: 12px 0 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid transparent;
+  text-transform: uppercase;
+  transition: all 0.15s;
+}
+.import-tab-btn:hover { color: #bbb; }
+.import-tab-btn.active {
+  color: #3b9eff;
+  border-bottom-color: #3b9eff;
+}
+.import-tab-btn:disabled { opacity: 0.4; pointer-events: none; }
+
+/* ── Body Content ── */
+.import-body-content {
+  padding: 20px 24px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
-/* Body */
-.import-body {
-    padding: 24px;
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
+/* ── Field ── */
+.import-field {
+  margin-bottom: 16px;
 }
 
-/* Docs Selectors Row */
-.docs-selectors-row {
-    display: flex;
-    gap: 40px;
-    /* Space between the two headers */
-    margin-bottom: 20px;
+.import-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: #ccc;
+  margin-bottom: 6px;
 }
 
-.doc-selector-wrapper {
-    position: relative;
+.import-req {
+  color: #ef4444;
+  margin-left: 1px;
 }
 
-.doc-selector-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: #fff;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    opacity: 0.9;
-    padding: 4px 8px;
-    border-radius: 2px;
+.import-input {
+  width: 100%;
+  background: #111318;
+  border: 1px solid #333;
+  color: #fff;
+  padding: 9px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  height: 38px;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.import-input:focus {
+  border-color: #3b9eff;
+  outline: none;
+}
+.import-input::placeholder { color: #555; }
+
+/* ── Drop Zone ── */
+.import-dropzone {
+  border: 1.5px dashed #444;
+  border-radius: 6px;
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: all 0.2s;
+  cursor: pointer;
+  padding: 16px;
+}
+.import-dropzone:hover,
+.import-dropzone.hover {
+  border-color: #3b9eff;
+  background: rgba(59, 158, 255, 0.04);
+}
+.import-dropzone.has-file {
+  border-style: solid;
+  border-color: #333;
+  cursor: default;
+  min-height: unset;
+  padding: 12px 16px;
 }
 
-.doc-selector-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-    opacity: 1;
+.import-drop-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  color: #888;
+}
+.import-drop-hint p {
+  margin: 0;
+  font-size: 13px;
+  color: #aaa;
+}
+.import-drop-formats {
+  font-size: 11px;
+  color: #666;
+}
+.import-ext-highlight {
+  color: #3b9eff;
 }
 
-/* Dropdown Menu */
-.doc-dropdown-menu {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    min-width: 300px;
-    background: #333;
-    border: 1px solid #111;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-    z-index: 100;
-    margin-top: 4px;
-    border-radius: 2px;
-    padding: 4px 0;
+/* File Selected State */
+.import-file-selected {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+.import-file-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.import-file-name {
+  font-size: 13px;
+  color: #ddd;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.import-file-size {
+  font-size: 11px;
+  color: #666;
+}
+.import-file-remove {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.import-file-remove:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
 }
 
-.doc-dropdown-item {
-    padding: 10px 16px;
-    font-size: 13px;
-    color: #e0e0e0;
-    cursor: pointer;
-    transition: background 0.1s;
+/* ── File Selected (inside dropzone) ── */
+.import-file-selected {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 0;
 }
 
-.doc-dropdown-item:hover,
-.doc-dropdown-item.selected {
-    background: #0696D7;
-    /* Autodesk Blue */
-    color: #fff;
+/* ── Phase / View Selector ── */
+.import-phase-row {
+  display: flex;
+  width: 100%;
 }
 
-/* Tree */
-.tree-container-clean {
-    height: 250px;
-    overflow-y: auto;
-    margin-bottom: 20px;
-    /* Clean look, no border, native tree will handle padding */
-    padding-left: 10px;
+.import-phase-selector {
+  position: relative;
 }
 
-/* Form Groups */
-.form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 16px;
+.import-phase-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #111318;
+  border: 1px solid #333;
+  border-right: 1px solid #2a2a2e;
+  color: #ddd;
+  padding: 0 12px;
+  height: 38px;
+  min-width: 90px;
+  border-radius: 4px 0 0 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+.import-phase-btn:hover { background: #1a1d24; }
+
+.import-phase-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 120px;
+  background: #252830;
+  border: 1px solid #333;
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 120;
+  overflow: hidden;
+}
+.import-phase-option {
+  padding: 8px 14px;
+  font-size: 13px;
+  color: #ccc;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.import-phase-option:hover,
+.import-phase-option.active {
+  background: #3b9eff;
+  color: #fff;
 }
 
-.form-group label {
-    font-size: 12px;
-    color: #fff;
-    /* Image 02 shows white label */
-    font-weight: 500;
+.import-phase-input {
+  flex: 1;
+  background: #111318;
+  border: 1px solid #333;
+  border-left: none;
+  color: #fff;
+  padding: 0 12px;
+  height: 38px;
+  border-radius: 0 4px 4px 0;
+  font-size: 13px;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.import-phase-input:focus {
+  border-color: #3b9eff;
+  outline: none;
+}
+.import-phase-input::placeholder { color: #555; }
+
+/* ── Checkbox ── */
+.import-checkbox-row {
+  margin-top: 8px;
+  padding-top: 4px;
 }
 
-.required {
-    color: #ff5555;
-    margin-left: 2px;
+.import-check-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #bbb;
+  user-select: none;
 }
 
-/* Input styling to match reference */
-.modal-input {
-    background: #111;
-    /* Darker background */
-    border: 1px solid #444;
-    color: #fff;
-    padding: 10px 12px;
-    border-radius: 2px;
-    font-size: 14px;
-    height: 40px;
-    transition: border-color 0.2s;
+.import-check-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1.5px solid #555;
+  background: transparent;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.import-check-box.checked {
+  background: #2d8fa5;
+  border-color: #2d8fa5;
 }
 
-.modal-input:focus {
-    border-color: #0696D7;
-    /* Blue focus */
-    outline: none;
+/* ── Progress View ── */
+.import-progress-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 40px 0;
+  gap: 12px;
 }
 
-/* Drop Zone - Visible dashed border */
-.drop-zone {
-    border: 1px dashed #555;
-    /* Distinct dashed border */
-    border-radius: 4px;
-    height: 180px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    /* Clean background */
-    transition: all 0.2s;
-    cursor: pointer;
-    margin-top: 4px;
+.import-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(59, 158, 255, 0.15);
+  border-top-color: #3b9eff;
+  border-radius: 50%;
+  animation: importSpin 0.8s linear infinite;
 }
 
-.drop-zone:hover {
-    border-color: #0696D7;
-    background: rgba(6, 150, 215, 0.05);
-    /* Subtle blue tint */
+@keyframes importSpin {
+  to { transform: rotate(360deg); }
 }
 
-/* Upload Icon - Remove circle, just icon */
-.upload-icon-circle {
-    width: 40px;
-    height: 40px;
-    background: transparent;
-    /* No circle bg */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #ccc;
-    margin-bottom: 12px;
+.import-progress-label {
+  font-size: 14px;
+  color: #ccc;
+  margin: 0;
 }
 
-.upload-svg {
-    width: 24px;
-    height: 24px;
+.import-progress-track {
+  width: 80%;
+  height: 4px;
+  background: #333;
+  border-radius: 4px;
+  overflow: hidden;
 }
 
-/* Phase Split Control */
-.phase-input-group {
-    display: flex;
-    gap: 0;
-    width: 100%;
+.import-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b9eff 0%, #60b4ff 100%);
+  border-radius: 4px;
+  transition: width 0.4s ease;
 }
 
-.phase-btn {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: #111;
-    /* Match input bg */
-    border: 1px solid #444;
-    border-right: 1px solid #333;
-    /* Divider */
-    color: #f1f1f1;
-    padding: 0 12px;
-    height: 40px;
-    min-width: 100px;
-    border-radius: 2px 0 0 2px;
-    cursor: pointer;
-    font-size: 14px;
+.import-progress-pct {
+  font-size: 13px;
+  color: #888;
+  font-variant-numeric: tabular-nums;
 }
 
-.phase-btn:hover {
-    background: #1a1a1a;
+/* ── DOCS Tab ── */
+.import-selectors-row {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 14px;
 }
 
-.phase-text-input {
-    flex: 1;
-    background: #111;
-    border: 1px solid #444;
-    border-left: none;
-    /* Join */
-    color: #fff;
-    padding: 0 12px;
-    height: 40px;
-    border-radius: 0 2px 2px 0;
-    font-size: 14px;
-    transition: border-color 0.2s;
+.import-selector-wrap {
+  position: relative;
 }
 
-.phase-text-input:focus {
-    border-color: #0696D7;
-    /* Focus blue */
-    outline: none;
-    /* When focused, show full border effectively or just visually ok */
+.import-selector-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.import-selector-trigger:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
-/* Custom Select Dropdown */
-.select-wrapper {
-    position: relative;
-    width: 100%;
+.import-selector-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 260px;
+  background: #252830;
+  border: 1px solid #333;
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 120;
+  overflow: hidden;
 }
 
-.modal-select {
-    width: 100%;
-    background: #333;
-    border: 1px solid #555;
-    color: #fff;
-    padding: 10px 12px;
-    padding-right: 30px;
-    border-radius: 2px;
-    font-size: 13px;
-    appearance: none;
-    cursor: pointer;
+.import-selector-option {
+  padding: 9px 14px;
+  font-size: 13px;
+  color: #ccc;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.import-selector-option:hover,
+.import-selector-option.active {
+  background: #3b9eff;
+  color: #fff;
 }
 
-.modal-select:focus {
-    border-color: #3899ec;
-    outline: none;
+.import-tree-container {
+  height: 240px;
+  overflow-y: auto;
+  margin-bottom: 14px;
+  padding-left: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #444 transparent;
+}
+.import-tree-container::-webkit-scrollbar { width: 5px; }
+.import-tree-container::-webkit-scrollbar-track { background: transparent; }
+.import-tree-container::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+
+.import-info-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(46, 204, 113, 0.06);
+  border: 1px solid rgba(46, 204, 113, 0.18);
+  border-radius: 6px;
+  margin-bottom: 10px;
 }
 
-.select-arrow {
-    position: absolute;
-    right: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    pointer-events: none;
-    color: #fff;
+/* ── Inline File Progress (Tandem-style) ── */
+.import-file-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  background: #111318;
+  border: 1px solid #333;
+  border-radius: 4px;
+  min-height: 36px;
+}
+.import-file-inline.extracting {
+  border-color: #3b9eff33;
+  background: linear-gradient(90deg, rgba(59,158,255,0.06) 0%, #111318 100%);
+}
+.import-file-inline-name {
+  flex: 1;
+  font-size: 12px;
+  color: #ccc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.import-file-inline-pct {
+  font-size: 12px;
+  color: #3b9eff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 32px;
+  text-align: right;
+}
+.import-file-inline-x {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+  display: flex;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.import-file-inline-x:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
 }
 
-/* Checkbox - Custom Style */
-.checkbox-container {
-    margin-top: 4px;
-    display: flex;
-    align-items: center;
+/* ── View Selector (DOCS tab) ── */
+.import-view-selector {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #111318;
+  border: 1px solid #333;
+  color: #ddd;
+  padding: 8px 12px;
+  height: 38px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: border-color 0.15s;
+}
+.import-view-selector:hover {
+  border-color: #555;
 }
 
-.tandem-checkbox {
-    display: block;
-    position: relative;
-    padding-left: 26px;
-    cursor: pointer;
-    font-size: 13px;
-    color: #ddd;
-    user-select: none;
+/* ── Footer ── */
+.import-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.tandem-checkbox input {
-    position: absolute;
-    opacity: 0;
-    cursor: pointer;
-    height: 0;
-    width: 0;
+.import-btn-cancel {
+  background: transparent;
+  border: 1px solid #444;
+  color: #ccc;
+  padding: 7px 18px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
 }
-
-.checkmark {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 16px;
-    width: 16px;
-    background-color: transparent;
-    border: 1px solid #666;
-    border-radius: 2px;
+.import-btn-cancel:hover {
+  border-color: #666;
+  color: #fff;
 }
+.import-btn-cancel:disabled { opacity: 0.4; pointer-events: none; }
 
-.tandem-checkbox:hover input~.checkmark {
-    border-color: #3899ec;
+.import-btn-primary {
+  background: #3b9eff;
+  border: none;
+  color: #fff;
+  padding: 7px 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.15s;
 }
-
-.tandem-checkbox input:checked~.checkmark {
-    background-color: #3899ec;
-    border-color: #3899ec;
+.import-btn-primary:hover:not(:disabled) {
+  background: #2b8ce0;
 }
-
-.checkmark:after {
-    content: "";
-    position: absolute;
-    display: none;
-}
-
-.tandem-checkbox input:checked~.checkmark:after {
-    display: block;
-}
-
-.tandem-checkbox .checkmark:after {
-    left: 5px;
-    top: 1px;
-    width: 4px;
-    height: 8px;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-}
-
-/* Footer */
-.modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    padding: 16px 24px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-    /* Very subtle or none depending on image */
-    margin-top: auto;
-}
-
-.modal-btn-cancel {
-    background: transparent;
-    border: 1px solid #666;
-    color: #eee;
-    padding: 6px 16px;
-    border-radius: 2px;
-    cursor: pointer;
-    font-size: 13px;
-}
-
-.modal-btn-cancel:hover {
-    border-color: #999;
-}
-
-.modal-btn-primary {
-    background: #0696D7;
-    /* Autodesk Blue */
-    border: 1px solid #0696D7;
-    color: #fff;
-    padding: 8px 24px;
-    border-radius: 2px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-}
-
-.modal-btn-primary:disabled {
-    background: #444;
-    border-color: #444;
-    color: #888;
-    cursor: not-allowed;
-}
-
-.modal-btn-primary:hover:not(:disabled) {
-    background: #2b8ce0;
-}
-
-.modal-btn-primary:active {
-    background: #0585BE;
+.import-btn-primary:disabled {
+  background: #333;
+  color: #666;
+  cursor: not-allowed;
 }

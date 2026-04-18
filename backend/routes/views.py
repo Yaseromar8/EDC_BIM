@@ -38,6 +38,34 @@ except Exception:
     pass
 
 
+
+def get_view_by_id(view_id):
+    """Reads a single view from PostgreSQL by ID."""
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, name, project_id, viewer_state, filter_state, config, created_at FROM saved_views WHERE id = %s",
+                (view_id,)
+            )
+            r = cursor.fetchone()
+            if r:
+                return {
+                    "id": r[0],
+                    "name": r[1],
+                    "projectId": r[2],
+                    "viewerState": r[3] or {},
+                    "filterState": r[4] or {},
+                    "config": r[5] or {},
+                    "createdAt": r[6].isoformat() if r[6] else None
+                }
+            return None
+    except Exception as e:
+        print(f"[views] DB read by id failed: {e}")
+        return None
+
+
 def get_views_internal(project_id=None):
     """Reads views from PostgreSQL. Falls back to local JSON if DB unavailable."""
     try:
@@ -108,6 +136,15 @@ def delete_view_from_db(view_id):
 
 
 # --- API Routes ---
+
+
+@views_bp.route("/api/views/<view_id>", methods=["GET"])
+def get_view(view_id):
+    view = get_view_by_id(view_id)
+    if view:
+        return jsonify(view)
+    else:
+        return jsonify({"error": "View not found"}), 404
 
 @views_bp.route('/api/views', methods=['GET'])
 def get_views():

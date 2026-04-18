@@ -10,23 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@capacitor/android": "^8.0.1",
-    "@capacitor/cli": "^8.0.1",
     "@capacitor/core": "^8.0.1",
-    "@tmcw/togeojson": "^3.2.0",
     "axios": "^1.13.5",
     "chart.js": "^4.5.1",
-    "file-saver": "^2.0.5",
-    "frappe-gantt": "^0.6.1",
-    "jszip": "^3.10.1",
+    "html2canvas": "^1.4.1",
     "react": "^19.1.1",
-    "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.1.1",
-    "react-pdf": "^10.4.0",
-    "react-tabulator": "^0.21.0",
-    "react-window": "^1.8.10",
-    "tabulator-tables": "^6.3.1",
-    "xlsx": "^0.18.5"
+    "react-pdf": "^10.4.0"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",

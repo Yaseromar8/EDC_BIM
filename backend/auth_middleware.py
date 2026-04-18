@@ -51,6 +51,7 @@ PUBLIC_PREFIXES = (
     '/api/documents/',        # ACC document linking (2-legged token)
     # ── Secure Share Engine ────────────────────────
     '/api/docs/shared/',      # Public UUID-based document viewer links
+    '/api/views/',            # Public UUID-based shared views
 )
 
 
@@ -149,6 +150,10 @@ def init_auth_middleware(app):
         
         # Skip public endpoints
         if path in PUBLIC_ENDPOINTS:
+            return None
+            
+        # Specific public GET routes for Shared Views functionality
+        if request.method == 'GET' and path in ['/api/config/project', '/api/views']:
             return None
         
         # Skip public prefixes

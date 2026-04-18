@@ -539,3 +539,13 @@
     height: 100vh;
     z-index: 99;
 }
+
+.import-spinner {
+    border-radius: 50%;
+    animation: sfp-spin 1s linear infinite;
+}
+
+@keyframes sfp-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}

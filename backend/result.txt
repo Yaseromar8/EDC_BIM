@@ -1,0 +1,69 @@
+--- MODELS ---
+File Node: CAS01 -> URN: proyectos/PQT8_TALARA
+File Node: CASA02 -> URN: proyectos/PQT8_TALARA
+File Node: CASA04 -> URN: proyectos/PQT8_TALARA
+File Node: ARCHIVO_500 -> URN: proyectos/PQT8_TALARA
+File Node: asdasdas -> URN: proyectos/PQT8_TALARA
+File Node: ARCHIVO_800 -> URN: proyectos/PQT8_TALARA
+File Node: 01_Gestion_de_Proyecto -> URN: b.proj_hospital_matucana_60633
+File Node: 02_Planos_Aprobados -> URN: b.proj_hospital_matucana_60633
+File Node: 03_Modelos_BIM -> URN: b.proj_hospital_matucana_60633
+File Node: 04_Fotos_de_Campo -> URN: b.proj_hospital_matucana_60633
+File Node: 01_Enero -> URN: b.proj_hospital_matucana_60633
+File Node: 02_Febrero -> URN: b.proj_hospital_matucana_60633
+File Node: 05_Informes_Semanales -> URN: b.proj_hospital_matucana_60633
+File Node: 03_Modelos_BIM -> URN: b.proj_hospital_matucana_60635
+File Node: 02_Planos_Aprobados -> URN: b.proj_hospital_matucana_60637
+File Node: 04_Fotos_de_Campo -> URN: b.proj_hospital_matucana_60635
+File Node: 01_Enero -> URN: b.proj_hospital_matucana_60635
+File Node: 03_Modelos_BIM -> URN: b.proj_hospital_matucana_60638
+File Node: 04_Fotos_de_Campo -> URN: b.proj_hospital_matucana_60638
+File Node: 01_Enero -> URN: b.proj_hospital_matucana_60638
+File Node: 02_Febrero -> URN: b.proj_hospital_matucana_60638
+File Node: 05_Informes_Semanales -> URN: b.proj_hospital_matucana_60638
+File Node: Archivos de proyecto -> URN: proyectos/PQT8_TALARA
+File Node: ARCHIVOS_01 -> URN: proyectos/PQT8_TALARA
+File Node: Archivos de proyecto -> URN: proyectos/Proyectos_GeneralesProyecto_de_Prueba
+File Node: MODELOS -> URN: proyectos/Proyectos_GeneralesProyecto_de_Prueba
+File Node: casa -> URN: proyectos/PQT8_TALARA
+File Node: archivo02 -> URN: proyectos/PQT8_TALARA
+File Node: asdasd -> URN: proyectos/PQT8_TALARA
+File Node: 100005-CSRC001-000-XX-MD-ST-000003.rvt -> URN: proyectos/Proyectos_GeneralesProyecto_de_Prueba
+File Node: CASA03 -> URN: proyectos/PQT8_TALARA
+File Node: ARCHIVO_0100 -> URN: proyectos/PQT8_TALARA
+File Node: casa01 -> URN: proyectos/PQT8_TALARA
+File Node: 032 -> URN: proyectos/PQT8_TALARA
+File Node: casasd -> URN: proyectos/PQT8_TALARA
+File Node: 01_Gestion_de_Proyecto -> URN: b.proj_hospital_matucana_60635
+File Node: 02_Planos_Aprobados -> URN: b.proj_hospital_matucana_60635
+File Node: 01_Gestion_de_Proyecto -> URN: b.proj_hospital_matucana_60637
+File Node: 06_Minutas_y_Contratos -> URN: b.proj_hospital_matucana_60633
+File Node: 03_Modelos_BIM -> URN: b.proj_hospital_matucana_60637
+File Node: 01_Gestion_de_Proyecto -> URN: b.proj_hospital_matucana_60638
+File Node: proyectos -> URN: global
+File Node: PQT8_TALARA -> URN: global
+File Node: 04_Fotos_de_Campo -> URN: b.proj_hospital_matucana_60637
+File Node: 02_Planos_Aprobados -> URN: b.proj_hospital_matucana_60638
+File Node: TEST_AUDIT_FOLDER -> URN: proyectos/PQT8_TALARA
+File Node: DELETE_ME -> URN: proyectos/PQT8_TALARA
+File Node: 01_Enero -> URN: b.proj_hospital_matucana_60637
+File Node: CASA0 -> URN: proyectos/PQT8_TALARA
+File Node: 02_Febrero -> URN: b.proj_hospital_matucana_60635
+File Node: casa dsad -> URN: proyectos/PQT8_TALARA
+File Node: POOL_TEST_ROOT -> URN: proyectos/PQT8_TALARA
+File Node: 02_Febrero -> URN: b.proj_hospital_matucana_60637
+File Node: 500125-CSSP001-000-XX-RP-HD-001008.pdf -> URN: proyectos/PQT8_TALARA
+File Node: 05_Informes_Semanales -> URN: b.proj_hospital_matucana_60635
+File Node: 05_Informes_Semanales -> URN: b.proj_hospital_matucana_60637
+File Node: 06_Minutas_y_Contratos -> URN: b.proj_hospital_matucana_60635
+File Node: 06_Minutas_y_Contratos -> URN: b.proj_hospital_matucana_60637
+File Node: 06_Minutas_y_Contratos -> URN: b.proj_hospital_matucana_60638
+File Node: Archivos de proyecto -> URN: proyectos/Proyectos_GeneralesProyecto_de_Prueba
+File Node: 100005-CSRC001-000-XX-MD-PL-000001.rvt -> URN: proyectos/Proyectos_GeneralesProyecto_de_Prueba
+
+--- ELEMENTS EXTRACTED ---
+inventory_assets table: dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLkJ4RkxyZi1vU1F5YWtnZ3B3YmdLNGc/dmVyc2lvbj0zMQ - 46 elements
+inventory_assets table: dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnJyV05tX28zUlhLWFJsNlZGdzQ5ZGc/dmVyc2lvbj01 - 488 elements
+inventory_assets table: 1_CANAL - 2328 elements
+inventory_assets table: dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnpWOE5LU2pzVDRxcUxLQ2plUm1pSEE/dmVyc2lvbj01 - 192 elements
+inventory_assets table: dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLkJ4RkxyZi1vU1F5YWtnZ3B3YmdLNGc/dmVyc2lvbj0yNw - 558 elements

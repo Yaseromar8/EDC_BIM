@@ -706,6 +706,7 @@ from routes.projects import projects_bp
 from routes.ai import ai_bp
 from routes.schedule import schedule_bp
 from routes.uploads import uploads_bp
+from routes.inventory import inventory_bp
 
 app.register_blueprint(digital_twin_bp)
 app.register_blueprint(maps_bp)
@@ -718,6 +719,7 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(ai_bp)
 app.register_blueprint(schedule_bp, url_prefix='/api/schedule')
 app.register_blueprint(uploads_bp)
+app.register_blueprint(inventory_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
@@ -730,8 +732,210 @@ ensure_ai_brain_schema()
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()
- 
- 
+
+@app.route('/api/inventory/schema', methods=['GET'])
+def get_inventory_schema():
+    """
+    Fase 6 - Paso 2: Smart Filter Schema.
+    Extrae la lista unificada de parámetros (Categoría::Nombre) directamente 
+    desde nuestra fuente de la verdad (PostgreSQL) usando una muestra representativa.
+    """
+    try:
+        from db import get_db_connection
+        import json as _json
+        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Muestreo rápido de 1000 filas. En BIM, el esquema es altamente homogéneo.
+            cursor.execute('''
+                SELECT properties 
+                FROM inventory_assets 
+                WHERE properties IS NOT NULL 
+                LIMIT 2000
+            ''')
+            rows = cursor.fetchall()
+            
+            schema_keys = set()
+            for row in rows:
+                props = row[0]
+                if isinstance(props, str):
+                    try:
+                        props = _json.loads(props)
+                    except:
+                        continue
+                
+                if isinstance(props, dict):
+                    # Identificar la estructura anidada de APS {"Categoria": {"Propiedad": "Valor"}}
+                    for cat, val in props.items():
+                        if isinstance(val, dict):
+                            for prop_name in val.keys():
+                                schema_keys.add(f"{cat}::{prop_name}")
+                        else:
+                            # Caso plano
+                            schema_keys.add(f"General::{cat}")
+                            
+            # Formatear a la sintaxis esperada por React (FilterConfiguratorModal)
+            schema = []
+            for key_name in schema_keys:
+                if "::" in key_name:
+                    cat, name = key_name.split("::", 1)
+                else:
+                    cat, name = "General", key_name
+                schema.append({
+                    "id": key_name,
+                    "name": name,
+                    "category": cat
+                })
+                
+            # Agregamos parámetros clave fijos por si no están en el sample
+            schema.append({"id": "Item::Category", "name": "Revit Category (EN)", "category": "System"})
+            schema.append({"id": "Elemento::Categoría", "name": "Revit Category (ES)", "category": "System"})
+            schema.append({"id": "Datos de identidad::Categoría", "name": "Revit Category (ID)", "category": "System"})
+            schema.append({"id": "__category__::__category__", "name": "Revit Category (Native)", "category": "System"})
+            schema.append({"id": "Standard::Revit Categories", "name": "Revit Categories", "category": "Standard"})
+            schema.append({"id": "Item::Type", "name": "Revit Type", "category": "System"})
+            schema.append({"id": "Standard::Sources", "name": "Sources", "category": "Standard"})
+            schema.append({"id": "System::Tandem Category", "name": "Tandem Category", "category": "System"})
+            
+            print(f"[API] /api/inventory/schema generado: {len(schema)} propiedades únicas extraídas.")
+            return jsonify({'schema': schema}), 200
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/inventory', methods=['GET'])
+def get_inventory():
+    """
+    Fase 3: API Endpoint para entregar el inventario inmutable y masivo al Frontend.
+    
+    Query params:
+      ?include_props=true  → Incluye columna JSONB properties (más lento, ~60s timeout)
+      (default)            → Solo columnas operativas (rápido, <2s)
+    """
+    try:
+        from db import get_db_connection
+        import json as _json
+        
+        include_props = request.args.get('include_props', 'true').lower() == 'true'
+        model_urn = request.args.get('model_urn')
+        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Aumentamos el timeout para esta query pesada (JSONB ~1779 filas)
+            cursor.execute("SET statement_timeout = '120000'")  # 120 segundos
+            
+            # Construir la query base y los parámetros
+            params = []
+            
+            if include_props:
+                query = '''
+                    SELECT external_id, name, material, installation_status, properties, model_urn, source_urn 
+                    FROM inventory_assets
+                '''
+            else:
+                query = '''
+                    SELECT external_id, name, material, installation_status, model_urn, source_urn 
+                    FROM inventory_assets
+                '''
+            
+            # Agregar filtrado por frente (model_urn)
+            if model_urn and model_urn != 'global':
+                query += ' WHERE model_urn = %s'
+                params.append(model_urn)
+            
+            cursor.execute(query, tuple(params))
+            
+            rows = cursor.fetchall()
+            
+            # Formateamos la respuesta
+            # Aseguramos parseo a String para evitar errores de serialización
+            inventory_list = []
+            for row in rows:
+                item = {
+                    'external_id': str(row[0]) if row[0] else None,
+                    'name': str(row[1]) if row[1] else "",
+                    'material': str(row[2]) if row[2] else "",
+                    'installation_status': str(row[3]) if row[3] else "",
+                    'model_urn': str(row[5] if include_props else row[4]) if (row[5] if include_props else row[4]) else None,
+                    'source_urn': str(row[6] if include_props else row[5]) if (row[6] if include_props else row[5]) else None
+                }
+                if include_props:
+                    item['properties'] = row[4] or {}
+                inventory_list.append(item)
+            
+            print(f"[API] /api/inventory OK: {len(inventory_list)} items (props={'YES' if include_props else 'NO'})")
+            
+            # Restaurar timeout del pool al valor original (30s)
+            cursor.execute("SET statement_timeout = '30000'")
+            
+            return jsonify(inventory_list), 200
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[API] Error Fatal en /api/inventory: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/inventory', methods=['PATCH'])
+def update_inventory():
+    # Fase 6 - Paso 3: Live Editing
+    try:
+        data = request.json
+        ext_id = data.get('external_id')
+        field_name = data.get('fieldName')
+        new_val = data.get('fieldValue')
+        
+        if not ext_id or not field_name:
+             return jsonify({'error': 'Missing external_id or fieldName'}), 400
+             
+        from db import get_db_connection
+        import json as _json
+        
+        base_cols = {'Name': 'name', 'Material': 'material', 'Status': 'installation_status'}
+        
+        with get_db_connection() as conn:
+             cursor = conn.cursor()
+             
+             if field_name in base_cols:
+                  col = base_cols[field_name]
+                  cursor.execute(f'UPDATE inventory_assets SET {col} = %s WHERE external_id = %s', (new_val, ext_id))
+             else:
+                  cursor.execute('SELECT properties FROM inventory_assets WHERE external_id = %s', (ext_id,))
+                  row = cursor.fetchone()
+                  if row:
+                      props = row[0]
+                      if isinstance(props, str): 
+                          try:
+                              props = _json.loads(props)
+                          except:
+                              props = {}
+                      
+                      updated = False
+                      for cat, attrs in props.items():
+                          if isinstance(attrs, dict) and field_name in attrs:
+                               attrs[field_name] = new_val
+                               updated = True
+                               break
+                      
+                      if not updated:
+                           if 'Live Edit' not in props:
+                               props['Live Edit'] = {}
+                           props['Live Edit'][field_name] = new_val
+                           
+                      cursor.execute('UPDATE inventory_assets SET properties = %s::jsonb WHERE external_id = %s', (_json.dumps(props), ext_id))
+             
+             conn.commit()
+             return jsonify({'status': 'ok'}), 200
+    except Exception as e:
+         import traceback
+         traceback.print_exc()
+         return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 3000))
     app.run(host='0.0.0.0', port=port, debug=True)

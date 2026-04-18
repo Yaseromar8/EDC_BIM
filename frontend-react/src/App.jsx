@@ -22,6 +22,7 @@ import TandemSidebar from './components/TandemSidebar';
 import TandemFilterPanel from './components/TandemFilterPanel';
 import PdfViewer from './components/PdfViewer';
 import ScheduleDetailedView from './components/ScheduleDetailedView';
+import MaqPinPanel from './components/MaqPinPanel';
 import { uploadFile } from './services/uploadService';
 import { apiFetch } from './utils/apiFetch';
 
@@ -490,7 +491,13 @@ function App() {
 
   const [models, setModels] = useState([]);
   const [relinkTargetModel, setRelinkTargetModel] = useState(null); // Relink State
+  const [extractionJobs, setExtractionJobs] = useState({}); // Tracking BG extractions
+
   const [hiddenModelUrns, setHiddenModelUrns] = useState([]);
+  
+  // Shared View Mode
+  const [isSharedMode, setIsSharedMode] = useState(() => !!new URLSearchParams(window.location.search).get('shareView'));
+  const [sharedViewData, setSharedViewData] = useState(null);
   const [savedViews, setSavedViews] = useState([]); // New State
   const [documents, setDocuments] = useState([]);
   const [sprites, setSprites] = useState([]);
@@ -499,6 +506,70 @@ function App() {
   const [spritePlacementActive, setSpritePlacementActive] = useState(false);
   const [activePanel, setActivePanel] = useState(null);
   const [panelVisible, setPanelVisible] = useState(false);
+  const [inventoryTabOpen, setInventoryTabOpen] = useState(false);
+  const [inventoryPanelHeight, setInventoryPanelHeight] = useState(280);
+
+  // Popout Window Bridge: Forward events between visor and undocked inventory
+  useEffect(() => {
+    // From popout → parent: row click selection
+    const handlePopoutMessage = (e) => {
+      if (!e.data || !e.data.type) return;
+      
+      if (e.data.type === 'inventory-popout-select') {
+        // Translate extId to dbId and trigger viewer selection
+        const extId = e.data.extId;
+        if (!extId || !window.rosettaToDbId) return;
+        for (const urn in window.rosettaToDbId) {
+          const mapping = window.rosettaToDbId[urn];
+          if (mapping && mapping[extId]) {
+            window.dispatchEvent(new CustomEvent('viewer-select', {
+              detail: { dbIds: [mapping[extId]], urn }
+            }));
+            break;
+          }
+        }
+      }
+      
+      if (e.data.type === 'inventory-dock') {
+        // Re-open inline panel
+        setInventoryTabOpen(true);
+        window.__inventoryPopup = null;
+      }
+    };
+
+    // From visor → popout: forward isolation & highlight events
+    const forwardIsolation = (e) => {
+      if (window.__inventoryPopup && !window.__inventoryPopup.closed) {
+        window.__inventoryPopup.postMessage({
+          type: 'inventory-popout-isolation',
+          isolatedExtIds: e.detail.isolatedExtIds
+        }, '*');
+      }
+    };
+
+    const forwardHighlight = (e) => {
+      if (window.__inventoryPopup && !window.__inventoryPopup.closed) {
+        const { dbId, urn } = e.detail;
+        const safeUrn = String(urn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const urnDict = window.rosettaToExtId?.[urn] || window.rosettaToExtId?.[safeUrn];
+        if (urnDict && urnDict[dbId]) {
+          window.__inventoryPopup.postMessage({
+            type: 'inventory-popout-highlight',
+            extId: urnDict[dbId]
+          }, '*');
+        }
+      }
+    };
+
+    window.addEventListener('message', handlePopoutMessage);
+    window.addEventListener('inventory-isolation-sync', forwardIsolation);
+    window.addEventListener('inventory-highlight-row', forwardHighlight);
+    return () => {
+      window.removeEventListener('message', handlePopoutMessage);
+      window.removeEventListener('inventory-isolation-sync', forwardIsolation);
+      window.removeEventListener('inventory-highlight-row', forwardHighlight);
+    };
+  }, []);
   const [scheduleData, setScheduleData] = useState(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
@@ -595,6 +666,8 @@ function App() {
   // Doc Pin Panel State
   const [docPinPanelOpen, setDocPinPanelOpen] = useState(false);
   const [selectedDocPin, setSelectedDocPin] = useState(null);
+  const [maqPinPanelOpen, setMaqPinPanelOpen] = useState(false);
+  const [selectedMaqPin, setSelectedMaqPin] = useState(null);
 
 
 
@@ -896,7 +969,61 @@ function App() {
     return () => window.removeEventListener('viewer-partidas-extracted', handlePartidas);
   }, []);
 
-  // Load views on mount
+  // ------------------------------------
+  // SHARED VIEW DETECTION
+  // ------------------------------------
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const shareId = params.get('shareView');
+    if (shareId) {
+      setIsSharedMode(true);
+      apiFetch(`${BACKEND_URL}/api/views/${shareId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (!data.error) {
+            console.log('[App] Shared View loaded successfully:', data.name);
+            setSharedViewData(data);
+            if (data.projectId) {
+               setSelectedProject({
+                   id: data.projectId,
+                   name: data.projectId,
+                   baseName: data.projectId
+               });
+            }
+          }
+        })
+        .catch(err => console.error("Error loading shared view:", err));
+    }
+  }, []);
+
+  // ------------------------------------
+  // SHARED VIEW AUTO-RESTORE
+  // ------------------------------------
+  useEffect(() => {
+    if (!isSharedMode || !sharedViewData) return;
+
+    let restored = false;
+    const handleGeometryLoaded = () => {
+      if (!restored) {
+        console.log('[App] Auto-restoring shared view state after geometry loaded...');
+        
+        // Aplica el estado almacenado (Cámara, colores, filtros, etc.)
+        if (sharedViewData.filterState) {
+          if (sharedViewData.filterState.filterSelections) setFilterSelections(sharedViewData.filterState.filterSelections);
+          if (sharedViewData.filterState.filterColors) setFilterColors(sharedViewData.filterState.filterColors);
+          if (sharedViewData.filterState.filterProperties) setFilterProperties(sharedViewData.filterState.filterProperties);
+          if (sharedViewData.filterState.hiddenModelUrns) setHiddenModelUrns(sharedViewData.filterState.hiddenModelUrns);
+        }
+        
+        window.dispatchEvent(new CustomEvent('viewer-restore-state', { detail: sharedViewData.viewerState }));
+        restored = true;
+      }
+    };
+
+    window.addEventListener('viewer-geometry-loaded', handleGeometryLoaded);
+    return () => window.removeEventListener('viewer-geometry-loaded', handleGeometryLoaded);
+  }, [isSharedMode, sharedViewData]);
+
   // Load views on mount
   useEffect(() => {
     if (!selectedProject) return;
@@ -1068,7 +1195,9 @@ function App() {
     setAvailableProperties([]);
     setDynamicFilterBuckets({});
     setHiddenModelUrns([]);
+    window.postgresInventory = null;
 
+    // Load Project Config Models
     apiFetch(`${BACKEND_URL}/api/config/project?project=${selectedProject.id}`)
       .then(res => res.json())
       .then(data => {
@@ -1079,12 +1208,154 @@ function App() {
             label: m.name
           }));
           setModels(mapped);
+          
+          // Hydrate activeViewableGuids for custom views
+          const initialViews = {};
+          mapped.forEach(m => {
+            if (m.defaultViewGuid) {
+              initialViews[m.urn] = m.defaultViewGuid;
+            }
+          });
+          if (Object.keys(initialViews).length > 0) {
+            setActiveViewableGuids(prev => ({ ...prev, ...initialViews }));
+          }
         }
       })
       .catch(err => console.error("Error loading project config:", err));
+
+    // INYECCIÓN CDE PROFESIONAL: Descargar inventario completo de la base de datos PostgreSQL
+    // Una vez descargado, evitará usar las consultas asfixiantes (O(N^2)) del visor LMV local.
+    apiFetch(`${BACKEND_URL}/api/inventory?model_urn=${encodeURIComponent(selectedProject.id)}`)
+      .then(res => {
+          if (!res.ok) throw new Error('Falló el fetch a /api/inventory');
+          return res.json();
+      })
+      .then(dbData => {
+          const schemaMap = {};
+          
+          // Flatten as in InventoryDataGrid
+          const mappedData = dbData.map(node => {
+              let row = {
+                  dbId: node.external_id, 
+                  model_urn: node.model_urn,
+                  source_urn: node.source_urn || node.model_urn,
+                  Name: node.name,
+                  Material: node.material || '',
+                  Status: node.installation_status || ''
+              };
+              if (node.properties && typeof node.properties === 'object') {
+                  Object.entries(node.properties).forEach(([cName, cVal]) => {
+                      if (typeof cVal === 'object' && cVal !== null) {
+                          Object.entries(cVal).forEach(([pName, pVal]) => {
+                              const val = String(pVal).trim();
+                              // FIX: Solo sobreescribir si el nuevo valor no está vacío,
+                              // o si la propiedad aún no existe. Esto protege los valores válidos.
+                              if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
+                                  row[pName] = val;
+                              }
+                              
+                              // Construir esquema exacto para FilterConfigurator
+                              const key = cName + '::' + pName;
+                              if (!schemaMap[key]) {
+                                  schemaMap[key] = {
+                                      id: key,
+                                      name: pName,
+                                      category: cName,
+                                      group: 'text',
+                                      path: cName + ' ▸ ' + pName
+                                  };
+                              }
+                          });
+                      }
+                  });
+              }
+              return row;
+          });
+          window.postgresInventory = mappedData;
+          console.log(`[Piedra Rosetta] Descargados ${mappedData.length} activos desde PostgreSQL (Enterprise CDE Mode)`);
+          
+          const schemaList = Object.values(schemaMap).sort((a,b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+          window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema: schemaList } }));
+      })
+      .catch(err => console.error("[Piedra Rosetta] Error pre-cargando inventario PostgreSQL:", err));
+
   }, [selectedProject]);
 
-  const handleLinkDocs = useCallback(async (modelsInput, isGemelo = false) => {
+  // Background Extraction Logic for Updates/Relinks
+  const triggerBackgroundExtraction = async (urn) => {
+    setExtractionJobs(prev => ({ ...prev, [urn]: { progress: 0, status: 'Iniciando extracción...', isActive: true } }));
+    console.log("[Extraction] Iniciando autollamada a la DB para URN:", urn);
+    try {
+      const res = await apiFetch(`${BACKEND_URL}/api/inventory/extract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urn, target_urn: selectedProject ? selectedProject.id : urn })
+      });
+      if (!res.ok) throw new Error("Error iniciando job");
+      const { job_id } = await res.json();
+      
+      const pollInterval = setInterval(async () => {
+        try {
+          const stRes = await apiFetch(`${BACKEND_URL}/api/inventory/extract/status/${job_id}`);
+          if (stRes.ok) {
+            const stData = await stRes.json();
+            
+            setExtractionJobs(prev => ({
+              ...prev, 
+              [urn]: { progress: stData.progress || 0, status: stData.message || '', isActive: true }
+            }));
+
+            if (stData.status === 'success') {
+              clearInterval(pollInterval);
+              setExtractionJobs(prev => ({ ...prev, [urn]: { ...prev[urn], progress: 100, isActive: false } }));
+              // Invalida cache de inventario global para que fuerce una llamada fresca al DB
+              window.__inventoryCache = null; 
+            } else if (stData.status === 'error') {
+              clearInterval(pollInterval);
+              setExtractionJobs(prev => ({ ...prev, [urn]: { ...prev[urn], status: 'Error', isActive: false } }));
+            }
+          }
+        } catch (e) {
+             console.error("Polling error:", e);
+        }
+      }, 3000);
+    } catch (e) {
+      console.error("[Extraction] Error:", e);
+      setExtractionJobs(prev => ({ ...prev, [urn]: { status: 'Fallo al iniciar', isActive: false } }));
+    }
+  };
+
+  const handleModelUpdate = useCallback(async (urn) => {
+    if (!selectedProject) return alert("Error: No project context.");
+    try {
+      const res = await apiFetch(`${BACKEND_URL}/api/config/project/update`, {
+        method: 'POST',
+                body: JSON.stringify({ urn, project: selectedProject.id })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.updated && data.config?.models) {
+          alert(`Model updated to latest version!`);
+          setModels(data.config.models.map(m => ({ ...m, label: m.name })));
+          
+          if (data.newUrn) {
+            // FIRE AND FORGET EXTRACTION
+            triggerBackgroundExtraction(data.newUrn);
+          }
+        } else if (data.message) {
+          alert(data.message);
+        }
+      } else {
+        const err = await res.json();
+        alert(`Update failed: ${err.error || 'Unknown error'}`);
+      }
+    } catch (e) {
+      console.error("Error updating model:", e);
+      alert("Error updating model. See console.");
+    }
+  }, [selectedProject]);
+
+  const handleLinkDocs = useCallback(async (modelsInput, isGemelo = false, viewGuid = null) => {
     // Determine if input is array
     const models = Array.isArray(modelsInput) ? modelsInput : [modelsInput];
 
@@ -1101,7 +1372,7 @@ function App() {
                     body: JSON.stringify({
             targetId: relinkTargetModel.id,
             oldUrn: relinkTargetModel.urn,
-            project: selectedProject,
+            project: selectedProject.id,
             newModel: {
               urn: newModelData.urn,
               name: newModelData.name || newModelData.label,
@@ -1109,7 +1380,8 @@ function App() {
               versionNumber: newModelData.versionNumber,
               lastModifiedTime: newModelData.lastModifiedTime,
               projectId: newModelData.projectId, // ACC Project
-              itemId: newModelData.itemId
+              itemId: newModelData.itemId,
+              defaultViewGuid: viewGuid
             }
           })
         });
@@ -1118,7 +1390,15 @@ function App() {
           const config = await res.json();
           if (config.models) {
             setModels(config.models.map(m => ({ ...m, label: m.name })));
+            
+            // Apply the new active viewable across the state
+            if (viewGuid) {
+              setActiveViewableGuids(prev => ({ ...prev, [newModelData.urn]: viewGuid }));
+            }
+            
             alert("Model relinked successfully.");
+            // FIRE AND FORGET EXTRACTION
+            triggerBackgroundExtraction(newModelData.urn);
           }
         } else {
           alert("Failed to relink model.");
@@ -1140,12 +1420,13 @@ function App() {
           versionId: model.versionId,
           versionNumber: model.versionNumber,
           lastModifiedTime: model.lastModifiedTime,
-          project: selectedProject.id
+          project: selectedProject.id,
+          defaultViewGuid: viewGuid
         };
 
         const res = await apiFetch(`${BACKEND_URL}${endpoint}`, {
           method: 'POST',
-                    body: JSON.stringify(payload)
+          body: JSON.stringify(payload)
         });
 
         if (res.ok) {
@@ -1159,36 +1440,65 @@ function App() {
         }
       }
 
+      // Si se cargó un gemelo, forzamos recarga de la metadata (inventario Postgres)
+      if (isGemelo) {
+          try {
+              const res = await apiFetch(`${BACKEND_URL}/api/inventory?model_urn=${encodeURIComponent(selectedProject.id)}`);
+              if (res.ok) {
+                  const dbData = await res.json();
+                  const schemaMap = {};
+                  
+                  const mappedData = dbData.map(node => {
+                      let row = {
+                          dbId: node.external_id, 
+                          model_urn: node.model_urn,
+                          source_urn: node.source_urn || node.model_urn,
+                          Name: node.name,
+                          Material: node.material || '',
+                          Status: node.installation_status || ''
+                      };
+                      if (node.properties && typeof node.properties === 'object') {
+                          Object.entries(node.properties).forEach(([cName, cVal]) => {
+                              if (typeof cVal === 'object' && cVal !== null) {
+                                  Object.entries(cVal).forEach(([pName, pVal]) => {
+                                      const val = String(pVal).trim();
+                                      if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
+                                          row[pName] = val;
+                                      }
+                                      
+                                      const key = cName + '::' + pName;
+                                      if (!schemaMap[key]) {
+                                          schemaMap[key] = {
+                                              id: key,
+                                              name: pName,
+                                              category: cName,
+                                              group: 'text',
+                                              path: cName + ' ▸ ' + pName
+                                          };
+                                      }
+                                  });
+                              }
+                          });
+                      }
+                      return row;
+                  });
+                  window.postgresInventory = mappedData;
+                  console.log(`[Piedra Rosetta] Caché reactualizada: ${mappedData.length} activos`);
+                  
+                  const schemaList = Object.values(schemaMap).sort((a,b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+                  window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema: schemaList } }));
+              }
+          } catch(e) {
+              console.error("Error recargando caché postgres:", e);
+          }
+      }
+
     } catch (e) {
       console.error("Error linking model:", e);
       alert("Error procesando los modelos.");
     }
   }, [selectedProject, relinkTargetModel]);
 
-  const handleModelUpdate = useCallback(async (urn) => {
-    if (!selectedProject) return alert("Error: No project context.");
-    try {
-      const res = await apiFetch(`${BACKEND_URL}/api/config/project/update`, {
-        method: 'POST',
-                body: JSON.stringify({ urn, project: selectedProject.id })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.updated && data.config?.models) {
-          alert(`Model updated to latest version!`);
-          setModels(data.config.models.map(m => ({ ...m, label: m.name })));
-        } else if (data.message) {
-          alert(data.message);
-        }
-      } else {
-        const err = await res.json();
-        alert(`Update failed: ${err.error || 'Unknown error'}`);
-      }
-    } catch (e) {
-      console.error("Error updating model:", e);
-      alert("Error updating model. See console.");
-    }
-  }, [selectedProject]);
 
   const handleLocalUpload = useCallback(async (file, label, onProgress) => {
     if (!selectedProject) return alert("Error: No project context.");
@@ -1365,7 +1675,8 @@ function App() {
             fotos: data.fotos || [],
             docs: data.docs || [],
             rfis: data.rfis || [],
-            restricciones: data.restricciones || []
+            restricciones: data.restricciones || [],
+            maquinaria: data.maquinaria || []
           });
         } else {
           console.error(`[App] Failed to fetch tracking data. Status: ${res.status}`);
@@ -1400,6 +1711,15 @@ function App() {
     fetchDocPins();
   }, [selectedProject]);
 
+    useEffect(() => {
+    const handleTooltipUpdate = (e) => {
+      const { pinId, equipo, personal, actividad } = e.detail;
+      handleTrackingPinUpdate('maquinaria', pinId, { equipo, personal, actividad });
+    };
+    window.addEventListener('maqPinUpdateFromTooltip', handleTooltipUpdate);
+    return () => window.removeEventListener('maqPinUpdateFromTooltip', handleTooltipUpdate);
+  }, []);
+
   // Save Tracking Data Helper
   const saveTrackingData = async (newData) => {
     try {
@@ -1413,7 +1733,7 @@ function App() {
     }
   };
 
-  const VALID_TRACKING_CATEGORIES = ['avance', 'fotos', 'docs', 'rfis', 'restricciones'];
+  const VALID_TRACKING_CATEGORIES = ['avance', 'fotos', 'docs', 'rfis', 'restricciones', 'maquinaria'];
 
   const handleTrackingPinCreate = (newPin) => {
     // 🔒 Defensa estructural: Evita inyección de categorías no reconocidas
@@ -1439,6 +1759,9 @@ function App() {
       const val = prompt("Descripción breve de la restricción / alerta:", "Pendiente");
       if (val === null) return;
       pinsToAdd = [{ ...newPin, val, docs: [], color: '#f59e0b', type: 'restriction' }];
+    } else if (trackingTab === 'maquinaria') {
+      // By default machinery pins have empty strings for metadata until edited in the tooltip
+      pinsToAdd = [{ ...newPin, equipo: '', personal: '', actividad: '', color: '#a855f7', type: 'maquinaria' }];
     }
 
 
@@ -1478,6 +1801,9 @@ function App() {
     } else if (type === 'docs' || type === 'restricciones' || type === 'rfis') {
       setDocPinPanelOpen(false);
       setSelectedDocPin(null);
+    } else if (type === 'maquinaria') {
+      setMaqPinPanelOpen(false);
+      setSelectedMaqPin(null);
     }
   };
 
@@ -1896,11 +2222,15 @@ function App() {
   }, []);
 
   // --- RENDER: LOGIN -> LANDING -> APP ---
-  if (!user) {
+  if (!user && !isSharedMode) {
     return <LoginScreen onLogin={handleLoginSuccess} />;
   }
 
-  if (!selectedProject) {
+  if (isSharedMode && !sharedViewData) {
+    return <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', background: '#1c2027', color: 'white', fontFamily: 'sans-serif' }}><h3>Cargando Vista Compartida...</h3></div>;
+  }
+
+  if (!selectedProject && !isSharedMode) {
     return <LandingPage onSelectProject={setSelectedProject} />;
   }
 
@@ -1909,22 +2239,24 @@ function App() {
 
   return (
     <div className={`app-layout ${activeSheet ? 'doc-open' : ''}`} style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden' }}>
-      <TopBar
-        user={user}
-        onLogout={handleLogout}
-        activePanel={activePanel}
-        togglePanel={togglePanel}
-        isViewsActive={activePanel === 'views'}
-        onLogoClick={() => {
-          if (activePanel) {
-            setActivePanel(null);
-          } else {
-            setSelectedProject(null);
-          }
-        }}
-        selectedProject={selectedProject}
-        onUniversalSearch={handleUniversalSearch}
-      />
+      {!isSharedMode && (
+        <TopBar
+          user={user}
+          onLogout={handleLogout}
+          activePanel={activePanel}
+          togglePanel={togglePanel}
+          isViewsActive={activePanel === 'views'}
+          onLogoClick={() => {
+            if (activePanel) {
+              setActivePanel(null);
+            } else {
+              setSelectedProject(null);
+            }
+          }}
+          selectedProject={selectedProject}
+          onUniversalSearch={handleUniversalSearch}
+        />
+      )}
       <div className="app-container" style={{ flex: 1, position: 'relative' }}>
 
         {/* Portal for floating Tandem Overlays (e.g. Heatmaps) */}
@@ -1938,7 +2270,7 @@ function App() {
           </div>
         )}
         {/* Expand Rail Button (Only visible when rail is hidden) */}
-        {!isRailExpanded && (
+        {!isSharedMode && !isRailExpanded && (
           <button
             onClick={toggleRail}
             className="desktop-rail-toggle"
@@ -1966,7 +2298,7 @@ function App() {
         )}
 
         {/* Navigation Rail */}
-        {isRailExpanded && (
+        {!isSharedMode && isRailExpanded && (
           <nav className="app-left-rail" aria-label="Primary tools">
             <button
               type="button"
@@ -2026,8 +2358,8 @@ function App() {
               <button
                 type="button"
                 data-test-id="nav-item-inventory"
-                className={`rail-button ${activePanel === 'inventory' && panelVisible ? 'active' : ''}`}
-                onClick={() => togglePanel('inventory')}
+                className={`rail-button ${inventoryTabOpen ? 'active' : ''}`}
+                onClick={() => setInventoryTabOpen(prev => !prev)}
                 title="Inventory"
               >
                 <InventoryIcon />
@@ -2040,69 +2372,72 @@ function App() {
         )}
 
 
-        <TandemSidebar
-          activePanel={activePanel}
-          panelVisible={panelVisible}
-          models={models}
-          hiddenModelUrns={hiddenModelUrns}
-          selectedElement={selectedElement}
+        {!isSharedMode && (
+          <TandemSidebar
+            activePanel={activePanel}
+            panelVisible={panelVisible}
+            models={models}
+            hiddenModelUrns={hiddenModelUrns}
+            selectedElement={selectedElement}
 
-          dynamicFilterBuckets={dynamicFilterBuckets}
-          filterSelections={filterSelections}
-          filterColors={filterColors}
-          expandedFilters={expandedFilters}
-          facetSearch={facetSearch}
-          visiblePropertyObjects={visiblePropertyObjects}
-          hasMoreProperties={hasMoreProperties}
-          handleToggleModelVisibility={handleToggleModelVisibility}
-          togglePropertyAll={togglePropertyAll}
-          handleValueToggle={handleValueToggle}
-          toggleColor={toggleColor}
-          setFilterConfiguratorOpen={setFilterConfiguratorOpen}
-          setFilterSelections={setFilterSelections}
-          setHiddenModelUrns={setHiddenModelUrns}
-          setExpandedFilters={setExpandedFilters}
-          setFacetSearch={setFacetSearch}
-          setVisiblePropertiesCount={setVisiblePropertiesCount}
-          PALETTE={PALETTE}
-          DEFAULT_VISIBLE_VALUES={DEFAULT_VISIBLE_VALUES}
-          modelViews={modelViews}
-          activeViewableGuids={activeViewableGuids}
-          handleLoadSpecificView={handleLoadSpecificView}
-          handleModelUpdate={handleModelUpdate}
-          removeModel={removeModel}
-          setRelinkTargetModel={setRelinkTargetModel}
-          setImportModalOpen={setImportModalOpen}
-          documents={documents}
-          sprites={sprites}
-          activeSpriteId={activeSpriteId}
-          showSprites={showSprites}
-          spritePlacementActive={spritePlacementActive}
-          handleSpriteSelect={handleSpriteSelect}
-          setDocumentsModalOpen={setDocumentsModalOpen}
-          removeDocument={removeDocument}
-          toggleSpritesVisibility={toggleSpritesVisibility}
-          requestSpritePlacement={requestSpritePlacement}
-          onUniversalSearch={handleUniversalSearch}
-          universalSearch={universalSearch}
-          onOpenDocument={handleOpenDocByNodeId}
-          onCloseUniversalSearch={() => setPanelVisible(false)}
-          BACKEND_URL={BACKEND_URL}
-          scheduleData={scheduleData}
-          setScheduleData={setScheduleData}
+            dynamicFilterBuckets={dynamicFilterBuckets}
+            filterSelections={filterSelections}
+            filterColors={filterColors}
+            expandedFilters={expandedFilters}
+            facetSearch={facetSearch}
+            visiblePropertyObjects={visiblePropertyObjects}
+            hasMoreProperties={hasMoreProperties}
+            handleToggleModelVisibility={handleToggleModelVisibility}
+            togglePropertyAll={togglePropertyAll}
+            handleValueToggle={handleValueToggle}
+            toggleColor={toggleColor}
+            setFilterConfiguratorOpen={setFilterConfiguratorOpen}
+            setFilterSelections={setFilterSelections}
+            setHiddenModelUrns={setHiddenModelUrns}
+            setExpandedFilters={setExpandedFilters}
+            setFacetSearch={setFacetSearch}
+            setVisiblePropertiesCount={setVisiblePropertiesCount}
+            PALETTE={PALETTE}
+            DEFAULT_VISIBLE_VALUES={DEFAULT_VISIBLE_VALUES}
+            modelViews={modelViews}
+            activeViewableGuids={activeViewableGuids}
+            handleLoadSpecificView={handleLoadSpecificView}
+            handleModelUpdate={handleModelUpdate}
+            removeModel={removeModel}
+            setRelinkTargetModel={setRelinkTargetModel}
+            extractionJobs={extractionJobs}
+            setImportModalOpen={setImportModalOpen}
+            documents={documents}
+            sprites={sprites}
+            activeSpriteId={activeSpriteId}
+            showSprites={showSprites}
+            spritePlacementActive={spritePlacementActive}
+            handleSpriteSelect={handleSpriteSelect}
+            setDocumentsModalOpen={setDocumentsModalOpen}
+            removeDocument={removeDocument}
+            toggleSpritesVisibility={toggleSpritesVisibility}
+            requestSpritePlacement={requestSpritePlacement}
+            onUniversalSearch={handleUniversalSearch}
+            universalSearch={universalSearch}
+            onOpenDocument={handleOpenDocByNodeId}
+            onCloseUniversalSearch={() => setPanelVisible(false)}
+            BACKEND_URL={BACKEND_URL}
+            scheduleData={scheduleData}
+            setScheduleData={setScheduleData}
 
-          // Tracking / BuildPanel Props
-          trackingData={trackingData}
-          onTrackingPinClick={handleTrackingPinClick}
-          onTrackingPinDelete={(id) => handleTrackingPinDelete(trackingTab || 'restricciones', id)}
-          onTrackingPlacementToggle={handleTrackingPlacementToggle}
-          trackingPlacementMode={trackingPlacementMode}
-          selectedPinId={selectedProgressPin?.id || selectedDocPin?.id || selectedAlbumPin?.id}
-          onCameraCapture={handleCameraCapture}
-        />
+            // Tracking / BuildPanel Props
+            trackingData={trackingData}
+            onTrackingPinClick={handleTrackingPinClick}
+            onTrackingPinDelete={(id) => handleTrackingPinDelete(trackingTab || 'restricciones', id)}
+            onTrackingPlacementToggle={handleTrackingPlacementToggle}
+            trackingPlacementMode={trackingPlacementMode}
+            selectedPinId={selectedProgressPin?.id || selectedDocPin?.id || selectedAlbumPin?.id}
+            onCameraCapture={handleCameraCapture}
+          />
+        )}
 
         <div className="app-viewer">
-          {activePanel === 'progress' && (
+          {!isSharedMode && activePanel === 'progress' && (
             <div className="tracking-toolbar" style={{
               left: panelDocked && (
                 (trackingTab === 'fotos' && photoAlbumOpen && selectedAlbumPin) ||
@@ -2237,6 +2572,26 @@ function App() {
                 </svg>
                 RESTR.
               </button>
+              <button
+                className="secondary-btn"
+                style={{
+                  background: trackingTab === 'maquinaria' ? '#a855f7' : 'transparent',
+                  color: trackingTab === 'maquinaria' ? '#fff' : '#bbb',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textTransform: 'uppercase',
+                  fontSize: '11px',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                onClick={() => setTrackingTab(prev => prev === 'maquinaria' ? null : 'maquinaria')}
+              >
+                MAQ
+              </button>
 
               {trackingTab && (
                 <button
@@ -2318,10 +2673,68 @@ function App() {
                 </div>
               )}
 
-              {/* INVENTORY DATA GRID - Bottom Panel */}
-              {activePanel === 'inventory' && panelVisible && (
-                <div style={{ height: '320px', flexShrink: 0, borderTop: '1px solid #444', zIndex: 11, background: '#1c2027', display: 'flex', flexDirection: 'column' }}>
-                  <InventoryDataGrid dynamicFilterBuckets={dynamicFilterBuckets} filterSelections={filterSelections} />
+              {/* 6. Maquinaria Pin Panel */}
+          <div className={`draggable-panel ${panelDocked ? 'docked' : 'floating'}`} style={{ display: maqPinPanelOpen ? 'block' : 'none' }}>
+            <MaqPinPanel
+              isOpen={maqPinPanelOpen}
+              onClose={() => setMaqPinPanelOpen(false)}
+              pin={selectedMaqPin}
+              onUpdate={handleTrackingPinUpdate}
+            />
+          </div>
+
+          {/* INVENTORY DATA GRID - Overlay Panel (Tandem Style) */}
+              {inventoryTabOpen && (
+                <div style={{ 
+                  position: 'absolute',
+                  bottom: 0,
+                  left: (activePanel && panelVisible && activePanel !== 'views' && activePanel !== 'inventory' && activePanel !== 'build' && activePanel !== 'schedule') ? '320px' : '0px',
+                  right: 0,
+                  height: `${inventoryPanelHeight}px`, 
+                  zIndex: 11,
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  borderTop: '1px solid #2a2b30',
+                  boxShadow: '0 -2px 12px rgba(0,0,0,0.5)',
+                  pointerEvents: 'auto',
+                  transition: 'left 0.3s ease'
+                }}>
+                  {/* Resize Handle */}
+                  <div 
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      const startY = e.clientY;
+                      const startH = inventoryPanelHeight;
+                      const onMove = (ev) => {
+                        const delta = startY - ev.clientY;
+                        const newH = Math.max(150, Math.min(600, startH + delta));
+                        setInventoryPanelHeight(newH);
+                      };
+                      const onUp = () => {
+                        window.removeEventListener('mousemove', onMove);
+                        window.removeEventListener('mouseup', onUp);
+                      };
+                      window.addEventListener('mousemove', onMove);
+                      window.addEventListener('mouseup', onUp);
+                    }}
+                    style={{
+                      height: '5px',
+                      cursor: 'ns-resize',
+                      background: 'transparent',
+                      position: 'relative',
+                      zIndex: 12,
+                      flexShrink: 0
+                    }}
+                  >
+                    <div style={{ position: 'absolute', left: '50%', top: '1px', transform: 'translateX(-50%)', width: '40px', height: '3px', borderRadius: '2px', background: '#555' }} />
+                  </div>
+                  <InventoryDataGrid 
+                     activeModelUrn={selectedProject?.id || 'global'}
+                     dynamicFilterBuckets={dynamicFilterBuckets} 
+                     filterSelections={filterSelections} 
+                     hiddenModelUrns={hiddenModelUrns} 
+                     onClose={() => setInventoryTabOpen(false)}
+                  />
                 </div>
               )}
 
@@ -2555,6 +2968,7 @@ function App() {
           onClose={() => setImportModalOpen(false)}
           onLinkDocs={handleLinkDocs}
           onUploadLocal={handleLocalUpload}
+          selectedProject={selectedProject}
         />
 
         {/* Views Popover */}
@@ -2620,3 +3034,4 @@ function App() {
 }
 
 export default App;
+

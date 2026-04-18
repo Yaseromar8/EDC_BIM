@@ -24,6 +24,14 @@ const MoreIcon = () => (
     </svg>
 );
 
+const ShareIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+        <polyline points="16 6 12 2 8 6"></polyline>
+        <line x1="12" y1="2" x2="12" y2="15"></line>
+    </svg>
+);
+
 const SaveIcon = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v13a2 2 0 0 1-2 2z"></path>
@@ -42,6 +50,14 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose }) =>
         onSaveView(newViewName);
         setNewViewName('');
         setIsCreating(false);
+    };
+
+    const handleShare = (view, e) => {
+        e.stopPropagation();
+        const shareUrl = `${window.location.origin}${window.location.pathname}?shareView=${view.id}`;
+        navigator.clipboard.writeText(shareUrl)
+            .then(() => alert(`¡Enlace copiado al portapapeles!\n${shareUrl}`))
+            .catch(err => console.error("Error al copiar", err));
     };
 
     const filteredViews = views.filter(v =>
@@ -109,6 +125,14 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose }) =>
                     <div key={view.id} className="view-list-item" onClick={() => onLoadView(view)}>
                         <span className="view-name-text">{view.name}</span>
                         <div className="view-item-actions">
+                            <button
+                                className="more-btn"
+                                onClick={(e) => handleShare(view, e)}
+                                title="Share View"
+                                style={{ marginRight: '6px' }}
+                            >
+                                <ShareIcon />
+                            </button>
                             <button
                                 className="more-btn"
                                 onClick={(e) => { e.stopPropagation(); onDeleteView(view.id); }}

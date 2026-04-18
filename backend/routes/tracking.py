@@ -99,7 +99,7 @@ except Exception:
 
 def get_tracking_data(model_urn='global'):
     """Construye el JSON de tracking desde la base de datos PostgreSQL"""
-    data = {"avance": [], "fotos": [], "docs": [], "rfis": [], "restricciones": [], "detalles": {}}
+    data = {"avance": [], "fotos": [], "docs": [], "rfis": [], "restricciones": [], "maquinaria": [], "detalles": {}}
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -213,6 +213,8 @@ def get_tracking_data(model_urn='global'):
                     data["rfis"].append(pin)
                 elif pin_type == 'restricciones':
                     data["restricciones"].append(pin)
+                elif pin_type == 'maquinaria':
+                    data["maquinaria"].append(pin)
             
             # Add remaining legacy fotos that don't have a tracking_pin entry
             for pin_id, pin_group in fotos_dict.items():
@@ -346,6 +348,12 @@ def update_tracking():
                 cursor.execute("DELETE FROM tracking_pins WHERE pin_type = 'restricciones' AND model_urn = %s", (model_urn,))
                 for pin_item in new_data['restricciones']:
                     _upsert_pin(cursor, pin_item, 'restricciones', model_urn)
+            
+            # 7. Sincronizar 'maquinaria'
+            if 'maquinaria' in new_data:
+                cursor.execute("DELETE FROM tracking_pins WHERE pin_type = 'maquinaria' AND model_urn = %s", (model_urn,))
+                for pin_item in new_data['maquinaria']:
+                    _upsert_pin(cursor, pin_item, 'maquinaria', model_urn)
                         
             conn.commit()
             

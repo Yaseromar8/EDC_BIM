@@ -3,10 +3,18 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './viewer.css';
 import './IconMarkup.css'; // Add this line
 import { BaseExtension } from '../aps/extensions/BaseExtension';
-import { findLeafNodes, getBulkProperties, calculateDynamicFilterBucketsNative, extractPartidasNative, extractSchemaNative } from '../aps/utils/model';
+import { findLeafNodes, getBulkProperties, calculateDynamicFilterBucketsNative, extractPartidasNative, extractSchemaNative, calculateBucketsFromPostgres } from '../aps/utils/model';
 import IconMarkupExtension from '../aps/extensions/IconMarkupExtension';
+import ProgressiveExtension from '../aps/extensions/ProgressiveExtension';
+import WorkfrontsPanel from './WorkfrontsPanel';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+
+// Utilidad para normalizar base64 vs base64url-safe y comparar URNs sin cruzarse
+const normalizeUrn = (urn) => {
+    if (!urn) return '';
+    return String(urn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
 
 // --- Shared texture helpers (extracted to avoid duplication inside useEffects) ---
 const getDocTexture = () => {
@@ -105,6 +113,15 @@ const Viewer = ({
     const [viewerReady, setViewerReady] = useState(false);
     const [mobileToolsVisible, setMobileToolsVisible] = useState(false);
     const [contextMenu, setContextMenu] = useState(null);
+    const [showProgressives, setShowProgressives] = useState(false);
+    
+    // Workfronts State
+    const [isWorkfrontsPanelOpen, setWorkfrontsPanelOpen] = useState(false);
+    const [workfronts, setWorkfronts] = useState([
+        { id: '1', start: 0, end: 500, color: '#ffaaaa', name: 'Frente 1: Excavación' },
+        { id: '2', start: 500, end: 1100, color: '#9c27b0', name: 'Frente 2: Base' },
+        { id: '3', start: 1100, end: 2000, color: '#4caf50', name: 'Frente 3: Asfalto' }
+    ]);
 
     // Sync hiddenModelUrnsRef
     useEffect(() => {
@@ -280,6 +297,11 @@ const Viewer = ({
             const x = event.clientX - rect.left;
             const y = event.clientY - rect.top;
 
+            const hitForDebug = viewer.impl.hitTest(x, y, false);
+            if (hitForDebug && hitForDebug.intersectPoint) {
+                console.log("[CALIBRACION] Coordenada Visor:", hitForDebug.intersectPoint);
+            }
+
             // Priority 1: Tracking Pins
             if (trackingPlacementMode) {
                 const hit = viewer.impl.hitTest(x, y, false);
@@ -439,6 +461,7 @@ const Viewer = ({
 
                 Autodesk.Viewing.theExtensionManager.registerExtension('BaseExtension', BaseExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('IconMarkupExtension', IconMarkupExtension);
+                Autodesk.Viewing.theExtensionManager.registerExtension('ProgressiveExtension', ProgressiveExtension);
                 // Custom extensions removed to simplify UI
 
                 const config = {
@@ -447,35 +470,147 @@ const Viewer = ({
                         'Autodesk.BIM360.Extension.PushPin',
                         'Autodesk.PDF',
                         'Autodesk.AEC.LevelsExtension',
-                        'Autodesk.AEC.Minimap3DExtension'
+                        'Autodesk.AEC.Minimap3DExtension',
+                        'ProgressiveExtension'
                     ],
-                    // PERFORMANCE FLAGS (To match reference image settings)
                     disabledExtensions: {
                         measure: false,
                         section: false
-                    },
-                    experimental: [
-                        'Autodesk.Viewing.WebGPU' 
-                    ]
+                    }
                 };
 
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);
                 viewer.start();
 
                 // INYECCIÓN DE EVENTOS DE CICLO DE VIDA (TRACING)
-                viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, () => {
-                     console.log(`[APS LMV] ⏱️ ${performance.now().toFixed(2)}ms - Evento: GEOMETRY_LOADED_EVENT - Geometría renderizada.`);
-                });
-                viewer.addEventListener(Autodesk.Viewing.OBJECT_TREE_CREATED_EVENT, () => {
-                     console.log(`[APS LMV] ⏱️ ${performance.now().toFixed(2)}ms - Evento: OBJECT_TREE_CREATED_EVENT - Base de datos de propiedades lista.`);
-                });
+                // ═══════════════════════════════════════════════════════════
+                // GHOST ACC MODE — Solución definitiva (blindada)
+                // 
+                // Intercepta viewer.setGhosting() para que CUALQUIER código
+                // (filtros, extensiones, eventos externos) que active ghosting
+                // automáticamente aplique el modo ACC (light + dithered).
+                //
+                // Propiedades controladas:
+                //   _ghostingDark = false     → Light mode (no gray surfaces)
+                //   setDitheredGhosting(true) → Patrón puntillado transparente
+                //   _edgeColorGhosted.w=0.12  → Bordes al 12% alpha
+                // ═══════════════════════════════════════════════════════════
+                const enforceACCGhosting = () => {
+                    try {
+                        if (!viewer?.impl) return;
+                        viewer.impl._ghostingDark = false;
+                        const renderer = viewer.impl.renderer();
+                        if (renderer && typeof renderer.setDitheredGhosting === 'function') {
+                            renderer.setDitheredGhosting(true);
+                        }
+                        viewer.impl._edgeColorGhosted = { x: 0.5, y: 0.5, z: 0.5, w: 0.12 };
+                        viewer.impl.invalidate(true, true, true);
+                    } catch (e) { /* silencioso */ }
+                };
 
-                // 🚀 FORCE OFFICIAL ACC/BIM360 LOOK & FEEL
-                viewer.setTheme('light-theme'); // Use light theme as in reference image 2/4
+                // Monkey-patch: interceptar setGhosting para auto-reforzar ACC mode
+                const _originalSetGhosting = viewer.setGhosting.bind(viewer);
+                viewer.setGhosting = (val) => {
+                    _originalSetGhosting(val);
+                    if (val) enforceACCGhosting();
+                };
+
+                // Aplicar en cada carga de geometría (modelos nuevos)
+                viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, () => {
+                     console.log(`[APS LMV] ⏱️ ${performance.now().toFixed(2)}ms - Evento: GEOMETRY_LOADED_EVENT`);
+                     window.dispatchEvent(new CustomEvent('viewer-geometry-loaded'));
+                     enforceACCGhosting();
+                     console.log('[GHOST ACC] ✅ Modo ACC reforzado en GEOMETRY_LOADED');
+                });
                 
-                if (Autodesk.Viewing.Profile && Autodesk.Viewing.Profile.AEC) {
-                    viewer.setProfile(Autodesk.Viewing.Profile.AEC);
-                }
+                // ═══════════════════════════════════════════════════════════
+                // GHOST — ghosting nativo del viewer (sin overrides)
+                // ═══════════════════════════════════════════════════════════
+                const startGhostEnforcement = () => {
+                    viewer.setGhosting(true);
+                };
+                
+                const stopGhostEnforcement = () => {
+                    const models = viewer.impl.modelQueue().getModels();
+                    models.forEach(model => {
+                        viewer.clearThemingColors(model);
+                    });
+                    viewer.impl.invalidate(true, true, true);
+                };
+
+                window.__ghostCleanup = stopGhostEnforcement;
+                
+                viewer.addEventListener(Autodesk.Viewing.ISOLATE_EVENT, () => {
+                    const loadedModels = viewer.impl.modelQueue().getModels();
+                    let hasIsolation = false;
+                    
+                    for (const model of loadedModels) {
+                        const isolatedIds = viewer.getIsolatedNodes(model);
+                        if (isolatedIds && isolatedIds.length > 0) {
+                            hasIsolation = true;
+                            break;
+                        }
+                    }
+                    
+                    if (hasIsolation) {
+                        startGhostEnforcement();
+                    } else {
+                        stopGhostEnforcement();
+                    }
+
+                    // --- SYNC: Visor → Inventory ---
+                    setTimeout(() => {
+                        const allIsolatedExtIds = [];
+                        const allModels = viewer.impl.modelQueue().getModels();
+                        
+                        for (const model of allModels) {
+                            const isolatedIds = viewer.getIsolatedNodes(model);
+                            if (isolatedIds && isolatedIds.length > 0) {
+                                const modelUrn = model.getData()?.urn;
+                                const safeUrn = modelUrn ? String(modelUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') : '';
+                                const urnDict = window.rosettaToExtId?.[modelUrn] || window.rosettaToExtId?.[safeUrn];
+                                
+                                if (urnDict) {
+                                    for (const dbId of isolatedIds) {
+                                        const extId = urnDict[dbId];
+                                        if (extId) allIsolatedExtIds.push(extId);
+                                    }
+                                }
+                            }
+                        }
+                        
+                        window.dispatchEvent(new CustomEvent('inventory-isolation-sync', {
+                            detail: { isolatedExtIds: allIsolatedExtIds }
+                        }));
+                        console.log(`[SYNC Visor→Inventory] ${allIsolatedExtIds.length} elementos aislados despachados`);
+                    }, 100);
+                });
+                viewer.addEventListener(Autodesk.Viewing.OBJECT_TREE_CREATED_EVENT, (event) => {
+                     console.log(`[APS LMV] ⏱️ ${performance.now().toFixed(2)}ms - Evento: OBJECT_TREE_CREATED_EVENT`);
+                     
+                     // --- FASE 5: PIEDRA ROSETTA (MULTI-MODELO) ---
+                     const modelLoaded = event.model;
+                     if (!modelLoaded) return;
+                     const urn = modelLoaded.getData().urn;
+
+                     modelLoaded.getExternalIdMapping((mapping) => {
+                         window.rosettaToDbId = window.rosettaToDbId || {};
+                         window.rosettaToDbId[urn] = mapping;
+                     
+                         window.rosettaToExtId = window.rosettaToExtId || {};
+                         window.rosettaToExtId[urn] = {};
+                         for (const extId in mapping) {
+                             if (mapping.hasOwnProperty(extId)) {
+                                 const dbId = mapping[extId];
+                                 window.rosettaToExtId[urn][dbId] = extId;
+                             }
+                         }
+                         
+                         console.log(`[Piedra Rosetta Multi-Modelo] Mapeo Bidireccional Creado para ${urn}. Total: ${Object.keys(mapping).length}`);
+                     }, (err) => {
+                         console.error("[Piedra Rosetta] Error obteniendo el ExternalIdMapping:", err);
+                     });
+                });
 
                 // 5. Final check before state update
                 if (!mountedRef.current) {
@@ -483,14 +618,6 @@ const Viewer = ({
                     viewer.finish();
                     return;
                 }
-
-                // 🚀 PERFORMANCE OPTIMIZATIONS
-                viewer.setGhosting(true); // Reactivamos Ghosting nativo según requerimiento (efecto Rayos-X en aislamiento)
-                viewer.setProgressiveRendering(true); // Carga progresiva anti-congelamiento
-                viewer.setQualityLevel(false, false); // Apaga antialiasing y oclusión ambiental (maximiza FPS)
-                viewer.setGroundShadow(false);
-                viewer.setGroundReflection(false);
-                viewer.setEnvMapBackground(false);
 
                 viewerRef.current = viewer;
                 window.NOP_VIEWER = viewer;
@@ -510,6 +637,9 @@ const Viewer = ({
                 const v = viewerRef.current;
                 viewerRef.current = null; // Detach ref immediately
                 setViewerReady(false);
+                
+                // Stop ghost enforcement rAF
+                if (window.__ghostCleanup) { window.__ghostCleanup(); }
 
                 try {
                     v.finish();
@@ -572,10 +702,10 @@ const Viewer = ({
             window.dispatchEvent(new CustomEvent('viewer-partidas-extracted', { detail: { urn, partidas } }));
         }).catch(err => console.error('[Viewer] Error extracting partidas', err));
 
-        // Extraer esquema general para popular Configurator
-        extractSchemaNative(model).then(schema => {
-            window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema } }));
-        }).catch(err => console.error('[Viewer] Error extracting schema', err));
+        // REMOVIDO: extractSchemaNative ya no se utiliza porque la metadata
+        // se construye ahora basándose en PostgreSQL (App.jsx), que garantiza
+        // incluir *todas* las propiedades DSI (inclusive las instancias únicas)
+        // a través de todos los modelos federados sin truncamiento.
 
         // Ensure model is visible (centered)
         setTimeout(() => {
@@ -598,58 +728,40 @@ const Viewer = ({
             const detail = event.detail;
             const models = Object.values(loadedModelsRef.current);
             if(models.length === 0) return;
-            // Iterate over all models and merge buckets natively
-            let mergedResult = {};
+            
+            // =========================================================
+            // FASE 3: EXTRACCIÓN CDE POSTGRESQL (MILISEGUNDOS)
+            // =========================================================
+            // Si el inventario global fue descargado existosamente, cruzamos
+            // los filtros directamente contra la matriz de la base de datos
+            // en O(N) ignorando las miles de llamadas lentas del C++ de Autodesk.
+
+            let finalBuckets = {};
             let mergedValidIdsByUrn = {};
 
-            for(const model of models) {
-                if(!model.getPropertyDb()) continue;
-                try {
-                    // Extract structured response from Worker
-                    const calculationResult = await calculateDynamicFilterBucketsNative(model, detail.filterProperties, detail.filterSelections);
-                    const res = calculationResult.buckets;
-                    const validIds = calculationResult.globalValidDbIds || [];
+            if (window.postgresInventory) {
+                console.log(`[VIEWER EXECUTE] Iniciando filtrado CDE Postgres (${window.postgresInventory.length} elementos)...`);
+                
+                const { buckets, globalValidDbIds } = calculateBucketsFromPostgres(
+                    window.postgresInventory, 
+                    detail.filterProperties, 
+                    detail.filterSelections,
+                    window.rosettaToDbId, // Mapeo Directo: URN -> ExtId -> DbId
+                    hiddenModelUrnsRef.current // Modelos ocultos en Sources
+                );
 
-                    // Group intersected Global IDs by Model URN
-                    validIds.forEach(item => {
-                        if (!mergedValidIdsByUrn[item.modelUrn]) mergedValidIdsByUrn[item.modelUrn] = new Set();
-                        mergedValidIdsByUrn[item.modelUrn].add(item.id);
-                    });
-
-                    // Merge res into mergedResult
-                    for(let propId in res) {
-                         if(!mergedResult[propId]) mergedResult[propId] = { meta: res[propId].meta, total: 0, values: {}, valueIndex: {} };
-                         mergedResult[propId].total += res[propId].total;
-                         res[propId].values.forEach(v => {
-                             if(!mergedResult[propId].values[v.value]) {
-                                 mergedResult[propId].values[v.value] = { count: 0, dbIds: [] };
-                             }
-                             mergedResult[propId].values[v.value].count += v.count;
-                             mergedResult[propId].values[v.value].dbIds.push(...v.dbIds);
-                         });
-                    }
-                } catch(e) { console.error('[Viewer] Error on native calculation', e); }
-            }
-            
-            // Format to expected shapes
-            const finalBuckets = {};
-            for(let propId in mergedResult) {
-                 const arr = Object.keys(mergedResult[propId].values).map(val => ({
-                      value: val,
-                      count: mergedResult[propId].values[val].count,
-                      dbIds: mergedResult[propId].values[val].dbIds
-                 }));
-                 arr.sort((a,b) => b.count === a.count ? a.value.localeCompare(b.value) : b.count - a.count);
-                 
-                 const valueIndex = {};
-                 arr.forEach(entry => { valueIndex[entry.value] = entry; });
-
-                 finalBuckets[propId] = {
-                      meta: mergedResult[propId].meta,
-                      total: mergedResult[propId].total,
-                      values: arr,
-                      valueIndex: valueIndex
-                 };
+                finalBuckets = buckets;
+                
+                // Agrupar los ids válidos interceptados por modelo
+                globalValidDbIds.forEach(item => {
+                    if (!mergedValidIdsByUrn[item.modelUrn]) mergedValidIdsByUrn[item.modelUrn] = new Set();
+                    mergedValidIdsByUrn[item.modelUrn].add(item.id);
+                });
+                
+                console.log(`[VIEWER EXECUTE] Filtrado CDE finalizado instantáneamente.`);
+            } else {
+                console.warn("[VIEWER EXECUTE] postgresInventory no está listo, saltando filtrado...");
+                return;
             }
 
             // Enviar respuesta cruzada al App.jsx
@@ -670,39 +782,47 @@ const Viewer = ({
                 const activeFilters = Object.keys(detail.filterSelections || {}).filter(k => detail.filterSelections[k].length > 0);
                 console.log(`[VIEWER EXECUTE] activeFilters count: ${activeFilters.length}`, activeFilters);
                 
+                // TANDEM GRAY-GHOST: Guardar el filtro global en la memoria para el manejador de Temas
+                window._lastHasActiveFilters = activeFilters.length > 0;
+                window._lastValidDbIds = mergedValidIdsByUrn;
+
                 if (activeFilters.length === 0) {
                      console.log(`[VIEWER EXECUTE] 🔄 No active filters. Resetting isolation per-model.`);
                      const modelsQueue = viewer.impl.modelQueue().getModels();
                      modelsQueue.forEach(m => viewer.isolate([], m));
+                     if (window.__ghostCleanup) window.__ghostCleanup();
                 } else {
-                     // Forzar ghosting activo ANTES de aislar
-                     viewer.setGhosting(true);
-                     // Apply per-model isolation that respects setGhosting(true)
-                     // Modelos con IDs validos: se aislan esos IDs (el resto se ghostea)
-                     // Modelos SIN IDs: se aisla el nodo raiz invisible, ghosteando toda la geometria visible
+                    viewer.setGhosting(true);
                      const modelsQueue = viewer.impl.modelQueue().getModels();
                      let totalIsolated = 0;
 
                      modelsQueue.forEach((m, idx) => {
-                         const urn = m.urn || m.getData()?.urn;
+                         const rawViewerUrn = m.getData()?.urn;
+                         const viewerUrn = normalizeUrn(rawViewerUrn);
+                         const reactUrn = Object.keys(loadedModelsRef.current).find(k => normalizeUrn(k) === viewerUrn) || rawViewerUrn;
                          
-                         // Omitimos modelos ocultos por SOURCES
-                         if (hiddenModelUrnsRef.current && hiddenModelUrnsRef.current.includes(urn)) {
+                         // 1. Si el modelo está oculto en Sources → hideModel y saltar
+                         if (hiddenModelUrnsRef.current && (hiddenModelUrnsRef.current.includes(reactUrn) || hiddenModelUrnsRef.current.some(u => normalizeUrn(u) === viewerUrn))) {
+                             viewer.hideModel(m.id);
                              return;
                          }
 
-                         const idsSet = mergedValidIdsByUrn[urn];
+                         // 2. Asegurar que este visible si interactuara con el filtro
+                         viewer.showModel(m.id);
+
+                         // 3. Aplicar aislamiento por filtro
+                         const idsSet = mergedValidIdsByUrn[rawViewerUrn] 
+                             || mergedValidIdsByUrn[reactUrn]
+                             || Object.entries(mergedValidIdsByUrn).find(([k]) => normalizeUrn(k) === viewerUrn)?.[1];
+                         
                          if (idsSet && idsSet.size > 0) {
-                             // Modelo TIENE elementos que pasan el filtro: aislar solo esos
                              const idsArray = Array.from(idsSet);
-                             viewer.isolate(idsArray, m);
-                             console.log(`[VIEWER EXECUTE]   Model ${idx}: ${idsArray.length} elements isolated (ghosting rest)`);
+                             viewer.impl.visibilityManager.isolate(idsArray, m);
+                             console.log(`[VIEWER EXECUTE]   Model ${idx} (${viewerUrn?.slice(-20)}): ${idsArray.length} elements isolated.`);
                              totalIsolated += idsArray.length;
                          } else {
-                             // Modelo NO tiene la propiedad: ghostear toda su geometria
-                             // Per-model isolate con ID inexistente: todo queda ghosteado
-                             viewer.isolate([-1], m);
-                             console.log(`[VIEWER EXECUTE]   Model ${idx}: fully ghosted (no matching property)`);
+                             viewer.impl.visibilityManager.isolate([-1], m); // Forzar ghost: dbId -1 no existe → todo el modelo queda fantasma
+                             console.log(`[VIEWER EXECUTE]   Model ${idx} (${viewerUrn?.slice(-20)}): fully ghosted`);
                          }
                      });
 
@@ -710,17 +830,19 @@ const Viewer = ({
                      viewer.impl.invalidate(true, true, true);
                 }
                 
-                // Forzamos re-apagado inmediato para asegurar paridad con SOURCES 
-                if (hiddenModelUrnsRef.current && hiddenModelUrnsRef.current.length > 0) {
-                     const modelsQueue2 = viewer.impl.modelQueue().getModels();
-                     modelsQueue2.forEach(m => {
-                         const urn = m.urn || m.getData()?.urn;
-                         if (hiddenModelUrnsRef.current.includes(urn)) {
-                             viewer.hideModel(m.id);
-                         }
-                     });
+                // TANDEM GRAY-GHOST: Repintar tema automáticamente al cambiar selecciones (respeta memoria fotográfica)
+                 if (window._lastThemeEventConfig && window._lastThemeEventConfig.active) {
+                      window.dispatchEvent(new CustomEvent('theme-property-bucket', { detail: window._lastThemeEventConfig }));
+                 }
+                 
+                // Restaurar NODOS ocultos manualmente (Right Click -> Hide)
+                const hiddenAgg = viewer.getAggregateHiddenNodes();
+                if (hiddenAgg && hiddenAgg.length > 0) {
+                    hiddenAgg.forEach(agg => {
+                        if (agg.selection && agg.selection.length > 0) viewer.hide(agg.selection, agg.model);
+                    });
                 }
-            }
+                }
             }, 50); // debounce 50ms
         };
 
@@ -751,7 +873,7 @@ const Viewer = ({
                 // Group by model URN for multi-model aggregate isolation
                 const idsByUrn = {};
                 values.forEach(val => {
-                    const entry = buckets[propId].valueIndex[val];
+                    const entry = buckets[propId].values.find(v => v.value === val);
                     if (entry && entry.dbIds) {
                         entry.dbIds.forEach(item => {
                             if (!idsByUrn[item.modelUrn]) idsByUrn[item.modelUrn] = new Set();
@@ -763,13 +885,23 @@ const Viewer = ({
                 viewer.setGhosting(true);
                 const modelsQueue = viewer.impl.modelQueue().getModels();
                 modelsQueue.forEach(m => {
-                    const urn = m.urn || m.getData?.()?.urn;
-                    const idsSet = idsByUrn[urn];
+                    const rawViewerUrn = m.getData?.()?.urn;
+                    const viewerUrn = normalizeUrn(rawViewerUrn);
+                    const reactUrn = Object.keys(loadedModelsRef.current).find(k => normalizeUrn(k) === viewerUrn) || rawViewerUrn;
+                    
+                    if (hiddenModelUrnsRef.current && (hiddenModelUrnsRef.current.includes(reactUrn) || hiddenModelUrnsRef.current.some(u => normalizeUrn(u) === viewerUrn))) {
+                        viewer.hideModel(m.id);
+                        return;
+                    }
+
+                    viewer.showModel(m.id);
+
+                    const idsSet = idsByUrn[rawViewerUrn] || idsByUrn[reactUrn] || Object.entries(idsByUrn).find(([k]) => normalizeUrn(k) === viewerUrn)?.[1];
                     if (idsSet && idsSet.size > 0) {
                         viewer.isolate(Array.from(idsSet), m);
                     } else {
                         // Ghostear toda la geometria de este modelo
-                        viewer.isolate([-1], m);
+                        viewer.impl.visibilityManager.isolate([-1], m);
                     }
                 });
                 
@@ -789,6 +921,7 @@ const Viewer = ({
 
         const handleTheme = (e) => {
             const { propId, values, active } = e.detail;
+            window._lastThemeEventConfig = { propId, values, active }; // MEMORIA FOTOGRAFICA
             console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: theme-property-bucket - propId: ${propId}, active: ${active}`);
             
             const PALETTE = [
@@ -808,42 +941,71 @@ const Viewer = ({
             if (buckets && buckets[propId]) {
                 const valsToTheme = (!values || values.length === 0) ? buckets[propId].values.map(v => v.value) : values;
 
-                // Operación no bloqueante asíncrona
-                requestAnimationFrame(() => {
-                    modelsQueue.forEach(m => viewer.clearThemingColors(m));
-                    valsToTheme.forEach((val) => {
-                        const originalIndex = buckets[propId].values.findIndex(v => v.value === val);
-                        const entry = buckets[propId].valueIndex[val];
-                        if (originalIndex !== -1 && entry) {
-                            const hexColor = PALETTE[originalIndex % PALETTE.length];
-                            
-                            // Parse hex to Vector4
-                            const rgb = parseInt(hexColor.replace('#', ''), 16);
-                            const r = ((rgb >> 16) & 255) / 255;
-                            const g = ((rgb >> 8) & 255) / 255;
-                            const b = (rgb & 255) / 255;
-                            const colorVector = new window.THREE.Vector4(r, g, b, 1);
+                // Paso 1: Motor Gráfico de Aceleración por GPU (FacetsManager Equivalent)
+                // Construimos el colorMap (diccionario de shaders) fuera del hilo bloqueante
+                
+                const colorMapByUrn = {};
+                // TANDEM GRAY-GHOST: Si hay aislamientos vivos, solo pintamos los elementos activos (dejando en gris el resto)
+                const validIdsFilter = window._lastHasActiveFilters ? window._lastValidDbIds : null;
 
-                            // Agrupar IDs por URN para asegurar Theming en multiples modelos LMV
-                            const dbIdsByUrn = {};
-                            let totalIds = 0;
-                            entry.dbIds.forEach(item => {
-                                if(!dbIdsByUrn[item.modelUrn]) dbIdsByUrn[item.modelUrn] = [];
-                                dbIdsByUrn[item.modelUrn].push(item.id);
-                                totalIds++;
-                            });
-                            console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Disparando: viewer.setThemingColor() en ${totalIds} elementos con color Hex: ${hexColor}`);
+                valsToTheme.forEach((val) => {
+                    const originalIndex = buckets[propId].values.findIndex(v => v.value === val);
+                    const entry = buckets[propId].values[originalIndex]; // Equivalente a find o valueIndex
+                    if (originalIndex !== -1 && entry) {
+                        const hexColor = PALETTE[originalIndex % PALETTE.length];
+                        
+                        // Parse hex to Vector4 (Shader readable)
+                        const rgb = parseInt(hexColor.replace('#', ''), 16);
+                        const r = ((rgb >> 16) & 255) / 255;
+                        const g = ((rgb >> 8) & 255) / 255;
+                        const b = (rgb & 255) / 255;
+                        const colorVector = new window.THREE.Vector4(r, g, b, 1);
 
-                            modelsQueue.forEach(m => {
-                                const urn = m.urn || m.getData?.()?.urn;
-                                const ids = dbIdsByUrn[urn];
-                                if (ids && ids.length > 0) {
-                                    ids.forEach(id => viewer.setThemingColor(id, colorVector, m, true));
-                                }
-                            });
-                        }
-                    });
+                        // Mapeo en Diccionario por URN
+                        entry.dbIds.forEach(item => {
+                            if (validIdsFilter) {
+                                const urnSet = validIdsFilter[item.modelUrn];
+                                if (!urnSet || !urnSet.has(item.id)) return; // No pintar si está ghosteado o no hay filtro válido para este modelo
+                            }
+                            if(!colorMapByUrn[item.modelUrn]) colorMapByUrn[item.modelUrn] = [];
+                            colorMapByUrn[item.modelUrn].push({ id: item.id, colorVector });
+                        });
+                    }
                 });
+
+                // Inyección Nativa al Pipeline GPU (Non-blocking ASYNC CHUNKING)
+                const startGPU = performance.now();
+                console.log(`[GPU] 🚀 Compilando ColorMap de FacetsManager para ${Object.keys(colorMapByUrn).length} modelos federados...`);
+                
+                const processGPUBuffer = async () => {
+                    // Iterar por cada modelo
+                    for (const m of modelsQueue) {
+                        viewer.clearThemingColors(m); // Liberamos memoria de video base
+                        const viewerUrn = m.getData?.()?.urn;
+                        const reactUrn = Object.keys(loadedModelsRef.current).find(k => loadedModelsRef.current[k] === m) || viewerUrn;
+                        const instructions = colorMapByUrn[viewerUrn] || colorMapByUrn[reactUrn] || [];
+                        
+                        if (instructions.length > 0) {
+                            // Procesamiento por Lotes (Chunking: 5,000 elementos) para evitar 'Page Unresponsive'
+                            const CHUNK_SIZE = 5000;
+                            for (let i = 0; i < instructions.length; i += CHUNK_SIZE) {
+                                const chunk = instructions.slice(i, i + CHUNK_SIZE);
+                                chunk.forEach(inst => {
+                                    viewer.setThemingColor(inst.id, inst.colorVector, m, false);
+                                });
+                                // Liberar el Hilo Principal del Navegador brevemente
+                                await new Promise(resolve => setTimeout(resolve, 0));
+                                viewer.impl.invalidate(true, true, true); // Intercambio Parcial (Efecto Progreso Fluido)
+                            }
+                        }
+                    }
+
+                    // Forzar el repintado final de shader
+                    viewer.impl.invalidate(true, true, true);
+                    console.log(`[GPU] ⚡ Tema visual re-renderizado asíncronamente en ${(performance.now() - startGPU).toFixed(2)}ms`);
+                };
+
+                processGPUBuffer();
             }
         };
 
@@ -896,12 +1058,14 @@ const Viewer = ({
         if (!viewer || !viewerReady) return;
 
         const handleSelection = (event) => {
-            const dbIdArray = event.dbIdArray;
-            const model = event.model;
-
-            if (dbIdArray.length > 0 && model) {
-                const dbId = dbIdArray[0];
-                const urn = model.getData().urn;
+            // Para multi-modelo, extraer selectiones del evento agregado o del evento normal
+            const selections = event.selections || (event.dbIdArray ? [{ model: event.model, dbIdArray: event.dbIdArray }] : []);
+            
+            if (selections.length > 0 && selections[0].dbIdArray.length > 0 && selections[0].model) {
+                const dbId = selections[0].dbIdArray[0];
+                const model = selections[0].model;
+                const reactUrn = Object.keys(loadedModelsRef.current).find(k => loadedModelsRef.current[k] === model) || model.urn || model.getData().urn;
+                const urn = reactUrn;
 
                 // Extraemos las propiedades de Revit del elemento
                 model.getProperties(dbId, (result) => {
@@ -934,10 +1098,10 @@ const Viewer = ({
             }
         };
 
-        viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, handleSelection);
+        viewer.addEventListener(Autodesk.Viewing.AGGREGATE_SELECTION_CHANGED_EVENT, handleSelection);
 
         return () => {
-            viewer.removeEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, handleSelection);
+            viewer.removeEventListener(Autodesk.Viewing.AGGREGATE_SELECTION_CHANGED_EVENT, handleSelection);
         }
     }, [viewerReady, onSelectionChanged]);
 
@@ -968,10 +1132,15 @@ const Viewer = ({
 
             // Find the correct model in the viewer
             const models = viewer.impl.modelQueue().getModels();
-            const targetModel = models.find(m => m.getData().urn === urn || (m.urn && m.urn === urn));
+            const normUrn = normalizeUrn(urn);
+            const targetModel = models.find(m => {
+                 const modelViewerUrn = normalizeUrn(m.getData()?.urn);
+                 const modelReactUrn = Object.keys(loadedModelsRef.current).find(k => normalizeUrn(k) === modelViewerUrn) || modelViewerUrn;
+                 return normalizeUrn(modelReactUrn) === normUrn || modelViewerUrn === normUrn;
+            });
 
             if (targetModel) {
-                viewer.select(dbIds, targetModel);
+                viewer.setAggregateSelection([{ model: targetModel, selection: dbIds }]);
                 viewer.fitToView(dbIds, targetModel);
             }
         };
@@ -1141,9 +1310,6 @@ const Viewer = ({
                             try {
                                 if (shouldHide) {
                                     viewer.hideModel(loadedModel.id);
-                                    if (loadedModel.getRootId) {
-                                        viewer.impl.visibilityManager.setNodeOff(loadedModel.getRootId(), true);
-                                    }
                                 } else {
                                     viewer.showModel(loadedModel.id);
                                 }
@@ -1242,6 +1408,10 @@ const Viewer = ({
             } else if (trackingTab === 'rfis') {
                 const currentRfis = trackingData?.rfis || [];
                 icons = currentRfis.map(i => ({ ...i, type: 'rfi', color: i.color || '#ef4444' }));
+            } else if (trackingTab === 'maquinaria') {
+                const currentMaq = trackingData?.maquinaria || [];
+                // We use 'maquinaria' type so IconMarkupExtension can apply specific styles if needed.
+                icons = currentMaq.map(i => ({ ...i, type: 'maquinaria', color: i.color || '#a855f7' }));
             }
 
             // 4. Set Icons
@@ -1262,6 +1432,118 @@ const Viewer = ({
         };
 
     }, [viewerReady, trackingTab, trackingData, onTrackingPinClick]);
+
+    // --- Progressive Markers Logic ---
+    useEffect(() => {
+        const viewer = viewerRef.current;
+        if (!viewer || !viewerReady) return;
+
+        let ext = viewer.getExtension('ProgressiveExtension');
+        if (!ext) return; // not loaded yet
+
+        if (showProgressives) {
+            // Fetch and Parse CSV
+            fetch('/data/progresivas.csv')
+                .then(r => r.text())
+                .then(text => {
+                    const lines = text.split('\n').filter(l => l.trim().length > 0);
+                    
+                    const rawGroups = {};
+                    lines.forEach((line) => {
+                        const parts = line.split(',');
+                        if (parts.length < 5) return;
+                        const tag = parts[4].trim();
+                        if (!rawGroups[tag]) rawGroups[tag] = [];
+                        rawGroups[tag].push({
+                            x: parseFloat(parts[1]),
+                            y: parseFloat(parts[2]),
+                            z: parseFloat(parts[3])
+                        });
+                    });
+
+                    const markers = [];
+
+                    // Process each alignment track independently
+                    Object.keys(rawGroups).forEach(tag => {
+                        const groupPoints = rawGroups[tag];
+                        if (groupPoints.length < 2) return;
+
+                        // Santa Rita ('PG') starts from first value (original order)
+                        // Politecnico ('POL') starts from last value (reversed order)
+                        if (tag === 'POL') {
+                            groupPoints.reverse();
+                        }
+
+                        // 2. Build polyline with cumulative distances
+                        const polyline = [{ dist: 0, ...groupPoints[0] }];
+                        for (let i = 1; i < groupPoints.length; i++) {
+                            const dx = groupPoints[i].x - groupPoints[i - 1].x;
+                            const dy = groupPoints[i].y - groupPoints[i - 1].y;
+                            const segLen = Math.sqrt(dx * dx + dy * dy);
+                            polyline.push({
+                                dist: polyline[i - 1].dist + segLen,
+                                ...groupPoints[i]
+                            });
+                        }
+
+                        const totalLength = polyline[polyline.length - 1].dist;
+
+                        // 3. Interpolate at exact 10m intervals
+                        const INTERVAL = 10; // meters
+                        let segIdx = 0; // current segment index
+
+                        for (let station = 0; station <= totalLength; station += INTERVAL) {
+                            while (segIdx < polyline.length - 2 && polyline[segIdx + 1].dist < station) {
+                                segIdx++;
+                            }
+
+                            const a = polyline[segIdx];
+                            const b = polyline[segIdx + 1];
+                            const segLen = b.dist - a.dist;
+                            const t = segLen > 0 ? (station - a.dist) / segLen : 0;
+
+                            const x = a.x + (b.x - a.x) * t;
+                            const y = a.y + (b.y - a.y) * t;
+                            const z = a.z + (b.z - a.z) * t;
+
+                            const len = Math.sqrt(Math.pow(b.x - a.x, 2) + Math.pow(b.y - a.y, 2) + Math.pow(b.z - a.z, 2));
+                            const dx = len > 0 ? (b.x - a.x)/len : 0;
+                            const dy = len > 0 ? (b.y - a.y)/len : 0;
+                            const dz = len > 0 ? (b.z - a.z)/len : 0;
+
+                            const km = Math.floor(station / 1000);
+                            const m = Math.round(station % 1000);
+                            // Prefix label with Track tag to distinguish overlapping numbers
+                            const prefix = Object.keys(rawGroups).length > 1 ? `${tag}-` : '';
+                            const label = `${prefix}KM ${km}+${m.toString().padStart(3, '0')}`;
+
+                            markers.push({ x, y, z, label, station, dx, dy, dz });
+                        }
+                    });
+                    
+                    // Inject actual Workfronts state
+                    ext.setWorkfronts(workfronts);
+                    ext.setMarkers(markers);
+                    ext.toggleVisibility(true);
+                })
+                .catch(err => console.error("Error loading progressivas CSV:", err));
+        } else {
+            ext.toggleVisibility(false);
+        }
+    }, [showProgressives, viewerReady]);
+
+    // Live update Workfronts without reloading the CSV
+    useEffect(() => {
+        if (!viewerReady || !showProgressives) return;
+        const viewer = viewerRef.current;
+        if (!viewer) return;
+        const ext = viewer.getExtension('ProgressiveExtension');
+        if (ext && ext._markers && ext._markers.length > 0) {
+            ext.setWorkfronts(workfronts);
+            ext.setMarkers(ext._markers); // Triggers clear and reconstruct
+            ext.toggleVisibility(true);
+        }
+    }, [workfronts, viewerReady, showProgressives]);
 
     // --- Native Overlay Implementation (Robust & Scaled) ---
     useEffect(() => {
@@ -1433,7 +1715,7 @@ const Viewer = ({
             const isFiltering = detail.isFiltering !== undefined ? detail.isFiltering : (detail.dbIds && detail.dbIds.length > 0);
 
             if (!isFiltering) {
-                viewer.setGhosting(false);
+                viewer.setGhosting(true);
                 // viewer.showAll(); 
                 viewer.impl.visibilityManager.isolate([]); // Clear isolation
 
@@ -1444,7 +1726,7 @@ const Viewer = ({
             }
 
             // 1. Enable Ghosting
-            viewer.setGhosting(true);
+            viewer.prefs.set('ghosting', true);
 
             // 2. Isolate matching items PER MODEL
             const idsByModel = new Map();
@@ -1500,41 +1782,63 @@ const Viewer = ({
                 }
             });
 
-            // 3. Apply Colors to matching items PER MODEL
-            detail.groups?.forEach((group, index) => {
-                let color;
-                if (group.color) {
-                    color = new window.THREE.Color(group.color);
-                } else {
-                    color = palette[index % palette.length];
-                }
+            // 3. Apply Colors to matching items PER MODEL (GPU Batching ASYNC CHUNKING)
+            const applyColorsAsynchronously = async () => {
+                for (let index = 0; index < (detail.groups || []).length; index++) {
+                    const group = detail.groups[index];
+                    let color;
+                    if (group.color) {
+                        color = new window.THREE.Color(group.color);
+                    } else {
+                        color = palette[index % palette.length];
+                    }
 
-                const vector = new window.THREE.Vector4(color.r, color.g, color.b, 1);
+                    const vector = new window.THREE.Vector4(color.r, color.g, color.b, 1);
 
-                group.dbIds.forEach(item => {
+                    // Agrupar elementos por modelo para evitar sobre-búsquedas
+                    const itemsByModel = new Map();
+
                     group.dbIds.forEach(item => {
-                        let model = loadedModelsRef.current[item.modelUrn];
+                        let targetUrn = item.modelUrn;
+                        let model = loadedModelsRef.current[targetUrn];
 
-                        // 1. Prefix/Suffix Match if exact fail
-                        if (!model && item.modelUrn) {
-                            const matchUrn = Object.keys(loadedModelsRef.current).find(u => u.includes(item.modelUrn) || item.modelUrn.includes(u));
-                            if (matchUrn) {
-                                model = loadedModelsRef.current[matchUrn];
-                            }
+                        if (!model && targetUrn) {
+                            const matchUrn = Object.keys(loadedModelsRef.current).find(u => u.includes(targetUrn) || targetUrn.includes(u));
+                            if (matchUrn) model = loadedModelsRef.current[matchUrn];
                         }
-
-                        // 2. Fuzzy Single Match
                         if (!model && Object.keys(loadedModelsRef.current).length === 1) {
                             model = loadedModelsRef.current[Object.keys(loadedModelsRef.current)[0]];
                         }
 
                         if (model) {
-                            viewer.setThemingColor(item.id, vector, model);
+                            if (!itemsByModel.has(model)) itemsByModel.set(model, []);
+                            itemsByModel.get(model).push(item.id);
                         }
                     });
 
-                });
-            });
+                    // Procesamiento en Lotes por Modelo
+                    for (const [model, ids] of itemsByModel.entries()) {
+                        const CHUNK_SIZE = 5000;
+                        for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+                            const chunk = ids.slice(i, i + CHUNK_SIZE);
+                            chunk.forEach(id => {
+                                viewer.setThemingColor(id, vector, model, false); // GPU Shading Directo
+                            });
+                            // Respiro al Thread UI
+                            await new Promise(resolve => setTimeout(resolve, 0));
+                           viewer.setGhosting(true);
+                            viewer.impl.invalidate(true, true, true);
+                        }
+                    }
+                }
+
+                // Flush final atómico
+                viewer.setGhosting(true);
+                viewer.impl.invalidate(true, true, true);
+                viewer.impl.sceneUpdated(true);
+            };
+
+            applyColorsAsynchronously();
 
             // Force visual update for colors and ghosting
             // Ensure ghosting is definitely on
@@ -1547,7 +1851,7 @@ const Viewer = ({
             // 2. Delayed invalidation (Next Tick) to catch any post-processing delays
             setTimeout(() => {
                 if (viewer.impl) {
-                    viewer.prefs.set('ghosting', true);
+                    viewer.setGhosting(true);
                     viewer.impl.invalidate(true, true, true);
                     viewer.impl.sceneUpdated(true);
                 }
@@ -2003,15 +2307,8 @@ const Viewer = ({
             try {
                 if (shouldHide) {
                     viewer.hideModel(model.id);
-                    // Fallback: Manually hide root node if model.id doesn't catch everything
-                    if (model.getRootId) {
-                        // viewer.impl.visibilityManager.setNodeOff(model.getRootId(), true);
-                    }
                 } else {
                     viewer.showModel(model.id);
-                    if (model.getRootId) {
-                        // viewer.impl.visibilityManager.setNodeOff(model.getRootId(), false);
-                    }
                 }
             } catch (e) {
                 console.error(`[Viewer] Error toggling visibility for ${urn}:`, e);
@@ -2666,6 +2963,73 @@ const Viewer = ({
         setContextMenu(null);
     };
 
+    const handleTakeScreenshot = () => {
+        const viewer = viewerRef.current;
+        if (!viewer) return;
+
+        // Increase resolution (2x scaling for high quality)
+        const scaleFactor = 2; 
+        const renderWidth = viewer.container.clientWidth * scaleFactor;
+        const renderHeight = viewer.container.clientHeight * scaleFactor;
+
+        // 1. Get raw WebGL screenshot from APS in High Definition
+        viewer.getScreenShot(renderWidth, renderHeight, (blobUrl) => {
+            const img = new Image();
+            img.src = blobUrl;
+            img.crossOrigin = "Anonymous";
+            img.onload = async () => {
+                
+                const originalCanvasDisplay = viewer.canvas.style.display;
+                viewer.canvas.style.display = 'none';
+
+                img.style.position = 'absolute';
+                img.style.left = '0';
+                img.style.top = '0';
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.zIndex = '0';
+                img.style.pointerEvents = 'none';
+                
+                viewer.container.insertBefore(img, viewer.container.firstChild);
+
+                try {
+                    // Try to generate composite 2D image at HD scale
+                    const html2canvas = (await import('html2canvas')).default;
+                    const canvas2d = await html2canvas(viewer.container, {
+                        backgroundColor: null,
+                        useCORS: true,
+                        logging: false,
+                        scale: scaleFactor // Captura los marcadores HTML en Alta Resolución
+                    });
+                    
+                    const finalUrl = canvas2d.toDataURL('image/png', 1.0);
+                    const a = document.createElement('a');
+                    a.href = finalUrl;
+                    a.download = `Visor_Tandem_Reporte_${new Date().toISOString().slice(0, 10)}.png`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+
+                } catch (error) {
+                    console.error("[Viewer] Screenshots composite failed:", error);
+                    // Fallback to WebGL only
+                    const a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.download = `Visor_Solo_3D_${new Date().toISOString().slice(0, 10)}.png`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                } finally {
+                    // Restore 3D viewer
+                    viewer.canvas.style.display = originalCanvasDisplay;
+                    if (img.parentNode) {
+                        img.parentNode.removeChild(img);
+                    }
+                }
+            };
+        });
+    };
+
     return (
         <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
             {/* BACKGROUND CAMERA (Always Active/Ready) */}
@@ -2770,6 +3134,48 @@ const Viewer = ({
                     )}
                 </div>
             )}
+            
+            {/* Workfronts Config Panel */}
+            <WorkfrontsPanel 
+                isVisible={isWorkfrontsPanelOpen} 
+                onClose={() => setWorkfrontsPanelOpen(false)} 
+                workfronts={workfronts} 
+                setWorkfronts={setWorkfronts} 
+            />
+
+            {/* Botones Flotantes (Obras Lineales) - Solo visibles en tab Maquinaria */}
+            {trackingTab === 'maquinaria' && (
+                <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 90, display: 'flex', gap: '8px' }}>
+                    <button
+                        onClick={() => setShowProgressives(!showProgressives)}
+                        className={`px-5 py-2 rounded-full font-bold shadow-lg transition ${showProgressives ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-gray-800 text-white hover:bg-gray-700'}`}
+                        style={{ backdropFilter: 'blur(4px)' }}
+                    >
+                        {showProgressives ? "🗺️ Ocultar Progresivas" : "🗺️ Mostrar Progresivas (Trazo)"}
+                    </button>
+                    {showProgressives && (
+                        <button
+                            onClick={() => setWorkfrontsPanelOpen(!isWorkfrontsPanelOpen)}
+                            className={`p-2 rounded-full font-bold shadow-lg transition ${isWorkfrontsPanelOpen ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-gray-800 text-white hover:bg-gray-700'}`}
+                            style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            title="Configurar Frentes de Trabajo (Heatmap)"
+                        >
+                            ⚙️
+                        </button>
+                    )}
+                    
+                    {/* Botón de Captura de Pantalla Nítida */}
+                    <button
+                        onClick={handleTakeScreenshot}
+                        className="p-2 rounded-full font-bold shadow-lg transition bg-gray-800 text-white hover:bg-gray-700"
+                        style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
+                        title="Tomar Captura de Pantalla (JPG/PNG HD)"
+                    >
+                        📸
+                    </button>
+                </div>
+            )}
+            
         </div>
     );
 };

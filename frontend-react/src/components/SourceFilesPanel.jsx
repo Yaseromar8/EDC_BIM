@@ -100,7 +100,7 @@ const getTimeAgo = (dateString) => {
     return "just now";
 };
 
-const SourceFilesPanel = ({ models, hiddenModels = [], onImport, onRemove, onToggleVisibility, modelViews, activeViewableGuids, onLoadView, onUpdate, onRelink }) => {
+const SourceFilesPanel = ({ models, hiddenModels = [], onImport, onRemove, onToggleVisibility, modelViews, activeViewableGuids, onLoadView, onUpdate, onRelink, extractionJobs = {} }) => {
     // Local state for UI only (expanded items)
     const [expandedModels, setExpandedModels] = useState({});
     const [activeMenu, setActiveMenu] = useState(null);
@@ -125,6 +125,8 @@ const SourceFilesPanel = ({ models, hiddenModels = [], onImport, onRemove, onTog
                 {models.map(model => {
                     const isHidden = hiddenModels.includes(model.urn);
                     const isExpanded = expandedModels[model.urn];
+                    const extractData = extractionJobs[model.urn];
+                    const isExtracting = extractData && extractData.isActive;
 
                     return (
                         <div key={model.urn} className={`sfp-item ${isExpanded ? 'expanded' : ''}`}>
@@ -132,7 +134,15 @@ const SourceFilesPanel = ({ models, hiddenModels = [], onImport, onRemove, onTog
                                 <button className="sfp-list-chevron">
                                     {isExpanded ? <ChevronDown /> : <ChevronRight />}
                                 </button>
-                                <span className="sfp-label" title={model.label}>{model.label}</span>
+                                <span className="sfp-label" style={{ display: 'flex', flexDirection: 'column' }} title={model.label}>
+                                    {model.label}
+                                    {isExtracting && (
+                                        <span style={{ fontSize: '10px', color: '#3b9eff', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                                            <div className="import-spinner" style={{ width: 10, height: 10, borderWidth: 2, borderColor: '#3b9eff', borderRightColor: 'transparent' }} />
+                                            Extracting DB: {Math.round(extractData.progress)}%
+                                        </span>
+                                    )}
+                                </span>
 
                                 <div className="sfp-spacer"></div>
 

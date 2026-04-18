@@ -357,3 +357,157 @@ export function extractSchemaNative(model) {
         .catch(() => resolve([]));
     });
 }
+
+export function calculateBucketsFromPostgres(allData, filterProperties, filterSelections, rosettaToExtIdReversed, hiddenModelUrns = []) {
+    // allData is array of objects: { dbId: 'UUID', model_urn: 'URN', <PropName>: 'Value', ... }
+    // rosettaToExtIdReversed: URN -> ExternalId -> dbId
+    // hiddenModelUrns: array of URNs que el usuario ocultó en Sources (formato React/raw)
+    
+    // Pre-compute safe versions of hidden URNs for fast lookup
+    const hiddenSet = new Set();
+    (hiddenModelUrns || []).forEach(u => {
+        hiddenSet.add(u);
+        hiddenSet.add(String(u).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
+    });
+    
+    // We only care about models that are currently active in rosettaToExtIdReversed
+    const activeUrns = Object.keys(rosettaToExtIdReversed || {});
+    
+    // Preparar buckets vacíos para las propiedades solicitadas (filterProperties)
+    const bucketMaps = {};
+    filterProperties.forEach(propId => {
+        bucketMaps[propId] = {}; // val -> { count, dbIds: [{id, modelUrn}] }
+    });
+
+    const hasAnySelection = Object.keys(filterSelections).some(k => filterSelections[k] && filterSelections[k].length > 0);
+    const globalValidDbIds = [];
+
+    // Nivel 1: Filtrar sólo data activa en el visor (rosetta) y filtrado global
+    allData.forEach(row => {
+        const extId = row.dbId; // Recordatorio: en mappedData, pospusimos UUID a dbId
+        const urn = row.source_urn || row.model_urn;
+        const safeUrn = String(urn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        
+        // Excluir elementos de modelos ocultos por Sources
+        if (hiddenSet.has(urn) || hiddenSet.has(safeUrn)) {
+            return;
+        }
+        
+        // Evitar fantasmas:
+        // Si el elemento no existe en la piedra Rosetta activa de la UI, ignorar
+        const urnDict = rosettaToExtIdReversed[urn] || rosettaToExtIdReversed[safeUrn];
+        if (!rosettaToExtIdReversed || !urnDict || urnDict[extId] === undefined) {
+            return;
+        }
+        
+        // ID geométrico temporal del visor de Autodesk
+        const viewerDbId = urnDict[extId];
+
+        // Validar si pasa TODOS los filtros activos
+        let passesAllFilters = true;
+        if (hasAnySelection) {
+            for (let selPropId in filterSelections) {
+                const sVals = filterSelections[selPropId];
+                if (!sVals || sVals.length === 0) continue;
+                
+                // Formato clave: Category::PropertyName
+                let pName = selPropId.split('::')[1] || selPropId;
+                let isSourceFilter = false;
+                if (selPropId === 'Standard::Sources') {
+                   isSourceFilter = true;
+                }
+
+                const rowVal = isSourceFilter 
+                    ? String(row.source_urn || row.model_urn).trim() 
+                    : String(row[pName] || '(Unassigned)').trim();
+                
+                if (!sVals.includes(rowVal)) {
+                    passesAllFilters = false;
+                    break;
+                }
+            }
+        }
+
+        if (hasAnySelection && passesAllFilters) {
+            globalValidDbIds.push({ id: parseInt(viewerDbId, 10), modelUrn: safeUrn });
+        }
+
+        // Construir buckets (Nivel Facetado - OR para sí mismo)
+        for(let propId of filterProperties) {
+            let pName = propId.split('::')[1] || propId;
+            let val = '';
+            
+            if (propId === 'Standard::Sources') {
+                val = String(row.source_urn || row.model_urn).trim();
+            } else {
+                val = String(row[pName] || '(Unassigned)').trim();
+            }
+            if(!val) continue;
+
+            let passesFacet = true;
+            if (hasAnySelection) {
+                for (let selPropId in filterSelections) {
+                    if (selPropId === propId) continue; // Faceted OR
+                    const sVals = filterSelections[selPropId];
+                    if (!sVals || sVals.length === 0) continue;
+                    
+                    let pNameCheck = selPropId.split('::')[1] || selPropId;
+                    let isCheckSourceFilter = false;
+                    if (selPropId === 'Standard::Sources') isCheckSourceFilter = true;
+
+                    const rowVal = isCheckSourceFilter
+                        ? String(row.source_urn || row.model_urn).trim() 
+                        : String(row[pNameCheck] || '(Unassigned)').trim();
+                    if (!sVals.includes(rowVal)) {
+                        passesFacet = false;
+                        break;
+                    }
+                }
+            }
+
+            if (passesFacet) {
+                if(!bucketMaps[propId][val]) {
+                    bucketMaps[propId][val] = { count: 0, dbIds: [] };
+                }
+                bucketMaps[propId][val].count++;
+                bucketMaps[propId][val].dbIds.push({ id: viewerDbId, modelUrn: safeUrn });
+            }
+        }
+    });
+
+    const result = {};
+    filterProperties.forEach(propId => {
+        const map = bucketMaps[propId];
+        const values = [];
+        for (let val in map) {
+            values.push({
+                 value: val,
+                 count: map[val].count,
+                 dbIds: map[val].dbIds
+            });
+        }
+        
+        values.sort(function(a, b) {
+             if (b.count === a.count) return a.value.localeCompare(b.value);
+             return b.count - a.count;
+        });
+        
+        let total = 0;
+        values.forEach(function(entry) { total += entry.count; });
+        
+        // Fake Meta structure to satisfy frontend expected data
+        const fakeMeta = {
+            id: propId,
+            name: propId.split('::')[1] || propId,
+            category: propId.split('::')[0] || 'General'
+        };
+
+        result[propId] = {
+            meta: fakeMeta,
+            total: total,
+            values: values
+        };
+    });
+
+    return { buckets: result, globalValidDbIds };
+}

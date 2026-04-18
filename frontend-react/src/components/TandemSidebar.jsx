@@ -41,6 +41,7 @@ const TandemSidebar = ({
     removeModel,
     setRelinkTargetModel,
     setImportModalOpen,
+    extractionJobs,
 
     // DocumentPanel props
     documents,
@@ -66,6 +67,7 @@ const TandemSidebar = ({
     trackingPlacementMode,
     selectedPinId,
     onCameraCapture,
+    onPinMoveRequest, // New Prop
     BACKEND_URL,
     scheduleData,
     setScheduleData,
@@ -115,6 +117,7 @@ const TandemSidebar = ({
                         setRelinkTargetModel(model);
                         setImportModalOpen(true);
                     }}
+                    extractionJobs={extractionJobs}
                 />
             )}
 
@@ -155,13 +158,15 @@ const TandemSidebar = ({
                     pins={trackingData ? [
                         ...(trackingData.avance || []),
                         ...(trackingData.docs || []),
-                        ...(trackingData.restricciones || [])
+                        ...(trackingData.restricciones || []),
+                        ...(trackingData.maquinaria || [])
                     ] : []}
                     onPinSelect={(id) => {
                         const allPins = [
                             ...(trackingData.avance || []),
                             ...(trackingData.docs || []),
-                            ...(trackingData.restricciones || [])
+                            ...(trackingData.restricciones || []),
+                            ...(trackingData.maquinaria || [])
                         ];
                         const found = allPins.find(p => p.id === id);
                         if (found && onTrackingPinClick) onTrackingPinClick(found);
@@ -179,6 +184,7 @@ const TandemSidebar = ({
                     onTogglePins={() => { }} // Placeholder
                     selectedPinId={selectedPinId}
                     onCameraCapture={onCameraCapture}
+                    onPinMoveRequest={onPinMoveRequest}
                 />
             )}
 
