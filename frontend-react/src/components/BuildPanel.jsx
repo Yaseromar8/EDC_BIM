@@ -124,8 +124,7 @@ const BuildPanel = ({
         const typeMap = {
             'DOCS': 'docs',
             'AVANCE': 'avance',
-            'RESTRICCIONES': 'restriction',
-            'MAQUINARIA': 'maquinaria'
+            'RESTRICCIONES': 'restriction'
         };
         const targetType = typeMap[activeTab];
         return pins.filter(p => p.type === targetType);
@@ -166,7 +165,7 @@ const BuildPanel = ({
         <div className="build-panel source-files-panel">
             {/* TABS NAVIGATION */}
             <div className="bp-tabs">
-                {['DATA', 'DOCS', 'AVANCE', 'RESTRICCIONES', 'MAQUINARIA'].map((tab) => (
+                {['DATA', 'DOCS', 'AVANCE', 'RESTRICCIONES'].map((tab) => (
                     <button
                         key={tab}
                         className={`bp-tab ${activeTab === tab ? 'active' : ''}`}
@@ -179,57 +178,13 @@ const BuildPanel = ({
 
 
             {/* SHARED CONTENT FOR ALL TABS (Filtered) */}
-            {(activeTab === 'DATA' || activeTab === 'DOCS' || activeTab === 'AVANCE' || activeTab === 'RESTRICCIONES' || activeTab === 'MAQUINARIA') && (
+            {(activeTab === 'DATA' || activeTab === 'DOCS' || activeTab === 'AVANCE' || activeTab === 'RESTRICCIONES') && (
                 <>
                     {/* Header... (Shared) - Only show Models in DATA tab though? User said "when in DATA all are seen". Implies structure might be different per tab.
                         Let's keep Models ONLY in DATA for now as per "DATA contains what we have".
                         So conditionally render Models section.
                     */}
-                    {activeTab === 'DATA' && (
-                        <div className="sfp-header">
-                            <h3>CONTROL DE OBRA</h3>
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                <button
-                                    onClick={handleCameraClick}
-                                    style={{
-                                        background: '#3b82f6',
-                                        border: 'none',
-                                        color: 'white',
-                                        borderRadius: '4px',
-                                        padding: '4px 8px',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '4px',
-                                        fontSize: '12px',
-                                        fontWeight: 600
-                                    }}
-                                    title="Tomar Foto nueva"
-                                >
-                                    <span>📷</span> Foto
-                                </button>
 
-                                {isConnected ? (
-                                    <div
-                                        onClick={() => window.location.href = '/api/auth/login'}
-                                        title="Reconectar"
-                                        style={{
-                                            display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: '#10b981', fontWeight: '600', background: '#ecfdf5', padding: '4px 6px', borderRadius: '4px', border: '1px solid #a7f3d0', cursor: 'pointer'
-                                        }}>
-                                        <span>🟢</span> ON
-                                    </div>
-                                ) : (
-                                    <button
-                                        className="sfp-import-btn"
-                                        onClick={() => window.location.href = '/api/auth/login'}
-                                        style={{ background: '#0696D7', border: 'none' }}
-                                    >
-                                        Connect
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    )}
 
                     {/* Modelos 3D Section - REMOVED per user request (Files handling only in FILES panel) */}
                     {/* 
@@ -299,15 +254,14 @@ const BuildPanel = ({
                             <span className="sfp-section-title">
                                 {activeTab === 'DATA' ? 'Puntos de Control' :
                                     activeTab === 'DOCS' ? 'Documentos' :
-                                        activeTab === 'AVANCE' ? 'Avance' : 
-                                            activeTab === 'MAQUINARIA' ? 'Maquinaria' : 'Restricciones'}
+                                        activeTab === 'AVANCE' ? 'Avance' : 'Restricciones'}
                             </span>
                             <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         // Determine type based on tab
-                                        const typeMap = { 'DATA': 'data', 'DOCS': 'docs', 'AVANCE': 'avance', 'RESTRICCIONES': 'restriction', 'MAQUINARIA': 'maquinaria' };
+                                        const typeMap = { 'DATA': 'data', 'DOCS': 'docs', 'AVANCE': 'avance', 'RESTRICCIONES': 'restriction' };
                                         onTogglePlacement(typeMap[activeTab]);
                                     }}
                                     className="sfp-import-text-btn"
@@ -348,8 +302,7 @@ const BuildPanel = ({
                                                 <span className="pin-index-badge" style={{
                                                     background: pin.type === 'restriction' ? '#f59e0b' : // Yellow/Orange
                                                         pin.type === 'docs' ? '#3b82f6' :        // Blue
-                                                            pin.type === 'maquinaria' ? '#a855f7' :  // Purple
-                                                                pin.type === 'avance' ? '#9ca3af' :      // Grey
+                                                            pin.type === 'avance' ? '#9ca3af' :      // Grey
                                                                     '#6b7280'                                // Default Grey
                                                 }}>
                                                     {/* In DATA tab, index might be confusing if we filter, but filteredPins updates index. 
@@ -364,7 +317,7 @@ const BuildPanel = ({
                                                 {/* Type Indicator Icon if in DATA tab */}
                                                 {activeTab === 'DATA' && pin.type && pin.type !== 'data' && (
                                                     <span style={{ fontSize: '10px', marginRight: '6px', opacity: 0.7 }}>
-                                                        {pin.type === 'docs' ? '📄' : pin.type === 'restriction' ? '⚠️' : pin.type === 'maquinaria' ? '🚜' : '✅'}
+                                                        {pin.type === 'docs' ? '📄' : pin.type === 'restriction' ? '⚠️' : '✅'}
                                                     </span>
                                                 )}
 
@@ -401,15 +354,7 @@ const BuildPanel = ({
                                                                 }}>
                                                                     <span className="sfp-menu-icon" style={{ fontSize: '12px' }}>✏️</span> Renombrar
                                                                 </button>
-                                                                {pin.type === 'maquinaria' && (
-                                                                    <button onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        if (onPinMoveRequest) onPinMoveRequest(pin.id);
-                                                                        setActiveMenu(null);
-                                                                    }}>
-                                                                        <span className="sfp-menu-icon" style={{ fontSize: '12px' }}>📍</span> Mover
-                                                                    </button>
-                                                                )}
+                                                                {/* Eliminado mover panel de maquinaria */}
                                                                 {/* 
                                                                 <button onClick={(e) => {
                                                                     e.stopPropagation();

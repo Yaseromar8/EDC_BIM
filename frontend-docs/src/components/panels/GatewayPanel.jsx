@@ -32,9 +32,11 @@ export default function GatewayPanel({ projectPrefix, onClose }) {
     }
   ];
 
-  const handleOpenFront = (urn) => {
-    // Intercepta en frontend-react (Puerto 5173) en App.jsx línea 581
-    window.open(`${VISOR_URL}/?model_urn=${encodeURIComponent(urn)}`, '_blank', 'noopener,noreferrer');
+  const handleOpenFront = (front) => {
+    // Intercepta en frontend-react App.jsx Gateway Interceptor (líneas 721-749)
+    // Envía ?project=<prefix>&frente=<id>&fn=<nombre> para bootstrap automático
+    const url = `${VISOR_URL}/?project=${encodeURIComponent(projectPrefix)}&frente=${encodeURIComponent(front.id)}&fn=${encodeURIComponent(front.title)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -64,7 +66,7 @@ export default function GatewayPanel({ projectPrefix, onClose }) {
             <div 
               key={f.id} 
               className={`gateway-card ${f.className}`}
-              onClick={() => handleOpenFront(f.urn)}
+              onClick={() => handleOpenFront(f)}
             >
               <div className="gateway-icon">{f.icon}</div>
               <h3>{f.title}</h3>

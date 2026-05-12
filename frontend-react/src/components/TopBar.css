@@ -5,15 +5,15 @@
     justify-content: space-between;
     align-items: center;
     height: 48px;
-    background-color: #2A2A2A;
-    /* Red line removed */
+    background-color: #3A3A3A;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
     padding: 0 12px;
     color: #E0E0E0;
     box-sizing: border-box;
-    font-family: 'Inter', sans-serif;
-    position: relative;
+    font-family: inherit;
+    position: absolute;
+    top: 0; left: 0; right: 0;
     z-index: 2000;
-    /* High z-index to stay on top */
 }
 
 .top-bar-left,
@@ -138,9 +138,8 @@
 .top-search {
     display: flex;
     align-items: center;
-    background-color: #000;
-    /* Darker black for search input */
-    border: 1px solid #333;
+    background-color: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 4px;
     padding: 0 10px;
     width: 250px;

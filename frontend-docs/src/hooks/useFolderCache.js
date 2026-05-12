@@ -231,6 +231,12 @@ export function useFolderCache(apiBase, projectPrefix) {
     bumpCache();
   }, [bumpCache]);
 
+  const forceSetData = useCallback((nodeId, data) => {
+    const key = nodeId || '__root__';
+    cacheRef.current.set(key, data);
+    bumpCache();
+  }, [bumpCache]);
+
   const methods = useMemo(() => ({
     getChildren,
     expandNode,
@@ -246,11 +252,12 @@ export function useFolderCache(apiBase, projectPrefix) {
     optimisticDelete,
     commitDelete,
     rollbackDelete,
+    forceSetData,
   }), [
     getChildren, expandNode, fetchNode, invalidateNode, invalidateAll,
     optimisticCreate, commitCreate, rollbackCreate,
     optimisticRename, commitRename, rollbackRename,
-    optimisticDelete, commitDelete, rollbackDelete
+    optimisticDelete, commitDelete, rollbackDelete, forceSetData
   ]);
 
   // Return methods + cacheVersion separately so consumers can choose

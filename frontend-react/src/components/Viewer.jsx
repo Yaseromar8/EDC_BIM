@@ -94,6 +94,7 @@ const Viewer = ({
     const viewerRef = useRef(null);
     const containerRef = useRef(null);
     const loadedModelsRef = useRef({});
+    const loadedViewGuidsRef = useRef({}); // Tracks the GUID of the currently loaded view per model URN
     const baseOffsetRef = useRef(null);
     const basePlacementRef = useRef(null);
     const spriteViewRef = useRef(null);
@@ -108,6 +109,12 @@ const Viewer = ({
     const ghostMeshRef = useRef(null);
     const viewerReadyRef = useRef(false);
     const recalcDebounceRef = useRef(null);
+    const activeViewableGuidsRef = useRef(activeViewableGuids);
+
+    // Keep ref synced with latest prop value
+    useEffect(() => {
+        activeViewableGuidsRef.current = activeViewableGuids;
+    }, [activeViewableGuids]);
 
     // --- States ---
     const [viewerReady, setViewerReady] = useState(false);
@@ -118,9 +125,9 @@ const Viewer = ({
     // Workfronts State
     const [isWorkfrontsPanelOpen, setWorkfrontsPanelOpen] = useState(false);
     const [workfronts, setWorkfronts] = useState([
-        { id: '1', start: 0, end: 500, color: '#ffaaaa', name: 'Frente 1: Excavación' },
-        { id: '2', start: 500, end: 1100, color: '#9c27b0', name: 'Frente 2: Base' },
-        { id: '3', start: 1100, end: 2000, color: '#4caf50', name: 'Frente 3: Asfalto' }
+        { id: '1', start: 0, end: 500, color: '#ffaaaa', name: 'Frente 1: Excavación', track: 'PG' },
+        { id: '2', start: 500, end: 1100, color: '#9c27b0', name: 'Frente 2: Base', track: 'PG' },
+        { id: '3', start: 1100, end: 2000, color: '#4caf50', name: 'Frente 3: Asfalto', track: 'PG' }
     ]);
 
     // Sync hiddenModelUrnsRef
@@ -540,10 +547,13 @@ const Viewer = ({
 
                 window.__ghostCleanup = stopGhostEnforcement;
                 
+                // GHOST ENFORCEMENT: Solo visual — mantenido aquí porque depende de
+                // las closures startGhostEnforcement/stopGhostEnforcement del Initializer.
+                // La sincronización con Inventory se maneja en un useEffect separado
+                // (ver "Isolation → Inventory Sync" más abajo) para resiliencia con HMR.
                 viewer.addEventListener(Autodesk.Viewing.ISOLATE_EVENT, () => {
                     const loadedModels = viewer.impl.modelQueue().getModels();
                     let hasIsolation = false;
-                    
                     for (const model of loadedModels) {
                         const isolatedIds = viewer.getIsolatedNodes(model);
                         if (isolatedIds && isolatedIds.length > 0) {
@@ -551,62 +561,102 @@ const Viewer = ({
                             break;
                         }
                     }
-                    
                     if (hasIsolation) {
                         startGhostEnforcement();
                     } else {
                         stopGhostEnforcement();
                     }
-
-                    // --- SYNC: Visor → Inventory ---
-                    setTimeout(() => {
-                        const allIsolatedExtIds = [];
-                        const allModels = viewer.impl.modelQueue().getModels();
-                        
-                        for (const model of allModels) {
-                            const isolatedIds = viewer.getIsolatedNodes(model);
-                            if (isolatedIds && isolatedIds.length > 0) {
-                                const modelUrn = model.getData()?.urn;
-                                const safeUrn = modelUrn ? String(modelUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') : '';
-                                const urnDict = window.rosettaToExtId?.[modelUrn] || window.rosettaToExtId?.[safeUrn];
-                                
-                                if (urnDict) {
-                                    for (const dbId of isolatedIds) {
-                                        const extId = urnDict[dbId];
-                                        if (extId) allIsolatedExtIds.push(extId);
-                                    }
-                                }
-                            }
-                        }
-                        
-                        window.dispatchEvent(new CustomEvent('inventory-isolation-sync', {
-                            detail: { isolatedExtIds: allIsolatedExtIds }
-                        }));
-                        console.log(`[SYNC Visor→Inventory] ${allIsolatedExtIds.length} elementos aislados despachados`);
-                    }, 100);
                 });
                 viewer.addEventListener(Autodesk.Viewing.OBJECT_TREE_CREATED_EVENT, (event) => {
                      console.log(`[APS LMV] ⏱️ ${performance.now().toFixed(2)}ms - Evento: OBJECT_TREE_CREATED_EVENT`);
                      
-                     // --- FASE 5: PIEDRA ROSETTA (MULTI-MODELO) ---
                      const modelLoaded = event.model;
                      if (!modelLoaded) return;
                      const urn = modelLoaded.getData().urn;
+                     const tree = modelLoaded.getInstanceTree();
 
                      modelLoaded.getExternalIdMapping((mapping) => {
+                         // PIEDRA ROSETTA: Solo mapear NODOS HOJA con geometría real.
+                         // Un nodo hoja es aquel que NO tiene hijos en el árbol de instancias.
+                         // Excluimos nodos padre (Type, Category, Family) porque:
+                         //   1. No representan elementos constructivos individuales
+                         //   2. Aislarlos muestra toda su subrama (efecto "doble modelo")
+                         //   3. Sus propiedades son de tipo, no de instancia
+                         const leafPhysicalDbIds = new Set();
+                         if (tree) {
+                             const rootId = tree.getRootId();
+                             const scanLeaves = (dbId) => {
+                                 const childCount = tree.getChildCount(dbId);
+                                 if (childCount === 0) {
+                                     // Nodo hoja: verificar si tiene geometría (fragmentos)
+                                     let hasFragments = false;
+                                     tree.enumNodeFragments(dbId, () => { hasFragments = true; });
+                                     if (hasFragments) leafPhysicalDbIds.add(dbId);
+                                 } else {
+                                     // Nodo padre: descender pero NO agregarlo al diccionario
+                                     tree.enumNodeChildren(dbId, (childId) => {
+                                         scanLeaves(childId);
+                                     });
+                                 }
+                             };
+                             scanLeaves(rootId);
+                         }
+
                          window.rosettaToDbId = window.rosettaToDbId || {};
-                         window.rosettaToDbId[urn] = mapping;
+                         window.rosettaToDbId[urn] = {};
                      
                          window.rosettaToExtId = window.rosettaToExtId || {};
                          window.rosettaToExtId[urn] = {};
+                         
+                         let rawCount = 0;
+                         let leafCount = 0;
+
                          for (const extId in mapping) {
                              if (mapping.hasOwnProperty(extId)) {
                                  const dbId = mapping[extId];
+                                 rawCount++;
+
+                                 // rosettaToExtId: TODOS los nodos (dbId → extId)
+                                 // Necesario para que highlight y isolation sync funcionen
+                                 // con TODAS las categorías (incluyendo genéricas con sub-componentes).
                                  window.rosettaToExtId[urn][dbId] = extId;
+
+                                 // rosettaToDbId: SOLO hojas físicas (extId → dbId)
+                                 // Usado por Inventory para purgar nodos fantasma (Type/Category/Family)
+                                 // que no representan elementos constructivos individuales.
+                                 if (leafPhysicalDbIds.has(dbId)) {
+                                     window.rosettaToDbId[urn][extId] = dbId;
+                                     leafCount++;
+                                 }
                              }
                          }
                          
-                         console.log(`[Piedra Rosetta Multi-Modelo] Mapeo Bidireccional Creado para ${urn}. Total: ${Object.keys(mapping).length}`);
+                         console.log(`[Piedra Rosetta Multi-Modelo] Diccionario Creado (${urn}). Nodos Crudos: ${rawCount} -> Hojas Físicas: ${leafCount}`);
+
+                         // IFC BRIDGE: Para modelos IFC, el viewer usa IDs path-based (0/0/0/X)
+                         // pero la DB almacena IfcGUIDs (2q0BjkWCptwm...). Construir mapeo adicional.
+                         const sampleExtId = Object.keys(window.rosettaToDbId[urn])[0];
+                         if (sampleExtId && sampleExtId.includes('/')) {
+                             console.log(`[Piedra Rosetta] Detectado modelo IFC — construyendo puente IfcGUID...`);
+                             const leafDbIds = Array.from(leafPhysicalDbIds);
+                             modelLoaded.getBulkProperties(leafDbIds, ['IfcGUID'], (results) => {
+                                 let bridgeCount = 0;
+                                 results.forEach(result => {
+                                     const guidProp = result.properties.find(p => p.displayName === 'IfcGUID');
+                                     if (guidProp && guidProp.displayValue) {
+                                         // Agregar IfcGUID como clave adicional (no sobrescribe path-based)
+                                         window.rosettaToDbId[urn][guidProp.displayValue] = result.dbId;
+                                         // Mapeo inverso: dbId → IfcGUID (para click-to-select e isolation sync)
+                                         window.rosettaToExtId[urn][result.dbId] = guidProp.displayValue;
+                                         bridgeCount++;
+                                     }
+                                 });
+                                 console.log(`[Piedra Rosetta] IfcGUID bridge completado: ${bridgeCount} elementos mapeados.`);
+                                 window.dispatchEvent(new CustomEvent('rosetta-ready'));
+                             });
+                         } else {
+                             window.dispatchEvent(new CustomEvent('rosetta-ready'));
+                         }
                      }, (err) => {
                          console.error("[Piedra Rosetta] Error obteniendo el ExternalIdMapping:", err);
                      });
@@ -650,6 +700,18 @@ const Viewer = ({
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [accessToken]);
+
+    // ============== EVENTOS GLOBALES DE TOPBAR ==============
+    useEffect(() => {
+        const toggleProg = () => setShowProgressives(prev => !prev);
+        const toggleWF = () => setWorkfrontsPanelOpen(prev => !prev);
+        window.addEventListener('toggle-progressives', toggleProg);
+        window.addEventListener('toggle-workfronts-panel', toggleWF);
+        return () => {
+            window.removeEventListener('toggle-progressives', toggleProg);
+            window.removeEventListener('toggle-workfronts-panel', toggleWF);
+        };
+    }, []);
 
     const handleModelLoaded = useCallback(async (event, retryCount = 0) => {
         if (!mountedRef.current) return; // Prevent if unmounted
@@ -707,16 +769,8 @@ const Viewer = ({
         // incluir *todas* las propiedades DSI (inclusive las instancias únicas)
         // a través de todos los modelos federados sin truncamiento.
 
-        // Ensure model is visible (centered)
-        setTimeout(() => {
-            if (mountedRef.current && viewer && viewer.model && viewer.impl) {
-                try {
-                    viewer.fitToView();
-                } catch (e) {
-                    console.warn("[Viewer] Could not fit to view (viewer might be closing):", e);
-                }
-            }
-        }, 500);
+        // NOTA: fitToView() se ejecuta condicionalmente en loadModelSequentially
+        // para evitar destruir la cámara/Section Box de la Vista 3D seleccionada.
     }, [onModelProperties]);
 
     // Recalcular Filtros nativamente desde el API de APS (con debounce para evitar double-fire)
@@ -781,20 +835,36 @@ const Viewer = ({
             if (viewer && isReady) {
                 const activeFilters = Object.keys(detail.filterSelections || {}).filter(k => detail.filterSelections[k].length > 0);
                 console.log(`[VIEWER EXECUTE] activeFilters count: ${activeFilters.length}`, activeFilters);
+                console.log(`[VIEWER EXECUTE] filterSelections:`, JSON.stringify(detail.filterSelections));
                 
                 // TANDEM GRAY-GHOST: Guardar el filtro global en la memoria para el manejador de Temas
                 window._lastHasActiveFilters = activeFilters.length > 0;
                 window._lastValidDbIds = mergedValidIdsByUrn;
 
+                // GUARD: Señalizar que la isolation viene del sistema de filtros,
+                // NO del usuario. Esto evita que handleIsolationSync dispare
+                // un MASTER RESET que crearía un feedback loop infinito.
+                window._filterIsolationInProgress = true;
+
                 if (activeFilters.length === 0) {
                      console.log(`[VIEWER EXECUTE] 🔄 No active filters. Resetting isolation per-model.`);
                      const modelsQueue = viewer.impl.modelQueue().getModels();
-                     modelsQueue.forEach(m => viewer.isolate([], m));
+                     modelsQueue.forEach(m => {
+                         // Respect Sources visibility — don't un-hide models that are toggled off
+                         const rawUrn = m.getData()?.urn;
+                         const normViewerUrn = normalizeUrn(rawUrn);
+                         if (hiddenModelUrnsRef.current && hiddenModelUrnsRef.current.some(u => normalizeUrn(u) === normViewerUrn)) {
+                             viewer.hideModel(m.id);
+                             return;
+                         }
+                         viewer.isolate([], m);
+                     });
                      if (window.__ghostCleanup) window.__ghostCleanup();
                 } else {
                     viewer.setGhosting(true);
                      const modelsQueue = viewer.impl.modelQueue().getModels();
                      let totalIsolated = 0;
+                     console.log(`[VIEWER EXECUTE] modelsQueue: ${modelsQueue.length} model instances`, modelsQueue.map(m => m.getData()?.urn?.slice(-20)));
 
                      modelsQueue.forEach((m, idx) => {
                          const rawViewerUrn = m.getData()?.urn;
@@ -817,9 +887,20 @@ const Viewer = ({
                          
                          if (idsSet && idsSet.size > 0) {
                              const idsArray = Array.from(idsSet);
-                             viewer.impl.visibilityManager.isolate(idsArray, m);
-                             console.log(`[VIEWER EXECUTE]   Model ${idx} (${viewerUrn?.slice(-20)}): ${idsArray.length} elements isolated.`);
-                             totalIsolated += idsArray.length;
+                             // LEAF-ONLY FILTER: Aislar nodos padre hace visible toda su subrama.
+                             // Elementos Unassigned a menudo incluyen nodos Type/Category de Revit
+                             // que no tienen el parámetro de instancia. Filtramos a hojas solamente.
+                             const tree = m.getInstanceTree();
+                             const leafIds = tree 
+                                 ? idsArray.filter(id => tree.getChildCount(id) === 0) 
+                                 : idsArray;
+                             if (leafIds.length > 0) {
+                                 viewer.impl.visibilityManager.isolate(leafIds, m);
+                             } else {
+                                 viewer.impl.visibilityManager.isolate([-1], m); // No leaf matches → ghost all
+                             }
+                             console.log(`[VIEWER EXECUTE]   Model ${idx} (${viewerUrn?.slice(-20)}): ${leafIds.length} leaf elements isolated (${idsArray.length} raw).`);
+                             totalIsolated += leafIds.length;
                          } else {
                              viewer.impl.visibilityManager.isolate([-1], m); // Forzar ghost: dbId -1 no existe → todo el modelo queda fantasma
                              console.log(`[VIEWER EXECUTE]   Model ${idx} (${viewerUrn?.slice(-20)}): fully ghosted`);
@@ -829,6 +910,10 @@ const Viewer = ({
                      console.log(`[VIEWER EXECUTE] \uD83C\uDFAF Per-model isolation complete: ${totalIsolated} total elements visible`);
                      viewer.impl.invalidate(true, true, true);
                 }
+                
+                // GUARD: Liberar la bandera después de un tick para que el ISOLATE_EVENT
+                // (que se despacha asincrónicamente por el viewer) sea ignorado.
+                setTimeout(() => { window._filterIsolationInProgress = false; }, 300);
                 
                 // TANDEM GRAY-GHOST: Repintar tema automáticamente al cambiar selecciones (respeta memoria fotográfica)
                  if (window._lastThemeEventConfig && window._lastThemeEventConfig.active) {
@@ -864,7 +949,15 @@ const Viewer = ({
             if (!propId || !values || values.length === 0) {
                 console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Ejecutando: per-model isolate([]) [Reset]`);
                 const modelsQueue = viewer.impl.modelQueue().getModels();
-                modelsQueue.forEach(m => viewer.isolate([], m));
+                modelsQueue.forEach(m => {
+                    const rawUrn = m.getData()?.urn;
+                    const normUrn = normalizeUrn(rawUrn);
+                    if (hiddenModelUrnsRef.current && hiddenModelUrnsRef.current.some(u => normalizeUrn(u) === normUrn)) {
+                        viewer.hideModel(m.id);
+                        return;
+                    }
+                    viewer.isolate([], m);
+                });
                 return;
             }
 
@@ -913,14 +1006,22 @@ const Viewer = ({
                 Object.values(idsByUrn).forEach(set => set.forEach(id => allIds.push(id)));
                 if (allIds.length > 0) viewer.fitToView(allIds);
             } else {
-                // Reset: Show all on every model
+                // Reset: Show all on every model (but respect Sources visibility)
                 const modelsQueue = viewer.impl.modelQueue().getModels();
-                modelsQueue.forEach(m => viewer.isolate([], m));
+                modelsQueue.forEach(m => {
+                    const rawUrn = m.getData()?.urn;
+                    const normUrn = normalizeUrn(rawUrn);
+                    if (hiddenModelUrnsRef.current && hiddenModelUrnsRef.current.some(u => normalizeUrn(u) === normUrn)) {
+                        viewer.hideModel(m.id);
+                        return;
+                    }
+                    viewer.isolate([], m);
+                });
             }
         };
 
         const handleTheme = (e) => {
-            const { propId, values, active } = e.detail;
+            const { propId, values, active, customColors } = e.detail;
             window._lastThemeEventConfig = { propId, values, active }; // MEMORIA FOTOGRAFICA
             console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: theme-property-bucket - propId: ${propId}, active: ${active}`);
             
@@ -928,6 +1029,9 @@ const Viewer = ({
                 '#3AA0FF', '#F97316', '#10B981', '#F43F5E', '#A855F7', '#0EA5E9', '#EAB308',
                 '#EF4444', '#8B5CF6', '#EC4899', '#6366F1', '#14B8A6', '#84CC16', '#F59E0B'
             ];
+
+            // Merge custom per-value color overrides (from color picker or global store)
+            const customOverrides = customColors || window._customValueColors || {};
 
             const modelsQueue = viewer.impl.modelQueue().getModels();
             
@@ -952,7 +1056,9 @@ const Viewer = ({
                     const originalIndex = buckets[propId].values.findIndex(v => v.value === val);
                     const entry = buckets[propId].values[originalIndex]; // Equivalente a find o valueIndex
                     if (originalIndex !== -1 && entry) {
-                        const hexColor = PALETTE[originalIndex % PALETTE.length];
+                        // Check for custom per-value color override first, fall back to PALETTE
+                        const overrideKey = `${propId}::${val}`;
+                        const hexColor = customOverrides[overrideKey] || PALETTE[originalIndex % PALETTE.length];
                         
                         // Parse hex to Vector4 (Shader readable)
                         const rgb = parseInt(hexColor.replace('#', ''), 16);
@@ -1096,6 +1202,52 @@ const Viewer = ({
             } else {
                 if (onSelectionChanged) onSelectionChanged(null);
             }
+
+            // --- Sincronización de Selección Múltiple (Silenciosa) ---
+            try {
+                const allSelectedExtIds = [];
+                let hasSelection = false;
+
+                for (const sel of selections) {
+                    if (!sel.dbIdArray || sel.dbIdArray.length === 0 || !sel.model) continue;
+                    hasSelection = true;
+                    const selModel = sel.model;
+                    const modelUrn = selModel.getData()?.urn;
+                    const safeUrn = modelUrn ? String(modelUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') : '';
+                    const urnDict = window.rosettaToExtId?.[modelUrn] || window.rosettaToExtId?.[safeUrn];
+
+                    if (!urnDict) continue;
+
+                    const instanceTree = selModel.getInstanceTree();
+                    
+                    for (const dbId of sel.dbIdArray) {
+                        const extId = urnDict[dbId];
+                        const isParent = instanceTree && instanceTree.getChildCount(dbId) > 0;
+
+                        if (extId) {
+                            allSelectedExtIds.push(extId);
+                        }
+
+                        // Expandir a hojas
+                        if (isParent) {
+                            instanceTree.enumNodeChildren(dbId, (childId) => {
+                                if (instanceTree.getChildCount(childId) === 0) {
+                                    const childExtId = urnDict[childId];
+                                    if (childExtId) {
+                                        allSelectedExtIds.push(childExtId);
+                                    }
+                                }
+                            }, true);
+                        }
+                    }
+                }
+
+                window.dispatchEvent(new CustomEvent('inventory-selection-sync', {
+                    detail: { selectedExtIds: allSelectedExtIds }
+                }));
+            } catch (err) {
+                console.error('[SYNC ❌] Error en selection sync:', err);
+            }
         };
 
         viewer.addEventListener(Autodesk.Viewing.AGGREGATE_SELECTION_CHANGED_EVENT, handleSelection);
@@ -1104,6 +1256,102 @@ const Viewer = ({
             viewer.removeEventListener(Autodesk.Viewing.AGGREGATE_SELECTION_CHANGED_EVENT, handleSelection);
         }
     }, [viewerReady, onSelectionChanged]);
+
+    // ═══════════════════════════════════════════════════════════
+    // Isolation → Inventory Sync
+    // En su propio useEffect([viewerReady]) para que se re-registre con HMR,
+    // igual que el handler de SELECTION de arriba (que SÍ funciona).
+    // ═══════════════════════════════════════════════════════════
+    useEffect(() => {
+        const viewer = viewerRef.current;
+        if (!viewer || !viewerReady) return;
+
+        const handleIsolationSync = (event) => {
+            // GUARD: Si la isolation fue disparada por el sistema de filtros (recalculate-filters),
+            // NO propagar al App.jsx. Esto rompe el feedback loop:
+            //   filter→isolate→ISOLATE_EVENT→sync(0 ids)→MASTER RESET→filter(vacío)→loop
+            if (window._filterIsolationInProgress) {
+                console.log(`[ISOLATE_EVENT] ⏭️ Ignorado (filterIsolationInProgress=true)`);
+                return;
+            }
+            console.log(`[ISOLATE_EVENT] Payload:`, event);
+            // Pequeño retardo para asegurar que el estado interno del viewer se haya actualizado
+            setTimeout(() => {
+                try {
+                    const allIsolatedExtIds = [];
+                    const models = viewer.impl.modelQueue().getModels();
+                    let hasIsolation = false;
+
+                    console.log(`[ISOLATE_EVENT] Disparado (post-timeout). Modelos: ${models.length}`);
+
+                for (const model of models) {
+                    const isolatedIds = viewer.getIsolatedNodes(model);
+                    if (!isolatedIds || isolatedIds.length === 0) continue;
+                    hasIsolation = true;
+
+                    const modelUrn = model.getData()?.urn;
+                    const safeUrn = modelUrn ? String(modelUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') : '';
+                    const urnDict = window.rosettaToExtId?.[modelUrn] || window.rosettaToExtId?.[safeUrn];
+
+                    if (!urnDict) {
+                        console.warn(`[SYNC ⚠️] Sin Rosetta para: ${(modelUrn || '').substring(0, 60)}`);
+                        console.warn(`[SYNC ⚠️]   Claves disponibles:`, Object.keys(window.rosettaToExtId || {}));
+                        continue;
+                    }
+
+                    const instanceTree = model.getInstanceTree();
+                    let directHits = 0, expandedHits = 0, misses = 0;
+
+                    for (const dbId of isolatedIds) {
+                        const extId = urnDict[dbId];
+                        const isParent = instanceTree && instanceTree.getChildCount(dbId) > 0;
+
+                        if (extId) {
+                            allIsolatedExtIds.push(extId);
+                            directHits++;
+                        }
+
+                        // SIEMPRE expandir nodos padre a sus hijos hoja.
+                        // Antes esto era un "else if", lo cual impedía la expansión
+                        // cuando el padre tenía extId (y rosettaToExtId mapea TODOS los nodos).
+                        // La tabla de inventario solo muestra hojas (instancias), así que
+                        // necesitamos los extIds de los hijos para que el filtro funcione.
+                        if (isParent) {
+                            instanceTree.enumNodeChildren(dbId, (childId) => {
+                                if (instanceTree.getChildCount(childId) === 0) {
+                                    const childExtId = urnDict[childId];
+                                    if (childExtId) {
+                                        allIsolatedExtIds.push(childExtId);
+                                        expandedHits++;
+                                    }
+                                }
+                            }, true);
+                        }
+
+                        if (!extId && !isParent) {
+                            misses++;
+                        }
+                    }
+                    console.log(`[SYNC] Modelo ${(modelUrn || '').substring(0, 30)}... | ids: ${isolatedIds.length} | directos: ${directHits} | expandidos: ${expandedHits} | misses: ${misses}`);
+                }
+
+                window.dispatchEvent(new CustomEvent('inventory-isolation-sync', {
+                    detail: { isolatedExtIds: allIsolatedExtIds }
+                }));
+                console.log(`[SYNC ✅] ${allIsolatedExtIds.length} extIds despachados (hasIsolation=${hasIsolation})`);
+            } catch (err) {
+                console.error('[SYNC ❌] Error en isolation sync:', err);
+            }
+            }, 150); // 150ms timeout para estabilización del viewer
+        };
+
+        viewer.addEventListener(Autodesk.Viewing.ISOLATE_EVENT, handleIsolationSync);
+        console.log('[Viewer] ✅ ISOLATE_EVENT sync listener registrado (useEffect)');
+
+        return () => {
+            viewer.removeEventListener(Autodesk.Viewing.ISOLATE_EVENT, handleIsolationSync);
+        };
+    }, [viewerReady]);
 
     useEffect(() => {
         if (models.length === 0) {
@@ -1140,8 +1388,15 @@ const Viewer = ({
             });
 
             if (targetModel) {
-                viewer.setAggregateSelection([{ model: targetModel, selection: dbIds }]);
-                viewer.fitToView(dbIds, targetModel);
+                console.log(`[Viewer-Select] Seleccionando dbIds: ${dbIds} en URN: ${urn.slice(-15)}`);
+                viewer.setAggregateSelection([{ model: targetModel, ids: dbIds }]);
+                
+                // Si 'followCamera' no fue enviado explicitly como 'false', movemos la cámara.
+                if (e.detail.followCamera !== false) {
+                    viewer.fitToView(dbIds, targetModel);
+                }
+            } else {
+                console.warn(`[Viewer-Select] Modelo no encontrado para URN: ${urn}`);
             }
         };
 
@@ -1203,17 +1458,35 @@ const Viewer = ({
 
                         // Determine which view to load
                         let viewable = null;
-                        const targetGuid = activeViewableGuids[model.urn];
+                        let targetLogicalViewNode = null;
+                        // Usamos el ref para overrides en runtime, y model.defaultViewGuid como respaldo persistido
+                        const targetGuid = activeViewableGuidsRef.current[model.urn] || model.defaultViewGuid;
 
                         if (targetGuid) {
-                            viewable = doc.getRoot().findByGuid(targetGuid);
+                            const node = doc.getRoot().findByGuid(targetGuid);
+                            if (node) {
+                                targetLogicalViewNode = node;
+                                // VALIDACIÓN PREVIA: loadDocumentNode SOLO acepta nodos type=geometry.
+                                // Si el GUID apunta a un sub-recurso (type=resource, role=graphics),
+                                // lo escalamos al padre geometry ANTES de intentar cargar,
+                                // evitando que Autodesk muestre el diálogo de Error 13.
+                                if (node.data.type === 'geometry') {
+                                    viewable = node;
+                                } else {
+                                    let parent = node;
+                                    while (parent && parent.data.type !== 'geometry' && parent.parent) {
+                                        parent = parent.parent;
+                                    }
+                                    if (parent && parent.data.type === 'geometry') {
+                                        console.log(`[Viewer] GUID ${targetGuid} es type=${node.data.type}. Escalando a Geometry Parent: ${parent.name()}`);
+                                        viewable = parent;
+                                    }
+                                }
+                            }
                         }
 
                         if (!viewable) {
-                            // 1. Try standard default from metadata (Revit Publish Settings usually sets this)
                             viewable = doc.getRoot().getDefaultGeometry();
-
-                            // 2. If no default is marked, try 'master' (Infraworks) or fallback to first
                             if (!viewable) {
                                 viewable = viewables.find(v => v.name() && v.name().toLowerCase() === 'master') || viewables[0];
                             }
@@ -1225,7 +1498,7 @@ const Viewer = ({
                             return;
                         }
 
-                        console.log(`[Viewer] Loading view: ${viewable.name()} (${viewable.guid()})`);
+                        console.log(`[Viewer] Loading view: ${viewable.name()} (${viewable.guid()}) | Target: ${targetGuid || 'Default'}`);
 
                         // Extract 2D Sheets and Sync
                         const sheets = doc.getRoot().search({ type: 'geometry', role: '2d' });
@@ -1253,35 +1526,55 @@ const Viewer = ({
                             applyScaling: 'mm',
                             applyRefPoint: true,
                             modelNameOverride: model.label || 'model.rvt',
-                            memoryLimit: 512      // ⚡ Fuerza a limpiar memoria de geometría lejana
+                            memoryLimit: 512
                         };
-
-                        console.log(`[Viewer] Loading model: ${model.label || model.urn}`);
 
                         if (baseOffsetRef.current) {
                             loadOptions.globalOffset = baseOffsetRef.current;
                         }
 
-                        // Hotfix para Autodesk Viewer: Evitar "Cannot read properties of null (reading 'toLowerCase')" 
-                        // cuando el archivo derivado falla (404) y el visor intenta buscar la unidad base o la extensión.
                         try {
-                            if (viewable && viewable.data && !viewable.data.unit) {
-                                viewable.data.unit = 'm';
-                            }
-                            if (doc.getRoot() && doc.getRoot().data && !doc.getRoot().data.unit) {
-                                doc.getRoot().data.unit = 'm';
-                            }
+                            if (viewable && viewable.data && !viewable.data.unit) viewable.data.unit = 'm';
+                            if (doc.getRoot() && doc.getRoot().data && !doc.getRoot().data.unit) doc.getRoot().data.unit = 'm';
                         } catch (e) { }
 
-                        // Evitar que el panel de Carga se congele infinitamente si falla internamente el Visor de Autodesk
                         const timeoutPromise = new Promise((_, reject) => {
-                            setTimeout(() => reject(new Error('Model load timeout triggered to prevent UI freeze')), 120000); // 120s
+                            setTimeout(() => reject(new Error('Model load timeout triggered')), 120000);
                         });
 
-                        const loadedModel = await Promise.race([
-                            viewer.loadDocumentNode(doc, viewable, loadOptions),
-                            timeoutPromise
-                        ]);
+                        let viewableToLoad = viewable;
+                        let loadedModel = null;
+                        
+                        try {
+                            console.log(`[Viewer] Attempting loadDocumentNode: type=${viewableToLoad.data.type}, role=${viewableToLoad.data.role || 'N/A'}`);
+                            loadedModel = await Promise.race([
+                                viewer.loadDocumentNode(doc, viewableToLoad, loadOptions),
+                                timeoutPromise
+                            ]);
+                        } catch (err) {
+                            // Error 13 = Nodo lógico sin geometría descargable. Fallback a Geometry Parent.
+                            console.warn(`[Viewer] Direct load failed (Error ${err}). Falling back to Geometry Parent.`);
+                            let fallbackNode = targetLogicalViewNode || viewableToLoad;
+                            while (fallbackNode && fallbackNode.data.type !== 'geometry' && fallbackNode.parent) {
+                                fallbackNode = fallbackNode.parent;
+                            }
+                            if (fallbackNode && fallbackNode.data.type === 'geometry') {
+                                console.log(`[Viewer] Fallback loading Geometry Master: ${fallbackNode.name()}`);
+                                viewableToLoad = fallbackNode;
+                                loadedModel = await Promise.race([
+                                    viewer.loadDocumentNode(doc, viewableToLoad, loadOptions),
+                                    timeoutPromise
+                                ]);
+                            } else {
+                                console.error('[Viewer] Exhausted fallback options. Could not find Geometry.');
+                            }
+                        }
+
+                        // Registrar el GUID de la vista cargada para evitar loops de recarga
+                        if (loadedModel) {
+                            loadedViewGuidsRef.current[model.urn] = targetGuid || viewableToLoad.guid();
+                        }
+
                         loadedModelsRef.current[model.urn] = loadedModel;
 
                         if (loadedModel) {
@@ -1305,8 +1598,7 @@ const Viewer = ({
 
 
                         if (loadedModel) {
-                            // Check visibility immediately to handle race conditions
-                            const shouldHide = hiddenModelUrnsRef.current.includes(model.urn);
+                            const shouldHide = hiddenModelUrnsRef.current.some(u => normalizeUrn(u) === normalizeUrn(model.urn));
                             try {
                                 if (shouldHide) {
                                     viewer.hideModel(loadedModel.id);
@@ -1317,11 +1609,13 @@ const Viewer = ({
                                 console.error('[Viewer] Error setting initial visibility:', e);
                             }
 
-                            // Force property update with correct URN mapping
                             handleModelLoaded({ model: loadedModel });
 
-                            // Ensure camera frames the new model (Fixes white screen if AEC data skipped)
-                            viewer.fitToView(null, loadedModel);
+                            // Solo hacer fitToView si NO hay vista específica seleccionada
+                            // (para no destruir la cámara/section box de la vista elegida)
+                            if (!targetGuid) {
+                                viewer.fitToView(null, loadedModel);
+                            }
                         }
 
                         if (Object.keys(loadedModelsRef.current).length >= 1) {
@@ -1408,10 +1702,6 @@ const Viewer = ({
             } else if (trackingTab === 'rfis') {
                 const currentRfis = trackingData?.rfis || [];
                 icons = currentRfis.map(i => ({ ...i, type: 'rfi', color: i.color || '#ef4444' }));
-            } else if (trackingTab === 'maquinaria') {
-                const currentMaq = trackingData?.maquinaria || [];
-                // We use 'maquinaria' type so IconMarkupExtension can apply specific styles if needed.
-                icons = currentMaq.map(i => ({ ...i, type: 'maquinaria', color: i.color || '#a855f7' }));
             }
 
             // 4. Set Icons
@@ -1468,11 +1758,7 @@ const Viewer = ({
                         const groupPoints = rawGroups[tag];
                         if (groupPoints.length < 2) return;
 
-                        // Santa Rita ('PG') starts from first value (original order)
-                        // Politecnico ('POL') starts from last value (reversed order)
-                        if (tag === 'POL') {
-                            groupPoints.reverse();
-                        }
+                        // Both tracks keep their CSV order (KM 0 starts at the same end)
 
                         // 2. Build polyline with cumulative distances
                         const polyline = [{ dist: 0, ...groupPoints[0] }];
@@ -1517,7 +1803,7 @@ const Viewer = ({
                             const prefix = Object.keys(rawGroups).length > 1 ? `${tag}-` : '';
                             const label = `${prefix}KM ${km}+${m.toString().padStart(3, '0')}`;
 
-                            markers.push({ x, y, z, label, station, dx, dy, dz });
+                            markers.push({ x, y, z, label, station, dx, dy, dz, tag });
                         }
                     });
                     
@@ -1592,35 +1878,25 @@ const Viewer = ({
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
 
-        // Iterate over activeViewableGuids
-        // If a model is loaded but has a DIFFERENT view, reload it.
-        // We know which models are loaded via loadedModelsRef
-
         Object.entries(activeViewableGuids).forEach(async ([urn, targetGuid]) => {
-            // Find model by URN
-            // Note: loadedModelsRef keys are URNs
             const loadedModel = loadedModelsRef.current[urn];
+            if (!loadedModel) return;
 
-            // How do we know the CURRENT view GUID of the loaded model?
-            // We don't easily know it unless we stored it. 
-            // Assume if this effect runs, we want to enforce the view.
-            // We can check if the model is currently loaded.
+            // ANTI-LOOP: Solo recargar si el GUID realmente cambió
+            const currentGuid = loadedViewGuidsRef.current[urn];
+            if (currentGuid === targetGuid) {
+                return; // Ya estamos en la vista correcta
+            }
 
-            if (loadedModel) {
-                // Check if we need to reload. 
-                // Since we can't easily check the current GUID, we'll force reload 
-                // (Optimize: Store loaded view guid in another ref)
+            console.log(`[Viewer] Switching view for ${urn}: ${currentGuid} → ${targetGuid}`);
 
-                console.log(`[Viewer] Reloading model ${urn} to switch view to ${targetGuid}`);
+            viewer.unloadModel(loadedModel);
+            delete loadedModelsRef.current[urn];
+            delete loadedViewGuidsRef.current[urn];
 
-                viewer.unloadModel(loadedModel);
-                delete loadedModelsRef.current[urn];
-
-                // Find the model config object
-                const modelConfig = models.find(m => m.urn === urn);
-                if (modelConfig) {
-                    await loadModelSequentially(modelConfig);
-                }
+            const modelConfig = models.find(m => normalizeUrn(m.urn) === normalizeUrn(urn));
+            if (modelConfig) {
+                await loadModelSequentially(modelConfig);
             }
         });
 
@@ -1767,7 +2043,7 @@ const Viewer = ({
 
             idsByModel.forEach((ids, urn) => {
                 // CRITICAL: Do not touch hidden models. Let them stay hidden.
-                if (hiddenModelUrnsRef.current.includes(urn)) return;
+                if (hiddenModelUrnsRef.current.some(u => normalizeUrn(u) === normalizeUrn(urn))) return;
 
                 const model = loadedModelsRef.current[urn];
                 if (model) {
@@ -2252,16 +2528,29 @@ const Viewer = ({
         }
 
         Object.entries(loaded).forEach(([urn, model]) => {
-            if (!targetUrns.includes(urn)) {
-                console.log('[Viewer] Unloading model:', urn);
-                // Use unloadModel if it's not the primary one, or unloadDocumentNode
-                viewer.unloadModel(model);
-                // Also check if it's the current 'model' property of viewer to force clear?
+            if (!targetUrns.some(t => normalizeUrn(t) === normalizeUrn(urn))) {
+                console.log('[Viewer] Unloading removed model:', urn);
+                
+                // If this is the primary (first-loaded) model, unloadModel alone 
+                // won't clear its geometry. We need unloadCurrentModel for full cleanup.
                 if (viewer.model === model) {
-                    // viewer.impl.unloadCurrentModel(); // Sometimes needed for full cleanup
+                    try {
+                        viewer.impl.unloadCurrentModel();
+                        console.log('[Viewer] Primary model unloaded via impl.unloadCurrentModel()');
+                    } catch (e) {
+                        console.warn('[Viewer] unloadCurrentModel fallback:', e);
+                        viewer.unloadModel(model);
+                    }
+                } else {
+                    viewer.unloadModel(model);
                 }
 
                 delete loadedModelsRef.current[urn];
+                delete loadedViewGuidsRef.current[urn];
+
+                // Clean Rosetta maps for the removed model
+                if (window.rosettaToDbId) delete window.rosettaToDbId[urn];
+                if (window.rosettaToExtId) delete window.rosettaToExtId[urn];
 
                 // Remove sheets for this model
                 if (sheetsMapRef.current[urn]) {
@@ -2298,9 +2587,12 @@ const Viewer = ({
         const allLoaded = Object.keys(loadedModelsRef.current);
         console.log('[Viewer] Loaded Models URNs:', allLoaded);
 
+        // Pre-normalize hidden list once for O(1) lookups
+        const hiddenNormSet = new Set(hiddenModelUrns.map(u => normalizeUrn(u)));
+
         Object.entries(loadedModelsRef.current).forEach(([urn, model]) => {
             if (!model) return;
-            const shouldHide = hiddenModelUrns.includes(urn);
+            const shouldHide = hiddenNormSet.has(normalizeUrn(urn));
 
             console.log(`[Viewer] Processing visibility for ${urn} (ID: ${model.id}): Hide? ${shouldHide}`);
 
@@ -2314,8 +2606,6 @@ const Viewer = ({
                 console.error(`[Viewer] Error toggling visibility for ${urn}:`, e);
             }
         });
-        // Force a full scene update to ensure changes take effect immediately
-        // viewer.impl.invalidate(true, true, true);
     }, [hiddenModelUrns, viewerReady]);
 
     useEffect(() => {
@@ -2415,7 +2705,7 @@ const Viewer = ({
 
                     // Filter based on Model Visibility
                     if (pin.modelUrn) {
-                        return !hiddenModelUrns.includes(pin.modelUrn);
+                        return !hiddenModelUrns.some(u => normalizeUrn(u) === normalizeUrn(pin.modelUrn));
                     }
                     return true; // If no modelUrn (legacy), show it? or hide it? Let's show it by default to be safe.
                 })
@@ -3030,6 +3320,504 @@ const Viewer = ({
         });
     };
 
+    // ====== EXPORT PDF — Ficha Técnica Profesional con Vista 3D + Leyenda ======
+    const handleExportPDF = () => {
+        const viewer = viewerRef.current;
+        if (!viewer) return;
+
+        const PALETTE = [
+            '#3AA0FF', '#F97316', '#10B981', '#F43F5E', '#A855F7', '#0EA5E9', '#EAB308',
+            '#EF4444', '#8B5CF6', '#EC4899', '#6366F1', '#14B8A6', '#84CC16', '#F59E0B'
+        ];
+
+        // --- Natural sort helper: "FASE 02" < "FASE 10", "VC-1" < "VC-12" ---
+        const naturalCompare = (a, b) => {
+            const ax = String(a).split(/(\d+)/);
+            const bx = String(b).split(/(\d+)/);
+            for (let i = 0; i < Math.max(ax.length, bx.length); i++) {
+                const ai = ax[i] || '', bi = bx[i] || '';
+                const an = parseInt(ai, 10), bn = parseInt(bi, 10);
+                if (!isNaN(an) && !isNaN(bn)) {
+                    if (an !== bn) return an - bn;
+                } else {
+                    const cmp = ai.localeCompare(bi, undefined, { sensitivity: 'base' });
+                    if (cmp !== 0) return cmp;
+                }
+            }
+            return 0;
+        };
+
+        // 1. Recopilar información de la leyenda activa ANTES de la captura
+        const themeConfig = window._lastThemeEventConfig;
+        const buckets = window._lastCalculatedBuckets;
+        const customColors = window._customValueColors || {};
+
+        let legendItems = [];
+        let legendTitle = '';
+
+        // --- Helper: Parsear volumen de un string como "4.520 m^3" o "4.520" ---
+        const parseVolume = (raw) => {
+            if (raw === null || raw === undefined || raw === '') return 0;
+            const cleaned = String(raw).replace(/[^0-9.,\-]/g, '').replace(',', '.');
+            const val = parseFloat(cleaned);
+            return isNaN(val) ? 0 : val;
+        };
+
+        // --- Construir reverse lookup: viewerDbId → extId (por modelo/URN) ---
+        const viewerDbIdToExtId = {};
+        if (window.rosettaToDbId) {
+            Object.entries(window.rosettaToDbId).forEach(([urn, mapping]) => {
+                Object.entries(mapping).forEach(([extId, viewerDbId]) => {
+                    const key = `${urn}::${viewerDbId}`;
+                    viewerDbIdToExtId[key] = extId;
+                });
+            });
+        }
+
+        // --- Construir lookup rápido: extId → inventory row ---
+        const inventoryByExtId = {};
+        if (window.postgresInventory) {
+            window.postgresInventory.forEach(row => {
+                if (row.dbId) inventoryByExtId[row.dbId] = row;
+            });
+        }
+
+        // --- Función: calcular Σ Dynamo_Volumen para un conjunto de dbIds del bucket ---
+        const computeVolumeForDbIds = (dbIds) => {
+            let sum = 0;
+            if (!dbIds || !dbIds.length) return sum;
+            dbIds.forEach(({ id, modelUrn }) => {
+                // Buscar extId via reverse rosetta
+                const key = `${modelUrn}::${id}`;
+                const extId = viewerDbIdToExtId[key];
+                if (extId && inventoryByExtId[extId]) {
+                    sum += parseVolume(inventoryByExtId[extId]['Dynamo_Volumen']);
+                }
+            });
+            return sum;
+        };
+
+        if (themeConfig && themeConfig.active && buckets && buckets[themeConfig.propId]) {
+            const bucket = buckets[themeConfig.propId];
+            legendTitle = bucket.meta?.name || themeConfig.propId.split('::').pop() || themeConfig.propId;
+
+            const activeValues = (themeConfig.values && themeConfig.values.length > 0)
+                ? themeConfig.values
+                : bucket.values.map(v => v.value);
+
+            activeValues.forEach((val) => {
+                const originalIndex = bucket.values.findIndex(v => v.value === val);
+                const entry = bucket.values[originalIndex];
+                if (originalIndex !== -1 && entry) {
+                    const overrideKey = `${themeConfig.propId}::${val}`;
+                    const color = customColors[overrideKey] || PALETTE[originalIndex % PALETTE.length];
+                    const volume = computeVolumeForDbIds(entry.dbIds);
+                    legendItems.push({ value: val, color, count: entry.count, volume });
+                }
+            });
+
+            // Ordenar leyenda de forma natural (FASE 01, FASE 02, ... FASE 10)
+            legendItems.sort((a, b) => naturalCompare(a.value, b.value));
+        }
+
+        // 2. Captura de alta resolución preservando proporciones
+        const scaleFactor = 2;
+        const srcW = viewer.container.clientWidth;
+        const srcH = viewer.container.clientHeight;
+        const renderWidth = srcW * scaleFactor;
+        const renderHeight = srcH * scaleFactor;
+        const srcAspect = srcW / srcH; // Aspect ratio original del visor
+
+        viewer.getScreenShot(renderWidth, renderHeight, async (blobUrl) => {
+            try {
+                const { jsPDF } = await import('jspdf');
+
+                // Configuración de página — Landscape A3
+                const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
+                const pageW = pdf.internal.pageSize.getWidth();  // ~420mm
+                const pageH = pdf.internal.pageSize.getHeight(); // ~297mm
+
+                // ── COLORES DEL TEMA MINIMALISTA ──
+                const C = {
+                    bg:        [255, 255, 255],  // Fondo blanco
+                    headerBg:  [245, 247, 250],  // Header gris muy claro
+                    accent:    [ 41, 98, 255],    // Azul profesional
+                    textDark:  [ 30,  30,  35],   // Texto principal
+                    textMid:   [100, 105, 115],   // Texto secundario
+                    textLight: [160, 165, 175],   // Texto sutil
+                    border:    [215, 220, 228],   // Bordes suaves
+                    legendBg:  [250, 251, 253],   // Fondo leyenda
+                };
+
+                // ── METADATOS ──
+                const now = new Date();
+                const projectTitle = document.querySelector('.breadcrumb-project')?.textContent
+                    || document.querySelector('.breadcrumb-view')?.textContent
+                    || 'Proyecto';
+                const viewName = document.querySelector('.breadcrumb-view')?.textContent || '';
+                const dateStr = now.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' });
+                const timeStr = now.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+
+                // ══════════════════════════════════════════════════
+                //  FONDO BLANCO
+                // ══════════════════════════════════════════════════
+                pdf.setFillColor(...C.bg);
+                pdf.rect(0, 0, pageW, pageH, 'F');
+
+                // ══════════════════════════════════════════════════
+                //  HEADER — Franja superior limpia
+                // ══════════════════════════════════════════════════
+                const headerH = 22;
+                pdf.setFillColor(...C.headerBg);
+                pdf.rect(0, 0, pageW, headerH, 'F');
+                // Línea de acento inferior (delgada, azul)
+                pdf.setFillColor(...C.accent);
+                pdf.rect(0, headerH, pageW, 0.6, 'F');
+
+                // Título del proyecto (izquierda)
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(13);
+                pdf.setTextColor(...C.textDark);
+                pdf.text(projectTitle.toUpperCase(), 12, 10);
+
+                // Sub-título: vista + parámetro de leyenda (si existe)
+                if (viewName || legendTitle) {
+                    pdf.setFont('helvetica', 'normal');
+                    pdf.setFontSize(9);
+                    pdf.setTextColor(...C.textMid);
+                    const sub = [viewName, legendTitle ? `Filtro: ${legendTitle}` : ''].filter(Boolean).join('  ·  ');
+                    pdf.text(sub, 12, 16);
+                }
+
+                // Fecha y hora (derecha)
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(8);
+                pdf.setTextColor(...C.textLight);
+                pdf.text(`Generado: ${dateStr}  —  ${timeStr}`, pageW - 12, 10, { align: 'right' });
+
+                // Logo/marca (derecha, segunda línea)
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(8);
+                pdf.setTextColor(...C.accent);
+                pdf.text('VISIION', pageW - 12, 16, { align: 'right' });
+
+                // ══════════════════════════════════════════════════
+                //  LAYOUT PRINCIPAL
+                // ══════════════════════════════════════════════════
+                const marginX = 12;
+                const bodyTop = headerH + 4;
+                const footerZone = 10;
+                const bodyBottom = pageH - footerZone - 4;
+                const bodyH = bodyBottom - bodyTop;
+                const hasLegend = legendItems.length > 0;
+                const totalVolume = hasLegend ? legendItems.reduce((s, i) => s + i.volume, 0) : 0;
+
+                // Sidebar derecho más ancho para incluir todo el contenido
+                const sideW = hasLegend ? 120 : 0;
+                const gap = hasLegend ? 6 : 0;
+
+                // ── Helper para parsear color hex ──
+                const hexRGB = (hex) => {
+                    const h = hex.replace('#', '');
+                    return [parseInt(h.substring(0, 2), 16), parseInt(h.substring(2, 4), 16), parseInt(h.substring(4, 6), 16)];
+                };
+
+                // ══════════════════════════════════════════════════
+                //  IMAGEN 3D — Área izquierda (aspect ratio preservado)
+                // ══════════════════════════════════════════════════
+                const statsStripH = hasLegend ? 28 : 0; // Franja de estadísticas bajo la imagen
+                const imgAreaW = pageW - marginX * 2 - sideW - gap;
+                const imgAreaH = bodyH - statsStripH;
+
+                let imgW, imgH;
+                const fitByWidth = imgAreaW / srcAspect;
+                if (fitByWidth <= imgAreaH) {
+                    imgW = imgAreaW;
+                    imgH = fitByWidth;
+                } else {
+                    imgH = imgAreaH;
+                    imgW = imgAreaH * srcAspect;
+                }
+                const imgX = marginX + (imgAreaW - imgW) / 2;
+                const imgY = bodyTop + (imgAreaH - imgH) / 2;
+
+                // Fondo gris claro detrás de la imagen (para que no haya blanco vacío)
+                pdf.setFillColor(248, 249, 251);
+                pdf.roundedRect(marginX, bodyTop, imgAreaW, imgAreaH, 2, 2, 'F');
+                pdf.setDrawColor(...C.border);
+                pdf.setLineWidth(0.2);
+                pdf.roundedRect(marginX, bodyTop, imgAreaW, imgAreaH, 2, 2, 'S');
+
+                // Etiqueta "VISTA 3D" esquina superior izquierda de la imagen
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(7);
+                pdf.setTextColor(...C.textLight);
+                pdf.text('VISTA 3D', marginX + 4, bodyTop + 5);
+
+                pdf.addImage(blobUrl, 'PNG', imgX, imgY, imgW, imgH);
+
+                // ══════════════════════════════════════════════════
+                //  FRANJA DE ESTADÍSTICAS — bajo la imagen
+                // ══════════════════════════════════════════════════
+                if (hasLegend && statsStripH > 0) {
+                    const ssY = bodyTop + imgAreaH + 3;
+                    const ssW = imgAreaW;
+                    const colW = ssW / legendItems.length;
+
+                    // Fondo
+                    pdf.setFillColor(...C.legendBg);
+                    pdf.roundedRect(marginX, ssY, ssW, statsStripH - 3, 2, 2, 'F');
+                    pdf.setDrawColor(...C.border);
+                    pdf.setLineWidth(0.15);
+                    pdf.roundedRect(marginX, ssY, ssW, statsStripH - 3, 2, 2, 'S');
+
+                    // Mini tarjetas de cada valor con porcentaje por volumen
+                    legendItems.forEach((item, i) => {
+                        const cx = marginX + i * colW;
+                        const pct = totalVolume > 0 ? ((item.volume / totalVolume) * 100).toFixed(1) : '0';
+                        const [cr, cg, cb] = hexRGB(item.color);
+
+                        // Barra de color indicadora (izquierda de cada celda)
+                        pdf.setFillColor(cr, cg, cb);
+                        pdf.rect(cx + 3, ssY + 3, 2, statsStripH - 9, 'F');
+
+                        // Nombre
+                        pdf.setFont('helvetica', 'bold');
+                        pdf.setFontSize(7.5);
+                        pdf.setTextColor(...C.textDark);
+                        const shortVal = String(item.value).length > 12 ? String(item.value).substring(0, 10) + '…' : String(item.value);
+                        pdf.text(shortVal, cx + 8, ssY + 8);
+
+                        // Porcentaje grande (basado en volumen)
+                        pdf.setFont('helvetica', 'bold');
+                        pdf.setFontSize(11);
+                        pdf.setTextColor(cr, cg, cb);
+                        pdf.text(`${pct}%`, cx + 8, ssY + 17);
+
+                        // Volumen en m³
+                        pdf.setFont('helvetica', 'normal');
+                        pdf.setFontSize(6.5);
+                        pdf.setTextColor(...C.textLight);
+                        pdf.text(`${item.volume.toFixed(2)} m³`, cx + 8, ssY + 22);
+
+                        // Separador vertical
+                        if (i < legendItems.length - 1) {
+                            pdf.setDrawColor(...C.border);
+                            pdf.setLineWidth(0.1);
+                            pdf.line(cx + colW, ssY + 3, cx + colW, ssY + statsStripH - 6);
+                        }
+                    });
+                }
+
+                // ══════════════════════════════════════════════════
+                //  SIDEBAR DERECHO — Leyenda + Gráfico + Info
+                // ══════════════════════════════════════════════════
+                if (hasLegend) {
+                    const sx = pageW - marginX - sideW;
+                    const sy = bodyTop;
+                    const sw = sideW;
+                    const sideH = bodyH;
+
+                    // ─── SECCIÓN 1: LEYENDA ───
+                    const legendItemH = 10;
+                    const legendHeaderH = 24;
+                    const legendContentH = legendHeaderH + legendItems.length * legendItemH + 8;
+                    const s1h = Math.min(legendContentH, sideH * 0.38);
+
+                    pdf.setFillColor(...C.legendBg);
+                    pdf.roundedRect(sx, sy, sw, s1h, 2, 2, 'F');
+                    pdf.setDrawColor(...C.border);
+                    pdf.setLineWidth(0.2);
+                    pdf.roundedRect(sx, sy, sw, s1h, 2, 2, 'S');
+                    pdf.setFillColor(...C.accent);
+                    pdf.rect(sx + 0.5, sy + 0.5, sw - 1, 1.2, 'F');
+
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setFontSize(9);
+                    pdf.setTextColor(...C.textDark);
+                    pdf.text('LEYENDA', sx + sw / 2, sy + 9, { align: 'center' });
+
+                    pdf.setFont('helvetica', 'normal');
+                    pdf.setFontSize(7.5);
+                    pdf.setTextColor(...C.accent);
+                    pdf.text(legendTitle, sx + sw / 2, sy + 16, { align: 'center' });
+
+                    pdf.setDrawColor(...C.border);
+                    pdf.setLineWidth(0.1);
+                    pdf.line(sx + 6, sy + 20, sx + sw - 6, sy + 20);
+
+                    let curY = sy + legendHeaderH;
+                    legendItems.forEach((item) => {
+                        if (curY + legendItemH > sy + s1h - 4) return;
+                        const [cr, cg, cb] = hexRGB(item.color);
+                        const pct = totalVolume > 0 ? ((item.volume / totalVolume) * 100).toFixed(1) : '0';
+
+                        pdf.setFillColor(cr, cg, cb);
+                        pdf.roundedRect(sx + 6, curY - 2, 5, 5, 1, 1, 'F');
+
+                        pdf.setFont('helvetica', 'normal');
+                        pdf.setFontSize(8);
+                        pdf.setTextColor(...C.textDark);
+                        pdf.text(String(item.value), sx + 14, curY + 1.5);
+
+                        pdf.setFontSize(7);
+                        pdf.setTextColor(...C.textMid);
+                        pdf.text(`${item.volume.toFixed(2)} m³`, sx + sw - 22, curY + 1.5, { align: 'right' });
+
+                        pdf.setTextColor(...C.textLight);
+                        pdf.text(`${pct}%`, sx + sw - 6, curY + 1.5, { align: 'right' });
+
+                        curY += legendItemH;
+                    });
+                    // Total
+                    pdf.setDrawColor(...C.border);
+                    pdf.setLineWidth(0.1);
+                    const totalY = Math.min(curY + 1, sy + s1h - 8);
+                    pdf.line(sx + 6, totalY, sx + sw - 6, totalY);
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setFontSize(8);
+                    pdf.setTextColor(...C.textDark);
+                    pdf.text('Total', sx + 14, totalY + 5);
+                    pdf.text(`${totalVolume.toFixed(2)} m³`, sx + sw - 22, totalY + 5, { align: 'right' });
+                    pdf.text('100%', sx + sw - 6, totalY + 5, { align: 'right' });
+
+                    // ─── SECCIÓN 2: GRÁFICO DE BARRAS HORIZONTALES ───
+                    const s2y = sy + s1h + 4;
+                    const s2h = Math.min(sideH * 0.35, 20 + legendItems.length * 14);
+
+                    pdf.setFillColor(...C.legendBg);
+                    pdf.roundedRect(sx, s2y, sw, s2h, 2, 2, 'F');
+                    pdf.setDrawColor(...C.border);
+                    pdf.setLineWidth(0.2);
+                    pdf.roundedRect(sx, s2y, sw, s2h, 2, 2, 'S');
+                    pdf.setFillColor(...C.accent);
+                    pdf.rect(sx + 0.5, s2y + 0.5, sw - 1, 1.2, 'F');
+
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setFontSize(9);
+                    pdf.setTextColor(...C.textDark);
+                    pdf.text('DISTRIBUCIÓN', sx + sw / 2, s2y + 9, { align: 'center' });
+
+                    const barStartY = s2y + 16;
+                    const barMaxW = sw - 40;
+                    const barH = 6;
+                    const barGap = legendItems.length <= 6 ? 14 : 10;
+                    const maxVolume = Math.max(...legendItems.map(i => i.volume), 0.01);
+
+                    legendItems.forEach((item, i) => {
+                        const by = barStartY + i * barGap;
+                        if (by + barH > s2y + s2h - 4) return;
+                        const [cr, cg, cb] = hexRGB(item.color);
+                        const bw = (item.volume / maxVolume) * barMaxW;
+
+                        // Label
+                        pdf.setFont('helvetica', 'normal');
+                        pdf.setFontSize(6.5);
+                        pdf.setTextColor(...C.textMid);
+                        const shortLabel = String(item.value).length > 10 ? String(item.value).substring(0, 8) + '…' : String(item.value);
+                        pdf.text(shortLabel, sx + 6, by + barH / 2 + 1);
+
+                        // Bar background
+                        pdf.setFillColor(235, 238, 243);
+                        pdf.roundedRect(sx + 32, by, barMaxW, barH, 1.5, 1.5, 'F');
+
+                        // Bar fill
+                        if (bw > 2) {
+                            pdf.setFillColor(cr, cg, cb);
+                            pdf.roundedRect(sx + 32, by, bw, barH, 1.5, 1.5, 'F');
+                        }
+
+                        // Volume label (m³)
+                        pdf.setFont('helvetica', 'bold');
+                        pdf.setFontSize(6.5);
+                        pdf.setTextColor(...C.textDark);
+                        pdf.text(`${item.volume.toFixed(1)}`, sx + 33 + barMaxW + 2, by + barH / 2 + 1);
+                    });
+
+                    // ─── SECCIÓN 3: INFORMACIÓN DEL PROYECTO ───
+                    const s3y = s2y + s2h + 4;
+                    const s3h = Math.max(bodyBottom - s3y, 40);
+
+                    if (s3h > 30) {
+                        pdf.setFillColor(...C.legendBg);
+                        pdf.roundedRect(sx, s3y, sw, s3h, 2, 2, 'F');
+                        pdf.setDrawColor(...C.border);
+                        pdf.setLineWidth(0.2);
+                        pdf.roundedRect(sx, s3y, sw, s3h, 2, 2, 'S');
+                        pdf.setFillColor(...C.accent);
+                        pdf.rect(sx + 0.5, s3y + 0.5, sw - 1, 1.2, 'F');
+
+                        pdf.setFont('helvetica', 'bold');
+                        pdf.setFontSize(9);
+                        pdf.setTextColor(...C.textDark);
+                        pdf.text('INFORMACIÓN', sx + sw / 2, s3y + 9, { align: 'center' });
+
+                        const infoItems = [
+                            ['Proyecto', projectTitle],
+                            ['Vista', viewName || '—'],
+                            ['Parámetro', legendTitle || '—'],
+                            ['Categorías', String(legendItems.length)],
+                            ['Volumen Total', `${totalVolume.toFixed(2)} m³`],
+                            ['Fecha', dateStr],
+                            ['Hora', timeStr],
+                        ];
+
+                        let iy = s3y + 18;
+                        infoItems.forEach(([label, val]) => {
+                            if (iy + 9 > s3y + s3h - 2) return;
+                            pdf.setFont('helvetica', 'normal');
+                            pdf.setFontSize(7);
+                            pdf.setTextColor(...C.textLight);
+                            pdf.text(label, sx + 6, iy);
+                            pdf.setFont('helvetica', 'bold');
+                            pdf.setFontSize(7.5);
+                            pdf.setTextColor(...C.textDark);
+                            const dispVal = String(val).length > 22 ? String(val).substring(0, 20) + '…' : String(val);
+                            pdf.text(dispVal, sx + 6, iy + 5);
+                            // Separador
+                            pdf.setDrawColor(235, 238, 243);
+                            pdf.setLineWidth(0.1);
+                            pdf.line(sx + 6, iy + 8, sx + sw - 6, iy + 8);
+                            iy += 12;
+                        });
+                    }
+                }
+
+                // ══════════════════════════════════════════════════
+                //  FOOTER
+                // ══════════════════════════════════════════════════
+                const footerY = pageH - 8;
+                pdf.setDrawColor(...C.border);
+                pdf.setLineWidth(0.15);
+                pdf.line(marginX, footerY - 2, pageW - marginX, footerY - 2);
+
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(6.5);
+                pdf.setTextColor(...C.textLight);
+                pdf.text('VISIION  ·  Plataforma Digital de Construcción', marginX, footerY + 1);
+                pdf.text(`Ficha Técnica  ·  ${dateStr}`, pageW / 2, footerY + 1, { align: 'center' });
+                pdf.text('Página 1 de 1', pageW - marginX, footerY + 1, { align: 'right' });
+
+                // ══════════════════════════════════════════════════
+                //  GUARDAR
+                // ══════════════════════════════════════════════════
+                const safeTitle = (legendTitle || 'Vista3D').replace(/[^a-zA-Z0-9_-]/g, '_');
+                const fileName = `Ficha_${safeTitle}_${now.toISOString().slice(0, 10)}.pdf`;
+                pdf.save(fileName);
+                console.log(`[PDF] ✅ Ficha técnica exportada: ${fileName}`);
+
+            } catch (error) {
+                console.error('[PDF] ❌ Error generando PDF:', error);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = `Vista3D_${new Date().toISOString().slice(0, 10)}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+        });
+    };
+
     return (
         <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
             {/* BACKGROUND CAMERA (Always Active/Ready) */}
@@ -3143,39 +3931,69 @@ const Viewer = ({
                 setWorkfronts={setWorkfronts} 
             />
 
-            {/* Botones Flotantes (Obras Lineales) - Solo visibles en tab Maquinaria */}
-            {trackingTab === 'maquinaria' && (
-                <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 90, display: 'flex', gap: '8px' }}>
-                    <button
-                        onClick={() => setShowProgressives(!showProgressives)}
-                        className={`px-5 py-2 rounded-full font-bold shadow-lg transition ${showProgressives ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-gray-800 text-white hover:bg-gray-700'}`}
-                        style={{ backdropFilter: 'blur(4px)' }}
-                    >
-                        {showProgressives ? "🗺️ Ocultar Progresivas" : "🗺️ Mostrar Progresivas (Trazo)"}
-                    </button>
-                    {showProgressives && (
-                        <button
-                            onClick={() => setWorkfrontsPanelOpen(!isWorkfrontsPanelOpen)}
-                            className={`p-2 rounded-full font-bold shadow-lg transition ${isWorkfrontsPanelOpen ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-gray-800 text-white hover:bg-gray-700'}`}
-                            style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                            title="Configurar Frentes de Trabajo (Heatmap)"
-                        >
-                            ⚙️
-                        </button>
-                    )}
-                    
-                    {/* Botón de Captura de Pantalla Nítida */}
-                    <button
-                        onClick={handleTakeScreenshot}
-                        className="p-2 rounded-full font-bold shadow-lg transition bg-gray-800 text-white hover:bg-gray-700"
-                        style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
-                        title="Tomar Captura de Pantalla (JPG/PNG HD)"
-                    >
-                        📸
-                    </button>
-                </div>
+            {/* Botón de Captura de Pantalla Global */}
+            {viewerReady && (
+                <button
+                    onClick={handleTakeScreenshot}
+                    title="Tomar Captura de Pantalla"
+                    style={{
+                        position: 'absolute',
+                        top: '18px',
+                        right: '70px',
+                        zIndex: 100,
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'rgba(180, 180, 180, 0.7)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'color 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = 'white'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(180, 180, 180, 0.7)'}
+                >
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                        <circle cx="12" cy="13" r="4"></circle>
+                    </svg>
+                </button>
             )}
-            
+
+            {/* Botón de Exportar PDF con Leyenda */}
+            {viewerReady && (
+                <button
+                    onClick={handleExportPDF}
+                    title="Exportar Ficha PDF con Leyenda"
+                    style={{
+                        position: 'absolute',
+                        top: '18px',
+                        right: '106px',
+                        zIndex: 100,
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'rgba(180, 180, 180, 0.7)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'color 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = '#3AA0FF'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(180, 180, 180, 0.7)'}
+                >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                </button>
+            )}
+
         </div>
     );
 };

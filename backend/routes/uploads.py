@@ -58,7 +58,7 @@ def init_upload():
 
     # ── TENANT ISOLATION ──
     from routes.documents import verify_project_access
-    if user and not verify_project_access(user.get('id'), model_urn):
+    if user and not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
 
     # ── RBAC CHECK ──

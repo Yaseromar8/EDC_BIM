@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 
 const DEFAULT_SELECTION = [
     'Standard::Sources',
-    'Tandem Category'
+    'Standard::Revit Category'
 ];
 
 const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], selectedProperties = [], onUpdate }) => {
@@ -121,15 +121,16 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
             display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
             <div className="filter-config-modal" style={{
-                background: '#2a2a2a', width: '800px', height: '600px',
+                background: 'rgba(30, 30, 30, 0.65)', backdropFilter: 'blur(15px)', WebkitBackdropFilter: 'blur(15px)',
+                width: '800px', height: '600px',
                 borderRadius: '4px', display: 'flex', flexDirection: 'column',
-                boxShadow: '0 10px 40px rgba(0,0,0,0.5)', border: '1px solid #3e4045',
+                boxShadow: '0 10px 40px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)',
                 color: '#ececec', fontFamily: 'Artifakt Element, sans-serif'
             }}>
 
                 {/* Header */}
                 <div className="fc-header" style={{
-                    padding: '16px 20px', borderBottom: '1px solid #3e4045',
+                    padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                 }}>
                     <span style={{ fontWeight: 700, fontSize: '14px', letterSpacing: '0.5px', color: '#fff' }}>EDIT FILTERS</span>
@@ -168,8 +169,8 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                     value={searchTermAvailable}
                                     onChange={e => setSearchTermAvailable(e.target.value)}
                                     style={{
-                                        width: '100%', padding: '6px 8px 6px 30px', background: '#222', border: '1px solid #444',
-                                        borderRadius: '2px', color: '#fff', fontSize: '13px'
+                                        width: '100%', padding: '6px 8px 6px 30px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
+                                        borderRadius: '2px', color: '#fff', fontSize: '13px', outline: 'none'
                                     }}
                                 />
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" style={{ position: 'absolute', left: '8px', top: '8px' }}>
@@ -177,7 +178,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                                 </svg>
                             </div>
-                            <div className="fc-list" style={{ flex: 1, border: '1px solid #3e4045', borderRadius: '2px', overflowY: 'auto', background: '#1f2227' }}>
+                            <div className="fc-list" style={{ flex: 1, border: '1px solid rgba(255,255,255,0.05)', borderRadius: '2px', overflowY: 'auto', background: 'rgba(0,0,0,0.15)' }}>
                                 {Object.keys(filteredGroups).sort().map(cat => {
                                     const props = filteredGroups[cat];
                                     const isExpanded = expandedCategories[cat] || searchTermAvailable.length > 0;
@@ -233,8 +234,8 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                     value={searchTermSelected}
                                     onChange={e => setSearchTermSelected(e.target.value)}
                                     style={{
-                                        width: '100%', padding: '6px 8px 6px 30px', background: '#222', border: '1px solid #444',
-                                        borderRadius: '2px', color: '#fff', fontSize: '13px'
+                                        width: '100%', padding: '6px 8px 6px 30px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
+                                        borderRadius: '2px', color: '#fff', fontSize: '13px', outline: 'none'
                                     }}
                                 />
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" style={{ position: 'absolute', left: '8px', top: '8px' }}>
@@ -242,7 +243,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                                 </svg>
                             </div>
-                            <div className="fc-list" style={{ flex: 1, border: '1px solid #3e4045', borderRadius: '2px', overflowY: 'auto', background: '#1f2227' }}>
+                            <div className="fc-list" style={{ flex: 1, border: '1px solid rgba(255,255,255,0.05)', borderRadius: '2px', overflowY: 'auto', background: 'rgba(0,0,0,0.15)' }}>
                                 {selectedObjects.map((item, idx) => (
                                     <div
                                         key={item.id}
@@ -292,20 +293,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
 
                     </div>
 
-                    <div className="fc-options" style={{ marginTop: '20px', borderTop: '1px solid #3e4045', paddingTop: '16px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <span style={{ fontSize: '12px', fontWeight: 600, color: '#bbb' }}>Element Visibility:</span>
-                        </div>
 
-                        <label style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: '#ccc', marginBottom: '8px', cursor: 'pointer' }}>
-                            <input type="checkbox" style={{ marginRight: '8px' }} />
-                            Hide location categories (Levels, Rooms, and Spaces) from graphics and filter results
-                        </label>
-                        <label style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: '#ccc', cursor: 'pointer' }}>
-                            <input type="checkbox" style={{ marginRight: '8px' }} />
-                            Include elements spanning multiple levels in each level's filters
-                        </label>
-                    </div>
 
                 </div>
 

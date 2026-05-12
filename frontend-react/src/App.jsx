@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import './App.css';
 import TopBar from './components/TopBar';
 import ViewsPanel from './components/ViewsPanel';
@@ -21,11 +21,80 @@ import InventoryDataGrid from './components/InventoryDataGrid';
 import TandemSidebar from './components/TandemSidebar';
 import TandemFilterPanel from './components/TandemFilterPanel';
 import PdfViewer from './components/PdfViewer';
-import ScheduleDetailedView from './components/ScheduleDetailedView';
-import MaqPinPanel from './components/MaqPinPanel';
+
+
 import { uploadFile } from './services/uploadService';
 import { apiFetch } from './utils/apiFetch';
 
+// =====================================================================
+// NORMALIZACIÓN DE CATEGORÍAS REVIT (ES → EN)
+// Revit exporta categorías en el idioma del template.
+// Este mapa unifica las categorías en español a su equivalente inglés
+// para que los filtros no muestren duplicados ("Muros" + "Walls").
+// =====================================================================
+const REVIT_CATEGORY_ES_TO_EN = {
+  'Muros': 'Walls',
+  'Suelos': 'Floors',
+  'Modelos genéricos': 'Generic Models',
+  'Armadura estructural': 'Structural Rebar',
+  'Bordes de losa': 'Slab Edges',
+  'Aparatos sanitarios': 'Plumbing Fixtures',
+  'Puertas': 'Doors',
+  'Ventanas': 'Windows',
+  'Pilares estructurales': 'Structural Columns',
+  'Pilares': 'Columns',
+  'Vigas': 'Beams',
+  'Techos': 'Ceilings',
+  'Cubiertas': 'Roofs',
+  'Escaleras': 'Stairs',
+  'Tramos': 'Stair Runs',
+  'Descansillos': 'Stair Landings',
+  'Barandillas': 'Railings',
+  'Líneas': 'Lines',
+  'Tuberías': 'Pipes',
+  'Conductos': 'Ducts',
+  'Bandejas de cables': 'Cable Trays',
+  'Mobiliario': 'Furniture',
+  'Equipos mecánicos': 'Mechanical Equipment',
+  'Equipos eléctricos': 'Electrical Equipment',
+  'Iluminación': 'Lighting Fixtures',
+  'Rampas': 'Ramps',
+  'Áreas': 'Areas',
+  'Habitaciones': 'Rooms',
+  'Niveles': 'Levels',
+  'Rejillas': 'Grids',
+  'Cimentación estructural': 'Structural Foundations',
+  'Conexiones estructurales': 'Structural Connections',
+  'Armazón estructural': 'Structural Framing',
+  'Estructura': 'Structural Framing',
+  'Refuerzo de área estructural': 'Structural Area Reinforcement',
+  'Refuerzo de trayectoria estructural': 'Structural Path Reinforcement',
+  'Cerramientos': 'Curtain Walls',
+  'Montantes de cerramiento': 'Curtain Wall Mullions',
+  'Paneles de cerramiento': 'Curtain Panels',
+  'Sistemas de tuberías': 'Piping Systems',
+  'Accesorios de tuberías': 'Pipe Fittings',
+  'Accesorios de tubería': 'Pipe Fittings',
+  'Topografía': 'Topography',
+  'Vegetación': 'Planting',
+  'Forjados': 'Floors',
+};
+
+/**
+ * Normaliza una categoría de Revit:
+ * 1. Traduce español → inglés
+ * 2. Detecta nombres de archivo usados como categoría (modelos vinculados)
+ */
+function normalizeRevitCategory(rawCat) {
+  if (!rawCat || rawCat === '(Unassigned)') return rawCat || '(Unassigned)';
+  const trimmed = String(rawCat).trim();
+  // Paso 1: Detectar nombres de archivo (linked models)
+  // Patrones: contiene .dwg/.rvt/.ifc, o es solo MAYÚSCULAS+números+guiones
+  if (/\.(dwg|rvt|ifc|nwc|nwd)$/i.test(trimmed)) return '(Linked Model)';
+  if (/^[A-Z0-9_\-]+$/.test(trimmed) && trimmed.length > 3) return '(Linked Model)';
+  // Paso 2: Normalizar idioma
+  return REVIT_CATEGORY_ES_TO_EN[trimmed] || trimmed;
+}
 
 
 const ARIcon = () => (
@@ -155,24 +224,7 @@ const ProgressIcon = () => (
   </svg>
 );
 
-const ScheduleIcon = () => (
-  <svg
-    className="rail-icon"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-    <line x1="16" y1="2" x2="16" y2="6"></line>
-    <line x1="8" y1="2" x2="8" y2="6"></line>
-    <line x1="3" y1="10" x2="21" y2="10"></line>
-  </svg>
-);
+
 
 const InventoryIcon = () => (
   <svg
@@ -461,6 +513,13 @@ console.log('[App] Version: 1.0.3 - Mobile Connection & UI Cleanup applied.');
 
 const ACC_PROJECT_ID = 'b.a7ce4d60-79f3-4dbf-b059-fefaf14f7b1d';
 
+// ─── DEMO TOGGLE: Auth Bypass ───────────────────────────────────────────────
+// Cuando BYPASS_AUTH = true, el visor NO muestra LoginScreen ni LandingPage.
+// La sesión se asume válida y el proyecto se recibe vía URL params
+// desde frontend-docs (Gateway Interceptor).
+// Cambiar a false para reactivar auth nativo.
+const BYPASS_AUTH = true;
+
 function App() {
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('visor_user');
@@ -494,7 +553,7 @@ function App() {
   const [extractionJobs, setExtractionJobs] = useState({}); // Tracking BG extractions
 
   const [hiddenModelUrns, setHiddenModelUrns] = useState([]);
-  
+
   // Shared View Mode
   const [isSharedMode, setIsSharedMode] = useState(() => !!new URLSearchParams(window.location.search).get('shareView'));
   const [sharedViewData, setSharedViewData] = useState(null);
@@ -508,13 +567,15 @@ function App() {
   const [panelVisible, setPanelVisible] = useState(false);
   const [inventoryTabOpen, setInventoryTabOpen] = useState(false);
   const [inventoryPanelHeight, setInventoryPanelHeight] = useState(280);
+  const [sidebarWidth, setSidebarWidth] = useState(350);
+  const [isolatedExtIds, setIsolatedExtIds] = useState(null); // Lifted from InventoryDataGrid — persists across mount/unmount
 
   // Popout Window Bridge: Forward events between visor and undocked inventory
   useEffect(() => {
     // From popout → parent: row click selection
     const handlePopoutMessage = (e) => {
       if (!e.data || !e.data.type) return;
-      
+
       if (e.data.type === 'inventory-popout-select') {
         // Translate extId to dbId and trigger viewer selection
         const extId = e.data.extId;
@@ -529,7 +590,7 @@ function App() {
           }
         }
       }
-      
+
       if (e.data.type === 'inventory-dock') {
         // Re-open inline panel
         setInventoryTabOpen(true);
@@ -539,10 +600,32 @@ function App() {
 
     // From visor → popout: forward isolation & highlight events
     const forwardIsolation = (e) => {
+      const ids = e.detail.isolatedExtIds;
+      console.log(`[App.jsx 🔍] inventory-isolation-sync recibido: ${ids ? ids.length : 0} extIds`);
+      // Persist isolation state in App.jsx (always mounted) so Inventory reads it on open
+      if (!ids || ids.length === 0) {
+        setIsolatedExtIds(null);
+        // MASTER RESET: Solo limpiar filtros si el usuario realmente NO tiene filtros activos.
+        // Si hay filtros activos del usuario (filterSelections con valores), el reset proviene
+        // del sistema de filtros (feedback loop) y NO debemos borrar las selecciones.
+        setFilterSelections(prev => {
+          const hasActiveFilters = Object.keys(prev).some(k => prev[k] && prev[k].length > 0);
+          if (hasActiveFilters) {
+            console.log(`[App.jsx] Isolation CLEARED, pero filterSelections PRESERVADAS (${Object.keys(prev).length} filtros activos)`);
+            return prev; // No mutar — el usuario tiene filtros activos
+          }
+          console.log(`[App.jsx] Isolation CLEARED, FilterSelections RESET (sin filtros activos)`);
+          return {};
+        });
+      } else {
+        setIsolatedExtIds(new Set(ids));
+        console.log(`[App.jsx] Isolation SET: ${ids.length} elements (sample: ${ids.slice(0, 2).join(', ')})`);
+      }
+      // Forward to popout window if open
       if (window.__inventoryPopup && !window.__inventoryPopup.closed) {
         window.__inventoryPopup.postMessage({
           type: 'inventory-popout-isolation',
-          isolatedExtIds: e.detail.isolatedExtIds
+          isolatedExtIds: ids
         }, '*');
       }
     };
@@ -570,12 +653,12 @@ function App() {
       window.removeEventListener('inventory-highlight-row', forwardHighlight);
     };
   }, []);
-  const [scheduleData, setScheduleData] = useState(null);
+
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
   const [filterConfiguratorOpen, setFilterConfiguratorOpen] = useState(false);
   const [availableProperties, setAvailableProperties] = useState([]);
-  const [filterProperties, setFilterProperties] = useState(['Standard::Sources', 'Tandem Category']);
+  const [filterProperties, setFilterProperties] = useState(['Standard::Sources', 'Standard::Revit Category']);
 
   const [filterSelections, setFilterSelections] = useState({});
   const [expandedFilters, setExpandedFilters] = useState({});
@@ -614,6 +697,27 @@ function App() {
     }
   }, [selectedProject]);
 
+  // 🔄 Reset filtros al cambiar de frente
+  // Solo se activa cuando se pasa de un proyecto a OTRO proyecto distinto.
+  // NO se activa en: carga inicial, logout (null), ni shared views.
+  const prevProjectIdRef = useRef(selectedProject?.id || null);
+  useEffect(() => {
+    const newId = selectedProject?.id || null;
+    const prevId = prevProjectIdRef.current;
+
+    // Solo resetear si AMBOS son non-null y son DIFERENTES
+    if (prevId && newId && prevId !== newId) {
+      console.log(`[App] Frente cambió: ${prevId} → ${newId}. Limpiando filtros.`);
+      setFilterSelections({});
+      setFilterColors({});
+      setHiddenModelUrns([]);
+      window._lastHasActiveFilters = false;
+      window._lastValidDbIds = null;
+    }
+
+    prevProjectIdRef.current = newId;
+  }, [selectedProject]);
+
   // 🚀 INTERCEPTOR DE PASARELA (Gateway interceptor)
   // Escucha los parámetros en la URL (ej: ?project=PQT8_TALARA&frente=CANAL)
   // provenientes de la app de Docs (Plataforma BIM)
@@ -644,6 +748,27 @@ function App() {
     }
   }, []);
 
+  // ─── BYPASS_AUTH: Proyecto por defecto ───────────────────────────────────────
+  // Cuando BYPASS_AUTH está activo y no se recibió proyecto por URL ni por
+  // localStorage, se asigna automáticamente un proyecto predeterminado para
+  // que todas las operaciones (upload, link, extract) funcionen sin pasar
+  // por el LandingPage.
+  useEffect(() => {
+    if (!BYPASS_AUTH) return;
+    if (selectedProject) return; // Ya tenemos proyecto (de URL o localStorage)
+
+    const defaultProject = {
+      id: '1_DRENAJE',
+      baseName: '1',
+      frontId: 'DRENAJE',
+      frontName: 'Frente Drenaje Urbano',
+      displayName: 'Proyecto Demo - Frente Drenaje Urbano',
+      name: 'Proyecto Demo'
+    };
+    console.log('[BYPASS_AUTH] No project context found. Auto-selecting default:', defaultProject.id);
+    setSelectedProject(defaultProject);
+  }, []);
+
   const [showSplash, setShowSplash] = useState(false);
   const [selectedPinId, setSelectedPinId] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
@@ -666,8 +791,6 @@ function App() {
   // Doc Pin Panel State
   const [docPinPanelOpen, setDocPinPanelOpen] = useState(false);
   const [selectedDocPin, setSelectedDocPin] = useState(null);
-  const [maqPinPanelOpen, setMaqPinPanelOpen] = useState(false);
-  const [selectedMaqPin, setSelectedMaqPin] = useState(null);
 
 
 
@@ -724,7 +847,7 @@ function App() {
 
       const resp = await apiFetch(`${BACKEND_URL}/api/ai/universal-search`, {
         method: 'POST',
-                body: JSON.stringify({
+        body: JSON.stringify({
           query,
           model_urn: selectedProject?.urn || null,
           history: fullHistory
@@ -741,9 +864,9 @@ function App() {
             loading: false
           }));
         } else {
-          const assistantMsg = { 
-            role: 'assistant', 
-            content: data.answer, 
+          const assistantMsg = {
+            role: 'assistant',
+            content: data.answer,
             results: data.results,
             agentSteps: data.agent_steps // Capture from backend
           };
@@ -832,7 +955,7 @@ function App() {
         setTrackingTab(null);
         setTrackingPlacementMode(false);
       }
-      
+
       // Ocultar el panel lateral automáticamente si es Seguimiento (Progreso)
       // para que solo aparezcan los botones superiores
       if (panelName === 'progress') {
@@ -896,14 +1019,14 @@ function App() {
     try {
       await apiFetch(`${BACKEND_URL}/api/pins`, {
         method: 'POST',
-                body: JSON.stringify({
-           id: newPin.id,
-           type: 'doc',
-           x_coord: newPin.x,
-           y_coord: newPin.y,
-           z_coord: newPin.z,
-           projectId: urn,
-           name: position.objectName || 'Document Pin'
+        body: JSON.stringify({
+          id: newPin.id,
+          type: 'doc',
+          x_coord: newPin.x,
+          y_coord: newPin.y,
+          z_coord: newPin.z,
+          projectId: urn,
+          name: position.objectName || 'Document Pin'
         })
       });
     } catch (e) {
@@ -947,22 +1070,22 @@ function App() {
   }, []);
 
   const [availablePartidas, setAvailablePartidas] = useState([]);
-  
+
   useEffect(() => {
     const handlePartidas = (e) => {
       setAvailablePartidas(prev => {
-         // Merge in case we load multiple models over time
-         const map = new Map();
-         prev.forEach(p => map.set(p.code, p));
-         e.detail.partidas.forEach(p => {
-             if(map.has(p.code)) {
-                 map.get(p.code).count += p.count;
-                 if(!map.get(p.code).name && p.name) map.get(p.code).name = p.name;
-             } else {
-                 map.set(p.code, p);
-             }
-         });
-         return Array.from(map.values()).sort((a,b) => a.code.localeCompare(b.code));
+        // Merge in case we load multiple models over time
+        const map = new Map();
+        prev.forEach(p => map.set(p.code, p));
+        e.detail.partidas.forEach(p => {
+          if (map.has(p.code)) {
+            map.get(p.code).count += p.count;
+            if (!map.get(p.code).name && p.name) map.get(p.code).name = p.name;
+          } else {
+            map.set(p.code, p);
+          }
+        });
+        return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
       });
     };
     window.addEventListener('viewer-partidas-extracted', handlePartidas);
@@ -984,11 +1107,11 @@ function App() {
             console.log('[App] Shared View loaded successfully:', data.name);
             setSharedViewData(data);
             if (data.projectId) {
-               setSelectedProject({
-                   id: data.projectId,
-                   name: data.projectId,
-                   baseName: data.projectId
-               });
+              setSelectedProject({
+                id: data.projectId,
+                name: data.projectId,
+                baseName: data.projectId
+              });
             }
           }
         })
@@ -1006,7 +1129,7 @@ function App() {
     const handleGeometryLoaded = () => {
       if (!restored) {
         console.log('[App] Auto-restoring shared view state after geometry loaded...');
-        
+
         // Aplica el estado almacenado (Cámara, colores, filtros, etc.)
         if (sharedViewData.filterState) {
           if (sharedViewData.filterState.filterSelections) setFilterSelections(sharedViewData.filterState.filterSelections);
@@ -1014,8 +1137,29 @@ function App() {
           if (sharedViewData.filterState.filterProperties) setFilterProperties(sharedViewData.filterState.filterProperties);
           if (sharedViewData.filterState.hiddenModelUrns) setHiddenModelUrns(sharedViewData.filterState.hiddenModelUrns);
         }
-        
+
         window.dispatchEvent(new CustomEvent('viewer-restore-state', { detail: sharedViewData.viewerState }));
+        
+        // ANTI-WIPE (Race Condition Resolution): APS restoreState destruye los shaders custom de WebGPU.
+        // Forzamos una re-inyección de la paleta semántica 1.5s después de que se posiciona la cámara nativa.
+        if (sharedViewData.filterState && sharedViewData.filterState.filterColors) {
+          setTimeout(() => {
+            Object.keys(sharedViewData.filterState.filterColors).forEach(propId => {
+              if (sharedViewData.filterState.filterColors[propId]) {
+                const selectedValues = sharedViewData.filterState.filterSelections?.[propId] || [];
+                window.dispatchEvent(new CustomEvent('theme-property-bucket', {
+                  detail: {
+                    propId,
+                    values: selectedValues.length > 0 ? selectedValues : null,
+                    active: true,
+                    paletteName: 'Classic Tandem'
+                  }
+                }));
+              }
+            });
+          }, 1500);
+        }
+        
         restored = true;
       }
     };
@@ -1051,7 +1195,7 @@ function App() {
 
       apiFetch(`${BACKEND_URL}/api/views`, {
         method: 'POST',
-                body: JSON.stringify({
+        body: JSON.stringify({
           name,
           viewerState,
           filterState,
@@ -1077,20 +1221,63 @@ function App() {
   }, []);
 
   const handleLoadView = useCallback((view) => {
+    // 1. Restaurar estado nativo del Viewer (cámara, renderOptions)
+    //    NOTA: restoreState WIPES la visibilidad custom de nuestros filtros.
+    //    Por eso re-inyectamos los filtros DESPUÉS con delay.
+    window.dispatchEvent(new CustomEvent('viewer-restore-state', { detail: view.viewerState }));
+
+    // 2. Restaurar el estado de filtros en React (async state updates)
     if (view.filterState) {
       if (view.filterState.filterSelections) setFilterSelections(view.filterState.filterSelections);
       if (view.filterState.filterColors) setFilterColors(view.filterState.filterColors);
       if (view.filterState.filterProperties) setFilterProperties(view.filterState.filterProperties);
       if (view.filterState.hiddenModelUrns) setHiddenModelUrns(view.filterState.hiddenModelUrns);
-      else setHiddenModelUrns([]); // Reset if empty
+      else setHiddenModelUrns([]);
     }
-    window.dispatchEvent(new CustomEvent('viewer-restore-state', { detail: view.viewerState }));
-  }, []);
+
+    // 3. ANTI-WIPE: Forzar re-aplicación de filtros DESPUÉS de que restoreState
+    //    haya terminado de resetear la visibilidad del viewer.
+    //    Sin este delay, restoreState borra la isolation que recalculate-filters aplicó.
+    setTimeout(() => {
+      const fs = view.filterState || {};
+      console.log('[App] Anti-wipe: Re-inyectando filtros tras restoreState...');
+
+      // Re-dispatch recalculate-filters para que Viewer.jsx re-aplique isolation
+      window.dispatchEvent(new CustomEvent('recalculate-filters', {
+        detail: {
+          filterProperties: fs.filterProperties || filterProperties,
+          filterSelections: fs.filterSelections || {}
+        }
+      }));
+
+      // Re-inyectar colores semánticos (misma lógica que shared view)
+      if (fs.filterColors) {
+        Object.keys(fs.filterColors).forEach(propId => {
+          if (fs.filterColors[propId]) {
+            const selectedValues = fs.filterSelections?.[propId] || [];
+            window.dispatchEvent(new CustomEvent('theme-property-bucket', {
+              detail: {
+                propId,
+                values: selectedValues.length > 0 ? selectedValues : null,
+                active: true,
+                paletteName: 'Classic Tandem'
+              }
+            }));
+          }
+        });
+      }
+    }, 500);
+  }, [filterProperties]);
 
   const handleToggleModelVisibility = useCallback((urn) => {
-    console.log('[App] Toggling visibility for:', urn);
+    // Normalize to prevent encoding mismatches (+/-  //_  =)
+    const norm = (u) => String(u || '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const normalizedUrn = norm(urn);
+    console.log('[App] Toggling visibility for:', normalizedUrn);
     setHiddenModelUrns(prev => {
-      const next = prev.includes(urn) ? prev.filter(u => u !== urn) : [...prev, urn];
+      const next = prev.map(norm).includes(normalizedUrn)
+        ? prev.filter(u => norm(u) !== normalizedUrn)
+        : [...prev, normalizedUrn];
       console.log('[App] New hidden list:', next);
       return next;
     });
@@ -1157,18 +1344,18 @@ function App() {
     if (!availableProperties.length) return;
     setFilterProperties(prev => {
       const availableIds = new Set(availableProperties.map(prop => prop.id));
-      // Whitelist 'Standard::Sources' and 'Tandem Category' so they are not stripped
-      const sanitized = prev.filter(id => availableIds.has(id) || id === 'Standard::Sources' || id === 'Tandem Category');
+      // Whitelist 'Standard::Sources' and 'Standard::Revit Category' so they are not stripped
+      const sanitized = prev.filter(id => availableIds.has(id) || id === 'Standard::Sources' || id === 'Standard::Revit Category');
 
       if (sanitized.length) return sanitized;
       // Default fallback
-      return ['Standard::Sources', 'Tandem Category'];
+      return ['Standard::Sources', 'Standard::Revit Category'];
     });
   }, [availableProperties]);
 
   const resetFiltersToDefault = useCallback(() => {
     // Reset to hardcoded defaults
-    setFilterProperties(['Standard::Sources', 'Tandem Category']);
+    setFilterProperties(['Standard::Sources', 'Standard::Revit Category']);
   }, []);
 
   useEffect(() => {
@@ -1207,9 +1394,10 @@ function App() {
             ...m,
             label: m.name
           }));
-          setModels(mapped);
-          
-          // Hydrate activeViewableGuids for custom views
+
+          // CRITICAL: Hydrate activeViewableGuids BEFORE setModels
+          // de modo que cuando el Viewer reaccione al cambio de `models`,
+          // ya tenga los GUIDs de las vistas configuradas por el usuario.
           const initialViews = {};
           mapped.forEach(m => {
             if (m.defaultViewGuid) {
@@ -1219,6 +1407,9 @@ function App() {
           if (Object.keys(initialViews).length > 0) {
             setActiveViewableGuids(prev => ({ ...prev, ...initialViews }));
           }
+
+          // AHORA seteamos los modelos (esto dispara la carga en el Viewer)
+          setModels(mapped);
         }
       })
       .catch(err => console.error("Error loading project config:", err));
@@ -1227,61 +1418,200 @@ function App() {
     // Una vez descargado, evitará usar las consultas asfixiantes (O(N^2)) del visor LMV local.
     apiFetch(`${BACKEND_URL}/api/inventory?model_urn=${encodeURIComponent(selectedProject.id)}`)
       .then(res => {
-          if (!res.ok) throw new Error('Falló el fetch a /api/inventory');
-          return res.json();
+        if (!res.ok) throw new Error('Falló el fetch a /api/inventory');
+        return res.json();
       })
       .then(dbData => {
-          const schemaMap = {};
-          
-          // Flatten as in InventoryDataGrid
-          const mappedData = dbData.map(node => {
-              let row = {
-                  dbId: node.external_id, 
-                  model_urn: node.model_urn,
-                  source_urn: node.source_urn || node.model_urn,
-                  Name: node.name,
-                  Material: node.material || '',
-                  Status: node.installation_status || ''
-              };
-              if (node.properties && typeof node.properties === 'object') {
-                  Object.entries(node.properties).forEach(([cName, cVal]) => {
-                      if (typeof cVal === 'object' && cVal !== null) {
-                          Object.entries(cVal).forEach(([pName, pVal]) => {
-                              const val = String(pVal).trim();
-                              // FIX: Solo sobreescribir si el nuevo valor no está vacío,
-                              // o si la propiedad aún no existe. Esto protege los valores válidos.
-                              if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
-                                  row[pName] = val;
-                              }
-                              
-                              // Construir esquema exacto para FilterConfigurator
-                              const key = cName + '::' + pName;
-                              if (!schemaMap[key]) {
-                                  schemaMap[key] = {
-                                      id: key,
-                                      name: pName,
-                                      category: cName,
-                                      group: 'text',
-                                      path: cName + ' ▸ ' + pName
-                                  };
-                              }
-                          });
-                      }
-                  });
+        const schemaMap = {};
+
+        // Flatten as in InventoryDataGrid
+        const mappedData = dbData.map(node => {
+          let row = {
+            dbId: node.external_id,
+            model_urn: node.model_urn,
+            source_urn: node.source_urn || node.model_urn,
+            Name: node.name,
+            Material: node.material || '',
+            Status: node.installation_status || '',
+            Vaciado_Nro: node.vaciado_nro || ''
+          };
+          if (node.properties && typeof node.properties === 'object') {
+            Object.entries(node.properties).forEach(([cName, cVal]) => {
+              if (typeof cVal === 'object' && cVal !== null) {
+                Object.entries(cVal).forEach(([pName, pVal]) => {
+                  const val = String(pVal).trim();
+                  // FIX: Solo sobreescribir si el nuevo valor no está vacío,
+                  // o si la propiedad aún no existe. Esto protege los valores válidos.
+                  if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
+                    row[pName] = val;
+                  }
+
+                  // Construir esquema exacto para FilterConfigurator
+                  const key = cName + '::' + pName;
+                  if (!schemaMap[key]) {
+                    schemaMap[key] = {
+                      id: key,
+                      name: pName,
+                      category: cName,
+                      group: 'text',
+                      path: cName + ' ▸ ' + pName
+                    };
+                  }
+                });
               }
-              return row;
-          });
-          window.postgresInventory = mappedData;
-          console.log(`[Piedra Rosetta] Descargados ${mappedData.length} activos desde PostgreSQL (Enterprise CDE Mode)`);
-          
-          const schemaList = Object.values(schemaMap).sort((a,b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
-          window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema: schemaList } }));
+            });
+          }
+
+          // Inyectar "Revit Category" normalizada (ES→EN, linked models, etc.)
+          const rawCat = node.properties?.['__category__']?.['__category__']
+            || row['__category__']  // ya aplanado por el loop anterior
+            || '(Unassigned)';
+          row['Revit Category'] = normalizeRevitCategory(rawCat);
+
+          return row;
+        });
+        window.postgresInventory = mappedData;
+        console.log(`[Piedra Rosetta] Descargados ${mappedData.length} activos desde PostgreSQL (Enterprise CDE Mode)`);
+
+        // Registrar 'Revit Category' como propiedad disponible para filtros
+        schemaMap['Standard::Revit Category'] = {
+          id: 'Standard::Revit Category',
+          name: 'Revit Category',
+          category: 'Standard',
+          group: 'text',
+          path: 'Standard ▸ Revit Category'
+        };
+
+        // INYECCIÓN DEMO: Registrar 'Status' (Estado de Ejecución) para permitir su coloreo
+        schemaMap['Avance de Obra::Status'] = {
+          id: 'Avance de Obra::Status',
+          name: 'Estado de Ejecución',
+          category: 'Avance de Obra',
+          group: 'text',
+          path: 'Avance de Obra ▸ Estado de Ejecución'
+        };
+
+        // Plan de Vaciado: Registrar 'Vaciado_Nro' para filtrado y coloreo en 3D
+        schemaMap['Avance de Obra::Vaciado_Nro'] = {
+          id: 'Avance de Obra::Vaciado_Nro',
+          name: 'Plan de Vaciado',
+          category: 'Avance de Obra',
+          group: 'text',
+          path: 'Avance de Obra ▸ Plan de Vaciado'
+        };
+
+        const schemaList = Object.values(schemaMap).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+        window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema: schemaList } }));
       })
       .catch(err => console.error("[Piedra Rosetta] Error pre-cargando inventario PostgreSQL:", err));
 
   }, [selectedProject]);
 
+  // Recarga reactiva: cuando una extracción termina, re-descargar inventario fresco
+  useEffect(() => {
+    if (!selectedProject) return;
+    const handleRefresh = () => {
+      console.log('[Piedra Rosetta] Recarga reactiva disparada — descargando inventario fresco...');
+      apiFetch(`${BACKEND_URL}/api/inventory?model_urn=${encodeURIComponent(selectedProject.id)}`)
+        .then(res => {
+          if (!res.ok) throw new Error('Falló el fetch a /api/inventory');
+          return res.json();
+        })
+        .then(dbData => {
+          const schemaMap = {};
+          const mappedData = dbData.map(node => {
+            let row = {
+              dbId: node.external_id,
+              model_urn: node.model_urn,
+              source_urn: node.source_urn || node.model_urn,
+              Name: node.name,
+              Material: node.material || '',
+              Status: node.installation_status || '',
+              Vaciado_Nro: node.vaciado_nro || ''
+            };
+            if (node.properties && typeof node.properties === 'object') {
+              Object.entries(node.properties).forEach(([cName, cVal]) => {
+                if (typeof cVal === 'object' && cVal !== null) {
+                  Object.entries(cVal).forEach(([pName, pVal]) => {
+                    const val = String(pVal).trim();
+                    if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
+                      row[pName] = val;
+                    }
+                    const key = cName + '::' + pName;
+                    if (!schemaMap[key]) {
+                      schemaMap[key] = { id: key, name: pName, category: cName, group: 'text', path: cName + ' ▸ ' + pName };
+                    }
+                  });
+                }
+              });
+            }
+            const rawCat2 = node.properties?.['__category__']?.['__category__']
+              || row['__category__']
+              || '(Unassigned)';
+            row['Revit Category'] = normalizeRevitCategory(rawCat2);
+            return row;
+          });
+
+          window.postgresInventory = mappedData;
+          window.__inventoryCache = null;
+          console.log(`[Piedra Rosetta] Recarga reactiva completada: ${mappedData.length} activos actualizados`);
+
+          schemaMap['Standard::Revit Category'] = {
+            id: 'Standard::Revit Category', name: 'Revit Category', category: 'Standard', group: 'text', path: 'Standard ▸ Revit Category'
+          };
+          const schemaList = Object.values(schemaMap).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+          window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema: schemaList } }));
+        })
+        .catch(err => console.error('[Piedra Rosetta] Error en recarga reactiva:', err));
+    };
+
+    window.addEventListener('inventory-needs-refresh', handleRefresh);
+    return () => window.removeEventListener('inventory-needs-refresh', handleRefresh);
+  }, [selectedProject]);
+
   // Background Extraction Logic for Updates/Relinks
+  const [availableUpdates, setAvailableUpdates] = useState({});
+
+  // === VERSION CHECK POLLING (Tandem-style) ===
+  useEffect(() => {
+    if (!selectedProject) return;
+
+    const checkForUpdates = async () => {
+      try {
+        const res = await apiFetch(`${BACKEND_URL}/api/config/project/check-updates`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project: selectedProject.id })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const updatesMap = {};
+          (data.updates || []).forEach(u => {
+            updatesMap[u.model_id] = u;
+          });
+          setAvailableUpdates(updatesMap);
+          const withUpdates = (data.updates || []).filter(u => u.has_update);
+          if (withUpdates.length > 0) {
+            console.log(`[Version Check] ${withUpdates.length} model(s) have updates available`);
+          }
+        }
+      } catch (err) {
+        console.warn('[Version Check] Error checking for updates:', err);
+      }
+    };
+
+    // Check immediately on project load
+    const initialDelay = setTimeout(checkForUpdates, 5000); // 5s after load
+
+    // Poll every 5 minutes
+    const interval = setInterval(checkForUpdates, 5 * 60 * 1000);
+
+    return () => {
+      clearTimeout(initialDelay);
+      clearInterval(interval);
+    };
+  }, [selectedProject]);
+
   const triggerBackgroundExtraction = async (urn) => {
     setExtractionJobs(prev => ({ ...prev, [urn]: { progress: 0, status: 'Iniciando extracción...', isActive: true } }));
     console.log("[Extraction] Iniciando autollamada a la DB para URN:", urn);
@@ -1293,15 +1623,15 @@ function App() {
       });
       if (!res.ok) throw new Error("Error iniciando job");
       const { job_id } = await res.json();
-      
+
       const pollInterval = setInterval(async () => {
         try {
           const stRes = await apiFetch(`${BACKEND_URL}/api/inventory/extract/status/${job_id}`);
           if (stRes.ok) {
             const stData = await stRes.json();
-            
+
             setExtractionJobs(prev => ({
-              ...prev, 
+              ...prev,
               [urn]: { progress: stData.progress || 0, status: stData.message || '', isActive: true }
             }));
 
@@ -1309,14 +1639,16 @@ function App() {
               clearInterval(pollInterval);
               setExtractionJobs(prev => ({ ...prev, [urn]: { ...prev[urn], progress: 100, isActive: false } }));
               // Invalida cache de inventario global para que fuerce una llamada fresca al DB
-              window.__inventoryCache = null; 
+              window.__inventoryCache = null;
+              // Disparar recarga reactiva de inventario y filtros
+              window.dispatchEvent(new CustomEvent('inventory-needs-refresh'));
             } else if (stData.status === 'error') {
               clearInterval(pollInterval);
               setExtractionJobs(prev => ({ ...prev, [urn]: { ...prev[urn], status: 'Error', isActive: false } }));
             }
           }
         } catch (e) {
-             console.error("Polling error:", e);
+          console.error("Polling error:", e);
         }
       }, 3000);
     } catch (e) {
@@ -1325,33 +1657,77 @@ function App() {
     }
   };
 
+  // Per-model update check status: { [urn]: { status: 'checking'|'up_to_date'|'updating'|'error', message? } }
+  const [updateCheckStatus, setUpdateCheckStatus] = useState({});
+
   const handleModelUpdate = useCallback(async (urn) => {
-    if (!selectedProject) return alert("Error: No project context.");
+    if (!selectedProject) return;
+
+    // Show spinner
+    setUpdateCheckStatus(prev => ({ ...prev, [urn]: { status: 'checking' } }));
+
     try {
       const res = await apiFetch(`${BACKEND_URL}/api/config/project/update`, {
         method: 'POST',
-                body: JSON.stringify({ urn, project: selectedProject.id })
+        body: JSON.stringify({ urn, project: selectedProject.id })
       });
       if (res.ok) {
         const data = await res.json();
         if (data.updated && data.config?.models) {
-          alert(`Model updated to latest version!`);
-          setModels(data.config.models.map(m => ({ ...m, label: m.name })));
-          
+          // New version found and applied
+          setUpdateCheckStatus(prev => ({ ...prev, [urn]: { status: 'updating', message: 'Updated! Extracting...' } }));
+
+          // CRITICAL: Hydrate activeViewableGuids for new URNs BEFORE setModels
+          // to prevent the Viewer from falling back to default geometry (wrong view).
+          // This mirrors the hydration logic in the initial project load (line ~1332).
+          const mapped = data.config.models.map(m => ({ ...m, label: m.name }));
+          const updatedViews = {};
+          mapped.forEach(m => {
+            if (m.defaultViewGuid) {
+              updatedViews[m.urn] = m.defaultViewGuid;
+            }
+          });
+          if (Object.keys(updatedViews).length > 0) {
+            setActiveViewableGuids(prev => ({ ...prev, ...updatedViews }));
+          }
+
+          setModels(mapped);
+
+          // Clear the update notification for this model
+          setAvailableUpdates(prev => {
+            const next = { ...prev };
+            Object.keys(next).forEach(k => {
+              if (next[k]?.urn === urn) next[k] = { ...next[k], has_update: false };
+            });
+            return next;
+          });
+
           if (data.newUrn) {
-            // FIRE AND FORGET EXTRACTION
             triggerBackgroundExtraction(data.newUrn);
           }
-        } else if (data.message) {
-          alert(data.message);
+
+          // Invalidate inventory caches immediately so stale data from the old URN
+          // isn't displayed while the background extraction runs
+          window.__inventoryCache = null;
+          window.postgresInventory = null;
+
+          // Clear status after 5s
+          setTimeout(() => setUpdateCheckStatus(prev => { const n = { ...prev }; delete n[urn]; return n; }), 5000);
+        } else {
+          // Already latest version
+          setUpdateCheckStatus(prev => ({ ...prev, [urn]: { status: 'up_to_date' } }));
+          // Clear after 3s
+          setTimeout(() => setUpdateCheckStatus(prev => { const n = { ...prev }; delete n[urn]; return n; }), 3000);
         }
       } else {
-        const err = await res.json();
-        alert(`Update failed: ${err.error || 'Unknown error'}`);
+        const err = await res.json().catch(() => ({}));
+        setUpdateCheckStatus(prev => ({ ...prev, [urn]: { status: 'error', message: err.error || 'Error' } }));
+        setTimeout(() => setUpdateCheckStatus(prev => { const n = { ...prev }; delete n[urn]; return n; }), 4000);
       }
     } catch (e) {
       console.error("Error updating model:", e);
-      alert("Error updating model. See console.");
+      setUpdateCheckStatus(prev => ({ ...prev, [urn]: { status: 'error', message: 'Connection error' } }));
+      setTimeout(() => setUpdateCheckStatus(prev => { const n = { ...prev }; delete n[urn]; return n; }), 4000);
     }
   }, [selectedProject]);
 
@@ -1369,7 +1745,7 @@ function App() {
 
         const res = await apiFetch(`${BACKEND_URL}/api/config/project/relink`, {
           method: 'POST',
-                    body: JSON.stringify({
+          body: JSON.stringify({
             targetId: relinkTargetModel.id,
             oldUrn: relinkTargetModel.urn,
             project: selectedProject.id,
@@ -1390,12 +1766,12 @@ function App() {
           const config = await res.json();
           if (config.models) {
             setModels(config.models.map(m => ({ ...m, label: m.name })));
-            
+
             // Apply the new active viewable across the state
             if (viewGuid) {
               setActiveViewableGuids(prev => ({ ...prev, [newModelData.urn]: viewGuid }));
             }
-            
+
             alert("Model relinked successfully.");
             // FIRE AND FORGET EXTRACTION
             triggerBackgroundExtraction(newModelData.urn);
@@ -1442,55 +1818,71 @@ function App() {
 
       // Si se cargó un gemelo, forzamos recarga de la metadata (inventario Postgres)
       if (isGemelo) {
-          try {
-              const res = await apiFetch(`${BACKEND_URL}/api/inventory?model_urn=${encodeURIComponent(selectedProject.id)}`);
-              if (res.ok) {
-                  const dbData = await res.json();
-                  const schemaMap = {};
-                  
-                  const mappedData = dbData.map(node => {
-                      let row = {
-                          dbId: node.external_id, 
-                          model_urn: node.model_urn,
-                          source_urn: node.source_urn || node.model_urn,
-                          Name: node.name,
-                          Material: node.material || '',
-                          Status: node.installation_status || ''
-                      };
-                      if (node.properties && typeof node.properties === 'object') {
-                          Object.entries(node.properties).forEach(([cName, cVal]) => {
-                              if (typeof cVal === 'object' && cVal !== null) {
-                                  Object.entries(cVal).forEach(([pName, pVal]) => {
-                                      const val = String(pVal).trim();
-                                      if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
-                                          row[pName] = val;
-                                      }
-                                      
-                                      const key = cName + '::' + pName;
-                                      if (!schemaMap[key]) {
-                                          schemaMap[key] = {
-                                              id: key,
-                                              name: pName,
-                                              category: cName,
-                                              group: 'text',
-                                              path: cName + ' ▸ ' + pName
-                                          };
-                                      }
-                                  });
-                              }
-                          });
+        try {
+          const res = await apiFetch(`${BACKEND_URL}/api/inventory?model_urn=${encodeURIComponent(selectedProject.id)}`);
+          if (res.ok) {
+            const dbData = await res.json();
+            const schemaMap = {};
+
+            const mappedData = dbData.map(node => {
+              let row = {
+                dbId: node.external_id,
+                model_urn: node.model_urn,
+                source_urn: node.source_urn || node.model_urn,
+                Name: node.name,
+                Material: node.material || '',
+                Status: node.installation_status || '',
+                Vaciado_Nro: node.vaciado_nro || ''
+              };
+              if (node.properties && typeof node.properties === 'object') {
+                Object.entries(node.properties).forEach(([cName, cVal]) => {
+                  if (typeof cVal === 'object' && cVal !== null) {
+                    Object.entries(cVal).forEach(([pName, pVal]) => {
+                      const val = String(pVal).trim();
+                      if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
+                        row[pName] = val;
                       }
-                      return row;
-                  });
-                  window.postgresInventory = mappedData;
-                  console.log(`[Piedra Rosetta] Caché reactualizada: ${mappedData.length} activos`);
-                  
-                  const schemaList = Object.values(schemaMap).sort((a,b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
-                  window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema: schemaList } }));
+
+                      const key = cName + '::' + pName;
+                      if (!schemaMap[key]) {
+                        schemaMap[key] = {
+                          id: key,
+                          name: pName,
+                          category: cName,
+                          group: 'text',
+                          path: cName + ' ▸ ' + pName
+                        };
+                      }
+                    });
+                  }
+                });
               }
-          } catch(e) {
-              console.error("Error recargando caché postgres:", e);
+              // Inyectar "Revit Category" normalizada
+              const rawCat3 = node.properties?.['__category__']?.['__category__']
+                || row['__category__']
+                || '(Unassigned)';
+              row['Revit Category'] = normalizeRevitCategory(rawCat3);
+
+              return row;
+            });
+            window.postgresInventory = mappedData;
+            console.log(`[Piedra Rosetta] Caché reactualizada: ${mappedData.length} activos`);
+
+            // Registrar 'Revit Category' en el schema
+            schemaMap['Standard::Revit Category'] = {
+              id: 'Standard::Revit Category',
+              name: 'Revit Category',
+              category: 'Standard',
+              group: 'text',
+              path: 'Standard ▸ Revit Category'
+            };
+
+            const schemaList = Object.values(schemaMap).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+            window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema: schemaList } }));
           }
+        } catch (e) {
+          console.error("Error recargando caché postgres:", e);
+        }
       }
 
     } catch (e) {
@@ -1531,7 +1923,7 @@ function App() {
     try {
       await apiFetch(`${BACKEND_URL}/api/config/project/remove`, {
         method: 'POST',
-                body: JSON.stringify({ urn, project: selectedProject.id })
+        body: JSON.stringify({ urn, project: selectedProject.id })
       });
       // Don't use the response to update state — local optimistic update already handled it
     } catch (e) {
@@ -1571,7 +1963,7 @@ function App() {
     const body = storageId ? { storageId } : { projectId, versionId };
     const resp = await apiFetch(`${BACKEND_URL}/api/build/signed-read`, {
       method: 'POST',
-            body: JSON.stringify(body)
+      body: JSON.stringify(body)
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
@@ -1690,20 +2082,20 @@ function App() {
       try {
         const projectUrn = selectedProject?.id || 'global';
         const res = await apiFetch(`${BACKEND_URL}/api/pins?project=${projectUrn}`);
-        if(res.ok) {
-            const data = await res.json();
-            const loadedDocs = data.filter(p => p.type === 'doc').map(p => ({
-               id: p.id,
-               x: p.x_coord,
-               y: p.y_coord,
-               z: p.z_coord,
-               objectName: p.name,
-               docs: p.attachment_url ? [{ url: p.attachment_url, name: 'Adjunto' }] : []
-            }));
-            setDocPins(loadedDocs);
+        if (res.ok) {
+          const data = await res.json();
+          const loadedDocs = data.filter(p => p.type === 'doc').map(p => ({
+            id: p.id,
+            x: p.x_coord,
+            y: p.y_coord,
+            z: p.z_coord,
+            objectName: p.name,
+            docs: p.attachment_url ? [{ url: p.attachment_url, name: 'Adjunto' }] : []
+          }));
+          setDocPins(loadedDocs);
         }
       } catch (e) {
-         console.error("Error fetching doc pins", e);
+        console.error("Error fetching doc pins", e);
       }
     };
 
@@ -1711,7 +2103,7 @@ function App() {
     fetchDocPins();
   }, [selectedProject]);
 
-    useEffect(() => {
+  useEffect(() => {
     const handleTooltipUpdate = (e) => {
       const { pinId, equipo, personal, actividad } = e.detail;
       handleTrackingPinUpdate('maquinaria', pinId, { equipo, personal, actividad });
@@ -1726,14 +2118,14 @@ function App() {
       const urn = selectedProject?.id || 'global';
       await apiFetch(`${BACKEND_URL}/api/tracking?model_urn=${urn}`, {
         method: 'POST',
-                body: JSON.stringify(newData)
+        body: JSON.stringify(newData)
       });
     } catch (e) {
       console.error("Failed to save tracking data", e);
     }
   };
 
-  const VALID_TRACKING_CATEGORIES = ['avance', 'fotos', 'docs', 'rfis', 'restricciones', 'maquinaria'];
+  const VALID_TRACKING_CATEGORIES = ['avance', 'fotos', 'docs', 'rfis', 'restricciones'];
 
   const handleTrackingPinCreate = (newPin) => {
     // 🔒 Defensa estructural: Evita inyección de categorías no reconocidas
@@ -1747,10 +2139,10 @@ function App() {
     if (trackingTab === 'avance') {
       const partidaInfo = newPin.codigoPartida ? ` (Partida: ${newPin.codigoPartida})` : '';
       const val = prompt(`Ingrese el porcentaje de avance${partidaInfo} (ej: 50%):`, "0%");
-      if (val === null) return; 
+      if (val === null) return;
       pinsToAdd = [{ ...newPin, val, color: '#fbbf24' }];
     } else if (trackingTab === 'docs') {
-      pinsToAdd = [{ ...newPin, docs: [], color: '#8b5cf6' }]; 
+      pinsToAdd = [{ ...newPin, docs: [], color: '#8b5cf6' }];
     } else if (trackingTab === 'rfis') {
       const val = prompt("Asunto del RFI:", "Nuevo RFI");
       if (val === null) return;
@@ -1759,9 +2151,6 @@ function App() {
       const val = prompt("Descripción breve de la restricción / alerta:", "Pendiente");
       if (val === null) return;
       pinsToAdd = [{ ...newPin, val, docs: [], color: '#f59e0b', type: 'restriction' }];
-    } else if (trackingTab === 'maquinaria') {
-      // By default machinery pins have empty strings for metadata until edited in the tooltip
-      pinsToAdd = [{ ...newPin, equipo: '', personal: '', actividad: '', color: '#a855f7', type: 'maquinaria' }];
     }
 
 
@@ -1801,9 +2190,6 @@ function App() {
     } else if (type === 'docs' || type === 'restricciones' || type === 'rfis') {
       setDocPinPanelOpen(false);
       setSelectedDocPin(null);
-    } else if (type === 'maquinaria') {
-      setMaqPinPanelOpen(false);
-      setSelectedMaqPin(null);
     }
   };
 
@@ -1966,40 +2352,40 @@ function App() {
 
   // Attach a doc (PDF) to a doc pin
   const handleAttachDocToPin = async (pinId, doc, isUpdate = false, pinType = 'docs') => {
-    
+
     if (!isUpdate) {
-        // Encontrar el pin objetivo para extraer dbId y urn
-        const targetArray = trackingData[pinType] || [];
-        const targetPin = targetArray.find(p => p.id === pinId);
-        
-        if (targetPin && targetPin.dbId) {
-            try {
-                // Disparar Payload Simétrico al Backend para persistencia real (dataType: 25)
-                const payload = {
-                    urn: targetPin.modelUrn || targetPin.urn || 'global',
-                    dbId: targetPin.dbId,
-                    documentName: doc.name || doc.plano_titulo || 'Documento Adjunto',
-                    documentUrl: doc.nodeId || doc.url,
-                    dataType: 25
-                };
-                
-                const API_URL = import.meta.env.VITE_BACKEND_URL || '';
-                const response = await fetch(`${API_URL}/api/docs/mutate-bind`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                
-                if (!response.ok) {
-                    console.warn('[APS Bridge] Fallo la inyección del puntero en el servidor', await response.text());
-                    return; // Abort local UI update if server failed (as requested)
-                }
-                console.log('[APS Bridge] Inyección dataType: 25 persistida con éxito en BIM-Talara.');
-            } catch (e) {
-                console.error('[APS Bridge] API no disponible para mutate-bind u ocurrió un error de red:', e);
-                return; // Abort
-            }
+      // Encontrar el pin objetivo para extraer dbId y urn
+      const targetArray = trackingData[pinType] || [];
+      const targetPin = targetArray.find(p => p.id === pinId);
+
+      if (targetPin && targetPin.dbId) {
+        try {
+          // Disparar Payload Simétrico al Backend para persistencia real (dataType: 25)
+          const payload = {
+            urn: targetPin.modelUrn || targetPin.urn || 'global',
+            dbId: targetPin.dbId,
+            documentName: doc.name || doc.plano_titulo || 'Documento Adjunto',
+            documentUrl: doc.nodeId || doc.url,
+            dataType: 25
+          };
+
+          const API_URL = import.meta.env.VITE_BACKEND_URL || '';
+          const response = await fetch(`${API_URL}/api/docs/mutate-bind`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+            console.warn('[APS Bridge] Fallo la inyección del puntero en el servidor', await response.text());
+            return; // Abort local UI update if server failed (as requested)
+          }
+          console.log('[APS Bridge] Inyección dataType: 25 persistida con éxito en BIM-Talara.');
+        } catch (e) {
+          console.error('[APS Bridge] API no disponible para mutate-bind u ocurrió un error de red:', e);
+          return; // Abort
         }
+      }
     }
 
     setTrackingData(prev => {
@@ -2194,9 +2580,9 @@ function App() {
   // Escucha el esquema de propiedades extraído nativamente por el Viewer
   useEffect(() => {
     const handleSchemaExtracted = (e) => {
-        console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: viewer-schema-extracted - Sincronizando propiedades disponibles.`);
-        setAvailableProperties(e.detail.schema);
-        // No dispatch aquí: el useEffect de filterProperties/filterSelections/availableProperties ya lo hará
+      console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: viewer-schema-extracted - Sincronizando propiedades disponibles.`);
+      setAvailableProperties(e.detail.schema);
+      // No dispatch aquí: el useEffect de filterProperties/filterSelections/availableProperties ya lo hará
     };
     window.addEventListener('viewer-schema-extracted', handleSchemaExtracted);
     return () => window.removeEventListener('viewer-schema-extracted', handleSchemaExtracted);
@@ -2207,22 +2593,37 @@ function App() {
     if (availableProperties.length === 0) return; // No disparar si no ha cargado el esquema
     console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Cambio en filtros (UI): Disparando recalculate-filters hacia LMV`);
     window.dispatchEvent(new CustomEvent('recalculate-filters', {
-       detail: { filterProperties, filterSelections }
+      detail: { filterProperties, filterSelections }
     }));
   }, [filterProperties, filterSelections, availableProperties.length, hiddenModelUrns]);
-  
+
   // Guardar en la UI las nuevas cubetas calculadas asincrónicamente por el Viewer LMV Worker
   useEffect(() => {
-     const handleFiltersCalculated = (e) => {
-         console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: filters-calculated - Actualizando UI de Paneles`);
-         setDynamicFilterBuckets(e.detail);
-     };
-     window.addEventListener('filters-calculated', handleFiltersCalculated);
-     return () => window.removeEventListener('filters-calculated', handleFiltersCalculated);
-  }, []);
+    const handleFiltersCalculated = (e) => {
+      console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: filters-calculated - Actualizando UI de Paneles`);
+      setDynamicFilterBuckets(e.detail);
+
+      // AUTO-INYECCIÓN VISTA GUARDADA: Si al terminar de cargar los buckets hay colores activos, reinstanciarlos
+      Object.keys(filterColors).forEach(propId => {
+          if (filterColors[propId]) {
+              const selectedValues = filterSelections[propId] || [];
+              window.dispatchEvent(new CustomEvent('theme-property-bucket', {
+                  detail: {
+                      propId,
+                      values: selectedValues.length > 0 ? selectedValues : null,
+                      active: true,
+                      paletteName: 'Classic Tandem'
+                  }
+              }));
+          }
+      });
+    };
+    window.addEventListener('filters-calculated', handleFiltersCalculated);
+    return () => window.removeEventListener('filters-calculated', handleFiltersCalculated);
+  }, [filterColors, filterSelections]);
 
   // --- RENDER: LOGIN -> LANDING -> APP ---
-  if (!user && !isSharedMode) {
+  if (!user && !isSharedMode && !BYPASS_AUTH) {
     return <LoginScreen onLogin={handleLoginSuccess} />;
   }
 
@@ -2230,7 +2631,7 @@ function App() {
     return <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', background: '#1c2027', color: 'white', fontFamily: 'sans-serif' }}><h3>Cargando Vista Compartida...</h3></div>;
   }
 
-  if (!selectedProject && !isSharedMode) {
+  if (!selectedProject && !isSharedMode && !BYPASS_AUTH) {
     return <LandingPage onSelectProject={setSelectedProject} />;
   }
 
@@ -2242,7 +2643,7 @@ function App() {
       {!isSharedMode && (
         <TopBar
           user={user}
-          onLogout={handleLogout}
+          onLogout={BYPASS_AUTH ? null : handleLogout}
           activePanel={activePanel}
           togglePanel={togglePanel}
           isViewsActive={activePanel === 'views'}
@@ -2319,17 +2720,7 @@ function App() {
               <FolderIcon />
               <span className="rail-label" style={{ fontWeight: 700 }}>Files</span>
             </button>
-            
-            <button
-              type="button"
-              data-test-id="nav-item-docs"
-              className={`rail-button ${activePanel === 'accdocs' && panelVisible ? 'active' : ''}`}
-              onClick={() => togglePanel('accdocs')}
-              title="Docs"
-            >
-              <DocumentIcon />
-              <span className="rail-label" style={{ fontWeight: 700 }}>Docs</span>
-            </button>
+
 
             <button
               type="button"
@@ -2341,15 +2732,7 @@ function App() {
               <span className="rail-label" style={{ fontWeight: 700 }}>Seguimiento</span>
             </button>
 
-            <button
-              type="button"
-              className={`rail-button ${activePanel === 'schedule' && panelVisible ? 'active' : ''}`}
-              onClick={() => togglePanel('schedule')}
-              title="Cronograma"
-            >
-              <ScheduleIcon />
-              <span className="rail-label" style={{ fontWeight: 700 }}>Cronograma</span>
-            </button>
+
 
             <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
               {/* SEPARATOR AS IN TANDEM */}
@@ -2376,6 +2759,8 @@ function App() {
           <TandemSidebar
             activePanel={activePanel}
             panelVisible={panelVisible}
+            sidebarWidth={sidebarWidth}
+            setSidebarWidth={setSidebarWidth}
             models={models}
             hiddenModelUrns={hiddenModelUrns}
             selectedElement={selectedElement}
@@ -2406,6 +2791,8 @@ function App() {
             removeModel={removeModel}
             setRelinkTargetModel={setRelinkTargetModel}
             extractionJobs={extractionJobs}
+            availableUpdates={availableUpdates}
+            updateCheckStatus={updateCheckStatus}
             setImportModalOpen={setImportModalOpen}
             documents={documents}
             sprites={sprites}
@@ -2422,8 +2809,7 @@ function App() {
             onOpenDocument={handleOpenDocByNodeId}
             onCloseUniversalSearch={() => setPanelVisible(false)}
             BACKEND_URL={BACKEND_URL}
-            scheduleData={scheduleData}
-            setScheduleData={setScheduleData}
+
 
             // Tracking / BuildPanel Props
             trackingData={trackingData}
@@ -2572,26 +2958,7 @@ function App() {
                 </svg>
                 RESTR.
               </button>
-              <button
-                className="secondary-btn"
-                style={{
-                  background: trackingTab === 'maquinaria' ? '#a855f7' : 'transparent',
-                  color: trackingTab === 'maquinaria' ? '#fff' : '#bbb',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  fontSize: '11px',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                onClick={() => setTrackingTab(prev => prev === 'maquinaria' ? null : 'maquinaria')}
-              >
-                MAQ
-              </button>
+
 
               {trackingTab && (
                 <button
@@ -2622,8 +2989,8 @@ function App() {
           )}
           <div className="split-view-container">
             <div className="split-3d" style={{ position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              {/* 3D VIEWER - Hide when schedule or build is active */}
-              <div style={{ flex: 1, minHeight: 0, position: 'relative', display: (activePanel === 'build' || activePanel === 'schedule') ? 'none' : 'block' }}>
+              {/* 3D VIEWER - Hide when build is active */}
+              <div style={{ flex: 1, minHeight: 0, position: 'relative', display: (activePanel === 'build') ? 'none' : 'block' }}>
                 <Viewer
                   accessToken={accessToken}
                   models={models}
@@ -2666,33 +3033,20 @@ function App() {
 
               </div>
 
-              {/* SCHEDULE DETAILED VIEW - Full width interaction */}
-              {activePanel === 'schedule' && (
-                <div style={{ flex: 1, minHeight: 0 }}>
-                  <ScheduleDetailedView scheduleData={scheduleData} initialTab="Activities" />
-                </div>
-              )}
 
-              {/* 6. Maquinaria Pin Panel */}
-          <div className={`draggable-panel ${panelDocked ? 'docked' : 'floating'}`} style={{ display: maqPinPanelOpen ? 'block' : 'none' }}>
-            <MaqPinPanel
-              isOpen={maqPinPanelOpen}
-              onClose={() => setMaqPinPanelOpen(false)}
-              pin={selectedMaqPin}
-              onUpdate={handleTrackingPinUpdate}
-            />
-          </div>
 
-          {/* INVENTORY DATA GRID - Overlay Panel (Tandem Style) */}
+              {/* INVENTORY DATA GRID - Overlay Panel (Tandem Style) */}
               {inventoryTabOpen && (
-                <div style={{ 
+                <div style={{
                   position: 'absolute',
                   bottom: 0,
-                  left: (activePanel && panelVisible && activePanel !== 'views' && activePanel !== 'inventory' && activePanel !== 'build' && activePanel !== 'schedule') ? '320px' : '0px',
+                  left: panelVisible && activePanel && activePanel !== 'views' && activePanel !== 'inventory'
+                    ? `${64 + sidebarWidth}px`
+                    : '64px',
                   right: 0,
-                  height: `${inventoryPanelHeight}px`, 
-                  zIndex: 11,
-                  display: 'flex', 
+                  height: `${inventoryPanelHeight}px`,
+                  zIndex: 30,
+                  display: 'flex',
                   flexDirection: 'column',
                   borderTop: '1px solid #2a2b30',
                   boxShadow: '0 -2px 12px rgba(0,0,0,0.5)',
@@ -2700,7 +3054,7 @@ function App() {
                   transition: 'left 0.3s ease'
                 }}>
                   {/* Resize Handle */}
-                  <div 
+                  <div
                     onMouseDown={(e) => {
                       e.preventDefault();
                       const startY = e.clientY;
@@ -2728,12 +3082,13 @@ function App() {
                   >
                     <div style={{ position: 'absolute', left: '50%', top: '1px', transform: 'translateX(-50%)', width: '40px', height: '3px', borderRadius: '2px', background: '#555' }} />
                   </div>
-                  <InventoryDataGrid 
-                     activeModelUrn={selectedProject?.id || 'global'}
-                     dynamicFilterBuckets={dynamicFilterBuckets} 
-                     filterSelections={filterSelections} 
-                     hiddenModelUrns={hiddenModelUrns} 
-                     onClose={() => setInventoryTabOpen(false)}
+                  <InventoryDataGrid
+                    activeModelUrn={selectedProject?.id || 'global'}
+                    dynamicFilterBuckets={dynamicFilterBuckets}
+                    filterSelections={filterSelections}
+                    hiddenModelUrns={hiddenModelUrns}
+                    isolatedExtIds={isolatedExtIds}
+                    onClose={() => setInventoryTabOpen(false)}
                   />
                 </div>
               )}

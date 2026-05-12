@@ -5,6 +5,7 @@ Public endpoints (login, register, google-auth) are whitelisted.
 """
 
 import secrets
+import time
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import request, jsonify, g
@@ -52,6 +53,7 @@ PUBLIC_PREFIXES = (
     # ── Secure Share Engine ────────────────────────
     '/api/docs/shared/',      # Public UUID-based document viewer links
     '/api/views/',            # Public UUID-based shared views
+    '/api/inventory/',        # Inventory sync
 )
 
 
@@ -93,8 +95,25 @@ def create_session(user_id):
         return None
 
 
+# ── IN-MEMORY SESSION CACHE (TTL 60s) ──────────────────────────────────
+# Elimina el roundtrip de ~600ms a Cloud SQL en cada request.
+# Peor caso: una sesión revocada tarda 60s en ser rechazada.
+_session_cache = {}  # token -> (user_dict, timestamp)
+_SESSION_CACHE_TTL = 60  # seconds
+
+
 def validate_session(token):
-    """Validate a session token. Returns user dict or None."""
+    """Validate a session token. Returns user dict or None. Uses in-memory cache."""
+    # 1. Check in-memory cache first (0ms)
+    cached = _session_cache.get(token)
+    if cached:
+        user_dict, cached_at = cached
+        if time.time() - cached_at < _SESSION_CACHE_TTL:
+            return user_dict
+        else:
+            del _session_cache[token]  # Expired
+
+    # 2. Cache miss → hit Cloud SQL (~600ms)
     from db import get_db_connection
     try:
         with get_db_connection() as conn:
@@ -107,12 +126,15 @@ def validate_session(token):
             ''', (token,))
             row = cursor.fetchone()
             if row:
-                return {
+                user = {
                     'id': row[1],
                     'name': row[2],
                     'email': row[3],
                     'role': row[4]
                 }
+                # Store in cache
+                _session_cache[token] = (user, time.time())
+                return user
         return None
     except Exception as e:
         print(f"[auth_middleware] Error validating session: {e}")
@@ -121,6 +143,8 @@ def validate_session(token):
 
 def revoke_session(token):
     """Revoke a session token (logout)."""
+    # Immediately evict from cache on logout
+    _session_cache.pop(token, None)
     from db import get_db_connection
     try:
         with get_db_connection() as conn:
@@ -171,7 +195,7 @@ def init_auth_middleware(app):
         if not token:
             return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
         
-        # Validate the session
+        # Validate the session (now with in-memory cache)
         user = validate_session(token)
         if not user:
             return jsonify({'error': 'Sesión inválida o expirada', 'code': 'INVALID_TOKEN'}), 401

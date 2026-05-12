@@ -17,6 +17,111 @@ const VALID_TRANSITIONS = {
   ARCHIVED:  ['PUBLISHED'],
 };
 
+const ReviewStatusControl = ({ item, isAdmin, onStatusChange }) => {
+  const st = item.status || 'WIP';
+  const cfg = STATUS_CONFIG[st] || STATUS_CONFIG.WIP;
+  const transitions = VALID_TRANSITIONS[st] || [];
+  const [showDrop, setShowDrop] = useState(false);
+  const dropRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropRef.current && !dropRef.current.contains(e.target)) {
+        setShowDrop(false);
+      }
+    };
+
+    if (showDrop) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDrop]);
+
+  return (
+    <div ref={dropRef} style={{ position: 'relative' }}>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          if (isAdmin && transitions.length > 0) setShowDrop(!showDrop);
+        }}
+        style={{
+          background: cfg.bg,
+          color: cfg.color,
+          border: 'none',
+          borderRadius: 12,
+          padding: '2px 10px',
+          fontSize: 11,
+          fontWeight: 600,
+          cursor: isAdmin && transitions.length > 0 ? 'pointer' : 'default',
+          whiteSpace: 'nowrap',
+          lineHeight: '20px',
+        }}
+        title={isAdmin && transitions.length > 0 ? 'Clic para cambiar estado' : cfg.label}
+      >
+        {cfg.label}{isAdmin && transitions.length > 0 ? ' ▾' : ''}
+      </button>
+      {showDrop && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            zIndex: 9999,
+            background: '#fff',
+            border: '1px solid #e5e7eb',
+            borderRadius: 6,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+            minWidth: 130,
+            marginTop: 4,
+            overflow: 'hidden',
+          }}
+        >
+          {transitions.map(nextSt => {
+            const nextCfg = STATUS_CONFIG[nextSt];
+            return (
+              <button
+                key={nextSt}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDrop(false);
+                  if (onStatusChange) onStatusChange(item, nextSt);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  color: '#333',
+                  textAlign: 'left',
+                }}
+                onMouseEnter={(e) => e.target.style.background = '#f3f4f6'}
+                onMouseLeave={(e) => e.target.style.background = 'none'}
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: nextCfg.color,
+                    flexShrink: 0,
+                  }}
+                />
+                {nextCfg.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 /**
  * TableRow Component - Renders an individual row in the virtualized list.
  */
@@ -311,8 +416,13 @@ const TableRow = ({ index, style, data }) => {
             </div>
           </div>
           <div className="td-cell" style={{ width: columnWidths.status }}>
-            {!isFolder && (() => {
-              const st = item.status || 'WIP';
+            {!isFolder && (
+              <ReviewStatusControl
+                item={item}
+                isAdmin={isAdmin}
+                onStatusChange={onStatusChange}
+              />
+            )}{/*
               const cfg = STATUS_CONFIG[st] || STATUS_CONFIG.WIP;
               const transitions = VALID_TRANSITIONS[st] || [];
               const [showDrop, setShowDrop] = useState(false);
@@ -375,7 +485,7 @@ const TableRow = ({ index, style, data }) => {
                   )}
                 </div>
               );
-            })()}
+            */}
           </div>
         </>
       )}

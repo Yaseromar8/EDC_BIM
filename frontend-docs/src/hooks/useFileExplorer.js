@@ -198,6 +198,17 @@ export function useFileExplorer(project, user) {
         setFolders(sortedFolders);
         setFiles(sortedFiles);
         
+        // 🔥 SWR Sync: Asegurar que la tabla principal alimente la caché global para que las flechas laterales estén listas instantáneamente
+        if (nodeId && cacheMethods && !trash) {
+          if (typeof cacheMethods.forceSetData === 'function') {
+            cacheMethods.forceSetData(nodeId, {
+              folders: sortedFolders,
+              files: sortedFiles,
+              timestamp: Date.now()
+            });
+          }
+        }
+        
         if (trash) {
           const allDel = [...(data.folders || []), ...(data.files || [])].map(it => ({
             ...it,
@@ -213,8 +224,9 @@ export function useFileExplorer(project, user) {
     finally { if (!silent && seq === fetchSeqRef.current) setLoading(false); }
   }, [projectPrefix, cacheMethods]);
 
-  const triggerRefresh = useCallback((path = currentPath) => {
-    fetchContents(path, isTrashMode, true, isTrashMode ? null : currentNodeId);
+  const triggerRefresh = useCallback((path = currentPath, specificNodeId = undefined) => {
+    const idToUse = specificNodeId !== undefined ? specificNodeId : currentNodeId;
+    fetchContents(path, isTrashMode, true, isTrashMode ? null : idToUse);
     setRefreshSignal(prev => prev + 1);
   }, [currentPath, isTrashMode, currentNodeId, fetchContents]);
 
@@ -238,12 +250,13 @@ export function useFileExplorer(project, user) {
     setSelectedDeletedIds([]);
   }, []);
 
-  const handleFolderClick = useCallback((path) => {
+  const handleFolderClick = useCallback((path, nodeId) => {
     switchMode(false);
     setCurrentPath(path);
+    if (nodeId) setCurrentNodeId(nodeId);
     setSearchQuery('');
     setSelected(new Set());
-    triggerRefresh(path);
+    triggerRefresh(path, nodeId);
   }, [switchMode, triggerRefresh]);
 
   // ═══════════════════════════════════════════════════════════════

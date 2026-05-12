@@ -1,15 +1,16 @@
 import os
+import urllib.parse
 import time
 import json
 import base64
 import traceback
+import threading
 import requests
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 from aps import get_internal_token
-
-digital_twin_bp = Blueprint('digital_twin', __name__)
+from routes.inventory import sanitize_urn
 
 digital_twin_bp = Blueprint('digital_twin', __name__)
 
@@ -55,7 +56,7 @@ def get_project_config_internal():
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT model_id, name, urn, source, region, project_id, item_id,
-                       version_id, version_number, last_modified_time, app_project_id, added_at
+                       version_id, version_number, last_modified_time, app_project_id, added_at, default_view_guid
                 FROM model_config ORDER BY added_at
             ''')
             rows = cursor.fetchall()
@@ -73,7 +74,8 @@ def get_project_config_internal():
                     'versionNumber': r[8],
                     'lastModifiedTime': r[9],
                     'appProjectId': r[10],
-                    'added_at': r[11].isoformat() if r[11] else None
+                    'added_at': r[11].isoformat() if r[11] else None,
+                    'defaultViewGuid': r[12]
                 })
             return {'models': models}
     except Exception as e:
@@ -91,21 +93,23 @@ def save_project_config_internal(config):
                 cursor.execute('''
                     INSERT INTO model_config
                         (model_id, name, urn, source, region, project_id, item_id,
-                         version_id, version_number, last_modified_time, app_project_id, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                         version_id, version_number, last_modified_time, app_project_id, default_view_guid, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     ON CONFLICT (model_id) DO UPDATE SET
                         name = EXCLUDED.name,
                         urn = EXCLUDED.urn,
                         version_id = EXCLUDED.version_id,
                         version_number = EXCLUDED.version_number,
                         last_modified_time = EXCLUDED.last_modified_time,
+                        default_view_guid = EXCLUDED.default_view_guid,
                         updated_at = NOW()
                 ''', (
                     model.get('id'), model.get('name'), model.get('urn'),
                     model.get('source', 'DOCS'), model.get('region', 'US'),
                     model.get('projectId'), model.get('itemId'),
                     model.get('versionId'), model.get('versionNumber'),
-                    model.get('lastModifiedTime'), model.get('appProjectId')
+                    model.get('lastModifiedTime'), model.get('appProjectId'),
+                    model.get('defaultViewGuid')
                 ))
             conn.commit()
             db_ok = True
@@ -281,10 +285,8 @@ def update_model_link():
         return jsonify({'error': 'Model not found'}), 404
         
     if not model.get('projectId') or not model.get('itemId'):
-        # Just reload if we can't check for updates
-        if app_project_id:
-            config['models'] = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
-        return jsonify(config) # Or return specific status to frontend
+        # Can't check for updates without ACC metadata
+        return jsonify({'updated': False, 'message': 'Este modelo no tiene projectId/itemId. Use Relink.'}), 200
         
     # Check for new version from APS
     try:
@@ -310,31 +312,115 @@ def update_model_link():
         
         if latest_version_id != current_version_id:
             # New version detected!
+            old_urn = model['urn']
             print(f"Updating model {model['name']} from {current_version_id} to {latest_version_id}")
             
             # Calculate new URN
-            # Standard URN is base64 encoded version_id (no padding)
             urn_bytes = base64.urlsafe_b64encode(latest_version_id.encode('utf-8'))
             new_urn = urn_bytes.decode('utf-8').rstrip('=')
             
+            # LIMPIEZA: Borrar inventario del URN viejo antes de actualizar
+            # COHERENCIA: sanitize_urn asegura que el DELETE use el mismo formato
+            # que extract_metadata_task usó al guardar source_urn.
+            try:
+                from db import get_db_connection
+                old_urn_sanitized = sanitize_urn(old_urn)
+                target = app_project_id or model.get('appProjectId')
+                with get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN (%s, %s)",
+                        (target, old_urn_sanitized, old_urn)
+                    )
+                    deleted = cursor.rowcount
+                    conn.commit()
+                    print(f"[Update] Limpieza inventario: {deleted} registros del URN viejo eliminados")
+            except Exception as cleanup_err:
+                print(f"[Update] Advertencia: Error limpiando inventario viejo: {cleanup_err}")
+            
             # Update Model Record
+            version_num_before = model.get('versionNumber')
             model['urn'] = new_urn
             model['versionId'] = latest_version_id
             
-            # Optional: Update Name if changed?
-            # We can fetch version details if we want the new name:
-            # v_url = f"https://developer.api.autodesk.com/data/v1/projects/{project_id}/versions/{latest_version_id}"
-            # v_resp = requests.get(v_url, headers=headers)
-            # if v_resp.ok:
-            #    model['name'] = v_resp.json()['data']['attributes']['name'] 
+            # Fetch version attributes to update versionNumber and lastModifiedTime
+            try:
+                v_url = f"https://developer.api.autodesk.com/data/v1/projects/{project_id}/versions/{urllib.parse.quote(latest_version_id, safe='')}"
+                v_resp = requests.get(v_url, headers=headers, timeout=10)
+                if v_resp.ok:
+                    v_data = v_resp.json()
+                    attrs = v_data.get('data', {}).get('attributes', {})
+                    ext_attrs = attrs.get('extension', {}).get('data', {})
+                    if attrs.get('versionNumber'):
+                        model['versionNumber'] = attrs.get('versionNumber')
+                    # lastModifiedTime puede estar en attributes o en extension.data
+                    lmt = attrs.get('lastModifiedTime') or ext_attrs.get('lastModifiedTime') or attrs.get('createTime')
+                    if lmt:
+                        model['lastModifiedTime'] = lmt
+            except Exception as e:
+                print(f"[Update] Error fetching version details: {e}")
+            
+            # FALLBACK: Si aún no hay lastModifiedTime, usar timestamp actual
+            if not model.get('lastModifiedTime'):
+                model['lastModifiedTime'] = datetime.now().isoformat() + 'Z'
+            
+            # FALLBACK: Extraer versionNumber del version_id si la API no lo devolvió
+            # El version_id siempre tiene formato "...?version=N"
+            if not model.get('versionNumber') or model.get('versionNumber') == version_num_before:
+                try:
+                    v_num_from_id = int(latest_version_id.split('?version=')[1])
+                    model['versionNumber'] = v_num_from_id
+                    print(f"[Update] versionNumber extraído del ID: v{v_num_from_id}")
+                except (IndexError, ValueError):
+                    pass
             
             save_project_config_internal(config)
+            
+            # AUTO-EXTRACT: Disparar extracción en background (no depende del frontend)
+            target = app_project_id or model.get('appProjectId') or new_urn
+            try:
+                from routes.inventory import extract_metadata_task
+                job_id = f"auto_update_{int(time.time())}"
+                thread = threading.Thread(
+                    target=extract_metadata_task,
+                    args=(new_urn, target, job_id),
+                    daemon=True
+                )
+                thread.start()
+                print(f"[Update] Auto-extracción iniciada en background (job: {job_id})")
+            except Exception as extract_err:
+                print(f"[Update] Advertencia: No se pudo iniciar auto-extracción: {extract_err}")
             
             if app_project_id:
                 config['models'] = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
                 
             return jsonify({'updated': True, 'config': config, 'newUrn': new_urn})
         else:
+            # Self-healing: Update might have occurred before the metadata fix.
+            # Force verify if we have the correct lastModifiedTime and versionNumber.
+            healed = False
+            try:
+                v_url = f"https://developer.api.autodesk.com/data/v1/projects/{project_id}/versions/{urllib.parse.quote(latest_version_id, safe='')}"
+                v_resp = requests.get(v_url, headers=headers, timeout=10)
+                if v_resp.ok:
+                    v_data = v_resp.json()
+                    attrs = v_data.get('data', {}).get('attributes', {})
+                    if attrs.get('versionNumber') and model.get('versionNumber') != attrs.get('versionNumber'):
+                        model['versionNumber'] = attrs.get('versionNumber')
+                        healed = True
+                    if attrs.get('lastModifiedTime') and model.get('lastModifiedTime') != attrs.get('lastModifiedTime'):
+                        model['lastModifiedTime'] = attrs.get('lastModifiedTime')
+                        healed = True
+            except Exception as e:
+                print(f"[Update] Error self-healing version details: {e}")
+
+            if healed:
+                save_project_config_internal(config)
+                if app_project_id:
+                    config['models'] = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
+                # Return updated:True but newUrn:None so it updates UI without triggering extraction again
+                return jsonify({'updated': True, 'message': 'Metadata resynced', 'config': config})
+
             if app_project_id:
                 config['models'] = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
             return jsonify({'updated': False, 'message': 'Already latest version', 'config': config})
@@ -415,8 +501,47 @@ def remove_model_route():
     config['models'] = [m for m in config.get('models', []) if m.get('urn') != urn]
     
     if len(config['models']) < initial_len:
-        # Delete from DB directly
+        # Delete model config from DB
         delete_model_from_db(urn)
+
+        # CLEANUP: Purgar metadata de inventory_assets
+        # COHERENCIA: sanitize_urn normaliza el URN exactamente como lo hace
+        # extract_metadata_task antes de almacenar source_urn en inventory_assets.
+        try:
+            from db import get_db_connection
+            urn_sanitized = sanitize_urn(urn)
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Estrategia multi-capa para garantizar purga completa:
+                # 1. Intentar con URN sanitizado (como lo guarda extract_metadata_task)
+                cursor.execute(
+                    "DELETE FROM inventory_assets WHERE source_urn = %s",
+                    (urn_sanitized,)
+                )
+                deleted_count = cursor.rowcount
+                
+                # 2. Si no encontró nada, intentar con URN raw (por si hay datos legacy)
+                if deleted_count == 0 and urn != urn_sanitized:
+                    cursor.execute(
+                        "DELETE FROM inventory_assets WHERE source_urn = %s",
+                        (urn,)
+                    )
+                    deleted_count = cursor.rowcount
+                
+                # 3. Fallback: buscar por model_urn (appProjectId) + source_urn
+                if deleted_count == 0 and app_project_id:
+                    cursor.execute(
+                        "DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN (%s, %s)",
+                        (app_project_id, urn_sanitized, urn)
+                    )
+                    deleted_count = cursor.rowcount
+                
+                conn.commit()
+                print(f"[Remove] Limpieza inventario: {deleted_count} registros eliminados (URN: ...{urn_sanitized[-30:]})")
+        except Exception as cleanup_err:
+            print(f"[Remove] Advertencia: Error limpiando inventory_assets: {cleanup_err}")
+
         # Return filtered list
         if app_project_id:
             config['models'] = [m for m in config['models'] if m.get('appProjectId') == app_project_id]
@@ -428,6 +553,7 @@ def remove_model_route():
 def relink_model_route():
     data = request.json
     target_id = data.get('targetId')
+    old_urn = data.get('oldUrn')
     app_project_id = data.get('project') # Segregation
     if isinstance(app_project_id, dict):
         app_project_id = app_project_id.get('id')
@@ -436,12 +562,30 @@ def relink_model_route():
     if not target_id or not new_data:
         return jsonify({"error": "Missing targetId or newModel data"}), 400
 
+    # LIMPIEZA: Borrar inventario del URN viejo antes de relinkear
+    # COHERENCIA: sanitize_urn asegura match con el formato de source_urn en inventory_assets.
+    if old_urn and app_project_id:
+        try:
+            from db import get_db_connection
+            old_urn_sanitized = sanitize_urn(old_urn)
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN (%s, %s)",
+                    (app_project_id, old_urn_sanitized, old_urn)
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                print(f"[Relink] Limpieza inventario: {deleted} registros del URN viejo eliminados")
+        except Exception as cleanup_err:
+            print(f"[Relink] Advertencia: Error limpiando inventario viejo: {cleanup_err}")
+
     config = get_project_config_internal()
     model_found = False
 
     for m in config.get('models', []):
         # Match by ID (preferred) or URN if needed
-        if m.get('id') == target_id or (not target_id and m.get('urn') == data.get('oldUrn')):
+        if m.get('id') == target_id or (not target_id and m.get('urn') == old_urn):
             model_found = True
             # Update fields
             m['urn'] = new_data.get('urn')
@@ -458,6 +602,22 @@ def relink_model_route():
     
     if model_found:
         if save_project_config_internal(config):
+             # AUTO-EXTRACT: Disparar extracción en background para el nuevo URN
+             new_urn = new_data.get('urn')
+             if new_urn and app_project_id:
+                 try:
+                     from routes.inventory import extract_metadata_task
+                     job_id = f"auto_relink_{int(time.time())}"
+                     thread = threading.Thread(
+                         target=extract_metadata_task,
+                         args=(new_urn, app_project_id, job_id),
+                         daemon=True
+                     )
+                     thread.start()
+                     print(f"[Relink] Auto-extracción iniciada en background (job: {job_id})")
+                 except Exception as extract_err:
+                     print(f"[Relink] Advertencia: No se pudo iniciar auto-extracción: {extract_err}")
+
              if app_project_id:
                  config['models'] = [m for m in config['models'] if m.get('appProjectId') == app_project_id]
              return jsonify(config)
@@ -465,6 +625,98 @@ def relink_model_route():
              return jsonify({"error": "Failed to save config"}), 500
 
     return jsonify({"error": "Target model not found"}), 404
+
+
+@digital_twin_bp.route('/api/config/project/check-updates', methods=['POST'])
+def check_model_updates():
+    """Verifica si hay versiones nuevas disponibles en ACC para los modelos del proyecto.
+    No aplica cambios — solo informa."""
+    data = request.get_json() or {}
+    app_project_id = data.get('project')
+    if not app_project_id:
+        return jsonify({'error': 'Missing project'}), 400
+
+    config = get_project_config_internal()
+    project_models = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
+
+    if not project_models:
+        return jsonify({'updates': []})
+
+    try:
+        token, error = get_internal_token()
+        if error or not token:
+            return jsonify({'error': 'Auth failed'}), 500
+
+        headers = {'Authorization': f'Bearer {token}'}
+        updates = []
+
+        for model in project_models:
+            pid = model.get('projectId')
+            iid = model.get('itemId')
+            if not pid or not iid:
+                updates.append({
+                    'model_id': model.get('id'),
+                    'name': model.get('name'),
+                    'has_update': False,
+                    'reason': 'no_acc_metadata',
+                    'current_version': model.get('versionNumber'),
+                })
+                continue
+
+            try:
+                url = f"https://developer.api.autodesk.com/data/v1/projects/{pid}/items/{iid}"
+                resp = requests.get(url, headers=headers, timeout=10)
+                if not resp.ok:
+                    updates.append({
+                        'model_id': model.get('id'),
+                        'name': model.get('name'),
+                        'has_update': False,
+                        'reason': f'api_error_{resp.status_code}',
+                        'current_version': model.get('versionNumber'),
+                    })
+                    continue
+
+                item_data = resp.json()
+                latest_version_id = item_data['data']['relationships']['tip']['data']['id']
+                current_version_id = model.get('versionId')
+
+                has_update = latest_version_id != current_version_id
+
+                # Extract version number from latest_version_id if possible
+                latest_version_num = None
+                if has_update:
+                    try:
+                        v_url = f"https://developer.api.autodesk.com/data/v1/projects/{pid}/versions/{urllib.parse.quote(latest_version_id, safe='')}"
+                        v_resp = requests.get(v_url, headers=headers, timeout=10)
+                        if v_resp.ok:
+                            v_data = v_resp.json()
+                            latest_version_num = v_data.get('data', {}).get('attributes', {}).get('versionNumber')
+                    except Exception:
+                        pass
+
+                updates.append({
+                    'model_id': model.get('id'),
+                    'name': model.get('name'),
+                    'has_update': has_update,
+                    'current_version': model.get('versionNumber'),
+                    'latest_version': latest_version_num,
+                    'urn': model.get('urn'),
+                })
+            except Exception as model_err:
+                print(f"[check-updates] Error checking {model.get('name')}: {model_err}")
+                updates.append({
+                    'model_id': model.get('id'),
+                    'name': model.get('name'),
+                    'has_update': False,
+                    'reason': 'exception',
+                    'current_version': model.get('versionNumber'),
+                })
+
+        return jsonify({'updates': updates})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 @digital_twin_bp.route('/api/model/views', methods=['GET'])

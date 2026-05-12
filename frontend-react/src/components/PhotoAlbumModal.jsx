@@ -42,7 +42,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
         setBrowseLoading(true);
         try {
             const url = `${DOCS_API}/list?path=${encodeURIComponent(path)}&model_urn=${encodeURIComponent(modelUrn)}`;
-            const res = await fetch(url);
+            const res = await apiFetch(url);
             const data = await res.json();
             if (data.success) {
                 setBrowseFolders(data.data.folders || []);
@@ -371,9 +371,9 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
             <div className="album-target-info" style={{ 
                 padding: '4px 16px', 
                 fontSize: '11px', 
-                color: '#888', 
-                background: '#1a1b1e',
-                borderBottom: '1px solid #333',
+                color: '#555', 
+                background: '#f8f9fa',
+                borderBottom: '1px solid #e0e0e0',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between'
@@ -451,10 +451,10 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
 
             {browsing ? (
                 /* EMBEDDED ECD BROWSER (Phase 20) */
-                <div className="album-browser-overlay" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#0f1115' }}>
-                    <div className="browser-header" style={{ padding: '10px 15px', borderBottom: '1px solid #333', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <button onClick={() => setBrowsing(false)} className="text-btn" style={{ color: '#888' }}>✕ Cancelar</button>
-                        <div style={{ flex: 1, fontSize: '13px', color: '#aaa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div className="album-browser-overlay" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#ffffff' }}>
+                    <div className="browser-header" style={{ padding: '10px 15px', borderBottom: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <button onClick={() => setBrowsing(false)} className="text-btn" style={{ color: '#555' }}>✕ Cancelar</button>
+                        <div style={{ flex: 1, fontSize: '13px', color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {browseMode === 'link' ? 'Selecciona fotos para vincular' : 'Selecciona carpeta de destino'}
                             <div style={{ fontSize: '10px', opacity: 0.7 }}>{browsePath}</div>
                         </div>
@@ -469,7 +469,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                 {browsePath !== 'proyectos/' && browsePath !== '' && (
                                     <div 
                                         className="browser-item" 
-                                        style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #222', color: '#ccc' }}
+                                        style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #eee', color: '#555' }}
                                         onClick={() => {
                                             const parts = browsePath.replace(/\/$/, '').split('/');
                                             parts.pop();
@@ -484,7 +484,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                     <div 
                                         key={f.fullName} 
                                         className="browser-item" 
-                                        style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                                        style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                                         onClick={() => fetchBrowseContents(f.fullName)}
                                     >
                                         <span style={{ color: '#fbbf24' }}>📁 {f.name.replace(/\/$/, '')}</span>
@@ -509,10 +509,10 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                         <div 
                                             key={f.id} 
                                             className="browser-item" 
-                                            style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                                            style={{ padding: '10px', cursor: 'pointer', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                                             onClick={() => browseMode === 'link' && handleSelectFromECD(f)}
                                         >
-                                            <span style={{ color: '#fff' }}>{isImg ? '🖼️' : isVid ? '🎬' : '📄'} {f.name}</span>
+                                            <span style={{ color: '#333' }}>{isImg ? '🖼️' : isVid ? '🎬' : '📄'} {f.name}</span>
                                             {browseMode === 'link' && (
                                                 <span style={{ fontSize: '10px', color: '#3b82f6' }}>VINCULAR</span>
                                             )}

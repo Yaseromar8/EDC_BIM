@@ -71,26 +71,32 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                        fn.description, fn.mime_type,
                        COALESCE(fn.updated_by, fn.created_by, 'Sistema') as u_by,
                        fp.permission_level,
-                       EXISTS(SELECT 1 FROM file_nodes c WHERE c.parent_id = fn.id AND c.is_deleted = FALSE) AS has_children
+                       EXISTS(SELECT 1 FROM file_nodes c WHERE c.model_urn = fn.model_urn AND c.parent_id = fn.id AND c.is_deleted = FALSE) AS has_children
                 FROM file_nodes fn
                 LEFT JOIN folder_permissions fp 
                     ON fn.id = fp.folder_node_id AND fp.user_id = %s
-                WHERE fn.model_urn = %s AND fn.parent_id IS NOT DISTINCT FROM %s AND fn.is_deleted = FALSE
+                WHERE fn.model_urn = %s AND {parent_cond} AND fn.is_deleted = FALSE
                 ORDER BY fn.node_type DESC, fn.name ASC
             """
-            cursor.execute(query, (u_id, model_urn, parent_id))
+            if parent_id is None:
+                cursor.execute(query.format(parent_cond="fn.parent_id IS NULL"), (u_id, model_urn))
+            else:
+                cursor.execute(query.format(parent_cond="fn.parent_id = %s"), (u_id, model_urn, parent_id))
         else:
             query = """
                 SELECT id, name, node_type, size_bytes, version_number, updated_at, gcs_urn, 
                        status, tags, metadata, description, mime_type, 
                        COALESCE(updated_by, created_by, 'Sistema') as u_by,
                        NULL as permission_level,
-                       EXISTS(SELECT 1 FROM file_nodes c WHERE c.parent_id = file_nodes.id AND c.is_deleted = FALSE) AS has_children
+                       EXISTS(SELECT 1 FROM file_nodes c WHERE c.model_urn = file_nodes.model_urn AND c.parent_id = file_nodes.id AND c.is_deleted = FALSE) AS has_children
                 FROM file_nodes 
-                WHERE model_urn = %s AND parent_id IS NOT DISTINCT FROM %s AND is_deleted = FALSE
+                WHERE model_urn = %s AND {parent_cond} AND is_deleted = FALSE
                 ORDER BY node_type DESC, name ASC
             """
-            cursor.execute(query, (model_urn, parent_id))
+            if parent_id is None:
+                cursor.execute(query.format(parent_cond="parent_id IS NULL"), (model_urn,))
+            else:
+                cursor.execute(query.format(parent_cond="parent_id = %s"), (model_urn, parent_id))
         
         rows = cursor.fetchall()
         
@@ -149,15 +155,24 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                 
     return {"folders": folders, "files": files}
 
+# ── IN-MEMORY ROOT NODE CACHE (permanent) ────────────────────────────
+# Root node IDs never change → cache permanently. Eliminates ~600ms roundtrip.
+_root_cache = {}  # model_urn -> root_id
+
 
 def ensure_project_root_node(model_urn):
     """
     Asegura que exista un nodo raíz real ('Archivos de proyecto') para el proyecto dado.
     Si no existe, lo crea y re-asigna como padre de las carpetas huérfanas (parent_id=NULL).
-    Retorna el UUID del nodo raíz.
+    Retorna el UUID del nodo raíz. Usa caché in-memory permanente.
     """
     if not model_urn or model_urn == 'global':
         return None
+    
+    # 0. Check in-memory cache first (0ms)
+    cached = _root_cache.get(model_urn)
+    if cached:
+        return cached
     
     ROOT_NAME = 'Archivos de proyecto'
     
@@ -173,6 +188,7 @@ def ensure_project_root_node(model_urn):
         row = cursor.fetchone()
         
         if row:
+            _root_cache[model_urn] = row[0]
             return row[0]
         
         # 2. No existe → Crear nodo raíz
@@ -193,6 +209,7 @@ def ensure_project_root_node(model_urn):
         
         conn.commit()
         print(f"[DB] Nodo raíz creado para {model_urn}: {root_id} ({moved} carpetas re-asignadas)")
+        _root_cache[model_urn] = root_id
         return root_id
 
 def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mime_type=None, created_by=None):

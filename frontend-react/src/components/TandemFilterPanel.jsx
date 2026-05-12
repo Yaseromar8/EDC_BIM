@@ -4,8 +4,7 @@ import {
     GearIcon,
     RevertIcon,
     SearchIconTandem,
-    PaletteIconTandem,
-    ClusterIconTandem
+    PaletteIconTandem
 } from './TandemIcons';
 
 // Subcomponente memoizado para evitar re-renders masivos
@@ -20,8 +19,9 @@ const FilterCategory = React.memo(({
     handleValueToggle,
     setExpandedFilters,
     setFacetSearch,
-    handleClusterToggle,
     handleColorToggle,
+    handleCustomColorChange,
+    customValueColors,
     DEFAULT_VISIBLE_VALUES,
     PALETTE
 }) => {
@@ -52,6 +52,18 @@ const FilterCategory = React.memo(({
         }));
     }, [prop.id, setFacetSearch]);
 
+    // COLOR PICKER STATE
+    const [colorPickerTarget, setColorPickerTarget] = useState(null); // { value, anchorRect }
+
+    const PRESET_COLORS = [
+        '#10B981', '#059669', '#34D399', // Greens
+        '#3AA0FF', '#0EA5E9', '#6366F1', // Blues
+        '#F97316', '#EAB308', '#F59E0B', // Oranges/Yellows
+        '#EF4444', '#F43F5E', '#EC4899', // Reds/Pinks
+        '#A855F7', '#8B5CF6', '#14B8A6', // Purples/Teals
+        '#84CC16', '#22D3EE', '#FB923C', // Lime/Cyan/Light Orange
+    ];
+
     return (
         <div className="tandem-group" data-test-id={`facet-item:${prop.name}`}>
             <div className="tandem-group-header">
@@ -74,14 +86,6 @@ const FilterCategory = React.memo(({
                 <div className="tandem-actions" style={{ gap: '4px', alignItems: 'center' }}>
                     <button className={`tandem-action-btn ${searchConfig?.open ? 'active' : ''}`} title="Search" onClick={() => setFacetSearch(prev => ({ ...prev, [prop.id]: { open: !prev[prop.id]?.open, query: '' } }))}>
                         <SearchIconTandem />
-                    </button>
-                    {/* Disparamos Evento de Cluster Semántico */}
-                    <button 
-                        className="tandem-action-btn" 
-                        title="Isolate property"
-                        onClick={(e) => { e.stopPropagation(); handleClusterToggle(prop.id, selectedValues); }}
-                    >
-                        <ClusterIconTandem />
                     </button>
                     {/* Disparamos Evento de Color Semántico */}
                     <button
@@ -117,11 +121,17 @@ const FilterCategory = React.memo(({
             <ul className={`tandem-list open`}>
                 {filteredVisibleItems.map(item => {
                     const isChecked = selectedValues.length === 0 || selectedValues.includes(item.value);
+                    const customColorKey = `${prop.id}::${item.value}`;
+                    const customColor = customValueColors[customColorKey];
                     let colorStyle = {};
                     if (isColorActive) {
-                        const originalIndex = bucket.values.findIndex(v => v.value === item.value);
-                        const color = PALETTE[originalIndex % PALETTE.length];
-                        colorStyle = { backgroundColor: color, border: `1px solid ${color}` };
+                        if (customColor) {
+                            colorStyle = { backgroundColor: customColor, border: `1px solid ${customColor}`, boxShadow: `0 0 6px ${customColor}55` };
+                        } else {
+                            const originalIndex = bucket.values.findIndex(v => v.value === item.value);
+                            const color = PALETTE[originalIndex % PALETTE.length];
+                            colorStyle = { backgroundColor: color, border: `1px solid ${color}` };
+                        }
                     }
                     return (
                         <li key={item.value} className="tandem-item" data-test-id={`facet-value:${item.value}`}>
@@ -139,11 +149,80 @@ const FilterCategory = React.memo(({
                             </label>
                             <div className="tandem-item-right">
                                 <span className="tandem-count-badge">{item.count}</span>
-                                <div className="tandem-color-box" style={colorStyle}></div>
+                                <div 
+                                    className="tandem-color-box" 
+                                    style={{ ...colorStyle, cursor: isColorActive ? 'pointer' : 'default', transition: 'all 0.2s' }}
+                                    onClick={(e) => {
+                                        if (!isColorActive) return;
+                                        e.stopPropagation();
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        setColorPickerTarget(prev => 
+                                            prev?.value === item.value ? null : { value: item.value, anchorRect: rect }
+                                        );
+                                    }}
+                                    title={isColorActive ? 'Click to change color' : ''}
+                                />
                             </div>
                         </li>
                     );
                 })}
+
+                {/* INLINE COLOR PICKER POPOVER */}
+                {colorPickerTarget && isColorActive && (
+                    <li style={{ padding: '8px 16px 8px 36px', background: '#1a1c22', borderTop: '1px solid #333', borderBottom: '1px solid #333' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '11px', color: '#aaa', fontWeight: 600 }}>
+                                    Color: {colorPickerTarget.value}
+                                </span>
+                                <button 
+                                    onClick={() => setColorPickerTarget(null)} 
+                                    style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px', padding: '0 4px' }}
+                                >×</button>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                {PRESET_COLORS.map(c => {
+                                    const isSelected = customValueColors[`${prop.id}::${colorPickerTarget.value}`] === c;
+                                    return (
+                                        <div
+                                            key={c}
+                                            onClick={() => {
+                                                handleCustomColorChange(prop.id, colorPickerTarget.value, c);
+                                                setColorPickerTarget(null);
+                                            }}
+                                            style={{
+                                                width: '18px', height: '18px', borderRadius: '3px',
+                                                backgroundColor: c, cursor: 'pointer',
+                                                border: isSelected ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
+                                                boxShadow: isSelected ? `0 0 8px ${c}` : 'none',
+                                                transition: 'all 0.15s'
+                                            }}
+                                            title={c}
+                                        />
+                                    );
+                                })}
+                                {/* Native color input for full custom */}
+                                <label style={{ 
+                                    width: '18px', height: '18px', borderRadius: '3px', 
+                                    background: 'linear-gradient(135deg, #ff0000, #00ff00, #0000ff)', 
+                                    cursor: 'pointer', border: '1px solid rgba(255,255,255,0.3)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    overflow: 'hidden', position: 'relative'
+                                }} title="Custom color...">
+                                    <input 
+                                        type="color" 
+                                        style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }}
+                                        onChange={(e) => {
+                                            handleCustomColorChange(prop.id, colorPickerTarget.value, e.target.value);
+                                            setColorPickerTarget(null);
+                                        }}
+                                    />
+                                </label>
+                            </div>
+                        </div>
+                    </li>
+                )}
+
                 {hasMore && !expanded && (
                     <li className="tandem-item" style={{ justifyContent: 'flex-end', paddingRight: '16px', cursor: 'pointer', color: '#ccc', fontSize: '11px' }} onClick={() => setExpandedFilters(prev => ({ ...prev, [prop.id]: true }))}>
                         <span>more ⌄</span>
@@ -177,6 +256,11 @@ const TandemFilterPanel = ({
     PALETTE,
     DEFAULT_VISIBLE_VALUES
 }) => {
+    // Shared URN normalizer for consistent comparisons
+    const normUrn = (u) => String(u || '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const isUrnHidden = (urn) => hiddenModelUrns.some(u => normUrn(u) === normUrn(urn));
+    const visibleCount = models.filter(m => !isUrnHidden(m.urn)).length;
+
     const [heatmapConfig, setHeatmapConfig] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -189,15 +273,6 @@ const TandemFilterPanel = ({
     }, []);
 
     // Delegación estricta de eventos: Semantic Payloads
-    const handleClusterToggle = useCallback((propId, selectedValues) => {
-        console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Disparando: isolate-property-bucket con la propiedad ${propId}`);
-        window.dispatchEvent(new CustomEvent('isolate-property-bucket', {
-            detail: {
-                propId,
-                values: selectedValues.length > 0 ? selectedValues : null // si null aislará todos los validos de esa propiedad
-            }
-        }));
-    }, []);
 
     const handleColorToggle = useCallback((propId, selectedValues, isActive, propName) => {
         // Tandem no usa popup para seleccionar colores; aplica un espectro automático (Heatmap o Classic) a los properties del bucket
@@ -208,10 +283,36 @@ const TandemFilterPanel = ({
                 propId,
                 values: selectedValues.length > 0 ? selectedValues : null,
                 active: isActive,
-                paletteName: 'Classic Tandem' // Usar un tema default automáticamente
+                paletteName: 'Classic Tandem',
+                customColors: window._customValueColors || {} // Pass custom overrides
             }
         }));
     }, [toggleColor]);
+
+    // CUSTOM COLOR PER VALUE
+    const [customValueColors, setCustomValueColors] = useState(() => window._customValueColors || {});
+
+    const handleCustomColorChange = useCallback((propId, value, color) => {
+        const key = `${propId}::${value}`;
+        setCustomValueColors(prev => {
+            const next = { ...prev, [key]: color };
+            window._customValueColors = next; // Global store for Viewer access
+            return next;
+        });
+        // Re-dispatch theming event to repaint 3D instantly with new color
+        if (filterColors[propId]) {
+            const selectedVals = filterSelections[propId] || [];
+            window.dispatchEvent(new CustomEvent('theme-property-bucket', {
+                detail: {
+                    propId,
+                    values: selectedVals.length > 0 ? selectedVals : null,
+                    active: true,
+                    paletteName: 'Classic Tandem',
+                    customColors: { ...window._customValueColors, [key]: color }
+                }
+            }));
+        }
+    }, [filterColors, filterSelections]);
 
     const handleResetAll = useCallback(() => {
         setFilterSelections({});
@@ -295,13 +396,13 @@ const TandemFilterPanel = ({
                 {/* 1. SOURCES GROUP (Modelos) */}
                 <div className="tandem-group">
                     <div className="tandem-group-header">
-                        <label className="tandem-cb-container" title="Toggle all models" onClick={e => { e.stopPropagation(); if (hiddenModelUrns.length === 0) { setHiddenModelUrns(models.map(m => m.urn)); } else { setHiddenModelUrns([]); } }}>
+                        <label className="tandem-cb-container" title="Toggle all models" onClick={e => { e.stopPropagation(); if (visibleCount === models.length) { setHiddenModelUrns(models.map(m => normUrn(m.urn))); } else { setHiddenModelUrns([]); } }}>
                             <div className="tandem-cb-wrap">
-                                <div className={`tandem-cb-box ${hiddenModelUrns.length === 0 ? 'checked' : (hiddenModelUrns.length > 0 && hiddenModelUrns.length < models.length ? 'checked' : '')} ${hiddenModelUrns.length > 0 ? 'active' : ''}`}>
+                                <div className={`tandem-cb-box ${visibleCount === models.length ? 'checked' : (visibleCount > 0 && visibleCount < models.length ? 'checked' : '')} ${visibleCount < models.length ? 'active' : ''}`}>
                                     <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" className="tandem-cb-icon">
-                                        {hiddenModelUrns.length > 0 && hiddenModelUrns.length < models.length
+                                        {visibleCount > 0 && visibleCount < models.length
                                             ? <line x1="6" y1="12" x2="18" y2="12" stroke="#fff" />
-                                            : <path fill="none" stroke={hiddenModelUrns.length === 0 ? '#fff' : 'transparent'} d="M6,11.3 L10.3,16 L18,6.2" />
+                                            : <path fill="none" stroke={visibleCount === models.length ? '#fff' : 'transparent'} d="M6,11.3 L10.3,16 L18,6.2" />
                                         }
                                     </svg>
                                 </div>
@@ -309,7 +410,7 @@ const TandemFilterPanel = ({
                         </label>
                         <div className="tandem-group-info" onClick={() => setExpandedFilters(prev => ({ ...prev, 'sources': !prev['sources'] }))}>
                             <span className="tandem-group-title">Sources</span>
-                            <span className="tandem-group-count">({models.length - hiddenModelUrns.length} of {models.length})</span>
+                            <span className="tandem-group-count">({visibleCount} of {models.length})</span>
                         </div>
                         <div className="tandem-actions" style={{ gap: '4px', alignItems: 'center' }}>
                             <button className={`tandem-action-btn ${facetSearch['sources']?.open ? 'active' : ''}`} title="Search" onClick={() => setFacetSearch(prev => ({ ...prev, sources: { open: !prev.sources?.open, query: '' } }))}><SearchIconTandem /></button>
@@ -347,9 +448,9 @@ const TandemFilterPanel = ({
                                     <label className="tandem-item-label">
                                         <span className="tandem-cb-container" onClick={e => { e.preventDefault(); handleToggleModelVisibility(model.urn); }}>
                                             <div className="tandem-cb-wrap">
-                                                <div className={`tandem-cb-box ${!hiddenModelUrns.includes(model.urn) ? 'checked' : ''} ${hiddenModelUrns.length > 0 ? 'active' : ''}`}>
+                                                <div className={`tandem-cb-box ${!isUrnHidden(model.urn) ? 'checked' : ''} ${hiddenModelUrns.length > 0 ? 'active' : ''}`}>
                                                     <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" className="tandem-cb-icon">
-                                                        <path fill="none" stroke={!hiddenModelUrns.includes(model.urn) ? '#fff' : 'transparent'} d="M6,11.3 L10.3,16 L18,6.2" />
+                                                        <path fill="none" stroke={!isUrnHidden(model.urn) ? '#fff' : 'transparent'} d="M6,11.3 L10.3,16 L18,6.2" />
                                                     </svg>
                                                 </div>
                                             </div>
@@ -393,8 +494,9 @@ const TandemFilterPanel = ({
                         handleValueToggle={handleValueToggle}
                         setExpandedFilters={setExpandedFilters}
                         setFacetSearch={setFacetSearch}
-                        handleClusterToggle={handleClusterToggle}
                         handleColorToggle={handleColorToggle}
+                        handleCustomColorChange={handleCustomColorChange}
+                        customValueColors={customValueColors}
                         DEFAULT_VISIBLE_VALUES={DEFAULT_VISIBLE_VALUES}
                         PALETTE={PALETTE}
                     />

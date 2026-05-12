@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import ReactDOM from 'react-dom';
 
 const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selectedColumns = [], onUpdate }) => {
     const [currentSelection, setCurrentSelection] = useState([]);
@@ -115,14 +116,14 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
 
     if (!open) return null;
 
-    return (
+    return ReactDOM.createPortal(
         <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
             background: 'rgba(0,0,0,0.5)', zIndex: 3000,
             display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
             <div style={{
-                background: '#2a2a2a', width: '800px', height: '600px',
+                background: '#2a2a2a', width: '900px', maxWidth: '95vw', height: '80vh', minHeight: '500px', maxHeight: '750px',
                 borderRadius: '4px', display: 'flex', flexDirection: 'column',
                 boxShadow: '0 10px 40px rgba(0,0,0,0.5)', border: '1px solid #3e4045',
                 color: '#ececec', fontFamily: 'Artifakt Element, sans-serif'
@@ -334,7 +335,8 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                 </div>
 
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

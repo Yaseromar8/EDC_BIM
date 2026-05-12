@@ -14,6 +14,79 @@ EXTRACTION_JOBS = {}
 
 APS_MD_URL = "https://developer.api.autodesk.com/modelderivative/v2/designdata"
 
+# =====================================================================
+# NORMALIZACIÓN DE CATEGORÍAS REVIT (ES → EN)
+# Revit exporta categorías en el idioma del template del proyecto.
+# Este mapa unifica nombres en español a sus equivalentes en inglés.
+# =====================================================================
+REVIT_CATEGORY_ES_TO_EN = {
+    'Muros': 'Walls',
+    'Suelos': 'Floors',
+    'Modelos genéricos': 'Generic Models',
+    'Armadura estructural': 'Structural Rebar',
+    'Bordes de losa': 'Slab Edges',
+    'Aparatos sanitarios': 'Plumbing Fixtures',
+    'Puertas': 'Doors',
+    'Ventanas': 'Windows',
+    'Pilares estructurales': 'Structural Columns',
+    'Pilares': 'Columns',
+    'Vigas': 'Beams',
+    'Techos': 'Ceilings',
+    'Cubiertas': 'Roofs',
+    'Escaleras': 'Stairs',
+    'Tramos': 'Stair Runs',
+    'Descansillos': 'Stair Landings',
+    'Barandillas': 'Railings',
+    'Líneas': 'Lines',
+    'Tuberías': 'Pipes',
+    'Conductos': 'Ducts',
+    'Bandejas de cables': 'Cable Trays',
+    'Mobiliario': 'Furniture',
+    'Equipos mecánicos': 'Mechanical Equipment',
+    'Equipos eléctricos': 'Electrical Equipment',
+    'Iluminación': 'Lighting Fixtures',
+    'Rampas': 'Ramps',
+    'Áreas': 'Areas',
+    'Habitaciones': 'Rooms',
+    'Niveles': 'Levels',
+    'Rejillas': 'Grids',
+    'Cimentación estructural': 'Structural Foundations',
+    'Conexiones estructurales': 'Structural Connections',
+    'Armazón estructural': 'Structural Framing',
+    'Estructura': 'Structural Framing',
+    'Refuerzo de área estructural': 'Structural Area Reinforcement',
+    'Refuerzo de trayectoria estructural': 'Structural Path Reinforcement',
+    'Cerramientos': 'Curtain Walls',
+    'Montantes de cerramiento': 'Curtain Wall Mullions',
+    'Paneles de cerramiento': 'Curtain Panels',
+    'Sistemas de tuberías': 'Piping Systems',
+    'Accesorios de tuberías': 'Pipe Fittings',
+    'Accesorios de tubería': 'Pipe Fittings',
+    'Topografía': 'Topography',
+    'Vegetación': 'Planting',
+    'Forjados': 'Floors',
+}
+
+import re as _re
+
+def _is_filename(name):
+    """Detecta si un nombre de nodo es un archivo vinculado, no una categoría."""
+    if _re.search(r'\.(dwg|rvt|ifc|nwc|nwd)$', name, _re.IGNORECASE):
+        return True
+    if _re.match(r'^[A-Z0-9_\-]+$', name) and len(name) > 3:
+        return True
+    return False
+
+def normalize_revit_category(raw_cat):
+    """Normaliza una categoría de Revit: traduce ES→EN y detecta linked models."""
+    if not raw_cat or raw_cat == '(Unassigned)':
+        return raw_cat or '(Unassigned)'
+    trimmed = str(raw_cat).strip()
+    if _is_filename(trimmed):
+        return '(Linked Model)'
+    return REVIT_CATEGORY_ES_TO_EN.get(trimmed, trimmed)
+
+
 def get_internal_token():
     from aps import get_internal_token as aps_token
     return aps_token()
@@ -76,38 +149,146 @@ def extract_metadata_task(urn, target_urn, job_id):
         if not metadata:
             raise Exception("No se encontraron metadatos para este URN.")
         
+        # --- Selección inteligente de GUID ---
+        # Prioridad 1: default_view_guid de model_config (configurado por el usuario)
+        # Prioridad 2: Vista 3D con más elementos (leaf nodes)
+        # Prioridad 3: Primera vista de cualquier tipo
+        configured_guid = None
+        try:
+            from db import get_db_connection
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT default_view_guid FROM model_config WHERE urn = %s AND default_view_guid IS NOT NULL",
+                    (urn,)
+                )
+                row = cursor.fetchone()
+                if row and row[0]:
+                    configured_guid = row[0]
+                    print(f"[Extractor] default_view_guid encontrado en model_config: {configured_guid}")
+        except Exception as db_err:
+            print(f"[Extractor] Advertencia: No se pudo consultar model_config: {db_err}")
+
         guid = None
+        available_guids = set()
+        views_3d = []
         for view in metadata:
             print(f"[Extractor]   Vista: {view.get('name')} (role={view.get('role')}, guid={view.get('guid')})")
+            available_guids.add(view.get('guid'))
             if view.get('role') == '3d':
-                guid = view['guid']
-                break
+                views_3d.append(view)
+
+        # Intentar usar el GUID configurado si existe y está disponible en el manifest
+        if configured_guid and configured_guid in available_guids:
+            guid = configured_guid
+            matched_name = next((v.get('name') for v in metadata if v.get('guid') == guid), '?')
+            print(f"[Extractor] Usando default_view_guid configurado: {guid} (vista: {matched_name})")
+        else:
+            if configured_guid:
+                print(f"[Extractor] ADVERTENCIA: default_view_guid '{configured_guid}' no encontrado en manifest, usando fallback")
+            # Fallback INTELIGENTE: elegir la vista 3D con más nodos hoja
+            if len(views_3d) == 1:
+                guid = views_3d[0]['guid']
+                print(f"[Extractor] Fallback: única vista 3D: {guid} (vista: {views_3d[0].get('name')})")
+            elif len(views_3d) > 1:
+                print(f"[Extractor] Fallback: evaluando {len(views_3d)} vistas 3D para elegir la más completa...")
+                best_guid = None
+                best_count = -1
+                best_name = '?'
+                for v3d in views_3d:
+                    v_guid = v3d['guid']
+                    try:
+                        v_resp = requests.get(f"{APS_MD_URL}/{urn}/metadata/{v_guid}", headers=headers, timeout=30)
+                        v_resp.raise_for_status()
+                        v_objects = v_resp.json().get('data', {}).get('objects', [])
+                        # Contar hojas
+                        leaf_count = 0
+                        def _count_leaves(objs):
+                            nonlocal leaf_count
+                            for o in objs:
+                                ch = o.get('objects', [])
+                                if not ch:
+                                    leaf_count += 1
+                                else:
+                                    _count_leaves(ch)
+                        _count_leaves(v_objects)
+                        print(f"[Extractor]   Vista '{v3d.get('name')}' (guid={v_guid}): {leaf_count} hojas")
+                        if leaf_count > best_count:
+                            best_count = leaf_count
+                            best_guid = v_guid
+                            best_name = v3d.get('name', '?')
+                    except Exception as ve:
+                        print(f"[Extractor]   Vista '{v3d.get('name')}' error: {ve}")
+                if best_guid:
+                    guid = best_guid
+                    print(f"[Extractor] Fallback: mejor vista 3D seleccionada: {best_name} ({best_count} hojas, guid={guid})")
         if not guid:
             guid = metadata[0]['guid']
-        print(f"[Extractor] GUID seleccionado: {guid}")
+            print(f"[Extractor] Fallback final: primera vista disponible: {guid}")
+        print(f"[Extractor] GUID seleccionado final: {guid}")
 
-        # Fase 2: Extracción Properties
-        EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': 40, 'message': 'Descargando propiedades (puede tardar)...'}
-        prop_url = f"{APS_MD_URL}/{urn}/metadata/{guid}/properties?forceget=true"
-        print(f"[Extractor] Fase 2 - GET {prop_url}")
+        # Fase 2: Extracción Properties (Paginada)
+        # Usamos POST .../properties:query con paginación para garantizar cobertura total.
+        # Fallback al GET legacy si el POST falla.
+        EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': 40, 'message': 'Descargando propiedades (paginado)...'}
         
         collection = None
-        max_retries = 30
-        for attempt in range(max_retries):
-            resp = requests.get(prop_url, headers=headers)
-            print(f"[Extractor] Fase 2 - Intento {attempt+1}/{max_retries}: status={resp.status_code}")
+        PAGE_SIZE = 500
+        query_url = f"{APS_MD_URL}/{urn}/metadata/{guid}/properties:query"
+        print(f"[Extractor] Fase 2 - POST paginado {query_url}")
+        
+        try:
+            all_items = []
+            offset = 0
+            max_pages = 200  # Safety limit (100,000 elementos max)
+            for page in range(max_pages):
+                payload = {
+                    'query': {},
+                    'pagination': {'limit': PAGE_SIZE, 'offset': offset}
+                }
+                for attempt in range(20):
+                    resp = requests.post(query_url, headers={**headers, 'Content-Type': 'application/json'}, json=payload)
+                    if resp.status_code == 202:
+                        pct = 40 + int((page * PAGE_SIZE) / max(1, PAGE_SIZE * 10) * 20)
+                        EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': min(pct, 65), 'message': f'Esperando respuesta de Autodesk (intento {attempt+1})...'}
+                        time.sleep(5)
+                        continue
+                    break
+                
+                if resp.status_code == 202:
+                    raise Exception("Timeout en paginación")
+                resp.raise_for_status()
+                batch = resp.json().get('data', {}).get('collection', [])
+                all_items.extend(batch)
+                print(f"[Extractor] Fase 2 - Página {page+1}: +{len(batch)} elementos (total: {len(all_items)})")
+                EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': min(40 + page * 3, 65), 'message': f'Descargando propiedades ({len(all_items)} elementos)...'}
+                
+                if len(batch) < PAGE_SIZE:
+                    break  # Última página
+                offset += PAGE_SIZE
             
-            if resp.status_code == 202:
-                # Autodesk is still preparing the data
-                pct = 40 + int((attempt / max_retries) * 30)  # 40% -> 70%
-                EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': pct, 'message': f'Esperando respuesta de Autodesk (intento {attempt+1})...'}
-                time.sleep(5)
-                continue
-            resp.raise_for_status()
-            collection = resp.json().get('data', {}).get('collection', [])
-            print(f"[Extractor] Fase 2 - Recibidos {len(collection)} elementos")
-            break
+            collection = all_items
+            print(f"[Extractor] Fase 2 - POST paginado completado: {len(collection)} elementos totales")
             
+        except Exception as paginated_err:
+            # FALLBACK: GET legacy (funciona para modelos pequeños/medianos)
+            print(f"[Extractor] Fase 2 - POST paginado falló ({paginated_err}), usando GET legacy...")
+            prop_url = f"{APS_MD_URL}/{urn}/metadata/{guid}/properties?forceget=true"
+            collection = None
+            max_retries = 30
+            for attempt in range(max_retries):
+                resp = requests.get(prop_url, headers=headers)
+                print(f"[Extractor] Fase 2 (GET fallback) - Intento {attempt+1}/{max_retries}: status={resp.status_code}")
+                if resp.status_code == 202:
+                    pct = 40 + int((attempt / max_retries) * 25)
+                    EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': pct, 'message': f'Esperando respuesta de Autodesk (intento {attempt+1})...'}
+                    time.sleep(5)
+                    continue
+                resp.raise_for_status()
+                collection = resp.json().get('data', {}).get('collection', [])
+                print(f"[Extractor] Fase 2 (GET fallback) - Recibidos {len(collection)} elementos")
+                break
+                
         if collection is None:
             raise Exception("Autodesk tardó demasiado en preparar las propiedades.")
 
@@ -131,10 +312,61 @@ def extract_metadata_task(urn, target_urn, job_id):
         build_parent_map(hier_objects, None)
         print(f"[Extractor] Fase 2.1 - Jerarquía extraída: {len(parent_map)} relaciones padre-hijo")
 
+        # Fase 2.2: Verificación Cruzada (Tree Leaves vs Properties Collection)
+        # Detectar nodos hoja del árbol que NO están en el collection de propiedades.
+        # Esto captura Revit Parts y elementos que la API de propiedades puede omitir.
+        tree_all_nodes = {}  # objectid -> name
+        tree_leaf_ids = set()
+        def catalog_tree(objects_list):
+            for obj in objects_list:
+                oid = obj.get('objectid')
+                tree_all_nodes[oid] = obj.get('name', 'Unnamed')
+                children = obj.get('objects', [])
+                if not children:
+                    tree_leaf_ids.add(oid)
+                else:
+                    catalog_tree(children)
+        catalog_tree(hier_objects)
+        
+        collection_ids = {node.get('objectid') for node in collection}
+        missing_leaf_ids = tree_leaf_ids - collection_ids
+        
+        if missing_leaf_ids:
+            print(f"[Extractor] Fase 2.2 - [!] DETECTADOS {len(missing_leaf_ids)} nodos hoja en arbol AUSENTES del collection")
+            print(f"[Extractor] Fase 2.2 - Intentando recuperar propiedades individuales para nodos faltantes...")
+            EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': 72, 'message': f'Recuperando {len(missing_leaf_ids)} elementos faltantes...'}
+            
+            # Intentar recuperar las propiedades de los nodos faltantes en lotes
+            missing_list = list(missing_leaf_ids)
+            BATCH = 50
+            recovered = 0
+            for i in range(0, len(missing_list), BATCH):
+                batch_ids = missing_list[i:i+BATCH]
+                try:
+                    q_url = f"{APS_MD_URL}/{urn}/metadata/{guid}/properties:query"
+                    q_payload = {
+                        'query': {'$in': ['objectid'] + batch_ids}
+                    }
+                    q_resp = requests.post(q_url, headers={**headers, 'Content-Type': 'application/json'}, json=q_payload, timeout=30)
+                    if q_resp.status_code == 200:
+                        batch_results = q_resp.json().get('data', {}).get('collection', [])
+                        collection.extend(batch_results)
+                        recovered += len(batch_results)
+                except Exception as gap_err:
+                    print(f"[Extractor] Fase 2.2 - Error recuperando lote {i//BATCH}: {gap_err}")
+            print(f"[Extractor] Fase 2.2 - Recuperados {recovered}/{len(missing_leaf_ids)} elementos faltantes")
+        else:
+            print(f"[Extractor] Fase 2.2 - [OK] Cobertura completa: {len(tree_leaf_ids)} hojas, todas presentes en collection")
+
         # Fase 3: Inserción BD y Fusión Genética
         EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': 80, 'message': 'Estructurando gemelo digital (Fusionando Familias)...'}
         
         props_by_id = {node.get('objectid'): node.get('properties', {}) for node in collection}
+        names_by_id = {node.get('objectid'): node.get('name', 'Unnamed') for node in collection}
+        # Enriquecer names_by_id con nombres del árbol (más completo que el collection)
+        for oid, oname in tree_all_nodes.items():
+            if oid not in names_by_id:
+                names_by_id[oid] = oname
         
         import copy
         def deep_merge(target, source):
@@ -144,17 +376,18 @@ def extract_metadata_task(urn, target_urn, job_id):
                         target[k] = {}
                     deep_merge(target[k], v)
                 else:
-                    # Source es más específico (hijo). Sobrescribe al target (padre) SOLO si aporta valor real
                     val_src = str(v).strip() if v is not None else ''
                     if val_src != '' and val_src != 'None':
                         target[k] = copy.deepcopy(v)
 
         inventory_data = []
+        skipped_nodes = 0
         for node in collection:
             name = node.get('name', 'Unnamed')
             external_id = node.get('externalId')
             objectid = node.get('objectid')
             if not external_id:
+                print(f"[Extractor] [!] Nodo sin externalId descartado: objectid={objectid}, name={name}")
                 continue
                 
             ancestral_path = []
@@ -171,6 +404,86 @@ def extract_metadata_task(urn, target_urn, job_id):
                 
             my_props = node.get('properties', {})
             deep_merge(merged_props, my_props)
+
+            # --- LIMPIEZA DE RUIDO (CIVIL 3D) ---
+            # Eliminar grupos matemáticos irrelevantes para aligerar la base de datos
+            keys_to_remove = [k for k in merged_props.keys() if k.startswith('Sub-entity')]
+            for k in keys_to_remove:
+                del merged_props[k]
+
+            # Inyectar Category Topológico (Modelo SVF)
+            # ancestral_path = [Root(0), Category(1), Family(2), Type(3)] 
+            # Si se agrupó por niveles = [Root(0), Level(1), Category(2)]
+            path_names = [names_by_id.get(anc_id, 'Unnamed') for anc_id in ancestral_path]
+            
+            revit_cat = '(Unassigned)'
+            if len(path_names) > 1:
+                candidate = path_names[1]
+                # Si path_names[1] es un nombre de archivo (linked model),
+                # buscar la categoría real más profundamente en la jerarquía.
+                if _is_filename(candidate) and len(path_names) > 2:
+                    candidate = path_names[2]
+                revit_cat = candidate
+            
+            # Fallback: si todavía no tenemos categoría válida, intentar
+            # leer de las propiedades del elemento (Item::Category o Elemento::Categoría)
+            if revit_cat == '(Unassigned)' or _is_filename(revit_cat):
+                item_cat = merged_props.get('Item', {}).get('Category', '')
+                elem_cat = merged_props.get('Elemento', {}).get('Categoría', '')
+                identity_cat = merged_props.get('Datos de identidad', {}).get('Categoría', '')
+                for fallback in [item_cat, elem_cat, identity_cat]:
+                    if fallback and str(fallback).strip() and str(fallback).strip() != '(Unassigned)':
+                        revit_cat = str(fallback).strip()
+                        break
+
+            # Normalizar: ES→EN y linked models
+            revit_cat = normalize_revit_category(revit_cat)
+
+            # Inyectamos en la estructura que el frontend espera
+            if '__category__' not in merged_props:
+                merged_props['__category__'] = {}
+            merged_props['__category__']['__category__'] = revit_cat
+            
+            # Clasificar tipo de nodo SVF: instance / type / category
+            # - Instance: Elemento colocado con geometría → nombre contiene [ElementId]
+            # - Category: Nodo agrupador → externalId tiene formato "NombreTipo:Categoría"
+            # - Type: Definición de familia (sin geometría propia)
+            import re
+            # ─── Clasificación de nodos SVF ───────────────────────────
+            # Revit:   nombres como "Muro Básico [4537502]"  → decimal
+            # Civil3D: nombres como "Solid [787B]"           → hexadecimal (handle)
+            # Ambos formatos indican instancias geométricas reales.
+            # Además, priorizamos el árbol jerárquico real (tree_leaf_ids)
+            # ──────────────────────────────────────────────────────────
+            if objectid in tree_leaf_ids:
+                node_type = 'instance'
+            elif re.search(r'\[[\dA-Fa-f]+\]', name):
+                node_type = 'instance'
+            elif ':' in external_id and not external_id.startswith('urn:'):
+                node_type = 'category'
+            elif 'IfcGUID' in merged_props.get('Element', {}):
+                node_type = 'instance'  # IFC elements son instancias geométricas reales
+            else:
+                node_type = 'type'
+            
+            if '__node__' not in merged_props:
+                merged_props['__node__'] = {}
+            merged_props['__node__']['__node_type__'] = node_type
+            
+            # ═══════════════════════════════════════════════════════════
+            # FILTRO DE COHERENCIA: Solo almacenar instancias geométricas
+            # Los nodos 'type' y 'category' son artefactos del árbol SVF:
+            #   - 'type':     Definición de familia (e.g., "000_SYP_Empedrado")
+            #                 → Sus propiedades YA están heredadas por las instancias
+            #                   gracias a la Fusión Genética (deep_merge ancestral).
+            #   - 'category': Nodo agrupador (e.g., "Muros:", "Walls")
+            #                 → Sin valor para auditoría.
+            # Las instancias contienen toda la metadata de auditoría:
+            #   Dimensions (Area, Volume, Length), Data (DSI_*), Constraints, etc.
+            # ═══════════════════════════════════════════════════════════
+            if node_type != 'instance':
+                skipped_nodes += 1
+                continue
             
             inventory_data.append({
                 "name": name,
@@ -178,7 +491,7 @@ def extract_metadata_task(urn, target_urn, job_id):
                 "properties": json.dumps(merged_props)
             })
 
-        print(f"[Extractor] Fase 3 - {len(inventory_data)} objetos con ID para insertar")
+        print(f"[Extractor] Fase 3 - {len(inventory_data)} instancias geométricas para insertar ({skipped_nodes} nodos type/category descartados)")
 
         if not inventory_data:
             EXTRACTION_JOBS[job_id] = {'status': 'success', 'progress': 100, 'message': 'El modelo no contiene objetos con ID.'}

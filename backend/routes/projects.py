@@ -77,6 +77,14 @@ def ensure_projects_schema():
             cursor.execute("""
                 ALTER TABLE projects ADD COLUMN IF NOT EXISTS invite_code VARCHAR(10) UNIQUE;
             """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_projects_model_urn
+                ON projects(model_urn);
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_projects_name
+                ON projects(name);
+            """)
 
             # --- Insertar Hub y Project por defecto para projects legacy ---
             # Verificar si hay proyectos sin hub asignado

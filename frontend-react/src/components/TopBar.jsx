@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './TopBar.css';
 
 const DOCS_URL = import.meta.env.VITE_DOCS_URL || 'http://localhost:5174';
@@ -104,6 +104,22 @@ const SectionIcon = () => (
     </svg>
 );
 
+const ToolboxIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+        <polyline points="2 12 12 17 22 12"></polyline>
+        <polyline points="2 17 12 22 22 17"></polyline>
+    </svg>
+);
+
+const PinIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+);
+
+const HeatmapIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+);
+
 const TopBar = ({
     user,
     onLogout,
@@ -114,8 +130,22 @@ const TopBar = ({
     selectedProject,
     onUniversalSearch
 }) => {
-    const [timer, setTimer] = React.useState(null);
-    const [isLongPress, setIsLongPress] = React.useState(false);
+    const [timer, setTimer] = useState(null);
+    const [isLongPress, setIsLongPress] = useState(false);
+    
+    // Obra Lineal Toolbox
+    const [isProjectToolsOpen, setIsProjectToolsOpen] = useState(false);
+    const toolsRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (toolsRef.current && !toolsRef.current.contains(event.target)) {
+                setIsProjectToolsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const handleStart = () => {
         setIsLongPress(false);
@@ -154,14 +184,66 @@ const TopBar = ({
                     style={{ position: 'relative' }}
                 >
                     <div className={`logo-wrapper ${activePanel === 'search' ? 'ai-active-glow' : ''}`}>
-                        <img src="/logo.png" alt="Logo" style={{ height: '28px', display: 'block', zIndex: 2, position: 'relative' }} />
+                        <img src="/logo.png" alt="Logo" style={{ height: '28px', transform: 'scale(1.5)', display: 'block', zIndex: 2, position: 'relative' }} />
                     </div>
 
                     {selectedProject && (
-                        <div className="top-bar-breadcrumb">
+                        <div className="top-bar-breadcrumb" style={{ display: 'flex', alignItems: 'center' }}>
                             <span className="breadcrumb-project">{selectedProject.baseName || selectedProject.name}</span>
                             <span className="breadcrumb-sep">/</span>
                             <span className="breadcrumb-view">{selectedProject.frontName}</span>
+                            
+                            {/* Toolbar de Obra Lineal desplegable */}
+                            <div style={{ position: 'relative', marginLeft: '12px' }} ref={toolsRef}>
+                                <button 
+                                    className="tool-btn"
+                                    title="Herramientas de Obra Lineal"
+                                    onClick={(e) => { e.stopPropagation(); setIsProjectToolsOpen(!isProjectToolsOpen); }}
+                                    style={{ padding: '6px', background: isProjectToolsOpen ? 'rgba(255,255,255,0.1)' : 'transparent', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#cbd5e1' }}
+                                    onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
+                                    onMouseLeave={(e) => e.currentTarget.style.color = (isProjectToolsOpen ? '#fff' : '#cbd5e1')}
+                                >
+                                    <ToolboxIcon />
+                                </button>
+
+                                {isProjectToolsOpen && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: '100%',
+                                        left: '0',
+                                        marginTop: '4px',
+                                        background: '#3A3A3A', 
+                                        border: '1px solid #444',
+                                        borderRadius: '6px',
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.6)',
+                                        padding: '8px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '4px',
+                                        zIndex: 200,
+                                        minWidth: '190px'
+                                    }}>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('toggle-progressives')); setIsProjectToolsOpen(false); }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: 'transparent', border: 'none', color: '#E0E0E0', cursor: 'pointer', borderRadius: '4px', textAlign: 'left', width: '100%', fontSize: '13px', transition: 'all 0.15s ease' }}
+                                            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#fff'; }}
+                                            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#E0E0E0'; }}
+                                        >
+                                            <PinIcon />
+                                            Trazos y Progresivas
+                                        </button>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('toggle-workfronts-panel')); setIsProjectToolsOpen(false); }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: 'transparent', border: 'none', color: '#E0E0E0', cursor: 'pointer', borderRadius: '4px', textAlign: 'left', width: '100%', fontSize: '13px', transition: 'all 0.15s ease' }}
+                                            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#fff'; }}
+                                            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#E0E0E0'; }}
+                                        >
+                                            <HeatmapIcon />
+                                            Gestor de Heatmap
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -211,6 +293,7 @@ const TopBar = ({
                             <span style={{ color: '#fff', fontSize: '13px', fontWeight: 500 }}>{user.name}</span>
                             <span style={{ color: '#888', fontSize: '11px' }}>{user.role === 'admin' ? 'Administrador' : 'Usuario'}</span>
                         </div>
+                        {onLogout && (
                         <button
                             className="tool-btn logout-btn"
                             onClick={onLogout}
@@ -219,6 +302,7 @@ const TopBar = ({
                         >
                             <SignOutIcon />
                         </button>
+                        )}
                     </div>
                 )}
             </div>

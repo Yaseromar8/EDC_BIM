@@ -32,6 +32,9 @@ app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB (Failsafe para 
 CORS(app, resources={r"/*": {"origins": [
     "http://localhost:5173",   # frontend-docs (dev)
     "http://localhost:5174",   # frontend-react (dev)
+    "http://localhost:5175",
+    "http://localhost:5176",
+    "http://localhost:5177",
     "http://localhost:3000",   # backend self
     # Agregar aquí los dominios de producción:
     # "https://tu-ecd.netlify.app",
@@ -707,8 +710,15 @@ from routes.ai import ai_bp
 from routes.schedule import schedule_bp
 from routes.uploads import uploads_bp
 from routes.inventory import inventory_bp
+from routes.diagnostics import diag_bp
+from routes.audit import audit_bp
+from routes.rfis import rfis_bp
+from routes.redlines import redlines_bp
+from routes.partidas import partidas_bp
 
 app.register_blueprint(digital_twin_bp)
+app.register_blueprint(audit_bp)
+app.register_blueprint(diag_bp)
 app.register_blueprint(maps_bp)
 app.register_blueprint(views_bp)
 app.register_blueprint(pins_bp)
@@ -720,15 +730,21 @@ app.register_blueprint(ai_bp)
 app.register_blueprint(schedule_bp, url_prefix='/api/schedule')
 app.register_blueprint(uploads_bp)
 app.register_blueprint(inventory_bp)
+app.register_blueprint(rfis_bp, url_prefix='/api/rfis')
+app.register_blueprint(redlines_bp, url_prefix='/api/redlines')
+app.register_blueprint(partidas_bp, url_prefix='/api/partidas')
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
     return send_from_directory(MAP_UPLOAD_FOLDER, filename)
 
 # Inicializar tablas maestras de la BD
-from db import ensure_file_nodes_table, ensure_ai_brain_schema
+from db import ensure_file_nodes_table, ensure_ai_brain_schema, ensure_rfi_schema, ensure_redline_schema, ensure_partidas_schema
 ensure_file_nodes_table()
 ensure_ai_brain_schema()
+ensure_rfi_schema()
+ensure_redline_schema()
+ensure_partidas_schema()
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()
@@ -833,12 +849,12 @@ def get_inventory():
             
             if include_props:
                 query = '''
-                    SELECT external_id, name, material, installation_status, properties, model_urn, source_urn 
+                    SELECT external_id, name, material, installation_status, vaciado_nro, properties, model_urn, source_urn 
                     FROM inventory_assets
                 '''
             else:
                 query = '''
-                    SELECT external_id, name, material, installation_status, model_urn, source_urn 
+                    SELECT external_id, name, material, installation_status, vaciado_nro, model_urn, source_urn 
                     FROM inventory_assets
                 '''
             
@@ -860,11 +876,12 @@ def get_inventory():
                     'name': str(row[1]) if row[1] else "",
                     'material': str(row[2]) if row[2] else "",
                     'installation_status': str(row[3]) if row[3] else "",
-                    'model_urn': str(row[5] if include_props else row[4]) if (row[5] if include_props else row[4]) else None,
-                    'source_urn': str(row[6] if include_props else row[5]) if (row[6] if include_props else row[5]) else None
+                    'vaciado_nro': str(row[4]) if row[4] else "",
+                    'model_urn': str(row[6] if include_props else row[5]) if (row[6] if include_props else row[5]) else None,
+                    'source_urn': str(row[7] if include_props else row[6]) if (row[7] if include_props else row[6]) else None
                 }
                 if include_props:
-                    item['properties'] = row[4] or {}
+                    item['properties'] = row[5] or {}
                 inventory_list.append(item)
             
             print(f"[API] /api/inventory OK: {len(inventory_list)} items (props={'YES' if include_props else 'NO'})")
@@ -896,7 +913,7 @@ def update_inventory():
         from db import get_db_connection
         import json as _json
         
-        base_cols = {'Name': 'name', 'Material': 'material', 'Status': 'installation_status'}
+        base_cols = {'Name': 'name', 'Material': 'material', 'Status': 'installation_status', 'Vaciado_Nro': 'vaciado_nro'}
         
         with get_db_connection() as conn:
              cursor = conn.cursor()
@@ -935,6 +952,66 @@ def update_inventory():
          import traceback
          traceback.print_exc()
          return jsonify({'error': str(e)}), 500
+
+@app.route('/api/inventory/bulk', methods=['PATCH'])
+def bulk_update_inventory():
+    """
+    Bulk update: recibe un array de external_ids y aplica un fieldName/fieldValue a TODOS
+    en un solo query SQL. Hasta 10,000x más rápido que llamadas individuales.
+    """
+    try:
+        data = request.json
+        external_ids = data.get('external_ids', [])
+        field_name = data.get('fieldName')
+        field_value = data.get('fieldValue')
+
+        if not external_ids or not field_name:
+            return jsonify({'error': 'Missing external_ids or fieldName'}), 400
+
+        from db import get_db_connection
+        import json as _json
+
+        base_cols = {'Name': 'name', 'Material': 'material', 'Status': 'installation_status', 'Vaciado_Nro': 'vaciado_nro'}
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SET statement_timeout = '60000'")
+
+            if field_name in base_cols:
+                # FAST PATH: Single UPDATE for base columns
+                col = base_cols[field_name]
+                cursor.execute(
+                    f'UPDATE inventory_assets SET {col} = %s WHERE external_id = ANY(%s)',
+                    (field_value, external_ids)
+                )
+                updated = cursor.rowcount
+            else:
+                # JSONB PATH: Update properties column in batch using jsonb_set
+                cursor.execute('''
+                    UPDATE inventory_assets 
+                    SET properties = jsonb_set(
+                        COALESCE(properties, '{}'::jsonb),
+                        %s,
+                        %s::jsonb,
+                        true
+                    )
+                    WHERE external_id = ANY(%s)
+                ''', (
+                    '{Live Edit,' + field_name + '}',
+                    _json.dumps(field_value),
+                    external_ids
+                ))
+                updated = cursor.rowcount
+
+            conn.commit()
+            cursor.execute("SET statement_timeout = '30000'")
+            print(f"[BULK] Updated {updated}/{len(external_ids)} rows: {field_name} = {field_value}")
+            return jsonify({'status': 'ok', 'updated': updated}), 200
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 3000))

@@ -3,7 +3,7 @@
     flex-direction: column;
     height: 100%;
     color: #e0e0e0;
-    font-family: 'Inter', sans-serif;
+    font-family: inherit;
     background-color: transparent;
 }
 
@@ -70,7 +70,7 @@
     cursor: pointer;
     background: transparent;
     transition: background 0.15s;
-    height: 32px;
+    min-height: 36px;
 }
 
 .sfp-item-row:hover {
@@ -89,18 +89,28 @@
     margin-right: 4px;
     cursor: pointer;
     padding: 0;
+    flex-shrink: 0;
 }
 
 .sfp-icon {
     display: block;
 }
 
+/* === LABEL WITH BADGE === */
 .sfp-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0; /* allow shrinking */
+    margin-right: 8px;
+    overflow: hidden;
+}
+
+.sfp-label-text {
     font-size: 13px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-right: 8px;
     color: #e5e7eb;
     font-weight: 500;
 }
@@ -115,18 +125,13 @@
     gap: 2px;
     color: #9ca3af;
     opacity: 0;
-    /* Hidden by default similar to Tandem hover behavior */
     transition: opacity 0.2s;
+    flex-shrink: 0;
 }
 
 .sfp-item-row:hover .sfp-actions,
 .sfp-menu-wrapper:active .sfp-actions,
 .sfp-actions:focus-within {
-    opacity: 1;
-}
-
-/* Force show if menu open */
-.sfp-item .sfp-menu-wrapper button[aria-expanded="true"]~.sfp-actions {
     opacity: 1;
 }
 
@@ -153,6 +158,10 @@
     color: #fbbf24;
 }
 
+.sfp-action-btn.eye.off {
+    color: #6b7280;
+}
+
 .sfp-action-btn.more {
     margin-left: 2px;
 }
@@ -166,10 +175,11 @@
     position: absolute;
     top: 100%;
     right: 0;
-    width: 160px;
-    background: #2a2a2a;
+    width: 180px;
+    background: rgba(42, 42, 42, 0.95);
+    backdrop-filter: blur(8px);
     border: 1px solid #444;
-    border-radius: 2px;
+    border-radius: 4px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     z-index: 100;
     display: flex;
@@ -220,17 +230,153 @@
     z-index: 99;
 }
 
-/* Expanded Details */
+/* === VERSION BADGE === */
+.sfp-version-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: #3b9eff;
+    background: rgba(59, 158, 255, 0.12);
+    padding: 1px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.sfp-version-badge-detail {
+    font-size: 10px;
+    font-weight: 600;
+    color: #3b9eff;
+    background: rgba(59, 158, 255, 0.12);
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+/* === MENU BADGE === */
+.sfp-menu-badge {
+    font-size: 9px;
+    font-weight: 700;
+    color: #fff;
+    background: #3b9eff;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: auto;
+    letter-spacing: 0.04em;
+}
+
+/* === UPDATE AVAILABLE BANNER (Tandem style) === */
+.sfp-update-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px 6px 40px;
+    background: rgba(59, 158, 255, 0.06);
+    border-left: 3px solid #3b9eff;
+    animation: sfp-banner-slide-in 0.3s ease-out;
+}
+
+.sfp-update-banner-text {
+    font-size: 11px;
+    color: #8ab4f8;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 400;
+}
+
+.sfp-update-banner-text .sfp-icon {
+    color: #3b9eff;
+    flex-shrink: 0;
+}
+
+.sfp-update-banner-btn {
+    background: transparent;
+    border: none;
+    color: #3b9eff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 3px;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+
+.sfp-update-banner-btn:hover {
+    background: rgba(59, 158, 255, 0.15);
+    color: #69b4ff;
+}
+
+@keyframes sfp-banner-slide-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* === INLINE CHECK STATUS (spinner / up to date) === */
+.sfp-check-status {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 500;
+    margin-right: 6px;
+    flex-shrink: 0;
+    animation: sfp-status-fade-in 0.2s ease-out;
+}
+
+.sfp-status-checking {
+    color: #8ab4f8;
+}
+
+.sfp-status-up_to_date {
+    color: #4ade80;
+}
+
+.sfp-status-updating {
+    color: #fbbf24;
+}
+
+.sfp-status-error {
+    color: #f87171;
+}
+
+@keyframes sfp-status-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.sfp-check-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(138, 180, 248, 0.3);
+    border-top-color: #8ab4f8;
+    border-radius: 50%;
+    animation: sfp-spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+/* === EXTRACTION PROGRESS BAR === */
+.sfp-extraction-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 12px 3px 40px;
+    font-size: 10px;
+    color: #8ab4f8;
+    background: rgba(59, 158, 255, 0.04);
+}
+
+/* === EXPANDED DETAILS === */
 .sfp-details {
     padding-left: 40px;
-    /* Aligned under label */
     padding-bottom: 12px;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    /* Tandem spacing */
     background: rgba(0, 0, 0, 0.1);
-    /* Subtle background for expanded area */
     padding-top: 8px;
 }
 
@@ -249,302 +395,28 @@
     justify-content: center;
     align-items: center;
     opacity: 0.8;
+    flex-shrink: 0;
 }
 
 .detail-text {
     color: #ccc;
-    font-family: 'Inter', sans-serif;
+    font-family: inherit;
 }
 
 .detail-text.main {
     color: #fff;
     font-size: 12px;
     font-weight: 500;
-}
-
-.sfp-view-select {
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #ccc;
-    font-size: 11px;
-    padding: 2px 4px;
-    border-radius: 2px;
-    outline: none;
-    cursor: pointer;
-    max-width: 200px;
-}
-
-.sfp-view-select:hover {
-    border-color: rgba(255, 255, 255, 0.3);
-}
-
-.sfp-view-select option {
-    background: #333;
-    color: #fff;
-}
-
-
-.sfp-header h3 {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: #f0f0f0;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
-
-.sfp-import-btn {
-    background: transparent;
-    border: none;
-    color: #3AA0FF;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
-    border-radius: 4px;
-}
-
-.sfp-import-btn:hover {
-    background: rgba(58, 160, 255, 0.1);
-}
-
-.sfp-controls {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 14px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.sfp-control-btn {
-    background: transparent;
-    border: none;
-    color: #D1D5DB;
-    font-size: 13px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px;
-}
-
-.sfp-control-btn:hover {
-    color: white;
-}
-
-.sfp-chevron {
-    display: flex;
-    align-items: center;
-    color: #999;
-}
-
-.sfp-sort-btn {
-    background: transparent;
-    border: none;
-    color: #999;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-}
-
-.sfp-sort-btn:hover {
-    color: white;
-}
-
-.sfp-list {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    padding: 4px 0;
-}
-
-.sfp-empty {
-    padding: 20px;
-    text-align: center;
-    font-size: 13px;
-    color: #888;
-}
-
-.sfp-item {
-    display: flex;
-    flex-direction: column;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-}
-
-.sfp-item-row {
-    display: flex;
-    align-items: center;
-    padding: 8px 14px;
-    cursor: pointer;
-    background: transparent;
-    transition: background 0.15s;
-    height: 36px;
-}
-
-.sfp-item-row:hover {
-    background: rgba(255, 255, 255, 0.04);
-}
-
-.sfp-item-row:hover .sfp-actions {
-    opacity: 1;
-    display: flex;
-}
-
-.sfp-list-chevron {
-    background: transparent;
-    border: none;
-    color: #9ca3af;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    margin-right: 4px;
-    cursor: pointer;
-}
-
-.sfp-label {
-    flex: 1;
-    font-size: 13px;
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-right: 8px;
-    color: #e5e7eb;
+    white-space: nowrap;
 }
 
-.sfp-actions {
-    display: none;
-    /* Hidden by default similar to Tandem */
-    align-items: center;
-    gap: 8px;
-    color: #9ca3af;
-    transition: opacity 0.2s;
+.sfp-icon-rvt {
+    display: block;
 }
 
-/* Keep actions visible if menu is actively open for this item */
-.sfp-menu-wrapper:active .sfp-actions,
-.sfp-item-row:focus-within .sfp-actions {
-    display: flex;
-    opacity: 1;
-}
-
-.sfp-action-btn {
-    background: transparent;
-    border: none;
-    color: inherit;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    padding: 2px;
-}
-
-.sfp-action-btn:hover {
-    color: #fff;
-}
-
-.sfp-action-btn.star:hover {
-    color: #fbbf24;
-}
-
-.sfp-action-btn.eye.off {
-    color: #6b7280;
-}
-
-.sfp-menu-wrapper {
-    position: relative;
-    display: flex;
-}
-
-.sfp-dropdown {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    width: 160px;
-    background: rgba(56, 58, 62, 0.85);
-    backdrop-filter: blur(8px);
-    /* Lighter dark gray for menu */
-    border: none;
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-    z-index: 100;
-    display: flex;
-    flex-direction: column;
-    padding: 6px 0;
-}
-
-.sfp-dropdown button {
-    background: transparent;
-    border: none;
-    color: #e0e0e0;
-    padding: 8px 16px;
-    text-align: left;
-    font-size: 13px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.sfp-dropdown button:hover {
-    background: #4b4d52;
-}
-
-.sfp-menu-separator {
-    border: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    margin: 4px 0;
-}
-
-.sfp-menu-icon {
-    display: flex;
-    align-items: center;
-    width: 16px;
-    color: #9ca3af;
-}
-
-/* Expanded Details */
-.sfp-details {
-    padding-left: 38px;
-    /* Indent under label */
-    padding-bottom: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.sfp-detail-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 12px;
-    color: #9ca3af;
-}
-
-.file-info {
-    color: #e0e0e0;
-    margin-bottom: 2px;
-}
-
-.sfp-menu-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 99;
-}
-
-.import-spinner {
-    border-radius: 50%;
-    animation: sfp-spin 1s linear infinite;
-}
-
+/* === SPINNER === */
 @keyframes sfp-spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }

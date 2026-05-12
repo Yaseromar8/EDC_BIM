@@ -1,9 +1,47 @@
 import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { apiFetch } from '../utils/apiFetch';
 import ColumnConfiguratorModal from './ColumnConfiguratorModal';
 
 const ROW_HEIGHT = 25; // Tandem SlickGrid: 25px per row (from DOM top:25px)
 const OVERSCAN = 10;
+
+// ─── Fractional-Inch Formatter ───────────────────────────────────────────
+// Autodesk Model Derivative API almacena diámetros y medidas como
+// "0.375 fractional-in", pero el visor 3D los muestra como "3/8\"".
+// Este formateador replica esa conversión para consistencia visual.
+const formatFractionalInch = (raw) => {
+    if (typeof raw !== 'string') return raw;
+    const match = raw.match(/^(-?\d+\.?\d*)\s+fractional-in$/i);
+    if (!match) return raw;
+    
+    const decimal = parseFloat(match[1]);
+    if (isNaN(decimal)) return raw;
+    
+    const sign = decimal < 0 ? '-' : '';
+    const abs = Math.abs(decimal);
+    const whole = Math.floor(abs);
+    const frac = abs - whole;
+    
+    // Resolución máxima de Revit: 1/128"
+    const denom = 128;
+    let num = Math.round(frac * denom);
+    
+    if (num === 0) {
+        return `${sign}${whole}"`;
+    }
+    
+    // Reducir fracción con GCD
+    const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
+    const divisor = gcd(num, denom);
+    num = num / divisor;
+    const den = denom / divisor;
+    
+    if (whole === 0) {
+        return `${sign}${num}/${den}"`;
+    }
+    return `${sign}${whole}-${num}/${den}"`;
+};
 
 // Iconos SVGs extraidos de Autodesk Tandem
 const Icons = {
@@ -30,6 +68,12 @@ const Icons = {
     ),
     ImportAction: () => (
         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
+    ),
+    Sync: () => (
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0020 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 004 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+    ),
+    Sigma: () => (
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18 6H8.83l6 6-6 6H18v2H6v-2l6-6-6-6V4h12v2z" /></svg>
     )
 };
 
@@ -60,7 +104,7 @@ const ToolBtn = ({ icon, onClick, active }) => (
 );
 
 // Componente Row estable
-const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top, onCellEdit }) => {
+const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top, onCellEdit, isChecked, onToggleCheck }) => {
     const [editingCol, setEditingCol] = useState(null);
     const [editValue, setEditValue] = useState('');
     const inputRef = useRef(null);
@@ -77,15 +121,16 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
                 position: 'absolute', top, left: 0, right: 0, display: 'flex', 
                 borderBottom: '1px solid #32363e', alignItems: 'center', 
                 fontSize: '12.5px', height: `${ROW_HEIGHT}px`,
-                background: isHighlighted ? '#2a4a8a' : (row._isSaving ? '#2d3340' : (index % 2 === 0 ? '#1e1f24' : '#1a1b1f')),
+                background: isChecked ? '#1e3a5f' : (isHighlighted ? '#2a4a8a' : (row._isSaving ? '#2d3340' : (index % 2 === 0 ? '#1e1f24' : '#1a1b1f'))),
                 color: isHighlighted ? '#fff' : '#d1d5db',
                 cursor: 'pointer', userSelect: 'none', transition: 'background 0.1s ease',
                 opacity: row._isSaving ? 0.6 : 1
             }}
             onClick={() => { if(!editingCol) onRowClick(row.dbId, row.source_urn || row.model_urn); }}
         >
-            <div style={{ width: '40px', flexShrink: 0, padding: '0 10px', color: '#666', borderRight: '1px solid #32363e', height: '100%', display: 'flex', alignItems: 'center' }}>
-                {index + 1}
+            <div style={{ width: '40px', flexShrink: 0, padding: '0 4px', color: '#666', borderRight: '1px solid #32363e', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                <input type="checkbox" checked={!!isChecked} onChange={(e) => { e.stopPropagation(); onToggleCheck(row.dbId); }} onClick={e => e.stopPropagation()} style={{ accentColor: '#3aa0ff', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }} />
+                <span style={{ fontSize: '10px', minWidth: '18px', textAlign: 'right' }}>{index + 1}</span>
             </div>
             {columns.map(col => {
                 let cellVal = row[col.key];
@@ -136,10 +181,22 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
     const [followSelection, setFollowSelection] = useState(true);
     const [showAssetsOnly, setShowAssetsOnly] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
-    const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-    const [showGroupTotals, setShowGroupTotals] = useState(false);
-    const [showFooterTotals, setShowFooterTotals] = useState(false);
+    const [totalsPickerOpen, setTotalsPickerOpen] = useState(false);
+    const [totalColumns, setTotalColumns] = useState(new Set()); // Set of column keys
+    const [checkedIds, setCheckedIds] = useState(new Set()); // BULK SELECTION
+    const [bulkAssigning, setBulkAssigning] = useState(false);
+    const [bulkField, setBulkField] = useState('Status'); // Default column for bulk edit
+    const [bulkValue, setBulkValue] = useState('');
     
+    const parseNumericCell = (val) => {
+        if (typeof val === 'number') return val;
+        if (typeof val === 'string') {
+            const num = parseFloat(val.replace(/,/g, ''));
+            return isNaN(num) ? null : num;
+        }
+        return null;
+    };
+
     // Sync selected columns to cache
     useEffect(() => {
         if (selectedColumnKeys !== null) {
@@ -170,10 +227,18 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
             if (!dbId || !urn) return;
             
             // Traducción Rosetta INVERSA (Multi-Modelo): ¿Qué fila de Postgres le pertenece a este clic 3D?
+            // Normalización Multi-Formato: probar raw, URL-safe base64, y standard base64
             let targetExtId = null;
             const safeUrn = String(urn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-            const urnDict = window.rosettaToExtId[urn] || window.rosettaToExtId[safeUrn];
-            if (window.rosettaToExtId && urnDict && urnDict[dbId]) {
+            const stdUrn = String(urn).replace(/-/g, '+').replace(/_/g, '/');
+            const urnDict = window.rosettaToExtId?.[urn]
+                || window.rosettaToExtId?.[safeUrn]
+                || window.rosettaToExtId?.[stdUrn]
+                || Object.values(window.rosettaToExtId || {}).find((_, i) => {
+                    const k = Object.keys(window.rosettaToExtId)[i];
+                    return k.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') === safeUrn;
+                });
+            if (urnDict && urnDict[dbId]) {
                  targetExtId = urnDict[dbId];
             }
 
@@ -198,28 +263,45 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
 
     // (C) Visor 3D Isolation → Tabla (multi-select / isolate sync)
     const [isolatedExtIds, setIsolatedExtIds] = useState(null); // null = no isolation active
+    const [localSelIds, setLocalSelIds] = useState(null); // RAW selection from 3D (no filter yet)
+    const [activeSelectionFilter, setActiveSelectionFilter] = useState(null); // The actual filter applied by the button
+
     useEffect(() => {
         const handleIsolationSync = (e) => {
             const { isolatedExtIds: ids } = e.detail;
             if (!ids || ids.length === 0) {
                 // Isolation cleared — restore full view
                 setIsolatedExtIds(null);
-                console.log('[Inventory] Isolation cleared — showing all items');
+                setActiveSelectionFilter(null); // MASTER RESET: Clear sync selection
+                console.log('[Inventory] Isolation cleared — showing all items & clearing sync');
             } else {
                 setIsolatedExtIds(new Set(ids));
                 console.log(`[Inventory] Isolation sync: ${ids.length} elements isolated`);
             }
         };
 
+        const handleSelectionSync = (e) => {
+            const { selectedExtIds: ids } = e.detail;
+            if (!ids || ids.length === 0) {
+                setLocalSelIds(null);
+            } else {
+                setLocalSelIds(new Set(ids));
+            }
+        };
+
         window.addEventListener('inventory-isolation-sync', handleIsolationSync);
-        return () => window.removeEventListener('inventory-isolation-sync', handleIsolationSync);
+        window.addEventListener('inventory-selection-sync', handleSelectionSync);
+        return () => {
+            window.removeEventListener('inventory-isolation-sync', handleIsolationSync);
+            window.removeEventListener('inventory-selection-sync', handleSelectionSync);
+        };
     }, []);
 
     useEffect(() => {
         let isMounted = true;
 
         const processDbData = (dbData) => {
-            const allProps = new Set(['Name', 'Material', 'Status']);
+            const allProps = new Set(['Name', 'Material', 'Status', 'Vaciado_Nro']);
             
             const mappedData = dbData.map(node => {
                 let row = {
@@ -228,14 +310,18 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                     source_urn: node.source_urn || node.model_urn,
                     Name: node.name,
                     Material: node.material || '',
-                    Status: node.installation_status || ''
+                    Status: node.installation_status || '',
+                    Vaciado_Nro: node.vaciado_nro || '',
+                    // Preservar node_type para filtro "Assets only" (safety net legacy)
+                    _nodeType: node.properties?.__node__?.__node_type__ || 'instance'
                 };
                 
                 if (node.properties && typeof node.properties === 'object') {
                     Object.values(node.properties).forEach(cat => {
                         if (typeof cat === 'object' && cat !== null) {
                             Object.entries(cat).forEach(([pName, pVal]) => {
-                                const val = (pVal === null || pVal === undefined) ? '' : String(pVal).trim();
+                                const rawVal = (pVal === null || pVal === undefined) ? '' : String(pVal).trim();
+                                const val = formatFractionalInch(rawVal);
                                 if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
                                     row[pName] = val;
                                 }
@@ -247,7 +333,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                 return row;
             });
 
-            let preferredOrder = ['Name', 'Material', 'Status', 'Level', 'Tandem Category', 'Rooms', 'Dimensions', 'Categoría', 'Nivel base'];
+            let preferredOrder = ['Name', 'Material', 'Status', 'Vaciado_Nro', 'Level', 'Tandem Category', 'Rooms', 'Dimensions', 'Categoría', 'Nivel base'];
             const cols = [{ key: 'dbId', header: 'EXT ID', width: 280 }];
             
             const extractedCols = Array.from(allProps);
@@ -367,10 +453,19 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
             });
         };
 
-        // PRIORIDAD 1: Isolation activa desde el visor 3D
-        if (isolatedExtIds && isolatedExtIds.size > 0) {
-            const filtered = rawData.filter(row => isolatedExtIds.has(row.dbId));
-            setFlattenedData(applyHiddenFilter(filtered));
+        // Helper: filtro "Assets only" — descarta nodos type/category legacy
+        // Nuevas extracciones ya no los traen, pero datos pre-existentes pueden tenerlos
+        const applyAssetsFilter = (data) => {
+            if (!showAssetsOnly) return data;
+            return data.filter(row => row._nodeType === 'instance');
+        };
+
+        // PRIORIDAD: Isolation activa desde el visor 3D O Filtro Manual
+        const isolationTarget = activeSelectionFilter || isolatedExtIds;
+
+        if (isolationTarget && isolationTarget.size > 0) {
+            const filtered = rawData.filter(row => isolationTarget.has(row.dbId));
+            setFlattenedData(applyAssetsFilter(applyHiddenFilter(filtered)));
             window._lastHasActiveFilters = true;
             console.log(`[Inventory] Isolation active: ${filtered.length}/${rawData.length} items`);
             return;
@@ -384,7 +479,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
 
         if (!hasActiveFilters) {
             // Sin filtros ni isolation: mostrar todo
-            setFlattenedData(applyHiddenFilter(rawData));
+            setFlattenedData(applyAssetsFilter(applyHiddenFilter(rawData)));
             return;
         }
 
@@ -414,12 +509,12 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
 
         if (validExtIds.size > 0) {
             const filtered = rawData.filter(row => validExtIds.has(row.dbId));
-            setFlattenedData(applyHiddenFilter(filtered));
+            setFlattenedData(applyAssetsFilter(applyHiddenFilter(filtered)));
             console.log(`[Inventory] Filter sync: ${filtered.length}/${rawData.length} items match active filters`);
         } else {
             setFlattenedData([]);
         }
-    }, [rawData, filterSelections, dynamicFilterBuckets, hiddenModelUrns, isolatedExtIds]);
+    }, [rawData, filterSelections, dynamicFilterBuckets, hiddenModelUrns, isolatedExtIds, activeSelectionFilter, showAssetsOnly]);
 
     // React to column selection changes
     useEffect(() => {
@@ -432,26 +527,69 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         setColumns(cols);
     }, [selectedColumnKeys, allPropertyKeys]);
 
-    const handleExportCSV = useCallback(() => {
+    const handleExportExcel = useCallback(() => {
         if (!flattenedData.length || !columns.length) return;
-        const headers = columns.map(c => `"${c.header}"`).join(',');
-        const rows = flattenedData.map(row => {
-             return columns.map(c => {
-                 const cellVal = row[c.key];
-                 return `"${cellVal !== undefined && cellVal !== null ? String(cellVal).replace(/"/g, '""') : ''}"`;
-             }).join(',');
-        });
-        const csvContent = [headers, ...rows].join('\n');
         
-        const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", `Asset_Inventory_${new Date().toISOString().slice(0,10)}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }, [flattenedData, columns]);
+        // Formatear la data para el Excel — VALORES NUMÉRICOS SIN UNIDAD
+        // Esto permite sumar/operar directamente en Excel sin errores de texto.
+        const stripUnitsAndParse = (raw) => {
+            if (raw === null || raw === undefined || raw === '') return raw;
+            const s = String(raw).trim();
+            if (s === '') return '';
+            // Preservar valores de pulgadas (ej. 3/8", 1") como texto puro para evitar que Excel reciba solo el primer dígito
+            if (s.endsWith('"')) return s;
+            // Extraer solo la parte numérica: dígitos, punto, coma, signo negativo
+            // Ejemplos: "4.520 m³" → 4.52, "88.070 m" → 88.07, "260.89 m^3" → 260.89
+            //           "10 kg" → 10, "1,234.56 m2" → 1234.56, "-3.5 °C" → -3.5
+            const cleaned = s.replace(/,/g, ''); // Eliminar comas de miles
+            const match = cleaned.match(/^(-?\d+\.?\d*)/); // Extraer número del inicio
+            if (match) {
+                // Verificar que hay texto NO-numérico después (unidad) O es solo número
+                const rest = cleaned.slice(match[0].length).trim();
+                // Si el resto está vacío o empieza con letra/símbolo (unidad), es un número con unidad
+                if (rest === '' || /^[a-zA-Z°^µ²³\/]/.test(rest)) {
+                    const parsed = parseFloat(match[1]);
+                    if (!isNaN(parsed)) return parsed;
+                }
+            }
+            return raw; // No es numérico, devolver tal cual (texto puro)
+        };
+
+        const dataForExcel = flattenedData.map(row => {
+            const rowData = {};
+            columns.forEach(c => {
+                const val = row[c.key];
+                rowData[c.header] = (typeof val === 'string') ? stripUnitsAndParse(val) : val;
+            });
+            return rowData;
+        });
+
+        // Si hay columnas de totales, añadimos una fila al final
+        if (totalColumns.size > 0) {
+            const totalsRow = {};
+            columns.forEach((c, index) => {
+                if (index === 0) {
+                    totalsRow[c.header] = "Σ Totals";
+                } else if (totalColumns.has(c.key)) {
+                    let sum = 0;
+                    flattenedData.forEach(r => {
+                        const v = parseNumericCell(r[c.key]);
+                        if (v !== null) sum += v;
+                    });
+                    totalsRow[c.header] = Math.round(sum * 100) / 100;
+                } else {
+                    totalsRow[c.header] = "";
+                }
+            });
+            dataForExcel.push(totalsRow);
+        }
+
+        const worksheet = XLSX.utils.json_to_sheet(dataForExcel);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
+
+        XLSX.writeFile(workbook, `Asset_Inventory_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }, [flattenedData, columns, totalColumns]);
 
     // (A) Tabla -> Visor
     const handleRowClick = useCallback((rowExtId, rowUrn) => {
@@ -464,8 +602,16 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         }
 
         // Traducción Rosetta Bidimensional: Buscamos qué dbId efímero le toca a esta sesión 3D
+        // Normalización Multi-Formato: probar raw, URL-safe base64, y standard base64
         const safeUrn = String(rowUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-        const urnDict = window.rosettaToDbId[rowUrn] || window.rosettaToDbId[safeUrn];
+        const stdUrn = String(rowUrn).replace(/-/g, '+').replace(/_/g, '/');
+        const urnDict = window.rosettaToDbId?.[rowUrn]
+            || window.rosettaToDbId?.[safeUrn]
+            || window.rosettaToDbId?.[stdUrn]
+            || Object.values(window.rosettaToDbId || {}).find((_, i) => {
+                const k = Object.keys(window.rosettaToDbId)[i];
+                return k.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') === safeUrn;
+            });
         
         if (window.rosettaToDbId && urnDict && urnDict[rowExtId]) {
             const realDbId = urnDict[rowExtId];
@@ -494,6 +640,17 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
             setRawData(prev => prev.map(r => r.dbId === extId ? { ...r, [colKey]: newValue } : r));
             // Invalidar caché para que el próximo re-open refleje cambios
             window.__inventoryCache = null;
+            
+            // INYECCIÓN DEMO: Actualizar la fuente de verdad en memoria y forzar re-cálculo
+            if (window.postgresInventory) {
+                const target = window.postgresInventory.find(node => node.dbId === extId);
+                if (target) {
+                    target[colKey] = newValue;
+                }
+                // Si el panel de filtros está abierto, esto actualizará las barras/colores en tiempo real
+                window.dispatchEvent(new CustomEvent('recalculate-filters'));
+            }
+
         } catch(e) {
             console.error('[LIVE EDIT] Error:', e);
             alert("Error al guardar: " + e.message);
@@ -668,59 +825,210 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                     </label>
                 </div>
 
+                {/* BULK EDIT TOOLBAR */}
+                {checkedIds.size > 0 && (
+                    <>
+                        <div style={{ width: '1px', height: '16px', background: '#444' }} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '11px', color: '#4fc3f7', fontWeight: 600, whiteSpace: 'nowrap' }}>{checkedIds.size} sel.</span>
+                            <select
+                                value={bulkField}
+                                onChange={e => setBulkField(e.target.value)}
+                                style={{
+                                    background: '#2a2d33', border: '1px solid #555', color: '#e0e0e0',
+                                    padding: '3px 6px', fontSize: '11px', borderRadius: '3px', outline: 'none',
+                                    maxWidth: '120px', cursor: 'pointer'
+                                }}
+                            >
+                                {columns.filter(c => c.key !== 'dbId').map(c => (
+                                    <option key={c.key} value={c.key}>{c.header}</option>
+                                ))}
+                            </select>
+                            <input
+                                type="text"
+                                value={bulkValue}
+                                onChange={e => setBulkValue(e.target.value)}
+                                placeholder="Valor..."
+                                onKeyDown={e => { if (e.key === 'Enter' && bulkValue.trim()) document.getElementById('bulk-apply-btn')?.click(); }}
+                                style={{
+                                    background: '#1a1c22', border: '1px solid #555', color: '#fff',
+                                    padding: '3px 8px', fontSize: '11px', borderRadius: '3px', outline: 'none',
+                                    width: '120px'
+                                }}
+                            />
+                            <button
+                                id="bulk-apply-btn"
+                                disabled={bulkAssigning || !bulkValue.trim()}
+                                onClick={async () => {
+                                    if (bulkAssigning || !bulkValue.trim()) return;
+                                    const fieldName = bulkField;
+                                    const fieldValue = bulkValue.trim();
+                                    setBulkAssigning(true);
+                                    const ids = [...checkedIds];
+                                    try {
+                                        // SINGLE bulk API call — all IDs in one request
+                                        await apiFetch('/api/inventory/bulk', {
+                                            method: 'PATCH',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ external_ids: ids, fieldName, fieldValue })
+                                        });
+                                        // Update local state
+                                        setFlattenedData(prev => prev.map(r => checkedIds.has(r.dbId) ? { ...r, [fieldName]: fieldValue } : r));
+                                        setRawData(prev => prev.map(r => checkedIds.has(r.dbId) ? { ...r, [fieldName]: fieldValue } : r));
+                                        // Update postgresInventory memory
+                                        if (window.postgresInventory) {
+                                            window.postgresInventory.forEach(node => {
+                                                if (checkedIds.has(node.dbId)) node[fieldName] = fieldValue;
+                                            });
+                                            window.dispatchEvent(new CustomEvent('recalculate-filters'));
+                                        }
+                                        window.__inventoryCache = null;
+                                        setCheckedIds(new Set());
+                                        setBulkValue('');
+                                    } catch (e) {
+                                        console.error('[BULK] Error:', e);
+                                        alert('Error en asignación masiva: ' + e.message);
+                                    } finally {
+                                        setBulkAssigning(false);
+                                    }
+                                }}
+                                style={{
+                                    background: (bulkAssigning || !bulkValue.trim()) ? '#444' : 'linear-gradient(135deg, #3AA0FF, #2d8fa5)',
+                                    border: 'none', color: '#fff', padding: '3px 10px', fontSize: '11px', borderRadius: '3px',
+                                    cursor: (bulkAssigning || !bulkValue.trim()) ? 'not-allowed' : 'pointer',
+                                    display: 'flex', alignItems: 'center', gap: '4px',
+                                    fontWeight: 600, transition: 'all 0.2s', whiteSpace: 'nowrap',
+                                    boxShadow: (bulkAssigning || !bulkValue.trim()) ? 'none' : '0 2px 8px rgba(58,160,255,0.3)'
+                                }}
+                            >
+                                {bulkAssigning ? '⏳' : '▶'} Aplicar
+                            </button>
+                            <button
+                                onClick={() => setCheckedIds(new Set())}
+                                style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' }}
+                                title="Clear selection"
+                            >
+                                <Icons.Close />
+                            </button>
+                        </div>
+                    </>
+                )}
+
                 <div style={{ flex: 1 }} />
 
                 {/* Right Actions */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button 
-                        onClick={handleExportCSV}
-                        style={{ background: 'none', border: '1px solid #444', color: '#ccc', padding: '3px 10px', fontSize: '11px', borderRadius: '4px', cursor: 'pointer' }}
-                    >
-                        Export CSV
-                    </button>
-                    <div id="inventory-more-menu-container" style={{ position: 'relative' }}>
-                        <ToolBtn icon={<Icons.MoreVertical />} onClick={() => setMoreMenuOpen(!moreMenuOpen)} active={moreMenuOpen} />
-                        {moreMenuOpen && (
-                            <div style={{
-                                position: 'absolute', top: '100%', right: 0, marginTop: '4px',
-                                background: '#323232', border: '1px solid #444', borderRadius: '4px',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.5)', zIndex: 50, minWidth: '180px',
-                                display: 'flex', flexDirection: 'column', padding: '4px 0'
-                            }}>
-                                <div 
-                                    onClick={() => { handleExportCSV(); setMoreMenuOpen(false); }}
-                                    style={{ padding: '8px 16px', color: '#ececec', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}
-                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#404040'}
-                                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                                >
-                                    <Icons.ExportAction /> Export
-                                </div>
-                                <div 
-                                    onClick={() => { alert('Import functionality coming soon'); setMoreMenuOpen(false); }}
-                                    style={{ padding: '8px 16px', color: '#ececec', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}
-                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#404040'}
-                                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                                >
-                                    <Icons.ImportAction /> Import
-                                </div>
-                                
-                                <div style={{ height: '1px', background: '#444', margin: '4px 0' }} />
-                                
-                                <label style={{ padding: '8px 16px', color: '#ececec', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}
-                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#404040'}
-                                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
-                                    <input type="checkbox" checked={showGroupTotals} onChange={(e) => setShowGroupTotals(e.target.checked)} style={{ accentColor: '#4f83e8', cursor: 'pointer' }} />
-                                    Show group totals
-                                </label>
-                                <label style={{ padding: '8px 16px', color: '#ececec', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}
-                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#404040'}
-                                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
-                                    <input type="checkbox" checked={showFooterTotals} onChange={(e) => setShowFooterTotals(e.target.checked)} style={{ accentColor: '#4f83e8', cursor: 'pointer' }} />
-                                    Show footer totals
-                                </label>
+                    {/* MANUAL SYNC FROM SELECTION OR ISOLATION */}
+                    {(localSelIds || activeSelectionFilter || isolatedExtIds) && (() => {
+                        const isFiltered = activeSelectionFilter !== null || isolatedExtIds !== null;
+                        const filterSize = activeSelectionFilter ? activeSelectionFilter.size : (isolatedExtIds ? isolatedExtIds.size : 0);
+                        const displayIds = localSelIds || isolatedExtIds;
+                        const isSyncDisabled = localSelIds && isFiltered && localSelIds.size === filterSize;
+
+                        return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginRight: '4px', borderRight: '1px solid #333', paddingRight: '8px' }}>
+                                {!isFiltered ? (
+                                    <button
+                                        onClick={() => setActiveSelectionFilter(localSelIds)}
+                                        style={{
+                                            background: 'transparent',
+                                            border: 'none',
+                                            color: '#aaa',
+                                            padding: '4px 8px',
+                                            borderRadius: '4px',
+                                            fontSize: '11.5px',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            transition: 'all 0.2s'
+                                        }}
+                                        onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.color = '#aaa'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                        title="Sync inventory with 3D selection"
+                                    >
+                                        <Icons.Sync /> Sync ({displayIds.size})
+                                    </button>
+                                ) : (
+                                    <>
+                                        <button
+                                            onClick={() => {
+                                                if (localSelIds) setActiveSelectionFilter(localSelIds);
+                                            }}
+                                            disabled={!localSelIds || isSyncDisabled}
+                                            style={{
+                                                background: 'transparent',
+                                                border: 'none',
+                                                color: (!localSelIds || isSyncDisabled) ? '#4fc3f7' : '#aaa',
+                                                padding: '4px 8px',
+                                                borderRadius: '4px',
+                                                fontSize: '11.5px',
+                                                cursor: (!localSelIds || isSyncDisabled) ? 'default' : 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                transition: 'all 0.2s'
+                                            }}
+                                            onMouseEnter={e => { 
+                                                if (localSelIds && !isSyncDisabled) {
+                                                    e.currentTarget.style.color = '#fff';
+                                                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)';
+                                                }
+                                            }}
+                                            onMouseLeave={e => { 
+                                                if (localSelIds && !isSyncDisabled) {
+                                                    e.currentTarget.style.color = '#aaa';
+                                                    e.currentTarget.style.backgroundColor = 'transparent';
+                                                }
+                                            }}
+                                            title={(localSelIds && !isSyncDisabled) ? "Update filter with new selection" : "Table is currently filtered"}
+                                        >
+                                            {(localSelIds && !isSyncDisabled) ? <Icons.Sync /> : <Icons.Filter />} Filtered ({filterSize})
+                                        </button>
+                                        {activeSelectionFilter !== null && (
+                                            <button
+                                                onClick={() => setActiveSelectionFilter(null)}
+                                                style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px', transition: 'all 0.2s' }}
+                                                title="Clear Selection Filter"
+                                                onMouseEnter={e => { e.currentTarget.style.color = '#ef5350'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.color = '#888'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                            >
+                                                <Icons.Close />
+                                            </button>
+                                        )}
+                                    </>
+                                )}
                             </div>
-                        )}
-                    </div>
+                        );
+                    })()}
+                    <button 
+                        onClick={handleExportExcel}
+                        style={{ background: 'none', border: '1px solid #444', color: '#ccc', padding: '4px 10px', fontSize: '11.5px', borderRadius: '4px', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '6px' }}
+                        onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = '#ccc'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                    >
+                        <Icons.ExportAction /> Export Excel
+                    </button>
+                    <button 
+                        onClick={() => setTotalsPickerOpen(true)}
+                        style={{ background: 'none', border: '1px solid #444', color: totalColumns.size > 0 ? '#4fc3f7' : '#ccc', padding: '4px 10px', fontSize: '11.5px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
+                        onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = totalColumns.size > 0 ? '#4fc3f7' : '#ccc'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                        title="Configure Column Totals"
+                    >
+                        <Icons.Sigma /> Totals {totalColumns.size > 0 ? `(${totalColumns.size})` : ''}
+                    </button>
+                    {totalColumns.size > 0 && (
+                        <button 
+                            onClick={() => setTotalColumns(new Set())}
+                            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px', transition: 'all 0.2s' }}
+                            title="Clear Totals"
+                            onMouseEnter={e => { e.currentTarget.style.color = '#ef5350'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.color = '#888'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                        >
+                            <Icons.Close />
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -734,7 +1042,22 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                 ref={headerRef}
                 style={{ overflow: 'hidden', display: 'flex', background: '#1e1f24', height: '34px', alignItems: 'center', fontSize: '12px', fontWeight: 600, color: '#999', flexShrink: 0, borderBottom: '1px solid #2a2b30' }}
             >
-                <div style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #333', height: '100%' }}></div>
+                <div style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #333', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <input 
+                        type="checkbox" 
+                        checked={checkedIds.size > 0 && checkedIds.size === flattenedData.length}
+                        ref={el => { if (el) el.indeterminate = checkedIds.size > 0 && checkedIds.size < flattenedData.length; }}
+                        onChange={() => {
+                            if (checkedIds.size === flattenedData.length) {
+                                setCheckedIds(new Set());
+                            } else {
+                                setCheckedIds(new Set(flattenedData.map(r => r.dbId)));
+                            }
+                        }}
+                        style={{ accentColor: '#3aa0ff', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }}
+                        title={checkedIds.size === flattenedData.length ? 'Deselect all' : `Select all ${flattenedData.length} items`}
+                    />
+                </div>
                 {columns.map(col => (
                     <div 
                         key={col.key} 
@@ -802,6 +1125,8 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                                 isHighlighted={highlightedDbId === row.dbId}
                                 top={top}
                                 onCellEdit={handleCellEdit}
+                                isChecked={checkedIds.has(row.dbId)}
+                                onToggleCheck={(dbId) => setCheckedIds(prev => { const next = new Set(prev); if (next.has(dbId)) next.delete(dbId); else next.add(dbId); return next; })}
                             />
                         ))}
                     </div>
@@ -811,6 +1136,38 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                     </div>
                 )}
             </div>
+
+            {/* FOOTER TOTALS ROW */}
+            {totalColumns.size > 0 && flattenedData.length > 0 && (
+                <div style={{ 
+                    display: 'flex', 
+                    background: 'repeating-linear-gradient(45deg, #1a1b20, #1a1b20 10px, #22252a 10px, #22252a 20px)',
+                    borderTop: '1px solid #333',
+                    alignItems: 'center', fontSize: '12px', fontWeight: 600, color: '#4fc3f7', flexShrink: 0, height: '34px'
+                }}>
+                    <div style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #333', display: 'flex', justifyContent: 'center' }}>
+                        Σ
+                    </div>
+                    {columns.map(col => {
+                        if (!totalColumns.has(col.key)) {
+                            return <div key={col.key} style={{ width: col.width, flexShrink: 0, padding: '0 12px', borderRight: '1px solid #333' }} />;
+                        }
+                        const sum = flattenedData.reduce((acc, row) => {
+                            const val = parseNumericCell(row[col.key]);
+                            return acc + (val || 0);
+                        }, 0);
+                        
+                        return (
+                            <div key={col.key} style={{ 
+                                width: col.width, flexShrink: 0, padding: '0 12px', 
+                                borderRight: '1px solid #333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' 
+                            }}>
+                                {sum.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
 
             {/* Column Editor Modal */}
             <ColumnConfiguratorModal
@@ -822,6 +1179,122 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                     setSelectedColumnKeys(newCols.length === allPropertyKeys.length ? null : newCols);
                 }}
             />
+
+            {/* ═══════ TOTALS COLUMN PICKER MODAL ═══════ */}
+            {totalsPickerOpen && (
+                <div 
+                    style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(0,0,0,0.5)', zIndex: 200,
+                        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+                        paddingTop: '10vh'
+                    }}
+                    onClick={(e) => { if (e.target === e.currentTarget) setTotalsPickerOpen(false); }}
+                >
+                    <div style={{
+                        background: '#2a2a2e', border: '1px solid #444', borderRadius: '8px',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.6)', width: '380px', maxHeight: '70vh',
+                        display: 'flex', flexDirection: 'column', overflow: 'hidden'
+                    }}>
+                        {/* Header */}
+                        <div style={{ 
+                            padding: '16px 20px', borderBottom: '1px solid #444', 
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center' 
+                        }}>
+                            <div>
+                                <div style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>Column Totals</div>
+                                <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>Select columns to show sums in the footer</div>
+                            </div>
+                            <button 
+                                onClick={() => setTotalsPickerOpen(false)} 
+                                style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', padding: '4px' }}
+                            ><Icons.Close /></button>
+                        </div>
+
+                        {/* Column List */}
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+                            {columns.filter(c => c.key !== 'dbId').map(col => {
+                                const isSelected = totalColumns.has(col.key);
+                                // Verificar si la columna tiene datos numéricos
+                                const sampleValues = flattenedData.slice(0, 20).map(r => parseNumericCell(r[col.key])).filter(n => n !== null);
+                                const hasNumericData = sampleValues.length > 0;
+                                
+                                return (
+                                    <div 
+                                        key={col.key}
+                                        onClick={() => {
+                                            if (!hasNumericData) return;
+                                            setTotalColumns(prev => {
+                                                const next = new Set(prev);
+                                                if (next.has(col.key)) next.delete(col.key);
+                                                else next.add(col.key);
+                                                return next;
+                                            });
+                                        }}
+                                        style={{ 
+                                            padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '12px',
+                                            cursor: hasNumericData ? 'pointer' : 'not-allowed',
+                                            opacity: hasNumericData ? 1 : 0.35,
+                                            borderBottom: '1px solid rgba(255,255,255,0.04)',
+                                            background: isSelected ? 'rgba(79, 195, 247, 0.08)' : 'transparent',
+                                            transition: 'background 0.15s'
+                                        }}
+                                        onMouseEnter={e => { if (hasNumericData) e.currentTarget.style.background = isSelected ? 'rgba(79, 195, 247, 0.12)' : 'rgba(255,255,255,0.05)'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.background = isSelected ? 'rgba(79, 195, 247, 0.08)' : 'transparent'; }}
+                                    >
+                                        <div style={{
+                                            width: '18px', height: '18px', borderRadius: '3px',
+                                            border: isSelected ? '2px solid #4fc3f7' : '2px solid #555',
+                                            background: isSelected ? '#4fc3f7' : 'transparent',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            flexShrink: 0, transition: 'all 0.15s'
+                                        }}>
+                                            {isSelected && (
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1a1a2e" strokeWidth="3">
+                                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                                </svg>
+                                            )}
+                                        </div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontSize: '13px', color: '#eee', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{col.header}</div>
+                                            {hasNumericData && (
+                                                <div style={{ fontSize: '10px', color: '#666', marginTop: '1px' }}>
+                                                    {sampleValues.length} numeric value{sampleValues.length !== 1 ? 's' : ''} detected
+                                                </div>
+                                            )}
+                                            {!hasNumericData && (
+                                                <div style={{ fontSize: '10px', color: '#555', marginTop: '1px' }}>Non-numeric column</div>
+                                            )}
+                                        </div>
+                                        {isSelected && (
+                                            <div style={{ fontSize: '11px', color: '#4fc3f7', fontWeight: 600 }}>Σ</div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{ 
+                            padding: '12px 20px', borderTop: '1px solid #444', 
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            background: 'rgba(0,0,0,0.2)'
+                        }}>
+                            <span style={{ fontSize: '11px', color: '#888' }}>
+                                {totalColumns.size} column{totalColumns.size !== 1 ? 's' : ''} selected
+                            </span>
+                            <button 
+                                onClick={() => setTotalsPickerOpen(false)}
+                                style={{ 
+                                    background: '#4f83e8', border: 'none', color: '#fff', 
+                                    padding: '6px 20px', borderRadius: '4px', fontSize: '12px', 
+                                    fontWeight: 600, cursor: 'pointer' 
+                                }}
+                            >Done</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

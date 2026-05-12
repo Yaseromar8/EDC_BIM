@@ -200,6 +200,11 @@ def ensure_file_nodes_table():
                 WHERE is_deleted = FALSE;
             """)
             cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_file_nodes_listing_sort
+                ON file_nodes(model_urn, parent_id, node_type DESC, name)
+                WHERE is_deleted = FALSE;
+            """)
+            cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_file_nodes_name_lookup
                 ON file_nodes(model_urn, name, node_type)
                 WHERE is_deleted = FALSE;
@@ -367,14 +372,24 @@ def ensure_file_nodes_table():
                     FOREACH v_part IN ARRAY v_parts LOOP
                         IF v_part = '' THEN CONTINUE; END IF;
 
-                        -- Intentar encontrar el nodo padre
-                        SELECT id INTO v_current_id
-                        FROM file_nodes
-                        WHERE model_urn = p_model_urn
-                          AND parent_id IS NOT DISTINCT FROM v_parent_id
-                          AND name = v_part
-                          AND node_type = 'FOLDER'
-                          AND is_deleted = FALSE;
+                        -- Intentar encontrar el nodo padre usando IF para evitar Sequential Scans por IS NOT DISTINCT FROM
+                        IF v_parent_id IS NULL THEN
+                            SELECT id INTO v_current_id
+                            FROM file_nodes
+                            WHERE model_urn = p_model_urn
+                              AND parent_id IS NULL
+                              AND name = v_part
+                              AND node_type = 'FOLDER'
+                              AND is_deleted = FALSE;
+                        ELSE
+                            SELECT id INTO v_current_id
+                            FROM file_nodes
+                            WHERE model_urn = p_model_urn
+                              AND parent_id = v_parent_id
+                              AND name = v_part
+                              AND node_type = 'FOLDER'
+                              AND is_deleted = FALSE;
+                        END IF;
 
                         -- Si no existe, decidir si se crea o se aborta
                         IF NOT FOUND THEN
@@ -390,13 +405,23 @@ def ensure_file_nodes_table():
                             EXCEPTION WHEN unique_violation THEN
                                 -- Si alguien mas insertó exactamente la misma carpeta milisegundos despues de nuestra lectura
                                 -- El UNIQUE INDEX detiene el fallo y volvemos a leerla:
-                                SELECT id INTO v_current_id
-                                FROM file_nodes
-                                WHERE model_urn = p_model_urn
-                                  AND parent_id IS NOT DISTINCT FROM v_parent_id
-                                  AND name = v_part
-                                  AND node_type = 'FOLDER'
-                                  AND is_deleted = FALSE;
+                                IF v_parent_id IS NULL THEN
+                                    SELECT id INTO v_current_id
+                                    FROM file_nodes
+                                    WHERE model_urn = p_model_urn
+                                      AND parent_id IS NULL
+                                      AND name = v_part
+                                      AND node_type = 'FOLDER'
+                                      AND is_deleted = FALSE;
+                                ELSE
+                                    SELECT id INTO v_current_id
+                                    FROM file_nodes
+                                    WHERE model_urn = p_model_urn
+                                      AND parent_id = v_parent_id
+                                      AND name = v_part
+                                      AND node_type = 'FOLDER'
+                                      AND is_deleted = FALSE;
+                                END IF;
                             END;
                         END IF;
 
@@ -498,4 +523,108 @@ def log_activity(model_urn, action, entity_type, entity_id=None, entity_name=Non
         # No romper la operacion principal si el log falla
         print(f"[ActivityLog] Warning: no se pudo registrar actividad: {e}")
 
+def ensure_rfi_schema():
+    """Crea la tabla principal para el modulo de Requerimiento de Informacion (RFI)."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS doc_rfis (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    model_urn VARCHAR(255) NOT NULL,
+                    codigo VARCHAR(50) NOT NULL,
+                    titulo VARCHAR(255),
+                    estado VARCHAR(50) DEFAULT 'Emitido',
+                    responsable VARCHAR(255),
+                    fecha TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    adjuntos JSONB DEFAULT '[]', -- Matriz de objetos [{id: "node_id", type: "pdf/cad"}]
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    created_by VARCHAR(255)
+                );
+            """)
+            
+            # Indices para búsqueda rápida por proyecto
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_doc_rfis_model_urn
+                ON doc_rfis(model_urn);
+            """)
 
+            cursor.execute("ALTER TABLE doc_rfis ADD COLUMN IF NOT EXISTS respuesta VARCHAR(50);")
+            cursor.execute("ALTER TABLE doc_rfis ADD COLUMN IF NOT EXISTS fecha_respuesta TIMESTAMP WITH TIME ZONE;")
+            
+            conn.commit()
+            print("[DB] Esquema RFI verificado/creado exitosamente.")
+    except Exception as e:
+        print(f"Error inicializando esquema RFI: {e}")
+
+def ensure_redline_schema():
+    """Crea la tabla principal para el modulo de Red Lines."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS doc_redlines (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    model_urn VARCHAR(255) NOT NULL,
+                    codigo VARCHAR(50) NOT NULL,
+                    titulo VARCHAR(255),
+                    estado VARCHAR(50) DEFAULT 'Emitido',
+                    responsable VARCHAR(255),
+                    fecha TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    adjuntos JSONB DEFAULT '[]',
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    created_by VARCHAR(255),
+                    respuesta VARCHAR(50),
+                    fecha_respuesta TIMESTAMP WITH TIME ZONE
+                );
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_doc_redlines_model_urn
+                ON doc_redlines(model_urn);
+            """)
+            
+            conn.commit()
+            print("[DB] Esquema Red Lines verificado/creado exitosamente.")
+    except Exception as e:
+        print(f"Error inicializando esquema Red Lines: {e}")
+
+def ensure_partidas_schema():
+    """Crea la tabla principal para el modulo de Partidas / Metrados."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS doc_partidas (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    model_urn VARCHAR(255) NOT NULL,
+                    item VARCHAR(50),
+                    descripcion VARCHAR(500) NOT NULL,
+                    unidad VARCHAR(50),
+                    metrado NUMERIC,
+                    precio_unitario NUMERIC,
+                    precio NUMERIC,
+                    incidencia NUMERIC,
+                    metodologia VARCHAR(50),
+                    software VARCHAR(50),
+                    avance NUMERIC DEFAULT 0,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    created_by VARCHAR(255)
+                );
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_doc_partidas_model_urn
+                ON doc_partidas(model_urn);
+            """)
+            
+            conn.commit()
+            print("[DB] Esquema Partidas (Metrados) verificado/creado exitosamente.")
+    except Exception as e:
+        print(f"Error inicializando esquema Partidas: {e}")

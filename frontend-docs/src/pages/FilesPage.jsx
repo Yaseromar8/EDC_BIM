@@ -24,11 +24,14 @@ import NewFolderModal from '../components/modals/NewFolderModal';
 import ShareModal from '../components/modals/ShareModal';
 import MoveModal from '../components/modals/MoveModal';
 import UploadModal from '../components/modals/UploadModal';
+import RfiModule from '../components/RfiModule';
+import RedLineModule from '../components/RedLineModule';
 import VersionPanel from '../components/panels/VersionPanel';
 import DeletedTable from '../components/panels/DeletedTable';
 import GatewayPanel from '../components/panels/GatewayPanel';
 import QuarantineTable from '../components/panels/QuarantineTable';
 import ContextMenu from '../components/ContextMenu';
+import PartidasModule from '../components/PartidasModule';
 
 // ── Fase 3: Componentes de Layout ──
 import FolderNode from '../components/FolderNode';
@@ -121,6 +124,8 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
             <ul style={{ listStyle: 'none', padding: '8px 0', margin: 0 }}>
               {[
                 { label: 'Archivos', mode: 'files', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5,5l2,2H20v12h-16V5H12.5 M13.17,3h-10.34A1.83,1.83,0,0,0,1,4.83v14.34A1.83,1.83,0,0,0,2.83,21h18.34A1.83,1.83,0,0,0,23,19.17V6.83A1.83,1.83,0,0,0,21.17,5H14.83Z"/></svg>, onClick: () => { fe.setSidebarView('files'); fe.switchMode(false); } },
+                { label: 'RFI', mode: 'rfis', icon: <svg width="22" height="22" viewBox="0 0 24 24"><text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontWeight="bold" fontSize="13" fontFamily="sans-serif">RFI</text></svg>, onClick: () => fe.setSidebarView('rfis') },
+                { label: 'Red Line', mode: 'redlines', icon: <svg width="22" height="22" viewBox="0 0 24 24"><text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontWeight="bold" fontSize="14" fontFamily="sans-serif">RL</text></svg>, onClick: () => fe.setSidebarView('redlines') },
                 { label: 'Informes', mode: 'reports', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg>, onClick: () => fe.setSidebarView('reports') },
                 { label: 'Miembros', mode: 'members', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>, onClick: () => { fe.setSidebarView('members'); fe.setMembersLoading(true); apiFetch(`${API}/api/users`).then(r => r.json()).then(d => fe.setMembersList(d.users || d || [])).catch(() => fe.setMembersList([])).finally(() => fe.setMembersLoading(false)); } },
                 { label: 'Configuración', mode: 'settings', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>, onClick: () => fe.setSidebarView('settings') },
@@ -136,6 +141,13 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                   </button>
                 </li>
               ))}
+              <li
+                onClick={() => fe.setSidebarView('partidas')}
+                style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 16px', borderRadius: '0 20px 20px 0', cursor: 'pointer', marginBottom: 4, background: fe.sidebarView === 'partidas' ? '#e8f0fe' : 'transparent', color: fe.sidebarView === 'partidas' ? '#0696d7' : '#5f6368', fontWeight: fe.sidebarView === 'partidas' ? 600 : 500, transition: 'all 0.2s ease', position: 'relative' }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+                <span style={{ fontSize: 13, whiteSpace: 'nowrap' }}>Metrados</span>
+              </li>
               <li style={{ marginBottom: 2 }}>
                 <button onClick={() => fe.switchMode(true)}
                   style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '8px 12px',
@@ -161,6 +173,21 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
         {/* QUARANTINE VIEW */}
         {fe.sidebarView === 'quarantine' && !fe.isTrashMode && (
           <QuarantineTable projectPrefix={projectPrefix} API={API} isAdmin={isAdmin} user={user} />
+        )}
+
+        {/* RFIs VIEW */}
+        {fe.sidebarView === 'rfis' && (
+          <RfiModule project={project} API={API} user={user} isAdmin={isAdmin} />
+        )}
+
+        {/* RED LINES VIEW */}
+        {fe.sidebarView === 'redlines' && (
+          <RedLineModule project={project} API={API} user={user} isAdmin={isAdmin} />
+        )}
+
+        {/* PARTIDAS VIEW */}
+        {fe.sidebarView === 'partidas' && (
+          <PartidasModule project={project} API={API} user={user} isAdmin={isAdmin} />
         )}
 
         {/* REPORTS VIEW */}

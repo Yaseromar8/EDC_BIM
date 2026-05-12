@@ -224,6 +224,11 @@ export function calculateDynamicFilterBucketsNative(model, filterProperties, fil
                 }
                 
                 values.sort(function(a, b) {
+                     var aIsUnassigned = (a.value === '(Unassigned)' || a.value === 'Unassigned' || a.value === 'Sin asignar');
+                     var bIsUnassigned = (b.value === '(Unassigned)' || b.value === 'Unassigned' || b.value === 'Sin asignar');
+                     if (aIsUnassigned && !bIsUnassigned) return 1;
+                     if (!aIsUnassigned && bIsUnassigned) return -1;
+
                      if (b.count === a.count) return a.value.localeCompare(b.value);
                      return b.count - a.count;
                 });
@@ -373,6 +378,19 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
     // We only care about models that are currently active in rosettaToExtIdReversed
     const activeUrns = Object.keys(rosettaToExtIdReversed || {});
     
+    // FALLBACK GLOBAL: Pre-construir lookup extId -> {dbId, urn} para todos los URNs.
+    // Necesario para IFC de Civil 3D cuyo source_urn en postgres puede diferir del URN del viewer.
+    const globalExtIdLookup = {};
+    if (rosettaToExtIdReversed) {
+        Object.entries(rosettaToExtIdReversed).forEach(([loadedUrn, mapping]) => {
+            Object.entries(mapping).forEach(([extId, dbId]) => {
+                if (!globalExtIdLookup[extId]) {
+                    globalExtIdLookup[extId] = { dbId, urn: loadedUrn };
+                }
+            });
+        });
+    }
+    
     // Preparar buckets vacíos para las propiedades solicitadas (filterProperties)
     const bucketMaps = {};
     filterProperties.forEach(propId => {
@@ -396,12 +414,18 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
         // Evitar fantasmas:
         // Si el elemento no existe en la piedra Rosetta activa de la UI, ignorar
         const urnDict = rosettaToExtIdReversed[urn] || rosettaToExtIdReversed[safeUrn];
-        if (!rosettaToExtIdReversed || !urnDict || urnDict[extId] === undefined) {
-            return;
-        }
+        let viewerDbId;
+        let effectiveModelUrn = safeUrn;
         
-        // ID geométrico temporal del visor de Autodesk
-        const viewerDbId = urnDict[extId];
+        if (urnDict && urnDict[extId] !== undefined) {
+            viewerDbId = urnDict[extId];
+        } else if (globalExtIdLookup[extId]) {
+            // FALLBACK: extId encontrado en otro URN (IFC con versión/encoding diferente)
+            viewerDbId = globalExtIdLookup[extId].dbId;
+            effectiveModelUrn = globalExtIdLookup[extId].urn;
+        } else {
+            return; // No existe en ningún modelo cargado
+        }
 
         // Validar si pasa TODOS los filtros activos
         let passesAllFilters = true;
@@ -429,7 +453,7 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
         }
 
         if (hasAnySelection && passesAllFilters) {
-            globalValidDbIds.push({ id: parseInt(viewerDbId, 10), modelUrn: safeUrn });
+            globalValidDbIds.push({ id: parseInt(viewerDbId, 10), modelUrn: effectiveModelUrn });
         }
 
         // Construir buckets (Nivel Facetado - OR para sí mismo)
@@ -470,7 +494,7 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
                     bucketMaps[propId][val] = { count: 0, dbIds: [] };
                 }
                 bucketMaps[propId][val].count++;
-                bucketMaps[propId][val].dbIds.push({ id: viewerDbId, modelUrn: safeUrn });
+                bucketMaps[propId][val].dbIds.push({ id: viewerDbId, modelUrn: effectiveModelUrn });
             }
         }
     });
@@ -488,6 +512,11 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
         }
         
         values.sort(function(a, b) {
+             const aIsUnassigned = (a.value === '(Unassigned)' || a.value === 'Unassigned' || a.value === 'Sin asignar');
+             const bIsUnassigned = (b.value === '(Unassigned)' || b.value === 'Unassigned' || b.value === 'Sin asignar');
+             if (aIsUnassigned && !bIsUnassigned) return 1;
+             if (!aIsUnassigned && bIsUnassigned) return -1;
+
              if (b.count === a.count) return a.value.localeCompare(b.value);
              return b.count - a.count;
         });

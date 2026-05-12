@@ -202,6 +202,9 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
               setExtracting(false);
               setExtractionDone(true);
               setProgressMsg('Metadata extraida. Selecciona la vista para importar.');
+              // Recarga reactiva de inventario y filtros
+              window.__inventoryCache = null;
+              window.dispatchEvent(new CustomEvent('inventory-needs-refresh'));
               // Now fetch viewables to populate the view selector
               fetchViewables(urn);
             } else if (stData.status === 'error') {
@@ -225,7 +228,15 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
   const handleFinalImport = () => {
     const docs = pendingDocsRef.current;
     if (docs && docs.length > 0) {
-      onLinkDocs?.(docs, true, selectedViewGuid);
+      const processedDocs = docs.map(doc => {
+        let rawUrn = doc.id || doc.urn;
+        let b64Urn = rawUrn;
+        if (rawUrn && rawUrn.includes('urn:adsk')) {
+           try { b64Urn = btoa(rawUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); } catch(e){}
+        }
+        return { ...doc, urn: b64Urn, id: b64Urn };
+      });
+      onLinkDocs?.(processedDocs, true, selectedViewGuid);
     }
     onClose();
   };

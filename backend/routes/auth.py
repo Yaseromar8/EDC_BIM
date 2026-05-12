@@ -57,6 +57,10 @@ def ensure_users_tables():
                     PRIMARY KEY (project_id, user_id)
                 )
             ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_project_users_user_project
+                ON project_users (user_id, project_id)
+            ''')
             
             # La migración pesada se ha removido para evitar bloqueos en la base de datos
             # durante el reinicio de los contenedores en Render.

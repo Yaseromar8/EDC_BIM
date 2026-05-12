@@ -49,8 +49,8 @@ const DocsPanel = ({ selectedElement }) => {
     };
 
     return (
-        <div className="docs-panel" style={{ padding: '20px', color: '#fff', background: '#1c2027', height: '100%', overflowY: 'auto' }}>
-            <h3 style={{ borderBottom: '1px solid #333', paddingBottom: '10px', marginTop: 0 }}>Autodesk Docs (ACC)</h3>
+        <div className="docs-panel" style={{ padding: '20px', color: '#fff', background: 'transparent', height: '100%', overflowY: 'auto' }}>
+            <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px', marginTop: 0 }}>Autodesk Docs (ACC)</h3>
             <p style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '20px', lineHeight: '1.4' }}>
                 Pega la URL o URN de referencia de Autodesk Construction Cloud para inyectar su vínculo en el elemento seleccionado en el modelo.
             </p>

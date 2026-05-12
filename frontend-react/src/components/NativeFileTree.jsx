@@ -94,7 +94,7 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId, projectId: context
                 const sortedVersions = json.data.sort((a, b) => b.attributes.versionNumber - a.attributes.versionNumber);
                 const latestVersion = sortedVersions[0];
                 const versionUrn = latestVersion.id;
-                const urn = btoa(versionUrn).replace(/=+$/, '');
+                const urn = btoa(versionUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
                 onFileSelect(node.id, {
                     urn,

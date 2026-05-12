@@ -1,5 +1,6 @@
 // frontend-docs/src/components/DocumentViewer.jsx
 import React, { useState, useEffect } from 'react';
+import PDFViewer from './PDFViewer';
 
 // Utility formatters
 function formatDate(iso) {
@@ -88,15 +89,21 @@ export default function DocumentViewer({
               )}
             </div>
 
-            {!isShared && showVersions && versionHistory && versionHistory.length > 0 && (
+            {!isShared && showVersions && (
               <div className="version-popover" style={{ top: 32, left: 0, width: 350 }}>
                 <div style={{ padding: '8px 12px', borderBottom: '1px solid #eee', fontSize: 12, fontWeight: 600, color: '#666' }}>
                   Versiones
                 </div>
                 <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-                  {versionHistory.map((v, i) => {
-                    const isLatest = v.version_number === (versionHistory[0]?.version_number || file.version);
-                    return (
+                  {(!versionHistory || versionHistory.length === 0) ? (
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: 13 }}>
+                       <div className="adsk-spinner" style={{ width: 20, height: 20, margin: '0 auto 8px', borderWidth: 2 }} />
+                       Cargando historial...
+                    </div>
+                  ) : (
+                    versionHistory.map((v, i) => {
+                      const isLatest = v.version_number === (versionHistory[0]?.version_number || file.version);
+                      return (
                        <div 
                         key={i} 
                         className="version-popover-item"
@@ -142,7 +149,8 @@ export default function DocumentViewer({
                         )}
                       </div>
                     );
-                  })}
+                  })
+                  )}
                 </div>
               </div>
             )}
@@ -236,7 +244,12 @@ export default function DocumentViewer({
              )
           }
 
-          // 5. PDF & DEFAULT (Iframe)
+          // 5. PDF (Mozilla PDF.js — Motor intercambiable)
+          if (lowerName.endsWith('.pdf') || lowerName.endsWith('.pdfx')) {
+            return <PDFViewer url={fileUrl} fileName={file.name} />;
+          }
+
+          // 6. DEFAULT FALLBACK (Iframe genérico)
           return (
             <iframe 
               src={fileUrl} 

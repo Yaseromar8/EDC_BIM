@@ -4,7 +4,7 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.4);
     z-index: 1000;
     display: flex;
     justify-content: center;
@@ -13,12 +13,12 @@
 }
 
 .album-modal {
-    background: #1a1b1e;
+    background: #ffffff;
     border-radius: 12px;
     width: 600px;
     max-width: 90vw;
-    color: #fff;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    color: #333333;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -27,7 +27,7 @@
 .album-panel-content {
     width: 100%;
     height: 100%;
-    background: #1a1b1e;
+    background: #f8f9fa;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -44,7 +44,7 @@
     width: 100%;
     height: 100%;
     border-radius: 0;
-    background: rgba(0, 0, 0, 0.95);
+    background: rgba(255, 255, 255, 0.95);
 }
 
 .album-header {
@@ -52,8 +52,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #23252a;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
 }
 
 .album-title-group {
@@ -69,12 +69,12 @@
 .album-title-group h3 {
     font-size: 16px;
     font-weight: 600;
-    color: #e0e0e0;
+    color: #202124;
     margin: 0;
 }
 
 .pin-id {
-    color: #666;
+    color: #888;
     font-size: 14px;
     font-weight: 400;
     margin-left: 8px;
@@ -108,19 +108,19 @@
     background: none;
     border: none;
     font-size: 24px;
-    color: #888;
+    color: #5f6368;
     cursor: pointer;
     transition: color 0.2s;
 }
 
 .album-close-btn:hover {
-    color: #fff;
+    color: #202124;
 }
 
 .album-filter-toggle {
     background: transparent;
     border: none;
-    color: #888;
+    color: #5f6368;
     cursor: pointer;
     padding: 8px;
     border-radius: 60%;
@@ -131,22 +131,22 @@
 }
 
 .album-filter-toggle:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: #e0e0e0;
+    background: #f1f3f4;
+    color: #202124;
 }
 
 .album-filter-toggle.active {
-    background: rgba(59, 130, 246, 0.2);
-    color: #3b82f6;
+    background: rgba(26, 115, 232, 0.1);
+    color: #1a73e8;
 }
 
 .album-filter-bar {
-    background: #23252a;
+    background: #f8f9fa;
     padding: 10px 24px;
     display: flex;
     align-items: center;
     gap: 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid #e0e0e0;
     animation: slideDown 0.3s ease-out;
     flex-wrap: wrap;
     justify-content: flex-start;
@@ -157,13 +157,13 @@
     gap: 8px;
     margin-right: 12px;
     padding-right: 16px;
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    border-right: 1px solid #e0e0e0;
 }
 
 .preset-btn {
-    background: rgba(59, 130, 246, 0.1);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    color: #60a5fa;
+    background: #ffffff;
+    border: 1px solid #dadce0;
+    color: #1a73e8;
     padding: 4px 10px;
     border-radius: 4px;
     font-size: 11px;
@@ -173,7 +173,7 @@
 }
 
 .preset-btn:hover {
-    background: #3b82f6;
+    background: #1a73e8;
     color: white;
 }
 
@@ -195,31 +195,31 @@
 .timeline-header {
     position: sticky;
     top: -24px; /* Adjust based on parent padding/header */
-    background: #1a1b1e;
+    background: #f8f9fa;
     padding: 8px 12px;
     margin: 0 0 16px 0;
     font-size: 13px;
     font-weight: 700;
-    color: #3b82f6;
+    color: #1a73e8;
     text-transform: capitalize;
-    border-left: 3px solid #3b82f6;
+    border-left: 3px solid #1a73e8;
     z-index: 5;
-    box-shadow: 0 4px 6px -4px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 6px -4px rgba(0,0,0,0.05);
 }
 
 .media-type-filter {
     display: flex;
-    background: #1a1b1e;
+    background: #ffffff;
     border-radius: 6px;
     padding: 3px;
     gap: 2px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid #dadce0;
 }
 
 .media-btn {
     background: transparent;
     border: none;
-    color: #888;
+    color: #5f6368;
     padding: 4px 12px;
     border-radius: 4px;
     font-size: 11px;
@@ -229,7 +229,7 @@
 }
 
 .media-btn:hover {
-    color: #ccc;
+    color: #202124;
 }
 
 .media-btn.active {
@@ -245,9 +245,9 @@
 
 .album-search-input {
     width: 100%;
-    background: #1a1b1e;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #fff;
+    background: #ffffff;
+    border: 1px solid #dadce0;
+    color: #333333;
     padding: 6px 12px;
     border-radius: 6px;
     font-size: 13px;
@@ -256,8 +256,8 @@
 }
 
 .album-search-input:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
 }
 
 .filter-group {
@@ -274,9 +274,9 @@
 }
 
 .filter-group input[type="date"] {
-    background: #1a1b1e;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #fff;
+    background: #ffffff;
+    border: 1px solid #dadce0;
+    color: #333333;
     padding: 4px 8px;
     border-radius: 4px;
     font-size: 12px;
@@ -285,13 +285,13 @@
 }
 
 .filter-group input[type="date"]:focus {
-    border-color: #3b82f6;
+    border-color: #1a73e8;
 }
 
 .filter-clear-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #aaa;
+    background: transparent;
+    border: 1px solid #dadce0;
+    color: #5f6368;
     padding: 4px 10px;
     border-radius: 4px;
     font-size: 11px;
@@ -300,21 +300,21 @@
 }
 
 .filter-clear-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
+    background: #f1f3f4;
+    color: #202124;
 }
 
 .filter-results-count {
     margin-left: auto;
     font-size: 11px;
-    color: #666;
+    color: #5f6368;
     font-weight: 500;
 }
 
 .text-btn {
     background: none;
     border: none;
-    color: #3b82f6;
+    color: #1a73e8;
     text-decoration: underline;
     cursor: pointer;
     margin-top: 10px;
@@ -329,14 +329,14 @@
 
 .no-photos {
     text-align: center;
-    color: #666;
+    color: #5f6368;
     font-style: italic;
     margin-bottom: 8px;
 }
 
 .hint {
     text-align: center;
-    color: #444;
+    color: #80868b;
     font-size: 12px;
 }
 
@@ -346,9 +346,10 @@
     align-items: center;
     justify-content: center;
     padding: 40px;
-    border: 2px dashed rgba(255, 255, 255, 0.1);
+    border: 2px dashed #dadce0;
     border-radius: 8px;
     margin: 20px 0;
+    background: #ffffff;
 }
 
 .photo-grid {
@@ -364,7 +365,8 @@
     position: relative;
     aspect-ratio: 4/3;
     transition: transform 0.2s, box-shadow 0.2s;
-    background: #000;
+    background: #f1f3f4;
+    border: 1px solid #e0e0e0;
 }
 
 .photo-item:hover {
@@ -385,8 +387,8 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.5);
-    color: white;
+    background: rgba(255, 255, 255, 0.8);
+    color: #333333;
     width: 32px;
     height: 32px;
     border-radius: 50%;
@@ -394,7 +396,7 @@
     align-items: center;
     justify-content: center;
     font-size: 14px;
-    border: 2px solid rgba(255, 255, 255, 0.8);
+    border: 2px solid rgba(0, 0, 0, 0.1);
     pointer-events: none;
     /* Let clicks pass through to the container */
 }
@@ -440,7 +442,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.9);
+    background: rgba(255, 255, 255, 0.95);
     z-index: 1100;
     display: flex;
     justify-content: center;
@@ -459,6 +461,10 @@
     max-width: 90vw;
     max-height: 90vh;
     cursor: default;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
 }
 
 .lightbox-content img {
@@ -470,7 +476,7 @@
 }
 
 .lightbox-content p {
-    color: #ccc;
+    color: #555555;
     text-align: center;
     margin-top: 12px;
     font-size: 14px;
@@ -478,30 +484,30 @@
 
 .lightbox-close {
     position: absolute;
-    top: -40px;
-    right: 0;
-    background: none;
-    border: none;
-    color: #fff;
-    font-size: 32px;
+    top: -16px;
+    right: -16px;
+    background: #ffffff;
+    border: 1px solid #dadce0;
+    color: #333333;
+    font-size: 24px;
     cursor: pointer;
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
 .lightbox-close:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: #f1f3f4;
 }
 
 .album-title-input {
-    background: #1a1b1e;
-    border: 1px solid #3b82f6;
-    color: #fff;
+    background: #ffffff;
+    border: 1px solid #1a73e8;
+    color: #333333;
     font-size: 16px;
     font-weight: 600;
     padding: 2px 8px;
