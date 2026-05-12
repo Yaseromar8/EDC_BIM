@@ -4,6 +4,6 @@
   "private": true,
   "scripts": {
     "postinstall": "pip install --break-system-packages -r requirements.txt",
-    "start": "gunicorn --bind 0.0.0.0:$PORT --workers 4 --threads 2 --timeout 300 server:app"
+    "start": "/opt/render/.local/bin/gunicorn --bind 0.0.0.0:$PORT --workers 4 --threads 2 --timeout 300 server:app"
   }
 }
