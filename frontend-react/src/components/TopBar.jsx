@@ -269,7 +269,7 @@ const TopBar = ({
             <div className="top-bar-right">
                 <button
                     className="tool-btn"
-                    onClick={() => window.open(DOCS_URL, '_blank')}
+                    onClick={() => window.location.href = DOCS_URL}
                     title="Gestión Documental (ACC)"
                     style={{ marginRight: '8px', color: '#0696d7' }}
                 >

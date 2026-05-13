@@ -264,7 +264,7 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout }) 
       <header className="top-header">
         <div className="header-left"><span className="header-logo">☁️ Plataforma BIM</span></div>
         <div className="header-right">
-          <a href={VISOR_URL} className="header-nav-item" target="_blank" rel="noreferrer">🏗️ Visor 3D</a>
+          <a href={VISOR_URL} className="header-nav-item">🏗️ Visor 3D</a>
           <div className="header-user" onClick={onLogout} title="Cerrar sesión">
             <span style={{ fontSize: 13, marginRight: 8, opacity: 0.8 }}>{user.name.split(' ')[0]}</span>
             <div className="header-avatar">{getInitials(user.name)}</div>
