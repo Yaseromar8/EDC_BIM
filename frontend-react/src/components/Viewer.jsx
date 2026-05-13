@@ -1448,7 +1448,20 @@ const Viewer = ({
                             return role === '3d' || (role !== '2d' && role !== 'graphics');
                         });
 
-                        const extractedViews = viewables.map(v => ({ guid: v.guid(), name: v.name() }));
+                        const extractedViews = viewables.map(v => {
+                            const guids = [v.guid()];
+                            if (v.children) {
+                                v.children.forEach(child => {
+                                    if (child.guid) guids.push(child.guid());
+                                    if (child.children) {
+                                        child.children.forEach(grandchild => {
+                                            if (grandchild.guid) guids.push(grandchild.guid());
+                                        });
+                                    }
+                                });
+                            }
+                            return { guid: v.guid(), allGuids: guids, name: v.name() };
+                        });
                         console.log('[Viewer] All Found Geometries:', allGeometries.map(v => `${v.name()} (${v.data.role})`));
                         console.log('[Viewer] Filtered 3D Viewables:', extractedViews);
 

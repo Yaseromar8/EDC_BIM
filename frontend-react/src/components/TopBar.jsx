@@ -192,7 +192,72 @@ const TopBar = ({
                             <span className="breadcrumb-project">{selectedProject.baseName || selectedProject.name}</span>
                             <span className="breadcrumb-sep">/</span>
                             <span className="breadcrumb-view">{selectedProject.frontName}</span>
-                            {/* Toolbar de Obra Lineal desplegable se ha movido al Left Rail principal */}
+                            {/* Obra Lineal Tools Dropdown */}
+                            <div 
+                                className="obra-lineal-tools" 
+                                ref={toolsRef} 
+                                style={{ position: 'relative', marginLeft: '16px', borderLeft: '1px solid #444', paddingLeft: '16px' }}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onMouseUp={(e) => e.stopPropagation()}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <button 
+                                    className="tool-btn"
+                                    onClick={() => setIsProjectToolsOpen(!isProjectToolsOpen)}
+                                    title="Herramientas de Obra Lineal"
+                                    style={{ 
+                                        gap: '6px', 
+                                        background: isProjectToolsOpen ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                        color: isProjectToolsOpen ? '#fff' : undefined,
+                                        borderRadius: '4px'
+                                    }}
+                                >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+                                    <span style={{ fontSize: '11px', fontWeight: 700 }}>OBRA LINEAL</span>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: '4px', transform: isProjectToolsOpen ? 'rotate(180deg)' : 'none', transition: '0.2s' }}><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                </button>
+
+                                {isProjectToolsOpen && (
+                                    <div className="tools-dropdown-menu" style={{
+                                        position: 'absolute',
+                                        top: '100%',
+                                        left: '16px',
+                                        marginTop: '8px',
+                                        background: '#1e1e1e',
+                                        border: '1px solid #333',
+                                        borderRadius: '6px',
+                                        padding: '4px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        minWidth: '160px',
+                                        zIndex: 1000,
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+                                    }}>
+                                        <button
+                                            className="dropdown-tool-btn"
+                                            onClick={() => {
+                                                window.dispatchEvent(new CustomEvent("toggle-progressives"));
+                                                setIsProjectToolsOpen(false);
+                                            }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', color: '#ccc', border: 'none', background: 'transparent', textAlign: 'left', borderRadius: '4px', cursor: 'pointer', width: '100%' }}
+                                        >
+                                            <PinIcon />
+                                            <span style={{ fontSize: '12px', fontWeight: 500 }}>Progresivas</span>
+                                        </button>
+                                        <button
+                                            className="dropdown-tool-btn"
+                                            onClick={() => {
+                                                window.dispatchEvent(new CustomEvent("toggle-workfronts-panel"));
+                                                setIsProjectToolsOpen(false);
+                                            }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', color: '#ccc', border: 'none', background: 'transparent', textAlign: 'left', borderRadius: '4px', cursor: 'pointer', width: '100%' }}
+                                        >
+                                            <HeatmapIcon />
+                                            <span style={{ fontSize: '12px', fontWeight: 500 }}>Heatmap</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>

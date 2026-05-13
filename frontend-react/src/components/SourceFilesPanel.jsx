@@ -102,13 +102,13 @@ const getActiveViewName = (modelUrn, modelViews, activeViewableGuids, defaultVie
     
     // 1. Primary: use the defaultViewGuid persisted in model_config (DB source of truth)
     if (defaultViewGuid) {
-        const dbView = views.find(v => v.guid === defaultViewGuid);
+        const dbView = views.find(v => v.guid === defaultViewGuid || (v.allGuids && v.allGuids.includes(defaultViewGuid)));
         if (dbView) return dbView.name;
     }
     // 2. Secondary: check runtime activeViewableGuids (user switched view in session)
     const activeGuid = activeViewableGuids?.[modelUrn];
     if (activeGuid) {
-        const activeView = views.find(v => v.guid === activeGuid);
+        const activeView = views.find(v => v.guid === activeGuid || (v.allGuids && v.allGuids.includes(activeGuid)));
         if (activeView) return activeView.name;
     }
     // 3. Fallback: first 3D view in the list

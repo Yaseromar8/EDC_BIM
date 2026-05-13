@@ -677,6 +677,27 @@ function App() {
     restricciones: []
   });
   const [selectedProject, setSelectedProject] = useState(() => {
+    // PRIORITY 1: URL params from Gateway Interceptor (frontend-docs navigation)
+    // Must be checked SYNCHRONOUSLY here to prevent race condition where
+    // the model-fetch useEffect fires with stale localStorage data before
+    // the Gateway useEffect can update selectedProject.
+    const params = new URLSearchParams(window.location.search);
+    const projId = params.get('project');
+    const frenteId = params.get('frente');
+    if (projId && frenteId) {
+      const frontName = params.get('fn') || `Frente ${frenteId}`;
+      console.log(`[App] Gateway init: project=${projId}, frente=${frenteId}`);
+      return {
+        id: `${projId}_${frenteId}`,
+        baseName: projId,
+        frontId: frenteId,
+        frontName: frontName,
+        displayName: `${projId} - ${frontName}`,
+        name: projId
+      };
+    }
+
+    // PRIORITY 2: Restore from localStorage (page refresh without URL params)
     const saved = localStorage.getItem('visor_selectedProject');
     if (saved) {
       try {
@@ -719,27 +740,12 @@ function App() {
   }, [selectedProject]);
 
   // 🚀 INTERCEPTOR DE PASARELA (Gateway interceptor)
-  // Escucha los parámetros en la URL (ej: ?project=PQT8_TALARA&frente=CANAL)
-  // provenientes de la app de Docs (Plataforma BIM)
+  // The actual project initialization from URL params is now handled SYNCHRONOUSLY
+  // in the useState initializer above. This useEffect only cleans up the URL
+  // to prevent params from persisting on refresh.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const projId = params.get('project');
-    const frenteId = params.get('frente');
-    const frontName = params.get('fn') || `Frente ${frenteId}`;
-
-    if (projId && frenteId) {
-      const compositeProject = {
-        id: `${projId}_${frenteId}`, // Isolated DB scope
-        baseName: projId,
-        frontId: frenteId,
-        frontName: frontName,
-        displayName: `${projId} - ${frontName}`,
-        name: projId // fallback
-      };
-      console.log("[Gateway] Setting project from URL params:", compositeProject);
-      setSelectedProject(compositeProject);
-
-      // Clean the URL so it doesn't get stuck upon page refresh
+    if (params.get('project') && params.get('frente')) {
       const url = new URL(window.location);
       url.searchParams.delete('project');
       url.searchParams.delete('frente');
@@ -748,26 +754,7 @@ function App() {
     }
   }, []);
 
-  // ─── BYPASS_AUTH: Proyecto por defecto ───────────────────────────────────────
-  // Cuando BYPASS_AUTH está activo y no se recibió proyecto por URL ni por
-  // localStorage, se asigna automáticamente un proyecto predeterminado para
-  // que todas las operaciones (upload, link, extract) funcionen sin pasar
-  // por el LandingPage.
-  useEffect(() => {
-    if (!BYPASS_AUTH) return;
-    if (selectedProject) return; // Ya tenemos proyecto (de URL o localStorage)
 
-    const defaultProject = {
-      id: '1_DRENAJE',
-      baseName: '1',
-      frontId: 'DRENAJE',
-      frontName: 'Frente Drenaje Urbano',
-      displayName: 'Proyecto Demo - Frente Drenaje Urbano',
-      name: 'Proyecto Demo'
-    };
-    console.log('[BYPASS_AUTH] No project context found. Auto-selecting default:', defaultProject.id);
-    setSelectedProject(defaultProject);
-  }, []);
 
   const [showSplash, setShowSplash] = useState(false);
   const [selectedPinId, setSelectedPinId] = useState(null);
@@ -1809,6 +1796,11 @@ function App() {
           const config = await res.json();
           if (config.models) {
             setModels(config.models.map(m => ({ ...m, label: m.name })));
+            
+            // Apply the new active viewable across the state for standard imports
+            if (viewGuid) {
+              setActiveViewableGuids(prev => ({ ...prev, [model.urn]: viewGuid }));
+            }
           }
         } else {
           const err = await res.json();
@@ -2742,25 +2734,7 @@ function App() {
               <span className="rail-label" style={{ fontWeight: 700 }}>Seguimiento</span>
             </button>
 
-            <button
-              type="button"
-              className="rail-button"
-              onClick={() => window.dispatchEvent(new CustomEvent("toggle-progressives"))}
-              title="Trazos y Progresivas"
-            >
-              <svg className="rail-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-              <span className="rail-label" style={{ fontWeight: 700 }}>Progresivas</span>
-            </button>
 
-            <button
-              type="button"
-              className="rail-button"
-              onClick={() => window.dispatchEvent(new CustomEvent("toggle-workfronts-panel"))}
-              title="Gestor de Heatmap"
-            >
-              <svg className="rail-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-              <span className="rail-label" style={{ fontWeight: 700 }}>Heatmap</span>
-            </button>
 
 
 
@@ -3022,6 +2996,7 @@ function App() {
               {/* 3D VIEWER - Hide when build is active */}
               <div style={{ flex: 1, minHeight: 0, position: 'relative', display: (activePanel === 'build') ? 'none' : 'block' }}>
                 <Viewer
+                  key={selectedProject?.id || 'viewer-default'}
                   accessToken={accessToken}
                   models={models}
                   hiddenModelUrns={hiddenModelUrns}

@@ -41,7 +41,12 @@ const useFetch = (url) => {
 };
 
 const TreeNode = ({ node, selectedFiles, onFileSelect, hubId, projectId: contextProjectId }) => {
-    const [isOpen, setIsOpen] = useState(false);
+    const cacheKey = node.id || (node.links?.self?.href);
+    const [isOpen, setIsOpen] = useState(() => {
+        if (window.__treeCache && window.__treeCache[cacheKey]) return true;
+        return false;
+    });
+    
     let url = null;
     if (isOpen) {
         switch (node.type) {
@@ -68,7 +73,13 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId, projectId: context
 
     const handleToggle = () => {
         if (isFolder) {
-            setIsOpen(!isOpen);
+            setIsOpen(prev => {
+                const next = !prev;
+                if (!window.__treeCache) window.__treeCache = {};
+                if (next) window.__treeCache[cacheKey] = true;
+                else delete window.__treeCache[cacheKey];
+                return next;
+            });
         }
     };
 

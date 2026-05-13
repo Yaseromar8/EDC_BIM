@@ -118,13 +118,16 @@ def save_project_config_internal(config):
  
     return db_ok
 
-def delete_model_from_db(urn):
-    """Deletes a specific model from the DB by URN."""
+def delete_model_from_db(urn, app_project_id=None):
+    """Deletes a specific model from the DB by URN and optionally app_project_id."""
     try:
         from db import get_db_connection
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('DELETE FROM model_config WHERE urn = %s', (urn,))
+            if app_project_id:
+                cursor.execute('DELETE FROM model_config WHERE urn = %s AND app_project_id = %s', (urn, app_project_id))
+            else:
+                cursor.execute('DELETE FROM model_config WHERE urn = %s', (urn,))
             conn.commit()
     except Exception as e:
         print(f"[digital_twin] Error deleting model from DB: {e}")
@@ -216,6 +219,9 @@ def ensure_bucket_exists(bucket_key, token):
 def get_config_route():
     config = get_project_config_internal()
     project_id = request.args.get('project')
+    print(f"\n[DIAG-GET] project_id={project_id}, total_models_in_db={len(config.get('models',[]))}")
+    for m in config.get('models', []):
+        print(f"  [DIAG-GET] model: name={m.get('name')}, appProjectId={m.get('appProjectId')}, urn=...{str(m.get('urn',''))[-20:]}")
     
     if project_id and 'models' in config:
         # Filtrado inteligente por frente.
@@ -256,6 +262,7 @@ def add_model_route():
     
     app_project_id = data.get('project') # "DRENAJE_URBANO" or "CANAL"
     name = data.get('name')
+    print(f"\n[DIAG-ADD] project={app_project_id}, name={name}, urn=...{str(data.get('urn',''))[-20:]}")
 
     new_model = {
         "id": str(int(time.time() * 1000)),
@@ -293,7 +300,7 @@ def update_model_link():
     app_project_id = data.get('project')
     
     config = get_project_config_internal()
-    model = next((m for m in config.get('models', []) if m['urn'] == data['urn']), None)
+    model = next((m for m in config.get('models', []) if m['urn'] == data['urn'] and m.get('appProjectId') == app_project_id), None)
     
     if not model:
         return jsonify({'error': 'Model not found'}), 404
@@ -509,14 +516,19 @@ def remove_model_route():
     data = request.json
     urn = data.get('urn')
     app_project_id = data.get('project')
+    print(f"\n[DIAG-REMOVE] project={app_project_id}, urn=...{str(urn or '')[-20:]}")
 
     config = get_project_config_internal()
     initial_len = len(config.get('models', []))
-    config['models'] = [m for m in config.get('models', []) if m.get('urn') != urn]
+    
+    if app_project_id:
+        config['models'] = [m for m in config.get('models', []) if not (m.get('urn') == urn and m.get('appProjectId') == app_project_id)]
+    else:
+        config['models'] = [m for m in config.get('models', []) if m.get('urn') != urn]
     
     if len(config['models']) < initial_len:
         # Delete model config from DB
-        delete_model_from_db(urn)
+        delete_model_from_db(urn, app_project_id)
 
         # CLEANUP: Purgar metadata de inventory_assets
         # COHERENCIA: sanitize_urn normaliza el URN exactamente como lo hace
@@ -529,27 +541,21 @@ def remove_model_route():
                 
                 # Estrategia multi-capa para garantizar purga completa:
                 # 1. Intentar con URN sanitizado (como lo guarda extract_metadata_task)
-                cursor.execute(
-                    "DELETE FROM inventory_assets WHERE source_urn = %s",
-                    (urn_sanitized,)
-                )
+                if app_project_id:
+                    cursor.execute("DELETE FROM inventory_assets WHERE source_urn = %s AND model_urn = %s", (urn_sanitized, app_project_id))
+                else:
+                    cursor.execute("DELETE FROM inventory_assets WHERE source_urn = %s", (urn_sanitized,))
                 deleted_count = cursor.rowcount
                 
                 # 2. Si no encontró nada, intentar con URN raw (por si hay datos legacy)
                 if deleted_count == 0 and urn != urn_sanitized:
-                    cursor.execute(
-                        "DELETE FROM inventory_assets WHERE source_urn = %s",
-                        (urn,)
-                    )
+                    if app_project_id:
+                        cursor.execute("DELETE FROM inventory_assets WHERE source_urn = %s AND model_urn = %s", (urn, app_project_id))
+                    else:
+                        cursor.execute("DELETE FROM inventory_assets WHERE source_urn = %s", (urn,))
                     deleted_count = cursor.rowcount
                 
-                # 3. Fallback: buscar por model_urn (appProjectId) + source_urn
-                if deleted_count == 0 and app_project_id:
-                    cursor.execute(
-                        "DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN (%s, %s)",
-                        (app_project_id, urn_sanitized, urn)
-                    )
-                    deleted_count = cursor.rowcount
+
                 
                 conn.commit()
                 print(f"[Remove] Limpieza inventario: {deleted_count} registros eliminados (URN: ...{urn_sanitized[-30:]})")
