@@ -218,13 +218,26 @@ def get_config_route():
     project_id = request.args.get('project')
     
     if project_id and 'models' in config:
-        # Filter models by internal 'appProjectId' ("DRENAJE_URBANO", "1_CANAL", etc)
-        # Apply a fallback to the base project ID (e.g., "1") if the exact front is not explicitly defined in the DB.
-        base_id = project_id.split('_')[0] if '_' in project_id else project_id
-        config['models'] = [
-            m for m in config['models'] 
-            if m.get('appProjectId') == project_id or m.get('appProjectId') == base_id
-        ]
+        # Filtrado inteligente por frente.
+        # project_id viene como "1_CANAL", "1_DRENAJE", "1_INFRAWORKS", etc.
+        # Los appProjectId en la config pueden ser: "CANAL", "1_CANAL", "DRENAJE_URBANO", etc.
+        if '_' in project_id:
+            parts = project_id.split('_', 1)
+            base_id = parts[0]       # ej: "1"
+            frente = parts[1].upper() # ej: "CANAL", "DRENAJE"
+            
+            config['models'] = [
+                m for m in config['models']
+                if m.get('appProjectId') == project_id                        # exact: "1_CANAL"
+                or m.get('appProjectId', '').upper() == frente                 # frente name: "CANAL"
+                or frente in m.get('appProjectId', '').upper()                 # partial: "DRENAJE" in "DRENAJE_URBANO"
+            ]
+        else:
+            # Sin frente, filtrar solo por ID exacto
+            config['models'] = [
+                m for m in config['models']
+                if m.get('appProjectId') == project_id
+            ]
     
     
     # NOTA: Se eliminó el Auto-Update silencioso que existía aquí.

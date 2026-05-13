@@ -1,43 +1,40 @@
 import React from 'react';
 import { VISOR_URL } from '../../utils/helpers';
 
-export default function GatewayPanel({ projectPrefix, onClose }) {
-  // As the user didn't specify the exact URNs for each front, 
-  // we build them parametrically based on their projectPrefix
-  // to ensure the bridge connects to frontend-react properly.
+export default function GatewayPanel({ project, onClose }) {
+  // Frentes definidos: CANAL, DRENAJE, INFRAWORKS
+  // Usamos project.id (ID numérico de la BD, ej: "1") para construir
+  // el appProjectId que el Visor necesita para cargar los modelos correctos.
   const fronts = [
     {
-      id: 'canal',
+      id: 'CANAL',
       title: 'Canal',
       desc: 'Modelo 3D federado del segmento Canal. Topografía, estructuras hidráulicas y civil.',
       icon: '🌊',
       className: 'canal',
-      urn: `${projectPrefix}_Canal`
     },
     {
-      id: 'drenaje',
+      id: 'DRENAJE',
       title: 'Drenaje',
       desc: 'Sistema de drenaje pluvial y saneamiento profundo. Cruces y colectores.',
       icon: '🌧️',
       className: 'drenaje',
-      urn: `${projectPrefix}_Drenaje`
     },
     {
-      id: 'infraworks',
+      id: 'INFRAWORKS',
       title: 'Infraworks',
       desc: 'Modelo master de infraestructura integrado. Coordinación MAC y servicios.',
       icon: '🏗️',
       className: 'infraworks',
-      urn: `${projectPrefix}_Infraworks`
     }
   ];
 
   const handleOpenFront = (front) => {
-    // Intercepta en frontend-react App.jsx Gateway Interceptor (líneas 721-749)
-    // Envía ?project=<prefix>&frente=<id>&fn=<nombre> para bootstrap automático
-    const frenteId = front.id.toUpperCase(); // CANAL, DRENAJE, INFRAWORKS
-    const url = `${VISOR_URL}/?project=${encodeURIComponent(projectPrefix)}&frente=${encodeURIComponent(frenteId)}&fn=${encodeURIComponent(front.title)}`;
-    // Use window.location.href to keep everything in a single tab/window
+    // Intercepta en frontend-react App.jsx Gateway Interceptor
+    // Envía el ID numérico del proyecto (ej: "1") + frente (ej: "CANAL")
+    // para que el Visor construya "1_CANAL" y lo busque en la config de modelos.
+    const dbProjectId = project.id;
+    const url = `${VISOR_URL}/?project=${encodeURIComponent(dbProjectId)}&frente=${encodeURIComponent(front.id)}&fn=${encodeURIComponent(front.title)}`;
     window.location.href = url;
   };
 

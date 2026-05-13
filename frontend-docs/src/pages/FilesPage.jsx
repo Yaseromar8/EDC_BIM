@@ -484,7 +484,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
       {/* GATEWAY 3D OVERLAY (FRENTES) */}
       {showGateway && (
         <GatewayPanel 
-          projectPrefix={projectPrefix}
+          project={project}
           onClose={() => setShowGateway(false)}
         />
       )}

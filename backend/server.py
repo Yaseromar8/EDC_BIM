@@ -867,12 +867,15 @@ def get_inventory():
                     FROM inventory_assets
                 '''
             
-            # Agregar filtrado por frente (model_urn) con fallback al proyecto base
+            # Filtrado inteligente por frente (model_urn)
+            # model_urn viene como "1_CANAL", "1_DRENAJE", etc.
+            # Los registros en inventory_assets pueden tener model_urn: "CANAL", "1_CANAL", "DRENAJE_URBANO", etc.
             if model_urn and model_urn != 'global':
-                base_urn = model_urn.split('_')[0]
-                if base_urn != model_urn:
-                    query += ' WHERE model_urn = %s OR model_urn = %s'
-                    params.extend([model_urn, base_urn])
+                if '_' in model_urn:
+                    parts = model_urn.split('_', 1)
+                    frente = parts[1].upper()
+                    query += ' WHERE UPPER(model_urn) = %s OR UPPER(model_urn) = %s OR UPPER(model_urn) LIKE %s'
+                    params.extend([model_urn.upper(), frente, f'%{frente}%'])
                 else:
                     query += ' WHERE model_urn = %s'
                     params.append(model_urn)
