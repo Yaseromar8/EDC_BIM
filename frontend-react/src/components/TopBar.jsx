@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './TopBar.css';
 
-const DOCS_URL = import.meta.env.VITE_DOCS_URL || 'http://localhost:5174';
+const DOCS_URL = import.meta.env.VITE_DOCS_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5174' : 'https://visor-ecd-docs.onrender.com');
 
 // SVGs for Tandem-like icons
 const LogoIcon = () => (
@@ -192,58 +192,7 @@ const TopBar = ({
                             <span className="breadcrumb-project">{selectedProject.baseName || selectedProject.name}</span>
                             <span className="breadcrumb-sep">/</span>
                             <span className="breadcrumb-view">{selectedProject.frontName}</span>
-                            
-                            {/* Toolbar de Obra Lineal desplegable */}
-                            <div style={{ position: 'relative', marginLeft: '12px' }} ref={toolsRef}>
-                                <button 
-                                    className="tool-btn"
-                                    title="Herramientas de Obra Lineal"
-                                    onClick={(e) => { e.stopPropagation(); setIsProjectToolsOpen(!isProjectToolsOpen); }}
-                                    style={{ padding: '6px', background: isProjectToolsOpen ? 'rgba(255,255,255,0.1)' : 'transparent', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#cbd5e1' }}
-                                    onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
-                                    onMouseLeave={(e) => e.currentTarget.style.color = (isProjectToolsOpen ? '#fff' : '#cbd5e1')}
-                                >
-                                    <ToolboxIcon />
-                                </button>
-
-                                {isProjectToolsOpen && (
-                                    <div style={{
-                                        position: 'absolute',
-                                        top: '100%',
-                                        left: '0',
-                                        marginTop: '4px',
-                                        background: '#3A3A3A', 
-                                        border: '1px solid #444',
-                                        borderRadius: '6px',
-                                        boxShadow: '0 4px 12px rgba(0,0,0,0.6)',
-                                        padding: '8px',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '4px',
-                                        zIndex: 200,
-                                        minWidth: '190px'
-                                    }}>
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('toggle-progressives')); setIsProjectToolsOpen(false); }}
-                                            style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: 'transparent', border: 'none', color: '#E0E0E0', cursor: 'pointer', borderRadius: '4px', textAlign: 'left', width: '100%', fontSize: '13px', transition: 'all 0.15s ease' }}
-                                            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#fff'; }}
-                                            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#E0E0E0'; }}
-                                        >
-                                            <PinIcon />
-                                            Trazos y Progresivas
-                                        </button>
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('toggle-workfronts-panel')); setIsProjectToolsOpen(false); }}
-                                            style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: 'transparent', border: 'none', color: '#E0E0E0', cursor: 'pointer', borderRadius: '4px', textAlign: 'left', width: '100%', fontSize: '13px', transition: 'all 0.15s ease' }}
-                                            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#fff'; }}
-                                            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#E0E0E0'; }}
-                                        >
-                                            <HeatmapIcon />
-                                            Gestor de Heatmap
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
+                            {/* Toolbar de Obra Lineal desplegable se ha movido al Left Rail principal */}
                         </div>
                     )}
                 </div>

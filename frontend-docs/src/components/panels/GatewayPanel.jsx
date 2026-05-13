@@ -35,7 +35,8 @@ export default function GatewayPanel({ projectPrefix, onClose }) {
   const handleOpenFront = (front) => {
     // Intercepta en frontend-react App.jsx Gateway Interceptor (líneas 721-749)
     // Envía ?project=<prefix>&frente=<id>&fn=<nombre> para bootstrap automático
-    const url = `${VISOR_URL}/?project=${encodeURIComponent(projectPrefix)}&frente=${encodeURIComponent(front.id)}&fn=${encodeURIComponent(front.title)}`;
+    const frenteId = front.id.toUpperCase(); // CANAL, DRENAJE, INFRAWORKS
+    const url = `${VISOR_URL}/?project=${encodeURIComponent(projectPrefix)}&frente=${encodeURIComponent(frenteId)}&fn=${encodeURIComponent(front.title)}`;
     // Use window.location.href to keep everything in a single tab/window
     window.location.href = url;
   };

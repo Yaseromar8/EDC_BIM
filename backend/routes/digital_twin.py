@@ -218,12 +218,13 @@ def get_config_route():
     project_id = request.args.get('project')
     
     if project_id and 'models' in config:
-        # Filter models by internal 'userProjectId' (we'll use this key to distinguish from ACC's projectId)
-        # Or simply overload 'projectId' if it's not strictly ACC-bound? 
-        # ACC models use 'projectId' for the BIM360 Project ID.
-        # Let's use 'internalProjectId' or 'appContext' to avoid confusion.
-        # BETTER: Let's use 'appProjectId' for our filter "DRENAJE_URBANO" etc.
-        config['models'] = [m for m in config['models'] if m.get('appProjectId') == project_id]
+        # Filter models by internal 'appProjectId' ("DRENAJE_URBANO", "1_CANAL", etc)
+        # Apply a fallback to the base project ID (e.g., "1") if the exact front is not explicitly defined in the DB.
+        base_id = project_id.split('_')[0] if '_' in project_id else project_id
+        config['models'] = [
+            m for m in config['models'] 
+            if m.get('appProjectId') == project_id or m.get('appProjectId') == base_id
+        ]
     
     
     # NOTA: Se eliminó el Auto-Update silencioso que existía aquí.

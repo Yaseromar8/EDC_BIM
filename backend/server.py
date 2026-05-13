@@ -867,10 +867,15 @@ def get_inventory():
                     FROM inventory_assets
                 '''
             
-            # Agregar filtrado por frente (model_urn)
+            # Agregar filtrado por frente (model_urn) con fallback al proyecto base
             if model_urn and model_urn != 'global':
-                query += ' WHERE model_urn = %s'
-                params.append(model_urn)
+                base_urn = model_urn.split('_')[0]
+                if base_urn != model_urn:
+                    query += ' WHERE model_urn = %s OR model_urn = %s'
+                    params.extend([model_urn, base_urn])
+                else:
+                    query += ' WHERE model_urn = %s'
+                    params.append(model_urn)
             
             # Streaming Generator for Flask
             from flask import Response

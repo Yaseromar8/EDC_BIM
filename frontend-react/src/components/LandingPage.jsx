@@ -140,7 +140,7 @@ const LandingPage = ({ onSelectProject }) => {
         return '#f59e0b';
     };
 
-    const DOCS_URL = import.meta.env.VITE_DOCS_URL || 'http://localhost:5174';
+    const DOCS_URL = import.meta.env.VITE_DOCS_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5174' : 'https://visor-ecd-docs.onrender.com');
 
     if (selectedBaseProject) {
         return (
