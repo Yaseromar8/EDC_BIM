@@ -258,4 +258,41 @@
     color: #fff;
     font-size: 13px;
     font-weight: 500;
+}
+
+/* ==========================================
+   RESPONSIVE DESIGN FOR TABLETS & MOBILE
+   ========================================== */
+@media (max-width: 1024px) {
+    .top-search {
+        width: 180px;
+    }
+    .breadcrumb-project, .breadcrumb-sep {
+        display: none;
+    }
+    .top-bar-breadcrumb {
+        padding-left: 8px;
+        margin-left: 8px;
+    }
+}
+
+@media (max-width: 768px) {
+    .top-search {
+        width: 140px;
+    }
+    .breadcrumb-view {
+        display: none;
+    }
+    /* El botón del Toolbox (Capas) se mantiene visible */
+    .user-info {
+        display: none !important;
+    }
+    .user-profile-section {
+        border-left: none !important;
+        padding-left: 0 !important;
+        margin-left: 0 !important;
+    }
+    .top-bar-right .tool-btn span {
+        display: none; /* Oculta el texto "DOCS" */
+    }
 }
