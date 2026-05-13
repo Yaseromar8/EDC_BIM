@@ -838,13 +838,36 @@ def get_inventory():
             params = []
             
             if include_props:
+                # Utilizamos JSON_AGG en PostgreSQL y lo casteamos a ::text para evitar que 
+                # psycopg2 instancie miles de diccionarios en memoria de Python, previniendo el OOM en Render.
                 query = '''
-                    SELECT external_id, name, material, installation_status, vaciado_nro, properties, model_urn, source_urn 
+                    SELECT json_agg(
+                        json_build_object(
+                            'external_id', external_id,
+                            'name', name,
+                            'material', material,
+                            'installation_status', installation_status,
+                            'vaciado_nro', vaciado_nro,
+                            'model_urn', COALESCE(source_urn, model_urn),
+                            'source_urn', source_urn,
+                            'properties', properties
+                        )
+                    )::text
                     FROM inventory_assets
                 '''
             else:
                 query = '''
-                    SELECT external_id, name, material, installation_status, vaciado_nro, model_urn, source_urn 
+                    SELECT json_agg(
+                        json_build_object(
+                            'external_id', external_id,
+                            'name', name,
+                            'material', material,
+                            'installation_status', installation_status,
+                            'vaciado_nro', vaciado_nro,
+                            'model_urn', model_urn,
+                            'source_urn', source_urn
+                        )
+                    )::text
                     FROM inventory_assets
                 '''
             
@@ -854,32 +877,15 @@ def get_inventory():
                 params.append(model_urn)
             
             cursor.execute(query, tuple(params))
+            json_string = cursor.fetchone()[0] or "[]"
             
-            rows = cursor.fetchall()
-            
-            # Formateamos la respuesta
-            # Aseguramos parseo a String para evitar errores de serialización
-            inventory_list = []
-            for row in rows:
-                item = {
-                    'external_id': str(row[0]) if row[0] else None,
-                    'name': str(row[1]) if row[1] else "",
-                    'material': str(row[2]) if row[2] else "",
-                    'installation_status': str(row[3]) if row[3] else "",
-                    'vaciado_nro': str(row[4]) if row[4] else "",
-                    'model_urn': str(row[6] if include_props else row[5]) if (row[6] if include_props else row[5]) else None,
-                    'source_urn': str(row[7] if include_props else row[6]) if (row[7] if include_props else row[6]) else None
-                }
-                if include_props:
-                    item['properties'] = row[5] or {}
-                inventory_list.append(item)
-            
-            print(f"[API] /api/inventory OK: {len(inventory_list)} items (props={'YES' if include_props else 'NO'})")
+            print(f"[API] /api/inventory OK (optimized Postgres JSON streaming)")
             
             # Restaurar timeout del pool al valor original (30s)
             cursor.execute("SET statement_timeout = '30000'")
             
-            return jsonify(inventory_list), 200
+            from flask import Response
+            return Response(json_string, mimetype='application/json'), 200
             
     except Exception as e:
         import traceback
