@@ -51,8 +51,52 @@ body,
 }
 
 @media (max-width: 1024px) {
+  /* Convert vertical left rail → horizontal bottom tab bar on tablets & phones */
   .app-left-rail {
-    display: none;
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 56px;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    padding: 0;
+    border-right: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    background: #2a2a2a;
+    z-index: 2500;
+  }
+
+  .rail-button {
+    height: 100%;
+    width: auto;
+    flex: 1;
+    margin: 0;
+    border-radius: 0;
+    gap: 3px;
+    min-height: 44px; /* Touch-friendly minimum */
+  }
+
+  .rail-label {
+    font-size: 9px;
+  }
+
+  .rail-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Viewer: leave room for bottom bar */
+  .app-viewer {
+    height: calc(100vh - 48px - 56px) !important; /* TopBar + BottomBar */
+  }
+
+  /* Sidebar: don't overlap bottom bar */
+  .app-sidebar {
+    height: calc(100vh - 48px - 56px);
   }
 
   .desktop-rail-toggle {
@@ -1600,68 +1644,36 @@ div[class*="bim360-visual-style-group"] * {
 /* Focus: Bottom Navigation, Full Screen interactions */
 @media (max-width: 768px) {
 
-  /* A. Layout: Flip to Vertical (Viewer Top / Rail Bottom) */
-  .app-container {
-    flex-direction: column-reverse;
-  }
-
-  /* B. Navigation Rail -> Bottom Tab Bar */
+  /* A. Rail refinements for small screens */
   .app-left-rail {
-    width: 100%;
-    height: 60px;
-    /* Thumber friendly height */
-    flex-direction: row;
-    /* Horizontal Icons */
-    justify-content: space-around;
-    border-right: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 0;
-    z-index: 2000;
-    /* Always on top */
+    height: 52px;
     background: #1c2027;
   }
 
-  .rail-button {
-    height: 100%;
-    width: auto;
-    flex: 1;
-    /* Distribute evenly */
-    margin: 0;
-    border-radius: 0;
-    gap: 4px;
-  }
-
   .rail-label {
-    font-size: 10px;
-    /* Smaller text */
-    display: block;
-    /* Ensure visibility */
+    font-size: 8px;
   }
 
-  /* C. Sidebar Panels -> Full Screen Overlay */
+  /* B. Sidebar Panels → Full Screen Overlay */
   .app-sidebar {
     width: 100%;
     min-width: 100%;
     max-width: 100%;
-    height: calc(100% - 60px);
-    /* Full height minus bottom rail */
-    top: 0;
+    height: calc(100vh - 48px - 52px); /* TopBar + smaller BottomBar */
+    top: 48px;
     left: 0;
     border-right: none;
     z-index: 1500;
-    /* Above viewer, below rail */
     background: #1c2027;
-    /* Solid background */
   }
 
-  /* D. Viewer Area */
+  /* C. Viewer Area */
   .app-viewer {
     width: 100%;
-    height: calc(100% - 60px);
-    /* Leave room for rail */
+    height: calc(100vh - 48px - 52px) !important;
   }
 
-  /* E. Floating Doc Windows (Non-Parallel) */
+  /* D. Floating Doc Windows (Non-Parallel) */
   .split-doc:not(.parallel) {
     width: 96% !important;
     left: 2% !important;
@@ -1670,7 +1682,7 @@ div[class*="bim360-visual-style-group"] * {
     height: 50% !important;
   }
 
-  /* F. Modals */
+  /* E. Modals → Full Screen */
   .modal-panel {
     width: 100% !important;
     height: 100% !important;
