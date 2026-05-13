@@ -838,35 +838,31 @@ def get_inventory():
             params = []
             
             if include_props:
-                # Utilizamos JSON_AGG en PostgreSQL y lo casteamos a ::text para evitar que 
-                # psycopg2 instancie miles de diccionarios en memoria de Python, previniendo el OOM en Render.
+                # Retornamos el JSON directamente desde PostgreSQL por FILA, no agregado, 
+                # para poder hacer streaming fila por fila en Python y evitar RAM spikes.
                 query = '''
-                    SELECT json_agg(
-                        json_build_object(
-                            'external_id', external_id,
-                            'name', name,
-                            'material', material,
-                            'installation_status', installation_status,
-                            'vaciado_nro', vaciado_nro,
-                            'model_urn', COALESCE(source_urn, model_urn),
-                            'source_urn', source_urn,
-                            'properties', properties
-                        )
+                    SELECT json_build_object(
+                        'external_id', external_id,
+                        'name', name,
+                        'material', material,
+                        'installation_status', installation_status,
+                        'vaciado_nro', vaciado_nro,
+                        'model_urn', COALESCE(source_urn, model_urn),
+                        'source_urn', source_urn,
+                        'properties', properties
                     )::text
                     FROM inventory_assets
                 '''
             else:
                 query = '''
-                    SELECT json_agg(
-                        json_build_object(
-                            'external_id', external_id,
-                            'name', name,
-                            'material', material,
-                            'installation_status', installation_status,
-                            'vaciado_nro', vaciado_nro,
-                            'model_urn', model_urn,
-                            'source_urn', source_urn
-                        )
+                    SELECT json_build_object(
+                        'external_id', external_id,
+                        'name', name,
+                        'material', material,
+                        'installation_status', installation_status,
+                        'vaciado_nro', vaciado_nro,
+                        'model_urn', model_urn,
+                        'source_urn', source_urn
                     )::text
                     FROM inventory_assets
                 '''
@@ -876,16 +872,34 @@ def get_inventory():
                 query += ' WHERE model_urn = %s'
                 params.append(model_urn)
             
-            cursor.execute(query, tuple(params))
-            json_string = cursor.fetchone()[0] or "[]"
-            
-            print(f"[API] /api/inventory OK (optimized Postgres JSON streaming)")
-            
-            # Restaurar timeout del pool al valor original (30s)
-            cursor.execute("SET statement_timeout = '30000'")
-            
+            # Streaming Generator for Flask
             from flask import Response
-            return Response(json_string, mimetype='application/json'), 200
+            
+            def generate():
+                from db import get_db_connection
+                # Necesitamos nuestra propia conexión porque el yield es perezoso
+                with get_db_connection() as stream_conn:
+                    with stream_conn.cursor() as stream_cursor:
+                        stream_cursor.execute("SET statement_timeout = '120000'")
+                        stream_cursor.execute(query, tuple(params))
+                        
+                        yield '[\n'
+                        first = True
+                        while True:
+                            # fetchmany(100) para balancear I/O y memoria (aprox 1MB a la vez)
+                            rows = stream_cursor.fetchmany(100)
+                            if not rows:
+                                break
+                            
+                            for row in rows:
+                                if not first:
+                                    yield ',\n'
+                                yield row[0]
+                                first = False
+                                
+                        yield '\n]'
+            
+            return Response(generate(), mimetype='application/json'), 200
             
     except Exception as e:
         import traceback
