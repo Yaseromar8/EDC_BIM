@@ -53,7 +53,7 @@ PUBLIC_PREFIXES = (
     # ── Secure Share Engine ────────────────────────
     '/api/docs/shared/',      # Public UUID-based document viewer links
     '/api/views/',            # Public UUID-based shared views
-    '/api/inventory/',        # Inventory sync
+    '/api/inventory',         # Inventory sync (no trailing slash to match exact route)
 )
 
 
