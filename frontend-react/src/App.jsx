@@ -2591,10 +2591,20 @@ function App() {
   // Recalcular nativamente las cubetas cuando cambia la selección de filtros o de las categorías base
   useEffect(() => {
     if (availableProperties.length === 0) return; // No disparar si no ha cargado el esquema
-    console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Cambio en filtros (UI): Disparando recalculate-filters hacia LMV`);
-    window.dispatchEvent(new CustomEvent('recalculate-filters', {
-      detail: { filterProperties, filterSelections }
-    }));
+    
+    const triggerRecalc = () => {
+        console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Cambio detectado: Disparando recalculate-filters hacia LMV`);
+        window.dispatchEvent(new CustomEvent('recalculate-filters', {
+          detail: { filterProperties, filterSelections }
+        }));
+    };
+
+    triggerRecalc();
+
+    // Cuando un nuevo modelo termina de indexar su árbol (rosetta-ready), forzar recálculo
+    // para que la UI incluya sus elementos en los buckets de filtros.
+    window.addEventListener('rosetta-ready', triggerRecalc);
+    return () => window.removeEventListener('rosetta-ready', triggerRecalc);
   }, [filterProperties, filterSelections, availableProperties.length, hiddenModelUrns]);
 
   // Guardar en la UI las nuevas cubetas calculadas asincrónicamente por el Viewer LMV Worker
