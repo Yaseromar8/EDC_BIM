@@ -2641,7 +2641,7 @@ function App() {
     return <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', background: '#1c2027', color: 'white', fontFamily: 'sans-serif' }}><h3>Cargando Vista Compartida...</h3></div>;
   }
 
-  if (!selectedProject && !isSharedMode && !BYPASS_AUTH) {
+  if (!selectedProject && !isSharedMode) {
     return <LandingPage onSelectProject={setSelectedProject} />;
   }
 
