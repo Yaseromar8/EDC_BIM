@@ -198,7 +198,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     filename: file.name,
-                    gcs_urn: urlData.gcsUrn,
+                    gcs_urn: urlData.gcs_urn,
                     size_bytes: file.size,
                     mime_type: file.type || 'application/octet-stream',
                     path: uploadPath,
