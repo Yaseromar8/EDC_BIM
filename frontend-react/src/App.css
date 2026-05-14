@@ -176,6 +176,38 @@ body,
     z-index: 2000 !important;
     transition: none !important;
   }
+
+  /* 11. Docked panels (photo album, progress, etc.) — bottom sheet in portrait */
+  .split-doc.parallel {
+    position: fixed !important;
+    top: auto !important;
+    bottom: 56px !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    height: 33vh !important;
+    max-height: calc(100vh - 48px - 56px) !important;
+    border-radius: 16px 16px 0 0;
+    z-index: 2000 !important;
+    border-left: none !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+  }
+
+  /* 12. Floating panels (not docked) — also bottom sheet */
+  .split-doc.dark-float:not(.parallel) {
+    position: fixed !important;
+    top: auto !important;
+    bottom: 56px !important;
+    left: 5% !important;
+    right: 5% !important;
+    width: 90% !important;
+    height: 40vh !important;
+    max-height: calc(100vh - 48px - 56px) !important;
+    border-radius: 16px 16px 0 0;
+    z-index: 2500 !important;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.6);
+  }
 }
 
 /* ============================================================
