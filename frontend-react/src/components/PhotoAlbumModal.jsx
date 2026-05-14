@@ -420,23 +420,14 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         Vincular
                     </button>
 
-                    {/* 📸 Camera — opens built-in camera with device selector */}
-                    <button
-                        className="upload-btn"
-                        onClick={() => setShowCamera(true)}
-                        title="Tomar foto con cámara"
-                    >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-                        Cámara
-                    </button>
-
-                    {/* 📁 Gallery/Files — opens file picker for existing photos/videos */}
-                    <label className="upload-btn" title="Elegir de galería o archivos">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                        Galería
+                    {/* 📁 Upload — opens file/photo picker to select photos from gallery or camera apps */}
+                    <label className="upload-btn" title="Subir foto o video desde el dispositivo">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        Subir Foto
                         <input
                             type="file"
                             accept="image/*,video/*"
+                            multiple
                             style={{ display: 'none' }}
                             onChange={handleFileChange}
                         />
