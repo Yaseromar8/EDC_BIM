@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import './PhotoAlbumModal.css';
 import { uploadFile } from '../services/uploadService';
 import { enqueuePhoto, dequeuePhoto } from '../services/uploadQueue';
+import CameraCapture from './CameraCapture';
 import exifr from 'exifr';
 
 const MOCK_PHOTOS = [
@@ -39,6 +40,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
     const [browseFiles, setBrowseFiles] = useState([]);
     const [browseLoading, setBrowseLoading] = useState(false);
     const [toastMsg, setToastMsg] = useState(null); // { text, type: 'success' | 'error' }
+    const [showCamera, setShowCamera] = useState(false); // Built-in camera with device selection
     const activeUploadsRef = useRef(0);
 
     // 🛡️ Prevent accidental page refresh while photos are uploading
@@ -418,18 +420,15 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         Vincular
                     </button>
 
-                    {/* 📸 Camera — capture=environment forces camera to open */}
-                    <label className="upload-btn" title="Tomar foto con cámara">
+                    {/* 📸 Camera — opens built-in camera with device selector */}
+                    <button
+                        className="upload-btn"
+                        onClick={() => setShowCamera(true)}
+                        title="Tomar foto con cámara"
+                    >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
                         Cámara
-                        <input
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            style={{ display: 'none' }}
-                            onChange={handleFileChange}
-                        />
-                    </label>
+                    </button>
 
                     {/* 📁 Gallery/Files — opens file picker for existing photos/videos */}
                     <label className="upload-btn" title="Elegir de galería o archivos">
@@ -803,6 +802,16 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                     </div>
                 </div>
             )}
+
+            {/* 📸 Built-in Camera with Device Selector */}
+            <CameraCapture
+                isOpen={showCamera}
+                onClose={() => setShowCamera(false)}
+                onCapture={(file) => {
+                    // Feed captured photo through the same upload pipeline
+                    handleFileChange({ target: { files: [file] } });
+                }}
+            />
 
             {/* 🔔 Toast Notification for Upload Status */}
             {toastMsg && (
