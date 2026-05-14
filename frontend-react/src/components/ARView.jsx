@@ -108,7 +108,7 @@ const ARView = ({ models, initialCamera, onExit }) => {
 
         // AUTH LOGIC (Static vs Fetch)
         // Use Render backend URL for Capacitor (native app)
-        const BACKEND_URL = 'https://visor-ecd-backend.onrender.com';
+        const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location.hostname.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) ? `http://${window.location.hostname}:3000` : 'https://visor-ecd-backend.onrender.com')));
 
         const getAccessToken = (onSuccess) => {
             if (STATIC_TOKEN && STATIC_TOKEN.length > 10) {

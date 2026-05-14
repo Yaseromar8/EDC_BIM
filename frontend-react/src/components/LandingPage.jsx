@@ -3,9 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import './LandingPage.css';
 import { Capacitor } from '@capacitor/core';
 
-const BACKEND_URL = Capacitor.isNativePlatform()
-    ? 'https://visor-ecd-backend.onrender.com'
-    : (import.meta.env.VITE_BACKEND_URL || '');
+const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location.hostname.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) ? `http://${window.location.hostname}:3000` : 'https://visor-ecd-backend.onrender.com')));
 
 // ─── LandingPage (ACC-Style Hub + Project Selector) ─────────────────────────
 /*

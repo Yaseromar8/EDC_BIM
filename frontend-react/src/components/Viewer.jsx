@@ -8,7 +8,7 @@ import IconMarkupExtension from '../aps/extensions/IconMarkupExtension';
 import ProgressiveExtension from '../aps/extensions/ProgressiveExtension';
 import WorkfrontsPanel from './WorkfrontsPanel';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location.hostname.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) ? `http://${window.location.hostname}:3000` : 'https://visor-ecd-backend.onrender.com')));
 
 // Utilidad para normalizar base64 vs base64url-safe y comparar URNs sin cruzarse
 const normalizeUrn = (urn) => {
