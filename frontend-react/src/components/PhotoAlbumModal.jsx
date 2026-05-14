@@ -92,7 +92,19 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
     };
 
     // Ordenar fotos: Más recientes primero (por defecto)
-    const sortedPhotos = [...photos].sort((a, b) => {
+    const sortedPhotos = [...photos].map(p => {
+        let rawSrc = p.url || p.src;
+        if (rawSrc) {
+            if (rawSrc.includes('localhost:3000') && !BACKEND_URL.includes('localhost:3000')) {
+                rawSrc = rawSrc.replace(/http:\/\/localhost:3000/g, BACKEND_URL);
+            }
+            if (rawSrc.includes('/api/docs/proxy') && !rawSrc.includes('session_token=')) {
+                const tk = localStorage.getItem('visor_session_token') || 'DEMO_TOKEN';
+                rawSrc += (rawSrc.includes('?') ? '&' : '?') + `session_token=${tk}`;
+            }
+        }
+        return { ...p, src: rawSrc };
+    }).sort((a, b) => {
         const dateA = new Date(a.date || 0).getTime();
         const dateB = new Date(b.date || 0).getTime();
         return dateB - dateA;
