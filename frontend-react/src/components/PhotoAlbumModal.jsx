@@ -59,10 +59,10 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
     const handleOpenBrowser = (mode) => {
         setBrowseMode(mode);
         setBrowsing(true);
-        // Start from project root if possible, or pin's targetPath
+        // Start from project root — model_urn already isolates the project
         const initial = (mode === 'folder' && photos.length > 0 && photos[0].fullPath) 
             ? photos[0].fullPath.split('/').slice(0, -1).join('/') + '/'
-            : projectPrefix; 
+            : ''; // empty = project root
         fetchBrowseContents(initial);
     };
 
@@ -168,7 +168,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
             });
 
             // 3. Finalize upload in DB
-            const completeResp = await apiFetch(`${BACKEND_URL}/api/docs/upload-complete`, {
+            const completeResp = await apiFetch(`${BACKEND_URL}/api/docs/upload-confirm`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
