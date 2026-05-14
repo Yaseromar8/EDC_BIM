@@ -86,15 +86,15 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose }) =>
                             autoFocus
                             onKeyDown={e => e.key === 'Enter' && handleSave()}
                         />
-                        <button className="primary-btn sm" onClick={handleSave}>Save</button>
-                        <button className="secondary-btn sm" onClick={() => setIsCreating(false)}>X</button>
+                        <button type="button" className="primary-btn sm" onClick={handleSave}>Save</button>
+                        <button type="button" className="secondary-btn sm" onClick={() => setIsCreating(false)}>X</button>
                     </div>
                 ) : (
                     <>
-                        <button className="primary-btn wide" onClick={() => setIsCreating(true)}>
+                        <button type="button" className="primary-btn wide" onClick={() => setIsCreating(true)}>
                             <span className="btn-icon"><SaveIcon /></span> Save
                         </button>
-                        <button className="secondary-btn wide">
+                        <button type="button" className="secondary-btn wide">
                             + Save As...
                         </button>
                     </>
@@ -102,8 +102,8 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose }) =>
             </div>
 
             <div className="views-tabs">
-                <button className="tab active">List</button>
-                <button className="tab">Gallery</button>
+                <button type="button" className="tab active">List</button>
+                <button type="button" className="tab">Gallery</button>
             </div>
 
             <div className="views-search-bar">

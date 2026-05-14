@@ -177,8 +177,12 @@ def init_auth_middleware(app):
         if path in PUBLIC_ENDPOINTS:
             return None
             
-        # Specific public GET routes for Shared Views functionality
-        if request.method == 'GET' and path in ['/api/config/project', '/api/views']:
+        # Specific public routes for Gateway/BYPASS_AUTH mode
+        # /api/views: Allow all methods (save/delete views without session token)
+        # /api/config/project: Allow GET only (read config for shared views)
+        if path == '/api/views':
+            return None
+        if request.method == 'GET' and path == '/api/config/project':
             return None
         
         # Skip public prefixes
