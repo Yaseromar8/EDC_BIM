@@ -3,6 +3,7 @@ import { apiFetch } from '../utils/apiFetch';
 import React, { useState } from 'react';
 import './PhotoAlbumModal.css';
 import { uploadFile } from '../services/uploadService';
+import exifr from 'exifr';
 
 const MOCK_PHOTOS = [
     { id: 1, src: '/photo1.jpg', desc: 'Vaciado de losa' }, // Placeholder
@@ -125,6 +126,27 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
         const file = e.target.files[0];
         if (!file) return;
 
+        let captureDate = new Date();
+        
+        // 1. Intentar extraer EXIF DateTimeOriginal
+        try {
+            if (!isVideoFile(file.name)) {
+                const exifData = await exifr.parse(file, ['DateTimeOriginal']);
+                if (exifData && exifData.DateTimeOriginal) {
+                    captureDate = new Date(exifData.DateTimeOriginal);
+                    console.log("[PhotoAlbum] EXIF Date extracted:", captureDate);
+                } else if (file.lastModified) {
+                    captureDate = new Date(file.lastModified);
+                    console.log("[PhotoAlbum] Fallback to lastModified:", captureDate);
+                }
+            } else if (file.lastModified) {
+                // Video no tiene EXIF fácil en frontend, usamos lastModified
+                captureDate = new Date(file.lastModified);
+            }
+        } catch (err) {
+            console.warn("[PhotoAlbum] Could not extract EXIF date, using current date.", err);
+        }
+
         // Optimistic UI: Mostrar inmediatamente (con marca de subiendo)
         const temporaryUrl = URL.createObjectURL(file);
         const tempId = Date.now();
@@ -132,11 +154,12 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
             id: tempId,
             src: temporaryUrl,
             desc: file.name,
-            date: new Date().toISOString().split('T')[0],
-            displayDate: new Date().toLocaleDateString(),
+            date: captureDate.toISOString().split('T')[0], // Extract just the YYYY-MM-DD
+            displayDate: captureDate.toLocaleDateString(),
             fullPath: 'Subiendo...', 
             isUploading: true
         };
+
 
         if (onAddPhoto) {
             onAddPhoto(newPhotoTemp);
