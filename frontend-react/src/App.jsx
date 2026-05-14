@@ -772,7 +772,7 @@ function App() {
 
   const [progressPanelOpen, setProgressPanelOpen] = useState(false);
   const [selectedProgressPin, setSelectedProgressPin] = useState(null);
-  const [panelDocked, setPanelDocked] = useState(false); // PiP (false) vs Docked (true)
+  const [panelDocked, setPanelDocked] = useState(true); // Default to Docked instead of floating
   const [selectedElement, setSelectedElement] = useState(null); // New: Store { dbId, modelUrn } for detailed tracking
 
   // Doc Pin Panel State
