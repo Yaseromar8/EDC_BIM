@@ -10,7 +10,8 @@
 const AUTH_ENDPOINTS = ['/api/auth/login', '/api/auth/register', '/api/auth/google'];
 
 function getToken() {
-  return localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
+  const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
+  return token || 'DEMO_TOKEN';
 }
 
 function clearSession() {

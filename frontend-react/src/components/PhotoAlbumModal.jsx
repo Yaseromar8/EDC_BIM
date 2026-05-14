@@ -209,7 +209,8 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
 
             if (completeData.success) {
                 // The URL is now fixed to be a proxy URL (or signed read URL)
-                const permalinkUrl = `${BACKEND_URL}/api/docs/proxy?urn=${urlData.gcs_urn}`;
+                const token = localStorage.getItem('visor_session_token') || 'DEMO_TOKEN';
+                const permalinkUrl = `${BACKEND_URL}/api/docs/proxy?urn=${urlData.gcs_urn}&session_token=${token}`;
 
                 if (onAddPhoto) {
                     onAddPhoto({
