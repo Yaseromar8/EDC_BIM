@@ -194,19 +194,18 @@ body,
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
   }
 
-  /* 12. Floating panels (not docked) — also bottom sheet */
+  /* 12. Floating panels (not docked) — centered modal in portrait */
   .split-doc.dark-float:not(.parallel) {
     position: fixed !important;
-    top: auto !important;
-    bottom: 56px !important;
-    left: 5% !important;
-    right: 5% !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
     width: 90% !important;
-    height: 40vh !important;
-    max-height: calc(100vh - 48px - 56px) !important;
-    border-radius: 16px 16px 0 0;
+    height: 60vh !important;
+    max-height: calc(100vh - 48px - 56px - 20px) !important;
+    border-radius: 16px !important;
     z-index: 2500 !important;
-    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
   }
 }
 

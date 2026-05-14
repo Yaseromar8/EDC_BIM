@@ -3277,7 +3277,7 @@ function App() {
                   onRename={(id, newTitle, extras) => handleTrackingPinUpdate('fotos', id, { val: newTitle, ...extras })}
                   modelUrn={selectedProject?.id || 'global'}
                   targetPath={selectedAlbumPin?.targetPath}
-                  projectPrefix={selectedProject?.name ? `proyectos/${selectedProject.name.replace(/ /g, '_')}/` : 'proyectos/'}
+                  projectPrefix={selectedProject?.name ? `proyectos/${selectedProject.name.replace(/ /g, '_')}` : 'proyectos'}
                 />
               </div>
             )}

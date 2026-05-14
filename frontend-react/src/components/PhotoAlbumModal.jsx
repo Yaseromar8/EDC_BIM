@@ -41,7 +41,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
     const fetchBrowseContents = async (path) => {
         setBrowseLoading(true);
         try {
-            const url = `${DOCS_API}/list?path=${encodeURIComponent(path)}&model_urn=${encodeURIComponent(modelUrn)}`;
+            const url = `${DOCS_API}/list?path=${encodeURIComponent(path)}&model_urn=${encodeURIComponent(projectPrefix)}`;
             const res = await apiFetch(url);
             const data = await res.json();
             if (data.success) {
