@@ -539,3 +539,8 @@
 .confirm-btn:hover {
     background: #16a34a;
 }
+/* Toast animation for upload notifications */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}

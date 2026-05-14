@@ -1,6 +1,6 @@
 import { apiFetch } from '../utils/apiFetch';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './PhotoAlbumModal.css';
 import { uploadFile } from '../services/uploadService';
 import exifr from 'exifr';
@@ -37,6 +37,26 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
     const [browseFolders, setBrowseFolders] = useState([]);
     const [browseFiles, setBrowseFiles] = useState([]);
     const [browseLoading, setBrowseLoading] = useState(false);
+    const [toastMsg, setToastMsg] = useState(null); // { text, type: 'success' | 'error' }
+    const activeUploadsRef = useRef(0);
+
+    // 🛡️ Prevent accidental page refresh while photos are uploading
+    useEffect(() => {
+        const handleBeforeUnload = (e) => {
+            if (activeUploadsRef.current > 0) {
+                e.preventDefault();
+                e.returnValue = 'Hay fotos subiendo. Si sales ahora se perderán.';
+                return e.returnValue;
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, []);
+
+    const showToast = (text, type = 'success') => {
+        setToastMsg({ text, type });
+        setTimeout(() => setToastMsg(null), 4000);
+    };
 
     const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location.hostname.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) ? `http://${window.location.hostname}:3000` : 'https://visor-ecd-backend.onrender.com')));
     const DOCS_API = `${BACKEND_URL}/api/docs`;
@@ -184,6 +204,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
 
         const uploadPath = targetPath || `Fotos_Generales/Tracking/pin_${pinId}/`;
 
+        activeUploadsRef.current++;
         try {
             // 1. Get Signed URL
             const urlResp = await apiFetch(`${BACKEND_URL}/api/docs/upload-url`, {
@@ -233,15 +254,15 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         tempId: tempId
                     }, true);
                 }
+                showToast('✅ Foto guardada en la nube', 'success');
             } else {
-                alert(`Error al registrar la foto: ${completeData.error}`);
+                showToast(`❌ Error: ${completeData.error}`, 'error');
             }
         } catch (err) {
             console.error("Upload error:", err);
-            alert(`Error de conexión al subir la foto: ${err.message}`);
+            showToast(`❌ Error de conexión: ${err.message}`, 'error');
         } finally {
-            // setIsUploading(false); // Background uploads don't block
-            // setUploadProgress(0);
+            activeUploadsRef.current = Math.max(0, activeUploadsRef.current - 1);
         }
     };
 
@@ -739,6 +760,30 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                             )}
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* 🔔 Toast Notification for Upload Status */}
+            {toastMsg && (
+                <div style={{
+                    position: 'fixed',
+                    bottom: '80px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: toastMsg.type === 'success' ? 'rgba(16, 185, 129, 0.95)' : 'rgba(239, 68, 68, 0.95)',
+                    color: 'white',
+                    padding: '12px 24px',
+                    borderRadius: '12px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    zIndex: 99999,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                    backdropFilter: 'blur(8px)',
+                    animation: 'fadeInUp 0.3s ease',
+                    pointerEvents: 'none',
+                    whiteSpace: 'nowrap'
+                }}>
+                    {toastMsg.text}
                 </div>
             )}
         </div>
