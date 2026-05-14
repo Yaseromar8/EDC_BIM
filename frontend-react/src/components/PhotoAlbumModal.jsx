@@ -114,8 +114,13 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
 
     // Ordenar fotos: Más recientes primero (por defecto)
     const sortedPhotos = [...photos].map(p => {
-        let rawSrc = p.url || p.src;
+        // Priority: src (has GCS UUID URL) > url (may have broken fullPath URL)
+        let rawSrc = p.src || p.url;
         if (rawSrc) {
+            // Handle relative URLs from the backend (e.g. "/api/docs/proxy?...")
+            if (rawSrc.startsWith('/api/')) {
+                rawSrc = `${BACKEND_URL}${rawSrc}`;
+            }
             if (rawSrc.includes('localhost:3000') && !BACKEND_URL.includes('localhost:3000')) {
                 rawSrc = rawSrc.replace(/http:\/\/localhost:3000/g, BACKEND_URL);
             }
