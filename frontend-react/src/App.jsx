@@ -24,7 +24,7 @@ import PdfViewer from './components/PdfViewer';
 
 
 import { uploadFile } from './services/uploadService';
-import { processPendingUploads } from './services/uploadQueue';
+import { processPendingUploads, getPendingThumbnails } from './services/uploadQueue';
 import { apiFetch } from './utils/apiFetch';
 
 // =====================================================================
@@ -2098,14 +2098,32 @@ function App() {
     // 📸 DALUX-STYLE: Resume any pending photo uploads from IndexedDB
     const resumePendingUploads = async () => {
       try {
+        // STEP 1: Show thumbnails IMMEDIATELY from IndexedDB (user sees them right away)
+        const pendingThumbs = await getPendingThumbnails();
+        if (pendingThumbs.length > 0) {
+          console.log(`[App] 📸 Showing ${pendingThumbs.length} pending thumbnail(s) from local storage`);
+          setTrackingData(prev => {
+            const updatedFotos = prev.fotos.map(pin => {
+              const thumbsForPin = pendingThumbs.filter(t => String(t.pinId) === String(pin.id));
+              if (thumbsForPin.length === 0) return pin;
+              const existingIds = new Set((pin.photos || []).map(p => String(p.id)));
+              const newPhotos = thumbsForPin
+                .filter(t => !existingIds.has(String(t.photo.id)))
+                .map(t => t.photo);
+              return { ...pin, photos: [...(pin.photos || []), ...newPhotos] };
+            });
+            return { ...prev, fotos: updatedFotos };
+          });
+        }
+
+        // STEP 2: Upload in background (replace blob URL with permanent cloud URL when done)
         await processPendingUploads(
-          // onPhotoUploaded callback: inject recovered photo into tracking state
+          // onPhotoUploaded callback: replace temp thumbnail with cloud URL
           (pinId, photoData) => {
-            console.log(`[App] 🔄 Recovered pending photo for pin ${pinId}`);
+            console.log(`[App] ✅ Pending photo uploaded for pin ${pinId}`);
             setTrackingData(prev => {
               const updatedFotos = prev.fotos.map(pin => {
                 if (String(pin.id) === String(pinId)) {
-                  // Replace temp placeholder or add new
                   const existingIds = (pin.photos || []).map(p => String(p.id));
                   if (existingIds.includes(String(photoData.id))) {
                     return {
@@ -2130,7 +2148,7 @@ function App() {
       }
     };
     // Small delay to let tracking data load first
-    setTimeout(resumePendingUploads, 3000);
+    setTimeout(resumePendingUploads, 2000);
 
   }, [selectedProject]);
 

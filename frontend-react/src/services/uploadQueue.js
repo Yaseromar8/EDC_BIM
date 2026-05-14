@@ -128,6 +128,33 @@ export async function getPendingCount() {
 }
 
 /**
+ * Get pending photos with temporary blob URLs for thumbnail display.
+ * This allows showing thumbnails immediately on page load while uploads resume.
+ * Returns: [{ pinId, photo: { id, src (blob URL), desc, date, isUploading: true } }]
+ */
+export async function getPendingThumbnails() {
+    const pending = await getPendingPhotos();
+    return pending.map(item => {
+        // Create a temporary blob URL from the stored ArrayBuffer
+        const blob = new Blob([item.fileData], { type: item.fileType });
+        const blobUrl = URL.createObjectURL(blob);
+
+        return {
+            pinId: item.pinId,
+            photo: {
+                id: item.id,
+                src: blobUrl,
+                desc: item.desc || item.fileName,
+                date: item.captureDate?.split('T')[0],
+                displayDate: new Date(item.captureDate).toLocaleDateString(),
+                fullPath: 'Subiendo...',
+                isUploading: true
+            }
+        };
+    });
+}
+
+/**
  * Process all pending uploads. Call this on app startup.
  * @param {Function} onPhotoUploaded - callback(pinId, photoData) called for each successful upload
  * @param {Function} getBackendUrl - returns the BACKEND_URL string
