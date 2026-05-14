@@ -450,11 +450,7 @@
     cursor: zoom-out;
 }
 
-/* Override for inside panel */
-.album-panel-content .lightbox-overlay {
-    position: absolute;
-    /* width/height 100% inherited from above but context is different */
-}
+/* Removed override so lightbox always covers full screen */
 
 .lightbox-content {
     position: relative;

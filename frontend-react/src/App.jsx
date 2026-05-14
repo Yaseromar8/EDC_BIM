@@ -2323,6 +2323,33 @@ function App() {
     });
   };
 
+  const handleUpdatePhotoInPin = (pinId, photoId, newFields) => {
+    setTrackingData(prev => {
+      const updatedFotos = prev.fotos.map(pin => {
+        if (String(pin.id) === String(pinId)) {
+          return {
+            ...pin,
+            photos: (pin.photos || []).map(p => String(p.id) === String(photoId) ? { ...p, ...newFields } : p)
+          };
+        }
+        return pin;
+      });
+      const newState = { ...prev, fotos: updatedFotos };
+      saveTrackingData(newState);
+      return newState;
+    });
+
+    setSelectedAlbumPin(prev => {
+      if (prev && String(prev.id) === String(pinId)) {
+        return {
+          ...prev,
+          photos: (prev.photos || []).map(p => String(p.id) === String(photoId) ? { ...p, ...newFields } : p)
+        };
+      }
+      return prev;
+    });
+  };
+
   // Attach multiple docs to a pin in one go
   const handleAttachBatchDocsToPin = (pinId, newDocs, pinType = 'docs') => {
     setTrackingData(prev => {
@@ -3274,6 +3301,7 @@ function App() {
                   onAddPhoto={handleAddPhotoToPin}
                   onDelete={(id) => handleTrackingPinDelete('fotos', id)}
                   onDeletePhoto={handleDeletePhotoFromPin}
+                  onUpdatePhoto={handleUpdatePhotoInPin}
                   onRename={(id, newTitle, extras) => handleTrackingPinUpdate('fotos', id, { val: newTitle, ...extras })}
                   modelUrn={selectedProject?.id || 'global'}
                   targetPath={selectedAlbumPin?.targetPath}
