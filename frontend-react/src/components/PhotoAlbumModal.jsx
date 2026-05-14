@@ -386,63 +386,41 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         style={{
                             background: 'transparent',
                             border: 'none',
-                            color: '#ef4444',
+                            color: 'rgba(255,255,255,0.35)',
                             cursor: 'pointer',
                             display: onDelete ? 'flex' : 'none',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            padding: '8px',
-                            marginRight: '8px',
-                            opacity: 0.8
+                            padding: '6px'
                         }}
                         title="Eliminar Álbum"
                         className="album-delete-btn"
                     >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                     </button>
 
                     <button
                         className={`album-filter-toggle ${showFilters ? 'active' : ''}`}
                         onClick={() => setShowFilters(!showFilters)}
-                        title="Filtrar por fecha"
+                        title="Filtrar"
                     >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M22 3H2l8 9v7l4 3v-10L22 3z"></path>
                         </svg>
                     </button>
 
                     <button
-                        className="album-link-btn"
+                        className="upload-btn"
                         onClick={() => handleOpenBrowser('link')}
                         title="Vincular fotos del ECD"
-                        style={{
-                            background: 'rgba(59, 130, 246, 0.2)',
-                            border: '1px solid #3b82f6',
-                            color: '#60a5fa',
-                            padding: '6px 10px',
-                            borderRadius: '6px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            cursor: 'pointer'
-                        }}
                     >
-                        🔗 Vincular ECD
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        Vincular
                     </button>
 
-                    <label className="upload-btn" title="Tomar foto con cámara" style={{ padding: '6px 12px' }}>
-                        📷 Cámara
-                        <input
-                            type="file"
-                            accept="image/*"
-                            style={{ display: 'none' }}
-                            onChange={handleFileChange}
-                        />
-                    </label>
-                    <label className="upload-btn" title="Elegir de Galería o Archivos" style={{ padding: '6px 12px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', border: '1px solid #3b82f6' }}>
-                        📁 Galería
+                    <label className="upload-btn" title="Subir foto o video">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                        Subir
                         <input
                             type="file"
                             accept="image/*,video/*"
@@ -450,32 +428,33 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                             onChange={handleFileChange}
                         />
                     </label>
-                    <button className="album-close-btn" onClick={onClose}>&times;</button>
+
+                    <button className="album-close-btn" onClick={onClose}>✕</button>
                 </div>
             </header>
 
-            {/* Folder Configuration Label (Phase 20) */}
-            <div className="album-target-info" style={{ 
-                padding: '4px 16px', 
-                fontSize: '11px', 
-                color: '#555', 
-                background: '#f8f9fa',
-                borderBottom: '1px solid #e0e0e0',
+            {/* Folder Configuration Label */}
+            <div style={{ 
+                padding: '4px 14px', 
+                fontSize: '10px', 
+                color: 'rgba(255,255,255,0.3)', 
+                background: 'rgba(255,255,255,0.02)',
+                borderBottom: '1px solid rgba(255,255,255,0.04)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between'
             }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>📁 Alojamiento:</span>
-                    <span style={{ color: '#aaa', fontStyle: 'italic' }}>
-                        {targetPath || 'Ruta automática'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>Ruta:</span>
+                    <span style={{ color: 'rgba(255,255,255,0.2)', fontStyle: 'italic' }}>
+                        {targetPath || 'Automática'}
                     </span>
                 </div>
                 <button 
                     onClick={() => handleOpenBrowser('folder')}
-                    style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontSize: '10px', fontWeight: 600 }}
+                    style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', cursor: 'pointer', fontSize: '10px', fontWeight: 500 }}
                 >
-                    CAMBIAR CARPETA
+                    Cambiar
                 </button>
             </div>
 
@@ -650,34 +629,33 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        if (window.confirm('¿Eliminar definitivamente esta foto?')) {
+                                                        if (window.confirm('¿Eliminar esta foto?')) {
                                                             if (onDeletePhoto) onDeletePhoto(pinId, photo.id);
                                                             if (selectedPhoto && selectedPhoto.id === photo.id) setSelectedPhoto(null);
                                                         }
                                                     }}
                                                     className="photo-delete-btn"
-                                                    title="Eliminar Foto"
+                                                    title="Eliminar"
                                                     style={{
                                                         position: 'absolute',
-                                                        top: '6px',
-                                                        right: '6px',
-                                                        background: 'rgba(239, 68, 68, 0.9)',
-                                                        color: 'white',
+                                                        top: '4px',
+                                                        right: '4px',
+                                                        background: 'rgba(0,0,0,0.5)',
+                                                        color: 'rgba(255,255,255,0.8)',
                                                         border: 'none',
                                                         borderRadius: '50%',
-                                                        width: '24px',
-                                                        height: '24px',
+                                                        width: '20px',
+                                                        height: '20px',
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         justifyContent: 'center',
                                                         cursor: 'pointer',
                                                         zIndex: 5,
-                                                        fontSize: '16px',
-                                                        boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
-                                                        fontWeight: 'bold'
+                                                        fontSize: '12px',
+                                                        lineHeight: 1
                                                     }}
                                                 >
-                                                    &times;
+                                                    ✕
                                                 </button>
                                                 {isVideo ? (
                                                     <div style={{ position: 'relative', width: '100%', height: '100%' }}>

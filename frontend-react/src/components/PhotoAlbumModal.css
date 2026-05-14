@@ -1,24 +1,27 @@
+/* ============================================
+   PhotoAlbumModal — Dark Professional Theme
+   Matches VISOR APS interface (dark sidebar)
+   ============================================ */
+
 .album-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.4);
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
     z-index: 1000;
     display: flex;
     justify-content: center;
     align-items: center;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter', -apple-system, sans-serif;
 }
 
 .album-modal {
-    background: #ffffff;
-    border-radius: 12px;
-    width: 600px;
-    max-width: 90vw;
-    color: #333333;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    background: #1e2128;
+    border-radius: 8px;
+    width: 520px;
+    max-width: 92vw;
+    color: #e0e0e0;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -27,317 +30,285 @@
 .album-panel-content {
     width: 100%;
     height: 100%;
-    background: #f8f9fa;
+    background: #1a1d23;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    /* Reset Modal specific styles if any */
     border-radius: 0;
     box-shadow: none;
     position: relative;
-    /* Context for absolute children */
+    color: #e0e0e0;
 }
 
-/* Lightbox inside panel shoud be absolute/contained, not fixed/fullscreen */
-.album-panel-content .lightbox-overlay {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    border-radius: 0;
-    background: rgba(255, 255, 255, 0.95);
-}
-
+/* --- Header --- */
 .album-header {
-    padding: 16px 24px;
+    padding: 10px 14px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #ffffff;
-    border-bottom: 1px solid #e0e0e0;
+    background: #22252d;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    gap: 6px;
+    flex-wrap: wrap;
 }
 
 .album-title-group {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
 }
 
 .album-icon {
-    font-size: 20px;
+    font-size: 16px;
+    display: none; /* Hide emoji icon — keep it clean */
 }
 
 .album-title-group h3 {
-    font-size: 16px;
+    font-size: 13px;
     font-weight: 600;
-    color: #202124;
+    color: #ffffff;
     margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .pin-id {
-    color: #888;
-    font-size: 14px;
+    color: rgba(255,255,255,0.3);
+    font-size: 10px;
     font-weight: 400;
-    margin-left: 8px;
+    display: block;
 }
 
 .album-actions {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 6px;
+    flex-wrap: wrap;
 }
 
+/* --- Buttons --- */
 .upload-btn {
-    background: #3b82f6;
-    color: white;
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-size: 13px;
+    background: rgba(255,255,255,0.06);
+    color: #ccc;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 11px;
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.2s;
+    border: 1px solid rgba(255,255,255,0.1);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
+    transition: background 0.15s;
 }
 
 .upload-btn:hover {
-    background: #2563eb;
+    background: rgba(255,255,255,0.12);
+    color: #fff;
 }
 
 .album-close-btn {
     background: none;
     border: none;
-    font-size: 24px;
-    color: #5f6368;
+    font-size: 18px;
+    color: rgba(255,255,255,0.4);
     cursor: pointer;
-    transition: color 0.2s;
+    padding: 4px;
+    line-height: 1;
 }
 
 .album-close-btn:hover {
-    color: #202124;
+    color: #fff;
+}
+
+.album-delete-btn {
+    opacity: 0.5 !important;
+}
+.album-delete-btn:hover {
+    opacity: 1 !important;
 }
 
 .album-filter-toggle {
     background: transparent;
     border: none;
-    color: #5f6368;
+    color: rgba(255,255,255,0.4);
     cursor: pointer;
-    padding: 8px;
-    border-radius: 60%;
-    transition: all 0.2s;
+    padding: 6px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
 .album-filter-toggle:hover {
-    background: #f1f3f4;
-    color: #202124;
+    background: rgba(255,255,255,0.06);
+    color: #fff;
 }
 
 .album-filter-toggle.active {
-    background: rgba(26, 115, 232, 0.1);
-    color: #1a73e8;
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
 }
 
+/* --- Filter Bar --- */
 .album-filter-bar {
-    background: #f8f9fa;
-    padding: 10px 24px;
+    background: #22252d;
+    padding: 8px 14px;
     display: flex;
     align-items: center;
-    gap: 16px;
-    border-bottom: 1px solid #e0e0e0;
-    animation: slideDown 0.3s ease-out;
+    gap: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
     flex-wrap: wrap;
-    justify-content: flex-start;
 }
 
 .filter-presets {
     display: flex;
-    gap: 8px;
-    margin-right: 12px;
-    padding-right: 16px;
-    border-right: 1px solid #e0e0e0;
+    gap: 4px;
+    margin-right: 8px;
+    padding-right: 10px;
+    border-right: 1px solid rgba(255,255,255,0.08);
 }
 
 .preset-btn {
-    background: #ffffff;
-    border: 1px solid #dadce0;
-    color: #1a73e8;
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #aaa;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
 }
 
 .preset-btn:hover {
-    background: #1a73e8;
-    color: white;
-}
-
-@keyframes slideDown {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.timeline-section {
-    margin-bottom: 32px;
-}
-
-.timeline-header {
-    position: sticky;
-    top: -24px; /* Adjust based on parent padding/header */
-    background: #f8f9fa;
-    padding: 8px 12px;
-    margin: 0 0 16px 0;
-    font-size: 13px;
-    font-weight: 700;
-    color: #1a73e8;
-    text-transform: capitalize;
-    border-left: 3px solid #1a73e8;
-    z-index: 5;
-    box-shadow: 0 4px 6px -4px rgba(0,0,0,0.05);
+    background: rgba(255,255,255,0.12);
+    color: #fff;
 }
 
 .media-type-filter {
     display: flex;
-    background: #ffffff;
-    border-radius: 6px;
-    padding: 3px;
-    gap: 2px;
-    border: 1px solid #dadce0;
+    background: rgba(255,255,255,0.04);
+    border-radius: 4px;
+    padding: 2px;
+    gap: 1px;
+    border: 1px solid rgba(255,255,255,0.08);
 }
 
 .media-btn {
     background: transparent;
     border: none;
-    color: #5f6368;
-    padding: 4px 12px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
+    color: rgba(255,255,255,0.5);
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
 }
 
 .media-btn:hover {
-    color: #202124;
+    color: #fff;
 }
 
 .media-btn.active {
-    background: #3b82f6;
-    color: white;
-}
-
-.filter-group-text {
-    flex: 1;
-    min-width: 150px;
-    margin-right: 8px;
-}
-
-.album-search-input {
-    width: 100%;
-    background: #ffffff;
-    border: 1px solid #dadce0;
-    color: #333333;
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-size: 13px;
-    outline: none;
-    transition: all 0.2s;
-}
-
-.album-search-input:focus {
-    border-color: #1a73e8;
-    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+    background: rgba(59, 130, 246, 0.3);
+    color: #fff;
 }
 
 .filter-group {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
 
 .filter-group label {
-    font-size: 11px;
-    color: #888;
+    font-size: 10px;
+    color: rgba(255,255,255,0.4);
     text-transform: uppercase;
-    font-weight: 600;
+    font-weight: 500;
 }
 
 .filter-group input[type="date"] {
-    background: #ffffff;
-    border: 1px solid #dadce0;
-    color: #333333;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #ccc;
+    padding: 3px 6px;
+    border-radius: 3px;
+    font-size: 11px;
     outline: none;
-    transition: border-color 0.2s;
 }
 
 .filter-group input[type="date"]:focus {
-    border-color: #1a73e8;
+    border-color: #3b82f6;
 }
 
 .filter-clear-btn {
     background: transparent;
-    border: 1px solid #dadce0;
-    color: #5f6368;
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 11px;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.5);
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 10px;
     cursor: pointer;
-    transition: all 0.2s;
 }
 
 .filter-clear-btn:hover {
-    background: #f1f3f4;
-    color: #202124;
+    background: rgba(255,255,255,0.06);
+    color: #fff;
 }
 
 .filter-results-count {
     margin-left: auto;
-    font-size: 11px;
-    color: #5f6368;
-    font-weight: 500;
+    font-size: 10px;
+    color: rgba(255,255,255,0.35);
+    font-weight: 400;
+}
+
+.filter-group-text {
+    flex: 1;
+    min-width: 120px;
+}
+
+.album-search-input {
+    width: 100%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #e0e0e0;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+}
+
+.album-search-input:focus {
+    border-color: #3b82f6;
+}
+
+.album-search-input::placeholder {
+    color: rgba(255,255,255,0.25);
 }
 
 .text-btn {
     background: none;
     border: none;
-    color: #1a73e8;
-    text-decoration: underline;
+    color: #60a5fa;
+    text-decoration: none;
     cursor: pointer;
-    margin-top: 10px;
-    font-size: 13px;
-}
-
-.album-content {
-    padding: 24px;
-    overflow-y: auto;
-    max-height: 70vh;
-}
-
-.no-photos {
-    text-align: center;
-    color: #5f6368;
-    font-style: italic;
-    margin-bottom: 8px;
-}
-
-.hint {
-    text-align: center;
-    color: #80868b;
+    margin-top: 8px;
     font-size: 12px;
+}
+
+/* --- Content Area --- */
+.album-content {
+    padding: 14px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.album-panel-content .album-content {
+    max-height: none;
 }
 
 .empty-state {
@@ -345,33 +316,65 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 40px;
-    border: 2px dashed #dadce0;
-    border-radius: 8px;
-    margin: 20px 0;
-    background: #ffffff;
+    padding: 32px;
+    border: 1px dashed rgba(255,255,255,0.1);
+    border-radius: 6px;
+    margin: 12px 0;
+    background: rgba(255,255,255,0.02);
 }
 
+.no-photos {
+    text-align: center;
+    color: rgba(255,255,255,0.4);
+    font-size: 13px;
+    margin-bottom: 4px;
+}
+
+.hint {
+    text-align: center;
+    color: rgba(255,255,255,0.25);
+    font-size: 11px;
+}
+
+/* --- Timeline --- */
+.timeline-section {
+    margin-bottom: 20px;
+}
+
+.timeline-header {
+    position: sticky;
+    top: -14px;
+    background: #1a1d23;
+    padding: 6px 0;
+    margin: 0 0 10px 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.5);
+    text-transform: capitalize;
+    border-left: 2px solid rgba(255,255,255,0.15);
+    padding-left: 10px;
+    z-index: 5;
+}
+
+/* --- Photo Grid --- */
 .photo-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 8px;
 }
 
 .photo-item {
     cursor: pointer;
-    border-radius: 8px;
+    border-radius: 4px;
     overflow: hidden;
     position: relative;
     aspect-ratio: 4/3;
-    transition: transform 0.2s, box-shadow 0.2s;
-    background: #f1f3f4;
-    border: 1px solid #e0e0e0;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
 }
 
 .photo-item:hover {
-    transform: scale(1.02);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    border-color: rgba(255,255,255,0.15);
 }
 
 .photo-item img,
@@ -382,23 +385,30 @@
     display: block;
 }
 
+.photo-delete-btn {
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.photo-item:hover .photo-delete-btn {
+    opacity: 1;
+}
+
 .video-play-overlay {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: rgba(255, 255, 255, 0.8);
-    color: #333333;
-    width: 32px;
-    height: 32px;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
-    border: 2px solid rgba(0, 0, 0, 0.1);
+    font-size: 12px;
     pointer-events: none;
-    /* Let clicks pass through to the container */
 }
 
 .photo-desc {
@@ -406,141 +416,72 @@
     bottom: 0;
     left: 0;
     right: 0;
-    background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
     color: #fff;
-    padding: 12px 8px 6px;
-    opacity: 1;
-    /* Always show for context, or fade in on hover? User might want to see dates always */
-    transition: opacity 0.2s;
+    padding: 16px 6px 4px;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
 }
 
 .p-desc-text {
-    font-size: 11px;
-    font-weight: 500;
+    font-size: 10px;
+    font-weight: 400;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    color: rgba(255,255,255,0.85);
 }
 
 .p-date-text {
     font-size: 9px;
-    color: #aaa;
+    color: rgba(255,255,255,0.4);
     font-weight: 400;
 }
 
-.photo-item:hover .photo-desc {
-    background: rgba(0, 0, 0, 0.85);
-}
-
-/* Lightbox Styling */
-.lightbox-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(255, 255, 255, 0.95);
-    z-index: 1100;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: zoom-out;
-}
-
-/* Removed override so lightbox always covers full screen */
-
-.lightbox-content {
-    position: relative;
-    max-width: 90vw;
-    max-height: 90vh;
-    cursor: default;
-    background: #ffffff;
-    border-radius: 8px;
-    padding: 16px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-}
-
-.lightbox-content img {
-    max-width: 100%;
-    max-height: 80vh;
-    border-radius: 4px;
-    display: block;
-    margin: 0 auto;
-}
-
-.lightbox-content p {
-    color: #555555;
-    text-align: center;
-    margin-top: 12px;
-    font-size: 14px;
-}
-
-.lightbox-close {
-    position: absolute;
-    top: -16px;
-    right: -16px;
-    background: #ffffff;
-    border: 1px solid #dadce0;
-    color: #333333;
-    font-size: 24px;
-    cursor: pointer;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-}
-
-.lightbox-close:hover {
-    background: #f1f3f4;
-}
-
+/* --- Title Edit --- */
 .album-title-input {
-    background: #ffffff;
-    border: 1px solid #1a73e8;
-    color: #333333;
-    font-size: 16px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid #3b82f6;
+    color: #fff;
+    font-size: 13px;
     font-weight: 600;
     padding: 2px 8px;
-    border-radius: 4px;
+    border-radius: 3px;
     outline: none;
-    width: 200px;
+    width: 160px;
 }
 
 .rename-btn {
     background: transparent;
     border: none;
     cursor: pointer;
-    font-size: 12px;
-    opacity: 0.5;
-    transition: opacity 0.2s;
-    padding: 4px;
+    font-size: 11px;
+    opacity: 0.3;
+    padding: 2px;
 }
 
 .rename-btn:hover {
-    opacity: 1;
+    opacity: 0.8;
 }
 
 .confirm-btn {
-    background: #22c55e;
+    background: #3b82f6;
     border: none;
     color: white;
     padding: 2px 8px;
-    border-radius: 4px;
+    border-radius: 3px;
     cursor: pointer;
-    font-weight: bold;
+    font-weight: 500;
+    font-size: 12px;
 }
 
 .confirm-btn:hover {
-    background: #16a34a;
+    background: #2563eb;
 }
-/* Toast animation for upload notifications */
+
+/* --- Toast Animation --- */
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
