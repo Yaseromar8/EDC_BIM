@@ -321,7 +321,11 @@ def list_documents():
             if not parent_id and not is_project_root:
                 return jsonify({"success": True, "data": {"folders": [], "files": [], "current_node_id": None}}), 200
         else:
-            parent_id = None
+            # Empty path: use project root node if available
+            if model_urn and model_urn != 'global':
+                parent_id = ensure_project_root_node(model_urn)
+            else:
+                parent_id = None
 
         contents = list_contents(parent_id, model_urn, path, user=user)
 
