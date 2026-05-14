@@ -3,6 +3,7 @@ import { apiFetch } from '../utils/apiFetch';
 import React, { useState, useEffect, useRef } from 'react';
 import './PhotoAlbumModal.css';
 import { uploadFile } from '../services/uploadService';
+import { enqueuePhoto, dequeuePhoto } from '../services/uploadQueue';
 import exifr from 'exifr';
 
 const MOCK_PHOTOS = [
@@ -204,6 +205,17 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
 
         const uploadPath = targetPath || `Fotos_Generales/Tracking/pin_${pinId}/`;
 
+        // 🛡️ DALUX-STYLE: Save to IndexedDB FIRST (survives page close/refresh)
+        await enqueuePhoto({
+            id: tempId,
+            file,
+            pinId,
+            modelUrn,
+            uploadPath,
+            captureDate,
+            desc: file.name
+        });
+
         activeUploadsRef.current++;
         try {
             // 1. Get Signed URL
@@ -254,6 +266,8 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         tempId: tempId
                     }, true);
                 }
+                // ✅ Upload complete — remove from IndexedDB queue
+                await dequeuePhoto(tempId);
                 showToast('✅ Foto guardada en la nube', 'success');
             } else {
                 showToast(`❌ Error: ${completeData.error}`, 'error');

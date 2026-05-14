@@ -24,6 +24,7 @@ import PdfViewer from './components/PdfViewer';
 
 
 import { uploadFile } from './services/uploadService';
+import { processPendingUploads } from './services/uploadQueue';
 import { apiFetch } from './utils/apiFetch';
 
 // =====================================================================
@@ -2093,6 +2094,44 @@ function App() {
 
     fetchTracking();
     fetchDocPins();
+
+    // 📸 DALUX-STYLE: Resume any pending photo uploads from IndexedDB
+    const resumePendingUploads = async () => {
+      try {
+        await processPendingUploads(
+          // onPhotoUploaded callback: inject recovered photo into tracking state
+          (pinId, photoData) => {
+            console.log(`[App] 🔄 Recovered pending photo for pin ${pinId}`);
+            setTrackingData(prev => {
+              const updatedFotos = prev.fotos.map(pin => {
+                if (String(pin.id) === String(pinId)) {
+                  // Replace temp placeholder or add new
+                  const existingIds = (pin.photos || []).map(p => String(p.id));
+                  if (existingIds.includes(String(photoData.id))) {
+                    return {
+                      ...pin,
+                      photos: pin.photos.map(p => String(p.id) === String(photoData.id) ? photoData : p)
+                    };
+                  }
+                  return { ...pin, photos: [...(pin.photos || []), photoData] };
+                }
+                return pin;
+              });
+              const newState = { ...prev, fotos: updatedFotos };
+              saveTrackingData(newState);
+              return newState;
+            });
+          },
+          // getBackendUrl
+          () => BACKEND_URL
+        );
+      } catch (e) {
+        console.error('[App] Error resuming pending uploads:', e);
+      }
+    };
+    // Small delay to let tracking data load first
+    setTimeout(resumePendingUploads, 3000);
+
   }, [selectedProject]);
 
   useEffect(() => {
