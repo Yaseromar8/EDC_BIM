@@ -1717,27 +1717,28 @@ div[class*="bim360-visual-style-group"] * {
    ========================================= */
 
 /* --- 1. TABLET & SMALLER DESKTOP (< 1024px) --- */
-/* Focus: Better Split View Stacking */
-@media (max-width: 1024px) {
+/* Focus: Better Split View Stacking (PORTRAIT ONLY) */
+@media (max-width: 1024px) and (orientation: portrait) {
 
-  /* Stack Parallel View Vertically (Top 3D / Bottom 2D) */
+  /* Viewer keeps space for panel at bottom */
   .app-container:has(.split-doc.parallel) .app-viewer {
-    height: 50% !important;
+    height: calc(100vh - 48px - 56px - 33vh) !important;
     width: 100% !important;
   }
 
   .split-doc.parallel {
     width: 100% !important;
-    height: 50% !important;
-    position: absolute !important;
-    bottom: 16px !important;
-    /* Raised slightly from bottom */
+    height: 33vh !important;
+    position: fixed !important;
+    bottom: 56px !important;
     left: 0 !important;
     top: auto !important;
-    right: auto !important;
+    right: 0 !important;
     border-left: none !important;
-    border-top: 4px solid #111;
-    z-index: 1001;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 16px 16px 0 0;
+    z-index: 2000 !important;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
   }
 }
 
