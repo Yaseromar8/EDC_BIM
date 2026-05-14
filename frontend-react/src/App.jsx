@@ -2041,7 +2041,7 @@ function App() {
 
   // Load Tracking Data on Mount or Project Change
   useEffect(() => {
-    if (!user) return; // Prevent fetching if not logged in
+    if (!user && !BYPASS_AUTH) return; // Prevent fetching if not logged in (skip guard in demo mode)
 
     const fetchTracking = async () => {
       try {
