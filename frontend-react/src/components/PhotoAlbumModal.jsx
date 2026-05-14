@@ -23,6 +23,8 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [tempTitle, setTempTitle] = useState("");
     const [selectedPhoto, setSelectedPhoto] = useState(null);
+    const [editingDesc, setEditingDesc] = useState(false);
+    const [tempDesc, setTempDesc] = useState("");
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [showFilters, setShowFilters] = useState(photos.length > 20); // Auto-show if many
@@ -672,47 +674,53 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                             <img src={selectedPhoto.src} alt="Detalle ampliado" onError={(e) => e.target.src = FALLBACK_IMG} />
                         )}
                         <div className="lightbox-caption" style={{ marginTop: '12px', textAlign: 'center' }}>
-                            {(() => {
-                                const [editingDesc, setEditingDesc] = React.useState(false);
-                                const [tempDesc, setTempDesc] = React.useState(selectedPhoto.desc || "");
-
-                                const handleSave = () => {
-                                    if (tempDesc !== selectedPhoto.desc) {
-                                        if (onUpdatePhoto) onUpdatePhoto(pinId, selectedPhoto.id, { desc: tempDesc });
-                                        setSelectedPhoto({ ...selectedPhoto, desc: tempDesc });
-                                    }
-                                    setEditingDesc(false);
-                                };
-
-                                if (editingDesc) {
-                                    return (
-                                        <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                                            <input 
-                                                autoFocus
-                                                value={tempDesc}
-                                                onChange={e => setTempDesc(e.target.value)}
-                                                onBlur={handleSave}
-                                                onKeyDown={e => e.key === 'Enter' && handleSave()}
-                                                style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', minWidth: '250px' }}
-                                                placeholder="Descripción de la foto..."
-                                            />
-                                            <button onClick={handleSave} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', padding: '0 12px', cursor: 'pointer' }}>✓</button>
-                                        </div>
-                                    );
-                                }
-
-                                return (
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                        <span style={{ fontSize: '15px', color: '#333' }}>{selectedPhoto.desc || "Sin descripción"}</span>
-                                        <button 
-                                            onClick={() => setEditingDesc(true)}
-                                            style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6, fontSize: '14px' }}
-                                            title="Editar descripción"
-                                        >✏️</button>
-                                        {selectedPhoto.displayDate && <span style={{ color: '#888', fontSize: '13px', marginLeft: '8px' }}>• {selectedPhoto.displayDate}</span>}
-                                    </div>
-                                );
-                            })()}
+                            {editingDesc ? (
+                                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                                    <input 
+                                        autoFocus
+                                        value={tempDesc}
+                                        onChange={e => setTempDesc(e.target.value)}
+                                        onBlur={() => {
+                                            if (tempDesc !== selectedPhoto.desc) {
+                                                if (onUpdatePhoto) onUpdatePhoto(pinId, selectedPhoto.id, { desc: tempDesc });
+                                                setSelectedPhoto({ ...selectedPhoto, desc: tempDesc });
+                                            }
+                                            setEditingDesc(false);
+                                        }}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter') {
+                                                if (tempDesc !== selectedPhoto.desc) {
+                                                    if (onUpdatePhoto) onUpdatePhoto(pinId, selectedPhoto.id, { desc: tempDesc });
+                                                    setSelectedPhoto({ ...selectedPhoto, desc: tempDesc });
+                                                }
+                                                setEditingDesc(false);
+                                            }
+                                        }}
+                                        style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', minWidth: '250px' }}
+                                        placeholder="Descripción de la foto..."
+                                    />
+                                    <button onClick={() => {
+                                        if (tempDesc !== selectedPhoto.desc) {
+                                            if (onUpdatePhoto) onUpdatePhoto(pinId, selectedPhoto.id, { desc: tempDesc });
+                                            setSelectedPhoto({ ...selectedPhoto, desc: tempDesc });
+                                        }
+                                        setEditingDesc(false);
+                                    }} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', padding: '0 12px', cursor: 'pointer' }}>✓</button>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '15px', color: '#333' }}>{selectedPhoto.desc || "Sin descripción"}</span>
+                                    <button 
+                                        onClick={() => {
+                                            setTempDesc(selectedPhoto.desc || "");
+                                            setEditingDesc(true);
+                                        }}
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6, fontSize: '14px' }}
+                                        title="Editar descripción"
+                                    >✏️</button>
+                                    {selectedPhoto.displayDate && <span style={{ color: '#888', fontSize: '13px', marginLeft: '8px' }}>• {selectedPhoto.displayDate}</span>}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
