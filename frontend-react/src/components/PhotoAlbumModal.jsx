@@ -385,7 +385,6 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         <input
                             type="file"
                             accept="image/*"
-                            capture="environment"
                             style={{ display: 'none' }}
                             onChange={handleFileChange}
                         />
