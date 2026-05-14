@@ -236,6 +236,7 @@ const TandemSidebar = ({
                     pins={trackingData ? [
                         ...(trackingData.avance || []),
                         ...(trackingData.docs || []),
+                        ...(trackingData.fotos || []),
                         ...(trackingData.restricciones || []),
                         ...(trackingData.maquinaria || [])
                     ] : []}
@@ -243,6 +244,7 @@ const TandemSidebar = ({
                         const allPins = [
                             ...(trackingData.avance || []),
                             ...(trackingData.docs || []),
+                            ...(trackingData.fotos || []),
                             ...(trackingData.restricciones || []),
                             ...(trackingData.maquinaria || [])
                         ];

@@ -124,7 +124,8 @@ const BuildPanel = ({
         const typeMap = {
             'DOCS': 'docs',
             'AVANCE': 'avance',
-            'RESTRICCIONES': 'restriction'
+            'RESTRICCIONES': 'restriction',
+            'FOTOS': 'fotos'
         };
         const targetType = typeMap[activeTab];
         return pins.filter(p => p.type === targetType);
@@ -254,14 +255,15 @@ const BuildPanel = ({
                             <span className="sfp-section-title">
                                 {activeTab === 'DATA' ? 'Puntos de Control' :
                                     activeTab === 'DOCS' ? 'Documentos' :
-                                        activeTab === 'AVANCE' ? 'Avance' : 'Restricciones'}
+                                        activeTab === 'FOTOS' ? 'Fotos' :
+                                            activeTab === 'AVANCE' ? 'Avance' : 'Restricciones'}
                             </span>
                             <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         // Determine type based on tab
-                                        const typeMap = { 'DATA': 'data', 'DOCS': 'docs', 'AVANCE': 'avance', 'RESTRICCIONES': 'restriction' };
+                                        const typeMap = { 'DATA': 'data', 'DOCS': 'docs', 'FOTOS': 'fotos', 'AVANCE': 'avance', 'RESTRICCIONES': 'restriction' };
                                         onTogglePlacement(typeMap[activeTab]);
                                     }}
                                     className="sfp-import-text-btn"
@@ -300,12 +302,13 @@ const BuildPanel = ({
                                             <div className="sfp-item-row">
                                                 {/* Index Badge Color based on Type matching Viewer colors */}
                                                 <span className="pin-index-badge" style={{
-                                                    background: pin.type === 'restriction' ? '#f59e0b' : // Yellow/Orange
-                                                        pin.type === 'docs' ? '#3b82f6' :        // Blue
-                                                            pin.type === 'avance' ? '#9ca3af' :      // Grey
-                                                                    '#6b7280'                                // Default Grey
-                                                }}>
-                                                    {/* In DATA tab, index might be confusing if we filter, but filteredPins updates index. 
+                                            background: pin.type === 'restriction' ? '#f59e0b' : // Yellow/Orange
+                                                pin.type === 'docs' ? '#3b82f6' :        // Blue
+                                                    pin.type === 'fotos' ? '#3b82f6' :     // Blue
+                                                        pin.type === 'text' ? '#10b981' :      // Green
+                                                            pin.type === 'rfi' ? '#ef4444' :       // Red
+                                                                '#3b82f6' // Fallback (Blue)
+                                        }}>            {/* In DATA tab, index might be confusing if we filter, but filteredPins updates index. 
                                                        Wait, index comes from map. If filtering, indices change relative to view. Perfect.
                                                     */}
                                                     {index + 1}
