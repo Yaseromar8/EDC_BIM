@@ -377,8 +377,18 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         🔗 Vincular ECD
                     </button>
 
-                    <label className="upload-btn">
-                        + Subir Foto / Video
+                    <label className="upload-btn" title="Tomar foto con cámara" style={{ padding: '6px 12px' }}>
+                        📷 Cámara
+                        <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            style={{ display: 'none' }}
+                            onChange={handleFileChange}
+                        />
+                    </label>
+                    <label className="upload-btn" title="Elegir de Galería o Archivos" style={{ padding: '6px 12px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', border: '1px solid #3b82f6' }}>
+                        📁 Galería
                         <input
                             type="file"
                             accept="image/*,video/*"
