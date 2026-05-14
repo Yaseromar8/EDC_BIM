@@ -715,67 +715,97 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
             </div>
             )}
 
-            {/* Lightbox for Selected Photo */}
+            {/* Lightbox for Selected Photo — Clean, frameless, professional */}
             {selectedPhoto && (
-                <div className="lightbox-overlay" onClick={() => setSelectedPhoto(null)}>
-                    <div className="lightbox-content" onClick={e => e.stopPropagation()}>
-                        <button className="lightbox-close" onClick={() => setSelectedPhoto(null)}>&times;</button>
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.92)', zIndex: 99990,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
+                }} onClick={() => setSelectedPhoto(null)}>
+
+                    {/* Close button — top right */}
+                    <button onClick={() => setSelectedPhoto(null)} style={{
+                        position: 'absolute', top: '16px', right: '16px',
+                        background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+                        color: '#fff', width: '36px', height: '36px', borderRadius: '50%',
+                        fontSize: '18px', cursor: 'pointer', zIndex: 99991,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>✕</button>
+
+                    {/* Counter — top center */}
+                    <div style={{
+                        position: 'absolute', top: '16px', left: '50%', transform: 'translateX(-50%)',
+                        color: 'rgba(255,255,255,0.6)', fontSize: '13px', fontWeight: 500, zIndex: 99991
+                    }}>
+                        {(() => {
+                            const idx = filteredPhotos.findIndex(p => String(p.id) === String(selectedPhoto.id));
+                            return idx >= 0 ? `${idx + 1} / ${filteredPhotos.length}` : '';
+                        })()}
+                    </div>
+
+                    {/* Prev arrow */}
+                    {filteredPhotos.length > 1 && (
+                        <button onClick={(e) => {
+                            e.stopPropagation();
+                            const idx = filteredPhotos.findIndex(p => String(p.id) === String(selectedPhoto.id));
+                            const prev = idx > 0 ? filteredPhotos[idx - 1] : filteredPhotos[filteredPhotos.length - 1];
+                            setSelectedPhoto(prev);
+                        }} style={{
+                            position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)',
+                            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
+                            color: '#fff', width: '40px', height: '40px', borderRadius: '50%',
+                            fontSize: '20px', cursor: 'pointer', zIndex: 99991,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>‹</button>
+                    )}
+
+                    {/* Next arrow */}
+                    {filteredPhotos.length > 1 && (
+                        <button onClick={(e) => {
+                            e.stopPropagation();
+                            const idx = filteredPhotos.findIndex(p => String(p.id) === String(selectedPhoto.id));
+                            const next = idx < filteredPhotos.length - 1 ? filteredPhotos[idx + 1] : filteredPhotos[0];
+                            setSelectedPhoto(next);
+                        }} style={{
+                            position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+                            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
+                            color: '#fff', width: '40px', height: '40px', borderRadius: '50%',
+                            fontSize: '20px', cursor: 'pointer', zIndex: 99991,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>›</button>
+                    )}
+
+                    {/* Image/Video — no frame, no border, no padding */}
+                    <div onClick={e => e.stopPropagation()} style={{
+                        maxWidth: '92vw', maxHeight: '80vh', display: 'flex',
+                        flexDirection: 'column', alignItems: 'center'
+                    }}>
                         {selectedPhoto.src && (selectedPhoto.src.toLowerCase().endsWith('.mp4') || selectedPhoto.src.toLowerCase().endsWith('.webm') || selectedPhoto.src.toLowerCase().endsWith('.ogg')) ? (
                             <video
                                 src={selectedPhoto.src}
                                 controls
-                                style={{ maxHeight: '80vh', maxWidth: '100%' }}
+                                style={{ maxHeight: '78vh', maxWidth: '92vw', borderRadius: '2px' }}
                             />
                         ) : (
-                            <img src={selectedPhoto.src} alt="Detalle ampliado" onError={(e) => e.target.src = FALLBACK_IMG} />
+                            <img
+                                src={selectedPhoto.src}
+                                alt={selectedPhoto.desc || ''}
+                                onError={(e) => e.target.src = FALLBACK_IMG}
+                                style={{ maxHeight: '78vh', maxWidth: '92vw', objectFit: 'contain', borderRadius: '2px' }}
+                            />
                         )}
-                        <div className="lightbox-caption" style={{ marginTop: '12px', textAlign: 'center' }}>
-                            {editingDesc ? (
-                                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                                    <input 
-                                        autoFocus
-                                        value={tempDesc}
-                                        onChange={e => setTempDesc(e.target.value)}
-                                        onBlur={() => {
-                                            if (tempDesc !== selectedPhoto.desc) {
-                                                if (onUpdatePhoto) onUpdatePhoto(pinId, selectedPhoto.id, { desc: tempDesc });
-                                                setSelectedPhoto({ ...selectedPhoto, desc: tempDesc });
-                                            }
-                                            setEditingDesc(false);
-                                        }}
-                                        onKeyDown={e => {
-                                            if (e.key === 'Enter') {
-                                                if (tempDesc !== selectedPhoto.desc) {
-                                                    if (onUpdatePhoto) onUpdatePhoto(pinId, selectedPhoto.id, { desc: tempDesc });
-                                                    setSelectedPhoto({ ...selectedPhoto, desc: tempDesc });
-                                                }
-                                                setEditingDesc(false);
-                                            }
-                                        }}
-                                        style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', minWidth: '250px' }}
-                                        placeholder="Descripción de la foto..."
-                                    />
-                                    <button onClick={() => {
-                                        if (tempDesc !== selectedPhoto.desc) {
-                                            if (onUpdatePhoto) onUpdatePhoto(pinId, selectedPhoto.id, { desc: tempDesc });
-                                            setSelectedPhoto({ ...selectedPhoto, desc: tempDesc });
-                                        }
-                                        setEditingDesc(false);
-                                    }} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', padding: '0 12px', cursor: 'pointer' }}>✓</button>
-                                </div>
-                            ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                    <span style={{ fontSize: '15px', color: '#333' }}>{selectedPhoto.desc || "Sin descripción"}</span>
-                                    <button 
-                                        onClick={() => {
-                                            setTempDesc(selectedPhoto.desc || "");
-                                            setEditingDesc(true);
-                                        }}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6, fontSize: '14px' }}
-                                        title="Editar descripción"
-                                    >✏️</button>
-                                    {selectedPhoto.displayDate && <span style={{ color: '#888', fontSize: '13px', marginLeft: '8px' }}>• {selectedPhoto.displayDate}</span>}
-                                </div>
+
+                        {/* Caption — minimal */}
+                        <div style={{
+                            marginTop: '10px', color: 'rgba(255,255,255,0.8)',
+                            fontSize: '13px', textAlign: 'center', maxWidth: '90vw',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                        }}>
+                            <span>{selectedPhoto.desc || ''}</span>
+                            {selectedPhoto.displayDate && (
+                                <span style={{ color: 'rgba(255,255,255,0.4)', marginLeft: '10px' }}>
+                                    {selectedPhoto.displayDate}
+                                </span>
                             )}
                         </div>
                     </div>
