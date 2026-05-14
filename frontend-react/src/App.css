@@ -161,6 +161,21 @@ body,
   .sidebar-resizer {
     display: none !important;
   }
+
+  /* 10. Inventory panel — full width bottom sheet like other panels */
+  .inventory-overlay-panel {
+    position: fixed !important;
+    top: auto !important;
+    bottom: 56px !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    height: 33vh !important;
+    max-height: calc(100vh - 48px - 56px) !important;
+    border-radius: 16px 16px 0 0;
+    z-index: 2000 !important;
+    transition: none !important;
+  }
 }
 
 /* ============================================================
