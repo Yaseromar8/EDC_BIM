@@ -418,13 +418,14 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         Vincular
                     </button>
 
-                    {/* 📸 Camera — NO capture attr = Android shows app chooser (Open Camera, Google Camera, etc.) */}
+                    {/* 📸 Camera — capture=environment forces camera to open */}
                     <label className="upload-btn" title="Tomar foto con cámara">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
                         Cámara
                         <input
                             type="file"
                             accept="image/*"
+                            capture="environment"
                             style={{ display: 'none' }}
                             onChange={handleFileChange}
                         />
