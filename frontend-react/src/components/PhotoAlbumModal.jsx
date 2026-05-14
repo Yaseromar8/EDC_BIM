@@ -418,9 +418,36 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         Vincular
                     </button>
 
-                    <label className="upload-btn" title="Subir foto o video">
+                    {/* 📸 Back Camera (environment) — opens rear camera on tablet/mobile */}
+                    <label className="upload-btn" title="Cámara trasera">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-                        Subir
+                        Foto
+                        <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            style={{ display: 'none' }}
+                            onChange={handleFileChange}
+                        />
+                    </label>
+
+                    {/* 🤳 Front Camera (user) — opens selfie camera */}
+                    <label className="upload-btn" title="Cámara frontal">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="8" r="5"></circle><path d="M20 21a8 8 0 1 0-16 0"></path></svg>
+                        Selfie
+                        <input
+                            type="file"
+                            accept="image/*"
+                            capture="user"
+                            style={{ display: 'none' }}
+                            onChange={handleFileChange}
+                        />
+                    </label>
+
+                    {/* 📁 Gallery/Files — opens file picker */}
+                    <label className="upload-btn" title="Elegir de galería o archivos">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                        Galería
                         <input
                             type="file"
                             accept="image/*,video/*"
