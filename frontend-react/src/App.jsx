@@ -951,9 +951,11 @@ function App() {
         setPanelVisible(true);
       }
 
-      if (window.innerWidth < 1024) {
+      if (window.innerWidth < 1024 && window.innerWidth > window.innerHeight) {
+        // Landscape small screen: collapse rail like desktop
         setIsRailExpanded(false);
       }
+      // Portrait: rail stays visible (it's the bottom tab bar)
     }
   }, [activePanel, panelVisible]);
 
