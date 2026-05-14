@@ -2047,7 +2047,7 @@ function App() {
       try {
         const urn = selectedProject?.id || 'global';
         console.log(`[App] Fetching tracking data for urn: ${urn}`);
-        const res = await apiFetch(`${BACKEND_URL}/api/tracking?model_urn=${urn}&t=${Date.now()}`, {
+        const res = await apiFetch(`${BACKEND_URL}/api/project-pins?model_urn=${urn}&t=${Date.now()}`, {
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' }
         });
@@ -2108,7 +2108,7 @@ function App() {
   const saveTrackingData = async (newData) => {
     try {
       const urn = selectedProject?.id || 'global';
-      await apiFetch(`${BACKEND_URL}/api/tracking?model_urn=${urn}`, {
+      await apiFetch(`${BACKEND_URL}/api/project-pins?model_urn=${urn}`, {
         method: 'POST',
         body: JSON.stringify(newData)
       });

@@ -234,13 +234,13 @@ def get_tracking_data(model_urn='global'):
         traceback.print_exc()
     return data
 
-@tracking_bp.route('/api/tracking', methods=['GET'])
+@tracking_bp.route('/api/project-pins', methods=['GET'])
 def get_tracking():
     model_urn = request.args.get('model_urn', 'global')
     data = get_tracking_data(model_urn)
     return jsonify(data)
 
-@tracking_bp.route('/api/tracking', methods=['POST'])
+@tracking_bp.route('/api/project-pins', methods=['POST'])
 def update_tracking():
     """Actualiza la informacion en PostgreSQL basandose en el payload del cliente"""
     try:
@@ -381,7 +381,7 @@ def _upsert_pin(cursor, item, pin_type, model_urn):
             model_urn = EXCLUDED.model_urn, specialty = EXCLUDED.specialty
     ''', (pin_id, pin_type, x, y, z, val, color, json.dumps(extra, default=str), model_urn, item.get('specialty', 'General')))
 
-@tracking_bp.route('/api/tracking/photo', methods=['POST'])
+@tracking_bp.route('/api/project-pins/photo', methods=['POST'])
 def add_photo_to_pin():
     """Sube foto ligada a un PIN de Tracking hacia GCS y guarda en BD"""
     try:
@@ -423,7 +423,7 @@ def add_photo_to_pin():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@tracking_bp.route('/api/tracking/daily-reports', methods=['GET'])
+@tracking_bp.route('/api/project-pins/daily-reports', methods=['GET'])
 def list_daily_reports():
     model_urn = request.args.get('model_urn', 'global')
     try:
@@ -448,7 +448,7 @@ def list_daily_reports():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@tracking_bp.route('/api/tracking/daily-reports', methods=['POST'])
+@tracking_bp.route('/api/project-pins/daily-reports', methods=['POST'])
 def save_daily_report():
     data = request.json
     model_urn = data.get('model_urn', 'global')
