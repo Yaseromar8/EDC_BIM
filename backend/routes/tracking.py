@@ -319,18 +319,9 @@ def update_tracking():
             if 'fotos' in new_data:
                 # Remove old foto pins
                 cursor.execute("DELETE FROM tracking_pins WHERE pin_type = 'fotos' AND model_urn = %s", (model_urn,))
-                cursor.execute("DELETE FROM photo_evidences WHERE model_urn = %s", (model_urn,))
                 for pin_item in new_data['fotos']:
                     if pin_item.get('x') is not None:
                         _upsert_pin(cursor, pin_item, 'fotos', model_urn)
-                    # Also save photos to photo_evidences for legacy support
-                    pin_id = pin_item.get('id') or pin_item.get('pinId')
-                    for photo in pin_item.get('photos', []):
-                        cursor.execute('''
-                            INSERT INTO photo_evidences (pin_id, gcs_url, filename, model_urn)
-                            VALUES (%s, %s, %s, %s)
-                        ''', (pin_id, photo.get('url', photo.get('src', '')), photo.get('name', photo.get('desc', 'photo.jpg')), model_urn))
-
             # 4. Sincronizar 'docs' (3D pins with attached documents)
             if 'docs' in new_data:
                 cursor.execute("DELETE FROM tracking_pins WHERE pin_type = 'docs' AND model_urn = %s", (model_urn,))
