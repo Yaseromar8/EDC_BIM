@@ -2366,18 +2366,24 @@ function App() {
 
   const handleTrackingPinClick = useCallback((pin) => {
     console.log('[App] Pin Clicked:', pin);
-    if (trackingTab === 'fotos') {
+    // Use _trackingType (tagged by BuildPanel) as fallback if trackingTab is null or mismatched
+    const effectiveType = trackingTab || pin._trackingType;
+
+    if (effectiveType === 'fotos') {
       setSelectedAlbumPin(pin);
       setPhotoAlbumOpen(true);
-      setPanelDocked(false); // Start floating (PiP)
-    } else if (trackingTab === 'avance') {
+      setPanelDocked(false);
+      if (!trackingTab) setTrackingTab('fotos');
+    } else if (effectiveType === 'avance') {
       setSelectedProgressPin(pin);
       setProgressPanelOpen(true);
-      setPanelDocked(false); // Start floating (PiP)
-    } else if (trackingTab === 'docs' || trackingTab === 'restricciones' || trackingTab === 'rfis') {
+      setPanelDocked(false);
+      if (!trackingTab) setTrackingTab('avance');
+    } else if (effectiveType === 'docs' || effectiveType === 'restricciones' || effectiveType === 'rfis') {
       setSelectedDocPin(pin);
       setDocPinPanelOpen(true);
       setPanelDocked(false);
+      if (!trackingTab) setTrackingTab(effectiveType);
     }
   }, [trackingTab]);
 

@@ -241,12 +241,13 @@ const TandemSidebar = ({
                         ...(trackingData.maquinaria || [])
                     ] : []}
                     onPinSelect={(id) => {
+                        // Tag pins with their category type so the click handler knows which panel to open
                         const allPins = [
-                            ...(trackingData.avance || []),
-                            ...(trackingData.docs || []),
-                            ...(trackingData.fotos || []),
-                            ...(trackingData.restricciones || []),
-                            ...(trackingData.maquinaria || [])
+                            ...(trackingData.avance || []).map(p => ({ ...p, _trackingType: 'avance' })),
+                            ...(trackingData.docs || []).map(p => ({ ...p, _trackingType: 'docs' })),
+                            ...(trackingData.fotos || []).map(p => ({ ...p, _trackingType: 'fotos' })),
+                            ...(trackingData.restricciones || []).map(p => ({ ...p, _trackingType: 'restricciones' })),
+                            ...(trackingData.maquinaria || []).map(p => ({ ...p, _trackingType: 'maquinaria' }))
                         ];
                         const found = allPins.find(p => p.id === id);
                         if (found && onTrackingPinClick) onTrackingPinClick(found);
