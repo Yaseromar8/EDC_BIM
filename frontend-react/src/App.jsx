@@ -2164,10 +2164,23 @@ function App() {
   // Save Tracking Data Helper
   const saveTrackingData = async (newData) => {
     try {
+      // 🛡️ OFFLINE FIX: Never send "Subiendo..." pending photos to the backend.
+      // They are safe in IndexedDB and will be sent once they actually upload.
+      const sanitizedData = JSON.parse(JSON.stringify(newData));
+      
+      if (sanitizedData.fotos) {
+        sanitizedData.fotos = sanitizedData.fotos.map(pin => {
+          if (pin.photos) {
+            pin.photos = pin.photos.filter(p => !p.isUploading);
+          }
+          return pin;
+        });
+      }
+
       const urn = selectedProject?.id || 'global';
       await apiFetch(`${BACKEND_URL}/api/project-pins?model_urn=${urn}`, {
         method: 'POST',
-        body: JSON.stringify(newData)
+        body: JSON.stringify(sanitizedData)
       });
     } catch (e) {
       console.error("Failed to save tracking data", e);
