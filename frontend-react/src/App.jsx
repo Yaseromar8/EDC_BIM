@@ -3554,8 +3554,8 @@ function App() {
                   onAttachBatchDocs={(id, docs) => handleAttachBatchDocsToPin(id, docs, trackingTab)}
                   onRemoveDoc={(id, docId) => handleRemoveDocFromPin(id, docId, trackingTab)}
                   onRename={(id, newTitle) => handleTrackingPinUpdate(trackingTab, id, { val: newTitle })}
-                  projectPrefix={selectedProject?.name ? `proyectos/${selectedProject.name.replace(/ /g, '_')}/` : 'proyectos/'}
-                  modelUrn={selectedProject?.name ? `proyectos/${selectedProject.name.replace(/ /g, '_')}` : 'global'}
+                  projectPrefix={selectedProject?.baseName ? `proyectos/${selectedProject.baseName.replace(/ /g, '_')}/` : 'proyectos/'}
+                  modelUrn={selectedProject?.baseName ? `proyectos/${selectedProject.baseName.replace(/ /g, '_')}` : 'global'}
                 />
               </div>
             )}
