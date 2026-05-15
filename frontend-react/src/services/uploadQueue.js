@@ -222,6 +222,7 @@ export async function processPendingUploads(onPhotoUploaded, getBackendUrl) {
                         date: item.captureDate?.split('T')[0],
                         displayDate: new Date(item.captureDate).toLocaleDateString(),
                         fullPath: `${item.uploadPath}${item.fileName}`,
+                        gcs_urn: urlData.gcs_urn,
                         isUploading: false,
                         tempId: item.id
                     });

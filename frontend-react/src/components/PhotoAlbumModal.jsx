@@ -269,6 +269,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         ...newPhotoTemp,
                         src: permalinkUrl,
                         fullPath: `${uploadPath}${file.name}`,
+                        gcs_urn: urlData.gcs_urn,
                         isUploading: false,
                         tempId: tempId
                     }, true);
