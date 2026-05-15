@@ -161,6 +161,9 @@ def update_pin(pin_id):
     name = data.get('name')
     ptype = data.get('type')
     attachment_urn = data.get('attachment_urn')
+    x = data.get('x_coord')
+    y = data.get('y_coord')
+    z = data.get('z_coord')
     
     try:
         with get_db_connection() as conn:
@@ -177,10 +180,19 @@ def update_pin(pin_id):
             if attachment_urn is not None:
                 updates.append("attachment_urn = %s")
                 values.append(attachment_urn)
+            if x is not None:
+                updates.append("x_coord = %s")
+                values.append(x)
+            if y is not None:
+                updates.append("y_coord = %s")
+                values.append(y)
+            if z is not None:
+                updates.append("z_coord = %s")
+                values.append(z)
             
             updates.append("updated_at = CURRENT_TIMESTAMP")
             
-            if not updates:
+            if len(updates) <= 1:  # Only updated_at
                 return jsonify(data)
                 
             values.append(pin_id)

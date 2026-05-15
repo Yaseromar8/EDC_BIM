@@ -357,6 +357,15 @@ const BuildPanel = ({
                                                                 }}>
                                                                     <span className="sfp-menu-icon" style={{ fontSize: '12px' }}>✏️</span> Renombrar
                                                                 </button>
+                                                                {onPinMoveRequest && (
+                                                                    <button onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        onPinMoveRequest(pin.id);
+                                                                        setActiveMenu(null);
+                                                                    }}>
+                                                                        <span className="sfp-menu-icon" style={{ fontSize: '12px' }}>↔</span> Mover
+                                                                    </button>
+                                                                )}
                                                                 {/* Eliminado mover panel de maquinaria */}
                                                                 {/* 
                                                                 <button onClick={(e) => {

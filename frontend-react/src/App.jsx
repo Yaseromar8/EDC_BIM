@@ -704,6 +704,7 @@ function App() {
   // Seguimiento / Tracking State
   const [trackingTab, setTrackingTab] = useState(null); // 'avance' | 'fotos' | 'docs' | null
   const [trackingPlacementMode, setTrackingPlacementMode] = useState(false);
+  const [relocatingPin, setRelocatingPin] = useState(null); // { id, type } — pin being moved
   // Placeholder Mock Data (Should match Viewer internal logic or pass down)
   const [trackingData, setTrackingData] = useState({
     avance: [],
@@ -2342,6 +2343,27 @@ function App() {
     }
   };
 
+  // Handle Pin Relocation: user clicked a new position in the 3D viewer
+  const handlePinRelocateComplete = useCallback((newPos) => {
+    if (!relocatingPin) return;
+    const { id, type } = relocatingPin;
+    setRelocatingPin(null); // Exit relocate mode
+
+    // Update local state + sync to backend via saveTrackingData
+    setTrackingData(prev => {
+      const pins = prev[type] || [];
+      const updatedPins = pins.map(pin =>
+        String(pin.id) === String(id)
+          ? { ...pin, x: newPos.x, y: newPos.y, z: newPos.z }
+          : pin
+      );
+      const newState = { ...prev, [type]: updatedPins };
+      saveTrackingData(newState);
+      console.log(`[App] Pin ${id} reubicado a (${newPos.x.toFixed(2)}, ${newPos.y.toFixed(2)}, ${newPos.z.toFixed(2)})`);
+      return newState;
+    });
+  }, [relocatingPin]);
+
   const handleTrackingPinClick = useCallback((pin) => {
     console.log('[App] Pin Clicked:', pin);
     if (trackingTab === 'fotos') {
@@ -2976,6 +2998,21 @@ function App() {
             trackingPlacementMode={trackingPlacementMode}
             selectedPinId={selectedProgressPin?.id || selectedDocPin?.id || selectedAlbumPin?.id}
             onCameraCapture={handleCameraCapture}
+            onPinMoveRequest={(pinId) => {
+              // Determine pin type from trackingData
+              const types = ['avance', 'fotos', 'docs', 'restricciones', 'rfis', 'maquinaria'];
+              let foundType = null;
+              for (const t of types) {
+                if ((trackingData[t] || []).some(p => String(p.id) === String(pinId))) {
+                  foundType = t;
+                  break;
+                }
+              }
+              if (foundType) {
+                setRelocatingPin({ id: pinId, type: foundType });
+                console.log(`[App] Modo Mover activado para pin ${pinId} (${foundType})`);
+              }
+            }}
           />
         )}
 
@@ -3184,10 +3221,52 @@ function App() {
                   trackingPlacementMode={trackingPlacementMode}
                   onTrackingPinCreate={handleTrackingPinCreate}
                   onTrackingPinClick={handleTrackingPinClick}
+                  relocatingPin={relocatingPin}
+                  onPinRelocateComplete={handlePinRelocateComplete}
                   onSelectionChanged={setSelectedElement}
                   aiModelCommand={aiModelCommand}
                   hideToolbar={activePanel === 'progress'}
                 />
+
+                {/* PIN RELOCATE BANNER */}
+                {relocatingPin && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '12px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: 'rgba(59, 130, 246, 0.95)',
+                    color: '#fff',
+                    padding: '10px 24px',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    zIndex: 999,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                    backdropFilter: 'blur(8px)',
+                    animation: 'fadeIn 0.2s ease'
+                  }}>
+                    <span>📌 Haz clic en la nueva ubicación del pin</span>
+                    <button
+                      onClick={() => setRelocatingPin(null)}
+                      style={{
+                        background: 'rgba(255,255,255,0.2)',
+                        border: 'none',
+                        color: '#fff',
+                        padding: '4px 12px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: 600
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                )}
 
               </div>
 

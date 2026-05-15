@@ -88,7 +88,10 @@ const Viewer = ({
     // Gemelo / General Selection (removed - was only used for GemeloPropertiesPanel)
     onSelectionChanged,
     aiModelCommand,
-    hideToolbar = false
+    hideToolbar = false,
+    // Pin Relocation
+    relocatingPin,
+    onPinRelocateComplete
 }) => {
     // --- Refs ---
     const viewerRef = useRef(null);
@@ -309,6 +312,19 @@ const Viewer = ({
                 console.log("[CALIBRACION] Coordenada Visor:", hitForDebug.intersectPoint);
             }
 
+            // Priority 0: Pin Relocation ("Mover" mode)
+            if (relocatingPin && onPinRelocateComplete) {
+                const hit = viewer.impl.hitTest(x, y, false);
+                if (hit && hit.intersectPoint) {
+                    onPinRelocateComplete({
+                        x: hit.intersectPoint.x,
+                        y: hit.intersectPoint.y,
+                        z: hit.intersectPoint.z
+                    });
+                }
+                return;
+            }
+
             // Priority 1: Tracking Pins
             if (trackingPlacementMode) {
                 const hit = viewer.impl.hitTest(x, y, false);
@@ -385,7 +401,7 @@ const Viewer = ({
             }
         };
 
-        const isAnyPlacementActive = trackingPlacementMode || docPlacementMode || placementMode || buildPlacementMode;
+        const isAnyPlacementActive = !!relocatingPin || trackingPlacementMode || docPlacementMode || placementMode || buildPlacementMode;
 
         if (isAnyPlacementActive) {
             container.addEventListener('click', handleUnifiedClick, true); // Capture phase
@@ -400,7 +416,7 @@ const Viewer = ({
             container.removeEventListener('click', handleUnifiedClick, true);
             container.style.cursor = 'default';
         };
-    }, [viewerReady, trackingPlacementMode, docPlacementMode, placementMode, buildPlacementMode, trackingTab, onTrackingPinCreate, onDocPlacementComplete, onPlacementComplete, onBuildPinCreate]);
+    }, [viewerReady, relocatingPin, trackingPlacementMode, docPlacementMode, placementMode, buildPlacementMode, trackingTab, onTrackingPinCreate, onDocPlacementComplete, onPlacementComplete, onBuildPinCreate, onPinRelocateComplete]);
     // Ref to track if component is mounted - MOVED TO TOP for safety
     const mountedRef = useRef(true);
     const isInitializingRef = useRef(false);
