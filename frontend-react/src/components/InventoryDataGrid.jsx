@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from '
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../utils/apiFetch';
 import ColumnConfiguratorModal from './ColumnConfiguratorModal';
+import { Capacitor } from '@capacitor/core';
 
 const ROW_HEIGHT = 25; // Tandem SlickGrid: 25px per row (from DOM top:25px)
 const OVERSCAN = 10;
@@ -120,7 +121,8 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
         <div 
             data-inventory-dbid={row.dbId}
             style={{
-                position: 'absolute', top, left: 0, right: 0, display: 'flex', 
+                position: 'absolute', top, left: 0, display: 'inline-flex', 
+                minWidth: '100%',
                 borderBottom: '1px solid #32363e', alignItems: 'center', 
                 fontSize: '12.5px', height: `${ROW_HEIGHT}px`,
                 background: isChecked ? '#1e3a5f' : (isHighlighted ? '#2a4a8a' : (row._isSaving ? '#2d3340' : (index % 2 === 0 ? '#1e1f24' : '#1a1b1f'))),
@@ -529,7 +531,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         setColumns(cols);
     }, [selectedColumnKeys, allPropertyKeys]);
 
-    const handleExportExcel = useCallback(() => {
+    const handleExportExcel = useCallback(async () => {
         if (!flattenedData.length || !columns.length) return;
         
         // Formatear la data para el Excel — VALORES NUMÉRICOS SIN UNIDAD
@@ -590,7 +592,28 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
 
-        XLSX.writeFile(workbook, `Asset_Inventory_${new Date().toISOString().slice(0,10)}.xlsx`);
+        const fileName = `Asset_Inventory_${new Date().toISOString().slice(0,10)}.xlsx`;
+
+        // CAPACITOR NATIVE: Guardar en carpeta Descargas usando Filesystem
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const { Filesystem, Directory } = await import('@capacitor/filesystem');
+                const xlsxData = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+                await Filesystem.writeFile({
+                    path: fileName,
+                    data: xlsxData,
+                    directory: Directory.Documents,
+                    recursive: true
+                });
+                alert(`Archivo guardado: ${fileName}`);
+            } catch (err) {
+                console.error('[Export] Error guardando en dispositivo:', err);
+                // Fallback: intentar descarga web
+                XLSX.writeFile(workbook, fileName);
+            }
+        } else {
+            XLSX.writeFile(workbook, fileName);
+        }
     }, [flattenedData, columns, totalColumns]);
 
     // (A) Tabla -> Visor
@@ -679,6 +702,13 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         return rows;
     }, [flattenedData, scrollTop, containerHeight]);
     const totalHeight = flattenedData.length * ROW_HEIGHT;
+
+    // Compute total content width for horizontal scroll sync
+    const totalContentWidth = useMemo(() => {
+        const checkboxColWidth = 40;
+        const colsWidth = columns.reduce((sum, col) => sum + col.width, 0);
+        return checkboxColWidth + colsWidth;
+    }, [columns]);
 
     // ESTILO GENERAL DE LA APP:
     return (
@@ -806,7 +836,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
             </div>
 
             {/* Toolbar (Filters, Columns, Group rows...) */}
-            <div style={{ display: 'flex', background: '#1c1d22', height: '36px', alignItems: 'center', padding: '0 12px', borderBottom: '1px solid #252630', gap: '12px' }}>
+            <div style={{ display: 'flex', background: '#1c1d22', minHeight: '36px', alignItems: 'center', padding: '0 12px', borderBottom: checkedIds.size > 0 ? 'none' : '1px solid #252630', gap: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                     <ToolBtn icon={<Icons.Filter />} />
                     <ToolBtn icon={<Icons.Columns />} onClick={() => setColumnConfigOpen(true)} />
@@ -827,111 +857,32 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                     </label>
                 </div>
 
-                {/* BULK EDIT TOOLBAR */}
-                {checkedIds.size > 0 && (
-                    <>
-                        <div style={{ width: '1px', height: '16px', background: '#444' }} />
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '11px', color: '#4fc3f7', fontWeight: 600, whiteSpace: 'nowrap' }}>{checkedIds.size} sel.</span>
-                            <select
-                                value={bulkField}
-                                onChange={e => setBulkField(e.target.value)}
-                                style={{
-                                    background: '#2a2d33', border: '1px solid #555', color: '#e0e0e0',
-                                    padding: '3px 6px', fontSize: '11px', borderRadius: '3px', outline: 'none',
-                                    maxWidth: '120px', cursor: 'pointer'
-                                }}
-                            >
-                                {columns.filter(c => c.key !== 'dbId').map(c => (
-                                    <option key={c.key} value={c.key}>{c.header}</option>
-                                ))}
-                            </select>
-                            <input
-                                type="text"
-                                value={bulkValue}
-                                onChange={e => setBulkValue(e.target.value)}
-                                placeholder="Valor..."
-                                onKeyDown={e => { if (e.key === 'Enter' && bulkValue.trim()) document.getElementById('bulk-apply-btn')?.click(); }}
-                                style={{
-                                    background: '#1a1c22', border: '1px solid #555', color: '#fff',
-                                    padding: '3px 8px', fontSize: '11px', borderRadius: '3px', outline: 'none',
-                                    width: '120px'
-                                }}
-                            />
-                            <button
-                                id="bulk-apply-btn"
-                                disabled={bulkAssigning || !bulkValue.trim()}
-                                onClick={async () => {
-                                    if (bulkAssigning || !bulkValue.trim()) return;
-                                    const fieldName = bulkField;
-                                    const fieldValue = bulkValue.trim();
-                                    setBulkAssigning(true);
-                                    const ids = [...checkedIds];
-                                    try {
-                                        // SINGLE bulk API call — all IDs in one request
-                                        await apiFetch(`${BACKEND_URL}/api/inventory/bulk`, {
-                                            method: 'PATCH',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ external_ids: ids, fieldName, fieldValue })
-                                        });
-                                        // Update local state
-                                        setFlattenedData(prev => prev.map(r => checkedIds.has(r.dbId) ? { ...r, [fieldName]: fieldValue } : r));
-                                        setRawData(prev => prev.map(r => checkedIds.has(r.dbId) ? { ...r, [fieldName]: fieldValue } : r));
-                                        // Update postgresInventory memory
-                                        if (window.postgresInventory) {
-                                            window.postgresInventory.forEach(node => {
-                                                if (checkedIds.has(node.dbId)) node[fieldName] = fieldValue;
-                                            });
-                                            window.dispatchEvent(new CustomEvent('recalculate-filters'));
-                                        }
-                                        window.__inventoryCache = null;
-                                        setCheckedIds(new Set());
-                                        setBulkValue('');
-                                    } catch (e) {
-                                        console.error('[BULK] Error:', e);
-                                        alert('Error en asignación masiva: ' + e.message);
-                                    } finally {
-                                        setBulkAssigning(false);
-                                    }
-                                }}
-                                style={{
-                                    background: (bulkAssigning || !bulkValue.trim()) ? '#444' : 'linear-gradient(135deg, #3AA0FF, #2d8fa5)',
-                                    border: 'none', color: '#fff', padding: '3px 10px', fontSize: '11px', borderRadius: '3px',
-                                    cursor: (bulkAssigning || !bulkValue.trim()) ? 'not-allowed' : 'pointer',
-                                    display: 'flex', alignItems: 'center', gap: '4px',
-                                    fontWeight: 600, transition: 'all 0.2s', whiteSpace: 'nowrap',
-                                    boxShadow: (bulkAssigning || !bulkValue.trim()) ? 'none' : '0 2px 8px rgba(58,160,255,0.3)'
-                                }}
-                            >
-                                {bulkAssigning ? '⏳' : '▶'} Aplicar
-                            </button>
-                            <button
-                                onClick={() => setCheckedIds(new Set())}
-                                style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' }}
-                                title="Clear selection"
-                            >
-                                <Icons.Close />
-                            </button>
-                        </div>
-                    </>
-                )}
-
                 <div style={{ flex: 1 }} />
 
-                {/* Right Actions */}
+                {/* Right Actions — ALWAYS VISIBLE */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {/* MANUAL SYNC FROM SELECTION OR ISOLATION */}
-                    {(localSelIds || activeSelectionFilter || isolatedExtIds) && (() => {
+                    {/* MANUAL SYNC FROM SELECTION, ISOLATION, OR CHECKBOXES */}
+                    {(() => {
+                        // Merge: checkedIds from table + localSelIds from 3D viewer
+                        const mergedSyncIds = (() => {
+                            const merged = new Set();
+                            if (checkedIds.size > 0) checkedIds.forEach(id => merged.add(id));
+                            if (localSelIds) localSelIds.forEach(id => merged.add(id));
+                            return merged.size > 0 ? merged : null;
+                        })();
+
+                        const hasSyncSource = mergedSyncIds || activeSelectionFilter || isolatedExtIds;
+                        if (!hasSyncSource) return null;
+
                         const isFiltered = activeSelectionFilter !== null || isolatedExtIds !== null;
                         const filterSize = activeSelectionFilter ? activeSelectionFilter.size : (isolatedExtIds ? isolatedExtIds.size : 0);
-                        const displayIds = localSelIds || isolatedExtIds;
-                        const isSyncDisabled = localSelIds && isFiltered && localSelIds.size === filterSize;
+                        const isSyncDisabled = mergedSyncIds && isFiltered && mergedSyncIds.size === filterSize;
 
                         return (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginRight: '4px', borderRight: '1px solid #333', paddingRight: '8px' }}>
                                 {!isFiltered ? (
                                     <button
-                                        onClick={() => setActiveSelectionFilter(localSelIds)}
+                                        onClick={() => setActiveSelectionFilter(mergedSyncIds)}
                                         style={{
                                             background: 'transparent',
                                             border: 'none',
@@ -947,45 +898,45 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                                         }}
                                         onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
                                         onMouseLeave={e => { e.currentTarget.style.color = '#aaa'; e.currentTarget.style.backgroundColor = 'transparent'; }}
-                                        title="Sync inventory with 3D selection"
+                                        title="Sync inventory with selection (3D + checkboxes)"
                                     >
-                                        <Icons.Sync /> Sync ({displayIds.size})
+                                        <Icons.Sync /> Sync ({mergedSyncIds.size})
                                     </button>
                                 ) : (
                                     <>
                                         <button
                                             onClick={() => {
-                                                if (localSelIds) setActiveSelectionFilter(localSelIds);
+                                                if (mergedSyncIds) setActiveSelectionFilter(mergedSyncIds);
                                             }}
-                                            disabled={!localSelIds || isSyncDisabled}
+                                            disabled={!mergedSyncIds || isSyncDisabled}
                                             style={{
                                                 background: 'transparent',
                                                 border: 'none',
-                                                color: (!localSelIds || isSyncDisabled) ? '#4fc3f7' : '#aaa',
+                                                color: (!mergedSyncIds || isSyncDisabled) ? '#4fc3f7' : '#aaa',
                                                 padding: '4px 8px',
                                                 borderRadius: '4px',
                                                 fontSize: '11.5px',
-                                                cursor: (!localSelIds || isSyncDisabled) ? 'default' : 'pointer',
+                                                cursor: (!mergedSyncIds || isSyncDisabled) ? 'default' : 'pointer',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 gap: '6px',
                                                 transition: 'all 0.2s'
                                             }}
                                             onMouseEnter={e => { 
-                                                if (localSelIds && !isSyncDisabled) {
+                                                if (mergedSyncIds && !isSyncDisabled) {
                                                     e.currentTarget.style.color = '#fff';
                                                     e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)';
                                                 }
                                             }}
                                             onMouseLeave={e => { 
-                                                if (localSelIds && !isSyncDisabled) {
+                                                if (mergedSyncIds && !isSyncDisabled) {
                                                     e.currentTarget.style.color = '#aaa';
                                                     e.currentTarget.style.backgroundColor = 'transparent';
                                                 }
                                             }}
-                                            title={(localSelIds && !isSyncDisabled) ? "Update filter with new selection" : "Table is currently filtered"}
+                                            title={(mergedSyncIds && !isSyncDisabled) ? "Update filter with new selection" : "Table is currently filtered"}
                                         >
-                                            {(localSelIds && !isSyncDisabled) ? <Icons.Sync /> : <Icons.Filter />} Filtered ({filterSize})
+                                            {(mergedSyncIds && !isSyncDisabled) ? <Icons.Sync /> : <Icons.Filter />} Filtered ({filterSize})
                                         </button>
                                         {activeSelectionFilter !== null && (
                                             <button
@@ -1034,142 +985,239 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                 </div>
             </div>
 
+            {/* BULK EDIT TOOLBAR — Second Row (only when checks active) */}
+            {checkedIds.size > 0 && (
+                <div style={{
+                    display: 'flex', background: '#1a2332', minHeight: '34px', alignItems: 'center',
+                    padding: '0 12px', borderBottom: '1px solid #252630', gap: '8px',
+                    animation: 'fadeIn 0.15s ease-out'
+                }}>
+                    <span style={{ fontSize: '11px', color: '#4fc3f7', fontWeight: 600, whiteSpace: 'nowrap' }}>{checkedIds.size} sel.</span>
+                    <div style={{ width: '1px', height: '16px', background: '#333' }} />
+                    <select
+                        value={bulkField}
+                        onChange={e => setBulkField(e.target.value)}
+                        style={{
+                            background: '#2a2d33', border: '1px solid #555', color: '#e0e0e0',
+                            padding: '3px 6px', fontSize: '11px', borderRadius: '3px', outline: 'none',
+                            maxWidth: '120px', cursor: 'pointer'
+                        }}
+                    >
+                        {columns.filter(c => c.key !== 'dbId').map(c => (
+                            <option key={c.key} value={c.key}>{c.header}</option>
+                        ))}
+                    </select>
+                    <input
+                        type="text"
+                        value={bulkValue}
+                        onChange={e => setBulkValue(e.target.value)}
+                        placeholder="Valor..."
+                        onKeyDown={e => { if (e.key === 'Enter' && bulkValue.trim()) document.getElementById('bulk-apply-btn')?.click(); }}
+                        style={{
+                            background: '#1a1c22', border: '1px solid #555', color: '#fff',
+                            padding: '3px 8px', fontSize: '11px', borderRadius: '3px', outline: 'none',
+                            width: '120px'
+                        }}
+                    />
+                    <button
+                        id="bulk-apply-btn"
+                        disabled={bulkAssigning || !bulkValue.trim()}
+                        onClick={async () => {
+                            if (bulkAssigning || !bulkValue.trim()) return;
+                            const fieldName = bulkField;
+                            const fieldValue = bulkValue.trim();
+                            setBulkAssigning(true);
+                            const ids = [...checkedIds];
+                            try {
+                                await apiFetch(`${BACKEND_URL}/api/inventory/bulk`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ external_ids: ids, fieldName, fieldValue })
+                                });
+                                setFlattenedData(prev => prev.map(r => checkedIds.has(r.dbId) ? { ...r, [fieldName]: fieldValue } : r));
+                                setRawData(prev => prev.map(r => checkedIds.has(r.dbId) ? { ...r, [fieldName]: fieldValue } : r));
+                                if (window.postgresInventory) {
+                                    window.postgresInventory.forEach(node => {
+                                        if (checkedIds.has(node.dbId)) node[fieldName] = fieldValue;
+                                    });
+                                    window.dispatchEvent(new CustomEvent('recalculate-filters'));
+                                }
+                                window.__inventoryCache = null;
+                                setCheckedIds(new Set());
+                                setBulkValue('');
+                            } catch (e) {
+                                console.error('[BULK] Error:', e);
+                                alert('Error en asignación masiva: ' + e.message);
+                            } finally {
+                                setBulkAssigning(false);
+                            }
+                        }}
+                        style={{
+                            background: (bulkAssigning || !bulkValue.trim()) ? '#444' : 'linear-gradient(135deg, #3AA0FF, #2d8fa5)',
+                            border: 'none', color: '#fff', padding: '3px 10px', fontSize: '11px', borderRadius: '3px',
+                            cursor: (bulkAssigning || !bulkValue.trim()) ? 'not-allowed' : 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '4px',
+                            fontWeight: 600, transition: 'all 0.2s', whiteSpace: 'nowrap',
+                            boxShadow: (bulkAssigning || !bulkValue.trim()) ? 'none' : '0 2px 8px rgba(58,160,255,0.3)'
+                        }}
+                    >
+                        {bulkAssigning ? '...' : '▶'} Aplicar
+                    </button>
+                    <button
+                        onClick={() => setCheckedIds(new Set())}
+                        style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' }}
+                        title="Clear selection"
+                    >
+                        <Icons.Close />
+                    </button>
+                </div>
+            )}
+
             {/* Sub-header Summary */}
             <div style={{ padding: '6px 12px', background: '#18191e', fontSize: '11px', color: '#7a808b', borderBottom: '1px solid #252630', display: 'flex', justifyContent: 'space-between' }}>
                  <span>Showing {flattenedData.length.toLocaleString()} items {window._lastHasActiveFilters ? '(Filtered)' : ''}</span>
             </div>
             
-            {/* Column Headers (SlickGrid style) */}
-            <div 
-                ref={headerRef}
-                style={{ overflow: 'hidden', display: 'flex', background: '#1e1f24', height: '34px', alignItems: 'center', fontSize: '12px', fontWeight: 600, color: '#999', flexShrink: 0, borderBottom: '1px solid #2a2b30' }}
-            >
-                <div style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #333', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <input 
-                        type="checkbox" 
-                        checked={checkedIds.size > 0 && checkedIds.size === flattenedData.length}
-                        ref={el => { if (el) el.indeterminate = checkedIds.size > 0 && checkedIds.size < flattenedData.length; }}
-                        onChange={() => {
-                            if (checkedIds.size === flattenedData.length) {
-                                setCheckedIds(new Set());
-                            } else {
-                                setCheckedIds(new Set(flattenedData.map(r => r.dbId)));
-                            }
-                        }}
-                        style={{ accentColor: '#3aa0ff', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }}
-                        title={checkedIds.size === flattenedData.length ? 'Deselect all' : `Select all ${flattenedData.length} items`}
-                    />
-                </div>
-                {columns.map(col => (
-                    <div 
-                        key={col.key} 
-                        style={{ 
-                            width: col.width, 
-                            flexShrink: 0,
-                            padding: '0 12px', 
-                            overflow: 'hidden', 
-                            textOverflow: 'ellipsis', 
-                            whiteSpace: 'nowrap',
-                            textAlign: 'left',
-                            height: '100%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            borderRight: '1px solid #333',
-                            position: 'relative'
-                        }}
-                    >
-                        {col.header}
-                    </div>
-                ))}
-            </div>
-
-            {/* Virtualised Data Grid */}
+            {/* ═══ UNIFIED SCROLL CONTAINER (horizontal + vertical) ═══ */}
             <div 
                 ref={containerRef} 
                 onScroll={handleScroll}
                 style={{ 
                     flex: 1, 
                     minHeight: 0, 
-                    overflowY: 'auto', 
-                    overflowX: 'auto',
+                    overflow: 'auto',
                     position: 'relative'
                 }}
             >
-                {isLoading ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', gap: '16px' }}>
-                        {/* Tandem-style orbital spinner */}
-                        <div style={{ width: '40px', height: '40px', position: 'relative' }}>
-                            <svg viewBox="0 0 40 40" width="40" height="40" style={{ animation: 'inv-spin 1.2s linear infinite' }}>
-                                {[0,1,2,3,4,5,6,7].map(i => (
-                                    <circle
-                                        key={i}
-                                        cx={20 + 14 * Math.cos((i * Math.PI * 2) / 8)}
-                                        cy={20 + 14 * Math.sin((i * Math.PI * 2) / 8)}
-                                        r={2.2 + (i * 0.35)}
-                                        fill="#3AA0FF"
-                                        opacity={0.25 + (i * 0.1)}
-                                    />
-                                ))}
-                            </svg>
-                            <style>{`@keyframes inv-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-                        </div>
-                        <span style={{ color: '#7a808b', fontSize: '12px', letterSpacing: '0.5px' }}>Loading inventory data...</span>
-                    </div>
-                ) : flattenedData.length > 0 ? (
-                    <div style={{ height: `${totalHeight}px`, position: 'relative' }}>
-                        {visibleRows.map(({ index, row, top }) => (
-                            <InventoryRow 
-                                key={row.dbId || index}
-                                row={row}
-                                columns={columns}
-                                index={index}
-                                onRowClick={handleRowClick}
-                                isHighlighted={highlightedDbId === row.dbId}
-                                top={top}
-                                onCellEdit={handleCellEdit}
-                                isChecked={checkedIds.has(row.dbId)}
-                                onToggleCheck={(dbId) => setCheckedIds(prev => { const next = new Set(prev); if (next.has(dbId)) next.delete(dbId); else next.add(dbId); return next; })}
+                {/* Inner wrapper forces minWidth for horizontal scroll */}
+                <div style={{ minWidth: `${totalContentWidth}px` }}>
+                    {/* Column Headers (sticky top) */}
+                    <div 
+                        ref={headerRef}
+                        style={{ 
+                            display: 'flex', background: '#1e1f24', height: '34px', alignItems: 'center', 
+                            fontSize: '12px', fontWeight: 600, color: '#999', flexShrink: 0, 
+                            borderBottom: '1px solid #2a2b30',
+                            position: 'sticky', top: 0, zIndex: 2
+                        }}
+                    >
+                        <div style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #333', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <input 
+                                type="checkbox" 
+                                checked={checkedIds.size > 0 && checkedIds.size === flattenedData.length}
+                                ref={el => { if (el) el.indeterminate = checkedIds.size > 0 && checkedIds.size < flattenedData.length; }}
+                                onChange={() => {
+                                    if (checkedIds.size === flattenedData.length) {
+                                        setCheckedIds(new Set());
+                                    } else {
+                                        setCheckedIds(new Set(flattenedData.map(r => r.dbId)));
+                                    }
+                                }}
+                                style={{ accentColor: '#3aa0ff', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }}
+                                title={checkedIds.size === flattenedData.length ? 'Deselect all' : `Select all ${flattenedData.length} items`}
                             />
+                        </div>
+                        {columns.map(col => (
+                            <div 
+                                key={col.key} 
+                                style={{ 
+                                    width: col.width, 
+                                    flexShrink: 0,
+                                    padding: '0 12px', 
+                                    overflow: 'hidden', 
+                                    textOverflow: 'ellipsis', 
+                                    whiteSpace: 'nowrap',
+                                    textAlign: 'left',
+                                    height: '100%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    borderRight: '1px solid #333',
+                                    position: 'relative'
+                                }}
+                            >
+                                {col.header}
+                            </div>
                         ))}
                     </div>
-                ) : (
-                    <div style={{ padding: '60px 20px', color: '#555', textAlign: 'center', fontSize: '14px' }}>
-                        {window._lastHasActiveFilters ? 'No items match the current filter.' : 'Seleccione propiedades en Filters para poblar la tabla...'}
-                    </div>
-                )}
-            </div>
 
-            {/* FOOTER TOTALS ROW */}
-            {totalColumns.size > 0 && flattenedData.length > 0 && (
-                <div style={{ 
-                    display: 'flex', 
-                    background: 'repeating-linear-gradient(45deg, #1a1b20, #1a1b20 10px, #22252a 10px, #22252a 20px)',
-                    borderTop: '1px solid #333',
-                    alignItems: 'center', fontSize: '12px', fontWeight: 600, color: '#4fc3f7', flexShrink: 0, height: '34px'
-                }}>
-                    <div style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #333', display: 'flex', justifyContent: 'center' }}>
-                        Σ
-                    </div>
-                    {columns.map(col => {
-                        if (!totalColumns.has(col.key)) {
-                            return <div key={col.key} style={{ width: col.width, flexShrink: 0, padding: '0 12px', borderRight: '1px solid #333' }} />;
-                        }
-                        const sum = flattenedData.reduce((acc, row) => {
-                            const val = parseNumericCell(row[col.key]);
-                            return acc + (val || 0);
-                        }, 0);
-                        
-                        return (
-                            <div key={col.key} style={{ 
-                                width: col.width, flexShrink: 0, padding: '0 12px', 
-                                borderRight: '1px solid #333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' 
-                            }}>
-                                {sum.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    {/* Virtualised Data Grid */}
+                    {isLoading ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', gap: '16px' }}>
+                            {/* Tandem-style orbital spinner */}
+                            <div style={{ width: '40px', height: '40px', position: 'relative' }}>
+                                <svg viewBox="0 0 40 40" width="40" height="40" style={{ animation: 'inv-spin 1.2s linear infinite' }}>
+                                    {[0,1,2,3,4,5,6,7].map(i => (
+                                        <circle
+                                            key={i}
+                                            cx={20 + 14 * Math.cos((i * Math.PI * 2) / 8)}
+                                            cy={20 + 14 * Math.sin((i * Math.PI * 2) / 8)}
+                                            r={2.2 + (i * 0.35)}
+                                            fill="#3AA0FF"
+                                            opacity={0.25 + (i * 0.1)}
+                                        />
+                                    ))}
+                                </svg>
+                                <style>{`@keyframes inv-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
                             </div>
-                        );
-                    })}
-                </div>
+                            <span style={{ color: '#7a808b', fontSize: '12px', letterSpacing: '0.5px' }}>Loading inventory data...</span>
+                        </div>
+                    ) : flattenedData.length > 0 ? (
+                        <div style={{ height: `${totalHeight}px`, position: 'relative' }}>
+                            {visibleRows.map(({ index, row, top }) => (
+                                <InventoryRow 
+                                    key={row.dbId || index}
+                                    row={row}
+                                    columns={columns}
+                                    index={index}
+                                    onRowClick={handleRowClick}
+                                    isHighlighted={highlightedDbId === row.dbId}
+                                    top={top}
+                                    onCellEdit={handleCellEdit}
+                                    isChecked={checkedIds.has(row.dbId)}
+                                    onToggleCheck={(dbId) => setCheckedIds(prev => { const next = new Set(prev); if (next.has(dbId)) next.delete(dbId); else next.add(dbId); return next; })}
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <div style={{ padding: '60px 20px', color: '#555', textAlign: 'center', fontSize: '14px' }}>
+                            {window._lastHasActiveFilters ? 'No items match the current filter.' : 'Seleccione propiedades en Filters para poblar la tabla...'}
+                        </div>
+                    )}
+
+                    {/* FOOTER TOTALS ROW (inside scroll container so it scrolls horizontally with data) */}
+                    {totalColumns.size > 0 && flattenedData.length > 0 && (
+                        <div style={{ 
+                            display: 'flex', 
+                            background: 'repeating-linear-gradient(45deg, #1a1b20, #1a1b20 10px, #22252a 10px, #22252a 20px)',
+                            borderTop: '1px solid #333',
+                            alignItems: 'center', fontSize: '12px', fontWeight: 600, color: '#4fc3f7', flexShrink: 0, height: '34px',
+                            position: 'sticky', bottom: 0, zIndex: 2
+                        }}>
+                            <div style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #333', display: 'flex', justifyContent: 'center' }}>
+                                Σ
+                            </div>
+                            {columns.map(col => {
+                                if (!totalColumns.has(col.key)) {
+                                    return <div key={col.key} style={{ width: col.width, flexShrink: 0, padding: '0 12px', borderRight: '1px solid #333' }} />;
+                                }
+                                const sum = flattenedData.reduce((acc, row) => {
+                                    const val = parseNumericCell(row[col.key]);
+                                    return acc + (val || 0);
+                                }, 0);
+                                
+                                return (
+                                    <div key={col.key} style={{ 
+                                        width: col.width, flexShrink: 0, padding: '0 12px', 
+                                        borderRight: '1px solid #333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' 
+                                    }}>
+                                        {sum.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                    </div>
+                                );
+                            })}
+                        </div>
             )}
+                </div>{/* close inner minWidth wrapper */}
+            </div>{/* close outer scroll container */}
 
             {/* Column Editor Modal */}
             <ColumnConfiguratorModal
