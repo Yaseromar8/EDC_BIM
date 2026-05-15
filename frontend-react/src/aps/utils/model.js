@@ -140,9 +140,14 @@ export function calculateDynamicFilterBucketsNative(model, filterProperties, fil
                     const attrDef = attrDefs[attrId];
                     if(!attrDef) return;
                     
-                    const propName = attrDef.name || 'Unnamed';
-                    const propCategory = attrDef.category || 'General';
-                    const key = propCategory + '::' + propName;
+                    var propName = attrDef.name || 'Unnamed';
+                    var propCategory = attrDef.category || 'General';
+                    // Civil 3D: strip redundant group prefix
+                    var pfx = propCategory + ' - ';
+                    if (propName.indexOf(pfx) === 0) {
+                        propName = propName.substring(pfx.length);
+                    }
+                    var key = propCategory + '::' + propName;
                     
                     if(bucketMaps[key]) {
                         let val = pdb.getAttrValue(attrId, valId);
@@ -328,10 +333,16 @@ export function extractSchemaNative(model) {
         model.getPropertyDb().executeUserFunction(function(pdb) {
             const schemaMap = {};
             pdb.enumAttributes(function(attrId, attrDef) {
-                const category = attrDef.category || 'General';
-                const name = attrDef.name || 'Unnamed';
+                var category = attrDef.category || 'General';
+                var name = attrDef.name || 'Unnamed';
                 if(name.startsWith('__')) return; // ignore internal attributes
-                const key = category + '::' + name;
+                // Civil 3D: strip redundant group prefix from property name
+                // e.g. "SCL_Datos_Metrados - 01_13_DSI_Zona" → "01_13_DSI_Zona"
+                var prefix = category + ' - ';
+                if (name.indexOf(prefix) === 0) {
+                    name = name.substring(prefix.length);
+                }
+                var key = category + '::' + name;
                 if(!schemaMap[key]) {
                     schemaMap[key] = {
                         id: key,

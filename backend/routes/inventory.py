@@ -411,6 +411,30 @@ def extract_metadata_task(urn, target_urn, job_id):
             for k in keys_to_remove:
                 del merged_props[k]
 
+            # --- DEDUPLICAR PREFIJO DE GRUPO EN NOMBRES DE PROPIEDADES (Civil 3D) ---
+            # Civil 3D exporta propiedades como:
+            #   "SCL_Datos_Metrados": { "SCL_Datos_Metrados - 01_13_DSI_Zona": "DRENAJE URBANO" }
+            # El nombre ya contiene el grupo como prefijo. Lo limpiamos:
+            #   "SCL_Datos_Metrados": { "01_13_DSI_Zona": "DRENAJE URBANO" }
+            cleaned_props = {}
+            for group_name, group_vals in merged_props.items():
+                if not isinstance(group_vals, dict):
+                    cleaned_props[group_name] = group_vals
+                    continue
+                cleaned_group = {}
+                prefix1 = group_name + ' - '   # "SCL_Datos_Metrados - "
+                prefix2 = group_name + ' – '   # En dash variant
+                prefix3 = group_name + ' — '   # Em dash variant
+                for prop_name, prop_val in group_vals.items():
+                    clean_name = prop_name
+                    for pfx in (prefix1, prefix2, prefix3):
+                        if prop_name.startswith(pfx):
+                            clean_name = prop_name[len(pfx):]
+                            break
+                    cleaned_group[clean_name] = prop_val
+                cleaned_props[group_name] = cleaned_group
+            merged_props = cleaned_props
+
             # Inyectar Category Topológico (Modelo SVF)
             # ancestral_path = [Root(0), Category(1), Family(2), Type(3)] 
             # Si se agrupó por niveles = [Root(0), Level(1), Category(2)]
