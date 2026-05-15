@@ -705,6 +705,7 @@ from routes.audit import audit_bp
 from routes.rfis import rfis_bp
 from routes.redlines import redlines_bp
 from routes.partidas import partidas_bp
+from routes.photo_diag import photo_diag_bp
 
 app.register_blueprint(digital_twin_bp)
 app.register_blueprint(audit_bp)
@@ -723,6 +724,7 @@ app.register_blueprint(inventory_bp)
 app.register_blueprint(rfis_bp, url_prefix='/api/rfis')
 app.register_blueprint(redlines_bp, url_prefix='/api/redlines')
 app.register_blueprint(partidas_bp, url_prefix='/api/partidas')
+app.register_blueprint(photo_diag_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
