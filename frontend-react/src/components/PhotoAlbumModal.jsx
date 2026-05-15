@@ -165,126 +165,134 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
     };
 
     const handleFileChange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
 
-        let captureDate = new Date();
-        
-        // 1. Intentar extraer EXIF DateTimeOriginal
-        try {
-            if (!isVideoFile(file.name)) {
-                const exifData = await exifr.parse(file, ['DateTimeOriginal']);
-                if (exifData && exifData.DateTimeOriginal) {
-                    captureDate = new Date(exifData.DateTimeOriginal);
-                    console.log("[PhotoAlbum] EXIF Date extracted:", captureDate);
+        // Limpiar el input para permitir seleccionar el mismo archivo de nuevo si es necesario
+        e.target.value = null;
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            
+            let captureDate = new Date();
+            
+            // 1. Intentar extraer EXIF DateTimeOriginal
+            try {
+                if (!isVideoFile(file.name)) {
+                    const exifData = await exifr.parse(file, ['DateTimeOriginal']);
+                    if (exifData && exifData.DateTimeOriginal) {
+                        captureDate = new Date(exifData.DateTimeOriginal);
+                        console.log("[PhotoAlbum] EXIF Date extracted:", captureDate);
+                    } else if (file.lastModified) {
+                        captureDate = new Date(file.lastModified);
+                        console.log("[PhotoAlbum] Fallback to lastModified:", captureDate);
+                    }
                 } else if (file.lastModified) {
+                    // Video no tiene EXIF fácil en frontend, usamos lastModified
                     captureDate = new Date(file.lastModified);
-                    console.log("[PhotoAlbum] Fallback to lastModified:", captureDate);
                 }
-            } else if (file.lastModified) {
-                // Video no tiene EXIF fácil en frontend, usamos lastModified
-                captureDate = new Date(file.lastModified);
+            } catch (err) {
+                console.warn("[PhotoAlbum] Could not extract EXIF date, using current date.", err);
             }
-        } catch (err) {
-            console.warn("[PhotoAlbum] Could not extract EXIF date, using current date.", err);
-        }
 
-        // Optimistic UI: Mostrar inmediatamente (con marca de subiendo)
-        const temporaryUrl = URL.createObjectURL(file);
-        const tempId = Date.now();
-        const newPhotoTemp = {
-            id: tempId,
-            src: temporaryUrl,
-            desc: file.name,
-            date: captureDate.toISOString().split('T')[0], // Extract just the YYYY-MM-DD
-            displayDate: captureDate.toLocaleDateString(),
-            fullPath: 'Subiendo...', 
-            isUploading: true
-        };
+            // Optimistic UI: Mostrar inmediatamente (con marca de subiendo)
+            const temporaryUrl = URL.createObjectURL(file);
+            const tempId = Date.now() + i; // + i prevents duplicate keys when multiple files selected
+            const newPhotoTemp = {
+                id: tempId,
+                src: temporaryUrl,
+                desc: file.name,
+                date: captureDate.toISOString().split('T')[0], // Extract just the YYYY-MM-DD
+                displayDate: captureDate.toLocaleDateString(),
+                fullPath: 'Subiendo...', 
+                isUploading: true
+            };
 
+            if (onAddPhoto) {
+                onAddPhoto(newPhotoTemp);
+            }
 
-        if (onAddPhoto) {
-            onAddPhoto(newPhotoTemp);
-        }
+            const uploadPath = targetPath || `Fotos_Generales/Tracking/pin_${pinId}/`;
 
-        // setIsUploading(true); // Allow background concurrent uploads
-        // setUploadProgress(0);
-
-        const uploadPath = targetPath || `Fotos_Generales/Tracking/pin_${pinId}/`;
-
-        // 🛡️ DALUX-STYLE: Save to IndexedDB FIRST (survives page close/refresh)
-        await enqueuePhoto({
-            id: tempId,
-            file,
-            pinId,
-            modelUrn,
-            uploadPath,
-            captureDate,
-            desc: file.name
-        });
-
-        activeUploadsRef.current++;
-        try {
-            // 1. Get Signed URL
-            const urlResp = await apiFetch(`${BACKEND_URL}/api/docs/upload-url`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    filename: file.name,
-                    contentType: file.type || 'application/octet-stream',
-                    model_urn: modelUrn
-                })
-            });
-            const urlData = await urlResp.json();
-            if (!urlData.success) throw new Error(urlData.error);
-
-            // 2. Direct Upload to GCS
-            await uploadFile(file, urlData.uploadUrl, {
-                isDirect: true,
-                onProgress: (p) => setUploadProgress(p)
+            // 🛡️ DALUX-STYLE: Save to IndexedDB FIRST (survives page close/refresh)
+            await enqueuePhoto({
+                id: tempId,
+                file,
+                pinId,
+                modelUrn,
+                uploadPath,
+                captureDate,
+                desc: file.name
             });
 
-            // 3. Finalize upload in DB
-            const completeResp = await apiFetch(`${BACKEND_URL}/api/docs/upload-confirm`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    filename: file.name,
-                    gcs_urn: urlData.gcs_urn,
-                    size_bytes: file.size,
-                    mime_type: file.type || 'application/octet-stream',
-                    path: uploadPath,
-                    model_urn: modelUrn
-                })
-            });
-            const completeData = await completeResp.json();
+            activeUploadsRef.current++;
+            // We run the upload asynchronously without awaiting it in the loop
+            // so multiple files can upload concurrently
+            (async (currentTempId, currentFile, currentUploadPath, currentNewPhotoTemp) => {
+                try {
+                    // 1. Get Signed URL
+                    const urlResp = await apiFetch(`${BACKEND_URL}/api/docs/upload-url`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            filename: currentFile.name,
+                            contentType: currentFile.type || 'application/octet-stream',
+                            model_urn: modelUrn
+                        })
+                    });
+                    const urlData = await urlResp.json();
+                    if (!urlData.success) throw new Error(urlData.error);
 
-            if (completeData.success) {
-                // The URL is now fixed to be a proxy URL (or signed read URL)
-                const token = localStorage.getItem('visor_session_token') || 'DEMO_TOKEN';
-                const permalinkUrl = `${BACKEND_URL}/api/docs/proxy?urn=${urlData.gcs_urn}&session_token=${token}`;
+                    // 2. Direct Upload to GCS
+                    await uploadFile(currentFile, urlData.uploadUrl, {
+                        isDirect: true,
+                        // Only show progress for the first one to avoid UI flicker, or pass tempId if UI supports it
+                        onProgress: (p) => { if (i === 0) setUploadProgress(p); }
+                    });
 
-                if (onAddPhoto) {
-                    onAddPhoto({
-                        ...newPhotoTemp,
-                        src: permalinkUrl,
-                        fullPath: `${uploadPath}${file.name}`,
-                        gcs_urn: urlData.gcs_urn,
-                        isUploading: false,
-                        tempId: tempId
-                    }, true);
+                    // 3. Finalize upload in DB
+                    const completeResp = await apiFetch(`${BACKEND_URL}/api/docs/upload-confirm`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            filename: currentFile.name,
+                            gcs_urn: urlData.gcs_urn,
+                            size_bytes: currentFile.size,
+                            mime_type: currentFile.type || 'application/octet-stream',
+                            path: currentUploadPath,
+                            model_urn: modelUrn
+                        })
+                    });
+                    const completeData = await completeResp.json();
+
+                    if (completeData.success) {
+                        // The URL is now fixed to be a proxy URL (or signed read URL)
+                        const token = localStorage.getItem('visor_session_token') || 'DEMO_TOKEN';
+                        const permalinkUrl = `${BACKEND_URL}/api/docs/proxy?urn=${urlData.gcs_urn}&session_token=${token}`;
+
+                        if (onAddPhoto) {
+                            onAddPhoto({
+                                ...currentNewPhotoTemp,
+                                src: permalinkUrl,
+                                fullPath: `${currentUploadPath}${currentFile.name}`,
+                                gcs_urn: urlData.gcs_urn,
+                                isUploading: false,
+                                tempId: currentTempId
+                            }, true);
+                        }
+                        // ✅ Upload complete — remove from IndexedDB queue
+                        await dequeuePhoto(currentTempId);
+                        showToast(`✅ ${currentFile.name} subida`, 'success');
+                    } else {
+                        showToast(`❌ Error: ${completeData.error}`, 'error');
+                    }
+                } catch (err) {
+                    console.error("Upload error:", err);
+                    showToast(`❌ Error de conexión: ${err.message}`, 'error');
+                } finally {
+                    activeUploadsRef.current = Math.max(0, activeUploadsRef.current - 1);
                 }
-                // ✅ Upload complete — remove from IndexedDB queue
-                await dequeuePhoto(tempId);
-                showToast('✅ Foto guardada en la nube', 'success');
-            } else {
-                showToast(`❌ Error: ${completeData.error}`, 'error');
-            }
-        } catch (err) {
-            console.error("Upload error:", err);
-            showToast(`❌ Error de conexión: ${err.message}`, 'error');
-        } finally {
-            activeUploadsRef.current = Math.max(0, activeUploadsRef.current - 1);
+            })(tempId, file, uploadPath, newPhotoTemp);
         }
     };
 
