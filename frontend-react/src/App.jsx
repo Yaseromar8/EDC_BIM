@@ -3555,7 +3555,7 @@ function App() {
                   onRemoveDoc={(id, docId) => handleRemoveDocFromPin(id, docId, trackingTab)}
                   onRename={(id, newTitle) => handleTrackingPinUpdate(trackingTab, id, { val: newTitle })}
                   projectPrefix={selectedProject?.name ? `proyectos/${selectedProject.name.replace(/ /g, '_')}/` : 'proyectos/'}
-                  modelUrn={selectedProject?.id || 'global'}
+                  modelUrn={selectedProject?.name ? `proyectos/${selectedProject.name.replace(/ /g, '_')}` : 'global'}
                 />
               </div>
             )}
