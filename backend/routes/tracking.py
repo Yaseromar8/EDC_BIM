@@ -173,13 +173,17 @@ def get_tracking_data(model_urn='global'):
                         elif "gcs_urn" in doc:
                             doc["url"] = f"/api/docs/proxy?urn={doc['gcs_urn']}"
                 
-                # REFRESH PHOTOS
+                # REFRESH PHOTOS — generate both url AND src with fresh proxy URLs
                 if "photos" in extra and isinstance(extra["photos"], list):
                     for photo in extra["photos"]:
-                        if "fullPath" in photo:
-                            photo["url"] = f"/api/docs/proxy?urn={photo['fullPath']}"
-                        elif "gcs_urn" in photo:
-                             photo["url"] = f"/api/docs/proxy?urn={photo['gcs_urn']}"
+                        fresh_url = None
+                        if "gcs_urn" in photo:
+                            fresh_url = f"/api/docs/proxy?urn={photo['gcs_urn']}"
+                        elif "fullPath" in photo:
+                            fresh_url = f"/api/docs/proxy?urn={photo['fullPath']}"
+                        if fresh_url:
+                            photo["url"] = fresh_url
+                            photo["src"] = fresh_url  # Frontend prioritizes src
                 
                 pin.update(extra)  # Merge any extra JSONB data (dbId, codigoPartida, docs, photos, etc.)
                 
