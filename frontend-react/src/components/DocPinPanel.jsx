@@ -208,20 +208,10 @@ const DocPinPanel = ({
     useEffect(() => {
         if (!pin) return;
         
-        // Mapeo inteligente de carpetas por tipo de pin
-        const folderMap = {
-            'avance': '01_AVANCE/',
-            'fotos': '02_FOTOS/',
-            'docs': '03_DOCUMENTOS/',
-            'rfi': '04_RFI/',
-            'restriction': '05_RESTRICCIONES/'
-        };
-        
-        const subFolder = folderMap[pin.type] || '';
-        const initialPath = projectPrefix + '05_SEGUIMIENTO/' + subFolder;
-
+        // Start from the project root — the file system DB organizes by model_urn,
+        // not by path strings. An empty path = root level (parent_id IS NULL).
         setBrowsing(false);
-        setCurrentPath(initialPath);
+        setCurrentPath('');
         setIsSearching(false);
         setSearchResults([]);
         setSelectedItems(new Set());
