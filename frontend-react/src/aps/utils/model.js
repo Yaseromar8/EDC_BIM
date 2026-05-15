@@ -142,10 +142,14 @@ export function calculateDynamicFilterBucketsNative(model, filterProperties, fil
                     
                     var propName = attrDef.name || 'Unnamed';
                     var propCategory = attrDef.category || 'General';
-                    // Civil 3D: strip redundant group prefix
-                    var pfx = propCategory + ' - ';
-                    if (propName.indexOf(pfx) === 0) {
-                        propName = propName.substring(pfx.length);
+                    // Civil 3D: strip redundant group prefix (hyphen, en-dash, em-dash)
+                    var dashes = [' - ', ' \u2013 ', ' \u2014 '];
+                    for (var di = 0; di < dashes.length; di++) {
+                        var pfx = propCategory + dashes[di];
+                        if (propName.indexOf(pfx) === 0) {
+                            propName = propName.substring(pfx.length);
+                            break;
+                        }
                     }
                     var key = propCategory + '::' + propName;
                     
@@ -336,11 +340,14 @@ export function extractSchemaNative(model) {
                 var category = attrDef.category || 'General';
                 var name = attrDef.name || 'Unnamed';
                 if(name.startsWith('__')) return; // ignore internal attributes
-                // Civil 3D: strip redundant group prefix from property name
-                // e.g. "SCL_Datos_Metrados - 01_13_DSI_Zona" → "01_13_DSI_Zona"
-                var prefix = category + ' - ';
-                if (name.indexOf(prefix) === 0) {
-                    name = name.substring(prefix.length);
+                // Civil 3D: strip redundant group prefix (hyphen, en-dash, em-dash)
+                var dashes = [' - ', ' \u2013 ', ' \u2014 '];
+                for (var di = 0; di < dashes.length; di++) {
+                    var prefix = category + dashes[di];
+                    if (name.indexOf(prefix) === 0) {
+                        name = name.substring(prefix.length);
+                        break;
+                    }
                 }
                 var key = category + '::' + name;
                 if(!schemaMap[key]) {

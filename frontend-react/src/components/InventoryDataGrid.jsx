@@ -321,9 +321,14 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                 };
                 
                 if (node.properties && typeof node.properties === 'object') {
-                    Object.values(node.properties).forEach(cat => {
+                    Object.entries(node.properties).forEach(([catName, cat]) => {
                         if (typeof cat === 'object' && cat !== null) {
-                            Object.entries(cat).forEach(([pName, pVal]) => {
+                            Object.entries(cat).forEach(([rawPName, pVal]) => {
+                                // Civil 3D: strip redundant group prefix
+                                let pName = rawPName;
+                                for (const d of [' - ', ' \u2013 ', ' \u2014 ']) {
+                                    if (pName.startsWith(catName + d)) { pName = pName.slice((catName + d).length); break; }
+                                }
                                 const rawVal = (pVal === null || pVal === undefined) ? '' : String(pVal).trim();
                                 const val = formatFractionalInch(rawVal);
                                 if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {

@@ -1462,7 +1462,12 @@ function App() {
           if (node.properties && typeof node.properties === 'object') {
             Object.entries(node.properties).forEach(([cName, cVal]) => {
               if (typeof cVal === 'object' && cVal !== null) {
-                Object.entries(cVal).forEach(([pName, pVal]) => {
+                Object.entries(cVal).forEach(([rawPName, pVal]) => {
+                  // Civil 3D: strip redundant group prefix from property name
+                  let pName = rawPName;
+                  for (const d of [' - ', ' \u2013 ', ' \u2014 ']) {
+                    if (pName.startsWith(cName + d)) { pName = pName.slice((cName + d).length); break; }
+                  }
                   const val = String(pVal).trim();
                   // FIX: Solo sobreescribir si el nuevo valor no está vacío,
                   // o si la propiedad aún no existe. Esto protege los valores válidos.
@@ -1556,7 +1561,11 @@ function App() {
             if (node.properties && typeof node.properties === 'object') {
               Object.entries(node.properties).forEach(([cName, cVal]) => {
                 if (typeof cVal === 'object' && cVal !== null) {
-                  Object.entries(cVal).forEach(([pName, pVal]) => {
+                  Object.entries(cVal).forEach(([rawPName, pVal]) => {
+                    let pName = rawPName;
+                    for (const d of [' - ', ' \u2013 ', ' \u2014 ']) {
+                      if (pName.startsWith(cName + d)) { pName = pName.slice((cName + d).length); break; }
+                    }
                     const val = String(pVal).trim();
                     if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
                       row[pName] = val;
@@ -1866,7 +1875,11 @@ function App() {
               if (node.properties && typeof node.properties === 'object') {
                 Object.entries(node.properties).forEach(([cName, cVal]) => {
                   if (typeof cVal === 'object' && cVal !== null) {
-                    Object.entries(cVal).forEach(([pName, pVal]) => {
+                    Object.entries(cVal).forEach(([rawPName, pVal]) => {
+                      let pName = rawPName;
+                      for (const d of [' - ', ' \u2013 ', ' \u2014 ']) {
+                        if (pName.startsWith(cName + d)) { pName = pName.slice((cName + d).length); break; }
+                      }
                       const val = String(pVal).trim();
                       if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
                         row[pName] = val;
