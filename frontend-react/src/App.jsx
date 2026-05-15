@@ -27,6 +27,10 @@ import { uploadFile } from './services/uploadService';
 import { processPendingUploads, getPendingThumbnails } from './services/uploadQueue';
 import { apiFetch } from './utils/apiFetch';
 
+import { App as CapacitorApp } from '@capacitor/app';
+import { BackgroundTask } from '@capawesome/capacitor-background-task';
+import { Network } from '@capacitor/network';
+
 // =====================================================================
 // NORMALIZACIÓN DE CATEGORÍAS REVIT (ES → EN)
 // Revit exporta categorías en el idioma del template.
@@ -540,12 +544,42 @@ function App() {
     setUser(null);
     setSelectedProject(null);
   }, []);
-
-  useEffect(() => {
     const onAuthExpired = () => handleLogout();
     window.addEventListener('auth-expired', onAuthExpired);
     return () => window.removeEventListener('auth-expired', onAuthExpired);
   }, [handleLogout]);
+
+  // ── CAPACITOR BACKGROUND SYNC ──
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform()) {
+      // Listen for Backgrounding
+      CapacitorApp.addListener('appStateChange', async ({ isActive }) => {
+        if (!isActive) {
+          // App went to background, keep thread alive for queue
+          const taskId = await BackgroundTask.beforeExit(async () => {
+            console.log('[App] Background Task started to flush upload queue');
+            if (window.onPhotoUploadedCallback_for_background) {
+              await processPendingUploads(window.onPhotoUploadedCallback_for_background, () => BACKEND_URL);
+            }
+            BackgroundTask.finish({ taskId });
+          });
+        } else {
+          // App returned to foreground
+          if (window.onPhotoUploadedCallback_for_background) {
+            await processPendingUploads(window.onPhotoUploadedCallback_for_background, () => BACKEND_URL);
+          }
+        }
+      });
+
+      // Listen for Network Restoration
+      Network.addListener('networkStatusChange', async status => {
+        if (status.connected && window.onPhotoUploadedCallback_for_background) {
+          console.log('[App] Network restored, flushing upload queue');
+          await processPendingUploads(window.onPhotoUploadedCallback_for_background, () => BACKEND_URL);
+        }
+      });
+    }
+  }, []);
 
   const [models, setModels] = useState([]);
   const [relinkTargetModel, setRelinkTargetModel] = useState(null); // Relink State
@@ -2117,32 +2151,31 @@ function App() {
         }
 
         // STEP 2: Upload in background (replace blob URL with permanent cloud URL when done)
-        await processPendingUploads(
-          // onPhotoUploaded callback: replace temp thumbnail with cloud URL
-          (pinId, photoData) => {
-            console.log(`[App] ✅ Pending photo uploaded for pin ${pinId}`);
-            setTrackingData(prev => {
-              const updatedFotos = prev.fotos.map(pin => {
-                if (String(pin.id) === String(pinId)) {
-                  const existingIds = (pin.photos || []).map(p => String(p.id));
-                  if (existingIds.includes(String(photoData.id))) {
-                    return {
-                      ...pin,
-                      photos: pin.photos.map(p => String(p.id) === String(photoData.id) ? photoData : p)
-                    };
-                  }
-                  return { ...pin, photos: [...(pin.photos || []), photoData] };
+        const onPhotoUploaded = (pinId, photoData) => {
+          console.log(`[App] ✅ Pending photo uploaded for pin ${pinId}`);
+          setTrackingData(prev => {
+            const updatedFotos = prev.fotos.map(pin => {
+              if (String(pin.id) === String(pinId)) {
+                const existingIds = (pin.photos || []).map(p => String(p.id));
+                if (existingIds.includes(String(photoData.id))) {
+                  return {
+                    ...pin,
+                    photos: pin.photos.map(p => String(p.id) === String(photoData.id) ? photoData : p)
+                  };
                 }
-                return pin;
-              });
-              const newState = { ...prev, fotos: updatedFotos };
-              saveTrackingData(newState);
-              return newState;
+                return { ...pin, photos: [...(pin.photos || []), photoData] };
+              }
+              return pin;
             });
-          },
-          // getBackendUrl
-          () => BACKEND_URL
-        );
+            const newState = { ...prev, fotos: updatedFotos };
+            saveTrackingData(newState);
+            return newState;
+          });
+        };
+        
+        window.onPhotoUploadedCallback_for_background = onPhotoUploaded;
+
+        await processPendingUploads(onPhotoUploaded, () => BACKEND_URL);
       } catch (e) {
         console.error('[App] Error resuming pending uploads:', e);
       }
