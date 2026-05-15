@@ -544,6 +544,8 @@ function App() {
     setUser(null);
     setSelectedProject(null);
   }, []);
+
+  useEffect(() => {
     const onAuthExpired = () => handleLogout();
     window.addEventListener('auth-expired', onAuthExpired);
     return () => window.removeEventListener('auth-expired', onAuthExpired);

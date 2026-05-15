@@ -6,6 +6,8 @@ import ColumnConfiguratorModal from './ColumnConfiguratorModal';
 const ROW_HEIGHT = 25; // Tandem SlickGrid: 25px per row (from DOM top:25px)
 const OVERSCAN = 10;
 
+const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location.hostname.match(/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/) ? `http://${window.location.hostname}:3000` : 'https://visor-ecd-backend.onrender.com')));
+
 // ─── Fractional-Inch Formatter ───────────────────────────────────────────
 // Autodesk Model Derivative API almacena diámetros y medidas como
 // "0.375 fractional-in", pero el visor 3D los muestra como "3/8\"".
@@ -381,7 +383,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                 // Fetch all inventory. DB model_urn contains base64 URNs, not appProjectId.
                 // Frontend cache is still keyed by activeModelUrn for per-project segregation.
                 const urnParam = activeModelUrn && activeModelUrn !== 'global' ? `?model_urn=${encodeURIComponent(activeModelUrn)}` : '';
-                const res = await apiFetch(`/api/inventory${urnParam}`);
+                const res = await apiFetch(`${BACKEND_URL}/api/inventory${urnParam}`);
                 if (!res.ok) throw new Error('Falló el fetch a /api/inventory');
                 
                 const dbData = await res.json();
@@ -629,7 +631,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         setFlattenedData(prev => prev.map(r => r.dbId === extId ? { ...r, _isSaving: true, [colKey]: newValue } : r));
 
         try {
-            const res = await apiFetch('/api/inventory', {
+            const res = await apiFetch(`${BACKEND_URL}/api/inventory`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ external_id: extId, fieldName: colKey, fieldValue: newValue, model_urn: modelUrn })
@@ -867,7 +869,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                                     const ids = [...checkedIds];
                                     try {
                                         // SINGLE bulk API call — all IDs in one request
-                                        await apiFetch('/api/inventory/bulk', {
+                                        await apiFetch(`${BACKEND_URL}/api/inventory/bulk`, {
                                             method: 'PATCH',
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({ external_ids: ids, fieldName, fieldValue })
