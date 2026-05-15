@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './DocPinPanel.css';
+import { apiFetch, getUploadAuthHeaders } from '../utils/apiFetch';
 import { Document, Page, pdfjs } from 'react-pdf';
 import PdfViewer from './PdfViewer';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -285,7 +286,7 @@ const DocPinPanel = ({
         }, 50);
 
         try {
-            const res = await fetch(`${BACKEND_URL}/api/ai/ask`, {
+            const res = await apiFetch(`${BACKEND_URL}/api/ai/ask`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -317,7 +318,7 @@ const DocPinPanel = ({
     const fetchContents = useCallback(async (path) => {
         setLoading(true);
         try {
-            const res = await fetch(`${DOCS_API}/list?path=${encodeURIComponent(path)}&model_urn=${encodeURIComponent(modelUrn)}`);
+            const res = await apiFetch(`${DOCS_API}/list?path=${encodeURIComponent(path)}&model_urn=${encodeURIComponent(modelUrn)}`);
             if (res.ok) {
                 const json = await res.json();
                 const data = json.data || {}; // Extracting the 'data' field from standardized response
@@ -399,7 +400,7 @@ const DocPinPanel = ({
 
         const fullPath = currentPath + name + '/';
         try {
-            const res = await fetch(`${DOCS_API}/folder`, {
+            const res = await apiFetch(`${DOCS_API}/folder`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: fullPath, model_urn: modelUrn })
@@ -427,9 +428,10 @@ const DocPinPanel = ({
 
         setLoading(true);
         try {
-            const res = await fetch(`${DOCS_API}/upload`, {
+            const res = await apiFetch(`${DOCS_API}/upload`, {
                 method: 'POST',
-                body: formData
+                body: formData,
+                isUpload: true
             });
             const data = await res.json();
             if (data.success) {
@@ -449,7 +451,7 @@ const DocPinPanel = ({
         if (!window.confirm(`¿Seguro que desea eliminar "${file.name}"?`)) return;
 
         try {
-            const res = await fetch(`${DOCS_API}/delete`, {
+            const res = await apiFetch(`${DOCS_API}/delete`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ fullName: file.fullName, model_urn: modelUrn })
@@ -471,7 +473,7 @@ const DocPinPanel = ({
         if (!newName || newName === file.name) return;
 
         try {
-            const res = await fetch(`${DOCS_API}/rename`, {
+            const res = await apiFetch(`${DOCS_API}/rename`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ fullName: file.fullName, newName, model_urn: modelUrn })
@@ -512,7 +514,7 @@ const DocPinPanel = ({
         setSearchLoading(true);
         setIsSearching(true);
         try {
-            const res = await fetch(`${DOCS_API}/search?q=${encodeURIComponent(q)}&model_urn=${encodeURIComponent(modelUrn)}`);
+            const res = await apiFetch(`${DOCS_API}/search?q=${encodeURIComponent(q)}&model_urn=${encodeURIComponent(modelUrn)}`);
             const json = await res.json();
             if (json.success) {
                 setSearchResults(json.data || []);
@@ -538,7 +540,7 @@ const DocPinPanel = ({
         if (!window.confirm(`¿Eliminar ${selectedItems.size} elementos?`)) return;
 
         try {
-            const res = await fetch(`${BACKEND_URL}/api/docs/batch`, {
+            const res = await apiFetch(`${BACKEND_URL}/api/docs/batch`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -593,7 +595,7 @@ const DocPinPanel = ({
 
         try {
             // Se despacha a la API remota que el backend Python procesará sin saturar React
-            const res = await fetch(`${BACKEND_URL}/api/docs/mutate-bind`, {
+            const res = await apiFetch(`${BACKEND_URL}/api/docs/mutate-bind`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -635,7 +637,7 @@ const DocPinPanel = ({
         setAiLoading(true);
         setAiResponse('');
         try {
-            const res = await fetch(`${BACKEND_URL}/api/ai/ask`, {
+            const res = await apiFetch(`${BACKEND_URL}/api/ai/ask`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
