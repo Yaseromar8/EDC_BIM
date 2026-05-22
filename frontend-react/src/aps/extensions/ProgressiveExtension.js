@@ -219,7 +219,7 @@ class ProgressiveExtension extends BaseExtension {
             // ─── 3. STATION DOTS + TEXT LABELS ───
             viewerPoints.forEach((pt, i) => {
                 // --- Station Dot (small circle) ---
-                const dotGeom = new THREE.SphereGeometry(800, 12, 12);
+                const dotGeom = new THREE.SphereGeometry(300, 10, 10);
                 const dotMat = new THREE.MeshBasicMaterial({
                     color: 0xffffff,
                     depthTest: false,
@@ -233,7 +233,7 @@ class ProgressiveExtension extends BaseExtension {
                 this._meshes.push(dot);
 
                 // --- Dot ring (orange outline) ---
-                const ringGeom = new THREE.RingGeometry(700, 1000, 20);
+                const ringGeom = new THREE.RingGeometry(250, 400, 16);
                 const ringMat = new THREE.MeshBasicMaterial({
                     color: 0xf59e0b,
                     depthTest: false,
