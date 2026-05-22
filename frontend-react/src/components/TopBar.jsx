@@ -255,6 +255,18 @@ const TopBar = ({
                                             <HeatmapIcon />
                                             <span style={{ fontSize: '12px', fontWeight: 500 }}>Heatmap</span>
                                         </button>
+                                        <div style={{ height: '1px', background: '#333', margin: '2px 0' }} />
+                                        <button
+                                            className="dropdown-tool-btn"
+                                            onClick={() => {
+                                                window.dispatchEvent(new CustomEvent("toggle-station-tracker"));
+                                                setIsProjectToolsOpen(false);
+                                            }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', color: '#ccc', border: 'none', background: 'transparent', textAlign: 'left', borderRadius: '4px', cursor: 'pointer', width: '100%' }}
+                                        >
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16.5c0 0-4-6.5-12-6.5S3 14 3 14" /><path d="M3 17h18" /><path d="M3 14v4" /><path d="M21 14v4" /><path d="M6 17v-1.5" /><path d="M9 17v-1.5" /><path d="M12 17v-1.5" /><path d="M15 17v-1.5" /><path d="M18 17v-1.5" /></svg>
+                                            <span style={{ fontSize: '12px', fontWeight: 500 }}>Herramientas de Civil</span>
+                                        </button>
                                     </div>
                                 )}
                             </div>

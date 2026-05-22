@@ -352,6 +352,48 @@ class ProgressiveExtension extends BaseExtension {
         if (this._rafId) cancelAnimationFrame(this._rafId);
         this._rafId = requestAnimationFrame(() => this._updateLabels());
     }
+
+    // --- Station Tracker Methods (Civil Tools) ---
+
+    flyToStation(marker) {
+        if (!marker) return;
+        const model = this.viewer.getAllModels()[0];
+        let globalOffset = { x: 0, y: 0, z: 0 };
+        if (model && model.getData().globalOffset) {
+            globalOffset = model.getData().globalOffset;
+        }
+        const worldPos = new THREE.Vector3(
+            marker.x * 1000 - globalOffset.x,
+            marker.y * 1000 - globalOffset.y,
+            marker.z * 1000 - globalOffset.z
+        );
+        const dir = new THREE.Vector3(marker.dx || 0, marker.dy || 0, marker.dz || 0).normalize();
+        const upVec = this.viewer.navigation.getCameraUpVector();
+        const camPos = worldPos.clone()
+            .add(dir.clone().multiplyScalar(40000))
+            .add(upVec.clone().multiplyScalar(15000));
+        this.viewer.navigation.setRequestTransition(true, camPos, worldPos, upVec);
+    }
+
+    sectionAtStation(marker) {
+        if (!marker) return;
+        const model = this.viewer.getAllModels()[0];
+        let globalOffset = { x: 0, y: 0, z: 0 };
+        if (model && model.getData().globalOffset) {
+            globalOffset = model.getData().globalOffset;
+        }
+        const worldPos = new THREE.Vector3(
+            marker.x * 1000 - globalOffset.x,
+            marker.y * 1000 - globalOffset.y,
+            marker.z * 1000 - globalOffset.z
+        );
+        const normal = new THREE.Vector3(marker.dx || 0, marker.dy || 0, marker.dz || 0).normalize();
+        const d = -normal.dot(worldPos);
+        this.viewer.setCutPlanes([new THREE.Vector4(normal.x, normal.y, normal.z, d)]);
+
+        // Also fly to see the section
+        this.flyToStation(marker);
+    }
 }
 
 Autodesk.Viewing.theExtensionManager.registerExtension('ProgressiveExtension', ProgressiveExtension);
