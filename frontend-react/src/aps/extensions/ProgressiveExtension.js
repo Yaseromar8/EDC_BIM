@@ -294,10 +294,11 @@ class ProgressiveExtension extends BaseExtension {
                     
                     this.viewer.setCutPlanes([plane]);
                     
-                    const upVec = this.viewer.navigation.getCameraUpVector();
+                    // Stable camera: world-up + perpendicular view with elevation
+                    const upVec = new THREE.Vector3(0, 0, 1);
                     const camPos = worldPos.clone()
-                        .add(normal.clone().multiplyScalar(40000))
-                        .add(upVec.clone().multiplyScalar(15000));
+                        .add(normal.clone().multiplyScalar(50000))
+                        .add(upVec.clone().multiplyScalar(25000));
                         
                     this.viewer.navigation.setRequestTransition(true, camPos, worldPos, upVec);
                     this._activeSectionTag = tag;
@@ -488,10 +489,11 @@ class ProgressiveExtension extends BaseExtension {
             marker.z * 1000 - globalOffset.z
         );
         const dir = new THREE.Vector3(marker.dx || 0, marker.dy || 0, marker.dz || 0).normalize();
-        const upVec = this.viewer.navigation.getCameraUpVector();
+        // Stable camera: world-up + perpendicular view with elevation
+        const upVec = new THREE.Vector3(0, 0, 1);
         const camPos = worldPos.clone()
-            .add(dir.clone().multiplyScalar(40000))
-            .add(upVec.clone().multiplyScalar(15000));
+            .add(dir.clone().multiplyScalar(50000))
+            .add(upVec.clone().multiplyScalar(25000));
         this.viewer.navigation.setRequestTransition(true, camPos, worldPos, upVec);
     }
 
