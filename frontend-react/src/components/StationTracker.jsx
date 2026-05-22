@@ -38,6 +38,24 @@ const StationTracker = ({ isVisible, onClose, markers, viewerRef }) => {
         }
     }, [tracks]);
 
+    // Sync from drag events on the 3D labels
+    useEffect(() => {
+        const handleDragSync = (e) => {
+            const { station, tag } = e.detail;
+            if (tag !== selectedTrack) setSelectedTrack(tag);
+            const filtered = markers.filter(m => m.tag === tag);
+            let closestIdx = 0;
+            let closestDist = Infinity;
+            filtered.forEach((m, i) => {
+                const d = Math.abs(m.station - station);
+                if (d < closestDist) { closestDist = d; closestIdx = i; }
+            });
+            setCurrentStationIdx(closestIdx);
+        };
+        window.addEventListener('station-drag-update', handleDragSync);
+        return () => window.removeEventListener('station-drag-update', handleDragSync);
+    }, [markers, selectedTrack]);
+
     const trackMarkers = useMemo(() => {
         if (!markers || !selectedTrack) return [];
         return markers.filter(m => m.tag === selectedTrack);

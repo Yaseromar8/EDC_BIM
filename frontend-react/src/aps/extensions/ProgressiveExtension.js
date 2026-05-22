@@ -12,6 +12,11 @@ class ProgressiveExtension extends BaseExtension {
         this._labelElements = [];   // { el, worldPos }
         this.onCameraChange = this.onCameraChange.bind(this);
         this._rafId = null;
+        // Drag state for sliding section cuts along alignment
+        this._isDragging = false;
+        this._dragMarkerIdx = -1;
+        this._onPointerMove = this._onPointerMove.bind(this);
+        this._onPointerUp = this._onPointerUp.bind(this);
     }
 
     load() {
@@ -26,7 +31,7 @@ class ProgressiveExtension extends BaseExtension {
         // DOM container for text labels only (~15 elements, negligible cost)
         this._labelGroup = document.createElement('div');
         this._labelGroup.className = 'progressive-label-group';
-        this._labelGroup.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:90;display:none;';
+        this._labelGroup.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:90;display:none;overflow:hidden;';
         this.viewer.container.appendChild(this._labelGroup);
 
         this.viewer.addEventListener(Autodesk.Viewing.CAMERA_CHANGE_EVENT, this.onCameraChange);
@@ -107,12 +112,12 @@ class ProgressiveExtension extends BaseExtension {
             // ─── 1. MAIN ALIGNMENT LINE ───
             const lineGeom = new THREE.BufferGeometry().setFromPoints(viewerPoints);
             const lineMat = new THREE.LineBasicMaterial({
-                color: 0x3b82f6,
+                color: 0xf59e0b,
                 linewidth: 2,
                 depthTest: false,
                 depthWrite: false,
                 transparent: true,
-                opacity: 0.9
+                opacity: 0.95
             });
             const mainLine = new THREE.Line(lineGeom, lineMat);
             this.viewer.overlays.addMesh(mainLine, this._overlayName);
@@ -138,12 +143,12 @@ class ProgressiveExtension extends BaseExtension {
 
             const tickGeom = new THREE.BufferGeometry().setFromPoints(tickVertices);
             const tickMat = new THREE.LineBasicMaterial({
-                color: 0x3b82f6,
+                color: 0xf59e0b,
                 linewidth: 1,
                 depthTest: false,
                 depthWrite: false,
                 transparent: true,
-                opacity: 0.7
+                opacity: 0.6
             });
             const ticks = new THREE.LineSegments(tickGeom, tickMat);
             this.viewer.overlays.addMesh(ticks, this._overlayName);
@@ -211,30 +216,78 @@ class ProgressiveExtension extends BaseExtension {
                 }
             }
 
-            // ─── 3. TEXT LABELS ───
+            // ─── 3. STATION DOTS + TEXT LABELS ───
             viewerPoints.forEach((pt, i) => {
+                // --- Station Dot (small circle) ---
+                const dotGeom = new THREE.SphereGeometry(800, 12, 12);
+                const dotMat = new THREE.MeshBasicMaterial({
+                    color: 0xffffff,
+                    depthTest: false,
+                    depthWrite: false,
+                    transparent: true,
+                    opacity: 0.9
+                });
+                const dot = new THREE.Mesh(dotGeom, dotMat);
+                dot.position.copy(pt);
+                this.viewer.overlays.addMesh(dot, this._overlayName);
+                this._meshes.push(dot);
+
+                // --- Dot ring (orange outline) ---
+                const ringGeom = new THREE.RingGeometry(700, 1000, 20);
+                const ringMat = new THREE.MeshBasicMaterial({
+                    color: 0xf59e0b,
+                    depthTest: false,
+                    depthWrite: false,
+                    transparent: true,
+                    opacity: 0.8,
+                    side: THREE.DoubleSide
+                });
+                const ring = new THREE.Mesh(ringGeom, ringMat);
+                ring.position.copy(pt);
+                ring.lookAt(this.viewer.navigation.getPosition());
+                this.viewer.overlays.addMesh(ring, this._overlayName);
+                this._meshes.push(ring);
+
+                // --- Text Label (ACC style: white bg, gray text, rounded) ---
                 const el = document.createElement('div');
                 el.style.cssText = `
                     position: absolute;
-                    color: white;
-                    padding: 1px 4px;
-                    font: bold 10px Inter, Arial, sans-serif;
+                    color: #444;
+                    background: rgba(255,255,255,0.92);
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    border: 1px solid rgba(180,180,180,0.5);
+                    font: 600 10px Inter, Arial, sans-serif;
                     white-space: nowrap;
                     pointer-events: auto;
-                    cursor: pointer;
-                    text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6);
+                    cursor: grab;
+                    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
                     transform-origin: center center;
-                    transition: color 0.2s, transform 0.2s;
+                    transition: background 0.2s, transform 0.2s;
+                    line-height: 1.3;
                 `;
                 el.textContent = tagMarkers[i].label;
 
-                el.onmouseenter = () => el.style.color = '#7bf2ff';
-                el.onmouseleave = () => el.style.color = 'white';
+                el.onmouseenter = () => {
+                    el.style.background = 'rgba(245,158,11,0.95)';
+                    el.style.color = '#fff';
+                    el.style.borderColor = '#f59e0b';
+                };
+                el.onmouseleave = () => {
+                    if (!this._isDragging) {
+                        el.style.background = 'rgba(255,255,255,0.92)';
+                        el.style.color = '#444';
+                        el.style.borderColor = 'rgba(180,180,180,0.5)';
+                    }
+                };
 
                 const worldPos = pt.clone();
                 const worldDir = new THREE.Vector3(tagMarkers[i].dx || 0, tagMarkers[i].dy || 0, tagMarkers[i].dz || 0);
+                const markerIdx = i;
 
-                el.onclick = () => {
+                // Click: section cut + fly-to
+                el.onclick = (e) => {
+                    if (this._wasDragged) { this._wasDragged = false; return; }
                     const normal = worldDir.clone().normalize();
                     const d = -normal.dot(worldPos);
                     const plane = new THREE.Vector4(normal.x, normal.y, normal.z, d);
@@ -247,27 +300,45 @@ class ProgressiveExtension extends BaseExtension {
                         .add(upVec.clone().multiplyScalar(15000));
                         
                     this.viewer.navigation.setRequestTransition(true, camPos, worldPos, upVec);
+                    this._activeSectionTag = tag;
 
                     if (!this._clearSectionBtn) {
                         this._clearSectionBtn = document.createElement('button');
                         this._clearSectionBtn.innerText = '✖ Terminar Sección';
                         this._clearSectionBtn.style.cssText = `
                             position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
-                            background: #3b82f6; color: white; border: none; padding: 10px 20px;
+                            background: #f59e0b; color: white; border: none; padding: 10px 20px;
                             border-radius: 20px; font-weight: bold; cursor: pointer;
                             box-shadow: 0 4px 15px rgba(0,0,0,0.4); pointer-events: auto;
                             z-index: 1000; font-family: Inter, sans-serif; transition: background 0.2s;
                         `;
-                        this._clearSectionBtn.onmouseenter = () => this._clearSectionBtn.style.background = '#2563eb';
-                        this._clearSectionBtn.onmouseleave = () => this._clearSectionBtn.style.background = '#3b82f6';
+                        this._clearSectionBtn.onmouseenter = () => this._clearSectionBtn.style.background = '#d97706';
+                        this._clearSectionBtn.onmouseleave = () => this._clearSectionBtn.style.background = '#f59e0b';
                         
                         this._clearSectionBtn.onclick = () => {
                             this.viewer.setCutPlanes([]);
                             this._clearSectionBtn.style.display = 'none';
+                            this._activeSectionTag = null;
                         };
                         this.viewer.container.appendChild(this._clearSectionBtn);
                     }
                     this._clearSectionBtn.style.display = 'block';
+                };
+
+                // Drag: mousedown starts drag mode to slide section along alignment
+                el.onmousedown = (e) => {
+                    if (e.button !== 0) return;
+                    this._isDragging = true;
+                    this._wasDragged = false;
+                    this._dragTag = tag;
+                    this._dragMarkerIdx = markerIdx;
+                    el.style.cursor = 'grabbing';
+                    el.style.background = 'rgba(245,158,11,0.95)';
+                    el.style.color = '#fff';
+                    document.addEventListener('mousemove', this._onPointerMove);
+                    document.addEventListener('mouseup', this._onPointerUp);
+                    e.preventDefault();
+                    e.stopPropagation();
                 };
 
                 this._labelGroup.appendChild(el);
@@ -275,7 +346,9 @@ class ProgressiveExtension extends BaseExtension {
                     el,
                     worldPos: worldPos,
                     worldDir: worldDir,
-                    station: tagMarkers[i].station || 0
+                    station: tagMarkers[i].station || 0,
+                    tag: tag,
+                    markerIdx: markerIdx
                 });
             });
         }); // end forEach track
@@ -351,6 +424,53 @@ class ProgressiveExtension extends BaseExtension {
         // Debounce label updates with rAF (only ~15 elements, fast)
         if (this._rafId) cancelAnimationFrame(this._rafId);
         this._rafId = requestAnimationFrame(() => this._updateLabels());
+    }
+
+    // --- Drag along alignment for section cut ---
+    _onPointerMove(e) {
+        if (!this._isDragging) return;
+        this._wasDragged = true;
+        
+        // Find closest label element to mouse position
+        const tag = this._dragTag;
+        const tagLabels = this._labelElements.filter(l => l.tag === tag);
+        if (tagLabels.length === 0) return;
+
+        let closestIdx = 0;
+        let closestDist = Infinity;
+        tagLabels.forEach((l, idx) => {
+            const sp = this.viewer.worldToClient(l.worldPos);
+            if (sp.z < 0 || sp.z > 1) return;
+            const d = Math.sqrt(Math.pow(sp.x - e.clientX, 2) + Math.pow(sp.y - e.clientY, 2));
+            if (d < closestDist) { closestDist = d; closestIdx = idx; }
+        });
+
+        if (closestIdx !== this._dragMarkerIdx) {
+            this._dragMarkerIdx = closestIdx;
+            const lbl = tagLabels[closestIdx];
+            // Move section cut to this station
+            const normal = lbl.worldDir.clone().normalize();
+            const d = -normal.dot(lbl.worldPos);
+            this.viewer.setCutPlanes([new THREE.Vector4(normal.x, normal.y, normal.z, d)]);
+
+            // Dispatch event for StationTracker to sync
+            window.dispatchEvent(new CustomEvent('station-drag-update', {
+                detail: { station: lbl.station, tag: lbl.tag }
+            }));
+        }
+    }
+
+    _onPointerUp() {
+        this._isDragging = false;
+        document.removeEventListener('mousemove', this._onPointerMove);
+        document.removeEventListener('mouseup', this._onPointerUp);
+        // Reset all label styles
+        this._labelElements.forEach(l => {
+            l.el.style.cursor = 'grab';
+            l.el.style.background = 'rgba(255,255,255,0.92)';
+            l.el.style.color = '#444';
+            l.el.style.borderColor = 'rgba(180,180,180,0.5)';
+        });
     }
 
     // --- Station Tracker Methods (Civil Tools) ---
