@@ -54,6 +54,7 @@ PUBLIC_PREFIXES = (
     '/api/docs/shared/',      # Public UUID-based document viewer links
     '/api/views/',            # Public UUID-based shared views
     '/api/inventory',         # Inventory sync (no trailing slash to match exact route)
+    '/api/presupuesto',       # Budget/Presupuesto maestro (BIM 5D)
     '/api/config/',           # Config updates (bypasses auth when polling)
 )
 

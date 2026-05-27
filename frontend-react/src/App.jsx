@@ -18,6 +18,7 @@ import ProgressDetailPanel from './components/ProgressDetailPanel';
 import DocumentManager from './components/DocumentManager';
 import DocPinPanel from './components/DocPinPanel';
 import InventoryDataGrid from './components/InventoryDataGrid';
+import BudgetTree from './components/BudgetTree';
 import TandemSidebar from './components/TandemSidebar';
 import TandemFilterPanel from './components/TandemFilterPanel';
 import PdfViewer from './components/PdfViewer';
@@ -240,6 +241,13 @@ const InventoryIcon = () => (
     fill="currentColor"
   >
     <path d="M20,3.5H4a2,2,0,0,0-2,2v13a2,2,0,0,0,2,2H20a2,2,0,0,0,2-2v-13A2,2,0,0,0,20,3.5ZM20.5,18.5a.5.5,0,0,1-.5.5H15.75V12.75h4.75ZM20.5,11.25H15.75V5h4.25a.5.5,0,0,1,.5.5ZM14.25,12.75v6.25H9.75v-6.25ZM9.75,11.25V5h4.5v6.25ZM8.25,12.75v6.25H4a.5.5,0,0,1-.5-.5v-5.75ZM3.5,11.25V5.5A.5.5,0,0,1,4,5H8.25v6.25Z" />
+  </svg>
+);
+
+const BudgetIcon = () => (
+  <svg className="rail-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z"/>
+    <path d="M7 12h2v5H7zm4-3h2v8h-2zm4-3h2v11h-2z"/>
   </svg>
 );
 
@@ -602,6 +610,8 @@ function App() {
   const [panelVisible, setPanelVisible] = useState(false);
   const [inventoryTabOpen, setInventoryTabOpen] = useState(false);
   const [inventoryPanelHeight, setInventoryPanelHeight] = useState(280);
+  const [budgetTabOpen, setBudgetTabOpen] = useState(false);
+  const [budgetPanelHeight, setBudgetPanelHeight] = useState(320);
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [isolatedExtIds, setIsolatedExtIds] = useState(null); // Lifted from InventoryDataGrid — persists across mount/unmount
 
@@ -687,6 +697,17 @@ function App() {
       window.removeEventListener('inventory-isolation-sync', forwardIsolation);
       window.removeEventListener('inventory-highlight-row', forwardHighlight);
     };
+  }, []);
+
+  // Budget Popout Window Bridge
+  useEffect(() => {
+    const handleBudgetMessage = (e) => {
+      if (e.data?.type === 'budget-dock') {
+        setBudgetTabOpen(true);
+      }
+    };
+    window.addEventListener('message', handleBudgetMessage);
+    return () => window.removeEventListener('message', handleBudgetMessage);
   }, []);
 
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -1097,24 +1118,29 @@ function App() {
   const [availablePartidas, setAvailablePartidas] = useState([]);
 
   useEffect(() => {
-    const handlePartidas = (e) => {
-      setAvailablePartidas(prev => {
-        // Merge in case we load multiple models over time
-        const map = new Map();
-        prev.forEach(p => map.set(p.code, p));
-        e.detail.partidas.forEach(p => {
-          if (map.has(p.code)) {
-            map.get(p.code).count += p.count;
-            if (!map.get(p.code).name && p.name) map.get(p.code).name = p.name;
-          } else {
-            map.set(p.code, p);
-          }
-        });
-        return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
+    const handleSchemaExtracted = () => {
+      if (!window.postgresInventory) return;
+      
+      const pMap = {};
+      window.postgresInventory.forEach(row => {
+        let code = row['03_05_DSI_CodigoDePartida1'] || row['03_05_DSI_CodigoDePartida2'] || row['03_05_DSI_CodigoDePartida3'] || row['03_05_DSI_CodigoDePartida'];
+        if (code) {
+          code = String(code).trim();
+          let name = row['03_04_DSI_NombreDePartida1'] || row['03_04_DSI_NombreDePartida2'] || row['03_04_DSI_NombreDePartida3'] || row['03_04_DSI_NombreDePartida'] || row['Name'] || row['name'];
+          if (!pMap[code]) pMap[code] = { code, name: name || '', count: 0 };
+          pMap[code].count++;
+          if (!pMap[code].name && name) pMap[code].name = name;
+        }
       });
+      
+      setAvailablePartidas(Object.values(pMap).sort((a, b) => a.code.localeCompare(b.code)));
     };
-    window.addEventListener('viewer-partidas-extracted', handlePartidas);
-    return () => window.removeEventListener('viewer-partidas-extracted', handlePartidas);
+    
+    window.addEventListener('viewer-schema-extracted', handleSchemaExtracted);
+    // Call once in case it already fired
+    handleSchemaExtracted();
+    
+    return () => window.removeEventListener('viewer-schema-extracted', handleSchemaExtracted);
   }, []);
 
   // ------------------------------------
@@ -1466,8 +1492,11 @@ function App() {
                 Object.entries(cVal).forEach(([rawPName, pVal]) => {
                   // Civil 3D: strip redundant group prefix from property name
                   let pName = rawPName;
-                  for (const d of [' - ', ' \u2013 ', ' \u2014 ']) {
-                    if (pName.startsWith(cName + d)) { pName = pName.slice((cName + d).length); break; }
+                  if (pName.startsWith(cName)) {
+                    let cleaned = pName.slice(cName.length).replace(/^[\s\-\_\.]+/, '');
+                    if (cleaned.length > 0) pName = cleaned;
+                  } else if (cName.toUpperCase() === 'PROPERTY SETS' && pName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)) {
+                    pName = pName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)[1];
                   }
                   const val = String(pVal).trim();
                   // FIX: Solo sobreescribir si el nuevo valor no está vacío,
@@ -2372,17 +2401,17 @@ function App() {
     if (effectiveType === 'fotos') {
       setSelectedAlbumPin(pin);
       setPhotoAlbumOpen(true);
-      setPanelDocked(false);
+      setPanelDocked(true);
       if (!trackingTab) setTrackingTab('fotos');
     } else if (effectiveType === 'avance') {
       setSelectedProgressPin(pin);
       setProgressPanelOpen(true);
-      setPanelDocked(false);
+      setPanelDocked(true);
       if (!trackingTab) setTrackingTab('avance');
     } else if (effectiveType === 'docs' || effectiveType === 'restricciones' || effectiveType === 'rfis') {
       setSelectedDocPin(pin);
       setDocPinPanelOpen(true);
-      setPanelDocked(false);
+      setPanelDocked(true);
       if (!trackingTab) setTrackingTab(effectiveType);
     }
   }, [trackingTab]);
@@ -2925,6 +2954,17 @@ function App() {
 
               <button
                 type="button"
+                data-test-id="nav-item-budget"
+                className={`rail-button ${budgetTabOpen ? 'active' : ''}`}
+                onClick={() => setBudgetTabOpen(prev => !prev)}
+                title="BIM 5D - Presupuesto"
+              >
+                <BudgetIcon />
+                <span className="rail-label" style={{ fontWeight: 700 }}>BIM 5D</span>
+              </button>
+
+              <button
+                type="button"
                 data-test-id="nav-item-inventory"
                 className={`rail-button ${inventoryTabOpen ? 'active' : ''}`}
                 onClick={() => setInventoryTabOpen(prev => !prev)}
@@ -3278,6 +3318,60 @@ function App() {
 
 
 
+              {/* BIM 5D BUDGET TREE - Overlay Panel */}
+              {budgetTabOpen && (
+                <div className="budget-overlay-panel" style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: panelVisible && activePanel && activePanel !== 'views' && activePanel !== 'inventory'
+                    ? `${64 + sidebarWidth}px`
+                    : '64px',
+                  right: 0,
+                  height: `${budgetPanelHeight}px`,
+                  zIndex: 31,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  borderTop: '1px solid #2a2b30',
+                  boxShadow: '0 -2px 12px rgba(0,0,0,0.5)',
+                  pointerEvents: 'auto',
+                  transition: 'left 0.3s ease'
+                }}>
+                  {/* Resize Handle */}
+                  <div
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      const startY = e.clientY;
+                      const startH = budgetPanelHeight;
+                      const onMove = (ev) => {
+                        const delta = startY - ev.clientY;
+                        const newH = Math.max(150, Math.min(600, startH + delta));
+                        setBudgetPanelHeight(newH);
+                      };
+                      const onUp = () => {
+                        window.removeEventListener('mousemove', onMove);
+                        window.removeEventListener('mouseup', onUp);
+                      };
+                      window.addEventListener('mousemove', onMove);
+                      window.addEventListener('mouseup', onUp);
+                    }}
+                    style={{
+                      height: '5px',
+                      cursor: 'ns-resize',
+                      background: 'transparent',
+                      position: 'relative',
+                      zIndex: 12,
+                      flexShrink: 0
+                    }}
+                  >
+                    <div style={{ position: 'absolute', left: '50%', top: '1px', transform: 'translateX(-50%)', width: '40px', height: '3px', borderRadius: '2px', background: '#555' }} />
+                  </div>
+                  <BudgetTree
+                    activeModelUrn={selectedProject?.id || 'global'}
+                    onClose={() => setBudgetTabOpen(false)}
+                  />
+                </div>
+              )}
+
               {/* INVENTORY DATA GRID - Overlay Panel (Tandem Style) */}
               {inventoryTabOpen && (
                 <div className="inventory-overlay-panel" style={{
@@ -3493,7 +3587,7 @@ function App() {
 
             {/* CASE D: PHOTO ALBUM SLIDER */}
             {trackingTab === 'fotos' && photoAlbumOpen && selectedAlbumPin && (
-              <div className={`split-doc active dark-float ${panelDocked ? 'parallel' : ''}`} style={panelDocked ? { background: '#1a1b1e', borderLeft: '1px solid #444', zIndex: 10 } : {}}>
+              <div className={`split-doc active dark-float ${panelDocked ? 'parallel' : ''}`} style={panelDocked ? { background: '#1a1b1e', borderLeft: '1px solid #444', zIndex: 10, position: 'relative', overflow: 'hidden' } : {}}>
                 {/* Dock/Undock toggle */}
                 {!panelDocked && (
                   <button className="dock-toggle-btn" onClick={() => setPanelDocked(true)} title="Acoplar panel">

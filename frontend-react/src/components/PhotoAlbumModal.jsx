@@ -722,7 +722,8 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
             {/* Lightbox for Selected Photo — Clean, frameless, professional */}
             {selectedPhoto && (
                 <div style={{
-                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    position: (variant === 'panel' && window.innerWidth >= 768) ? 'absolute' : 'fixed',
+                    top: 0, left: 0, right: 0, bottom: 0,
                     background: 'rgba(0,0,0,0.92)', zIndex: 99990,
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
                 }} onClick={() => setSelectedPhoto(null)}>
@@ -781,21 +782,24 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
 
                     {/* Image/Video — no frame, no border, no padding */}
                     <div onClick={e => e.stopPropagation()} style={{
-                        maxWidth: '92vw', maxHeight: '80vh', display: 'flex',
-                        flexDirection: 'column', alignItems: 'center'
+                        maxWidth: (variant === 'panel' && window.innerWidth >= 768) ? '100%' : '92vw',
+                        maxHeight: (variant === 'panel' && window.innerWidth >= 768) ? '90%' : '80vh',
+                        display: 'flex',
+                        flexDirection: 'column', alignItems: 'center',
+                        padding: (variant === 'panel' && window.innerWidth >= 768) ? '10px' : '0'
                     }}>
                         {selectedPhoto.src && (selectedPhoto.src.toLowerCase().endsWith('.mp4') || selectedPhoto.src.toLowerCase().endsWith('.webm') || selectedPhoto.src.toLowerCase().endsWith('.ogg')) ? (
                             <video
                                 src={selectedPhoto.src}
                                 controls
-                                style={{ maxHeight: '78vh', maxWidth: '92vw', borderRadius: '2px' }}
+                                style={{ maxHeight: (variant === 'panel' && window.innerWidth >= 768) ? '70vh' : '78vh', maxWidth: '100%', borderRadius: '2px' }}
                             />
                         ) : (
                             <img
                                 src={selectedPhoto.src}
                                 alt={selectedPhoto.desc || ''}
                                 onError={(e) => e.target.src = FALLBACK_IMG}
-                                style={{ maxHeight: '78vh', maxWidth: '92vw', objectFit: 'contain', borderRadius: '2px' }}
+                                style={{ maxHeight: (variant === 'panel' && window.innerWidth >= 768) ? '70vh' : '78vh', maxWidth: '100%', objectFit: 'contain', borderRadius: '2px' }}
                             />
                         )}
 

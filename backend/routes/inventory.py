@@ -328,6 +328,16 @@ def extract_metadata_task(urn, target_urn, job_id):
                     catalog_tree(children)
         catalog_tree(hier_objects)
         
+        # ═══════════════════════════════════════════════════════════
+        # FILTRO INTEGRAL: Set de nodos PADRES en el árbol SVF.
+        # Cualquier nodo que sea padre de otros nodos NO es una
+        # instancia física, sino un nodo de tipo/familia/categoría.
+        # Esto funciona para TODAS las categorías de Revit sin
+        # necesidad de listas negras específicas por nombre.
+        # ═══════════════════════════════════════════════════════════
+        tree_parent_ids = set(parent_map.values())
+        print(f"[Extractor] Fase 2.2 - Detectados {len(tree_parent_ids)} nodos padre (serán excluidos como no-instancias)")
+        
         collection_ids = {node.get('objectid') for node in collection}
         missing_leaf_ids = tree_leaf_ids - collection_ids
         
@@ -382,6 +392,7 @@ def extract_metadata_task(urn, target_urn, job_id):
 
         inventory_data = []
         skipped_nodes = 0
+        seen_external_ids = set()  # Deduplicación integral por externalId
         for node in collection:
             name = node.get('name', 'Unnamed')
             external_id = node.get('externalId')
@@ -427,10 +438,15 @@ def extract_metadata_task(urn, target_urn, job_id):
                 prefix3 = group_name + ' — '   # Em dash variant
                 for prop_name, prop_val in group_vals.items():
                     clean_name = prop_name
-                    for pfx in (prefix1, prefix2, prefix3):
-                        if prop_name.startswith(pfx):
-                            clean_name = prop_name[len(pfx):]
-                            break
+                    import re
+                    if prop_name.startswith(group_name) and len(prop_name) > len(group_name):
+                        candidate = re.sub(r'^[\\s\\-\\_\\.]+', '', prop_name[len(group_name):])
+                        if candidate:
+                            clean_name = candidate
+                    elif group_name.upper() == 'PROPERTY SETS':
+                        match = re.match(r'^.*?\\s*[\\-\\u2013\\u2014]\\s*(.+)$', prop_name)
+                        if match:
+                            clean_name = match.group(1)
                     cleaned_group[clean_name] = prop_val
                 cleaned_props[group_name] = cleaned_group
             merged_props = cleaned_props
@@ -468,18 +484,22 @@ def extract_metadata_task(urn, target_urn, job_id):
                 merged_props['__category__'] = {}
             merged_props['__category__']['__category__'] = revit_cat
             
-            # Clasificar tipo de nodo SVF: instance / type / category
-            # - Instance: Elemento colocado con geometría → nombre contiene [ElementId]
-            # - Category: Nodo agrupador → externalId tiene formato "NombreTipo:Categoría"
-            # - Type: Definición de familia (sin geometría propia)
+            # ═══════════════════════════════════════════════════════════
+            # CLASIFICACIÓN INTEGRAL DE NODOS SVF
+            # Prioridad 1: Si el nodo es PADRE de otros → es tipo/familia (NUNCA instancia)
+            # Prioridad 2: Si es hoja del árbol → es instancia geométrica
+            # Prioridad 3: Regex de nombre con [ID] → instancia (Revit/Civil3D)
+            # Prioridad 4: ExternalId con ':' → categoría agrupadora
+            # Prioridad 5: IFC con IfcGUID → instancia
+            # Esta lógica funciona para TODAS las categorías de Revit
+            # sin necesidad de filtros específicos por nombre.
+            # ═══════════════════════════════════════════════════════════
             import re
-            # ─── Clasificación de nodos SVF ───────────────────────────
-            # Revit:   nombres como "Muro Básico [4537502]"  → decimal
-            # Civil3D: nombres como "Solid [787B]"           → hexadecimal (handle)
-            # Ambos formatos indican instancias geométricas reales.
-            # Además, priorizamos el árbol jerárquico real (tree_leaf_ids)
-            # ──────────────────────────────────────────────────────────
-            if objectid in tree_leaf_ids:
+            if objectid in tree_parent_ids:
+                # INTEGRAL: Nodo padre → NUNCA es instancia física
+                # Cubre: Tipos de tubería, Tipos de muro, Tipos de piso, etc.
+                node_type = 'type'
+            elif objectid in tree_leaf_ids:
                 node_type = 'instance'
             elif re.search(r'\[[\dA-Fa-f]+\]', name):
                 node_type = 'instance'
@@ -508,6 +528,34 @@ def extract_metadata_task(urn, target_urn, job_id):
             if node_type != 'instance':
                 skipped_nodes += 1
                 continue
+
+            # --- FILTRO DE ELEMENTOS FANTASMAS (SISTEMAS/ANALÍTICOS) ---
+            # Revit exporta lógicas analíticas invisibles (Piping Systems, Lines) 
+            # que duplican la data (Length, Partida) del elemento físico principal.
+            # Bloqueamos su ingreso a la BD para mantener la pureza de los metrados.
+            BLACKLIST_CATEGORIES = {
+                'Lines', 'Piping Systems', 'Duct Systems', 
+                'Analytical Models', 'Pipe Insulations'
+            }
+            # revit_cat ya fue normalizado (ES->EN) en el paso previo
+            if revit_cat in BLACKLIST_CATEGORIES:
+                skipped_nodes += 1
+                continue
+            
+            # --- FILTRO INTEGRAL: CENTERLINES MEP (REVIT) ---
+            # En Revit, cada tubería/conducto genera DOS nodos SVF:
+            #   1. La geometría 3D (tubería física) → tiene "Nombre de tipo"
+            #   2. Su línea de eje (centerline) → NO tiene "Nombre de tipo"
+            # Ambos heredan los mismos parámetros DSI, causando conteo doble.
+            # Solución: descartar nodos MEP que carezcan de Type Name.
+            MEP_CATEGORIES = {'Pipes', 'Pipe Fittings', 'Ducts', 'Duct Fittings',
+                              'Cable Trays', 'Conduits', 'Flex Pipes', 'Flex Ducts'}
+            if revit_cat in MEP_CATEGORIES:
+                identity = merged_props.get('Datos de identidad', merged_props.get('Identity Data', {}))
+                type_name = identity.get('Nombre de tipo', identity.get('Type Name', ''))
+                if not type_name:
+                    skipped_nodes += 1
+                    continue
             
             inventory_data.append({
                 "name": name,
@@ -526,9 +574,29 @@ def extract_metadata_task(urn, target_urn, job_id):
         with get_db_connection() as conn:
             cursor = conn.cursor()
             
-            # WIPE QUIRÚRGICO: Elimina los datos fantasmas antiguos para este modelo específico.
-            print(f"[Extractor] Aplicando Hard Wipe (Espejo Estricto) para model_urn={target_urn} y source_urn={urn}")
-            cursor.execute("DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn = %s", (target_urn, urn))
+            # WIPE QUIRÚRGICO: Elimina versiones históricas para no acumular basura en PostgreSQL
+            import base64
+            def get_base_urn(b64_urn):
+                try:
+                    padded = b64_urn + '=' * (-len(b64_urn) % 4)
+                    url_safe = padded.replace('-', '+').replace('_', '/')
+                    decoded = base64.b64decode(url_safe).decode('utf-8')
+                    return decoded.split('?')[0]
+                except Exception:
+                    return b64_urn
+            
+            base_urn_to_delete = get_base_urn(urn)
+            cursor.execute("SELECT DISTINCT source_urn FROM inventory_assets")
+            all_source_urns = cursor.fetchall()
+            urns_to_delete = []
+            for (s_urn,) in all_source_urns:
+                if get_base_urn(s_urn) == base_urn_to_delete:
+                    urns_to_delete.append(s_urn)
+            
+            if urns_to_delete:
+                format_strings = ','.join(['%s'] * len(urns_to_delete))
+                print(f"[Extractor] Eliminando {len(urns_to_delete)} versiones historicas del archivo para purgar la BD.")
+                cursor.execute(f"DELETE FROM inventory_assets WHERE source_urn IN ({format_strings})", urns_to_delete)
 
             current_time = datetime.now()
             records = [

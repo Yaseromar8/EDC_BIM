@@ -8,6 +8,7 @@ import IconMarkupExtension from '../aps/extensions/IconMarkupExtension';
 import ProgressiveExtension from '../aps/extensions/ProgressiveExtension';
 import WorkfrontsPanel from './WorkfrontsPanel';
 import StationTracker from './StationTracker';
+import { DataVizEngine } from '../aps/utils/DataVizEngine';
 
 const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location.hostname.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) ? `http://${window.location.hostname}:3000` : 'https://visor-ecd-backend.onrender.com')));
 
@@ -110,7 +111,8 @@ const Viewer = ({
     const lastFilterDetailRef = useRef(null);
     const longPressTimerRef = useRef(null);
     const isLongPressRef = useRef(false);
-    const ghostMeshRef = useRef(null);
+    const ghostMeshRef = useRef(null); // Reference to the 3D sprite mesh
+    const dataVizEngineRef = useRef(null);
     const viewerReadyRef = useRef(false);
     const recalcDebounceRef = useRef(null);
     const activeViewableGuidsRef = useRef(activeViewableGuids);
@@ -497,7 +499,8 @@ const Viewer = ({
                         'Autodesk.PDF',
                         'Autodesk.AEC.LevelsExtension',
                         'Autodesk.AEC.Minimap3DExtension',
-                        'ProgressiveExtension'
+                        'ProgressiveExtension',
+                        'Autodesk.DataVisualization'
                     ],
                     disabledExtensions: {
                         measure: false,
@@ -781,10 +784,9 @@ const Viewer = ({
         console.log(`[Viewer] Model Loaded: ${urn}. Native APS Processing applied.`);
         onModelProperties?.({ urn, props: [] });
 
-        // Extraer listado de Partidas (Liviano) en el Background
-        extractPartidasNative(model).then(partidas => {
-            window.dispatchEvent(new CustomEvent('viewer-partidas-extracted', { detail: { urn, partidas } }));
-        }).catch(err => console.error('[Viewer] Error extracting partidas', err));
+        // REMOVIDO: Ya no extraeremos partidas nativamente desde Viewer.jsx
+        // El App.jsx ahora construye availablePartidas directamente desde postgresInventory
+        // cuando recibe el evento viewer-schema-extracted.
 
         // REMOVIDO: extractSchemaNative ya no se utiliza porque la metadata
         // se construye ahora basándose en PostgreSQL (App.jsx), que garantiza
@@ -1422,8 +1424,32 @@ const Viewer = ({
             }
         };
 
+        const handleTandemHighlight = async (e) => {
+            const { idsByUrn, simpleIds } = e.detail;
+            
+            // Si la selección está vacía, limpiamos
+            if (Object.keys(idsByUrn).length === 0 && simpleIds.length === 0) {
+                if (dataVizEngineRef.current) dataVizEngineRef.current.clearTandemStripes();
+                return;
+            }
+
+            // Inicializamos el motor on-demand si no existe
+            if (!dataVizEngineRef.current && viewerRef.current) {
+                dataVizEngineRef.current = new DataVizEngine(viewerRef.current);
+            }
+
+            if (dataVizEngineRef.current) {
+                await dataVizEngineRef.current.applyTandemStripes(idsByUrn);
+            }
+        };
+
         window.addEventListener('viewer-select', handleViewerSelect);
-        return () => window.removeEventListener('viewer-select', handleViewerSelect);
+        window.addEventListener('budget-tandem-highlight', handleTandemHighlight);
+        
+        return () => {
+            window.removeEventListener('viewer-select', handleViewerSelect);
+            window.removeEventListener('budget-tandem-highlight', handleTandemHighlight);
+        };
     }, [viewerReady]);
 
     // Handle Active Sheet Change

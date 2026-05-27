@@ -143,13 +143,11 @@ export function calculateDynamicFilterBucketsNative(model, filterProperties, fil
                     var propName = attrDef.name || 'Unnamed';
                     var propCategory = attrDef.category || 'General';
                     // Civil 3D: strip redundant group prefix (hyphen, en-dash, em-dash)
-                    var dashes = [' - ', ' \u2013 ', ' \u2014 '];
-                    for (var di = 0; di < dashes.length; di++) {
-                        var pfx = propCategory + dashes[di];
-                        if (propName.indexOf(pfx) === 0) {
-                            propName = propName.substring(pfx.length);
-                            break;
-                        }
+                    if (propName.indexOf(propCategory) === 0) {
+                        var cleaned = propName.substring(propCategory.length).replace(/^[\s\-\_\.]+/, '');
+                        if (cleaned.length > 0) propName = cleaned;
+                    } else if (propCategory.toUpperCase() === 'PROPERTY SETS' && propName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)) {
+                        propName = propName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)[1];
                     }
                     var key = propCategory + '::' + propName;
                     
@@ -280,6 +278,11 @@ export function extractPartidasNative(model) {
     if(!model.getPropertyDb()) return Promise.resolve([]);
     return new Promise((resolve) => {
         model.getPropertyDb().executeUserFunction(function(pdb) {
+            const attrDefs = {};
+            pdb.enumAttributes(function(attrId, attrDef) {
+                attrDefs[attrId] = attrDef.name;
+            });
+
             const partidaMap = {};
             let dbId = 1;
             const maxId = pdb.getObjectCount();
@@ -288,7 +291,7 @@ export function extractPartidasNative(model) {
                 let code = '';
                 let name = '';
                 pdb.enumObjectProperties(dbId, function(propId, valId) {
-                    const propName = pdb.getPropertyName(propId);
+                    const propName = attrDefs[propId];
                     if (propName === '03_05_DSI_CodigoDePartida') {
                         let val = pdb.getAttrValue(propId, valId);
                         if(val !== null && val !== undefined) {
@@ -341,13 +344,11 @@ export function extractSchemaNative(model) {
                 var name = attrDef.name || 'Unnamed';
                 if(name.startsWith('__')) return; // ignore internal attributes
                 // Civil 3D: strip redundant group prefix (hyphen, en-dash, em-dash)
-                var dashes = [' - ', ' \u2013 ', ' \u2014 '];
-                for (var di = 0; di < dashes.length; di++) {
-                    var prefix = category + dashes[di];
-                    if (name.indexOf(prefix) === 0) {
-                        name = name.substring(prefix.length);
-                        break;
-                    }
+                if (name.indexOf(category) === 0) {
+                    var cleanedName = name.substring(category.length).replace(/^[\s\-\_\.]+/, '');
+                    if (cleanedName.length > 0) name = cleanedName;
+                } else if (category.toUpperCase() === 'PROPERTY SETS' && name.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)) {
+                    name = name.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)[1];
                 }
                 var key = category + '::' + name;
                 if(!schemaMap[key]) {

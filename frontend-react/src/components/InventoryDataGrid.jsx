@@ -326,8 +326,11 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                             Object.entries(cat).forEach(([rawPName, pVal]) => {
                                 // Civil 3D: strip redundant group prefix
                                 let pName = rawPName;
-                                for (const d of [' - ', ' \u2013 ', ' \u2014 ']) {
-                                    if (pName.startsWith(catName + d)) { pName = pName.slice((catName + d).length); break; }
+                                if (pName.startsWith(catName)) {
+                                    let cleaned = pName.slice(catName.length).replace(/^[\s\-\_\.]+/, '');
+                                    if (cleaned.length > 0) pName = cleaned;
+                                } else if (catName.toUpperCase() === 'PROPERTY SETS' && pName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)) {
+                                    pName = pName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)[1];
                                 }
                                 const rawVal = (pVal === null || pVal === undefined) ? '' : String(pVal).trim();
                                 const val = formatFractionalInch(rawVal);
@@ -387,14 +390,51 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
 
             setIsLoading(true);
             try {
-                // Fetch all inventory. DB model_urn contains base64 URNs, not appProjectId.
-                // Frontend cache is still keyed by activeModelUrn for per-project segregation.
-                const urnParam = activeModelUrn && activeModelUrn !== 'global' ? `?model_urn=${encodeURIComponent(activeModelUrn)}` : '';
-                const res = await apiFetch(`${BACKEND_URL}/api/inventory${urnParam}`);
-                if (!res.ok) throw new Error('Falló el fetch a /api/inventory');
-                
-                const dbData = await res.json();
-                const result = processDbData(dbData);
+                let result;
+                if (window.postgresInventory && window.postgresInventory.length > 0) {
+                    console.log(`[Inventory] 📦 Using offline window.postgresInventory — ${window.postgresInventory.length} items`);
+                    
+                    const allProps = new Set(['Name', 'Material', 'Status', 'Vaciado_Nro']);
+                    const mappedData = window.postgresInventory.map(row => {
+                         const newRow = { ...row };
+                         if (!newRow.Name && newRow.name) newRow.Name = newRow.name;
+                         Object.keys(newRow).forEach(k => {
+                             if (!['dbId', 'name', 'model_urn', 'source_urn', '_nodeType'].includes(k)) {
+                                 allProps.add(k);
+                             }
+                         });
+                         return newRow;
+                    });
+                    
+                    const preferredOrder = ['Name', 'Material', 'Status', 'Vaciado_Nro', 'Level', 'Tandem Category', 'Rooms', 'Dimensions', 'Categoría', 'Nivel base'];
+                    const cols = [{ key: 'dbId', header: 'EXT ID', width: 280 }];
+                    
+                    const extractedCols = Array.from(allProps);
+                    const orderedCols = [];
+                    preferredOrder.forEach(p => {
+                         const idx = extractedCols.indexOf(p);
+                         if (idx > -1) {
+                             orderedCols.push(p);
+                             extractedCols.splice(idx, 1);
+                         }
+                    });
+                    extractedCols.forEach(p => orderedCols.push(p));
+                    
+                    orderedCols.forEach(p => {
+                        cols.push({ key: p, header: p, width: p === 'Name' ? 240 : 160 });
+                    });
+
+                    result = { mappedData, cols, orderedCols };
+                } else {
+                    const urnParam = activeModelUrn && activeModelUrn !== 'global' ? `?model_urn=${encodeURIComponent(activeModelUrn)}` : '';
+                    // The apiFetch assumes a global variable or import which might fail offline.
+                    // Instead we just use the raw fetch and catch it if it fails.
+                    const res = await fetch(`${BACKEND_URL}/api/inventory${urnParam}`);
+                    if (!res.ok) throw new Error('Falló el fetch a /api/inventory');
+                    
+                    const dbData = await res.json();
+                    result = processDbData(dbData);
+                }
                 
                 if (!isMounted) return;
 

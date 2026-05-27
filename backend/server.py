@@ -706,6 +706,7 @@ from routes.rfis import rfis_bp
 from routes.redlines import redlines_bp
 from routes.partidas import partidas_bp
 from routes.photo_diag import photo_diag_bp
+from routes.presupuesto import presupuesto_bp
 
 app.register_blueprint(digital_twin_bp)
 app.register_blueprint(audit_bp)
@@ -725,6 +726,7 @@ app.register_blueprint(rfis_bp, url_prefix='/api/rfis')
 app.register_blueprint(redlines_bp, url_prefix='/api/redlines')
 app.register_blueprint(partidas_bp, url_prefix='/api/partidas')
 app.register_blueprint(photo_diag_bp)
+app.register_blueprint(presupuesto_bp, url_prefix='/api/presupuesto')
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
@@ -732,11 +734,13 @@ def serve_map_file(filename):
 
 # Inicializar tablas maestras de la BD
 from db import ensure_file_nodes_table, ensure_ai_brain_schema, ensure_rfi_schema, ensure_redline_schema, ensure_partidas_schema
+from routes.presupuesto import ensure_presupuesto_schema
 ensure_file_nodes_table()
 ensure_ai_brain_schema()
 ensure_rfi_schema()
 ensure_redline_schema()
 ensure_partidas_schema()
+ensure_presupuesto_schema()
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()
