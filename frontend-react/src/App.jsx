@@ -1244,12 +1244,17 @@ function App() {
         hiddenModelUrns
       };
 
+      const configState = {
+        inventoryColumns: window.__inventoryCacheSelectedColumns || null
+      };
+
       apiFetch(`${BACKEND_URL}/api/views`, {
         method: 'POST',
         body: JSON.stringify({
           name,
           viewerState,
           filterState,
+          config: configState,
           project: selectedProject?.id || selectedProject?.name || 'global'
         })
       })
@@ -1286,7 +1291,15 @@ function App() {
       else setHiddenModelUrns([]);
     }
 
-    // 3. ANTI-WIPE: Forzar re-aplicación de filtros DESPUÉS de que restoreState
+    // 3. Restaurar configuración adicional (como columnas del inventario)
+    if (view.config && view.config.inventoryColumns) {
+      window.__inventoryCacheSelectedColumns = view.config.inventoryColumns;
+      window.dispatchEvent(new CustomEvent('restore-inventory-config', {
+        detail: view.config.inventoryColumns
+      }));
+    }
+
+    // 4. ANTI-WIPE: Forzar re-aplicación de filtros DESPUÉS de que restoreState
     //    haya terminado de resetear la visibilidad del viewer.
     //    Sin este delay, restoreState borra la isolation que recalculate-filters aplicó.
     setTimeout(() => {

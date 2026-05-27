@@ -209,6 +209,18 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
             // Do not wipe window cache on mount if it's null, just sync forward
         }
     }, [selectedColumnKeys]);
+
+    // Restore column config from App.jsx (Saved Views)
+    useEffect(() => {
+        const handleRestoreConfig = (e) => {
+            const columns = e.detail;
+            if (columns) {
+                setSelectedColumnKeys(columns);
+            }
+        };
+        window.addEventListener('restore-inventory-config', handleRestoreConfig);
+        return () => window.removeEventListener('restore-inventory-config', handleRestoreConfig);
+    }, []);
     
     const containerRef = useRef(null);
     const headerRef = useRef(null);
