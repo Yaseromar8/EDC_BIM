@@ -124,8 +124,8 @@ const SourceFilesPanel = ({
     const [expandedModels, setExpandedModels] = useState({});
     const [activeMenu, setActiveMenu] = useState(null);
 
-    const toggleExpand = (urn) => {
-        setExpandedModels(prev => ({ ...prev, [urn]: !prev[urn] }));
+    const toggleExpand = (id) => {
+        setExpandedModels(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
     return (
@@ -144,7 +144,7 @@ const SourceFilesPanel = ({
                 {models.map(model => {
                     const norm = (u) => String(u || '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
                     const isHidden = hiddenModels.some(u => norm(u) === norm(model.urn));
-                    const isExpanded = expandedModels[model.urn];
+                    const isExpanded = expandedModels[model.id];
                     const extractData = extractionJobs[model.urn];
                     const isExtracting = extractData && extractData.isActive;
                     const versionNum = model.versionNumber || null;
@@ -154,7 +154,7 @@ const SourceFilesPanel = ({
                     const checkStatus = updateCheckStatus[model.urn];
 
                     return (
-                        <div key={model.urn} className={`sfp-item ${isExpanded ? 'expanded' : ''}`}>
+                        <div key={model.id} className={`sfp-item ${isExpanded ? 'expanded' : ''}`}>
                             {/* UPDATE BANNER — Tandem style */}
                             {hasUpdate && (
                                 <div className="sfp-update-banner">
@@ -171,7 +171,7 @@ const SourceFilesPanel = ({
                                 </div>
                             )}
 
-                            <div className="sfp-item-row" onClick={() => toggleExpand(model.urn)}>
+                            <div className="sfp-item-row" onClick={() => toggleExpand(model.id)}>
                                 <button className="sfp-list-chevron">
                                     {isExpanded ? <ChevronDown /> : <ChevronRight />}
                                 </button>
@@ -218,12 +218,12 @@ const SourceFilesPanel = ({
                                             className="sfp-action-btn more"
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                setActiveMenu(activeMenu === model.urn ? null : model.urn);
+                                                setActiveMenu(activeMenu === model.id ? null : model.id);
                                             }}
                                         >
                                             <MoreIcon />
                                         </button>
-                                        {activeMenu === model.urn && (
+                                        {activeMenu === model.id && (
                                             <div className="sfp-dropdown">
                                                 <button onClick={(e) => { e.stopPropagation(); onUpdate && onUpdate(model.urn); setActiveMenu(null); }}>
                                                     <span className="sfp-menu-icon"><UpdateIcon /></span> Update
