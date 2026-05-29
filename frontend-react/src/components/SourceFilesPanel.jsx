@@ -175,7 +175,7 @@ const SourceFilesPanel = ({
                                 <button className="sfp-list-chevron">
                                     {isExpanded ? <ChevronDown /> : <ChevronRight />}
                                 </button>
-                                <span className="sfp-label">
+                                <span className="sfp-label" title={model.label}>
                                     <span className="sfp-label-text">{model.label}</span>
                                     {versionNum && (
                                         <span className="sfp-version-badge">v{versionNum}</span>
