@@ -652,10 +652,17 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
       viewer.clearSelection();
     }
     
-    // Disparar evento para que el DataVizEngine (Tandem Stripes) lo intercepte en Viewer.jsx
-    window.dispatchEvent(new CustomEvent('budget-tandem-highlight', {
-      detail: { idsByUrn, simpleIds }
-    }));
+    // Resaltado Tandem (rayas amarillas): solo para elementos individuales 3D
+    if (node.is_element) {
+      window.dispatchEvent(new CustomEvent('budget-tandem-highlight', {
+        detail: { idsByUrn, simpleIds }
+      }));
+    } else {
+      // Limpiar rayas previas al seleccionar partidas/títulos
+      window.dispatchEvent(new CustomEvent('budget-tandem-highlight', {
+        detail: { idsByUrn: {}, simpleIds: [] }
+      }));
+    }
 
     window.dispatchEvent(new CustomEvent('budget-select-partidas', {
       detail: { items: leafItems, parentItem: node.is_element ? node.parent_item : node.item, dbIds: simpleIds, idsByUrn }
@@ -706,10 +713,16 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
       }
     }
 
-    // Disparar rayas Tandem sobre los elementos aislados
-    window.dispatchEvent(new CustomEvent('budget-tandem-highlight', {
-      detail: { idsByUrn, simpleIds }
-    }));
+    // Resaltado Tandem (rayas amarillas): solo para elementos individuales 3D
+    if (node.is_element) {
+      window.dispatchEvent(new CustomEvent('budget-tandem-highlight', {
+        detail: { idsByUrn, simpleIds }
+      }));
+    } else {
+      window.dispatchEvent(new CustomEvent('budget-tandem-highlight', {
+        detail: { idsByUrn: {}, simpleIds: [] }
+      }));
+    }
 
     window.dispatchEvent(new CustomEvent('budget-select-partidas', {
       detail: { items: leafItems, parentItem: node.is_element ? node.parent_item : node.item, dbIds: simpleIds, idsByUrn }
