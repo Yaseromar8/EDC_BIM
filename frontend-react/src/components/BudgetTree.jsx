@@ -374,7 +374,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
 
       worksheet.columns = [
         { header: 'ÍTEM', key: 'col1', width: 18 },
-        { header: 'DESCRIPCIÓN', key: 'col2', width: 45 },
+        { header: 'DESCRIPCIÓN', key: 'col2', width: 50 },
         { header: 'UND.', key: 'col3', width: 10 },
         { header: 'METRADO CONTR.', key: 'col4', width: 18 },
         { header: 'METRADO REAL', key: 'col5', width: 18 },
@@ -386,33 +386,55 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
 
       const headerRow = worksheet.getRow(1);
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A2B30' } };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF212529' } };
       headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
 
-      const applyRowStyles = (row, isElement = false, isSubHeader = false) => {
+      const applyRowStyles = (row, type, level = 0) => {
         row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-          cell.border = {
-            top: { style: 'thin', color: { argb: 'FFDDDDDD' } },
-            left: { style: 'thin', color: { argb: 'FFDDDDDD' } },
-            bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } },
-            right: { style: 'thin', color: { argb: 'FFDDDDDD' } }
-          };
-          
-          if (!isSubHeader) {
-            // Alineación de números
-            if (colNumber >= 4) {
-              cell.alignment = { horizontal: 'right', vertical: 'middle' };
-            } else {
-              cell.alignment = { vertical: 'middle' };
-            }
+          // Alineación por defecto para números
+          if (colNumber >= 4) {
+            cell.alignment = { horizontal: 'right', vertical: 'middle' };
+          } else {
+            cell.alignment = { vertical: 'middle' };
+          }
 
-            // Formatos de número nativos
-            if (colNumber === 4 || colNumber === 5 || colNumber === 9) {
-              cell.numFmt = '#,##0.00';
-            }
-            if (colNumber === 6 || colNumber === 7 || colNumber === 8) {
-              cell.numFmt = '"S/" #,##0.00';
-            }
+          // Indentation (Sangría) para descripciones
+          if (colNumber === 2 && level > 1) {
+            cell.alignment = { ...cell.alignment, indent: level - 1 };
+          }
+
+          // Formatos de número nativos
+          if (colNumber === 4 || colNumber === 5 || colNumber === 9) {
+            cell.numFmt = '#,##0.00';
+          }
+          if (colNumber === 6 || colNumber === 7 || colNumber === 8) {
+            cell.numFmt = '"S/" #,##0.00';
+          }
+
+          // Estilos específicos según tipo de fila
+          if (type === 'titulo_principal') {
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF343A40' } };
+            cell.border = { bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } } };
+          } else if (type === 'titulo_secundario') {
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF6C757D' } };
+            cell.border = { bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } } };
+          } else if (type === 'partida') {
+            cell.font = { bold: true, color: { argb: 'FF000000' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+            cell.border = {
+              top: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+              bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } }
+            };
+          } else if (type === 'subheader') {
+            cell.font = { italic: true, color: { argb: 'FF888888' }, size: 9 };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
+            cell.border = { bottom: { style: 'hair', color: { argb: 'FFEEEEEE' } } };
+            if (colNumber < 4) cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          } else if (type === 'elemento') {
+            cell.font = { color: { argb: 'FF666666' }, size: 9 };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
           }
         });
       };
@@ -429,10 +451,10 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
             col7: node.parcial_contractual ? Number(node.parcial_contractual) : null,
             col8: null
           });
-          row.outlineLevel = level - 1;
-          row.font = { bold: true };
-          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFEFEF' } };
-          applyRowStyles(row);
+          row.outlineLevel = Math.max(0, level - 1);
+          
+          const type = level === 1 ? 'titulo_principal' : 'titulo_secundario';
+          applyRowStyles(row, type, level);
           
           if (node.children) {
             node.children.forEach(child => addNodeToExcel(child, level + 1));
@@ -452,11 +474,10 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
             col7: node.parcial_contractual ? Number(node.parcial_contractual) : null,
             col8: parcialReal
           });
-          row.outlineLevel = level - 1;
-          applyRowStyles(row);
+          row.outlineLevel = Math.max(0, level - 1);
+          applyRowStyles(row, 'partida', level);
           
           if (eng && eng.elements && eng.elements.length > 0) {
-            // Inyectar sub-cabecera para el detalle
             const subHeaderRow = worksheet.addRow({
                 col1: '[ID] ELEMENTO',
                 col2: 'ZONA',
@@ -469,10 +490,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
                 col9: 'METRADO SUST.'
             });
             subHeaderRow.outlineLevel = level;
-            subHeaderRow.font = { bold: true, color: { argb: 'FF1F4E79' }, size: 10 }; // Azul oscuro corporativo
-            subHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDEBF7' } }; // Azul claro
-            subHeaderRow.alignment = { horizontal: 'center', vertical: 'middle' };
-            applyRowStyles(subHeaderRow, false, true);
+            applyRowStyles(subHeaderRow, 'subheader', level + 1);
 
             eng.elements.forEach(el => {
               const matchedSlot = el.matchedSlot || 1;
@@ -489,8 +507,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
                 col9: el.value != null ? Number(el.value) : null
               });
               elRow.outlineLevel = level;
-              elRow.font = { color: { argb: 'FF555555' }, italic: true, size: 10 };
-              applyRowStyles(elRow, true);
+              applyRowStyles(elRow, 'elemento', level + 1);
             });
           }
         }
