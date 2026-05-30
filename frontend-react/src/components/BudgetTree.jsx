@@ -369,22 +369,53 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Presupuesto 5D');
 
+      // Freeze first row
+      worksheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
+
       worksheet.columns = [
-        { header: 'ÍTEM / ELEMENTO', key: 'col1', width: 25 },
-        { header: 'DESCRIPCIÓN / ZONA', key: 'col2', width: 45 },
-        { header: 'UND. / UBICACIÓN', key: 'col3', width: 25 },
-        { header: 'MET. CONTR. / SUBZONA', key: 'col4', width: 25 },
-        { header: 'MET. REAL / SUBUBICACIÓN', key: 'col5', width: 25 },
-        { header: 'P.U (S/) / CÓD. PARTIDA', key: 'col6', width: 20 },
-        { header: 'PARCIAL CONTR. / NOMBRE PARTIDA', key: 'col7', width: 35 },
-        { header: 'PARCIAL REAL / UND.', key: 'col8', width: 20 },
-        { header: 'METRADO SUSTENTO', key: 'col9', width: 20 },
+        { header: 'ÍTEM', key: 'col1', width: 18 },
+        { header: 'DESCRIPCIÓN', key: 'col2', width: 45 },
+        { header: 'UND.', key: 'col3', width: 10 },
+        { header: 'METRADO CONTR.', key: 'col4', width: 18 },
+        { header: 'METRADO REAL', key: 'col5', width: 18 },
+        { header: 'P.U (S/)', key: 'col6', width: 15 },
+        { header: 'PARCIAL CONTR.', key: 'col7', width: 18 },
+        { header: 'PARCIAL REAL', key: 'col8', width: 18 },
+        { header: 'METRADO SUSTENTO', key: 'col9', width: 18 },
       ];
 
       const headerRow = worksheet.getRow(1);
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A2B30' } };
-      headerRow.alignment = { horizontal: 'center' };
+      headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      const applyRowStyles = (row, isElement = false, isSubHeader = false) => {
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+            left: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+            bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+            right: { style: 'thin', color: { argb: 'FFDDDDDD' } }
+          };
+          
+          if (!isSubHeader) {
+            // Alineación de números
+            if (colNumber >= 4) {
+              cell.alignment = { horizontal: 'right', vertical: 'middle' };
+            } else {
+              cell.alignment = { vertical: 'middle' };
+            }
+
+            // Formatos de número nativos
+            if (colNumber === 4 || colNumber === 5 || colNumber === 9) {
+              cell.numFmt = '#,##0.00';
+            }
+            if (colNumber === 6 || colNumber === 7 || colNumber === 8) {
+              cell.numFmt = '"S/" #,##0.00';
+            }
+          }
+        });
+      };
 
       const addNodeToExcel = (node, level) => {
         if (node.es_titulo) {
@@ -392,37 +423,57 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
             col1: node.item,
             col2: node.descripcion,
             col3: node.unidad,
-            col4: node.metrado_contractual,
-            col5: engineResults[node.item] ? engineResults[node.item].metrado_real : null,
-            col6: node.precio_unitario,
-            col7: node.parcial_contractual,
+            col4: node.metrado_contractual ? Number(node.metrado_contractual) : null,
+            col5: engineResults[node.item] && engineResults[node.item].metrado_real != null ? Number(engineResults[node.item].metrado_real) : null,
+            col6: node.precio_unitario ? Number(node.precio_unitario) : null,
+            col7: node.parcial_contractual ? Number(node.parcial_contractual) : null,
             col8: null
           });
           row.outlineLevel = level - 1;
           row.font = { bold: true };
-          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAEAEA' } };
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFEFEF' } };
+          applyRowStyles(row);
           
           if (node.children) {
             node.children.forEach(child => addNodeToExcel(child, level + 1));
           }
         } else {
           const eng = engineResults[node.item];
-          const metradoReal = eng ? eng.metrado_real : node.metrado_real;
-          const parcialReal = (metradoReal != null && node.precio_unitario != null) ? metradoReal * node.precio_unitario : null;
+          const metradoReal = eng && eng.metrado_real != null ? Number(eng.metrado_real) : (node.metrado_real != null ? Number(node.metrado_real) : null);
+          const parcialReal = (metradoReal != null && node.precio_unitario != null) ? metradoReal * Number(node.precio_unitario) : null;
           
           const row = worksheet.addRow({
             col1: node.item,
             col2: node.descripcion,
             col3: node.unidad,
-            col4: node.metrado_contractual,
+            col4: node.metrado_contractual ? Number(node.metrado_contractual) : null,
             col5: metradoReal,
-            col6: node.precio_unitario,
-            col7: node.parcial_contractual,
+            col6: node.precio_unitario ? Number(node.precio_unitario) : null,
+            col7: node.parcial_contractual ? Number(node.parcial_contractual) : null,
             col8: parcialReal
           });
           row.outlineLevel = level - 1;
+          applyRowStyles(row);
           
           if (eng && eng.elements && eng.elements.length > 0) {
+            // Inyectar sub-cabecera para el detalle
+            const subHeaderRow = worksheet.addRow({
+                col1: '[ID] ELEMENTO',
+                col2: 'ZONA',
+                col3: 'UBICACIÓN',
+                col4: 'SUBZONA',
+                col5: 'SUBUBICACIÓN',
+                col6: 'CÓD. PARTIDA',
+                col7: 'NOMBRE PARTIDA',
+                col8: 'UND.',
+                col9: 'METRADO SUST.'
+            });
+            subHeaderRow.outlineLevel = level;
+            subHeaderRow.font = { bold: true, color: { argb: 'FF1F4E79' }, size: 10 }; // Azul oscuro corporativo
+            subHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDEBF7' } }; // Azul claro
+            subHeaderRow.alignment = { horizontal: 'center', vertical: 'middle' };
+            applyRowStyles(subHeaderRow, false, true);
+
             eng.elements.forEach(el => {
               const matchedSlot = el.matchedSlot || 1;
               const rawProps = el.props || el.rawProps || {};
@@ -435,10 +486,11 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
                 col6: node.item,
                 col7: rawProps[`03_04_DSI_NombreDePartida${matchedSlot}`] || node.descripcion,
                 col8: rawProps[`02_01_DSI_Unidad${matchedSlot}`] || node.unidad || '-',
-                col9: el.value
+                col9: el.value != null ? Number(el.value) : null
               });
               elRow.outlineLevel = level;
-              elRow.font = { color: { argb: 'FF555555' }, italic: true };
+              elRow.font = { color: { argb: 'FF555555' }, italic: true, size: 10 };
+              applyRowStyles(elRow, true);
             });
           }
         }
