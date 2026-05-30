@@ -369,6 +369,12 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Presupuesto 5D');
 
+      // Configurar agrupación (Outline) para que el resumen esté ARRIBA de los detalles
+      worksheet.properties.outlineProperties = {
+        summaryBelow: false,
+        summaryRight: false,
+      };
+
       // Freeze first row
       worksheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
 
