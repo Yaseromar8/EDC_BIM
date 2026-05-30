@@ -29,7 +29,9 @@ export class DataVizEngine {
         // El tipo MIXED o REGULAR con color fuerte produce el tramado diagonal.
         const tandemColor = new THREE.Color(0xFFE500); // Amarillo Tandem
         this.viewer.setSelectionColor(tandemColor, Autodesk.Viewing.SelectionType.MIXED);
-        this.viewer.setSelectionEdges(true); // Asegurar bordes resaltados
+        if (typeof this.viewer.setSelectionEdges === 'function') {
+            this.viewer.setSelectionEdges(true);
+        }
 
         const aggregateSelection = [];
 
