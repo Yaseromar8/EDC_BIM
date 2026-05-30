@@ -591,16 +591,49 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
         let actualDbId = entry.id;
 
         // Si entry.id es un ExtId (UUID/Handle de Postgres), traducirlo al dbId entero del visor (Rosetta)
-        if (window.rosettaToDbId && urn && typeof actualDbId === 'string') {
-          const rosettaUrn = Object.keys(window.rosettaToDbId).find(u => normalizeUrn(u) === normalizeUrn(urn) || u === urn);
-          if (rosettaUrn && window.rosettaToDbId[rosettaUrn][actualDbId] !== undefined) {
-            actualDbId = window.rosettaToDbId[rosettaUrn][actualDbId];
+        if (window.rosettaToDbId && typeof actualDbId === 'string') {
+          let translated = false;
+          
+          // Intentar búsqueda directa por URN
+          if (urn) {
+            const rosettaUrn = Object.keys(window.rosettaToDbId).find(u => normalizeUrn(u) === normalizeUrn(urn) || u === urn);
+            if (rosettaUrn && window.rosettaToDbId[rosettaUrn][actualDbId] !== undefined) {
+              actualDbId = window.rosettaToDbId[rosettaUrn][actualDbId];
+              translated = true;
+            }
           }
+          
+          // Fallback: buscar en TODOS los URNs de Rosetta (para cuando el modelUrn de Postgres no coincide exactamente)
+          if (!translated) {
+            for (const rUrn of Object.keys(window.rosettaToDbId)) {
+              if (window.rosettaToDbId[rUrn][actualDbId] !== undefined) {
+                actualDbId = window.rosettaToDbId[rUrn][actualDbId];
+                if (!idsByUrn[rUrn]) idsByUrn[rUrn] = new Set();
+                idsByUrn[rUrn].add(actualDbId);
+                simpleIds.push(actualDbId);
+                translated = true;
+                break;
+              }
+            }
+          }
+          
+          if (translated && urn) {
+            if (!idsByUrn[urn]) idsByUrn[urn] = new Set();
+            idsByUrn[urn].add(actualDbId);
+            simpleIds.push(actualDbId);
+          } else if (!translated) {
+            // Último intento: si el dbId es numérico como string, convertirlo
+            const numId = parseInt(actualDbId, 10);
+            if (!isNaN(numId)) {
+              simpleIds.push(numId);
+            }
+            console.warn(`[BudgetTree] ⚠️ Rosetta no pudo traducir ExtId="${entry.id}" (URN=${urn ? normalizeUrn(urn) : 'null'})`);
+          }
+        } else {
+          if (!idsByUrn[urn]) idsByUrn[urn] = new Set();
+          idsByUrn[urn].add(actualDbId);
+          simpleIds.push(actualDbId);
         }
-
-        if (!idsByUrn[urn]) idsByUrn[urn] = new Set();
-        idsByUrn[urn].add(actualDbId);
-        simpleIds.push(actualDbId);
       } else {
         simpleIds.push(entry);
       }
