@@ -98,7 +98,7 @@ function flattenVisible(roots, expandedSet, engineResults = {}) {
                 nivel: node.nivel + 1,
                 es_titulo: false,
                 metrado_real: el.value,
-                dbIds: [el.dbId],
+                dbIds: [{ id: el.dbId, modelUrn: el.modelUrn }],
                 rawProps: el.rawProps || {},
                 matchedSlot: el.matchedSlot || 1,
                 parent_unidad: node.unidad,
@@ -275,7 +275,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
       const { roots, map } = buildTree(rows);
       setTreeRoots(roots);
       setTreeMap(map);
-      setExpandedSet(getInitialExpanded(rows, 1));
+      setExpandedSet(new Set()); // Start collapsed
       setLoading(false);
     };
     fetchData();
@@ -758,7 +758,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
             ↗ New Window
           </button>
           <button onClick={exportToExcel} title="Exportar a Excel con agrupaciones"
-            style={{ background: '#1d6f42', border: '1px solid #1d6f42', color: '#fff', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            style={{ background: 'none', border: '1px solid #444', color: '#aaa', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
             📊 Exportar
           </button>
           {onClose && (
