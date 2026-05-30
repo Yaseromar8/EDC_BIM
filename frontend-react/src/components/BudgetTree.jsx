@@ -713,16 +713,10 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
       }
     }
 
-    // Resaltado Tandem (rayas amarillas): solo para elementos individuales 3D
-    if (node.is_element) {
-      window.dispatchEvent(new CustomEvent('budget-tandem-highlight', {
-        detail: { idsByUrn, simpleIds }
-      }));
-    } else {
-      window.dispatchEvent(new CustomEvent('budget-tandem-highlight', {
-        detail: { idsByUrn: {}, simpleIds: [] }
-      }));
-    }
+    // Limpiar rayas Tandem previas al aislar (el aislamiento es visual por sí solo)
+    window.dispatchEvent(new CustomEvent('budget-tandem-highlight', {
+      detail: { idsByUrn: {}, simpleIds: [] }
+    }));
 
     window.dispatchEvent(new CustomEvent('budget-select-partidas', {
       detail: { items: leafItems, parentItem: node.is_element ? node.parent_item : node.item, dbIds: simpleIds, idsByUrn }
