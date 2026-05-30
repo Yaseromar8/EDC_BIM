@@ -227,7 +227,7 @@ function generatePopoutHTML(flatRows, engineResults) {
 // ═══════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════
-const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
+const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
   const [flatData, setFlatData] = useState([]);
   const [treeRoots, setTreeRoots] = useState([]);
   const [treeMap, setTreeMap] = useState({});
@@ -705,6 +705,15 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
         }
       }
     }
+
+    // Disparar rayas Tandem sobre los elementos aislados
+    window.dispatchEvent(new CustomEvent('budget-tandem-highlight', {
+      detail: { idsByUrn, simpleIds }
+    }));
+
+    window.dispatchEvent(new CustomEvent('budget-select-partidas', {
+      detail: { items: leafItems, parentItem: node.is_element ? node.parent_item : node.item, dbIds: simpleIds, idsByUrn }
+    }));
   }, [getDbIdsForNode]);
 
   // ─── Open in New Window ───────────────────────────
@@ -717,6 +726,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
       popup.document.close();
       window.__budgetPopup = popup;
       setIsPoppedOut(true);
+      if (onPoppedOut) onPoppedOut(true);
     }
   }, [flatData, engineResults]);
 
@@ -731,6 +741,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
         if (node) handleRowIsolate(node);
       } else if (e.data?.type === 'budget-dock') {
         setIsPoppedOut(false);
+        if (onPoppedOut) onPoppedOut(false);
       }
     };
     window.addEventListener('message', handleMessage);

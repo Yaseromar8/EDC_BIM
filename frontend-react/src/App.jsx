@@ -611,6 +611,7 @@ function App() {
   const [inventoryTabOpen, setInventoryTabOpen] = useState(false);
   const [inventoryPanelHeight, setInventoryPanelHeight] = useState(280);
   const [budgetTabOpen, setBudgetTabOpen] = useState(false);
+  const [budgetPoppedOut, setBudgetPoppedOut] = useState(false);
   const [budgetPanelHeight, setBudgetPanelHeight] = useState(320);
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [isolatedExtIds, setIsolatedExtIds] = useState(null); // Lifted from InventoryDataGrid — persists across mount/unmount
@@ -3340,9 +3341,9 @@ function App() {
                     ? `${64 + sidebarWidth}px`
                     : '64px',
                   right: 0,
-                  height: `${budgetPanelHeight}px`,
+                  height: budgetPoppedOut ? '0px' : `${budgetPanelHeight}px`,
                   zIndex: 31,
-                  display: 'flex',
+                  display: budgetPoppedOut ? 'none' : 'flex',
                   flexDirection: 'column',
                   borderTop: '1px solid #2a2b30',
                   boxShadow: '0 -2px 12px rgba(0,0,0,0.5)',
@@ -3381,6 +3382,7 @@ function App() {
                   <BudgetTree
                     activeModelUrn={selectedProject?.id || 'global'}
                     onClose={() => setBudgetTabOpen(false)}
+                    onPoppedOut={(val) => setBudgetPoppedOut(val)}
                   />
                 </div>
               )}
