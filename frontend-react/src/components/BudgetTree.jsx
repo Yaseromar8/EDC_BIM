@@ -197,11 +197,20 @@ function generatePopoutHTML(flatRows, engineResults) {
 </tr></thead><tbody>${rows}</tbody></table>
 </div>
 <script>
+  let lastClickTime = 0;
+  let lastClickItem = '';
   function selectRow(item) {
     document.querySelectorAll('.row.selected').forEach(r => r.classList.remove('selected'));
     const row = document.querySelector('[data-item="' + item + '"]');
     if (row) row.classList.add('selected');
-    if (window.opener) window.opener.postMessage({ type: 'budget-popout-select', item }, '*');
+    const now = Date.now();
+    if (lastClickItem === item && (now - lastClickTime) < 400) {
+      if (window.opener) window.opener.postMessage({ type: 'budget-popout-isolate', item }, '*');
+    } else {
+      if (window.opener) window.opener.postMessage({ type: 'budget-popout-select', item }, '*');
+    }
+    lastClickTime = now;
+    lastClickItem = item;
   }
   function dockBack() {
     if (window.opener) window.opener.postMessage({ type: 'budget-dock' }, '*');
@@ -684,13 +693,16 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
       if (e.data?.type === 'budget-popout-select') {
         const node = treeMap[e.data.item];
         if (node) handleRowSelect(node);
+      } else if (e.data?.type === 'budget-popout-isolate') {
+        const node = treeMap[e.data.item];
+        if (node) handleRowIsolate(node);
       } else if (e.data?.type === 'budget-dock') {
         setIsPoppedOut(false);
       }
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [treeMap, handleRowSelect]);
+  }, [treeMap, handleRowSelect, handleRowIsolate]);
 
   // ─── Engine status indicator ──────────────────────
   const engineLabel = useMemo(() => {
@@ -706,7 +718,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
 
   // ─── Render ───────────────────────────────────────
   if (isPoppedOut) {
-    return <div style={{ display: 'none' }}></div>;
+    return null;
   }
 
   if (loading) {
@@ -868,7 +880,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
                         {isElement ? '🧊' : ''}
                       </span>
                     )}
-                    <span>{isElement ? `[${node.dbIds[0]}]` : node.item}</span>
+                    <span>{isElement ? `[${typeof node.dbIds[0] === 'object' ? node.dbIds[0].id : node.dbIds[0]}]` : node.item}</span>
                   </div>
 
                   {isElement ? (
