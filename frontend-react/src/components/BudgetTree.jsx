@@ -705,7 +705,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
                       style={{ 
                         gridColumn: '2 / -1', 
                         display: 'grid', 
-                        gridTemplateColumns: 'minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(120px, 1.5fr) 50px 80px',
+                        gridTemplateColumns: 'minmax(90px, 1fr) minmax(120px, 1.2fr) minmax(130px, 1.5fr) max-content max-content minmax(150px, 2fr) 40px 80px',
                         height: '100%',
                         cursor: 'pointer',
                         fontSize: '10.5px',
