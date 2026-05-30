@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { extractModelMeasurements, calculateMetradoReal } from './budgetEngine';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 /**
  * BudgetTree - Panel 5D de Presupuesto
@@ -362,6 +364,96 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
     setExpandedSet(new Set());
   }, []);
 
+  const exportToExcel = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Presupuesto 5D');
+
+      worksheet.columns = [
+        { header: 'ÍTEM / ELEMENTO', key: 'col1', width: 25 },
+        { header: 'DESCRIPCIÓN / ZONA', key: 'col2', width: 45 },
+        { header: 'UND. / UBICACIÓN', key: 'col3', width: 25 },
+        { header: 'MET. CONTR. / SUBZONA', key: 'col4', width: 25 },
+        { header: 'MET. REAL / SUBUBICACIÓN', key: 'col5', width: 25 },
+        { header: 'P.U (S/) / CÓD. PARTIDA', key: 'col6', width: 20 },
+        { header: 'PARCIAL CONTR. / NOMBRE PARTIDA', key: 'col7', width: 35 },
+        { header: 'PARCIAL REAL / UND.', key: 'col8', width: 20 },
+        { header: 'METRADO SUSTENTO', key: 'col9', width: 20 },
+      ];
+
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A2B30' } };
+      headerRow.alignment = { horizontal: 'center' };
+
+      const addNodeToExcel = (node, level) => {
+        if (node.es_titulo) {
+          const row = worksheet.addRow({
+            col1: node.item,
+            col2: node.descripcion,
+            col3: node.unidad,
+            col4: node.metrado_contractual,
+            col5: engineResults[node.item] ? engineResults[node.item].metrado_real : null,
+            col6: node.precio_unitario,
+            col7: node.parcial_contractual,
+            col8: null
+          });
+          row.outlineLevel = level - 1;
+          row.font = { bold: true };
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAEAEA' } };
+          
+          if (node.children) {
+            node.children.forEach(child => addNodeToExcel(child, level + 1));
+          }
+        } else {
+          const eng = engineResults[node.item];
+          const metradoReal = eng ? eng.metrado_real : node.metrado_real;
+          const parcialReal = (metradoReal != null && node.precio_unitario != null) ? metradoReal * node.precio_unitario : null;
+          
+          const row = worksheet.addRow({
+            col1: node.item,
+            col2: node.descripcion,
+            col3: node.unidad,
+            col4: node.metrado_contractual,
+            col5: metradoReal,
+            col6: node.precio_unitario,
+            col7: node.parcial_contractual,
+            col8: parcialReal
+          });
+          row.outlineLevel = level - 1;
+          
+          if (eng && eng.elements && eng.elements.length > 0) {
+            eng.elements.forEach(el => {
+              const matchedSlot = el.matchedSlot || 1;
+              const rawProps = el.props || el.rawProps || {};
+              const elRow = worksheet.addRow({
+                col1: `[${el.dbId}]`,
+                col2: rawProps['01_13_DSI_Zona'] || '-',
+                col3: rawProps['01_11_DSI_Ubicacion'] || '-',
+                col4: rawProps['01_14_DSI_SubZona'] || '-',
+                col5: rawProps['01_12_DSI_SubUbicacion'] || '-',
+                col6: node.item,
+                col7: rawProps[`03_04_DSI_NombreDePartida${matchedSlot}`] || node.descripcion,
+                col8: rawProps[`02_01_DSI_Unidad${matchedSlot}`] || node.unidad || '-',
+                col9: el.value
+              });
+              elRow.outlineLevel = level;
+              elRow.font = { color: { argb: 'FF555555' }, italic: true };
+            });
+          }
+        }
+      };
+
+      treeRoots.forEach(root => addNodeToExcel(root, 1));
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      saveAs(blob, 'Presupuesto_BIM_5D.xlsx');
+    } catch (err) {
+      console.error('Error al exportar a Excel:', err);
+    }
+  };
+
   // ─── Visible rows ─────────────────────────────────
   const visibleRows = useMemo(
     () => flattenVisible(treeRoots, expandedSet, engineResults),
@@ -595,6 +687,10 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
           <button onClick={openPopout} title="Open in a new window"
             style={{ background: 'none', border: '1px solid #444', color: '#aaa', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>
             ↗ New Window
+          </button>
+          <button onClick={exportToExcel} title="Exportar a Excel con agrupaciones"
+            style={{ background: '#1d6f42', border: '1px solid #1d6f42', color: '#fff', padding: '3px 8px', borderRadius: '3px', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            📊 Exportar
           </button>
           {onClose && (
             <button onClick={onClose} title="Cerrar"
