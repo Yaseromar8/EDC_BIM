@@ -116,6 +116,19 @@ export function extractModelMeasurements() {
                 }
              }
            }
+
+           const metaProps = [
+             '01_11_DSI_Ubicacion', '01_12_DSI_SubUbicacion', '01_13_DSI_Zona', '01_14_DSI_SubZona',
+             '03_04_DSI_NombreDePartida1', '03_04_DSI_NombreDePartida2', '03_04_DSI_NombreDePartida3',
+             '03_05_DSI_CodigoDePartida1', '03_05_DSI_CodigoDePartida2', '03_05_DSI_CodigoDePartida3',
+             '02_01_DSI_Unidad1', '02_01_DSI_Unidad2', '02_01_DSI_Unidad3'
+           ];
+           for (const pName of metaProps) {
+             if (row[pName] !== undefined && row[pName] !== null && row[pName] !== '') {
+               elData.props[pName] = row[pName];
+             }
+           }
+
            partidaData[code].elements.push(elData);
         }); // End SLOTS
       } // End for loop
@@ -188,7 +201,9 @@ export function calculateMetradoReal(presupuestoRows, modelData) {
            dbId: el.dbId,
            name: el.name,
            value: val,
-           prop: chosenProp
+           prop: chosenProp,
+           matchedSlot: slot,
+           rawProps: el.props
          });
       }
     });

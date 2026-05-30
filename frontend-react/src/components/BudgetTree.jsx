@@ -96,7 +96,11 @@ function flattenVisible(roots, expandedSet, engineResults = {}) {
                 nivel: node.nivel + 1,
                 es_titulo: false,
                 metrado_real: el.value,
-                dbIds: [el.dbId]
+                dbIds: [el.dbId],
+                rawProps: el.rawProps || {},
+                matchedSlot: el.matchedSlot || 1,
+                parent_unidad: node.unidad,
+                parent_nombre: node.descripcion
               });
             });
           }
@@ -696,57 +700,87 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose }) => {
                     <span>{isElement ? `[${node.dbIds[0]}]` : node.item}</span>
                   </div>
 
-                  {/* RESTO DE LA FILA (Seleccionar / Aislar) */}
-                  <div
-                    style={{ display: 'contents', cursor: 'pointer' }}
-                    onClick={(e) => { e.stopPropagation(); handleRowSelect(node); }}
-                    onDoubleClick={(e) => { e.stopPropagation(); handleRowIsolate(node); }}
-                    title="Clic para seleccionar, Doble clic para aislar"
-                  >
-                    {/* DESCRIPCIÓN */}
-                    <div style={{
-                      padding: '0 8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      color: isElement ? '#9e9e9e' : isTitulo ? '#ccc' : '#e0e0e0',
-                      borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center'
-                    }}>
-                      {node.descripcion}
+                  {isElement ? (
+                    <div
+                      style={{ 
+                        gridColumn: '2 / -1', 
+                        display: 'grid', 
+                        gridTemplateColumns: 'minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(120px, 1.5fr) 50px 80px',
+                        height: '100%',
+                        cursor: 'pointer',
+                        fontSize: '10.5px',
+                        color: '#a0aab5'
+                      }}
+                      onClick={(e) => { e.stopPropagation(); handleRowSelect(node); }}
+                      onDoubleClick={(e) => { e.stopPropagation(); handleRowIsolate(node); }}
+                      title="Clic para seleccionar, Doble clic para aislar"
+                    >
+                       <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps['01_13_DSI_Zona']}>{node.rawProps['01_13_DSI_Zona'] || '-'}</div>
+                       <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps['01_11_DSI_Ubicacion']}>{node.rawProps['01_11_DSI_Ubicacion'] || '-'}</div>
+                       <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps['01_14_DSI_SubZona']}>{node.rawProps['01_14_DSI_SubZona'] || '-'}</div>
+                       <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps['01_12_DSI_SubUbicacion']}>{node.rawProps['01_12_DSI_SubUbicacion'] || '-'}</div>
+                       
+                       <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', color: '#6a737d' }} title={node.parent_item}>{node.parent_item}</div>
+                       <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={node.rawProps[`03_04_DSI_NombreDePartida${node.matchedSlot}`] || node.parent_nombre}>{node.rawProps[`03_04_DSI_NombreDePartida${node.matchedSlot}`] || node.parent_nombre}</div>
+                       
+                       <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{node.rawProps[`02_01_DSI_Unidad${node.matchedSlot}`] || node.parent_unidad || '-'}</div>
+                       
+                       <div style={{ padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: '#4caf50', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                          {metradoReal != null && metradoReal !== 0 ? fmt(metradoReal) : ''}
+                       </div>
                     </div>
-                    {/* UND */}
-                    <div style={{ padding: '0 4px', textAlign: 'center', color: '#888', borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {!isElement ? (node.unidad || '') : ''}
+                  ) : (
+                    <div
+                      style={{ display: 'contents', cursor: 'pointer' }}
+                      onClick={(e) => { e.stopPropagation(); handleRowSelect(node); }}
+                      onDoubleClick={(e) => { e.stopPropagation(); handleRowIsolate(node); }}
+                      title="Clic para seleccionar, Doble clic para aislar"
+                    >
+                      {/* DESCRIPCIÓN */}
+                      <div style={{
+                        padding: '0 8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        color: isTitulo ? '#ccc' : '#e0e0e0',
+                        borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center'
+                      }}>
+                        {node.descripcion}
+                      </div>
+                      {/* UND */}
+                      <div style={{ padding: '0 4px', textAlign: 'center', color: '#888', borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {node.unidad || ''}
+                      </div>
+                      {/* METRADO CONTRACTUAL */}
+                      <div style={{ padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                        {node.metrado_contractual != null ? fmt(node.metrado_contractual) : ''}
+                      </div>
+                      {/* METRADO REAL */}
+                      <div style={{
+                        padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+                        borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                        color: cellStatus === 'complete' ? '#22c55e' : cellStatus === 'no_metrado' ? '#eab308' : cellStatus === 'no_link' ? '#ef4444' : '#4caf50',
+                        fontWeight: 600,
+                        ...hatchStyle
+                      }}>
+                        {metradoReal != null && metradoReal !== 0 ? fmt(metradoReal) : (cellStatus === 'no_metrado' ? '0.00' : '')}
+                      </div>
+                      {/* P.U (S/) */}
+                      <div style={{ padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                        {node.precio_unitario != null ? fmtS(node.precio_unitario) : ''}
+                      </div>
+                      {/* P. PARCIAL CONTRACTUAL */}
+                      <div style={{ padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                        {node.parcial_contractual != null ? fmtS(node.parcial_contractual) : ''}
+                      </div>
+                      {/* P. PARCIAL REAL */}
+                      <div style={{
+                        padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                        color: cellStatus === 'complete' ? '#22c55e' : cellStatus === 'no_metrado' ? '#eab308' : cellStatus === 'no_link' ? '#ef4444' : '#4caf50',
+                        fontWeight: 600,
+                        ...hatchStyle
+                      }}>
+                        {parcialReal != null && parcialReal !== 0 ? fmtS(parcialReal) : (cellStatus === 'no_metrado' ? 'S/ 0.00' : '')}
+                      </div>
                     </div>
-                    {/* METRADO CONTRACTUAL */}
-                    <div style={{ padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                      {!isElement && node.metrado_contractual != null ? fmt(node.metrado_contractual) : ''}
-                    </div>
-                    {/* METRADO REAL */}
-                    <div style={{
-                      padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-                      borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                      color: isElement ? '#4caf50' : cellStatus === 'complete' ? '#22c55e' : cellStatus === 'no_metrado' ? '#eab308' : cellStatus === 'no_link' ? '#ef4444' : '#4caf50',
-                      fontWeight: isElement ? 400 : 600,
-                      ...hatchStyle
-                    }}>
-                      {metradoReal != null && metradoReal !== 0 ? fmt(metradoReal) : (!isElement && cellStatus === 'no_metrado' ? '0.00' : '')}
-                    </div>
-                    {/* P.U (S/) */}
-                    <div style={{ padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                      {!isElement && node.precio_unitario != null ? fmtS(node.precio_unitario) : ''}
-                    </div>
-                    {/* P. PARCIAL CONTRACTUAL */}
-                    <div style={{ padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                      {!isElement && node.parcial_contractual != null ? fmtS(node.parcial_contractual) : ''}
-                    </div>
-                    {/* P. PARCIAL REAL */}
-                    <div style={{
-                      padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                      color: cellStatus === 'complete' ? '#22c55e' : cellStatus === 'no_metrado' ? '#eab308' : cellStatus === 'no_link' ? '#ef4444' : '#4caf50',
-                      fontWeight: 600,
-                      ...hatchStyle
-                    }}>
-                      {parcialReal != null && parcialReal !== 0 ? fmtS(parcialReal) : (!isElement && cellStatus === 'no_metrado' ? 'S/ 0.00' : '')}
-                    </div>
-                  </div>
+                  )}
                 </div>
               );
             })}
