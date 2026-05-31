@@ -538,6 +538,153 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
     }
   };
 
+  // ─── Export por nodo (Título o Partida individual) ──
+  const exportNodeToExcel = async (targetNode) => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const sheetName = (targetNode.item || 'Detalle').substring(0, 31);
+      const worksheet = workbook.addWorksheet(sheetName);
+
+      worksheet.properties.outlineProperties = {
+        summaryBelow: false,
+        summaryRight: false,
+      };
+      worksheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
+
+      worksheet.columns = [
+        { header: 'ÍTEM', key: 'col1', width: 18 },
+        { header: 'DESCRIPCIÓN', key: 'col2', width: 50 },
+        { header: 'UND.', key: 'col3', width: 10 },
+        { header: 'METRADO CONTR.', key: 'col4', width: 18 },
+        { header: 'METRADO REAL', key: 'col5', width: 18 },
+        { header: 'P.U (S/)', key: 'col6', width: 15 },
+        { header: 'PARCIAL CONTR.', key: 'col7', width: 18 },
+        { header: 'PARCIAL REAL', key: 'col8', width: 18 },
+        { header: 'METRADO SUSTENTO', key: 'col9', width: 18 },
+      ];
+
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF212529' } };
+      headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      const applyStyles = (row, type, level = 0) => {
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          if (colNumber >= 4) {
+            cell.alignment = { horizontal: 'right', vertical: 'middle' };
+          } else {
+            cell.alignment = { vertical: 'middle' };
+          }
+          if (colNumber === 2 && level > 1) {
+            cell.alignment = { ...cell.alignment, indent: level - 1 };
+          }
+          if (colNumber === 4 || colNumber === 5 || colNumber === 9) {
+            cell.numFmt = '#,##0.00';
+          }
+          if (colNumber === 6 || colNumber === 7 || colNumber === 8) {
+            cell.numFmt = '"S/" #,##0.00';
+          }
+          if (type === 'titulo_principal') {
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF343A40' } };
+            cell.border = { bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } } };
+          } else if (type === 'titulo_secundario') {
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF6C757D' } };
+            cell.border = { bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } } };
+          } else if (type === 'partida') {
+            cell.font = { bold: true, color: { argb: 'FF000000' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+            cell.border = {
+              top: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+              bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } }
+            };
+          } else if (type === 'subheader') {
+            cell.font = { italic: true, color: { argb: 'FF888888' }, size: 9 };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
+            cell.border = { bottom: { style: 'hair', color: { argb: 'FFEEEEEE' } } };
+            if (colNumber < 4) cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          } else if (type === 'elemento') {
+            cell.font = { color: { argb: 'FF666666' }, size: 9 };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
+          }
+        });
+      };
+
+      const addNode = (node, level) => {
+        if (node.es_titulo) {
+          const row = worksheet.addRow({
+            col1: node.item,
+            col2: node.descripcion,
+            col3: node.unidad,
+            col4: node.metrado_contractual ? Number(node.metrado_contractual) : null,
+            col5: engineResults[node.item]?.metrado_real != null ? Number(engineResults[node.item].metrado_real) : null,
+            col6: node.precio_unitario ? Number(node.precio_unitario) : null,
+            col7: node.parcial_contractual ? Number(node.parcial_contractual) : null,
+            col8: null
+          });
+          row.outlineLevel = Math.max(0, level - 1);
+          applyStyles(row, level === 1 ? 'titulo_principal' : 'titulo_secundario', level);
+          if (node.children) {
+            node.children.forEach(child => addNode(child, level + 1));
+          }
+        } else {
+          const eng = engineResults[node.item];
+          const metradoReal = eng?.metrado_real != null ? Number(eng.metrado_real) : (node.metrado_real != null ? Number(node.metrado_real) : null);
+          const parcialReal = (metradoReal != null && node.precio_unitario != null) ? metradoReal * Number(node.precio_unitario) : null;
+          const row = worksheet.addRow({
+            col1: node.item,
+            col2: node.descripcion,
+            col3: node.unidad,
+            col4: node.metrado_contractual ? Number(node.metrado_contractual) : null,
+            col5: metradoReal,
+            col6: node.precio_unitario ? Number(node.precio_unitario) : null,
+            col7: node.parcial_contractual ? Number(node.parcial_contractual) : null,
+            col8: parcialReal
+          });
+          row.outlineLevel = Math.max(0, level - 1);
+          applyStyles(row, 'partida', level);
+          if (eng?.elements?.length > 0) {
+            const subHeaderRow = worksheet.addRow({
+              col1: '[ID] ELEMENTO', col2: 'ZONA', col3: 'UBICACIÓN',
+              col4: 'SUBZONA', col5: 'SUBUBICACIÓN', col6: 'CÓD. PARTIDA',
+              col7: 'NOMBRE PARTIDA', col8: 'UND.', col9: 'METRADO SUST.'
+            });
+            subHeaderRow.outlineLevel = level;
+            applyStyles(subHeaderRow, 'subheader', level + 1);
+            eng.elements.forEach(el => {
+              const matchedSlot = el.matchedSlot || 1;
+              const rawProps = el.props || el.rawProps || {};
+              const elRow = worksheet.addRow({
+                col1: `[${el.dbId}]`,
+                col2: rawProps['01_13_DSI_Zona'] || '-',
+                col3: rawProps['01_11_DSI_Ubicacion'] || '-',
+                col4: rawProps['01_14_DSI_SubZona'] || '-',
+                col5: rawProps['01_12_DSI_SubUbicacion'] || '-',
+                col6: node.item,
+                col7: rawProps[`03_04_DSI_NombreDePartida${matchedSlot}`] || node.descripcion,
+                col8: rawProps[`02_01_DSI_Unidad${matchedSlot}`] || node.unidad || '-',
+                col9: el.value != null ? Number(el.value) : null
+              });
+              elRow.outlineLevel = level;
+              applyStyles(elRow, 'elemento', level + 1);
+            });
+          }
+        }
+      };
+
+      // Exportar desde el nodo raíz seleccionado
+      addNode(targetNode, 1);
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const safeName = (targetNode.item || 'Detalle').replace(/[\/\\:*?"<>|]/g, '_');
+      saveAs(blob, `Presupuesto_${safeName}.xlsx`);
+    } catch (err) {
+      console.error('Error al exportar nodo a Excel:', err);
+    }
+  };
+
   // ─── Visible rows ─────────────────────────────────
   const visibleRows = useMemo(
     () => flattenVisible(treeRoots, expandedSet, engineResults),
@@ -897,8 +1044,16 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                     fontStyle: isElement ? 'italic' : 'normal',
                     transition: 'background 0.12s'
                   }}
-                  onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = isElement ? '#1c1e22' : '#2a2b30'; }}
-                  onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = isElement ? '#151619' : isTitulo ? '#1e1f23' : 'transparent'; }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) e.currentTarget.style.background = isElement ? '#1c1e22' : '#2a2b30';
+                    const xlsIcon = e.currentTarget.querySelector('.xls-export-icon');
+                    if (xlsIcon) xlsIcon.style.opacity = '1';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) e.currentTarget.style.background = isElement ? '#151619' : isTitulo ? '#1e1f23' : 'transparent';
+                    const xlsIcon = e.currentTarget.querySelector('.xls-export-icon');
+                    if (xlsIcon) xlsIcon.style.opacity = '0';
+                  }}
                 >
                   {/* ÍTEM (Solo para expandir) */}
                   <div 
@@ -1004,14 +1159,46 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                       <div style={{ padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                         {node.parcial_contractual != null ? fmtS(node.parcial_contractual) : ''}
                       </div>
-                      {/* P. PARCIAL REAL */}
+                      {/* P. PARCIAL REAL + XLS ICON */}
                       <div style={{
-                        padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                        padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px',
                         color: cellStatus === 'complete' ? '#22c55e' : cellStatus === 'no_metrado' ? '#eab308' : cellStatus === 'no_link' ? '#ef4444' : '#4caf50',
                         fontWeight: 600,
                         ...hatchStyle
                       }}>
-                        {parcialReal != null && parcialReal !== 0 ? fmtS(parcialReal) : (cellStatus === 'no_metrado' ? 'S/ 0.00' : '')}
+                        <span style={{ flex: 1, textAlign: 'right' }}>
+                          {parcialReal != null && parcialReal !== 0 ? fmtS(parcialReal) : (cellStatus === 'no_metrado' ? 'S/ 0.00' : '')}
+                        </span>
+                        {/* Ícono XLS - exportar esta rama */}
+                        <span
+                          className="xls-export-icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            const treeNode = treeMap[node.item];
+                            if (treeNode) exportNodeToExcel(treeNode);
+                          }}
+                          title={`Exportar "${node.item}" a Excel`}
+                          style={{
+                            opacity: 0,
+                            transition: 'opacity 0.15s',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '20px',
+                            height: '18px',
+                            borderRadius: '3px',
+                            background: '#1a7a3a',
+                            color: '#fff',
+                            fontSize: '7.5px',
+                            fontWeight: 800,
+                            fontStyle: 'normal',
+                            letterSpacing: '0.3px',
+                            lineHeight: 1,
+                            flexShrink: 0,
+                          }}
+                        >XLS</span>
                       </div>
                     </div>
                   )}
