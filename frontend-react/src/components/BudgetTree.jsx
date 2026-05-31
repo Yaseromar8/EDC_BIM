@@ -467,6 +467,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
             col8: null
           });
           row.outlineLevel = Math.max(0, level - 1);
+          if (row.outlineLevel >= 2) row.hidden = true;
           
           const type = level === 1 ? 'titulo_principal' : 'titulo_secundario';
           applyRowStyles(row, type, level);
@@ -490,6 +491,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
             col8: parcialReal
           });
           row.outlineLevel = Math.max(0, level - 1);
+          if (row.outlineLevel >= 2) row.hidden = true;
           applyRowStyles(row, 'partida', level);
           
           if (eng && eng.elements && eng.elements.length > 0) {
@@ -505,6 +507,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                 col9: 'METRADO SUST.'
             });
             subHeaderRow.outlineLevel = level;
+            subHeaderRow.hidden = true;
             applyRowStyles(subHeaderRow, 'subheader', level + 1);
 
             eng.elements.forEach(el => {
@@ -522,6 +525,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                 col9: el.value != null ? Number(el.value) : null
               });
               elRow.outlineLevel = level;
+              elRow.hidden = true;
               applyRowStyles(elRow, 'elemento', level + 1);
             });
           }
@@ -624,6 +628,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
             col8: null
           });
           row.outlineLevel = Math.max(0, level - 1);
+          if (row.outlineLevel >= 2) row.hidden = true;
           applyStyles(row, level === 1 ? 'titulo_principal' : 'titulo_secundario', level);
           if (node.children) {
             node.children.forEach(child => addNode(child, level + 1));
@@ -643,6 +648,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
             col8: parcialReal
           });
           row.outlineLevel = Math.max(0, level - 1);
+          if (row.outlineLevel >= 2) row.hidden = true;
           applyStyles(row, 'partida', level);
           if (eng?.elements?.length > 0) {
             const subHeaderRow = worksheet.addRow({
@@ -651,6 +657,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
               col7: 'NOMBRE PARTIDA', col8: 'UND.', col9: 'METRADO SUST.'
             });
             subHeaderRow.outlineLevel = level;
+            subHeaderRow.hidden = true;
             applyStyles(subHeaderRow, 'subheader', level + 1);
             eng.elements.forEach(el => {
               const matchedSlot = el.matchedSlot || 1;
@@ -667,6 +674,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                 col9: el.value != null ? Number(el.value) : null
               });
               elRow.outlineLevel = level;
+              elRow.hidden = true;
               applyStyles(elRow, 'elemento', level + 1);
             });
           }
