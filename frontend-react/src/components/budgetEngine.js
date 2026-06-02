@@ -7,25 +7,25 @@
 
 const UNIT_PROPERTY_MAP = {
   // Longitud
-  'm':     { natives: ['Length', 'Longitud', 'Curve Length'], fallbacks: ['02_02_DSI_Longitud1', '02_02_DSI_Longitud2', '02_02_DSI_Longitud3'] },
-  'ml':    { natives: ['Length', 'Longitud', 'Curve Length'], fallbacks: ['02_02_DSI_Longitud1', '02_02_DSI_Longitud2', '02_02_DSI_Longitud3'] },
+  'm':     { natives: ['Length', 'Longitud', 'Curve Length'], fallbacks: ['02_02_DSI_Longitud1', '02_02_DSI_Longitud2', '02_02_DSI_Longitud3', '02_02_DSI_Longitud4'] },
+  'ml':    { natives: ['Length', 'Longitud', 'Curve Length'], fallbacks: ['02_02_DSI_Longitud1', '02_02_DSI_Longitud2', '02_02_DSI_Longitud3', '02_02_DSI_Longitud4'] },
   // Área
-  'm2':    { natives: ['Area', 'Área', 'Surface Area'], fallbacks: ['02_04_DSI_Area1', '02_04_DSI_Area2', '02_04_DSI_Area3'] },
+  'm2':    { natives: ['Area', 'Área', 'Surface Area'], fallbacks: ['02_04_DSI_Area1', '02_04_DSI_Area2', '02_04_DSI_Area3', '02_04_DSI_Area4'] },
   // Volumen
-  'm3':    { natives: ['Volume', 'Volumen'], fallbacks: ['02_05_DSI_Volumen1', '02_05_DSI_Volumen2', '02_05_DSI_Volumen3'] },
+  'm3':    { natives: ['Volume', 'Volumen'], fallbacks: ['02_05_DSI_Volumen1', '02_05_DSI_Volumen2', '02_05_DSI_Volumen3', '02_05_DSI_Volumen4'] },
   // Unidades (conteo o genérico)
-  'und':   { natives: [], fallbacks: ['03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3'], countMode: true },
-  'pza':   { natives: [], fallbacks: ['03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3'], countMode: true },
+  'und':   { natives: [], fallbacks: ['03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3', '03_06_DSI_Metrado4'], countMode: true },
+  'pza':   { natives: [], fallbacks: ['03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3', '03_06_DSI_Metrado4'], countMode: true },
   // Global (siempre 1)
-  'glb':   { natives: [], fallbacks: ['03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3'], globalMode: true },
+  'glb':   { natives: [], fallbacks: ['03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3', '03_06_DSI_Metrado4'], globalMode: true },
   // Peso
-  'kg':    { natives: ['Weight', 'Mass', 'Peso'], fallbacks: ['02_06_DSI_Peso1', '02_06_DSI_Peso2', '02_06_DSI_Peso3', '03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3'] },
-  'tn':    { natives: ['Weight', 'Mass', 'Peso'], fallbacks: ['02_06_DSI_Peso1', '02_06_DSI_Peso2', '02_06_DSI_Peso3', '03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3'] },
+  'kg':    { natives: ['Weight', 'Mass', 'Peso'], fallbacks: ['02_06_DSI_Peso1', '02_06_DSI_Peso2', '02_06_DSI_Peso3', '02_06_DSI_Peso4', '03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3', '03_06_DSI_Metrado4'] },
+  'tn':    { natives: ['Weight', 'Mass', 'Peso'], fallbacks: ['02_06_DSI_Peso1', '02_06_DSI_Peso2', '02_06_DSI_Peso3', '02_06_DSI_Peso4', '03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3', '03_06_DSI_Metrado4'] },
   // Transporte
-  'm3-km': { natives: ['Volume', 'Volumen'], fallbacks: ['02_05_DSI_Volumen1', '02_05_DSI_Volumen2', '02_05_DSI_Volumen3'] },
+  'm3-km': { natives: ['Volume', 'Volumen'], fallbacks: ['02_05_DSI_Volumen1', '02_05_DSI_Volumen2', '02_05_DSI_Volumen3', '02_05_DSI_Volumen4'] },
   // Tiempo
-  'mes':   { natives: [], fallbacks: ['03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3'] },
-  'dia':   { natives: [], fallbacks: ['03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3'] },
+  'mes':   { natives: [], fallbacks: ['03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3', '03_06_DSI_Metrado4'] },
+  'dia':   { natives: [], fallbacks: ['03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3', '03_06_DSI_Metrado4'] },
 };
 
 /**
@@ -72,7 +72,7 @@ export function extractModelMeasurements() {
            }
         }
 
-        const SLOTS = [1, 2, 3];
+        const SLOTS = [1, 2, 3, 4];
         SLOTS.forEach(slot => {
            let code = row[`03_05_DSI_CodigoDePartida${slot}`];
            if (!code) return;
@@ -100,11 +100,11 @@ export function extractModelMeasurements() {
              'Area', 'Área', 'Surface Area',
              'Volume', 'Volumen',
              'Weight', 'Mass', 'Peso',
-             '02_02_DSI_Longitud1', '02_02_DSI_Longitud2', '02_02_DSI_Longitud3',
-             '02_04_DSI_Area1', '02_04_DSI_Area2', '02_04_DSI_Area3',
-             '02_05_DSI_Volumen1', '02_05_DSI_Volumen2', '02_05_DSI_Volumen3',
-             '02_06_DSI_Peso1', '02_06_DSI_Peso2', '02_06_DSI_Peso3',
-             '03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3'
+             '02_02_DSI_Longitud1', '02_02_DSI_Longitud2', '02_02_DSI_Longitud3', '02_02_DSI_Longitud4',
+             '02_04_DSI_Area1', '02_04_DSI_Area2', '02_04_DSI_Area3', '02_04_DSI_Area4',
+             '02_05_DSI_Volumen1', '02_05_DSI_Volumen2', '02_05_DSI_Volumen3', '02_05_DSI_Volumen4',
+             '02_06_DSI_Peso1', '02_06_DSI_Peso2', '02_06_DSI_Peso3', '02_06_DSI_Peso4',
+             '03_06_DSI_Metrado1', '03_06_DSI_Metrado2', '03_06_DSI_Metrado3', '03_06_DSI_Metrado4'
            ];
 
            for (const pName of propsToSum) {
@@ -119,9 +119,9 @@ export function extractModelMeasurements() {
 
            const metaProps = [
              '01_11_DSI_Ubicacion', '01_12_DSI_SubUbicacion', '01_13_DSI_Zona', '01_14_DSI_SubZona',
-             '03_04_DSI_NombreDePartida1', '03_04_DSI_NombreDePartida2', '03_04_DSI_NombreDePartida3',
-             '03_05_DSI_CodigoDePartida1', '03_05_DSI_CodigoDePartida2', '03_05_DSI_CodigoDePartida3',
-             '02_01_DSI_Unidad1', '02_01_DSI_Unidad2', '02_01_DSI_Unidad3'
+             '03_04_DSI_NombreDePartida1', '03_04_DSI_NombreDePartida2', '03_04_DSI_NombreDePartida3', '03_04_DSI_NombreDePartida4',
+             '03_05_DSI_CodigoDePartida1', '03_05_DSI_CodigoDePartida2', '03_05_DSI_CodigoDePartida3', '03_05_DSI_CodigoDePartida4',
+             '02_01_DSI_Unidad1', '02_01_DSI_Unidad2', '02_01_DSI_Unidad3', '02_01_DSI_Unidad4'
            ];
            for (const pName of metaProps) {
              if (row[pName] !== undefined && row[pName] !== null && row[pName] !== '') {
