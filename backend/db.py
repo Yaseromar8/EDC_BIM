@@ -666,3 +666,39 @@ def ensure_asset_user_data_table():
             print("[DB] Esquema asset_user_data (familia de usuario, persistente) verificado/creado exitosamente.")
     except Exception as e:
         print(f"Error inicializando esquema asset_user_data: {e}")
+
+
+# Pilar Identidad: tablas de datos que deben anclarse a una obra canonica (projects.id).
+# El 'frente' (model_urn / app_project_id, ej. '1_CANAL') queda como columna de agrupacion.
+PROJECT_SCOPED_TABLES = [
+    'inventory_assets', 'asset_user_data', 'model_config',
+    'tracking_pins', 'tracking_progress', 'tracking_details',
+    'photo_evidences', 'presupuesto_maestro', 'doc_partidas',
+    'doc_rfis', 'doc_redlines', 'saved_views', 'control_pins', 'daily_reports',
+]
+
+
+def ensure_project_identity_columns():
+    """Agrega project_id TEXT (+ indice) a todas las tablas de datos.
+
+    Aditivo e idempotente: ancla cada fila a una obra canonica (projects.id) sin
+    tocar el 'frente'. No cambia el comportamiento en runtime (ninguna query lo
+    lee todavia); es el cimiento del Pilar Identidad. El backfill lo hace
+    migrate_project_identity.py.
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            done = 0
+            for t in PROJECT_SCOPED_TABLES:  # whitelist fija (no inyectable)
+                try:
+                    cursor.execute(f"ALTER TABLE IF EXISTS {t} ADD COLUMN IF NOT EXISTS project_id TEXT")
+                    cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{t}_project_id ON {t}(project_id)")
+                    conn.commit()
+                    done += 1
+                except Exception as te:
+                    conn.rollback()
+                    print(f"[DB]  (project_id saltado en {t}: {te})")
+            print(f"[DB] Columna project_id verificada en {done} tablas (Pilar Identidad).")
+    except Exception as e:
+        print(f"Error agregando columnas project_id: {e}")

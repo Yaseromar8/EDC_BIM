@@ -743,7 +743,7 @@ def serve_map_file(filename):
     return send_from_directory(MAP_UPLOAD_FOLDER, filename)
 
 # Inicializar tablas maestras de la BD
-from db import ensure_file_nodes_table, ensure_ai_brain_schema, ensure_rfi_schema, ensure_redline_schema, ensure_partidas_schema, ensure_asset_user_data_table
+from db import ensure_file_nodes_table, ensure_ai_brain_schema, ensure_rfi_schema, ensure_redline_schema, ensure_partidas_schema, ensure_asset_user_data_table, ensure_project_identity_columns
 from routes.presupuesto import ensure_presupuesto_schema
 ensure_file_nodes_table()
 ensure_ai_brain_schema()
@@ -752,6 +752,7 @@ ensure_redline_schema()
 ensure_partidas_schema()
 ensure_presupuesto_schema()
 ensure_asset_user_data_table()
+ensure_project_identity_columns()
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()
