@@ -1,0 +1,3 @@
+# Dependencias solo para desarrollo/CI (no van a producción)
+-r requirements.txt
+pytest>=7.4
