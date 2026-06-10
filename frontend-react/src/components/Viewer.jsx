@@ -336,22 +336,24 @@ const Viewer = ({
                 if (hit) {
                     const pos = hit.intersectPoint;
                     const getPartidaInfo = (model, dbId) => new Promise((resolve) => {
-                        if (!model || !dbId) return resolve({ code: null, name: null });
+                        if (!model || !dbId) return resolve({ code: null, name: null, externalId: null });
                         model.getProperties(dbId, (result) => {
                             const codeProp = result.properties?.find(p => p.displayName === '03_05_DSI_CodigoDePartida');
                             const nameProp = result.properties?.find(p => p.displayName === '03_04_DSI_NombreDePartida');
                             resolve({
                                 code: codeProp ? codeProp.displayValue : null,
-                                name: nameProp ? nameProp.displayValue : null
+                                name: nameProp ? nameProp.displayValue : null,
+                                externalId: result.externalId || null  // ancla estable al elemento
                             });
-                        }, () => resolve({ code: null, name: null }));
+                        }, () => resolve({ code: null, name: null, externalId: null }));
                     });
 
-                    getPartidaInfo(hit.model, hit.dbId).then(({ code, name }) => {
+                    getPartidaInfo(hit.model, hit.dbId).then(({ code, name, externalId }) => {
                         onTrackingPinCreate?.({
                             id: Date.now().toString(),
                             x: pos.x, y: pos.y, z: pos.z,
                             dbId: hit.dbId || null,
+                            externalId: externalId,
                             codigoPartida: code,
                             partidaNombre: name,
                             val: trackingTab === 'avance' ? '0%' : null

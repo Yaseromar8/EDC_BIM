@@ -32,6 +32,8 @@ def ensure_tracking_pins_table():
             # Intentar agregar columna si la tabla existía antes
             cursor.execute("ALTER TABLE tracking_pins ADD COLUMN IF NOT EXISTS model_urn VARCHAR(255) DEFAULT 'global'")
             cursor.execute("ALTER TABLE tracking_pins ADD COLUMN IF NOT EXISTS specialty VARCHAR(100) DEFAULT 'General'")
+            # Pilar Datos: ancla estable al elemento (sigue al elemento entre versiones del modelo)
+            cursor.execute("ALTER TABLE tracking_pins ADD COLUMN IF NOT EXISTS external_id TEXT")
             
             # 2. Add model_urn to other legacy tracking tables if needed (tracking_progress, tracking_details, photo_evidences)
             # Para tracking_progress (excel)
@@ -152,7 +154,7 @@ def get_tracking_data(model_urn='global'):
                 })
             
             # --- 4. Cargar PINS de tracking (3D coordinates) ---
-            cursor.execute("SELECT id, pin_type, x, y, z, val, color, data, specialty FROM tracking_pins WHERE model_urn = %s ORDER BY created_at", (model_urn,))
+            cursor.execute("SELECT id, pin_type, x, y, z, val, color, data, specialty, external_id FROM tracking_pins WHERE model_urn = %s ORDER BY created_at", (model_urn,))
             for row in cursor.fetchall():
                 pin = {
                     "id": row[0],
@@ -161,7 +163,8 @@ def get_tracking_data(model_urn='global'):
                     "z": row[4],   # z = index 4
                     "val": row[5],
                     "color": row[6],
-                    "specialty": row[8] or 'General'
+                    "specialty": row[8] or 'General',
+                    "externalId": row[9]   # ancla estable al elemento (Pilar Datos)
                 }
                 extra = row[7] or {}
                 
@@ -381,19 +384,23 @@ def _upsert_pin(cursor, item, pin_type, model_urn):
     val = item.get('val')
     color = item.get('color')
     
+    # external_id: ancla estable al elemento (columna dedicada, no en el blob 'data')
+    ext_id = item.get('externalId') or item.get('external_id')
+
     # Everything else goes into JSONB 'data'
-    extra = {k: v for k, v in item.items() 
-             if k not in ('id', 'x', 'y', 'z', 'val', 'color', '_element')}
-    
+    extra = {k: v for k, v in item.items()
+             if k not in ('id', 'x', 'y', 'z', 'val', 'color', '_element', 'externalId', 'external_id')}
+
     cursor.execute('''
-        INSERT INTO tracking_pins (id, pin_type, x, y, z, val, color, data, model_urn, specialty, project_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO tracking_pins (id, pin_type, x, y, z, val, color, data, model_urn, specialty, project_id, external_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (id) DO UPDATE SET
             x = EXCLUDED.x, y = EXCLUDED.y, z = EXCLUDED.z,
             val = EXCLUDED.val, color = EXCLUDED.color, data = EXCLUDED.data,
             model_urn = EXCLUDED.model_urn, specialty = EXCLUDED.specialty,
-            project_id = EXCLUDED.project_id
-    ''', (pin_id, pin_type, x, y, z, val, color, json.dumps(extra, default=str), model_urn, item.get('specialty', 'General'), resolve_project_id(model_urn)))
+            project_id = EXCLUDED.project_id,
+            external_id = COALESCE(EXCLUDED.external_id, tracking_pins.external_id)
+    ''', (pin_id, pin_type, x, y, z, val, color, json.dumps(extra, default=str), model_urn, item.get('specialty', 'General'), resolve_project_id(model_urn), ext_id))
 
 @tracking_bp.route('/api/project-pins/photo', methods=['POST'])
 def add_photo_to_pin():

@@ -33,6 +33,8 @@ def ensure_pins_table():
             # Migración: Añadir project_id y attachment_urn si no existen
             cursor.execute("ALTER TABLE control_pins ADD COLUMN IF NOT EXISTS project_id TEXT;")
             cursor.execute("ALTER TABLE control_pins ADD COLUMN IF NOT EXISTS attachment_urn TEXT;")
+            # Pilar Datos: ancla estable al elemento (sigue al elemento entre versiones)
+            cursor.execute("ALTER TABLE control_pins ADD COLUMN IF NOT EXISTS external_id TEXT;")
             conn.commit()
             print("[pins] Tabla control_pins verificada (con attachment_urn).")
     except Exception as e:
@@ -135,14 +137,15 @@ def create_pin():
             data['name'] = pin_name
 
     project_id = data.get('projectId')
+    external_id = data.get('externalId') or data.get('external_id')  # ancla estable al elemento
 
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO control_pins (id, name, type, x_coord, y_coord, z_coord, project_id, attachment_urn)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ''', (pin_id, pin_name, pin_type, x, y, z, project_id, attachment_urn))
+                INSERT INTO control_pins (id, name, type, x_coord, y_coord, z_coord, project_id, attachment_urn, external_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (pin_id, pin_name, pin_type, x, y, z, project_id, attachment_urn, external_id))
             conn.commit()
     except Exception as e:
         print(f"Error POST pin: {e}")
