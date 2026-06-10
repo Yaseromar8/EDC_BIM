@@ -2849,7 +2849,15 @@ function App() {
   }, [filterColors, filterSelections]);
 
   // --- RENDER: LOGIN -> LANDING -> APP ---
-  if (!user && !isSharedMode && !BYPASS_AUTH) {
+  // Auth robusto: mostramos login si NO hay sesion. El gateway (frontend-docs)
+  // pasa ?session_token=... que apiFetch ya capturo a localStorage; si existe,
+  // entramos directo con el token real. Si no hay token ni usuario, login.
+  const _hasSession = !!(
+    localStorage.getItem('visor_session_token') ||
+    sessionStorage.getItem('visor_session_token') ||
+    new URLSearchParams(window.location.search).get('session_token')
+  );
+  if (!user && !_hasSession && !isSharedMode) {
     return <LoginScreen onLogin={handleLoginSuccess} />;
   }
 

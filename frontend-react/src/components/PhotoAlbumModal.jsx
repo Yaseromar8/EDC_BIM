@@ -127,7 +127,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                 rawSrc = rawSrc.replace(/http:\/\/localhost:3000/g, BACKEND_URL);
             }
             if (rawSrc.includes('/api/docs/proxy') && !rawSrc.includes('session_token=')) {
-                const tk = localStorage.getItem('visor_session_token') || 'DEMO_TOKEN';
+                const tk = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token') || '';
                 rawSrc += (rawSrc.includes('?') ? '&' : '?') + `session_token=${tk}`;
             }
         }
@@ -267,7 +267,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
 
                     if (completeData.success) {
                         // The URL is now fixed to be a proxy URL (or signed read URL)
-                        const token = localStorage.getItem('visor_session_token') || 'DEMO_TOKEN';
+                        const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token') || '';
                         const permalinkUrl = `${BACKEND_URL}/api/docs/proxy?urn=${urlData.gcs_urn}&session_token=${token}`;
 
                         if (onAddPhoto) {

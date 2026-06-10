@@ -4,11 +4,23 @@ Protects all /api/* endpoints by validating session tokens.
 Public endpoints (login, register, google-auth) are whitelisted.
 """
 
+import os
 import secrets
 import time
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import request, jsonify, g
+
+# ── DEMO_TOKEN: backdoor de desarrollo (seguro por defecto) ─────────────────
+# Historicamente el token 'DEMO_TOKEN' otorgaba acceso admin SIN login. Eso es
+# un backdoor y en produccion debe estar APAGADO. Se controla por variable de
+# entorno y por defecto esta DESACTIVADO.
+#   ALLOW_DEMO_TOKEN=true  -> habilita el atajo demo (solo desarrollo local)
+ALLOW_DEMO_TOKEN = os.getenv('ALLOW_DEMO_TOKEN', 'false').lower() in ('true', '1', 'yes')
+if ALLOW_DEMO_TOKEN:
+    print("[security] WARNING: ALLOW_DEMO_TOKEN ACTIVO -> DEMO_TOKEN concede admin sin login. NO usar en produccion.")
+else:
+    print("[security] DEMO_TOKEN deshabilitado (seguro). Para dev local: ALLOW_DEMO_TOKEN=true")
 
 # Endpoints that don't require authentication
 PUBLIC_ENDPOINTS = {
@@ -203,7 +215,8 @@ def init_auth_middleware(app):
         
         # Validate the session (now with in-memory cache)
         if token == 'DEMO_TOKEN':
-            user = {'id': 'demo', 'name': 'Demo User', 'role': 'admin'}
+            # Backdoor solo si ALLOW_DEMO_TOKEN esta activo (off por defecto -> None -> 401)
+            user = {'id': 'demo', 'name': 'Demo User', 'role': 'admin'} if ALLOW_DEMO_TOKEN else None
         else:
             user = validate_session(token)
             

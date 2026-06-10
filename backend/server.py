@@ -29,7 +29,17 @@ from aps import get_internal_token, get_api_data
 # Flask app setup
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB (Failsafe para archivos CAD/Civil pesados)
-CORS(app, resources={r"/*": {"origins": "*"}})
+# CORS configurable por entorno. Define CORS_ORIGINS (lista separada por comas)
+# en produccion para restringir a tus dominios. Sin la variable, queda abierto (*)
+# para no romper en desarrollo.
+_cors_env = os.getenv('CORS_ORIGINS', '').strip()
+if _cors_env:
+    _cors_origins = [o.strip() for o in _cors_env.split(',') if o.strip()]
+    CORS(app, resources={r"/*": {"origins": _cors_origins}})
+    print(f"[security] CORS restringido a: {_cors_origins}")
+else:
+    CORS(app, resources={r"/*": {"origins": "*"}})
+    print("[security] CORS abierto (*). Define CORS_ORIGINS para restringir en produccion.")
 
 # --- AUTH MIDDLEWARE ---
 from auth_middleware import init_auth_middleware

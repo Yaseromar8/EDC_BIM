@@ -210,7 +210,7 @@ export async function processPendingUploads(onPhotoUploaded, getBackendUrl) {
             const confirmData = await confirmResp.json();
 
             if (confirmData.success) {
-                const token = localStorage.getItem('visor_session_token') || 'DEMO_TOKEN';
+                const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token') || '';
                 const permalinkUrl = `${BACKEND_URL}/api/docs/proxy?urn=${urlData.gcs_urn}&session_token=${token}`;
 
                 // Notify the app that this photo is ready

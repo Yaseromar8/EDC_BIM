@@ -9,9 +9,22 @@
 
 const AUTH_ENDPOINTS = ['/api/auth/login', '/api/auth/register', '/api/auth/google'];
 
+// Al cargar el visor desde el gateway (frontend-docs), la sesion real llega como
+// ?session_token=... en la URL. La capturamos UNA vez y la guardamos, asi el visor
+// usa TU token real en vez del antiguo DEMO_TOKEN.
+(function captureUrlSessionToken() {
+  try {
+    const urlToken = new URLSearchParams(window.location.search).get('session_token');
+    if (urlToken) {
+      localStorage.setItem('visor_session_token', urlToken);
+    }
+  } catch (e) { /* entorno sin window/URL: ignorar */ }
+})();
+
 function getToken() {
-  const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
-  return token || 'DEMO_TOKEN';
+  // Sin fallback a DEMO_TOKEN: si no hay sesion devolvemos null -> el backend
+  // responde 401 -> el visor muestra login. (El backdoor demo queda cerrado.)
+  return localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token') || null;
 }
 
 function clearSession() {
