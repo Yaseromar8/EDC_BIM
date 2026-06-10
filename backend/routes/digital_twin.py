@@ -14,6 +14,21 @@ from routes.inventory import sanitize_urn
 
 digital_twin_bp = Blueprint('digital_twin', __name__)
 
+
+def _is_model_translated(urn, token):
+    """True si el modelo esta traducido (manifest status 'success').
+    Solo devuelve False cuando el manifest dice claramente que NO esta listo;
+    ante error/duda devuelve True (fail-open) para no bloquear flujos validos."""
+    try:
+        r = requests.get(
+            f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn}/manifest",
+            headers={'Authorization': f'Bearer {token}'}, timeout=12)
+        if not r.ok:
+            return True
+        return (r.json() or {}).get('status') == 'success'
+    except Exception:
+        return True
+
 def ensure_model_config_table():
     """Creates the model_config table in PostgreSQL if it doesn't exist."""
     try:
@@ -340,25 +355,12 @@ def update_model_link():
             urn_bytes = base64.urlsafe_b64encode(latest_version_id.encode('utf-8'))
             new_urn = urn_bytes.decode('utf-8').rstrip('=')
             
-            # LIMPIEZA: Borrar inventario del URN viejo antes de actualizar
-            # COHERENCIA: sanitize_urn asegura que el DELETE use el mismo formato
-            # que extract_metadata_task usó al guardar source_urn.
-            try:
-                from db import get_db_connection
-                old_urn_sanitized = sanitize_urn(old_urn)
-                target = app_project_id or model.get('appProjectId')
-                with get_db_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        "DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN (%s, %s)",
-                        (target, old_urn_sanitized, old_urn)
-                    )
-                    deleted = cursor.rowcount
-                    conn.commit()
-                    print(f"[Update] Limpieza inventario: {deleted} registros del URN viejo eliminados")
-            except Exception as cleanup_err:
-                print(f"[Update] Advertencia: Error limpiando inventario viejo: {cleanup_err}")
-            
+            # SEGURIDAD TRANSACCIONAL (Fase 6): NO se borra el inventario viejo aqui.
+            # Es la misma version-lineage (mismo base_urn), asi que extract_metadata_task
+            # purga las versiones historicas y re-inserta en UNA sola transaccion atomica.
+            # Si la extraccion falla (ej. traduccion no lista), el inventario viejo queda
+            # intacto en vez de quedar vacio. (Antes habia un DELETE no-atomico aqui.)
+
             # Update Model Record
             version_num_before = model.get('versionNumber')
             model['urn'] = new_urn
@@ -581,6 +583,19 @@ def relink_model_route():
 
     if not target_id or not new_data:
         return jsonify({"error": "Missing targetId or newModel data"}), 400
+
+    # SEGURIDAD TRANSACCIONAL (Fase 6): el relink apunta a OTRO archivo (otro base_urn),
+    # asi que la extraccion no purga la data vieja: hay que borrarla aqui. Pero NO la
+    # borramos si el nuevo modelo aun no esta traducido (la extraccion fallaria y
+    # quedaria sin datos). Verificamos primero.
+    _new_urn = new_data.get('urn')
+    if _new_urn:
+        _tok, _ = get_internal_token()
+        if _tok and not _is_model_translated(_new_urn, _tok):
+            return jsonify({
+                "error": "El nuevo modelo aun no esta traducido. Reintente en unos minutos.",
+                "code": "TRANSLATION_PENDING"
+            }), 409
 
     # LIMPIEZA: Borrar inventario del URN viejo antes de relinkear
     # COHERENCIA: sanitize_urn asegura match con el formato de source_urn en inventory_assets.
