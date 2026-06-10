@@ -2,6 +2,9 @@ import os
 import psycopg2
 from psycopg2 import pool, extras
 from contextlib import contextmanager
+from app_logging import get_logger
+
+logger = get_logger('db')
 
 # Definimos un Connection Pool global
 db_pool = None
@@ -30,9 +33,9 @@ def init_db_pool():
             keepalives_interval=10,
             keepalives_count=3
         )
-        print("[DB] Pool de conexiones PostgreSQL inicializado (Min:2, Max:15, Keepalive:ON)")
+        logger.info("Pool PostgreSQL inicializado (Min:2, Max:15, Keepalive:ON)")
     except Exception as e:
-        print(f"CRITICAL: Error iniciando Pool SQL a {os.environ.get('DB_HOST')}: {str(e)}")
+        logger.critical(f"Error iniciando Pool SQL a {os.environ.get('DB_HOST')}: {e}")
         import traceback
         traceback.print_exc()
 
@@ -96,7 +99,7 @@ def get_db_connection():
             break
             
         except pool.PoolError as e:
-            print(f"[DB] Pool agotado (intento {attempt+1}/{max_retries}): {e}")
+            logger.warning(f"Pool agotado (intento {attempt+1}/{max_retries}): {e}")
             conn = None
             if attempt == max_retries - 1:
                 raise Exception(f"No hay conexiones disponibles en el pool: {e}")
@@ -110,7 +113,7 @@ def get_db_connection():
         yield conn
     except Exception as e:
         conn_is_good = False
-        print(f"Error de Base de Datos: {e}")
+        logger.error(f"Error de Base de Datos: {e}")
         try:
             conn.rollback()
         except Exception:

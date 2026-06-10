@@ -26,6 +26,10 @@ import traceback
 
 from aps import get_internal_token, get_api_data
 
+# Logging central (niveles via LOG_LEVEL). Configurar temprano, antes de todo.
+from app_logging import setup_logging
+setup_logging()
+
 # Flask app setup
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB (Failsafe para archivos CAD/Civil pesados)

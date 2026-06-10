@@ -10,6 +10,9 @@ import time
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import request, jsonify, g
+from app_logging import get_logger
+
+logger = get_logger('auth')
 
 # ── DEMO_TOKEN: backdoor de desarrollo (seguro por defecto) ─────────────────
 # Historicamente el token 'DEMO_TOKEN' otorgaba acceso admin SIN login. Eso es
@@ -18,9 +21,9 @@ from flask import request, jsonify, g
 #   ALLOW_DEMO_TOKEN=true  -> habilita el atajo demo (solo desarrollo local)
 ALLOW_DEMO_TOKEN = os.getenv('ALLOW_DEMO_TOKEN', 'false').lower() in ('true', '1', 'yes')
 if ALLOW_DEMO_TOKEN:
-    print("[security] WARNING: ALLOW_DEMO_TOKEN ACTIVO -> DEMO_TOKEN concede admin sin login. NO usar en produccion.")
+    logger.warning("ALLOW_DEMO_TOKEN ACTIVO -> DEMO_TOKEN concede admin sin login. NO usar en produccion.")
 else:
-    print("[security] DEMO_TOKEN deshabilitado (seguro). Para dev local: ALLOW_DEMO_TOKEN=true")
+    logger.info("DEMO_TOKEN deshabilitado (seguro). Para dev local: ALLOW_DEMO_TOKEN=true")
 
 # Endpoints that don't require authentication
 PUBLIC_ENDPOINTS = {
@@ -106,7 +109,7 @@ def create_session(user_id):
             conn.commit()
         return token
     except Exception as e:
-        print(f"[auth_middleware] Error creating session: {e}")
+        logger.error(f"Error creando sesion: {e}")
         return None
 
 
@@ -152,7 +155,7 @@ def validate_session(token):
                 return user
         return None
     except Exception as e:
-        print(f"[auth_middleware] Error validating session: {e}")
+        logger.error(f"Error validando sesion: {e}")
         return None
 
 
@@ -168,7 +171,7 @@ def revoke_session(token):
             conn.commit()
             return True
     except Exception as e:
-        print(f"[auth_middleware] Error revoking session: {e}")
+        logger.error(f"Error revocando sesion: {e}")
         return False
 
 
@@ -177,7 +180,7 @@ def revoke_session(token):
 # que bloquearia, pero PERMITE). Encender (=true) cuando se confirme que no
 # rompe accesos. Siempre: admin bypass + fail-open ante error de BD.
 ENFORCE_PROJECT_AUTHZ = os.getenv('ENFORCE_PROJECT_AUTHZ', 'false').lower() in ('true', '1', 'yes')
-print(f"[security] Autorizacion por proyecto: {'ENFORCE' if ENFORCE_PROJECT_AUTHZ else 'log-only (no bloquea)'}")
+logger.info(f"Autorizacion por proyecto: {'ENFORCE' if ENFORCE_PROJECT_AUTHZ else 'log-only (no bloquea)'}")
 
 _membership_cache = {}  # (user_id, project_id) -> (bool, ts)
 _MEMBERSHIP_TTL = 120
@@ -198,7 +201,7 @@ def _user_in_project(user_id, project_id):
                         (str(project_id), user_id))
             ok = cur.fetchone() is not None
     except Exception as e:
-        print(f"[authz] error verificando membresia: {e}")
+        logger.error(f"error verificando membresia: {e}")
         return True  # fail-open: no romper por error de BD
     _membership_cache[key] = (ok, _t.time())
     return ok
@@ -285,8 +288,8 @@ def init_auth_middleware(app):
                 if pid and not _user_in_project(user.get('id'), pid):
                     if ENFORCE_PROJECT_AUTHZ:
                         return jsonify({'error': 'Sin acceso a este proyecto', 'code': 'PROJECT_FORBIDDEN'}), 403
-                    print(f"[authz][log-only] user={user.get('id')} SIN acceso a obra={pid} ({request.method} {path})")
+                    logger.info(f"[log-only] user={user.get('id')} SIN acceso a obra={pid} ({request.method} {path})")
         except Exception as e:
-            print(f"[authz] error (fail-open): {e}")  # nunca bloquear por bug del authz
+            logger.error(f"authz error (fail-open): {e}")  # nunca bloquear por bug del authz
 
         return None
