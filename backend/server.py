@@ -733,7 +733,7 @@ def serve_map_file(filename):
     return send_from_directory(MAP_UPLOAD_FOLDER, filename)
 
 # Inicializar tablas maestras de la BD
-from db import ensure_file_nodes_table, ensure_ai_brain_schema, ensure_rfi_schema, ensure_redline_schema, ensure_partidas_schema
+from db import ensure_file_nodes_table, ensure_ai_brain_schema, ensure_rfi_schema, ensure_redline_schema, ensure_partidas_schema, ensure_asset_user_data_table
 from routes.presupuesto import ensure_presupuesto_schema
 ensure_file_nodes_table()
 ensure_ai_brain_schema()
@@ -741,6 +741,7 @@ ensure_rfi_schema()
 ensure_redline_schema()
 ensure_partidas_schema()
 ensure_presupuesto_schema()
+ensure_asset_user_data_table()
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()
@@ -843,34 +844,50 @@ def get_inventory():
             # Construir la query base y los parámetros
             params = []
             
+            # LEFT JOIN a asset_user_data (familia de usuario, persistente). Los campos
+            # editables se resuelven con COALESCE(usuario, nativo): si la migracion aun
+            # no corrio o no hay edicion, cae al valor nativo de inventory_assets, asi
+            # el endpoint devuelve EXACTAMENTE la misma forma de siempre.
             if include_props:
-                # Retornamos el JSON directamente desde PostgreSQL por FILA, no agregado, 
+                # Retornamos el JSON directamente desde PostgreSQL por FILA, no agregado,
                 # para poder hacer streaming fila por fila en Python y evitar RAM spikes.
                 query = '''
                     SELECT json_build_object(
-                        'external_id', external_id,
-                        'name', name,
-                        'material', material,
-                        'installation_status', installation_status,
-                        'vaciado_nro', vaciado_nro,
-                        'model_urn', COALESCE(source_urn, model_urn),
-                        'source_urn', source_urn,
-                        'properties', properties
+                        'external_id', ia.external_id,
+                        'name', ia.name,
+                        'material', COALESCE(u.material, ia.material),
+                        'installation_status', COALESCE(u.status, ia.installation_status),
+                        'vaciado_nro', COALESCE(u.vaciado_nro, ia.vaciado_nro),
+                        'classification', u.classification,
+                        'model_urn', COALESCE(ia.source_urn, ia.model_urn),
+                        'source_urn', ia.source_urn,
+                        'properties', CASE
+                            WHEN u.extras IS NOT NULL AND u.extras <> '{}'::jsonb
+                            THEN jsonb_set(
+                                    COALESCE(ia.properties, '{}'::jsonb),
+                                    '{Live Edit}',
+                                    COALESCE(ia.properties->'Live Edit', '{}'::jsonb) || u.extras,
+                                    true)
+                            ELSE ia.properties
+                        END
                     )::text
-                    FROM inventory_assets
+                    FROM inventory_assets ia
+                    LEFT JOIN asset_user_data u ON u.external_id = ia.external_id
                 '''
             else:
                 query = '''
                     SELECT json_build_object(
-                        'external_id', external_id,
-                        'name', name,
-                        'material', material,
-                        'installation_status', installation_status,
-                        'vaciado_nro', vaciado_nro,
-                        'model_urn', model_urn,
-                        'source_urn', source_urn
+                        'external_id', ia.external_id,
+                        'name', ia.name,
+                        'material', COALESCE(u.material, ia.material),
+                        'installation_status', COALESCE(u.status, ia.installation_status),
+                        'vaciado_nro', COALESCE(u.vaciado_nro, ia.vaciado_nro),
+                        'classification', u.classification,
+                        'model_urn', ia.model_urn,
+                        'source_urn', ia.source_urn
                     )::text
-                    FROM inventory_assets
+                    FROM inventory_assets ia
+                    LEFT JOIN asset_user_data u ON u.external_id = ia.external_id
                 '''
             
             # Filtrado inteligente por frente (model_urn)
@@ -880,10 +897,10 @@ def get_inventory():
                 if '_' in model_urn:
                     parts = model_urn.split('_', 1)
                     frente = parts[1].upper()
-                    query += ' WHERE UPPER(model_urn) = %s OR UPPER(model_urn) = %s OR UPPER(model_urn) LIKE %s'
+                    query += ' WHERE UPPER(ia.model_urn) = %s OR UPPER(ia.model_urn) = %s OR UPPER(ia.model_urn) LIKE %s'
                     params.extend([model_urn.upper(), frente, f'%{frente}%'])
                 else:
-                    query += ' WHERE model_urn = %s'
+                    query += ' WHERE ia.model_urn = %s'
                     params.append(model_urn)
             
             # Streaming Generator for Flask
@@ -937,39 +954,34 @@ def update_inventory():
         from db import get_db_connection
         import json as _json
         
-        base_cols = {'Name': 'name', 'Material': 'material', 'Status': 'installation_status', 'Vaciado_Nro': 'vaciado_nro'}
-        
+        # Los campos editables ahora viven en asset_user_data (familia de usuario,
+        # persistente entre versiones del modelo). 'Name' es nativo del modelo y se
+        # mantiene en inventory_assets.
+        base_cols = {'Material': 'material', 'Status': 'status', 'Vaciado_Nro': 'vaciado_nro'}
+
         with get_db_connection() as conn:
              cursor = conn.cursor()
-             
-             if field_name in base_cols:
-                  col = base_cols[field_name]
-                  cursor.execute(f'UPDATE inventory_assets SET {col} = %s WHERE external_id = %s', (new_val, ext_id))
+
+             if field_name == 'Name':
+                  cursor.execute('UPDATE inventory_assets SET name = %s WHERE external_id = %s', (new_val, ext_id))
+             elif field_name in base_cols:
+                  col = base_cols[field_name]  # whitelist: material/status/vaciado_nro (no inyectable)
+                  cursor.execute(f'''
+                      INSERT INTO asset_user_data (external_id, {col}, updated_at)
+                      VALUES (%s, %s, NOW())
+                      ON CONFLICT (external_id) DO UPDATE
+                      SET {col} = EXCLUDED.{col}, updated_at = NOW()
+                  ''', (ext_id, new_val))
              else:
-                  cursor.execute('SELECT properties FROM inventory_assets WHERE external_id = %s', (ext_id,))
-                  row = cursor.fetchone()
-                  if row:
-                      props = row[0]
-                      if isinstance(props, str): 
-                          try:
-                              props = _json.loads(props)
-                          except:
-                              props = {}
-                      
-                      updated = False
-                      for cat, attrs in props.items():
-                          if isinstance(attrs, dict) and field_name in attrs:
-                               attrs[field_name] = new_val
-                               updated = True
-                               break
-                      
-                      if not updated:
-                           if 'Live Edit' not in props:
-                               props['Live Edit'] = {}
-                           props['Live Edit'][field_name] = new_val
-                           
-                      cursor.execute('UPDATE inventory_assets SET properties = %s::jsonb WHERE external_id = %s', (_json.dumps(props), ext_id))
-             
+                  # Campo custom (Costo, Notas, Proveedor, Fase...) -> extras JSONB (familia z de Tandem)
+                  cursor.execute('''
+                      INSERT INTO asset_user_data (external_id, extras, updated_at)
+                      VALUES (%s, jsonb_build_object(%s, %s::jsonb), NOW())
+                      ON CONFLICT (external_id) DO UPDATE
+                      SET extras = asset_user_data.extras || jsonb_build_object(%s, %s::jsonb),
+                          updated_at = NOW()
+                  ''', (ext_id, field_name, _json.dumps(new_val), field_name, _json.dumps(new_val)))
+
              conn.commit()
              return jsonify({'status': 'ok'}), 200
     except Exception as e:
@@ -995,36 +1007,39 @@ def bulk_update_inventory():
         from db import get_db_connection
         import json as _json
 
-        base_cols = {'Name': 'name', 'Material': 'material', 'Status': 'installation_status', 'Vaciado_Nro': 'vaciado_nro'}
+        # Igual que el PATCH individual, pero en lote: escribe a asset_user_data.
+        base_cols = {'Material': 'material', 'Status': 'status', 'Vaciado_Nro': 'vaciado_nro'}
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SET statement_timeout = '60000'")
 
-            if field_name in base_cols:
-                # FAST PATH: Single UPDATE for base columns
-                col = base_cols[field_name]
+            if field_name == 'Name':
+                # Name es nativo del modelo -> se mantiene en inventory_assets
                 cursor.execute(
-                    f'UPDATE inventory_assets SET {col} = %s WHERE external_id = ANY(%s)',
+                    'UPDATE inventory_assets SET name = %s WHERE external_id = ANY(%s)',
                     (field_value, external_ids)
                 )
                 updated = cursor.rowcount
+            elif field_name in base_cols:
+                col = base_cols[field_name]  # whitelist: material/status/vaciado_nro (no inyectable)
+                cursor.execute(f'''
+                    INSERT INTO asset_user_data (external_id, {col}, updated_at)
+                    SELECT eid, %s, NOW() FROM (SELECT DISTINCT unnest(%s::text[]) AS eid) t
+                    ON CONFLICT (external_id) DO UPDATE
+                    SET {col} = EXCLUDED.{col}, updated_at = NOW()
+                ''', (field_value, external_ids))
+                updated = cursor.rowcount
             else:
-                # JSONB PATH: Update properties column in batch using jsonb_set
+                # Campo custom -> extras JSONB (familia z de Tandem)
                 cursor.execute('''
-                    UPDATE inventory_assets 
-                    SET properties = jsonb_set(
-                        COALESCE(properties, '{}'::jsonb),
-                        %s,
-                        %s::jsonb,
-                        true
-                    )
-                    WHERE external_id = ANY(%s)
-                ''', (
-                    '{Live Edit,' + field_name + '}',
-                    _json.dumps(field_value),
-                    external_ids
-                ))
+                    INSERT INTO asset_user_data (external_id, extras, updated_at)
+                    SELECT eid, jsonb_build_object(%s, %s::jsonb), NOW()
+                    FROM (SELECT DISTINCT unnest(%s::text[]) AS eid) t
+                    ON CONFLICT (external_id) DO UPDATE
+                    SET extras = asset_user_data.extras || jsonb_build_object(%s, %s::jsonb),
+                        updated_at = NOW()
+                ''', (field_name, _json.dumps(field_value), external_ids, field_name, _json.dumps(field_value)))
                 updated = cursor.rowcount
 
             conn.commit()

@@ -628,3 +628,41 @@ def ensure_partidas_schema():
             print("[DB] Esquema Partidas (Metrados) verificado/creado exitosamente.")
     except Exception as e:
         print(f"Error inicializando esquema Partidas: {e}")
+
+
+def ensure_asset_user_data_table():
+    """Familia de datos de USUARIO, separada del inventario nativo de Revit.
+
+    Equivale a la 'column family z' (DtProperties) de Autodesk Tandem: la data que
+    el usuario autora desde la app (estado, material, nº de vaciado, clasificación y
+    campos custom) vive aquí, anclada SOLO por external_id (identidad estable entre
+    versiones). Así, cuando un modelo se actualiza/relinkea y se re-extrae el
+    inventario nativo, esta data NO se toca y persiste para siempre.
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS asset_user_data (
+                    external_id    TEXT PRIMARY KEY,
+                    model_urn      TEXT,
+                    status         TEXT,
+                    material       TEXT,
+                    vaciado_nro    TEXT,
+                    classification TEXT,
+                    extras         JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    updated_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_by     VARCHAR(255)
+                );
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_asset_user_data_model_urn
+                ON asset_user_data(model_urn);
+            """)
+
+            conn.commit()
+            print("[DB] Esquema asset_user_data (familia de usuario, persistente) verificado/creado exitosamente.")
+    except Exception as e:
+        print(f"Error inicializando esquema asset_user_data: {e}")
