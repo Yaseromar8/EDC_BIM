@@ -670,11 +670,17 @@ def ensure_asset_user_data_table():
 
 # Pilar Identidad: tablas de datos que deben anclarse a una obra canonica (projects.id).
 # El 'frente' (model_urn / app_project_id, ej. '1_CANAL') queda como columna de agrupacion.
+#
+# EXCLUIDAS porque su columna project_id YA EXISTE con OTRA semantica (no tocar):
+#   - model_config.project_id  = ACC Project ID ('b.3fcc...') usado por update/relink
+#   - saved_views.project_id   = frente ('1_CANAL'), contrato actual del API de vistas
+#   - control_pins.project_id  = frente, contrato del API de pins
+# Para esas, la obra se deriva del frente via resolve_project_id().
 PROJECT_SCOPED_TABLES = [
-    'inventory_assets', 'asset_user_data', 'model_config',
+    'inventory_assets', 'asset_user_data',
     'tracking_pins', 'tracking_progress', 'tracking_details',
     'photo_evidences', 'presupuesto_maestro', 'doc_partidas',
-    'doc_rfis', 'doc_redlines', 'saved_views', 'control_pins', 'daily_reports',
+    'doc_rfis', 'doc_redlines', 'daily_reports',
 ]
 
 
@@ -702,3 +708,59 @@ def ensure_project_identity_columns():
             print(f"[DB] Columna project_id verificada en {done} tablas (Pilar Identidad).")
     except Exception as e:
         print(f"Error agregando columnas project_id: {e}")
+
+
+# ── Resolver frente → obra canonica (projects.id) ──────────────────────────
+# El frontend opera por 'frente' ('1_CANAL', 'proyectos/PQT8_TALARA', 'global').
+# Convencion: el prefijo antes del primer '_' es el projects.id. Fallbacks:
+# match por nombre, match exacto, y si hay UNA sola obra activa, esa.
+# Cache en memoria con TTL para no pegarle a la BD en cada write.
+_project_resolver_cache = {'map': None, 'ts': 0}
+_PROJECT_RESOLVER_TTL = 300  # 5 min
+
+
+def _load_project_resolver():
+    import time as _time
+    now = _time.time()
+    if _project_resolver_cache['map'] is not None and now - _project_resolver_cache['ts'] < _PROJECT_RESOLVER_TTL:
+        return _project_resolver_cache['map']
+    by_id, by_name, active = {}, {}, []
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT id, name, status FROM projects")
+            for pid, name, status in cur.fetchall():
+                by_id[pid] = pid
+                if name:
+                    by_name[name] = pid
+                if status == 'active':
+                    active.append(pid)
+    except Exception as e:
+        print(f"[DB] resolve_project_id: no se pudo cargar projects: {e}")
+        return _project_resolver_cache['map'] or {'by_id': {}, 'by_name': {}, 'default': None}
+    resolved = {'by_id': by_id, 'by_name': by_name, 'default': active[0] if len(active) == 1 else None}
+    _project_resolver_cache['map'] = resolved
+    _project_resolver_cache['ts'] = now
+    return resolved
+
+
+def resolve_project_id(frente):
+    """Resuelve un 'frente' (model_urn/app_project_id) a la obra canonica (projects.id).
+    Devuelve None si no se puede resolver. Nunca lanza."""
+    try:
+        m = _load_project_resolver()
+        if not frente or frente == 'global':
+            return m['default']
+        prefix = str(frente).split('_', 1)[0]
+        if prefix in m['by_id']:
+            return prefix
+        tail = str(frente).split('/')[-1]
+        if tail in m['by_name']:
+            return m['by_name'][tail]
+        if frente in m['by_name']:
+            return m['by_name'][frente]
+        if frente in m['by_id']:
+            return frente
+        return m['default']
+    except Exception:
+        return None

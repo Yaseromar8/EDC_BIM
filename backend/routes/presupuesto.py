@@ -6,7 +6,7 @@ POST /api/presupuesto/import                   -> Importar Excel del presupuesto
 POST /api/presupuesto/import-json              -> Importar desde JSON (fallback)
 """
 from flask import Blueprint, jsonify, request
-from db import get_db_connection
+from db import get_db_connection, resolve_project_id
 import json
 import os
 
@@ -144,15 +144,16 @@ def import_presupuesto_json():
             cursor.execute("DELETE FROM presupuesto_maestro WHERE model_urn = %s", (model_urn,))
             
             from psycopg2.extras import execute_values
+            _pid = resolve_project_id(model_urn)
             insert_sql = """
-                INSERT INTO presupuesto_maestro 
-                    (model_urn, item, descripcion, unidad, metrado_contractual, precio_unitario, parcial_contractual, nivel, es_titulo, parent_item)
+                INSERT INTO presupuesto_maestro
+                    (model_urn, item, descripcion, unidad, metrado_contractual, precio_unitario, parcial_contractual, nivel, es_titulo, parent_item, project_id)
                 VALUES %s
             """
             records = [
                 (model_urn, r['item'], r['descripcion'], r['unidad'],
                  r['metrado_contractual'], r['precio_unitario'], r['parcial_contractual'],
-                 r['nivel'], r['es_titulo'], r['parent_item'])
+                 r['nivel'], r['es_titulo'], r['parent_item'], _pid)
                 for r in rows
             ]
             execute_values(cursor, insert_sql, records)

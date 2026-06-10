@@ -845,6 +845,7 @@ def get_inventory():
         
         include_props = request.args.get('include_props', 'true').lower() == 'true'
         model_urn = request.args.get('model_urn')
+        project_id = request.args.get('project_id')  # Pilar Identidad: filtrar por obra completa (dual-read)
         
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -901,10 +902,14 @@ def get_inventory():
                     LEFT JOIN asset_user_data u ON u.external_id = ia.external_id
                 '''
             
-            # Filtrado inteligente por frente (model_urn)
-            # model_urn viene como "1_CANAL", "1_DRENAJE", etc.
-            # Los registros en inventory_assets pueden tener model_urn: "CANAL", "1_CANAL", "DRENAJE_URBANO", etc.
-            if model_urn and model_urn != 'global':
+            # DUAL-READ (Pilar Identidad): si llega project_id, filtramos por la obra
+            # canonica (todos sus frentes). Si no, mantenemos el filtro por frente de
+            # siempre (model_urn). project_id tiene prioridad cuando esta presente.
+            if project_id:
+                query += ' WHERE ia.project_id = %s'
+                params.append(project_id)
+            elif model_urn and model_urn != 'global':
+                # Filtrado por frente (model_urn): "1_CANAL", "1_DRENAJE", etc.
                 if '_' in model_urn:
                     parts = model_urn.split('_', 1)
                     frente = parts[1].upper()
@@ -978,20 +983,23 @@ def update_inventory():
              elif field_name in base_cols:
                   col = base_cols[field_name]  # whitelist: material/status/vaciado_nro (no inyectable)
                   cursor.execute(f'''
-                      INSERT INTO asset_user_data (external_id, {col}, updated_at)
-                      VALUES (%s, %s, NOW())
+                      INSERT INTO asset_user_data (external_id, {col}, project_id, updated_at)
+                      VALUES (%s, %s, (SELECT project_id FROM inventory_assets WHERE external_id = %s LIMIT 1), NOW())
                       ON CONFLICT (external_id) DO UPDATE
-                      SET {col} = EXCLUDED.{col}, updated_at = NOW()
-                  ''', (ext_id, new_val))
+                      SET {col} = EXCLUDED.{col},
+                          project_id = COALESCE(asset_user_data.project_id, EXCLUDED.project_id),
+                          updated_at = NOW()
+                  ''', (ext_id, new_val, ext_id))
              else:
                   # Campo custom (Costo, Notas, Proveedor, Fase...) -> extras JSONB (familia z de Tandem)
                   cursor.execute('''
-                      INSERT INTO asset_user_data (external_id, extras, updated_at)
-                      VALUES (%s, jsonb_build_object(%s, %s::jsonb), NOW())
+                      INSERT INTO asset_user_data (external_id, extras, project_id, updated_at)
+                      VALUES (%s, jsonb_build_object(%s, %s::jsonb), (SELECT project_id FROM inventory_assets WHERE external_id = %s LIMIT 1), NOW())
                       ON CONFLICT (external_id) DO UPDATE
                       SET extras = asset_user_data.extras || jsonb_build_object(%s, %s::jsonb),
+                          project_id = COALESCE(asset_user_data.project_id, EXCLUDED.project_id),
                           updated_at = NOW()
-                  ''', (ext_id, field_name, _json.dumps(new_val), field_name, _json.dumps(new_val)))
+                  ''', (ext_id, field_name, _json.dumps(new_val), ext_id, field_name, _json.dumps(new_val)))
 
              conn.commit()
              return jsonify({'status': 'ok'}), 200
@@ -1035,20 +1043,24 @@ def bulk_update_inventory():
             elif field_name in base_cols:
                 col = base_cols[field_name]  # whitelist: material/status/vaciado_nro (no inyectable)
                 cursor.execute(f'''
-                    INSERT INTO asset_user_data (external_id, {col}, updated_at)
-                    SELECT eid, %s, NOW() FROM (SELECT DISTINCT unnest(%s::text[]) AS eid) t
+                    INSERT INTO asset_user_data (external_id, {col}, project_id, updated_at)
+                    SELECT eid, %s, (SELECT ia.project_id FROM inventory_assets ia WHERE ia.external_id = t.eid LIMIT 1), NOW()
+                    FROM (SELECT DISTINCT unnest(%s::text[]) AS eid) t
                     ON CONFLICT (external_id) DO UPDATE
-                    SET {col} = EXCLUDED.{col}, updated_at = NOW()
+                    SET {col} = EXCLUDED.{col},
+                        project_id = COALESCE(asset_user_data.project_id, EXCLUDED.project_id),
+                        updated_at = NOW()
                 ''', (field_value, external_ids))
                 updated = cursor.rowcount
             else:
                 # Campo custom -> extras JSONB (familia z de Tandem)
                 cursor.execute('''
-                    INSERT INTO asset_user_data (external_id, extras, updated_at)
-                    SELECT eid, jsonb_build_object(%s, %s::jsonb), NOW()
+                    INSERT INTO asset_user_data (external_id, extras, project_id, updated_at)
+                    SELECT eid, jsonb_build_object(%s, %s::jsonb), (SELECT ia.project_id FROM inventory_assets ia WHERE ia.external_id = t.eid LIMIT 1), NOW()
                     FROM (SELECT DISTINCT unnest(%s::text[]) AS eid) t
                     ON CONFLICT (external_id) DO UPDATE
                     SET extras = asset_user_data.extras || jsonb_build_object(%s, %s::jsonb),
+                        project_id = COALESCE(asset_user_data.project_id, EXCLUDED.project_id),
                         updated_at = NOW()
                 ''', (field_name, _json.dumps(field_value), external_ids, field_name, _json.dumps(field_value)))
                 updated = cursor.rowcount

@@ -599,19 +599,22 @@ def extract_metadata_task(urn, target_urn, job_id):
                 cursor.execute(f"DELETE FROM inventory_assets WHERE source_urn IN ({format_strings})", urns_to_delete)
 
             current_time = datetime.now()
+            from db import resolve_project_id
+            project_id = resolve_project_id(target_urn)  # obra canonica (Pilar Identidad)
             records = [
-                (item['external_id'], target_urn, urn, item['name'], item['properties'], current_time) 
+                (item['external_id'], target_urn, urn, item['name'], item['properties'], current_time, project_id)
                 for item in inventory_data
             ]
-            
+
             from psycopg2.extras import execute_values
             insert_query = """
-                INSERT INTO inventory_assets (external_id, model_urn, source_urn, name, properties, last_updated)
+                INSERT INTO inventory_assets (external_id, model_urn, source_urn, name, properties, last_updated, project_id)
                 VALUES %s
-                ON CONFLICT (model_urn, source_urn, external_id) DO UPDATE SET 
+                ON CONFLICT (model_urn, source_urn, external_id) DO UPDATE SET
                     name = EXCLUDED.name,
                     properties = EXCLUDED.properties,
-                    last_updated = EXCLUDED.last_updated;
+                    last_updated = EXCLUDED.last_updated,
+                    project_id = EXCLUDED.project_id;
             """
             execute_values(cursor, insert_query, records)
             conn.commit()

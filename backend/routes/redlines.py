@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from db import get_db_connection
+from db import get_db_connection, resolve_project_id
 import uuid
 import json
 
@@ -60,10 +60,10 @@ def create_redline():
             titulo = data.get('titulo', '')
             
             cursor.execute('''
-                INSERT INTO doc_redlines (model_urn, codigo, titulo, created_by)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO doc_redlines (model_urn, codigo, titulo, created_by, project_id)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id, fecha
-            ''', (model_urn, codigo, titulo, created_by))
+            ''', (model_urn, codigo, titulo, created_by, resolve_project_id(model_urn)))
             
             res = cursor.fetchone()
             item_id = str(res[0])

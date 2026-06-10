@@ -20,8 +20,9 @@ load_dotenv(pathlib.Path(__file__).resolve().parent.parent / '.env')
 load_dotenv()
 from db import init_db_pool, get_db_connection, ensure_project_identity_columns, PROJECT_SCOPED_TABLES
 
-# Columna de 'frente' por tabla
-FRENTE_COL = {t: ('app_project_id' if t == 'model_config' else 'model_urn') for t in PROJECT_SCOPED_TABLES}
+# Columna de 'frente' por tabla. (model_config/saved_views/control_pins estan
+# excluidas de PROJECT_SCOPED_TABLES: su project_id tiene otra semantica.)
+FRENTE_COL = {t: 'model_urn' for t in PROJECT_SCOPED_TABLES}
 
 
 def build_resolver(cur):

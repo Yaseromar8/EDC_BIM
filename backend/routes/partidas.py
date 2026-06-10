@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from db import get_db_connection
+from db import get_db_connection, resolve_project_id
 import json
 
 partidas_bp = Blueprint('partidas_bp', __name__)
@@ -56,10 +56,10 @@ def create_partida():
             item = data.get('item', '')
             
             cursor.execute('''
-                INSERT INTO doc_partidas (model_urn, item, descripcion, created_by)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO doc_partidas (model_urn, item, descripcion, created_by, project_id)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id, created_at
-            ''', (model_urn, item, descripcion, created_by))
+            ''', (model_urn, item, descripcion, created_by, resolve_project_id(model_urn)))
             
             res = cursor.fetchone()
             partida_id = str(res[0])
@@ -113,12 +113,12 @@ def create_partidas_batch():
                 software = str(p.get('software', ''))[:50]
                 avance = float(p.get('avance', 0.0)) if p.get('avance') not in [None, ''] else 0.0
                 
-                values.append((model_urn, item, desc, unidad, metrado, pu, precio, incidencia, metodologia, software, avance, created_by))
-            
-            args_str = ','.join(cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", x).decode('utf-8') for x in values)
-            
+                values.append((model_urn, item, desc, unidad, metrado, pu, precio, incidencia, metodologia, software, avance, created_by, resolve_project_id(model_urn)))
+
+            args_str = ','.join(cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", x).decode('utf-8') for x in values)
+
             cursor.execute(f'''
-                INSERT INTO doc_partidas (model_urn, item, descripcion, unidad, metrado, precio_unitario, precio, incidencia, metodologia, software, avance, created_by)
+                INSERT INTO doc_partidas (model_urn, item, descripcion, unidad, metrado, precio_unitario, precio, incidencia, metodologia, software, avance, created_by, project_id)
                 VALUES {args_str}
             ''')
             

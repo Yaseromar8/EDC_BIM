@@ -2,7 +2,7 @@ import os
 import json
 import traceback
 from flask import Blueprint, request, jsonify
-from db import get_db_connection
+from db import get_db_connection, resolve_project_id
 from datetime import datetime
 from gcs_manager import generate_signed_url
 
@@ -303,14 +303,15 @@ def update_tracking():
                     else:
                         # This is an Excel row - store in tracking_progress
                         cursor.execute('''
-                            INSERT INTO tracking_progress (id, nivel, clasificacion, partida, codigo_partida, metrado_total, metrado_ejecutado, unidad, porcentaje_avance, model_urn, specialty)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            INSERT INTO tracking_progress (id, nivel, clasificacion, partida, codigo_partida, metrado_total, metrado_ejecutado, unidad, porcentaje_avance, model_urn, specialty, project_id)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ''', (
                             item.get('id'), item.get('nivel'), item.get('clasificacion'),
                             item.get('partida'), item.get('CodigoDePartida'),
                             item.get('metrado_total', 0), item.get('metrado_ejecutado', 0),
                             item.get('unidad'), item.get('porcentaje_avance', 0),
-                            model_urn, item.get('specialty', 'General')
+                            model_urn, item.get('specialty', 'General'),
+                            resolve_project_id(model_urn)
                         ))
             
             # 2. Sincronizar 'detalles'
@@ -319,12 +320,12 @@ def update_tracking():
                 for pin_id, rows in new_data['detalles'].items():
                     for row in rows:
                         cursor.execute('''
-                            INSERT INTO tracking_details (pin_id, avance_parcial, fecha, comentario, model_urn)
-                            VALUES (%s, %s, %s, %s, %s)
+                            INSERT INTO tracking_details (pin_id, avance_parcial, fecha, comentario, model_urn, project_id)
+                            VALUES (%s, %s, %s, %s, %s, %s)
                         ''', (
-                            pin_id, row.get('avance_parcial', 0), 
+                            pin_id, row.get('avance_parcial', 0),
                             row.get('fecha'), row.get('comentario', ''),
-                            model_urn
+                            model_urn, resolve_project_id(model_urn)
                         ))
             
             # 3. Sincronizar 'fotos' (3D pins)
@@ -385,13 +386,14 @@ def _upsert_pin(cursor, item, pin_type, model_urn):
              if k not in ('id', 'x', 'y', 'z', 'val', 'color', '_element')}
     
     cursor.execute('''
-        INSERT INTO tracking_pins (id, pin_type, x, y, z, val, color, data, model_urn, specialty)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO tracking_pins (id, pin_type, x, y, z, val, color, data, model_urn, specialty, project_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (id) DO UPDATE SET
             x = EXCLUDED.x, y = EXCLUDED.y, z = EXCLUDED.z,
             val = EXCLUDED.val, color = EXCLUDED.color, data = EXCLUDED.data,
-            model_urn = EXCLUDED.model_urn, specialty = EXCLUDED.specialty
-    ''', (pin_id, pin_type, x, y, z, val, color, json.dumps(extra, default=str), model_urn, item.get('specialty', 'General')))
+            model_urn = EXCLUDED.model_urn, specialty = EXCLUDED.specialty,
+            project_id = EXCLUDED.project_id
+    ''', (pin_id, pin_type, x, y, z, val, color, json.dumps(extra, default=str), model_urn, item.get('specialty', 'General'), resolve_project_id(model_urn)))
 
 @tracking_bp.route('/api/project-pins/photo', methods=['POST'])
 def add_photo_to_pin():
@@ -423,9 +425,9 @@ def add_photo_to_pin():
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO photo_evidences (pin_id, gcs_url, filename, model_urn, gcs_urn)
-                VALUES (%s, %s, %s, %s, %s)
-            ''', (pin_id, gcs_url, filename, model_urn, gcs_uuid))
+                INSERT INTO photo_evidences (pin_id, gcs_url, filename, model_urn, gcs_urn, project_id)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            ''', (pin_id, gcs_url, filename, model_urn, gcs_uuid, resolve_project_id(model_urn)))
             conn.commit()
             
         # Devolver data sincronizada
@@ -468,18 +470,20 @@ def save_daily_report():
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO daily_reports (model_urn, report_date, weather, personnel_count, critical_issues, tasks_completed, performed_by)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO daily_reports (model_urn, report_date, weather, personnel_count, critical_issues, tasks_completed, performed_by, project_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (model_urn, report_date) DO UPDATE SET
                     weather = EXCLUDED.weather,
                     personnel_count = EXCLUDED.personnel_count,
                     critical_issues = EXCLUDED.critical_issues,
                     tasks_completed = EXCLUDED.tasks_completed,
-                    performed_by = EXCLUDED.performed_by
+                    performed_by = EXCLUDED.performed_by,
+                    project_id = EXCLUDED.project_id
             """, (
                 model_urn, data.get('date'), data.get('weather'),
                 data.get('personnel', 0), data.get('issues', ''),
-                data.get('tasks', ''), data.get('user', 'Sistema')
+                data.get('tasks', ''), data.get('user', 'Sistema'),
+                resolve_project_id(model_urn)
             ))
             conn.commit()
         return jsonify({"success": True})
