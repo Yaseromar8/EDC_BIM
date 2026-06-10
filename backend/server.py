@@ -786,7 +786,7 @@ def get_inventory_schema():
                 if isinstance(props, str):
                     try:
                         props = _json.loads(props)
-                    except:
+                    except Exception:
                         continue
                 
                 if isinstance(props, dict):

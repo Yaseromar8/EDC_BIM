@@ -1115,7 +1115,7 @@ def update_node_description_route():
         # Cast to int if possible
         try:
             node_id = int(node_id)
-        except: pass
+        except Exception: pass
 
         with get_db_connection() as conn:
             cursor = conn.cursor()

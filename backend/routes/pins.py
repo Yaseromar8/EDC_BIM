@@ -43,7 +43,7 @@ def ensure_pins_table():
 # Inicializar al importar
 try:
     ensure_pins_table()
-except:
+except Exception:
     pass
 
 def debug_log(msg):

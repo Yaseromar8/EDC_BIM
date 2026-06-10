@@ -909,7 +909,7 @@ def parse_storage_urn(urn):
         if '/' in last_part:
             b, o = last_part.split('/', 1)
             return b, o
-    except:
+    except Exception:
         pass
     return None, None
 
