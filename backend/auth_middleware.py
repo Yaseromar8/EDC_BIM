@@ -171,6 +171,57 @@ def revoke_session(token):
         return False
 
 
+# ── Autorizacion por proyecto (tenencia / Pilar Identidad) ─────────────────
+# Transicion segura: ENFORCE_PROJECT_AUTHZ off por defecto => LOG-ONLY (registra
+# que bloquearia, pero PERMITE). Encender (=true) cuando se confirme que no
+# rompe accesos. Siempre: admin bypass + fail-open ante error de BD.
+ENFORCE_PROJECT_AUTHZ = os.getenv('ENFORCE_PROJECT_AUTHZ', 'false').lower() in ('true', '1', 'yes')
+print(f"[security] Autorizacion por proyecto: {'ENFORCE' if ENFORCE_PROJECT_AUTHZ else 'log-only (no bloquea)'}")
+
+_membership_cache = {}  # (user_id, project_id) -> (bool, ts)
+_MEMBERSHIP_TTL = 120
+
+
+def _user_in_project(user_id, project_id):
+    """True si el usuario pertenece a la obra. Cachea. Fail-open ante error."""
+    import time as _t
+    key = (user_id, str(project_id))
+    cached = _membership_cache.get(key)
+    if cached and _t.time() - cached[1] < _MEMBERSHIP_TTL:
+        return cached[0]
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s LIMIT 1",
+                        (str(project_id), user_id))
+            ok = cur.fetchone() is not None
+    except Exception as e:
+        print(f"[authz] error verificando membresia: {e}")
+        return True  # fail-open: no romper por error de BD
+    _membership_cache[key] = (ok, _t.time())
+    return ok
+
+
+def _request_project_id():
+    """Mejor esfuerzo: deduce la obra (projects.id) de la request. None si no se puede."""
+    try:
+        from db import resolve_project_id
+    except Exception:
+        return None
+    pid = request.args.get('project_id')
+    if pid:
+        return pid
+    frente = request.args.get('model_urn') or request.args.get('project')
+    if not frente and request.is_json:
+        body = request.get_json(silent=True) or {}
+        if isinstance(body, dict):
+            if body.get('project_id'):
+                return body.get('project_id')
+            frente = body.get('model_urn') or body.get('project') or body.get('target_urn')
+    return resolve_project_id(frente) if frente else None
+
+
 def init_auth_middleware(app):
     """Register the authentication middleware on a Flask app."""
     
@@ -225,4 +276,16 @@ def init_auth_middleware(app):
         
         # Store authenticated user in Flask's g context
         g.current_user = user
+
+        # ── Autorizacion por proyecto (log-only por defecto) ──
+        try:
+            if user.get('role') != 'admin':
+                pid = _request_project_id()
+                if pid and not _user_in_project(user.get('id'), pid):
+                    if ENFORCE_PROJECT_AUTHZ:
+                        return jsonify({'error': 'Sin acceso a este proyecto', 'code': 'PROJECT_FORBIDDEN'}), 403
+                    print(f"[authz][log-only] user={user.get('id')} SIN acceso a obra={pid} ({request.method} {path})")
+        except Exception as e:
+            print(f"[authz] error (fail-open): {e}")  # nunca bloquear por bug del authz
+
         return None
