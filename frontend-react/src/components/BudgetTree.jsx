@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { extractModelMeasurements, calculateMetradoReal } from './budgetEngine';
+import { apiFetch } from '../utils/apiFetch';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
@@ -251,7 +252,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
       let rows = [];
       
       try {
-        const resp = await fetch(`${API_BASE}/api/presupuesto/${encodeURIComponent(activeModelUrn)}`);
+        const resp = await apiFetch(`${API_BASE}/api/presupuesto/${encodeURIComponent(activeModelUrn)}`);
         if (resp.ok) {
           const json = await resp.json();
           rows = json.results || [];

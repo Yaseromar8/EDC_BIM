@@ -65,11 +65,17 @@ def ensure_users_tables():
             # La migración pesada se ha removido para evitar bloqueos en la base de datos
             # durante el reinicio de los contenedores en Render.
             
-            # Crear usuario Admin (Omar) si no existe
+            # Crear usuario Admin (Omar) si no existe.
+            # Sin password hardcodeada: usa ADMIN_PASSWORD del entorno, o genera una
+            # aleatoria fuerte y la imprime una vez (para capturarla). Nunca 'admin123'.
             cursor.execute("SELECT id FROM users WHERE email='omarsanchezh8@gmail.com'")
             if not cursor.fetchone():
+                import os as _os, secrets as _secrets
+                admin_pw = _os.getenv('ADMIN_PASSWORD') or _secrets.token_urlsafe(12)
+                if not _os.getenv('ADMIN_PASSWORD'):
+                    print(f"[AUTH] ADMIN_PASSWORD no definido -> password generada (GUARDALA): {admin_pw}")
                 print("Creando usuario Administrador principal (Omar Sanchez)...")
-                default_password = generate_password_hash("admin123")
+                default_password = generate_password_hash(admin_pw)
                 cursor.execute('''
                     INSERT INTO users (name, email, password_hash, role)
                     VALUES (%s, %s, %s, %s)

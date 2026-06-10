@@ -439,9 +439,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                     result = { mappedData, cols, orderedCols };
                 } else {
                     const urnParam = activeModelUrn && activeModelUrn !== 'global' ? `?model_urn=${encodeURIComponent(activeModelUrn)}` : '';
-                    // The apiFetch assumes a global variable or import which might fail offline.
-                    // Instead we just use the raw fetch and catch it if it fails.
-                    const res = await fetch(`${BACKEND_URL}/api/inventory${urnParam}`);
+                    const res = await apiFetch(`${BACKEND_URL}/api/inventory${urnParam}`);
                     if (!res.ok) throw new Error('Falló el fetch a /api/inventory');
                     
                     const dbData = await res.json();

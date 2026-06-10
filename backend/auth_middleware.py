@@ -62,12 +62,13 @@ PUBLIC_PREFIXES = (
     '/api/build/',            # ACC upload/translation (2-legged token)
     '/api/images/',           # Image proxy (2-legged token)
     '/api/documents/',        # ACC document linking (2-legged token)
-    # ── Secure Share Engine ────────────────────────
+    # ── Secure Share Engine: SOLO links publicos por UUID ──────────────
     '/api/docs/shared/',      # Public UUID-based document viewer links
     '/api/views/',            # Public UUID-based shared views
-    '/api/inventory',         # Inventory sync (no trailing slash to match exact route)
-    '/api/presupuesto',       # Budget/Presupuesto maestro (BIM 5D)
-    '/api/config/',           # Config updates (bypasses auth when polling)
+    # NOTA (Fase 3): /api/inventory, /api/presupuesto y /api/config/* salieron
+    # de aqui -> ahora EXIGEN sesion (y quedan cubiertos por authz por proyecto).
+    # El frontend ya los llama via apiFetch (token). GET /api/config/project
+    # sigue permitido por el caso especial de abajo (vistas compartidas).
 )
 
 
