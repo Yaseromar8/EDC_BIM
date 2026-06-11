@@ -438,12 +438,29 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
 
                     result = { mappedData, cols, orderedCols };
                 } else {
-                    const urnParam = activeModelUrn && activeModelUrn !== 'global' ? `?model_urn=${encodeURIComponent(activeModelUrn)}` : '';
-                    const res = await apiFetch(`${BACKEND_URL}/api/inventory${urnParam}`);
-                    if (!res.ok) throw new Error('Falló el fetch a /api/inventory');
-                    
-                    const dbData = await res.json();
-                    result = processDbData(dbData);
+                    const urnQ = activeModelUrn && activeModelUrn !== 'global' ? `model_urn=${encodeURIComponent(activeModelUrn)}&` : '';
+                    // FASE 1: carga LIVIANA (sin el JSONB properties) -> instantanea, sin timeout
+                    // aunque el frente sea enorme (ej. CANAL: ~19k elementos / 48MB de properties).
+                    const resLight = await apiFetch(`${BACKEND_URL}/api/inventory?${urnQ}include_props=false`);
+                    if (!resLight.ok) throw new Error('Falló el fetch a /api/inventory (light)');
+                    result = processDbData(await resLight.json());
+
+                    // FASE 2 (segundo plano): trae properties completas y mejora las columnas.
+                    // Si el frente es enorme y hace timeout, nos quedamos con la vista liviana (ya visible).
+                    apiFetch(`${BACKEND_URL}/api/inventory?${urnQ}include_props=true`)
+                        .then(r => (r.ok ? r.json() : null))
+                        .then(full => {
+                            if (full && isMounted) {
+                                const rich = processDbData(full);
+                                window.__inventoryCache[activeModelUrn] = rich;
+                                setAllPropertyKeys(rich.orderedCols);
+                                setColumns(rich.cols);
+                                setRawData(rich.mappedData);
+                                setFlattenedData(rich.mappedData);
+                                console.log(`[Inventory] ⬆️ ${activeModelUrn}: columnas completas cargadas`);
+                            }
+                        })
+                        .catch(() => { /* timeout en frente grande: se mantiene la vista liviana */ });
                 }
                 
                 if (!isMounted) return;
