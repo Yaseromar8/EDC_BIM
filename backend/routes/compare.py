@@ -14,6 +14,7 @@ Un "scope" define cada lado:
 El detalle por elemento (que propiedades cambiaron) se pide bajo demanda con
 /api/compare/element para no mover MBs innecesarios.
 """
+import re
 from flask import Blueprint, request, jsonify
 from db import get_db_connection
 from app_logging import get_logger
@@ -22,6 +23,87 @@ compare_bp = Blueprint('compare', __name__)
 logger = get_logger('compare')
 
 MAX_IDS = 20000  # techo de ids por lista (los ids son livianos, ~40 bytes c/u)
+
+# Parametros DSI por slot (mismo esquema que budgetEngine.js):
+#   CodigoDePartida{n} + Metrado{n} + Unidad{n}. Si no hay Metrado{n} explicito,
+#   fallback al medible NATIVO segun la unidad: m3->Volume, m2->Area, m->Length,
+#   und/u/pza->1 (conteo). Igual que el motor 5D del frontend.
+_DSI_COD = re.compile(r'DSI_CodigoDePartida(\d)\s*$')
+_DSI_MET = re.compile(r'DSI_Metrado(\d)\s*$')
+_DSI_UNI = re.compile(r'DSI_Unidad(\d)\s*$')
+# Medibles nativos en ingles y espanol (Revit ES usa Volumen/Área/Longitud)
+_NATIVE = re.compile(r'\b(Volume|Volumen|Area|Área|Length|Longitud)\s*$', re.IGNORECASE)
+_NATIVE_MAP = {'volume': 'volume', 'volumen': 'volume', 'area': 'area', 'área': 'area', 'length': 'length', 'longitud': 'length'}
+_NUM = re.compile(r'-?\d+(?:[\.,]\d+)?')
+
+
+def _to_float(val):
+    m = _NUM.search(str(val or ''))
+    if not m:
+        return None
+    try:
+        return float(m.group(0).replace(',', '.'))
+    except ValueError:
+        return None
+
+
+def _pivot_dsi_rows(rows):
+    """(external_id, key, value) -> {ext: {codigo_partida: metrado_float}}.
+    Pura (testeable sin BD). Empareja por slot y aplica fallback nativo por unidad."""
+    slots = {}
+    natives = {}
+    for ext, key, val in rows:
+        key = key or ''
+        m = _DSI_COD.search(key)
+        if m:
+            slots.setdefault(ext, {}).setdefault(m.group(1), {})['cod'] = val
+            continue
+        m = _DSI_MET.search(key)
+        if m:
+            slots.setdefault(ext, {}).setdefault(m.group(1), {})['met'] = val
+            continue
+        m = _DSI_UNI.search(key)
+        if m:
+            slots.setdefault(ext, {}).setdefault(m.group(1), {})['uni'] = val
+            continue
+        m = _NATIVE.search(key)
+        if m:
+            f = _to_float(val)
+            if f is not None:
+                nat = _NATIVE_MAP.get(m.group(1).lower())
+                if nat:
+                    natives.setdefault(ext, {})[nat] = f
+
+    UNIT_TO_NATIVE = {'m3': 'volume', 'm³': 'volume', 'm2': 'area', 'm²': 'area', 'm': 'length', 'ml': 'length'}
+    COUNT_UNITS = {'und', 'u', 'pza', 'und.', 'glb'}
+
+    out = {}
+    for ext, by_slot in slots.items():
+        for _slot, kv in by_slot.items():
+            cod = (kv.get('cod') or '').strip()
+            if not cod:
+                continue
+            met = _to_float(kv.get('met'))
+            if met is None:
+                uni = str(kv.get('uni') or '').strip().lower()
+                if uni in COUNT_UNITS:
+                    met = 1.0
+                else:
+                    nat_key = UNIT_TO_NATIVE.get(uni)
+                    met = natives.get(ext, {}).get(nat_key) if nat_key else None
+            if met is None:
+                met = 0.0
+            out.setdefault(ext, {})[cod] = out.get(ext, {}).get(cod, 0.0) + met
+    return out
+
+
+def _aggregate_por_partida(by_elem):
+    """{ext: {cod: met}} -> {cod: metrado_total}. Pura."""
+    agg = {}
+    for _ext, cods in by_elem.items():
+        for cod, met in cods.items():
+            agg[cod] = agg.get(cod, 0.0) + met
+    return agg
 
 
 def _scope_filter(scope, alias):
@@ -108,6 +190,102 @@ def compare_diff():
         })
     except Exception as e:
         logger.error(f"diff fallo: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@compare_bp.route('/api/compare/metrados', methods=['POST'])
+def compare_metrados():
+    """Diff 5D: metrados por partida (y precios) entre los dos scopes.
+
+    Extrae los parametros DSI (CodigoDePartida{n} + Metrado{n}) de ambos lados
+    EN la BD (jsonb_each_text, sin transferir los JSONB completos), agrega por
+    partida, y cruza precios unitarios desde doc_partidas para valorizar el delta.
+
+    include_elements=true agrega el mapa por-elemento {ext: {a:{cod:met}, b:{...}}}
+    para el hover sincronizado (solo recomendable comparando modelos individuales).
+    """
+    data = request.get_json(silent=True) or {}
+    cond_a, par_a = _scope_filter(data.get('a'), 'ia')
+    cond_b, par_b = _scope_filter(data.get('b'), 'ia')
+    include_elements = bool(data.get('include_elements'))
+    if not cond_a or not cond_b:
+        return jsonify({'error': 'Scopes a/b invalidos'}), 400
+
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SET statement_timeout = '60000'")
+
+            def fetch_side(cond, params):
+                # Escanea TODOS los grupos de properties (Civil3D usa 'PROPERTY SETS',
+                # Revit usa sus propios grupos como 'Cotas' o el del shared parameter).
+                cur.execute(f"""
+                    SELECT ia.external_id, kv.key, kv.value
+                    FROM inventory_assets ia,
+                         jsonb_each(ia.properties) g,
+                         jsonb_each_text(CASE WHEN jsonb_typeof(g.value) = 'object'
+                                              THEN g.value ELSE '{{}}'::jsonb END) kv
+                    WHERE {cond}
+                      AND (kv.key ~ 'DSI_CodigoDePartida[0-9]\\s*$'
+                           OR kv.key ~ 'DSI_Metrado[0-9]\\s*$'
+                           OR kv.key ~ 'DSI_Unidad[0-9]\\s*$'
+                           OR kv.key ~* '(Volume|Volumen|Area|Área|Length|Longitud)\\s*$')
+                """, params)
+                return _pivot_dsi_rows(cur.fetchall())
+
+            elems_a = fetch_side(cond_a, par_a)
+            elems_b = fetch_side(cond_b, par_b)
+            agg_a = _aggregate_por_partida(elems_a)
+            agg_b = _aggregate_por_partida(elems_b)
+
+            # Precios unitarios + descripcion desde doc_partidas (catalogo del proyecto)
+            codes = sorted(set(agg_a) | set(agg_b))
+            precios = {}
+            if codes:
+                cur.execute("""
+                    SELECT item, MAX(descripcion), MAX(precio_unitario), MAX(unidad)
+                    FROM doc_partidas WHERE item = ANY(%s) GROUP BY item
+                """, (codes,))
+                for item, desc, pu, unidad in cur.fetchall():
+                    precios[item] = {'descripcion': desc, 'pu': float(pu) if pu is not None else None, 'unidad': unidad}
+
+        partidas = []
+        total_delta_precio = 0.0
+        for cod in codes:
+            ma = round(agg_a.get(cod, 0.0), 3)
+            mb = round(agg_b.get(cod, 0.0), 3)
+            delta = round(mb - ma, 3)
+            info = precios.get(cod, {})
+            pu = info.get('pu')
+            dp = round(delta * pu, 2) if pu is not None else None
+            if dp is not None:
+                total_delta_precio += dp
+            partidas.append({
+                'codigo': cod,
+                'descripcion': info.get('descripcion'),
+                'unidad': info.get('unidad'),
+                'metrado_a': ma, 'metrado_b': mb, 'delta': delta,
+                'precio_unitario': pu, 'delta_precio': dp,
+            })
+        # Las de mayor impacto primero
+        partidas.sort(key=lambda p: abs(p['delta_precio'] if p['delta_precio'] is not None else p['delta']), reverse=True)
+
+        resp = {
+            'partidas': partidas,
+            'totals': {
+                'partidas': len(partidas),
+                'delta_precio_total': round(total_delta_precio, 2),
+                'con_precio': sum(1 for p in partidas if p['precio_unitario'] is not None),
+            }
+        }
+        if include_elements:
+            ext_ids = set(elems_a) | set(elems_b)
+            resp['byElement'] = {
+                ext: {'a': elems_a.get(ext), 'b': elems_b.get(ext)} for ext in ext_ids
+            }
+        return jsonify(resp)
+    except Exception as e:
+        logger.error(f"metrados diff fallo: {e}")
         return jsonify({'error': str(e)}), 500
 
 

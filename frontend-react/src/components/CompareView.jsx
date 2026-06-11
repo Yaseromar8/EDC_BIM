@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { apiFetch } from '../utils/apiFetch';
 
 /**
@@ -45,9 +45,14 @@ export default function CompareView({ BACKEND_URL, onExit }) {
     const [diff, setDiff] = useState(null);
     const [activeList, setActiveList] = useState(null); // 'added' | 'removed' | 'modified'
     const [detail, setDetail] = useState(null);
+    const [fiveD, setFiveD] = useState(null);   // diff de metrados/precios por partida
+    const [tip, setTip] = useState(null);       // tooltip de hover sincronizado
     const contA = useRef(null);
     const contB = useRef(null);
-    const vs = useRef({ a: null, b: null, maps: { a: null, b: null }, syncing: false });
+    const tipEl = useRef(null);
+    const fiveDRef = useRef(null);
+    const scopesRef = useRef(null);             // scopes vigentes (evita closures viejos en listeners)
+    const vs = useRef({ a: null, b: null, maps: { a: null, b: null }, rev: { a: null, b: null }, syncing: false, selSyncing: false });
 
     // Lista de modelos de TODOS los frentes del proyecto
     useEffect(() => {
@@ -107,11 +112,59 @@ export default function CompareView({ BACKEND_URL, onExit }) {
         });
     };
 
+    // Hover sincronizado: pasar el mouse por un elemento muestra su diff 5D (A vs B)
+    const wireHover = useCallback(() => {
+        const Av = window.Autodesk.Viewing;
+        ['a', 'b'].forEach(side => {
+            const v = vs.current[side];
+            if (!v || v.__hoverWired) return;
+            v.__hoverWired = true;
+            v.addEventListener(Av.OBJECT_UNDER_MOUSE_CHANGED, (ev) => {
+                const dbId = ev.dbId;
+                const rev = vs.current.rev && vs.current.rev[side];
+                if (!dbId || dbId <= 0 || !rev || !rev[dbId]) { setTip(null); return; }
+                const ext = rev[dbId];
+                const data = fiveDRef.current && fiveDRef.current.byElement ? fiveDRef.current.byElement[ext] : null;
+                setTip({ side, ext, data });
+            });
+        });
+    }, []);
+
+    // Seleccion espejo: click en un elemento lo selecciona tambien en el otro visor
+    const wireMirror = useCallback(() => {
+        const Av = window.Autodesk.Viewing;
+        ['a', 'b'].forEach(side => {
+            const v = vs.current[side];
+            if (!v || v.__selWired) return;
+            v.__selWired = true;
+            v.addEventListener(Av.SELECTION_CHANGED_EVENT, (ev) => {
+                if (vs.current.selSyncing) return;
+                const dbId = ev.dbIdArray && ev.dbIdArray[0];
+                const other = side === 'a' ? 'b' : 'a';
+                const ov = vs.current[other];
+                vs.current.selSyncing = true;
+                try {
+                    if (!dbId) {
+                        if (ov) ov.clearSelection();
+                    } else {
+                        const ext = vs.current.rev && vs.current.rev[side] ? vs.current.rev[side][dbId] : null;
+                        const odb = ext && vs.current.maps[other] ? vs.current.maps[other][ext] : null;
+                        if (ov && ov.model) { if (odb) ov.select([odb]); else ov.clearSelection(); }
+                        if (ext) openDetailRef.current({ id: ext, name: 'Elemento …' + String(ext).slice(-10) });
+                    }
+                } finally {
+                    vs.current.selSyncing = false;
+                }
+            });
+        });
+    }, []);
+
     const runCompare = async () => {
         const a = scopeFor(selA);
         const b = scopeFor(selB);
         if (!a || !b) return;
-        setBusy(true); setDiff(null); setDetail(null); setActiveList(null);
+        scopesRef.current = { a, b };
+        setBusy(true); setDiff(null); setDetail(null); setActiveList(null); setFiveD(null); fiveDRef.current = null; setTip(null);
         try {
             // 1) Diff de DATOS en PostgreSQL (siempre, es el cerebro)
             setStatus('Comparando datos en PostgreSQL…');
@@ -123,7 +176,8 @@ export default function CompareView({ BACKEND_URL, onExit }) {
             setDiff(d);
 
             // 2) Vista 3D cuando ambos lados son modelos individuales
-            if (a.type === 'source' && b.type === 'source') {
+            const both3D = a.type === 'source' && b.type === 'source';
+            if (both3D) {
                 setStatus('Cargando los dos modelos…');
                 if (!vs.current.a) vs.current.a = makeViewer(contA.current);
                 if (!vs.current.b) vs.current.b = makeViewer(contB.current);
@@ -136,14 +190,30 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                 const mapA = await new Promise(r => vs.current.a.model.getExternalIdMapping(r));
                 const mapB = await new Promise(r => vs.current.b.model.getExternalIdMapping(r));
                 vs.current.maps = { a: mapA, b: mapB };
+                // mapas inversos dbId -> externalId (para hover y seleccion espejo)
+                const invert = (m) => { const r = {}; Object.keys(m || {}).forEach(k => { r[m[k]] = k; }); return r; };
+                vs.current.rev = { a: invert(mapA), b: invert(mapB) };
                 themeSide(vs.current.b, mapB, d.added, COLORS.added);
                 themeSide(vs.current.b, mapB, d.modified, COLORS.modified);
                 themeSide(vs.current.a, mapA, d.removed, COLORS.removed);
                 themeSide(vs.current.a, mapA, d.modified, COLORS.modified);
-                setStatus('Listo — verde: agregado · rojo: eliminado · ámbar: modificado. Cámaras sincronizadas.');
-            } else {
-                setStatus('Diff de datos listo. (El 3D lado a lado se activa al comparar dos modelos individuales.)');
+                wireHover();
+                wireMirror();
             }
+
+            // 3) Diff 5D: metrados por partida + precios (siempre; por-elemento solo en 3D)
+            setStatus('Calculando diff 5D (metrados y precios)…');
+            try {
+                const r5 = await apiFetch(`${BACKEND_URL}/api/compare/metrados`, {
+                    method: 'POST', body: JSON.stringify({ a, b, include_elements: both3D })
+                });
+                const d5 = await r5.json();
+                if (r5.ok) { setFiveD(d5); fiveDRef.current = d5; }
+            } catch (e5) { console.warn('[Compare] 5D no disponible:', e5); }
+
+            setStatus(both3D
+                ? 'Listo — verde: agregado · rojo: eliminado · ámbar: modificado. Cámaras sincronizadas; pasa el mouse sobre un elemento para ver su diff de metrado.'
+                : 'Diff de datos listo. (El 3D lado a lado se activa al comparar dos modelos individuales.)');
         } catch (e) {
             console.error('[Compare]', e);
             setStatus('Error: ' + e.message);
@@ -168,9 +238,10 @@ export default function CompareView({ BACKEND_URL, onExit }) {
 
     const openDetail = async (item) => {
         try {
+            const scopes = scopesRef.current || { a: scopeFor(selA), b: scopeFor(selB) };
             const res = await apiFetch(`${BACKEND_URL}/api/compare/element`, {
                 method: 'POST',
-                body: JSON.stringify({ external_id: item.id, a: scopeFor(selA), b: scopeFor(selB) })
+                body: JSON.stringify({ external_id: item.id, a: scopes.a, b: scopes.b })
             });
             const d = await res.json();
             const flat = (props) => {
@@ -192,10 +263,37 @@ export default function CompareView({ BACKEND_URL, onExit }) {
         } catch (e) { console.error('[Compare] detalle:', e); }
     };
 
+    // Ref estable a openDetail para los listeners del visor (evita closures viejos)
+    const openDetailRef = useRef(openDetail);
+    openDetailRef.current = openDetail;
+
     // Limpieza al salir del modo
     useEffect(() => () => {
         ['a', 'b'].forEach(s => { try { vs.current[s] && vs.current[s].finish(); } catch (e) { /* noop */ } });
     }, []);
+
+    // Precio unitario por partida (para valorizar el hover)
+    const puMap = useMemo(() => {
+        const m = {};
+        ((fiveD && fiveD.partidas) || []).forEach(p => { if (p.precio_unitario != null) m[p.codigo] = p.precio_unitario; });
+        return m;
+    }, [fiveD]);
+
+    const fmtMoney = (v) => (v == null ? '—' : (v < 0 ? '−' : '+') + 'S/ ' + Math.abs(v).toLocaleString('es-PE', { maximumFractionDigits: 2 }));
+    const fmtNum = (v) => Number(v || 0).toLocaleString('es-PE', { maximumFractionDigits: 3 });
+
+    // Filas del tooltip de hover: metrado A vs B por partida del elemento
+    const tipRows = useMemo(() => {
+        if (!tip || !tip.data) return [];
+        const cods = [...new Set([...Object.keys(tip.data.a || {}), ...Object.keys(tip.data.b || {})])];
+        return cods.map(c => {
+            const ma = (tip.data.a && tip.data.a[c]) || 0;
+            const mb = (tip.data.b && tip.data.b[c]) || 0;
+            const delta = mb - ma;
+            const pu = puMap[c];
+            return { c, ma, mb, delta, dp: pu != null ? delta * pu : null };
+        });
+    }, [tip, puMap]);
 
     const optionLabel = (m) => `${m.appProjectId || '?'} · ${m.name}${m.versionNumber ? ' (v' + m.versionNumber + ')' : ''}`;
     const renderSelect = (val, setVal, tag) => (
@@ -210,10 +308,20 @@ export default function CompareView({ BACKEND_URL, onExit }) {
         </select>
     );
 
-    const listData = diff && activeList ? diff[activeList] : [];
+    const listData = (diff && activeList && Array.isArray(diff[activeList])) ? diff[activeList] : [];
 
     return (
-        <div style={S.overlay}>
+        <div
+            style={S.overlay}
+            onMouseMove={(e) => {
+                if (tipEl.current) {
+                    const x = Math.min(e.clientX + 16, window.innerWidth - 290);
+                    const y = Math.min(e.clientY + 14, window.innerHeight - 180);
+                    tipEl.current.style.left = x + 'px';
+                    tipEl.current.style.top = y + 'px';
+                }
+            }}
+        >
             <div style={S.header}>
                 <span style={{ fontWeight: 700, fontSize: 14 }}>⇄ Comparador</span>
                 <span style={{ fontSize: 12, color: '#7f8893' }}>A (base/contractual)</span>
@@ -252,17 +360,42 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                         <button style={S.chip('#f4c067', activeList === 'modified')} onClick={() => { setActiveList('modified'); isolate('a', diff.modified); isolate('b', diff.modified); }}>
                             ~ {diff.summary.modified} modificados
                         </button>
+                        {fiveD && fiveD.partidas && fiveD.partidas.length > 0 && (
+                            <button style={S.chip('#8ab4ff', activeList === '5d')} onClick={() => setActiveList('5d')}>
+                                Σ 5D: {fmtMoney(fiveD.totals.delta_precio_total)}
+                            </button>
+                        )}
                         <span style={{ fontSize: 11.5, color: '#7f8893' }}>{diff.summary.unchanged} sin cambio</span>
                     </div>
 
                     <div style={S.list}>
                         {activeList === null && <div style={{ color: '#7f8893', padding: 8 }}>Haz clic en una categoría para listar y aislar sus elementos.</div>}
-                        {listData.slice(0, 500).map(it => (
+                        {activeList === '5d' && fiveD && (
+                            <>
+                                <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 70px 70px 70px 90px', gap: 4, padding: '3px 6px', color: '#7f8893', fontWeight: 700, fontSize: 11.5, position: 'sticky', top: 0, background: '#15191e' }}>
+                                    <span>Partida</span><span>Descripción</span><span style={{ textAlign: 'right' }}>A</span><span style={{ textAlign: 'right' }}>B</span><span style={{ textAlign: 'right' }}>Δ metr.</span><span style={{ textAlign: 'right' }}>Δ S/</span>
+                                </div>
+                                {fiveD.partidas.slice(0, 200).map(p => (
+                                    <div key={p.codigo} style={{ display: 'grid', gridTemplateColumns: '90px 1fr 70px 70px 70px 90px', gap: 4, padding: '3px 6px', borderBottom: '1px solid #232930', fontSize: 12 }}>
+                                        <span style={{ color: '#aab2bc' }}>{p.codigo}</span>
+                                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.descripcion || ''}>{p.descripcion || '—'}</span>
+                                        <span style={{ textAlign: 'right' }}>{fmtNum(p.metrado_a)}</span>
+                                        <span style={{ textAlign: 'right' }}>{fmtNum(p.metrado_b)}</span>
+                                        <span style={{ textAlign: 'right', color: p.delta > 0 ? '#7dd87f' : p.delta < 0 ? '#f08e8e' : '#7f8893' }}>{fmtNum(p.delta)} {p.unidad || ''}</span>
+                                        <span style={{ textAlign: 'right', color: (p.delta_precio || 0) > 0 ? '#7dd87f' : (p.delta_precio || 0) < 0 ? '#f08e8e' : '#7f8893' }}>{p.delta_precio == null ? '—' : fmtMoney(p.delta_precio)}</span>
+                                    </div>
+                                ))}
+                                <div style={{ padding: '5px 6px', fontSize: 11.5, color: '#7f8893' }}>
+                                    {fiveD.totals.con_precio}/{fiveD.totals.partidas} partidas con precio unitario (doc_partidas) · Total: <strong style={{ color: '#8ab4ff' }}>{fmtMoney(fiveD.totals.delta_precio_total)}</strong>
+                                </div>
+                            </>
+                        )}
+                        {activeList !== '5d' && listData.slice(0, 500).map(it => (
                             <div key={it.id} style={S.listItem} title={it.id} onClick={() => openDetail(it)}>
                                 {it.name || it.id}
                             </div>
                         ))}
-                        {listData.length > 500 && <div style={{ color: '#7f8893', padding: 6 }}>… y {listData.length - 500} más</div>}
+                        {activeList !== '5d' && listData.length > 500 && <div style={{ color: '#7f8893', padding: 6 }}>… y {listData.length - 500} más</div>}
                     </div>
 
                     <div style={S.detail}>
@@ -282,6 +415,40 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                     </div>
                 </div>
             )}
+
+            {/* Tooltip 5D de hover: metrado A vs B del elemento bajo el mouse */}
+            <div
+                ref={tipEl}
+                style={{
+                    position: 'fixed', zIndex: 9500, pointerEvents: 'none',
+                    display: tip ? 'block' : 'none',
+                    background: 'rgba(16,20,25,0.96)', border: '1px solid #39414c',
+                    borderRadius: 8, padding: '8px 11px', maxWidth: 280, fontSize: 12,
+                    boxShadow: '0 4px 18px rgba(0,0,0,0.5)'
+                }}
+            >
+                {tip && (
+                    <>
+                        <div style={{ fontWeight: 700, marginBottom: 4, color: '#d5d9de' }}>
+                            …{String(tip.ext).slice(-10)}
+                            <span style={{ fontWeight: 400, color: '#7f8893' }}> (hover en {tip.side === 'a' ? 'A' : 'B'})</span>
+                        </div>
+                        {tipRows.length === 0 && <div style={{ color: '#7f8893' }}>Sin parámetros de partida (DSI) en este elemento.</div>}
+                        {tipRows.map(r => (
+                            <div key={r.c} style={{ marginBottom: 3 }}>
+                                <div style={{ color: '#8ab4ff' }}>{r.c}</div>
+                                <div style={{ color: '#aab2bc' }}>
+                                    A: {fmtNum(r.ma)} → B: {fmtNum(r.mb)} ·{' '}
+                                    <span style={{ color: r.delta > 0 ? '#7dd87f' : r.delta < 0 ? '#f08e8e' : '#7f8893' }}>Δ {fmtNum(r.delta)}</span>
+                                    {r.dp != null && (
+                                        <span style={{ color: r.dp > 0 ? '#7dd87f' : r.dp < 0 ? '#f08e8e' : '#7f8893' }}> · {fmtMoney(r.dp)}</span>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </>
+                )}
+            </div>
         </div>
     );
 }
