@@ -248,6 +248,67 @@ def compare_versions():
         return jsonify({'error': str(e)}), 500
 
 
+@compare_bp.route('/api/compare/prepare-version', methods=['POST'])
+def compare_prepare_version():
+    """Prepara una version historica para comparar: verifica si esta TRADUCIDA
+    (manifest SVF). Si no lo esta (404 o failed), dispara la traduccion en ACC.
+
+    -> {status: 'ready' | 'translating' | 'failed', detail}
+    El frontend hace polling hasta 'ready' antes de extraer.
+    """
+    data = request.get_json(silent=True) or {}
+    urn = data.get('urn')
+    if not urn:
+        return jsonify({'error': 'Falta urn'}), 400
+    try:
+        from aps import get_internal_token
+        token, err = get_internal_token()
+        if err or not token:
+            return jsonify({'error': 'Auth APS fallo'}), 502
+
+        r = requests.get(
+            f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn}/manifest",
+            headers={'Authorization': f'Bearer {token}'}, timeout=15)
+
+        if r.ok:
+            st = (r.json() or {}).get('status')
+            if st == 'success':
+                return jsonify({'status': 'ready'})
+            if st in ('inprogress', 'pending'):
+                return jsonify({'status': 'translating', 'detail': f'Traduciendo ({st})'})
+            # failed/timeout -> reintentar traduccion abajo
+        elif r.status_code != 404:
+            return jsonify({'status': 'failed', 'detail': f'Manifest {r.status_code}'})
+
+        # Sin manifest (version nunca traducida) o failed -> disparar traduccion
+        from routes.digital_twin import trigger_translation
+        ok = trigger_translation(urn, token)
+        if ok:
+            logger.info(f"traduccion disparada para version historica ...{urn[-16:]}")
+            return jsonify({'status': 'translating', 'detail': 'Traduccion iniciada en Autodesk'})
+        return jsonify({'status': 'failed', 'detail': 'No se pudo iniciar la traduccion'})
+    except Exception as e:
+        logger.error(f"prepare-version fallo: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@compare_bp.route('/api/compare/cleanup', methods=['POST'])
+def compare_cleanup():
+    """Borra las extracciones TEMPORALES del comparador (scope '__cmp__').
+    Se llama al salir del modo: no queda nada 'volando' en la BD."""
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM inventory_assets WHERE model_urn = '__cmp__'")
+            n = cur.rowcount
+            conn.commit()
+        if n:
+            logger.info(f"cleanup comparador: {n} filas temporales eliminadas")
+        return jsonify({'deleted': n})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @compare_bp.route('/api/compare/extracted', methods=['GET'])
 def compare_extracted():
     """¿Esta version (urn) tiene inventario extraido en Postgres? -> {extracted, count}.

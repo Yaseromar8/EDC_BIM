@@ -80,7 +80,15 @@ export default function CompareView({ BACKEND_URL, onExit }) {
             .then(r => r.json())
             .then(cfg => setModels(cfg.models || []))
             .catch(() => setStatus('No se pudo cargar la lista de modelos.'));
+        // Purgar temporales de sesiones anteriores (por si quedo algo de un crash)
+        apiFetch(`${BACKEND_URL}/api/compare/cleanup`, { method: 'POST' }).catch(() => { });
     }, [BACKEND_URL]);
+
+    // Salir SIEMPRE limpia las extracciones temporales: no queda nada en la BD.
+    const doExit = useCallback(() => {
+        apiFetch(`${BACKEND_URL}/api/compare/cleanup`, { method: 'POST' }).catch(() => { });
+        onExit();
+    }, [BACKEND_URL, onExit]);
 
     const frentes = useMemo(() => [...new Set(models.map(m => m.appProjectId).filter(Boolean))], [models]);
     const byFrente = useMemo(() => {
@@ -132,7 +140,12 @@ export default function CompareView({ BACKEND_URL, onExit }) {
     };
     const loadUrn = (viewer, urn) => new Promise((resolve, reject) => {
         window.Autodesk.Viewing.Document.load('urn:' + urn, (doc) => {
-            viewer.loadDocumentNode(doc, doc.getRoot().getDefaultGeometry()).then(resolve).catch(reject);
+            // MISMO globalOffset en ambos panes: sin esto cada visor centra su modelo
+            // con un offset distinto y las camaras sincronizadas muestran lugares distintos.
+            viewer.loadDocumentNode(doc, doc.getRoot().getDefaultGeometry(), {
+                applyRefPoint: true,
+                globalOffset: { x: 0, y: 0, z: 0 },
+            }).then(resolve).catch(reject);
         }, (err) => reject(new Error('No se pudo cargar esa versión (¿traducida en ACC?): ' + err)));
     });
 
@@ -206,6 +219,21 @@ export default function CompareView({ BACKEND_URL, onExit }) {
     const ensureExtracted = async (urn, label) => {
         const chk = await apiFetch(`${BACKEND_URL}/api/compare/extracted?urn=${encodeURIComponent(urn)}`).then(r => r.json());
         if (chk.extracted) return;
+
+        // 0) Asegurar que la version este TRADUCIDA en ACC (las versiones viejas
+        //    pueden no tener SVF; aqui se dispara la traduccion y se espera).
+        for (let i = 0; i < 60; i++) {                        // hasta ~10 min
+            const prep = await apiFetch(`${BACKEND_URL}/api/compare/prepare-version`, {
+                method: 'POST', body: JSON.stringify({ urn })
+            }).then(r => r.json());
+            if (prep.status === 'ready') break;
+            if (prep.status === 'failed' || prep.error) {
+                throw new Error(`${label}: esa versión no se pudo traducir en Autodesk (${prep.detail || prep.error}). Prueba con otra versión.`);
+            }
+            setStatus(`Traduciendo ${label} en Autodesk… (versión histórica; puede tardar varios minutos)`);
+            await new Promise(r => setTimeout(r, 10000));
+        }
+
         setStatus(`Extrayendo metadata de ${label} (versión histórica)…`);
         const res = await apiFetch(`${BACKEND_URL}/api/inventory/extract`, {
             method: 'POST', body: JSON.stringify({ urn, target_urn: '__cmp__' })
@@ -247,6 +275,10 @@ export default function CompareView({ BACKEND_URL, onExit }) {
             if (!res.ok) throw new Error(d.error || 'Falló el diff');
             setDiff(d);
 
+            // Guard: si un lado quedo SIN datos, avisar y no pintar (todo saldria
+            // "agregado"/"eliminado" y el resultado seria enganoso).
+            const sideEmpty = d.summary.total_a === 0 ? 'A' : (d.summary.total_b === 0 ? 'B' : null);
+
             // 3) Vista 3D
             if (both3D) {
                 setStatus('Cargando ambas versiones…');
@@ -255,18 +287,24 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                 await Promise.all([loadUrn(vs.current.a, sa.value), loadUrn(vs.current.b, sb.value)]);
                 wireSync();
 
-                setStatus('Pintando diferencias…');
                 const mapA = await new Promise(r => vs.current.a.model.getExternalIdMapping(r));
                 const mapB = await new Promise(r => vs.current.b.model.getExternalIdMapping(r));
                 vs.current.maps = { a: mapA, b: mapB };
                 const invert = (m) => { const out = {}; Object.keys(m || {}).forEach(k => { out[m[k]] = k; }); return out; };
                 vs.current.rev = { a: invert(mapA), b: invert(mapB) };
-                themeSide(vs.current.b, mapB, d.added, COLORS.added);
-                themeSide(vs.current.b, mapB, d.modified, COLORS.modified);
-                themeSide(vs.current.a, mapA, d.removed, COLORS.removed);
-                themeSide(vs.current.a, mapA, d.modified, COLORS.modified);
+                if (!sideEmpty) {
+                    setStatus('Pintando diferencias…');
+                    themeSide(vs.current.b, mapB, d.added, COLORS.added);
+                    themeSide(vs.current.b, mapB, d.modified, COLORS.modified);
+                    themeSide(vs.current.a, mapA, d.removed, COLORS.removed);
+                    themeSide(vs.current.a, mapA, d.modified, COLORS.modified);
+                }
                 wireHover();
                 wireMirror();
+            }
+
+            if (sideEmpty) {
+                setStatus(`⚠ El lado ${sideEmpty} no tiene datos extraídos en PostgreSQL — el diff no es representativo (no se pintó). Revisa que esa versión se haya extraído bien.`);
             }
 
             // 4) Diff 5D valorizado
@@ -279,9 +317,11 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                 if (r5.ok) { setFiveD(d5); fiveDRef.current = d5; }
             } catch (e5) { console.warn('[Compare] 5D no disponible:', e5); }
 
-            setStatus(both3D
-                ? 'Verde: agregado · rojo: eliminado · ámbar: modificado. Hover = diff de metrado; click = espejo.'
-                : 'Diff de datos listo. El 3D se activa comparando dos modelos individuales.');
+            if (!sideEmpty) {
+                setStatus(both3D
+                    ? 'Verde: agregado · rojo: eliminado · ámbar: modificado. Hover = diff de metrado; click = espejo.'
+                    : 'Diff de datos listo. El 3D se activa comparando dos modelos individuales.');
+            }
         } catch (e) {
             console.error('[Compare]', e);
             setStatus('Error: ' + e.message);
@@ -411,7 +451,7 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                     <div style={S.setupCard}>
                         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
                             <span style={{ fontSize: 17, fontWeight: 600 }}>Comparar</span>
-                            <button style={{ ...S.btnGhost, border: 'none', fontSize: 16, padding: 4 }} onClick={onExit} title="Cerrar">✕</button>
+                            <button style={{ ...S.btnGhost, border: 'none', fontSize: 16, padding: 4 }} onClick={doExit} title="Cerrar">✕</button>
                         </div>
                         <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 22 }}>
                             Elige el modelo o documento y la versión de cada lado. A es la base (contractual); B el avance actual.
@@ -422,7 +462,7 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                             {renderSide('b', 'B · Avance')}
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
-                            <button style={S.btnGhost} onClick={onExit}>Cancelar</button>
+                            <button style={S.btnGhost} onClick={doExit}>Cancelar</button>
                             <button
                                 style={{ ...S.btnPrimary, opacity: (scopeOf(side.a) && scopeOf(side.b) && !busy) ? 1 : 0.45 }}
                                 disabled={!scopeOf(side.a) || !scopeOf(side.b) || busy}
@@ -445,7 +485,7 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
                             <button style={S.btnGhost} onClick={editSelection}>Editar selección</button>
                             <button style={S.btnGhost} onClick={showAll}>Mostrar todo</button>
-                            <button style={S.btnGhost} onClick={onExit}>Salir</button>
+                            <button style={S.btnGhost} onClick={doExit}>Salir</button>
                         </div>
                     </div>
 
