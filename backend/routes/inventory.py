@@ -585,18 +585,22 @@ def extract_metadata_task(urn, target_urn, job_id):
                 except Exception:
                     return b64_urn
             
+            # SEGURIDAD: la purga es LOCAL al scope destino (model_urn = target_urn).
+            # Antes barria toda la tabla por lineage, lo que podia borrar el inventario
+            # del frente real al extraer una version vieja a un scope temporal de
+            # comparacion ('__cmp__'). Dentro del frente, el comportamiento es identico.
             base_urn_to_delete = get_base_urn(urn)
-            cursor.execute("SELECT DISTINCT source_urn FROM inventory_assets")
+            cursor.execute("SELECT DISTINCT source_urn FROM inventory_assets WHERE model_urn = %s", (target_urn,))
             all_source_urns = cursor.fetchall()
             urns_to_delete = []
             for (s_urn,) in all_source_urns:
                 if get_base_urn(s_urn) == base_urn_to_delete:
                     urns_to_delete.append(s_urn)
-            
+
             if urns_to_delete:
                 format_strings = ','.join(['%s'] * len(urns_to_delete))
-                print(f"[Extractor] Eliminando {len(urns_to_delete)} versiones historicas del archivo para purgar la BD.")
-                cursor.execute(f"DELETE FROM inventory_assets WHERE source_urn IN ({format_strings})", urns_to_delete)
+                print(f"[Extractor] Eliminando {len(urns_to_delete)} versiones historicas del archivo (scope {target_urn}).")
+                cursor.execute(f"DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN ({format_strings})", [target_urn] + urns_to_delete)
 
             current_time = datetime.now()
             from db import resolve_project_id

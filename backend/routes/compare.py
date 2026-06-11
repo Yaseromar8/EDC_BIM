@@ -15,6 +15,9 @@ El detalle por elemento (que propiedades cambiaron) se pide bajo demanda con
 /api/compare/element para no mover MBs innecesarios.
 """
 import re
+import base64
+import urllib.parse
+import requests
 from flask import Blueprint, request, jsonify
 from db import get_db_connection
 from app_logging import get_logger
@@ -190,6 +193,81 @@ def compare_diff():
         })
     except Exception as e:
         logger.error(f"diff fallo: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@compare_bp.route('/api/compare/versions', methods=['GET'])
+def compare_versions():
+    """Lista las versiones ACC de un modelo vinculado (para elegir que comparar).
+
+    ?model_id=<model_config.model_id>  ->  [{versionNumber, urn, createTime, isCurrent}]
+    El urn de cada version (base64 URL-safe) es directamente cargable en el visor
+    y usable como scope 'source' del diff (si esa version esta extraida).
+    """
+    model_id = request.args.get('model_id')
+    if not model_id:
+        return jsonify({'error': 'Falta model_id'}), 400
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT project_id, item_id, urn, version_number FROM model_config WHERE model_id = %s", (model_id,))
+            row = cur.fetchone()
+        if not row:
+            return jsonify({'error': 'Modelo no encontrado'}), 404
+        acc_project, item_id, current_urn, current_vnum = row
+
+        if not acc_project or not item_id:
+            # Modelo sin metadata ACC (subida local): solo la version actual
+            return jsonify({'versions': [{'versionNumber': current_vnum or 1, 'urn': current_urn, 'createTime': None, 'isCurrent': True}], 'source': 'local'})
+
+        from aps import get_internal_token
+        token, err = get_internal_token()
+        if err or not token:
+            return jsonify({'error': 'Auth APS fallo', 'details': err}), 502
+
+        url = f"https://developer.api.autodesk.com/data/v1/projects/{acc_project}/items/{urllib.parse.quote(item_id, safe='')}/versions"
+        r = requests.get(url, headers={'Authorization': f'Bearer {token}'}, timeout=20)
+        if not r.ok:
+            return jsonify({'error': f'ACC versions fallo: {r.status_code}'}), 502
+
+        versions = []
+        for v in (r.json().get('data') or []):
+            vid = v.get('id', '')
+            attrs = v.get('attributes', {}) or {}
+            vurn = base64.urlsafe_b64encode(vid.encode('utf-8')).decode('utf-8').rstrip('=')
+            versions.append({
+                'versionNumber': attrs.get('versionNumber'),
+                'urn': vurn,
+                'createTime': attrs.get('createTime') or attrs.get('lastModifiedTime'),
+                'isCurrent': vurn == current_urn,
+            })
+        versions.sort(key=lambda x: x.get('versionNumber') or 0, reverse=True)
+        return jsonify({'versions': versions, 'source': 'acc'})
+    except Exception as e:
+        logger.error(f"versions fallo: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@compare_bp.route('/api/compare/extracted', methods=['GET'])
+def compare_extracted():
+    """¿Esta version (urn) tiene inventario extraido en Postgres? -> {extracted, count}.
+    El frontend lo usa para decidir si dispara la extraccion temporal ('__cmp__')
+    antes del diff de datos de una version historica."""
+    urn = request.args.get('urn')
+    if not urn:
+        return jsonify({'error': 'Falta urn'}), 400
+    try:
+        try:
+            from routes.inventory import sanitize_urn
+            sanitized = sanitize_urn(urn)
+        except Exception:
+            sanitized = urn
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM inventory_assets WHERE source_urn IN (%s, %s)", (urn, sanitized))
+            n = cur.fetchone()[0]
+        return jsonify({'extracted': n > 0, 'count': n})
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
