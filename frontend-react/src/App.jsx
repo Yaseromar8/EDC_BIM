@@ -22,6 +22,7 @@ import BudgetTree from './components/BudgetTree';
 import TandemSidebar from './components/TandemSidebar';
 import TandemFilterPanel from './components/TandemFilterPanel';
 import PdfViewer from './components/PdfViewer';
+import CompareView from './components/CompareView';
 
 
 import { uploadFile } from './services/uploadService';
@@ -607,6 +608,7 @@ function App() {
   const [showSprites, setShowSprites] = useState(false);
   const [spritePlacementActive, setSpritePlacementActive] = useState(false);
   const [activePanel, setActivePanel] = useState(null);
+  const [compareMode, setCompareMode] = useState(false); // Comparador (contractual vs avance)
   const [panelVisible, setPanelVisible] = useState(false);
   const [inventoryTabOpen, setInventoryTabOpen] = useState(false);
   const [inventoryPanelHeight, setInventoryPanelHeight] = useState(280);
@@ -2966,6 +2968,21 @@ function App() {
               <span className="rail-label" style={{ fontWeight: 700 }}>Seguimiento</span>
             </button>
 
+            <button
+              type="button"
+              className={`rail-button ${compareMode ? 'active' : ''}`}
+              onClick={() => setCompareMode(true)}
+              title="Comparar (contractual vs avance)"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="4" width="9" height="16" rx="1"></rect>
+                <rect x="13" y="4" width="9" height="16" rx="1"></rect>
+                <line x1="6.5" y1="9" x2="6.5" y2="15"></line>
+                <line x1="17.5" y1="9" x2="17.5" y2="15"></line>
+              </svg>
+              <span className="rail-label" style={{ fontWeight: 700 }}>Comparar</span>
+            </button>
+
 
 
 
@@ -2999,6 +3016,11 @@ function App() {
 
           </nav>
 
+        )}
+
+        {/* Modo Comparador: overlay que toma el lienzo sin desmontar el visor principal */}
+        {compareMode && (
+          <CompareView BACKEND_URL={BACKEND_URL} onExit={() => setCompareMode(false)} />
         )}
 
 
