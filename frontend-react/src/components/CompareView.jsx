@@ -14,9 +14,9 @@ import { apiFetch } from '../utils/apiFetch';
  */
 
 const COLORS = {
-    added: [0.22, 0.65, 0.15],
-    removed: [0.89, 0.29, 0.29],
-    modified: [0.94, 0.62, 0.15],
+    added: [0.22, 0.65, 0.15],     // verde
+    removed: [0.89, 0.29, 0.29],   // rojo
+    modified: [0.82, 0.20, 0.85],  // magenta — distinto del material naranja de los modelos
 };
 
 // ── Design tokens (minimalista profesional, alineado al dark theme de la app) ──
@@ -24,7 +24,7 @@ const T = {
     bg: '#15181d', panel: '#1b2026', panelSoft: '#20262d',
     border: '1px solid rgba(255,255,255,0.08)', borderSoft: '1px solid rgba(255,255,255,0.05)',
     text: '#ccd2d9', muted: '#8a93a0', faint: '#5d6672',
-    accent: '#3d7eff', green: '#5fbf67', red: '#e06a6a', amber: '#dba94d',
+    accent: '#3d7eff', green: '#5fbf67', red: '#e06a6a', amber: '#dba94d', magenta: '#cf57d6',
     radius: 8,
 };
 
@@ -138,14 +138,13 @@ export default function CompareView({ BACKEND_URL, onExit }) {
         v.start();
         return v;
     };
-    const loadUrn = (viewer, urn) => new Promise((resolve, reject) => {
+    const loadUrn = (viewer, urn, opts) => new Promise((resolve, reject) => {
         window.Autodesk.Viewing.Document.load('urn:' + urn, (doc) => {
-            // MISMO globalOffset en ambos panes: sin esto cada visor centra su modelo
-            // con un offset distinto y las camaras sincronizadas muestran lugares distintos.
-            viewer.loadDocumentNode(doc, doc.getRoot().getDefaultGeometry(), {
-                applyRefPoint: true,
-                globalOffset: { x: 0, y: 0, z: 0 },
-            }).then(resolve).catch(reject);
+            // opts.globalOffset: pasamos el MISMO offset a ambos panes para alinear,
+            // pero un offset cercano al modelo (no 0,0,0) -> sin perder precision en
+            // modelos georreferenciados (evita deformacion y parpadeo/z-fighting).
+            viewer.loadDocumentNode(doc, doc.getRoot().getDefaultGeometry(), opts || {})
+                .then(resolve).catch(reject);
         }, (err) => reject(new Error('No se pudo cargar esa versión (¿traducida en ACC?): ' + err)));
     });
 
@@ -297,7 +296,12 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                 setStatus('Cargando ambas versiones…');
                 if (!vs.current.a) vs.current.a = makeViewer(contA.current);
                 if (!vs.current.b) vs.current.b = makeViewer(contB.current);
-                await Promise.all([loadUrn(vs.current.a, sa.value), loadUrn(vs.current.b, sb.value)]);
+                // Cargar A primero para conocer su globalOffset (cercano al modelo),
+                // y cargar B con EL MISMO offset -> alineados y sin perder precision.
+                await loadUrn(vs.current.a, sa.value);
+                let _off = null;
+                try { _off = vs.current.a.model.getGlobalOffset && vs.current.a.model.getGlobalOffset(); } catch (e) { /* noop */ }
+                await loadUrn(vs.current.b, sb.value, _off ? { globalOffset: _off } : undefined);
                 wireSync();
 
                 const mapA = await new Promise(r => vs.current.a.model.getExternalIdMapping(r));
@@ -332,7 +336,7 @@ export default function CompareView({ BACKEND_URL, onExit }) {
 
             if (!sideEmpty) {
                 setStatus(both3D
-                    ? 'Verde: agregado · rojo: eliminado · ámbar: modificado. Hover = diff de metrado; click = espejo.'
+                    ? 'Verde: agregado · rojo: eliminado · magenta: modificado · naranja: material natural del modelo (sin cambio). Hover = diff de metrado; click = espejo.'
                     : 'Diff de datos listo. El 3D se activa comparando dos modelos individuales.');
             }
         } catch (e) {
@@ -524,8 +528,8 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                                 <button style={S.pill(T.red, activeList === 'removed')} onClick={() => { setActiveList('removed'); isolate('a', diff.removed); }}>
                                     <span style={S.dot(T.red)} />{diff.summary.removed.toLocaleString()} eliminados
                                 </button>
-                                <button style={S.pill(T.amber, activeList === 'modified')} onClick={() => { setActiveList('modified'); isolate('a', diff.modified); isolate('b', diff.modified); }}>
-                                    <span style={S.dot(T.amber)} />{diff.summary.modified.toLocaleString()} modificados
+                                <button style={S.pill(T.magenta, activeList === 'modified')} onClick={() => { setActiveList('modified'); isolate('a', diff.modified); isolate('b', diff.modified); }}>
+                                    <span style={S.dot(T.magenta)} />{diff.summary.modified.toLocaleString()} modificados
                                 </button>
                                 {fiveD && fiveD.partidas && fiveD.partidas.length > 0 && (
                                     <button style={S.pill(T.accent, activeList === '5d')} onClick={() => setActiveList('5d')}>
