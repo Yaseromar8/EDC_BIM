@@ -246,7 +246,8 @@ export default function DocumentViewer({
 
           // 5. PDF (Mozilla PDF.js — Motor intercambiable)
           if (lowerName.endsWith('.pdf') || lowerName.endsWith('.pdfx')) {
-            return <PDFViewer url={fileUrl} fileName={file.name} />;
+            return <PDFViewer url={fileUrl} fileName={file.name}
+              nodeId={isShared ? null : file.id} projectPrefix={projectPrefix} />;
           }
 
           // 6. DEFAULT FALLBACK (Iframe genérico)

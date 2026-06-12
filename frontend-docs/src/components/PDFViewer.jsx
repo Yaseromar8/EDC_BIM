@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import PdfToolsOverlay, { COLORS } from './PdfToolsOverlay';
 
 // Configurar el worker de PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -89,9 +90,10 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
 // ----------------------------------------------------------------------
 // Visor Principal
 // ----------------------------------------------------------------------
-export default function PDFViewer({ url, fileName = 'documento.pdf' }) {
+export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = null, projectPrefix = '' }) {
   const viewerRef = useRef(null); // Para Fullscreen
   const canvasRef = useRef(null);
+  const wrapRef = useRef(null); // Envuelve canvas + overlay de herramientas
   const containerRef = useRef(null);
   const sidebarRef = useRef(null);
   const pdfDocRef = useRef(null);
@@ -111,6 +113,15 @@ export default function PDFViewer({ url, fileName = 'documento.pdf' }) {
   // Pan States
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
+
+  // Herramientas de ingeniería (overlay)
+  const [tool, setTool] = useState('pan');
+  const [markupColor, setMarkupColor] = useState(COLORS[0]);
+  const [vpInfo, setVpInfo] = useState(null); // { vp, w, h } del render actual
+  const userName = (() => {
+    try { return JSON.parse(localStorage.getItem('visor_user') || sessionStorage.getItem('visor_user') || '{}').name || ''; }
+    catch { return ''; }
+  })();
 
   // Load PDF document
   useEffect(() => {
@@ -172,6 +183,8 @@ export default function PDFViewer({ url, fileName = 'documento.pdf' }) {
       const renderContext = { canvasContext: ctx, viewport };
       renderTaskRef.current = page.render(renderContext);
       await renderTaskRef.current.promise;
+      // El overlay necesita el viewport vigente para transformar coordenadas PDF<->pantalla
+      setVpInfo({ vp: viewport, w: viewport.width, h: viewport.height });
     } catch (err) {
       if (err?.name !== 'RenderingCancelledException' && err?.name !== 'RenderingCancelled') {
         console.error('[PDFViewer] Render error:', err);
@@ -223,6 +236,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf' }) {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target?.tagName)) return;
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         e.preventDefault(); goToPage(currentPage - 1);
       } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
@@ -250,8 +264,8 @@ export default function PDFViewer({ url, fileName = 'documento.pdf' }) {
       // Bloquear scroll vertical nativo (importante para que el zoom y cambio de pág funcionen sin que brinque la pantalla)
       e.preventDefault(); 
       
-      if (e.target === canvas) {
-        // Si el mouse está sobre la hoja blanca -> Zoom
+      if (wrapRef.current && wrapRef.current.contains(e.target)) {
+        // Si el mouse está sobre la hoja (canvas u overlay) -> Zoom
         if (e.deltaY < 0) zoomIn();
         else zoomOut();
       } else if (e.target === container) {
@@ -274,8 +288,10 @@ export default function PDFViewer({ url, fileName = 'documento.pdf' }) {
 
   // --- Click & Drag Panning Logic ---
   const handleMouseDown = (e) => {
+    // Con una herramienta activa, el clic sobre la hoja es para dibujar, no para panear
+    if (tool !== 'pan' && wrapRef.current && wrapRef.current.contains(e.target)) return;
     // 0 = Click Izquierdo, 1 = Click Rueda (Middle Click)
-    if (e.button !== 0 && e.button !== 1) return; 
+    if (e.button !== 0 && e.button !== 1) return;
     e.preventDefault(); // Evitar scroll automático al usar click central
     setIsDragging(true);
     dragStart.current = {
@@ -396,6 +412,38 @@ export default function PDFViewer({ url, fileName = 'documento.pdf' }) {
         </div>
       </div>
 
+      {/* ▀▀▀ Barra de herramientas de ingeniería ▀▀▀ */}
+      {nodeId && (
+        <div style={styles.toolsBar}>
+          {[
+            { id: 'pan', label: '✋', title: 'Navegar (pan y zoom)' },
+            { id: 'calibrate', label: '⚖', title: 'Calibrar escala: clic en 2 puntos de una distancia conocida' },
+            { id: 'measure', label: '📏', title: 'Medir distancia: clic por puntos, doble clic termina' },
+            { id: 'area', label: '⬠', title: 'Medir área: clic por vértices, doble clic cierra' },
+            { id: 'count', label: '🔢', title: 'Conteo: cada clic suma 1' },
+            { id: 'cloud', label: '☁', title: 'Nube de revisión: arrastrar' },
+            { id: 'arrow', label: '↗', title: 'Flecha: arrastrar' },
+            { id: 'rect', label: '▭', title: 'Rectángulo: arrastrar' },
+            { id: 'pen', label: '✏', title: 'Lápiz libre: arrastrar' },
+            { id: 'text', label: 'T', title: 'Texto: clic donde quieras escribir' },
+            { id: 'erase', label: '🗑', title: 'Borrar: clic sobre una anotación' },
+          ].map(t => (
+            <button key={t.id} onClick={() => setTool(prev => prev === t.id ? 'pan' : t.id)} title={t.title}
+              style={{ ...styles.toolsBtn, background: tool === t.id ? '#0696d7' : 'transparent', color: tool === t.id ? '#fff' : '#ccc' }}>
+              {t.label}
+            </button>
+          ))}
+          <div style={{ width: 1, height: 20, background: '#444', margin: '0 6px' }} />
+          {COLORS.map(c => (
+            <button key={c} onClick={() => setMarkupColor(c)} title="Color"
+              style={{ width: 18, height: 18, borderRadius: '50%', background: c, cursor: 'pointer', border: markupColor === c ? '2px solid #fff' : '2px solid transparent', padding: 0 }} />
+          ))}
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: '#888', paddingRight: 8 }}>
+            {tool === 'pan' ? 'Elige una herramienta para medir o anotar' : 'Esc cancela · doble clic termina líneas/áreas'}
+          </span>
+        </div>
+      )}
+
       {/* ▀▀▀ MAIN AREA (1 Página) ▀▀▀ */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
         
@@ -427,7 +475,16 @@ export default function PDFViewer({ url, fileName = 'documento.pdf' }) {
           onMouseLeave={handleMouseUp}
         >
           <div style={{ padding: '48px 0', display: 'flex', justifyContent: 'center' }}>
-            <canvas ref={canvasRef} style={styles.canvas} />
+            <div ref={wrapRef} style={{ position: 'relative' }}>
+              <canvas ref={canvasRef} style={styles.canvas} />
+              {nodeId && vpInfo && (
+                <PdfToolsOverlay
+                  vpInfo={vpInfo} page={currentPage} nodeId={nodeId}
+                  projectPrefix={projectPrefix} tool={tool} setTool={setTool}
+                  color={markupColor} userName={userName}
+                />
+              )}
+            </div>
           </div>
         </div>
         
@@ -453,6 +510,9 @@ const styles = {
   pageInputDark: { width: 40, textAlign: 'center', border: '1px solid #444', borderRadius: 4, padding: '4px 4px', fontSize: 13, outline: 'none', background: '#111', color: '#fff', fontFamily: 'inherit' },
   pageNavBtnDark: { background: 'transparent', border: 'none', color: '#ddd', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 2 },
   
+  toolsBar: { display: 'flex', alignItems: 'center', gap: 2, padding: '0 12px', height: 38, background: '#2b2b2b', borderTop: '1px solid #3a3a3a', flexShrink: 0, zIndex: 9 },
+  toolsBtn: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 28, border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14, transition: 'background 0.15s' },
+
   sidebar: { width: 220, background: '#f9f9f9', borderRight: '1px solid #ccc', overflowY: 'auto', display: 'flex', flexDirection: 'column', flexShrink: 0 },
   canvasContainer: { flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' },
   canvas: { boxShadow: '0 4px 16px rgba(0,0,0,0.3)', background: '#fff' },

@@ -743,6 +743,8 @@ app.register_blueprint(partidas_bp, url_prefix='/api/partidas')
 app.register_blueprint(photo_diag_bp)
 app.register_blueprint(presupuesto_bp, url_prefix='/api/presupuesto')
 app.register_blueprint(compare_bp)
+from routes.pdf_tools import pdf_tools_bp, ensure_pdf_tools_tables
+app.register_blueprint(pdf_tools_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
@@ -759,6 +761,7 @@ ensure_partidas_schema()
 ensure_presupuesto_schema()
 ensure_asset_user_data_table()
 ensure_project_identity_columns()
+ensure_pdf_tools_tables()
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()
