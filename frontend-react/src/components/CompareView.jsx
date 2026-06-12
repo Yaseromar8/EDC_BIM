@@ -90,6 +90,15 @@ export default function CompareView({ BACKEND_URL, onExit }) {
         onExit();
     }, [BACKEND_URL, onExit]);
 
+    // Pausar el visor PRINCIPAL mientras comparamos. Tener 3 visores LMV activos
+    // satura GPU/RAM (geometría que desaparece al moverse, parpadeo). stop() detiene
+    // su render loop y libera el hilo de render para los 2 visores del comparador;
+    // start() lo reanuda al salir. Reversible: NO destruye el modelo ya cargado.
+    useEffect(() => {
+        try { window.NOP_VIEWER && window.NOP_VIEWER.stop && window.NOP_VIEWER.stop(); } catch (e) { /* noop */ }
+        return () => { try { window.NOP_VIEWER && window.NOP_VIEWER.start && window.NOP_VIEWER.start(); } catch (e) { /* noop */ } };
+    }, []);
+
     const frentes = useMemo(() => [...new Set(models.map(m => m.appProjectId).filter(Boolean))], [models]);
     const byFrente = useMemo(() => {
         const g = {};
