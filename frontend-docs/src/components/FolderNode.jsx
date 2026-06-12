@@ -116,7 +116,7 @@ export default function FolderNode({
         className={`folder-tree-item ${isActive ? 'active' : ''} ${isChildrenActive ? 'child-active' : ''} ${nodeId === rightClickedId ? 'context-active' : ''}`}
         style={{ paddingLeft: `${8 + (level * 28)}px`, color: isActive ? '#0696D7' : folder._syncing ? '#999' : '#3c3c3c' }}
         onClick={(e) => { e.stopPropagation(); onNavigate(folderFullName, folder.id); if (level === 0 && onReset) onReset(); }}
-        onContextMenu={(e) => { if (isAdmin) { e.preventDefault(); e.stopPropagation(); const item = { ...folder, type: 'folder', id: nodeId }; onRowMenu(item, e); } }}
+        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const item = { ...folder, type: 'folder', id: nodeId }; onRowMenu(item, e); }}
       >
         <div className="tree-toggle" onClick={handleToggle} style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (!loading && children && children.length === 0 && expanded) ? 0 : 1 }}>
           {processingIds[nodeId] ? (

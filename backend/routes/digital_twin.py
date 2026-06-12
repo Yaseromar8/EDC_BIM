@@ -270,6 +270,37 @@ def get_config_route():
             
     return jsonify(config)
 
+@digital_twin_bp.route('/api/projects/<path:project_id>/frentes', methods=['GET'])
+def list_project_frentes(project_id):
+    """Lista los frentes reales de un proyecto (agrupaciones de modelos).
+    Un frente es el sufijo del app_project_id en model_config: '1_CANAL' -> 'CANAL'.
+    Sustituye las tarjetas hardcodeadas del Gateway de frontend-docs."""
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT app_project_id, COUNT(*), MAX(updated_at::text)
+                FROM model_config
+                WHERE app_project_id = %s OR app_project_id LIKE %s
+                GROUP BY app_project_id
+                ORDER BY app_project_id
+            ''', (str(project_id), str(project_id) + '\\_%'))
+            frentes = []
+            for app_pid, n_models, last_update in cursor.fetchall():
+                # Sufijo después del id del proyecto ('1_CANAL' -> 'CANAL')
+                tag = app_pid.split('_', 1)[1] if app_pid.startswith(str(project_id) + '_') else app_pid
+                frentes.append({
+                    'id': tag,
+                    'app_project_id': app_pid,
+                    'models': n_models,
+                    'last_update': last_update
+                })
+        return jsonify({'frentes': frentes})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @digital_twin_bp.route('/api/config/project/add', methods=['POST'])
 def add_model_route():
     data = request.json

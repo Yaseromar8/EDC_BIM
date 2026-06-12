@@ -41,10 +41,10 @@ export function useVersionHistory(projectPrefix, user, { onRefresh } = {}) {
       if (resp.ok) {
         setTableShowVersions(false);
         if (onRefresh) onRefresh();
-        alert(`Versión ${version.version_number} promocionada exitosamente.`);
+        toast.success(`Versión ${version.version_number} promocionada exitosamente.`);
       } else {
         const error = await resp.json();
-        alert(`Error al promocionar: ${error.error || 'Desconocido'}`);
+        toast.error(`Error al promocionar: ${error.error || 'Desconocido'}`);
       }
     } catch (e) { console.error(e); }
   };

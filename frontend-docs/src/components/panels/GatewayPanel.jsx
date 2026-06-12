@@ -1,51 +1,64 @@
-import React from 'react';
-import { VISOR_URL } from '../../utils/helpers';
+import React, { useState, useEffect } from 'react';
+import { API, VISOR_URL } from '../../utils/helpers';
+import { apiFetch } from '../../utils/apiFetch';
+
+// Estética por frente conocida; cualquier frente nuevo recibe un estilo del ciclo
+const FRONT_STYLES = {
+  CANAL: { icon: '🌊', className: 'canal' },
+  DRENAJE: { icon: '🌧️', className: 'drenaje' },
+  INFRAWORKS: { icon: '🏗️', className: 'infraworks' },
+};
+const FALLBACK_STYLES = [
+  { icon: '🏗️', className: 'infraworks' },
+  { icon: '🌊', className: 'canal' },
+  { icon: '🌧️', className: 'drenaje' },
+];
 
 export default function GatewayPanel({ project, onClose }) {
-  // Frentes definidos: CANAL, DRENAJE, INFRAWORKS
-  // Usamos project.id (ID numérico de la BD, ej: "1") para construir
-  // el appProjectId que el Visor necesita para cargar los modelos correctos.
-  const fronts = [
-    {
-      id: 'CANAL',
-      title: 'Canal',
-      desc: 'Modelo 3D federado del segmento Canal. Topografía, estructuras hidráulicas y civil.',
-      icon: '🌊',
-      className: 'canal',
-    },
-    {
-      id: 'DRENAJE',
-      title: 'Drenaje',
-      desc: 'Sistema de drenaje pluvial y saneamiento profundo. Cruces y colectores.',
-      icon: '🌧️',
-      className: 'drenaje',
-    },
-    {
-      id: 'INFRAWORKS',
-      title: 'Infraworks',
-      desc: 'Modelo master de infraestructura integrado. Coordinación MAC y servicios.',
-      icon: '🏗️',
-      className: 'infraworks',
-    }
-  ];
+  const [frentes, setFrentes] = useState(null); // null = cargando
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch(`${API}/api/projects/${encodeURIComponent(project.id)}/frentes`)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then(data => { if (!cancelled) setFrentes(data.frentes || []); })
+      .catch(e => {
+        console.error('[Gateway] Error cargando frentes:', e);
+        if (!cancelled) { setError('No se pudieron cargar los frentes del proyecto.'); setFrentes([]); }
+      });
+    return () => { cancelled = true; };
+  }, [project.id]);
 
   const handleOpenFront = (front) => {
-    // Intercepta en frontend-react App.jsx Gateway Interceptor
-    // Envía el ID numérico del proyecto (ej: "1") + frente (ej: "CANAL")
-    // para que el Visor construya "1_CANAL" y lo busque en la config de modelos.
-    const dbProjectId = project.id;
-    const url = `${VISOR_URL}/?project=${encodeURIComponent(dbProjectId)}&frente=${encodeURIComponent(front.id)}&fn=${encodeURIComponent(front.title)}`;
+    // Intercepta en frontend-react App.jsx Gateway Interceptor:
+    // project (id BD) + frente -> el visor construye "1_CANAL" y carga sus modelos.
+    const url = `${VISOR_URL}/?project=${encodeURIComponent(project.id)}&frente=${encodeURIComponent(front.id)}&fn=${encodeURIComponent(front.title)}`;
     window.location.href = url;
   };
 
+  const cards = (frentes || []).map((f, i) => {
+    const style = FRONT_STYLES[f.id.toUpperCase()] || FALLBACK_STYLES[i % FALLBACK_STYLES.length];
+    const title = f.id.charAt(0).toUpperCase() + f.id.slice(1).toLowerCase().replace(/_/g, ' ');
+    return {
+      id: f.id,
+      title,
+      desc: `Modelo 3D federado del frente ${title}. ${f.models} modelo${f.models !== 1 ? 's' : ''} vinculado${f.models !== 1 ? 's' : ''}.`,
+      ...style,
+    };
+  });
+
   return (
     <div className="file-viewer-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, display: 'flex', flexDirection: 'column', background: '#fff' }}>
-      
+
       {/* Header del Overlay para mantener estilo nativo ACC */}
       <div className="file-viewer-header" style={{ padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
         <div className="file-viewer-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 16, fontWeight: 500, color: '#0696D7' }}>
-            Frentes 3D (Gateway Interceptor)
+            Frentes 3D — {project.name}
           </span>
         </div>
         <div className="file-viewer-actions">
@@ -57,13 +70,32 @@ export default function GatewayPanel({ project, onClose }) {
       <div className="gateway-container">
         <div className="gateway-header">
           <h2>Módulos 3D del Proyecto</h2>
-          <p>Selecciona un frente para aislar el modelo federado en el Visor ACC Central</p>
+          <p>Selecciona un frente para aislar el modelo federado en el Visor 3D</p>
         </div>
-        
+
+        {frentes === null && (
+          <div style={{ textAlign: 'center', padding: 60, color: '#888', fontSize: 14 }}>
+            <div className="adsk-spinner" style={{ margin: '0 auto 16px' }} />
+            Cargando frentes del proyecto...
+          </div>
+        )}
+
+        {frentes !== null && error && (
+          <div style={{ textAlign: 'center', padding: 60, color: '#c62828', fontSize: 14 }}>{error}</div>
+        )}
+
+        {frentes !== null && !error && cards.length === 0 && (
+          <div style={{ textAlign: 'center', padding: 60, color: '#888', fontSize: 14 }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>🏗️</div>
+            Este proyecto aún no tiene frentes 3D con modelos vinculados.<br />
+            Vincula modelos desde el Visor (Files → Importar) para que aparezcan aquí.
+          </div>
+        )}
+
         <div className="gateway-grid">
-          {fronts.map(f => (
-            <div 
-              key={f.id} 
+          {cards.map(f => (
+            <div
+              key={f.id}
               className={`gateway-card ${f.className}`}
               onClick={() => handleOpenFront(f)}
             >

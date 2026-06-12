@@ -8,7 +8,7 @@
  * - Layout JSX del explorador
  */
 import React from 'react';
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 
 // ── Fase 1: Hooks ──
 import { useFileExplorer } from '../hooks/useFileExplorer';
@@ -90,11 +90,9 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
           <div className="separator-line" style={{ width: 1, height: 20, background: '#eee', margin: '0 8px' }} />
           <div className="project-selector" style={{ fontSize: 14, fontWeight: 600, color: '#333', textTransform: 'uppercase' }}>
             <span>{project.name}</span>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 4 }}><path d="M7 10l5 5 5-5H7z"/></svg>
           </div>
         </div>
         <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div className="header-nav-item" style={{ width: 24, height: 24, borderRadius: '50%', background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#666', cursor: 'pointer' }}>?</div>
           <div className="header-user" style={{ position: 'relative' }}>
              <div className="header-avatar" onClick={() => fe.setProfileMenuOpen(!fe.profileMenuOpen)} style={{ width: 32, height: 32, borderRadius: '50%', background: '#ff6b35', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{getInitials(user.name)}</div>
              {fe.profileMenuOpen && (
@@ -129,6 +127,8 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                 { label: 'Informes', mode: 'reports', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg>, onClick: () => fe.setSidebarView('reports') },
                 { label: 'Miembros', mode: 'members', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>, onClick: () => { fe.setSidebarView('members'); fe.setMembersLoading(true); apiFetch(`${API}/api/users`).then(r => r.json()).then(d => fe.setMembersList(d.users || d || [])).catch(() => fe.setMembersList([])).finally(() => fe.setMembersLoading(false)); } },
                 { label: 'Configuración', mode: 'settings', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>, onClick: () => fe.setSidebarView('settings') },
+                // Sala de Cuarentena ISO 19650: solo admins (las acciones dentro son destructivas)
+                ...(isAdmin ? [{ label: 'Cuarentena', mode: 'quarantine', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>, onClick: () => fe.setSidebarView('quarantine') }] : []),
               ].map((item, idx) => (
                 <li key={idx} style={{ marginBottom: 2 }}>
                   <button onClick={() => { if (item.onClick) item.onClick(); }}
@@ -263,17 +263,12 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
             {!fe.isTrashMode && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #dcdcdc' }}>
                 <div style={{ display: 'flex', gap: 32 }}>
-                  <div style={{ paddingBottom: 8, fontSize: 13, borderBottom: '2px solid #0696d7', color: '#0696d7', fontWeight: 600, cursor: 'pointer' }}>Carpetas</div>
-                  <div style={{ paddingBottom: 8, fontSize: 13, color: '#999', cursor: 'pointer' }}>Conjuntos</div>
+                  <div style={{ paddingBottom: 8, fontSize: 13, borderBottom: '2px solid #0696d7', color: '#0696d7', fontWeight: 600 }}>Carpetas</div>
                 </div>
                 <div style={{ display: 'flex', gap: 20, paddingBottom: 8 }}>
                    <button onClick={() => fe.switchMode(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer', padding: '4px 8px', borderRadius: 4 }}>
                      <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11 15H5a2.25 2.25 0 0 1-2.25-2.25V5.72a.75.75,0,0,1 1.5 0v7.07a.74.74,0,0,0 .75.75h6a.74.74,0,0,0 .75-.75V5.72a.75.75,0,0,1 1.5 0v7.07A2.25 2.25 0 0 1 11 15Zm3-12h-3a2.26 2.26 0 0 0-2.24-2h-1.5A2.26 2.26 0 0 0 5 3H2a.75.75,0,0,0 0 1.5h12A.75.75,0,0,0,14 3Zm-3.75 8V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Zm-3 0V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Z"></path></svg>
                      Elementos suprimidos
-                   </button>
-                   <button style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer' }}>
-                     <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M14.75 3.53a.76.76,0,0,1-.75.75H7.18a1.78,1.78,0,0,1-3.25,0H2a.75.75,0,0,1,0-1.5h1.93a1.78,1.78,0,0,1,3.25,0H14a.75.75,0,0,1,.75.75ZM14 12.1H7.18a1.79,1.79,0,0,0-3.25,0H2a.75.75,0,0,0,0,1.5h1.93a1.78,1.78,0,0,0,3.25,0H14a.75.75,0,0,0,0-1.5Zm0-4.64h-1.91a1.8,1.8,0,0,0-1.64-1.06 1.78,1.78,0,0,0-1.63,1.06H2A.75.75,0,0,0,2,9h6.84a1.77,1.77,0,0,0,1.61,1 1.8,1.8,0,0,0,1.62-1H14a.75.75,0,0,0,0-1.5Z"></path></svg>
-                     Configuración
                    </button>
                 </div>
               </div>
@@ -292,13 +287,13 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                        for (const id of fe.selectedDeletedIds) {
                          try {
                            const res = await apiFetch(`${API}/api/docs/permanent-delete`, { method: 'DELETE', body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name }) });
-                           if (res.ok) deleted++; else { const errBody = await res.text(); alert('Error eliminando: ' + errBody); }
-                         } catch (e) { alert('Error: ' + e.message); }
+                           if (res.ok) deleted++; else { const errBody = await res.text(); toast.error('Error eliminando: ' + errBody); }
+                         } catch (e) { toast.error('Error: ' + e.message); }
                        }
                        fe.setDeletedItems(prev => prev.filter(it => !fe.selectedDeletedIds.includes(it.id)));
                        fe.setSelectedDeletedIds([]);
                        fe.triggerRefresh(fe.currentPath);
-                       alert(deleted + ' de ' + count + ' eliminado(s) permanentemente.');
+                       toast.success(deleted + ' de ' + count + ' eliminado(s) permanentemente.');
                      }}
                      style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#d32f2f', color: '#fff', border: 'none', fontSize: 12, cursor: 'pointer', padding: '6px 14px', borderRadius: 4, fontWeight: 600 }}>
                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
@@ -318,7 +313,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                 collapseSignal={fe.collapseSignal} projectPrefix={projectPrefix} level={0} defaultExpanded={true}
                 isAdmin={isAdmin} onTreeRefresh={() => {}} onGlobalRefresh={(p) => { fe.triggerRefresh(fe.currentPath); if (p) fe.navigate(p); }}
                 refreshSignal={fe.refreshSignal} onInitiateMove={(items) => fe.setMoveState({ step: 1, items, destPath: '' })}
-                onRowMenu={(item, e) => { if (isAdmin) { fe.setRightClickedId(item.id); fe.setActiveRowMenu({ item, x: e.clientX, y: e.clientY, source: 'sidebar' }); } }}
+                onRowMenu={(item, e) => { fe.setRightClickedId(item.id); fe.setActiveRowMenu({ item, x: e.clientX, y: e.clientY, source: 'sidebar' }); }}
                 editingNodeId={fe.editingNodeId} setEditingNodeId={fe.setEditingNodeId}
                 rightClickedId={fe.rightClickedId} processingIds={fe.processingIds} setProcessingIds={fe.setProcessingIds}
                 creatingChildParentId={fe.creatingChildParentId} setCreatingChildParentId={fe.setCreatingChildParentId}
@@ -334,14 +329,11 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
             {/* DATA PANEL */}
             <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <div className="acc-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#fff', borderBottom: '1px solid #eee', flexShrink: 0 }}>
-                <div style={{ display: 'flex' }}>
-                   <button onClick={() => fe.setShowUploadModal(true)} style={{ padding: '6px 16px', background: '#0696D7', color: '#fff', border: 'none', borderRadius: '4px 0 0 4px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Cargar archivos</button>
-                   <button onClick={() => fe.setShowUploadModal(true)} style={{ padding: '6px 8px', background: '#0696D7', color: '#fff', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.3)', borderRadius: '0 4px 4px 0', cursor: 'pointer' }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5H7z"/></svg>
-                   </button>
-                </div>
+                {isAdmin && (
+                  <button onClick={() => fe.setShowUploadModal(true)} style={{ padding: '6px 16px', background: '#0696D7', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Cargar archivos</button>
+                )}
 
-                {!fe.isTrashMode && fe.selected.size > 0 && (
+                {!fe.isTrashMode && isAdmin && fe.selected.size > 0 && (
                   <>
                     <button onClick={() => {
                         const itemsToMove = Array.from(fe.selected);
@@ -361,7 +353,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                       const ids = [...fe.selectedDeletedIds];
                       const newRestoring = { ...fe.restoringIds }; ids.forEach(id => { newRestoring[id] = true; }); fe.setRestoringIds(newRestoring);
                       setTimeout(async () => {
-                        try { const res = await Promise.all(ids.map(id => apiFetch(`${API}/api/docs/restore`, { method: 'POST', body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name }) }))); if (!res.every(r => r.ok)) alert("No se pudieron restaurar algunos archivos."); } catch(e) { alert("Error de conexión al restaurar"); }
+                        try { const res = await Promise.all(ids.map(id => apiFetch(`${API}/api/docs/restore`, { method: 'POST', body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name }) }))); if (!res.every(r => r.ok)) toast.error("No se pudieron restaurar algunos archivos."); } catch(e) { toast.error("Error de conexión al restaurar"); }
                         fe.setDeletedItems(prev => prev.filter(it => !ids.includes(it.id))); fe.setSelectedDeletedIds([]); fe.setRestoringIds(prev => { const c = {...prev}; ids.forEach(id => { delete c[id]; }); return c; }); fe.triggerRefresh(fe.currentPath);
                       }, 1000);
                     }} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #747775', borderRadius: 4, color: '#1f1f1f', fontSize: 13, fontWeight: 500, padding: '6px 12px', cursor: 'pointer' }}>
@@ -374,18 +366,47 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                   <input type="text" placeholder="Buscar y filtrar" value={fe.searchQuery} onChange={e => fe.setSearchQuery(e.target.value)} style={{ width: '100%', height: 32, paddingLeft: 30, paddingRight: 8, border: '1px solid #ddd', borderRadius: 4, fontSize: 13, outline: 'none' }} />
                 </div>
 
-                <div style={{ display: 'flex', gap: 12, marginLeft: 'auto', alignItems: 'center' }}>
-                    <button className="row-action-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
-                    <button className="row-action-btn" style={{ color: '#0696D7' }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg></button>
-                </div>
               </div>
+
+              {/* BREADCRUMBS — ruta actual con navegación clickeable */}
+              {!fe.isTrashMode && (() => {
+                const rel = fe.currentPath.startsWith(projectPrefix)
+                  ? fe.currentPath.slice(projectPrefix.length).replace(/^\/+|\/+$/g, '')
+                  : '';
+                const segments = rel ? rel.split('/') : [];
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, padding: '8px 16px', fontSize: 13, background: '#fafbfc', borderBottom: '1px solid #f0f0f0', flexShrink: 0 }}>
+                    <span
+                      onClick={() => fe.navigate(projectPrefix + '/', null)}
+                      style={{ cursor: segments.length ? 'pointer' : 'default', color: segments.length ? '#0696d7' : '#333', fontWeight: segments.length ? 500 : 600 }}
+                    >
+                      Archivos de proyecto
+                    </span>
+                    {segments.map((seg, i) => {
+                      const isLast = i === segments.length - 1;
+                      const pathTo = projectPrefix + '/' + segments.slice(0, i + 1).join('/') + '/';
+                      return (
+                        <React.Fragment key={pathTo}>
+                          <span style={{ color: '#bbb' }}>/</span>
+                          <span
+                            onClick={() => { if (!isLast) fe.navigate(pathTo, null); }}
+                            style={{ cursor: isLast ? 'default' : 'pointer', color: isLast ? '#333' : '#0696d7', fontWeight: isLast ? 600 : 500 }}
+                          >
+                            {seg}
+                          </span>
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 {fe.loading ? (
                     <div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
                 ) : fe.isTrashMode ? (
                     <DeletedTable items={fe.deletedItems} selectedIds={fe.selectedDeletedIds} onToggle={fe.setSelectedDeletedIds}
-                      onRestore={(id) => { fe.setRestoringIds(prev => ({ ...prev, [id]: true })); setTimeout(async () => { try { const res = await apiFetch(`${API}/api/docs/restore`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name }) }); if (!res.ok) { const errData = await res.json().catch(() => ({})); alert(errData.error || "No se pudo restaurar."); } } catch(e) { alert("Error de conexión al restaurar"); } fe.setDeletedItems(prev => prev.filter(it => it.id !== id)); fe.setSelectedDeletedIds(prev => prev.filter(x => x !== id)); fe.setRestoringIds(prev => { const c = {...prev}; delete c[id]; return c; }); fe.triggerRefresh(fe.currentPath); }, 1000); }}
+                      onRestore={(id) => { fe.setRestoringIds(prev => ({ ...prev, [id]: true })); setTimeout(async () => { try { const res = await apiFetch(`${API}/api/docs/restore`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name }) }); if (!res.ok) { const errData = await res.json().catch(() => ({})); toast.error(errData.error || "No se pudo restaurar."); } } catch(e) { toast.error("Error de conexión al restaurar"); } fe.setDeletedItems(prev => prev.filter(it => it.id !== id)); fe.setSelectedDeletedIds(prev => prev.filter(x => x !== id)); fe.setRestoringIds(prev => { const c = {...prev}; delete c[id]; return c; }); fe.triggerRefresh(fe.currentPath); }, 1000); }}
                       getInitials={getInitials} restoringIds={fe.restoringIds} />
                 ) : (
                     <MatrixTable folders={fe.filteredFolders} files={fe.filteredFiles} selected={fe.selected}
@@ -395,11 +416,11 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                       onRename={async (item, newName) => { fe.setProcessingIds(prev => ({ ...prev, [item.id]: true })); if (item.type === 'folder') fe.setFolders(prev => prev.map(f => f.id === item.id ? { ...f, name: newName } : f)); else fe.setFiles(prev => prev.map(f => f.id === item.id ? { ...f, name: newName } : f)); try { const res = await apiFetch(`${API}/api/docs/rename`, { method: 'POST', body: JSON.stringify({ node_id: item.id, new_name: newName, model_urn: projectPrefix }) }); if (res.ok) fe.setRefreshSignal(s => s + 1); else fe.triggerRefresh(fe.currentPath); } catch (e) { fe.triggerRefresh(fe.currentPath); } finally { fe.setProcessingIds(prev => { const n = {...prev}; delete n[item.id]; return n; }); } }}
                       formatSize={formatSize} formatDate={formatDate} getInitials={getInitials} user={user} isAdmin={isAdmin}
                       isTrashMode={fe.isTrashMode} onShowVersions={vh.onShowVersions}
-                      onRowMenu={(item, e) => { if (isAdmin) { fe.setRightClickedId(item.id); fe.setActiveRowMenu({ item, x: e.clientX, y: e.clientY, source: 'table' }); } }}
+                      onRowMenu={(item, e) => { fe.setRightClickedId(item.id); fe.setActiveRowMenu({ item, x: e.clientX, y: e.clientY, source: 'table' }); }}
                       editingNodeId={fe.editingNodeId} setEditingNodeId={fe.setEditingNodeId} processingIds={fe.processingIds}
                       rightClickedId={fe.rightClickedId} startResizing={startResizing} setSelected={fe.setSelected}
                       renderFileIconSop={renderFileIconSop}
-                      onStatusChange={async (item, newStatus) => { fe.setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: newStatus } : f)); try { const res = await apiFetch(`${API}/api/docs/batch`, { method: 'POST', body: JSON.stringify({ items: [item.id], action: 'SET_STATUS', status: newStatus, model_urn: projectPrefix, user: user?.name }) }); if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error || 'Error al cambiar estado'); fe.triggerRefresh(fe.currentPath); } } catch (e) { fe.triggerRefresh(fe.currentPath); } }}
+                      onStatusChange={async (item, newStatus) => { fe.setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: newStatus } : f)); try { const res = await apiFetch(`${API}/api/docs/batch`, { method: 'POST', body: JSON.stringify({ items: [item.id], action: 'SET_STATUS', status: newStatus, model_urn: projectPrefix, user: user?.name }) }); if (!res.ok) { const err = await res.json().catch(() => ({})); toast.error(err.error || 'Error al cambiar estado'); fe.triggerRefresh(fe.currentPath); } } catch (e) { fe.triggerRefresh(fe.currentPath); } }}
                     />
                 )}
               </div>
@@ -429,7 +450,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
         onRename={(data) => fe.setEditingNodeId(data)}
         onShare={(item) => { fe.setShareTarget(item); fe.setShowShareModal(true); }}
         onMove={(item) => fe.setMoveState({ step: 1, items: [item.name], itemIds: [item.id || item.fullName], destPath: '', destId: null })}
-        onDelete={fe.deleteSpecificItem} />
+        onDelete={(fullName, id) => { fe.setDeleteTask({ ids: [], count: 1, single: { fullName, id } }); fe.setShowDeleteModal(true); }} />
 
       <NewFolderModal isOpen={fe.showNewFolder} folderName={fe.folderName} onFolderNameChange={fe.setFolderName} onCreate={fe.createFolder} onClose={() => fe.setShowNewFolder(false)} />
 

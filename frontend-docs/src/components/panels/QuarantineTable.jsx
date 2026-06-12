@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { formatSize, formatDate } from '../../utils/helpers';
 import { renderFileIconSop } from '../../utils/fileIcons';
 import { apiFetch } from '../../utils/apiFetch';
@@ -54,10 +55,10 @@ export default function QuarantineTable({ projectPrefix, API, isAdmin, user }) {
         // Remover el archivo de la vista actual tras éxito
         setFiles(prev => prev.filter(f => f.id !== id));
       } else {
-        alert("Error: " + (data.error || "Operación fallida"));
+        toast.error(data.error || "Operación fallida");
       }
     } catch (err) {
-      alert("Error de red: " + err.message);
+      toast.error("Error de red: " + err.message);
     }
   };
 

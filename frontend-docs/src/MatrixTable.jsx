@@ -163,6 +163,13 @@ const TableRow = ({ index, style, data }) => {
   const isSelected = selected.has(item.fullName);
   const isGrey = item.has_access === false;
 
+  // Abrir elemento: carpeta navega, archivo abre el visor
+  const openItem = () => {
+    if (isGrey) return;
+    if (isFolder) navigate(item.fullName, item.id);
+    else setActiveFile(item);
+  };
+
   const handleSave = () => {
     if (tempDesc !== (item.description || '')) {
       onUpdateDescription(item, tempDesc);
@@ -213,6 +220,15 @@ const TableRow = ({ index, style, data }) => {
         pointerEvents: processingIds[item.id] ? 'none' : 'auto',
         color: isGrey ? '#999' : 'inherit',
         transition: 'all 0.4s ease'
+      }}
+      onClick={() => {
+        // Clic en la fila = seleccionar (como ACC/Drive); doble clic = abrir
+        if (isGrey || isEditingName || isEditing) return;
+        toggle(item.fullName);
+      }}
+      onDoubleClick={() => {
+        if (isEditingName || isEditing) return;
+        openItem();
       }}
       onContextMenu={(e) => {
         if (isGrey) {
@@ -304,10 +320,9 @@ const TableRow = ({ index, style, data }) => {
                 textOverflow: 'ellipsis', 
                 whiteSpace: 'nowrap'
               }}
-              onClick={() => {
-                if (isGrey) return;
-                setActiveFile(item);
-                if (isFolder) navigate(item.fullName, item.id);
+              onClick={(e) => {
+                e.stopPropagation();
+                openItem();
               }}
             >
               {item.name || 'Sin nombre'}
@@ -327,10 +342,15 @@ const TableRow = ({ index, style, data }) => {
       </div>
       
       {!isTrashMode && (
-        <div 
-          className="td-cell description-cell-editable" 
+        <div
+          className="td-cell description-cell-editable"
           style={{ width: columnWidths.description, position: 'relative' }}
-          onClick={() => setIsEditing(true)}
+          onClick={(e) => {
+            // Editar descripción: solo admin con acceso; el clic no debe alterar la selección
+            if (!isAdmin || isGrey) return;
+            e.stopPropagation();
+            setIsEditing(true);
+          }}
         >
           {isEditing ? (
             <div className="inline-edit-box" onClick={(e) => e.stopPropagation()}>
@@ -373,9 +393,11 @@ const TableRow = ({ index, style, data }) => {
           ) : (
             <>
               <span className="description-text-value">{item.description || ''}</span>
-              <svg className="pencil-icon-acc" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0696d7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-              </svg>
+              {isAdmin && !isGrey && (
+                <svg className="pencil-icon-acc" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0696d7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                </svg>
+              )}
             </>
           )}
         </div>
@@ -408,10 +430,9 @@ const TableRow = ({ index, style, data }) => {
                <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                  <span style={{ fontSize: 13, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                     {typeof item.updated_by === 'object' && item.updated_by !== null
-                      ? (item.updated_by.name || 'Usuario') 
+                      ? (item.updated_by.name || 'Usuario')
                       : String(item.updated_by || 'ADMIN')}
                  </span>
-                 <span style={{ fontSize: 11, color: '#999', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>Trial account ysan...</span>
                </div>
             </div>
           </div>
@@ -422,70 +443,7 @@ const TableRow = ({ index, style, data }) => {
                 isAdmin={isAdmin}
                 onStatusChange={onStatusChange}
               />
-            )}{/*
-              const cfg = STATUS_CONFIG[st] || STATUS_CONFIG.WIP;
-              const transitions = VALID_TRANSITIONS[st] || [];
-              const [showDrop, setShowDrop] = useState(false);
-              const dropRef = useRef(null);
-              useEffect(() => {
-                const handleClickOutside = (e) => {
-                  if (dropRef.current && !dropRef.current.contains(e.target)) setShowDrop(false);
-                };
-                if (showDrop) document.addEventListener('mousedown', handleClickOutside);
-                return () => document.removeEventListener('mousedown', handleClickOutside);
-              }, [showDrop]);
-              return (
-                <div ref={dropRef} style={{ position: 'relative' }}>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); if (isAdmin && transitions.length > 0) setShowDrop(!showDrop); }}
-                    style={{
-                      background: cfg.bg, color: cfg.color, border: 'none',
-                      borderRadius: 12, padding: '2px 10px', fontSize: 11, fontWeight: 600,
-                      cursor: isAdmin && transitions.length > 0 ? 'pointer' : 'default',
-                      whiteSpace: 'nowrap', lineHeight: '20px',
-                    }}
-                    title={isAdmin && transitions.length > 0 ? 'Clic para cambiar estado' : cfg.label}
-                  >
-                    {cfg.label}{isAdmin && transitions.length > 0 ? ' ▾' : ''}
-                  </button>
-                  {showDrop && (
-                    <div style={{
-                      position: 'absolute', top: '100%', left: 0, zIndex: 9999,
-                      background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6,
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.12)', minWidth: 130, marginTop: 4,
-                      overflow: 'hidden',
-                    }}>
-                      {transitions.map(nextSt => {
-                        const nextCfg = STATUS_CONFIG[nextSt];
-                        return (
-                          <button
-                            key={nextSt}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShowDrop(false);
-                              if (onStatusChange) onStatusChange(item, nextSt);
-                            }}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                              padding: '8px 12px', border: 'none', background: 'none',
-                              cursor: 'pointer', fontSize: 12, color: '#333', textAlign: 'left',
-                            }}
-                            onMouseEnter={(e) => e.target.style.background = '#f3f4f6'}
-                            onMouseLeave={(e) => e.target.style.background = 'none'}
-                          >
-                            <span style={{
-                              width: 8, height: 8, borderRadius: '50%',
-                              background: nextCfg.color, flexShrink: 0,
-                            }} />
-                            {nextCfg.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            */}
+            )}
           </div>
         </>
       )}
@@ -547,9 +505,10 @@ const MatrixTable = ({
           <div className="td-cell checkbox-cell td-frozen-left" style={{ width: columnWidths.checkbox, left: 0 }}>
             <input
               type="checkbox"
-              checked={selected.size === allItems.length && allItems.length > 0}
+              checked={allItems.length > 0 && allItems.every(i => selected.has(i.fullName))}
               onChange={() => {
-                if (selected.size === allItems.length) setSelected(new Set());
+                const allChecked = allItems.length > 0 && allItems.every(i => selected.has(i.fullName));
+                if (allChecked) setSelected(new Set());
                 else setSelected(new Set(allItems.map(i => i.fullName)));
               }}
             />
@@ -601,12 +560,7 @@ const MatrixTable = ({
             </>
           )}
           {!isTrashMode && (
-            <div className="td-cell" style={{ width: columnWidths.action, textAlign: 'center', justifyContent: 'center' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ cursor: 'pointer', opacity: 0.7 }}>
-                <circle cx="12" cy="12" r="3"></circle>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-              </svg>
-            </div>
+            <div className="td-cell" style={{ width: columnWidths.action }} />
           )}
         </div>
  

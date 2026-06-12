@@ -4,6 +4,7 @@
  * Extraído de App.jsx líneas 2824-3001
  */
 import React from 'react';
+import toast from 'react-hot-toast';
 import { apiFetch } from '../../utils/apiFetch';
 import { API, getInitials } from '../../utils/helpers';
 
@@ -43,26 +44,18 @@ export default function ShareModal({
         setShareLinkCopied(true);
         setTimeout(() => setShareLinkCopied(false), 3000);
       } else {
-        alert("Error al generar el enlace.");
+        toast.error("Error al generar el enlace.");
       }
     } catch (e) {
       console.error(e);
-      alert("Error de conexión al generar el enlace.");
+      toast.error("Error de conexión al generar el enlace.");
     }
   };
 
+  // "Listo" solo cierra: el enlace se crea únicamente al pulsar "Copiar enlace"
+  // (antes disparaba un segundo POST silencioso que duplicaba el share)
   const handleDone = () => {
     onClose();
-    apiFetch(`${API}/api/docs/share`, {
-      method: 'POST',
-      body: JSON.stringify({
-        node_id: shareTarget.id,
-        model_urn: projectPrefix,
-        shared_by: user?.email || 'Unknown',
-        role: shareGeneralRole,
-        access_type: shareGeneralAccess
-      })
-    }).catch(e => console.error(e));
   };
 
   return (
@@ -70,10 +63,7 @@ export default function ShareModal({
       <div className="share-modal-box" onClick={e => e.stopPropagation()}>
         <div className="share-header">
           <h2>Compartir "{shareTarget.name.replace(/\/$/, '')}"</h2>
-          <div className="share-header-actions">
-            <button className="share-icon-btn" title="Ayuda"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></button>
-            <button className="share-icon-btn" title="Configuración"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
-          </div>
+          <div className="share-header-actions" />
         </div>
 
         <div className="share-input-wrapper" style={{ position: 'relative' }}>

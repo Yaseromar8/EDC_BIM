@@ -281,7 +281,7 @@ export function useFileExplorer(project, user) {
         triggerRefresh();
       } else {
         const err = await res.json();
-        alert("Error: " + (err.error || "No se pudo crear la carpeta"));
+        toast.error(err.error || "No se pudo crear la carpeta");
       }
     } catch (e) { console.error(e); }
     finally {
@@ -332,12 +332,12 @@ export function useFileExplorer(project, user) {
         });
         if (!res.ok) {
           const errData = await res.json();
-          alert(errData.error || "Error al desplazar");
+          toast.error(errData.error || "Error al desplazar");
           break;
         }
       } catch (e) {
         console.error(e);
-        alert("Error de red al desplazar");
+        toast.error("Error de red al desplazar");
         break;
       }
     }
@@ -365,6 +365,14 @@ export function useFileExplorer(project, user) {
   };
 
   const confirmBatchDelete = async () => {
+    // Borrado individual confirmado (desde el menú contextual)
+    if (deleteTask.single) {
+      setShowDeleteModal(false);
+      const { fullName, id } = deleteTask.single;
+      setDeleteTask({ ids: [], count: 0 });
+      await deleteSpecificItem(fullName, id);
+      return;
+    }
     const itemIds = deleteTask.ids;
     if (itemIds.length === 0) return;
     setShowDeleteModal(false);
@@ -391,11 +399,11 @@ export function useFileExplorer(project, user) {
         triggerRefresh();
       } else {
         const errData = await res.json();
-        alert(errData.error || "Error al suprimir elementos");
+        toast.error(errData.error || "Error al suprimir elementos");
       }
     } catch (e) {
       console.error(e);
-      alert("Error de conexión al suprimir elementos");
+      toast.error("Error de conexión al suprimir elementos");
     } finally {
       setProcessingIds(prev => {
         const n = { ...prev };
@@ -416,7 +424,11 @@ export function useFileExplorer(project, user) {
 
   // ── Upload Handler ──
   const handleSopUpload = async (fileList) => {
-    if (!isAdmin || !fileList?.length) return;
+    if (!isAdmin) {
+      toast.error('Solo los administradores pueden cargar archivos.');
+      return;
+    }
+    if (!fileList?.length) return;
     setShowUploadModal(true);
     chunkedUpload.addFiles(fileList, currentPath);
   };
