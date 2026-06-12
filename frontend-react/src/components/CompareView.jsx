@@ -221,17 +221,30 @@ export default function CompareView({ BACKEND_URL, onExit }) {
         if (chk.extracted) return;
 
         // 0) Asegurar que la version este TRADUCIDA en ACC (las versiones viejas
-        //    pueden no tener SVF; aqui se dispara la traduccion y se espera).
-        for (let i = 0; i < 60; i++) {                        // hasta ~10 min
+        //    pueden no tener SVF). Disparamos la traduccion UNA sola vez (force) y
+        //    luego solo consultamos el estado -> sin bucle de re-disparo.
+        let triggered = false;
+        for (let i = 0; i < 90; i++) {                        // ~15 min de techo
             const prep = await apiFetch(`${BACKEND_URL}/api/compare/prepare-version`, {
-                method: 'POST', body: JSON.stringify({ urn })
+                method: 'POST', body: JSON.stringify({ urn, force: !triggered })
             }).then(r => r.json());
+            triggered = true;  // ya disparamos (o consultamos) la primera vez
+
+            if (prep.error) throw new Error(`${label}: ${prep.error}`);
             if (prep.status === 'ready') break;
-            if (prep.status === 'failed' || prep.error) {
-                throw new Error(`${label}: esa versión no se pudo traducir en Autodesk (${prep.detail || prep.error}). Prueba con otra versión.`);
+
+            if (prep.status === 'translating') {
+                const pct = prep.progress ? ` ${prep.progress}` : '';
+                setStatus(`Traduciendo ${label} en Autodesk…${pct} (versión histórica; la primera vez puede tardar)`);
+            } else {
+                // failed / not_translated DESPUES de haber forzado el disparo -> rendirse claro
+                throw new Error(
+                    `${label}: esa versión no se puede traducir en Autodesk (${prep.detail || 'archivo original no disponible'}). ` +
+                    `Suele pasar con versiones muy antiguas cuyo archivo ya fue archivado en ACC. ` +
+                    `Prueba con una versión más reciente o la actual.`
+                );
             }
-            setStatus(`Traduciendo ${label} en Autodesk… (versión histórica; puede tardar varios minutos)`);
-            await new Promise(r => setTimeout(r, 10000));
+            await new Promise(r => setTimeout(r, 8000));
         }
 
         setStatus(`Extrayendo metadata de ${label} (versión histórica)…`);

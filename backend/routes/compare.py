@@ -250,14 +250,16 @@ def compare_versions():
 
 @compare_bp.route('/api/compare/prepare-version', methods=['POST'])
 def compare_prepare_version():
-    """Prepara una version historica para comparar: verifica si esta TRADUCIDA
-    (manifest SVF). Si no lo esta (404 o failed), dispara la traduccion en ACC.
+    """Estado de traduccion (SVF) de una version, para poder comparar.
 
-    -> {status: 'ready' | 'translating' | 'failed', detail}
-    El frontend hace polling hasta 'ready' antes de extraer.
+    SOLO dispara la traduccion si llega force=true (el frontend la fuerza UNA vez).
+    Sin force, solo informa el estado -> evita el bucle de re-disparo infinito.
+
+    -> {status: 'ready'|'translating'|'failed'|'not_translated', progress, detail}
     """
     data = request.get_json(silent=True) or {}
     urn = data.get('urn')
+    force = bool(data.get('force'))
     if not urn:
         return jsonify({'error': 'Falta urn'}), 400
     try:
@@ -266,27 +268,49 @@ def compare_prepare_version():
         if err or not token:
             return jsonify({'error': 'Auth APS fallo'}), 502
 
+        def _trigger():
+            from routes.digital_twin import trigger_translation
+            ok = trigger_translation(urn, token)
+            logger.info(f"traduccion {'disparada' if ok else 'NO disparada'} para ...{urn[-14:]}")
+            return ok
+
         r = requests.get(
             f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn}/manifest",
             headers={'Authorization': f'Bearer {token}'}, timeout=15)
 
         if r.ok:
-            st = (r.json() or {}).get('status')
+            mani = r.json() or {}
+            st = mani.get('status')
             if st == 'success':
                 return jsonify({'status': 'ready'})
             if st in ('inprogress', 'pending'):
-                return jsonify({'status': 'translating', 'detail': f'Traduciendo ({st})'})
-            # failed/timeout -> reintentar traduccion abajo
-        elif r.status_code != 404:
-            return jsonify({'status': 'failed', 'detail': f'Manifest {r.status_code}'})
+                return jsonify({'status': 'translating', 'progress': mani.get('progress')})
+            if st == 'failed':
+                if force:
+                    _trigger()
+                    return jsonify({'status': 'translating', 'detail': 'reintentando traduccion'})
+                # Extraer el motivo (ej. "Tr worker fail to download" = archivo no disponible)
+                detail = 'la traduccion falló en Autodesk'
+                for der in mani.get('derivatives', []):
+                    for m in der.get('messages', []):
+                        if m.get('type') == 'error':
+                            detail = str(m.get('message', detail))
+                            break
+                return jsonify({'status': 'failed', 'detail': detail})
+            # estado raro: tratar como no traducida
+        elif r.status_code == 404:
+            if force:
+                return jsonify({'status': 'translating', 'detail': 'traduccion iniciada'}) if _trigger() \
+                    else jsonify({'status': 'failed', 'detail': 'no se pudo iniciar la traduccion'})
+            return jsonify({'status': 'not_translated'})
+        else:
+            return jsonify({'status': 'failed', 'detail': f'manifest HTTP {r.status_code}'})
 
-        # Sin manifest (version nunca traducida) o failed -> disparar traduccion
-        from routes.digital_twin import trigger_translation
-        ok = trigger_translation(urn, token)
-        if ok:
-            logger.info(f"traduccion disparada para version historica ...{urn[-16:]}")
-            return jsonify({'status': 'translating', 'detail': 'Traduccion iniciada en Autodesk'})
-        return jsonify({'status': 'failed', 'detail': 'No se pudo iniciar la traduccion'})
+        # fallback: no traducida
+        if force:
+            return jsonify({'status': 'translating', 'detail': 'traduccion iniciada'}) if _trigger() \
+                else jsonify({'status': 'failed', 'detail': 'no se pudo iniciar la traduccion'})
+        return jsonify({'status': 'not_translated'})
     except Exception as e:
         logger.error(f"prepare-version fallo: {e}")
         return jsonify({'error': str(e)}), 500
