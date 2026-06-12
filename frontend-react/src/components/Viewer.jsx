@@ -34,20 +34,6 @@ const getDocTexture = () => {
     return tex;
 };
 
-const getDaluxTexture = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128; canvas.height = 128;
-    const ctx = canvas.getContext('2d');
-    ctx.beginPath(); ctx.arc(64, 64, 50, 0, 2 * Math.PI);
-    ctx.fillStyle = '#ffffff'; ctx.fill();
-    ctx.beginPath(); ctx.arc(64, 64, 42, 0, 2 * Math.PI);
-    ctx.fillStyle = '#60a5fa'; ctx.fill();
-    ctx.beginPath(); ctx.arc(64, 64, 15, 0, 2 * Math.PI);
-    ctx.fillStyle = '#ffffff'; ctx.fill();
-    const tex = new window.THREE.Texture(canvas); tex.needsUpdate = true;
-    return tex;
-};
-
 const Viewer = ({
     models,
     hiddenModelUrns = [],
@@ -83,6 +69,7 @@ const Viewer = ({
     trackingTab,
 
     trackingData = { avance: [], fotos: [] },
+    trackingPinsVisible = true,
     trackingPlacementMode = false,
     onTrackingPinCreate,
     onTrackingPinClick,
@@ -719,6 +706,9 @@ const Viewer = ({
                     v.finish();
                 } catch (e) {
                     console.warn("Error finishing viewer:", e);
+                }
+                if (window.NOP_VIEWER === v) {
+                    window.NOP_VIEWER = null;
                 }
             }
         };
@@ -1752,7 +1742,9 @@ const Viewer = ({
             const currentPhotos = trackingData?.fotos || [];
 
             let icons = [];
-            if (trackingTab === 'avance') {
+            if (!trackingPinsVisible) {
+                // Ojo (mostrar/ocultar) apagado: limpiar marcadores sin perder data
+            } else if (trackingTab === 'avance') {
                 icons = currentProgress.map(i => ({ ...i, type: 'text', color: i.color || '#fbbf24' }));
             } else if (trackingTab === 'fotos') {
                 icons = currentPhotos.map(i => ({ ...i, type: 'icon', color: '#3b82f6' }));
@@ -1784,7 +1776,7 @@ const Viewer = ({
             // Optional cleanup
         };
 
-    }, [viewerReady, trackingTab, trackingData, onTrackingPinClick]);
+    }, [viewerReady, trackingTab, trackingData, trackingPinsVisible, onTrackingPinClick]);
 
     // --- Progressive Markers Logic ---
     useEffect(() => {
@@ -2372,27 +2364,14 @@ const Viewer = ({
             });
         }
 
-        // 3. Build Pin: Sprite (Dalux Style, uses module-level getDaluxTexture)
-        if (!spriteStylesRef.current.blueMat) {
-            const tex = getDaluxTexture();
-            spriteStylesRef.current.blueMat = new window.THREE.SpriteMaterial({
-                map: tex,
-                color: 0xffffff,
-                depthTest: false,
-                depthWrite: false
-            });
-        }
-
         const docMat = spriteStylesRef.current.docMat;
         const redMat = spriteStylesRef.current.redMat;
-        const blueMat = spriteStylesRef.current.blueMat; // Now a SpriteMaterial
         const alertGeom = spriteStylesRef.current.alertGeom || new window.THREE.SphereGeometry(1, 16, 16);
 
         const currentMeshes = spriteMeshesRef.current;
         const allItems = [
             ...(sprites || []).map(s => ({ ...s, type: 'alert' })),
-            ...(docPins || []).map(d => ({ ...d, type: 'doc' })),
-            ...(buildPins || []).map(b => ({ ...b, type: 'build', id: 'build-' + b.id }))
+            ...(docPins || []).map(d => ({ ...d, type: 'doc' }))
         ];
 
         const activeIds = new Set(allItems.map(i => i.id));
@@ -2411,9 +2390,6 @@ const Viewer = ({
 
         // Sync: Add/Update
         allItems.forEach(item => {
-            const isBuild = item.type === 'build';
-            if (isBuild && !showBuildPins) return; // Skip hidden build pins
-
             if (!currentMeshes[item.id]) {
                 const isDoc = item.type === 'doc';
                 let mesh;
@@ -2423,14 +2399,6 @@ const Viewer = ({
                     mesh = new window.THREE.Sprite(docMat);
                     // Scale Sprite
                     const s = pinSize * 2.5;
-                    mesh.scale.set(s, s, 1);
-                } else if (isBuild) {
-                    // Sprite for Build (Dalux Style)
-                    mesh = new window.THREE.Sprite(blueMat);
-                    // Scale Sprite: Huge scale for Infraworks (often KM based)
-                    // Try a very large base scale, or make it relative to model bounds if possible.
-                    // For now, let's try 50x general pin size.
-                    const s = pinSize * 50;
                     mesh.scale.set(s, s, 1);
                 } else {
                     // Sphere for Alerts (Red)

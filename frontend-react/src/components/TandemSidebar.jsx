@@ -69,6 +69,9 @@ const TandemSidebar = ({
     onTrackingPinDelete,
     onTrackingPlacementToggle,
     trackingPlacementMode,
+    trackingPinsVisible = true,
+    onToggleTrackingPins,
+    onTrackingPinRename,
     selectedPinId,
     onCameraCapture,
     onPinMoveRequest, // New Prop
@@ -231,43 +234,37 @@ const TandemSidebar = ({
                 <DocsPanel selectedElement={selectedElement} />
             )}
 
-            {activePanel === 'progress' && (
-                <BuildPanel
-                    pins={trackingData ? [
-                        ...(trackingData.avance || []),
-                        ...(trackingData.docs || []),
-                        ...(trackingData.fotos || []),
-                        ...(trackingData.restricciones || []),
-                        ...(trackingData.maquinaria || [])
-                    ] : []}
-                    onPinSelect={(id) => {
-                        // Tag pins with their category type so the click handler knows which panel to open
-                        const allPins = [
-                            ...(trackingData.avance || []).map(p => ({ ...p, _trackingType: 'avance' })),
-                            ...(trackingData.docs || []).map(p => ({ ...p, _trackingType: 'docs' })),
-                            ...(trackingData.fotos || []).map(p => ({ ...p, _trackingType: 'fotos' })),
-                            ...(trackingData.restricciones || []).map(p => ({ ...p, _trackingType: 'restricciones' })),
-                            ...(trackingData.maquinaria || []).map(p => ({ ...p, _trackingType: 'maquinaria' }))
-                        ];
-                        const found = allPins.find(p => p.id === id);
-                        if (found && onTrackingPinClick) onTrackingPinClick(found);
-                    }}
-                    onPinDelete={onTrackingPinDelete}
-                    placementMode={trackingPlacementMode}
-                    onTogglePlacement={(type) => {
-                        // type comes from BuildPanel ('avance', 'docs', 'restriction')
-                        // We need to map 'restriction' back to App's 'restricciones' tab?
-                        // Actually, App.jsx uses trackingTab to know what to create.
-                        // So if we are in progress mode, we should set the tab.
-                        if (onTrackingPlacementToggle) onTrackingPlacementToggle(type);
-                    }}
-                    showPins={true} // Defaulting to true for now
-                    onTogglePins={() => { }} // Placeholder
-                    selectedPinId={selectedPinId}
-                    onCameraCapture={onCameraCapture}
-                    onPinMoveRequest={onPinMoveRequest}
-                />
-            )}
+            {activePanel === 'progress' && (() => {
+                // Un solo array etiquetado con la categoría real de cada pin
+                const taggedPins = trackingData ? [
+                    ...(trackingData.avance || []).map(p => ({ ...p, _trackingType: 'avance' })),
+                    ...(trackingData.fotos || []).map(p => ({ ...p, _trackingType: 'fotos' })),
+                    ...(trackingData.docs || []).map(p => ({ ...p, _trackingType: 'docs' })),
+                    ...(trackingData.rfis || []).map(p => ({ ...p, _trackingType: 'rfis' })),
+                    ...(trackingData.restricciones || []).map(p => ({ ...p, _trackingType: 'restricciones' })),
+                    ...(trackingData.maquinaria || []).map(p => ({ ...p, _trackingType: 'maquinaria' }))
+                ] : [];
+                return (
+                    <BuildPanel
+                        pins={taggedPins}
+                        onPinSelect={(id) => {
+                            const found = taggedPins.find(p => String(p.id) === String(id));
+                            if (found && onTrackingPinClick) onTrackingPinClick(found);
+                        }}
+                        onPinDelete={onTrackingPinDelete}
+                        onPinRename={onTrackingPinRename}
+                        placementMode={trackingPlacementMode}
+                        onTogglePlacement={(type) => {
+                            if (onTrackingPlacementToggle) onTrackingPlacementToggle(type);
+                        }}
+                        showPins={trackingPinsVisible}
+                        onTogglePins={onToggleTrackingPins}
+                        selectedPinId={selectedPinId}
+                        onCameraCapture={onCameraCapture}
+                        onPinMoveRequest={onPinMoveRequest}
+                    />
+                );
+            })()}
 
 
 

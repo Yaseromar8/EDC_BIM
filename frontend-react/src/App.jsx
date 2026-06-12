@@ -728,7 +728,9 @@ function App() {
   // Seguimiento / Tracking State
   const [trackingTab, setTrackingTab] = useState(null); // 'avance' | 'fotos' | 'docs' | null
   const [trackingPlacementMode, setTrackingPlacementMode] = useState(false);
+  const [trackingPinsVisible, setTrackingPinsVisible] = useState(true); // Ojo global de pins de seguimiento
   const [relocatingPin, setRelocatingPin] = useState(null); // { id, type } — pin being moved
+  const [pinPrompt, setPinPrompt] = useState(null); // { pin, tab } — datos pendientes para crear pin (reemplaza prompt() nativo)
   // Placeholder Mock Data (Should match Viewer internal logic or pass down)
   const [trackingData, setTrackingData] = useState({
     avance: [],
@@ -2289,7 +2291,28 @@ function App() {
     }, 1500);
   };
 
+  // Categorías que el usuario puede CREAR desde la UI de seguimiento
   const VALID_TRACKING_CATEGORIES = ['avance', 'fotos', 'docs', 'rfis', 'restricciones'];
+  // Categorías existentes en data (maquinaria se crea por otro flujo pero debe poder editarse/borrarse)
+  const ALL_TRACKING_CATEGORIES = [...VALID_TRACKING_CATEGORIES, 'maquinaria'];
+
+  // Resuelve la categoría real de un pin buscándolo por id en trackingData
+  const findPinCategory = (pinId) => {
+    for (const t of ALL_TRACKING_CATEGORIES) {
+      if ((trackingData[t] || []).some(p => String(p.id) === String(pinId))) return t;
+    }
+    return null;
+  };
+
+  // Commit final de un pin nuevo (tras el modal si la categoría requiere texto)
+  const commitTrackingPin = (tab, pin) => {
+    setTrackingData(prev => {
+      const currentList = prev[tab] || [];
+      const updated = { ...prev, [tab]: [...currentList, pin] };
+      saveTrackingData(updated); // Sync to backend
+      return updated;
+    });
+  };
 
   const handleTrackingPinCreate = (newPin) => {
     // 🔒 Defensa estructural: Evita inyección de categorías no reconocidas
@@ -2298,42 +2321,28 @@ function App() {
       return;
     }
 
-    let pinsToAdd = [newPin];
-
-    if (trackingTab === 'avance') {
-      const partidaInfo = newPin.codigoPartida ? ` (Partida: ${newPin.codigoPartida})` : '';
-      const val = prompt(`Ingrese el porcentaje de avance${partidaInfo} (ej: 50%):`, "0%");
-      if (val === null) return;
-      pinsToAdd = [{ ...newPin, val, color: '#fbbf24' }];
-    } else if (trackingTab === 'docs') {
-      pinsToAdd = [{ ...newPin, docs: [], color: '#8b5cf6' }];
-    } else if (trackingTab === 'rfis') {
-      const val = prompt("Asunto del RFI:", "Nuevo RFI");
-      if (val === null) return;
-      pinsToAdd = [{ ...newPin, val, docs: [], color: '#ef4444', type: 'rfi' }];
-    } else if (trackingTab === 'restricciones') {
-      const val = prompt("Descripción breve de la restricción / alerta:", "Pendiente");
-      if (val === null) return;
-      pinsToAdd = [{ ...newPin, val, docs: [], color: '#f59e0b', type: 'restriction' }];
+    if (trackingTab === 'avance' || trackingTab === 'rfis' || trackingTab === 'restricciones') {
+      // Requieren texto del usuario: abrir modal propio (reemplaza prompt() nativo)
+      setPinPrompt({ pin: newPin, tab: trackingTab });
+      return;
     }
 
-
-    setTrackingData(prev => {
-      const currentList = prev[trackingTab] || [];
-      const updated = {
-        ...prev,
-        [trackingTab]: [...currentList, ...pinsToAdd]
-      };
-      saveTrackingData(updated); // Sync to backend
-      return updated;
-    });
+    if (trackingTab === 'docs') {
+      commitTrackingPin('docs', { ...newPin, docs: [], color: '#8b5cf6' });
+    } else {
+      // fotos (y cualquier categoría sin texto inicial)
+      commitTrackingPin(trackingTab, newPin);
+    }
   };
 
   const handleTrackingPinDelete = async (type, id) => {
-    if (!VALID_TRACKING_CATEGORIES.includes(type)) {
-      console.warn(`[Seguridad] Operación DELETE abortada, categoría no válida: ${type}`);
+    // Resolver la categoría real del pin (la pestaña activa puede no coincidir)
+    const actualType = findPinCategory(id) || type;
+    if (!ALL_TRACKING_CATEGORIES.includes(actualType)) {
+      console.warn(`[Seguridad] Operación DELETE abortada, categoría no válida: ${actualType}`);
       return;
     }
+    type = actualType;
 
     // Optimistic Update
     setTrackingData(prev => {
@@ -2359,7 +2368,7 @@ function App() {
 
   // Update a specific tracking pin (e.g., change codigoPartida, val/name, etc.)
   const handleTrackingPinUpdate = (type, pinId, updates) => {
-    if (!VALID_TRACKING_CATEGORIES.includes(type)) return;
+    if (!ALL_TRACKING_CATEGORIES.includes(type)) return;
 
     setTrackingData(prev => {
       // Ensure we are operating on the correct category (avance/docs/fotos/restricciones/rfis)
@@ -2433,13 +2442,24 @@ function App() {
   }, [trackingTab]);
 
   const handleTrackingPlacementToggle = (type) => {
+    // Sin tipo (cambio de pestaña, cancelación): apagar el modo colocación
+    if (!type) {
+      setTrackingPlacementMode(false);
+      return;
+    }
     const tabMap = {
-      'data': 'avance',
       'avance': 'avance',
+      'fotos': 'fotos',
       'docs': 'docs',
-      'restriction': 'restricciones'
+      'rfis': 'rfis',
+      'restriction': 'restricciones',
+      'restricciones': 'restricciones'
     };
-    const targetTab = tabMap[type] || 'avance';
+    const targetTab = tabMap[type];
+    if (!targetTab) {
+      console.warn(`[Seguimiento] Tipo de colocación no reconocido: ${type}`);
+      return;
+    }
 
     if (trackingTab === targetTab) {
       setTrackingPlacementMode(prev => !prev);
@@ -3083,21 +3103,19 @@ function App() {
             // Tracking / BuildPanel Props
             trackingData={trackingData}
             onTrackingPinClick={handleTrackingPinClick}
-            onTrackingPinDelete={(id) => handleTrackingPinDelete(trackingTab || 'restricciones', id)}
+            onTrackingPinDelete={(id) => handleTrackingPinDelete(findPinCategory(id), id)}
             onTrackingPlacementToggle={handleTrackingPlacementToggle}
             trackingPlacementMode={trackingPlacementMode}
+            trackingPinsVisible={trackingPinsVisible}
+            onToggleTrackingPins={() => setTrackingPinsVisible(prev => !prev)}
+            onTrackingPinRename={(pinId, newName) => {
+              const t = findPinCategory(pinId);
+              if (t) handleTrackingPinUpdate(t, pinId, { val: newName });
+            }}
             selectedPinId={selectedProgressPin?.id || selectedDocPin?.id || selectedAlbumPin?.id}
             onCameraCapture={handleCameraCapture}
             onPinMoveRequest={(pinId) => {
-              // Determine pin type from trackingData
-              const types = ['avance', 'fotos', 'docs', 'restricciones', 'rfis', 'maquinaria'];
-              let foundType = null;
-              for (const t of types) {
-                if ((trackingData[t] || []).some(p => String(p.id) === String(pinId))) {
-                  foundType = t;
-                  break;
-                }
-              }
+              const foundType = findPinCategory(pinId);
               if (foundType) {
                 setRelocatingPin({ id: pinId, type: foundType });
                 console.log(`[App] Modo Mover activado para pin ${pinId} (${foundType})`);
@@ -3275,48 +3293,51 @@ function App() {
             <div className="split-3d" style={{ position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               {/* 3D VIEWER - Hide when build is active */}
               <div style={{ flex: 1, minHeight: 0, position: 'relative', display: (activePanel === 'build') ? 'none' : 'block' }}>
-                <Viewer
-                  key={selectedProject?.id || 'viewer-default'}
-                  accessToken={accessToken}
-                  models={models}
-                  hiddenModelUrns={hiddenModelUrns}
-                  sprites={sprites}
-                  showSprites={showSprites}
-                  activeSpriteId={activeSpriteId}
-                  onSpriteSelect={handleSpriteSelect}
-                  onSpriteDelete={handleSpriteDelete}
-                  placementMode={spritePlacementActive}
-                  onPlacementComplete={handlePlacementComplete}
-                  onModelProperties={handleModelProperties}
-                  minimapActive={minimapActive}
-                  vrActive={vrActive}
-                  onSheetsLoaded={setSheets}
-                  activeSheet={activeSheet}
+                {!compareMode && (
+                  <Viewer
+                    key={selectedProject?.id || 'viewer-default'}
+                    accessToken={accessToken}
+                    models={models}
+                    hiddenModelUrns={hiddenModelUrns}
+                    sprites={sprites}
+                    showSprites={showSprites}
+                    activeSpriteId={activeSpriteId}
+                    onSpriteSelect={handleSpriteSelect}
+                    onSpriteDelete={handleSpriteDelete}
+                    placementMode={spritePlacementActive}
+                    onPlacementComplete={handlePlacementComplete}
+                    onModelProperties={handleModelProperties}
+                    minimapActive={minimapActive}
+                    vrActive={vrActive}
+                    onSheetsLoaded={setSheets}
+                    activeSheet={activeSheet}
 
-                  // Doc Pins Props
-                  docPins={docPins}
-                  docPlacementMode={docPlacementMode}
-                  onDocPlacementComplete={handleDocPinComplete}
-                  onDocPinSelect={handleDocPinSelect}
+                    // Doc Pins Props
+                    docPins={docPins}
+                    docPlacementMode={docPlacementMode}
+                    onDocPlacementComplete={handleDocPinComplete}
+                    onDocPinSelect={handleDocPinSelect}
 
-                  // Viewables / Proposals
-                  onViewablesLoaded={handleViewablesLoaded}
-                  activeViewableGuids={activeViewableGuids}
+                    // Viewables / Proposals
+                    onViewablesLoaded={handleViewablesLoaded}
+                    activeViewableGuids={activeViewableGuids}
 
-                  arMode={false}
+                    arMode={false}
 
-                  // SEGUIMIENTO PROPS
-                  trackingTab={trackingTab}
-                  trackingData={trackingData}
-                  trackingPlacementMode={trackingPlacementMode}
-                  onTrackingPinCreate={handleTrackingPinCreate}
-                  onTrackingPinClick={handleTrackingPinClick}
-                  relocatingPin={relocatingPin}
-                  onPinRelocateComplete={handlePinRelocateComplete}
-                  onSelectionChanged={setSelectedElement}
-                  aiModelCommand={aiModelCommand}
-                  hideToolbar={activePanel === 'progress'}
-                />
+                    // SEGUIMIENTO PROPS
+                    trackingTab={trackingTab}
+                    trackingData={trackingData}
+                    trackingPinsVisible={trackingPinsVisible}
+                    trackingPlacementMode={trackingPlacementMode}
+                    onTrackingPinCreate={handleTrackingPinCreate}
+                    onTrackingPinClick={handleTrackingPinClick}
+                    relocatingPin={relocatingPin}
+                    onPinRelocateComplete={handlePinRelocateComplete}
+                    onSelectionChanged={setSelectedElement}
+                    aiModelCommand={aiModelCommand}
+                    hideToolbar={activePanel === 'progress'}
+                  />
+                )}
 
                 {/* PIN RELOCATE BANNER */}
                 {relocatingPin && (
@@ -3357,6 +3378,85 @@ function App() {
                     </button>
                   </div>
                 )}
+
+                {/* MODAL CREACIÓN DE PIN (reemplaza prompt() nativo) */}
+                {pinPrompt && (() => {
+                  const cfg = {
+                    avance: {
+                      title: 'Nuevo punto de avance',
+                      label: pinPrompt.pin.codigoPartida ? `Porcentaje de avance (Partida: ${pinPrompt.pin.codigoPartida})` : 'Porcentaje de avance',
+                      placeholder: 'Ej: 50%',
+                      defaultVal: '0%',
+                      accent: '#22c55e',
+                      build: (val) => ({ ...pinPrompt.pin, val, color: '#fbbf24' })
+                    },
+                    rfis: {
+                      title: 'Nuevo RFI',
+                      label: 'Asunto del RFI',
+                      placeholder: 'Ej: Consulta sobre detalle de armadura',
+                      defaultVal: 'Nuevo RFI',
+                      accent: '#ef4444',
+                      build: (val) => ({ ...pinPrompt.pin, val, docs: [], color: '#ef4444', type: 'rfi' })
+                    },
+                    restricciones: {
+                      title: 'Nueva restricción',
+                      label: 'Descripción breve de la restricción / alerta',
+                      placeholder: 'Ej: Falta liberación de área',
+                      defaultVal: 'Pendiente',
+                      accent: '#f59e0b',
+                      build: (val) => ({ ...pinPrompt.pin, val, docs: [], color: '#f59e0b', type: 'restriction' })
+                    }
+                  }[pinPrompt.tab];
+                  if (!cfg) return null;
+                  const confirm = () => {
+                    const input = document.getElementById('pin-prompt-input');
+                    const val = (input?.value || '').trim() || cfg.defaultVal;
+                    commitTrackingPin(pinPrompt.tab, cfg.build(val));
+                    setPinPrompt(null);
+                  };
+                  return (
+                    <div style={{
+                      position: 'absolute', inset: 0, zIndex: 1200,
+                      background: 'rgba(10,12,16,0.55)', backdropFilter: 'blur(3px)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }} onClick={() => setPinPrompt(null)}>
+                      <div onClick={(e) => e.stopPropagation()} style={{
+                        width: 'min(380px, 90vw)', background: '#1c2027',
+                        border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px',
+                        padding: '20px', boxShadow: '0 12px 40px rgba(0,0,0,0.5)'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: cfg.accent }}></span>
+                          <span style={{ color: '#fff', fontSize: '14px', fontWeight: 700 }}>{cfg.title}</span>
+                        </div>
+                        <label style={{ display: 'block', color: '#9aa3b2', fontSize: '12px', marginBottom: '6px' }}>{cfg.label}</label>
+                        <input
+                          id="pin-prompt-input"
+                          autoFocus
+                          defaultValue={cfg.defaultVal}
+                          placeholder={cfg.placeholder}
+                          onKeyDown={(e) => { if (e.key === 'Enter') confirm(); if (e.key === 'Escape') setPinPrompt(null); }}
+                          onFocus={(e) => e.target.select()}
+                          style={{
+                            width: '100%', boxSizing: 'border-box', background: '#12151a',
+                            border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px',
+                            color: '#fff', padding: '9px 12px', fontSize: '13px', outline: 'none'
+                          }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
+                          <button onClick={() => setPinPrompt(null)} style={{
+                            background: 'transparent', border: '1px solid rgba(255,255,255,0.15)',
+                            color: '#bbb', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600
+                          }}>Cancelar</button>
+                          <button onClick={confirm} style={{
+                            background: cfg.accent, border: 'none', color: '#fff',
+                            padding: '7px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 700
+                          }}>Crear</button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
               </div>
 

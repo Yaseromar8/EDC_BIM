@@ -86,12 +86,15 @@ const BuildPanel = ({
     placementMode,
     onTogglePlacement,
     onCameraCapture,
-    onPinMoveRequest // New Prop for moving pins
+    onPinMoveRequest, // New Prop for moving pins
+    onPinRename
 }) => {
     const selectedPin = pins.find(p => p.id === selectedPinId);
     const [activeMenu, setActiveMenu] = useState(null);
     const [isModelsOpen, setIsModelsOpen] = useState(false);
-    const [isPinsOpen, setIsPinsOpen] = useState(false);
+    const [isPinsOpen, setIsPinsOpen] = useState(true);
+    const [editingPinId, setEditingPinId] = useState(null);
+    const [editingValue, setEditingValue] = useState('');
 
     // Delegate upload trigger to parent (to open modal)
     const handlePinUploadClick = (pinId) => {
@@ -116,30 +119,31 @@ const BuildPanel = ({
     // activeTab state definition must be BEFORE useMemo
     const [activeTab, setActiveTab] = useState('DATA');
 
-    // Filter pins based on activeTab
+    // Pestañas alineadas 1:1 con la barra de seguimiento del visor
+    // (label corto para que entren; key = categoría real en trackingData)
+    const TABS = [
+        { id: 'DATA', label: 'TODOS', type: null },
+        { id: 'AVANCE', label: 'AVANCE', type: 'avance' },
+        { id: 'FOTOS', label: 'FOTOS', type: 'fotos' },
+        { id: 'DOCS', label: 'DOC', type: 'docs' },
+        { id: 'RFIS', label: 'RFI', type: 'rfis' },
+        { id: 'RESTRICCIONES', label: 'RESTR.', type: 'restricciones' }
+    ];
+    const activeTabDef = TABS.find(t => t.id === activeTab) || TABS[0];
+
+    // Filter pins based on activeTab (por categoría real _trackingType)
     const filteredPins = useMemo(() => {
         if (!pins) return [];
-        if (activeTab === 'DATA') return pins;
-        // Map tab names to pin types (lowercase)
-        const typeMap = {
-            'DOCS': 'docs',
-            'AVANCE': 'avance',
-            'RESTRICCIONES': 'restriction',
-            'FOTOS': 'fotos'
-        };
-        const targetType = typeMap[activeTab];
-        return pins.filter(p => p.type === targetType);
-    }, [pins, activeTab]);
+        if (!activeTabDef.type) return pins;
+        return pins.filter(p => p._trackingType === activeTabDef.type);
+    }, [pins, activeTabDef]);
 
     // Handle Tab Switch
     const handleTabChange = (tab) => {
         setActiveTab(tab);
-        // Reset or update placement mode if needed? 
-        // For now, keep it simple. If user switches tab, placement mode might stay on 
-        // but the type will be wrong unless we update it.
-        // It's safer to turn off placement mode when switching tabs.
+        // Al cambiar de pestaña, apagar el modo colocación (el tipo ya no coincide)
         if (placementMode) {
-            onTogglePlacement(); // Turn off
+            onTogglePlacement(null); // Turn off
         }
     };
 
@@ -166,20 +170,20 @@ const BuildPanel = ({
         <div className="build-panel source-files-panel">
             {/* TABS NAVIGATION */}
             <div className="bp-tabs">
-                {['DATA', 'DOCS', 'AVANCE', 'RESTRICCIONES'].map((tab) => (
+                {TABS.map((tab) => (
                     <button
-                        key={tab}
-                        className={`bp-tab ${activeTab === tab ? 'active' : ''}`}
-                        onClick={() => handleTabChange(tab)}
+                        key={tab.id}
+                        className={`bp-tab ${activeTab === tab.id ? 'active' : ''}`}
+                        onClick={() => handleTabChange(tab.id)}
                     >
-                        {tab}
+                        {tab.label}
                     </button>
                 ))}
             </div>
 
 
             {/* SHARED CONTENT FOR ALL TABS (Filtered) */}
-            {(activeTab === 'DATA' || activeTab === 'DOCS' || activeTab === 'AVANCE' || activeTab === 'RESTRICCIONES') && (
+            {(
                 <>
                     {/* Header... (Shared) - Only show Models in DATA tab though? User said "when in DATA all are seen". Implies structure might be different per tab.
                         Let's keep Models ONLY in DATA for now as per "DATA contains what we have".
@@ -256,30 +260,33 @@ const BuildPanel = ({
                                 {activeTab === 'DATA' ? 'Puntos de Control' :
                                     activeTab === 'DOCS' ? 'Documentos' :
                                         activeTab === 'FOTOS' ? 'Fotos' :
-                                            activeTab === 'AVANCE' ? 'Avance' : 'Restricciones'}
+                                            activeTab === 'AVANCE' ? 'Avance' :
+                                                activeTab === 'RFIS' ? 'RFIs' : 'Restricciones'}
+                                <span style={{ marginLeft: '6px', fontSize: '10px', opacity: 0.55 }}>({filteredPins.length})</span>
                             </span>
                             <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        // Determine type based on tab
-                                        const typeMap = { 'DATA': 'data', 'DOCS': 'docs', 'FOTOS': 'fotos', 'AVANCE': 'avance', 'RESTRICCIONES': 'restriction' };
-                                        onTogglePlacement(typeMap[activeTab]);
-                                    }}
-                                    className="sfp-import-text-btn"
-                                    style={{
-                                        background: placementMode ? '#3b82f6' : 'transparent',
-                                        borderColor: placementMode ? '#3b82f6' : 'rgba(255,255,255,0.2)',
-                                        color: placementMode ? 'white' : '#e0e0e0'
-                                    }}
-                                    title={`Crear nuevo ${activeTab === 'DATA' ? 'Punto' : activeTab}`}
-                                >
-                                    <TargetIcon /> {placementMode ? 'Creando...' : (activeTab === 'DATA' ? 'Crear Punto' : 'Nuevo')}
-                                </button>
+                                {/* Crear solo en pestañas con categoría concreta (en TODOS no se sabe qué tipo crear) */}
+                                {activeTabDef.type && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onTogglePlacement(activeTabDef.type);
+                                        }}
+                                        className="sfp-import-text-btn"
+                                        style={{
+                                            background: placementMode ? '#3b82f6' : 'transparent',
+                                            borderColor: placementMode ? '#3b82f6' : 'rgba(255,255,255,0.2)',
+                                            color: placementMode ? 'white' : '#e0e0e0'
+                                        }}
+                                        title={`Crear nuevo pin de ${activeTabDef.label.toLowerCase()}`}
+                                    >
+                                        <TargetIcon /> {placementMode ? 'Creando...' : 'Nuevo'}
+                                    </button>
+                                )}
                                 <button
                                     className={`sfp-action-btn eye ${!showPins ? 'off' : ''}`}
-                                    onClick={(e) => { e.stopPropagation(); onTogglePins(); }}
-                                    title={showPins ? "Ocultar Puntos" : "Mostrar Puntos"}
+                                    onClick={(e) => { e.stopPropagation(); if (onTogglePins) onTogglePins(); }}
+                                    title={showPins ? "Ocultar pins en el modelo" : "Mostrar pins en el modelo"}
                                 >
                                     <EyeIcon off={!showPins} />
                                 </button>
@@ -290,7 +297,9 @@ const BuildPanel = ({
                             <div className="sfp-list" style={{ paddingBottom: '120px' }}>
                                 {!filteredPins || filteredPins.length === 0 ? (
                                     <div className="sfp-empty">
-                                        {activeTab === 'DATA' ? 'Haz clic en el modelo para crear puntos.' : `No hay ${activeTab.toLowerCase()} creados.`}
+                                        {activeTab === 'DATA'
+                                            ? 'No hay pins aún. Elige una pestaña (Avance, Fotos, Doc…) y pulsa "Nuevo".'
+                                            : `No hay pins de ${activeTabDef.label.toLowerCase()}. Pulsa "Nuevo" y haz clic en el modelo.`}
                                     </div>
                                 ) : (
                                     filteredPins.map((pin, index) => (
@@ -300,27 +309,57 @@ const BuildPanel = ({
                                             onClick={() => onPinSelect(pin.id)}
                                         >
                                             <div className="sfp-item-row">
-                                                {/* Index Badge Color based on Type matching Viewer colors */}
+                                                {/* Badge con el color de la categoría (igual que el marcador 3D) */}
                                                 <span className="pin-index-badge" style={{
-                                            background: pin.type === 'restriction' ? '#f59e0b' : // Yellow/Orange
-                                                pin.type === 'docs' ? '#3b82f6' :        // Blue
-                                                    pin.type === 'fotos' ? '#3b82f6' :     // Blue
-                                                        pin.type === 'text' ? '#10b981' :      // Green
-                                                            pin.type === 'rfi' ? '#ef4444' :       // Red
-                                                                '#3b82f6' // Fallback (Blue)
-                                        }}>            {/* In DATA tab, index might be confusing if we filter, but filteredPins updates index. 
-                                                       Wait, index comes from map. If filtering, indices change relative to view. Perfect.
-                                                    */}
+                                                    background: pin.color || ({
+                                                        avance: '#fbbf24',
+                                                        fotos: '#3b82f6',
+                                                        docs: '#8b5cf6',
+                                                        rfis: '#ef4444',
+                                                        restricciones: '#f59e0b',
+                                                        maquinaria: '#64748b'
+                                                    }[pin._trackingType] || '#3b82f6')
+                                                }}>
                                                     {index + 1}
                                                 </span>
-                                                <span className="sfp-label" title={pin.name || pin.val || pin.id}>
-                                                    {pin.name || pin.val || (pin.id && String(pin.id).substring(0, 8)) || 'Sin nombre'}
-                                                </span>
+                                                {editingPinId === pin.id ? (
+                                                    <input
+                                                        autoFocus
+                                                        value={editingValue}
+                                                        onChange={(e) => setEditingValue(e.target.value)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                const v = editingValue.trim();
+                                                                if (v && onPinRename) onPinRename(pin.id, v);
+                                                                setEditingPinId(null);
+                                                            }
+                                                            if (e.key === 'Escape') setEditingPinId(null);
+                                                        }}
+                                                        onBlur={() => {
+                                                            const v = editingValue.trim();
+                                                            if (v && v !== (pin.name || pin.val) && onPinRename) onPinRename(pin.id, v);
+                                                            setEditingPinId(null);
+                                                        }}
+                                                        style={{
+                                                            flex: 1, minWidth: 0, background: '#12151a',
+                                                            border: '1px solid #3b82f6', borderRadius: '4px',
+                                                            color: '#fff', padding: '3px 6px', fontSize: '12px', outline: 'none'
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <span className="sfp-label" title={pin.name || pin.val || pin.id}>
+                                                        {pin.name || pin.val || (pin.id && String(pin.id).substring(0, 8)) || 'Sin nombre'}
+                                                    </span>
+                                                )}
 
-                                                {/* Type Indicator Icon if in DATA tab */}
-                                                {activeTab === 'DATA' && pin.type && pin.type !== 'data' && (
-                                                    <span style={{ fontSize: '10px', marginRight: '6px', opacity: 0.7 }}>
-                                                        {pin.type === 'docs' ? '📄' : pin.type === 'restriction' ? '⚠️' : '✅'}
+                                                {/* Indicador de categoría en la pestaña TODOS */}
+                                                {activeTab === 'DATA' && pin._trackingType && (
+                                                    <span style={{ fontSize: '10px', marginRight: '6px', opacity: 0.7 }} title={pin._trackingType}>
+                                                        {{
+                                                            avance: '✅', fotos: '📷', docs: '📄',
+                                                            rfis: '❓', restricciones: '⚠️', maquinaria: '🚜'
+                                                        }[pin._trackingType] || ''}
                                                     </span>
                                                 )}
 
@@ -351,8 +390,8 @@ const BuildPanel = ({
                                                                 </button>
                                                                 <button onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    // Placeholder for rename
-                                                                    alert("Funcionalidad de renombrar pronto.");
+                                                                    setEditingPinId(pin.id);
+                                                                    setEditingValue(pin.name || pin.val || '');
                                                                     setActiveMenu(null);
                                                                 }}>
                                                                     <span className="sfp-menu-icon" style={{ fontSize: '12px' }}>✏️</span> Renombrar
