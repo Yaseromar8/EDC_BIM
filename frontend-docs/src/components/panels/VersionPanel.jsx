@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { renderFileIconSop } from '../../utils/fileIcons';
-import { formatSizeDetailed as formatSize, formatDate, getInitialsDetailed as getInitials } from '../../utils/helpers';
+import { API, formatSizeDetailed as formatSize, formatDate, getInitialsDetailed as getInitials } from '../../utils/helpers';
 
 export default function VersionPanel({
   isOpen,
@@ -17,12 +17,11 @@ export default function VersionPanel({
   selectedVersions, setSelectedVersions,
   versionRowMenu, setVersionRowMenu,
   projectPrefix,
+  isAdmin = false,
   onClose,
   onPromote,
 }) {
   if (!isOpen || !versionTarget) return null;
-
-  const API = (typeof window !== 'undefined' && window.__VISOR_API__) || '';
 
   return (
     <>
@@ -103,7 +102,6 @@ export default function VersionPanel({
                            <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 10, flexShrink: 0 }}>{getInitials(v.updated_by || 'ADMIN')}</div>
                            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                              <span style={{ fontSize: 13, color: '#3c3c3c', textOverflow: 'ellipsis', overflow: 'hidden' }}>{v.updated_by || 'ADMIN'}</span>
-                             <span style={{ fontSize: 11, color: '#999', textOverflow: 'ellipsis', overflow: 'hidden' }}>Trial account ysan...</span>
                            </div>
                         </div>
                       </td>
@@ -112,7 +110,6 @@ export default function VersionPanel({
                            <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 10, flexShrink: 0 }}>{getInitials(v.updated_by || 'ADMIN')}</div>
                            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                              <span style={{ fontSize: 13, color: '#3c3c3c', textOverflow: 'ellipsis', overflow: 'hidden' }}>{v.updated_by || 'ADMIN'}</span>
-                             <span style={{ fontSize: 11, color: '#999', textOverflow: 'ellipsis', overflow: 'hidden' }}>Trial account ysan...</span>
                            </div>
                         </div>
                       </td>
@@ -156,14 +153,6 @@ export default function VersionPanel({
             style={{ position: 'fixed', left: versionRowMenu.x, top: versionRowMenu.y, width: 220 }}
             onClick={e => e.stopPropagation()}
           >
-            <button onClick={() => { setVersionRowMenu(null); }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
-              Copiar
-            </button>
-            <button onClick={() => { setVersionRowMenu(null); }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-              Añadir a paquetes
-            </button>
             <button onClick={() => {
               const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
               const tokenQuery = token ? `&session_token=${token}` : '';
@@ -174,10 +163,10 @@ export default function VersionPanel({
               Descargar archivo de origen
             </button>
             
-            {versionRowMenu.isSelected && versionRowMenu.v.version_number !== versionHistory[0]?.version_number && (
+            {isAdmin && versionRowMenu.v.version_number !== versionHistory[0]?.version_number && (
               <>
                 <div className="menu-divider" />
-                <button 
+                <button
                   onClick={() => { onPromote(versionRowMenu.v); setVersionRowMenu(null); }}
                   style={{ fontWeight: 600 }}
                 >

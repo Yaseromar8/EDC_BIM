@@ -541,6 +541,22 @@ def restore_node(model_urn, node_id):
             SET is_deleted = FALSE, updated_at = CURRENT_TIMESTAMP
             WHERE id IN (SELECT id FROM subtree)
         """, (node_id,))
+
+        # Restaurar también la cadena de ancestros si está borrada;
+        # si no, el elemento restaurado queda colgando de una carpeta
+        # eliminada y es invisible en el árbol (huérfano).
+        cursor.execute("""
+            WITH RECURSIVE ancestors AS (
+                SELECT parent_id FROM file_nodes WHERE id = %s
+                UNION ALL
+                SELECT fn.parent_id FROM file_nodes fn
+                INNER JOIN ancestors a ON fn.id = a.parent_id
+            )
+            UPDATE file_nodes
+            SET is_deleted = FALSE, updated_at = CURRENT_TIMESTAMP
+            WHERE id IN (SELECT parent_id FROM ancestors WHERE parent_id IS NOT NULL)
+              AND is_deleted = TRUE
+        """, (node_id,))
         conn.commit()
         return True
 
@@ -564,18 +580,32 @@ def permanent_delete_node_internal(model_urn, node_id):
             )
             SELECT id, gcs_urn FROM subtree
         """, (node_id,))
-        
+
         to_delete = cursor.fetchall()
-        
+
+        # 1b. Blobs de TODAS las versiones históricas del subárbol
+        #     (cada versión tiene su propio archivo en GCS; sin esto quedaban huérfanos para siempre)
+        cursor.execute("""
+            WITH RECURSIVE subtree AS (
+                SELECT id FROM file_nodes WHERE id = %s
+                UNION ALL
+                SELECT fn.id FROM file_nodes fn
+                INNER JOIN subtree st ON fn.parent_id = st.id
+            )
+            SELECT DISTINCT v.gcs_urn FROM file_versions v
+            WHERE v.file_node_id IN (SELECT id FROM subtree) AND v.gcs_urn IS NOT NULL
+        """, (node_id,))
+        version_urns = {r[0] for r in cursor.fetchall()}
+
         # 2. Borrar de GCS PRIMERO (evitar blobs huérfanos)
+        all_urns = version_urns | {u for _, u in to_delete if u}
         gcs_errors = []
-        for rid, gcs_urn in to_delete:
-            if gcs_urn:
-                try:
-                    delete_gcs_blob(gcs_urn)
-                except Exception as e:
-                    gcs_errors.append((gcs_urn, str(e)))
-                    print(f"[WARNING] GCS delete failed for {gcs_urn}: {e}")
+        for gcs_urn in all_urns:
+            try:
+                delete_gcs_blob(gcs_urn)
+            except Exception as e:
+                gcs_errors.append((gcs_urn, str(e)))
+                print(f"[WARNING] GCS delete failed for {gcs_urn}: {e}")
 
         # 3. Borrar de BD (ON DELETE CASCADE eliminará hijos automáticamente)
         cursor.execute("DELETE FROM file_nodes WHERE id = %s", (node_id,))

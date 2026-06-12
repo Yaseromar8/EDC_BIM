@@ -364,7 +364,13 @@ def promote_document_version():
     version_id = data.get('version_id')
     model_urn = data.get('model_urn', 'global')
     performed_by = data.get('user')
-    
+
+    # Promocionar reescribe la versión actual del ítem: solo administradores
+    from flask import g
+    current_user = getattr(g, 'current_user', None)
+    if not current_user or current_user.get('role') != 'admin':
+        return jsonify({"success": False, "error": "Solo los administradores pueden promocionar versiones."}), 403
+
     if not node_id or not version_id:
         return jsonify({"success": False, "error": "Faltan IDs"}), 400
         
@@ -765,7 +771,22 @@ def move_document():
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            
+
+            # 0. Evitar ciclos: el destino no puede ser un descendiente del nodo a mover
+            #    (movería el subárbol fuera del alcance de la raíz y rompería los CTE recursivos)
+            if new_parent_id:
+                cursor.execute("""
+                    WITH RECURSIVE subtree AS (
+                        SELECT id FROM file_nodes WHERE id = %s
+                        UNION ALL
+                        SELECT fn.id FROM file_nodes fn
+                        INNER JOIN subtree st ON fn.parent_id = st.id
+                    )
+                    SELECT 1 FROM subtree WHERE id = %s LIMIT 1
+                """, (target_node_id, new_parent_id))
+                if cursor.fetchone():
+                    return jsonify({"success": False, "error": "No se puede mover una carpeta dentro de sí misma o de una subcarpeta suya."}), 400
+
             # 1. Obtener datos del nodo a mover (nombre y tipo para validar conflictos)
             cursor.execute("SELECT name, node_type FROM file_nodes WHERE id = %s", (target_node_id,))
             source_row = cursor.fetchone()
@@ -1186,6 +1207,14 @@ def restore_doc():
     if not node_id:
         return jsonify({"success": False, "error": "Missing ID"}), 400
 
+    # ── TENANT ISOLATION + RBAC (mismo nivel que eliminar) ──
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+    rbac = check_folder_permission(user, node_id, model_urn, 'admin', 'restaurar elementos')
+    if rbac: return rbac
+
     try:
         from file_system_db import restore_node
         from db import log_activity
@@ -1208,6 +1237,14 @@ def permanent_delete_doc():
 
     if not node_id:
         return jsonify({"success": False, "error": "Missing ID"}), 400
+
+    # ── Destructivo e irreversible (borra blobs de GCS): solo administradores ──
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if not user or user.get('role') != 'admin':
+        return jsonify({"success": False, "error": "Solo los administradores pueden eliminar permanentemente."}), 403
+    if not verify_project_access(user, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
 
     try:
         from file_system_db import permanent_delete_node_internal
@@ -1243,10 +1280,19 @@ def share_document():
     shared_by = data.get('shared_by', 'system')
     role = data.get('role', 'viewer')
     access_type = data.get('access_type', 'restricted')
-    
+
     if not node_id or not model_urn:
         return jsonify({"success": False, "error": "Missing node_id or model_urn"}), 400
-        
+
+    # ── Crear un enlace público expone el archivo fuera de la plataforma:
+    #    exigir acceso al proyecto y permiso de edición sobre el nodo ──
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+    rbac = check_folder_permission(user, node_id, model_urn, 'edit', 'compartir documentos')
+    if rbac: return rbac
+
     try:
         from db import get_db_connection
         with get_db_connection() as conn:

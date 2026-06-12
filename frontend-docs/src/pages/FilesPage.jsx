@@ -56,6 +56,18 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
 
   const { isAdmin, projectPrefix } = fe;
 
+  // Sincronizar historial de versiones con el archivo abierto en el visor.
+  // Sin esto, el dropdown de versiones mostraba el historial del último archivo
+  // consultado en la tabla (o un spinner infinito) y "Hacer actual" podía
+  // promover una versión en el archivo equivocado.
+  React.useEffect(() => {
+    if (fe.activeFile && fe.activeFile.type !== 'folder') {
+      vh.setVersionTarget(fe.activeFile);
+      vh.fetchVersionHistory(fe.activeFile);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fe.activeFile]);
+
   // ═══════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════
@@ -441,7 +453,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
         loadingVersions={vh.loadingVersions} versionPanelWidth={versionPanelWidth} startVersionResize={startVersionResize}
         selectedVersions={vh.selectedVersions} setSelectedVersions={vh.setSelectedVersions}
         versionRowMenu={vh.versionRowMenu} setVersionRowMenu={vh.setVersionRowMenu}
-        projectPrefix={projectPrefix} onClose={() => vh.setTableShowVersions(false)} onPromote={vh.handlePromote} />
+        projectPrefix={projectPrefix} isAdmin={isAdmin} onClose={() => vh.setTableShowVersions(false)} onPromote={vh.handlePromote} />
 
       <ContextMenu activeRowMenu={fe.activeRowMenu} menuRef={fe.menuRef} isAdmin={isAdmin} projectPrefix={projectPrefix}
         onClose={() => { fe.setActiveRowMenu(null); fe.setRightClickedId(null); }}
