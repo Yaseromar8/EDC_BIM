@@ -464,6 +464,18 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                   <input type="text" placeholder="Buscar y filtrar" value={fe.searchQuery} onChange={e => fe.setSearchQuery(e.target.value)} style={{ width: '100%', height: 32, paddingLeft: 30, paddingRight: 8, border: '1px solid #ddd', borderRadius: 4, fontSize: 13, outline: 'none' }} />
                 </div>
 
+                {!fe.isTrashMode && (
+                  <select value={fe.statusFilter} onChange={e => fe.setStatusFilter(e.target.value)}
+                    title="Filtrar por estado de revisión"
+                    style={{ height: 32, padding: '0 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, color: fe.statusFilter === 'ALL' ? '#666' : '#0696d7', fontWeight: fe.statusFilter === 'ALL' ? 400 : 600, background: '#fff', cursor: 'pointer', outline: 'none' }}>
+                    <option value="ALL">Todos los estados</option>
+                    <option value="WIP">WIP</option>
+                    <option value="SHARED">Compartido</option>
+                    <option value="PUBLISHED">Publicado</option>
+                    <option value="ARCHIVED">Archivado</option>
+                  </select>
+                )}
+
               </div>
 
               {/* BREADCRUMBS — ruta actual con navegación clickeable */}
@@ -562,7 +574,9 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                 )}
               </div>
               <footer style={{ padding: '8px 16px', fontSize: 13, color: '#666', borderTop: '1px solid #eee', background: '#fff', flexShrink: 0 }}>
-                {fe.selected.size > 0 ? `${fe.selected.size} de ${fe.folders.length + fe.files.length} seleccionados` : `Mostrando ${fe.folders.length + fe.files.length} elementos`}
+                {fe.selected.size > 0
+                  ? `${fe.selected.size} de ${fe.folders.length + fe.files.length} seleccionados`
+                  : `Mostrando ${fe.filteredFolders.length + fe.filteredFiles.length}${fe.statusFilter !== 'ALL' || fe.searchQuery ? ` de ${fe.folders.length + fe.files.length}` : ''} elementos`}
               </footer>
             </section>
           </div>

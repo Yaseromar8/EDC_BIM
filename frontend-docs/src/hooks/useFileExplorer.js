@@ -84,6 +84,7 @@ export function useFileExplorer(project, user) {
   const [membersList, setMembersList] = useState([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL'); // ALL | WIP | SHARED | PUBLISHED | ARCHIVED
   const [collapseSignal, setCollapseSignal] = useState(0);
 
   // ── Mock Users for Share ──
@@ -448,7 +449,10 @@ export function useFileExplorer(project, user) {
 
   // ── Computed ──
   const filteredFolders = folders.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
-  const filteredFiles = files.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredFiles = files.filter(f =>
+    f.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+    (statusFilter === 'ALL' || (f.status || 'WIP') === statusFilter)
+  );
 
   return {
     // Constants
@@ -466,6 +470,7 @@ export function useFileExplorer(project, user) {
     refreshSignal, setRefreshSignal, triggerRefresh,
     filteredFolders, filteredFiles,
     searchQuery, setSearchQuery,
+    statusFilter, setStatusFilter,
     
     // Trash
     isTrashMode, setIsTrashMode,

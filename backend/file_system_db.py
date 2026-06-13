@@ -57,6 +57,13 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
     u_id = user.get('id') if user else None
     u_role = user.get('role', 'viewer') if user else None
     is_admin = (u_role == 'admin') if u_role else False
+
+    # Modo ISO 19650 estricto (opt-in por entorno): los no-admin solo ven
+    # documentos Compartido/Publicado. Los WIP son borradores internos del
+    # equipo que produce y no deben exponerse hasta ser revisados/aprobados.
+    import os as _os
+    strict_iso = _os.getenv('STRICT_ISO_VISIBILITY', 'false').lower() in ('true', '1', 'yes')
+    iso_visible = {'SHARED', 'PUBLISHED', 'ARCHIVED'}
     
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -141,7 +148,9 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                 item["has_children"] = bool(r_has_children)
                 folders.append(item)
             else:
-                if has_access:  # Los archivos sin acceso se excluyen por completo
+                # ISO estricto: ocultar WIP (y estados nulos) a los no-admin
+                iso_blocked = strict_iso and not is_admin and (r_status or 'WIP') not in iso_visible
+                if has_access and not iso_blocked:  # Los archivos sin acceso/bloqueados se excluyen
                     item.update({
                         "size": r_size,
                         "version": r_version,
