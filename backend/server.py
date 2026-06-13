@@ -745,6 +745,8 @@ app.register_blueprint(presupuesto_bp, url_prefix='/api/presupuesto')
 app.register_blueprint(compare_bp)
 from routes.pdf_tools import pdf_tools_bp, ensure_pdf_tools_tables
 app.register_blueprint(pdf_tools_bp)
+from routes.reviews import reviews_bp, ensure_reviews_table
+app.register_blueprint(reviews_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
@@ -762,6 +764,7 @@ ensure_presupuesto_schema()
 ensure_asset_user_data_table()
 ensure_project_identity_columns()
 ensure_pdf_tools_tables()
+ensure_reviews_table()
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()
