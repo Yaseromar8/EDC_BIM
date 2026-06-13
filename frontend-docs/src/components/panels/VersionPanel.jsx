@@ -3,9 +3,10 @@
  * Refactorización Fase 2: Capa de Modales
  * Extraído de App.jsx líneas 2300-2466
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { renderFileIconSop } from '../../utils/fileIcons';
 import { API, formatSizeDetailed as formatSize, formatDate, getInitialsDetailed as getInitials } from '../../utils/helpers';
+import PdfCompareView from '../PdfCompareView';
 
 export default function VersionPanel({
   isOpen,
@@ -21,7 +22,15 @@ export default function VersionPanel({
   onClose,
   onPromote,
 }) {
+  const [compareOpen, setCompareOpen] = useState(false);
   if (!isOpen || !versionTarget) return null;
+
+  // Comparar 2 versiones de un PDF (overlay rojo/azul)
+  const isPdf = (versionTarget.name || '').toLowerCase().endsWith('.pdf');
+  const selectedVerObjs = versionHistory.filter(v => selectedVersions.has(v.id) && v.gcs_urn);
+  const canCompare = isPdf && selectedVerObjs.length === 2;
+  // Orden cronológico: A = versión menor (anterior), B = mayor (nueva)
+  const [verA, verB] = [...selectedVerObjs].sort((x, y) => (x.version_number || 0) - (y.version_number || 0));
 
   return (
     <>
@@ -136,10 +145,30 @@ export default function VersionPanel({
           </div>
           
           <footer style={{ height: 40, borderTop: '1px solid #dcdcdc', padding: '0 16px', display: 'flex', alignItems: 'center', fontSize: 12, color: '#666', background: '#fff' }}>
-             {selectedVersions.size > 0 ? `${selectedVersions.size} de ${versionHistory.length} seleccionadas` : `Se están mostrando ${versionHistory.length} versiones`}
+             <span>{selectedVersions.size > 0 ? `${selectedVersions.size} de ${versionHistory.length} seleccionadas` : `Se están mostrando ${versionHistory.length} versiones`}</span>
+             {isPdf && (
+               <button
+                 onClick={() => canCompare && setCompareOpen(true)}
+                 disabled={!canCompare}
+                 title={canCompare ? 'Comparar las 2 versiones seleccionadas' : 'Marca exactamente 2 versiones para comparar'}
+                 style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: canCompare ? '#0696d7' : '#f0f0f0', color: canCompare ? '#fff' : '#aaa', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: canCompare ? 'pointer' : 'default' }}>
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="9" height="16" rx="1"/><rect x="13" y="4" width="9" height="16" rx="1"/></svg>
+                 Comparar versiones
+               </button>
+             )}
           </footer>
         </div>
       </div>
+
+      {compareOpen && canCompare && (
+        <PdfCompareView
+          fileName={versionTarget.name}
+          versionA={verA}
+          versionB={verB}
+          projectPrefix={projectPrefix}
+          onClose={() => setCompareOpen(false)}
+        />
+      )}
 
       {/* VERSION ROW CONTEXT MENU */}
       {versionRowMenu && (
