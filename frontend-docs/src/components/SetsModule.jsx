@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { API, formatDate } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
+import DocQuickView from './DocQuickView';
+import { useDocPreview } from './ReviewsModule';
 
 // ── Modal: añadir selección a un conjunto (existente o nuevo) ──
 export function AddToSetModal({ isOpen, onClose, items, projectPrefix, onAdded }) {
@@ -80,9 +82,10 @@ export function AddToSetModal({ isOpen, onClose, items, projectPrefix, onAdded }
 }
 
 // ── Vista: conjuntos del proyecto ──
-export function SetsView({ projectPrefix, isAdmin, onOpenFile }) {
+export function SetsView({ projectPrefix, isAdmin }) {
   const [sets, setSets] = useState(null);
   const [expanded, setExpanded] = useState({}); // { setId: items[] }
+  const [preview, openDoc, closePreview] = useDocPreview(projectPrefix);
 
   const load = () => {
     apiFetch(`${API}/api/sets?model_urn=${encodeURIComponent(projectPrefix)}`)
@@ -114,6 +117,7 @@ export function SetsView({ projectPrefix, isAdmin, onOpenFile }) {
 
   return (
     <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
+      <DocQuickView file={preview} projectPrefix={projectPrefix} onClose={closePreview} />
       <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 4 }}>Conjuntos</div>
       <div style={{ fontSize: 13, color: '#888', marginBottom: 20 }}>
         Agrupa planos por entrega o hito con su versión congelada. Selecciona archivos en Archivos y pulsa "Añadir a conjunto".
@@ -140,7 +144,7 @@ export function SetsView({ projectPrefix, isAdmin, onOpenFile }) {
                 <div style={{ padding: 16, fontSize: 12, color: '#999' }}>Conjunto vacío.</div>
               ) : expanded[s.id].map(it => (
                 <div key={it.node_id} style={{ padding: '8px 16px 8px 44px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #f7f7f7', fontSize: 13 }}>
-                  <span onClick={() => onOpenFile?.(it)} style={{ flex: 1, color: '#0696d7', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</span>
+                  <span onClick={() => openDoc(it)} title="Abrir documento" style={{ flex: 1, color: '#0696d7', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name} ↗</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#555', background: '#f0f0f0', padding: '2px 8px', borderRadius: 10 }}>V{it.version_number || 1} congelada</span>
                   <span style={{ fontSize: 11, color: '#aaa' }}>{formatDate(it.added_at)}</span>
                   {isAdmin && (

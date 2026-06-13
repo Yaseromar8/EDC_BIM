@@ -236,8 +236,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
 
         {/* SETS VIEW */}
         {fe.sidebarView === 'sets' && (
-          <SetsView projectPrefix={projectPrefix} isAdmin={isAdmin}
-            onOpenFile={(it) => fe.setActiveFile({ id: it.node_id, name: it.name, type: 'file', fullName: it.name, version: it.version_number })} />
+          <SetsView projectPrefix={projectPrefix} isAdmin={isAdmin} />
         )}
 
         {/* RFIs VIEW */}

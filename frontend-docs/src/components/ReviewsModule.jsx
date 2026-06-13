@@ -3,6 +3,21 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { API, formatDate, getInitials } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
+import DocQuickView from './DocQuickView';
+
+// Resuelve la URL firmada de un documento por su node_id y lo abre en el visor
+export function useDocPreview(projectPrefix) {
+  const [preview, setPreview] = useState(null);
+  const open = async (it) => {
+    try {
+      const r = await apiFetch(`${API}/api/docs/signed-url?model_urn=${encodeURIComponent(projectPrefix)}&id=${encodeURIComponent(it.node_id)}`);
+      const d = await r.json();
+      if (!d.success || !d.url) throw new Error(d.error || 'No se pudo abrir');
+      setPreview({ name: it.name, url: d.url, nodeId: it.node_id });
+    } catch (e) { toast.error(e.message || 'No se pudo abrir el documento'); }
+  };
+  return [preview, open, () => setPreview(null)];
+}
 
 const STATUS_CHIP = {
   pending: { label: 'En revisión', bg: '#fff7e0', color: '#b26a00' },
@@ -124,6 +139,7 @@ export function ReviewsView({ projectPrefix, user, isAdmin }) {
   const [reviews, setReviews] = useState(null);
   const [comments, setComments] = useState({}); // { reviewId: texto }
   const [acting, setActing] = useState(null);
+  const [preview, openDoc, closePreview] = useDocPreview(projectPrefix);
 
   const load = () => {
     apiFetch(`${API}/api/reviews?model_urn=${encodeURIComponent(projectPrefix)}`)
@@ -150,6 +166,7 @@ export function ReviewsView({ projectPrefix, user, isAdmin }) {
 
   return (
     <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
+      <DocQuickView file={preview} projectPrefix={projectPrefix} onClose={closePreview} />
       <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 4 }}>Revisiones</div>
       <div style={{ fontSize: 13, color: '#888', marginBottom: 20 }}>
         Flujos de aprobación: selecciona archivos en Archivos y pulsa "Enviar a revisión".
@@ -169,8 +186,14 @@ export function ReviewsView({ projectPrefix, user, isAdmin }) {
               <span style={{ fontSize: 14, fontWeight: 600, color: '#333', flex: 1 }}>{rev.title}</span>
               <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12, background: chip.bg, color: chip.color }}>{chip.label}</span>
             </div>
-            <div style={{ padding: '10px 16px', fontSize: 12, color: '#666', display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-              <span>📄 {rev.items.length} documento{rev.items.length !== 1 ? 's' : ''}: {rev.items.map(i => `${i.name} (V${i.version || 1})`).join(', ')}</span>
+            <div style={{ padding: '10px 16px', fontSize: 12, color: '#666', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+              <span>📄 {rev.items.length} documento{rev.items.length !== 1 ? 's' : ''}:</span>
+              {rev.items.map(i => (
+                <button key={i.node_id} onClick={() => openDoc(i)} title="Abrir para revisar"
+                  style={{ background: '#f0f7fc', border: '1px solid #cfe7f5', color: '#0696d7', padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  {i.name} (V{i.version || 1}) ↗
+                </button>
+              ))}
             </div>
             <div style={{ padding: '4px 16px 12px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               {rev.steps.map((s, i) => {
