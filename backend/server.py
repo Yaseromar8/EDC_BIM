@@ -747,6 +747,8 @@ from routes.pdf_tools import pdf_tools_bp, ensure_pdf_tools_tables
 app.register_blueprint(pdf_tools_bp)
 from routes.reviews import reviews_bp, ensure_reviews_table
 app.register_blueprint(reviews_bp)
+from routes.transmittals import transmittals_bp, ensure_transmittals_table
+app.register_blueprint(transmittals_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
@@ -765,6 +767,7 @@ ensure_asset_user_data_table()
 ensure_project_identity_columns()
 ensure_pdf_tools_tables()
 ensure_reviews_table()
+ensure_transmittals_table()
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()
