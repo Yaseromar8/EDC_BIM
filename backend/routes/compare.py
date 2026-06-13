@@ -115,6 +115,26 @@ def _scope_filter(scope, alias):
         return None, None
     stype = scope.get('type')
     value = scope.get('value')
+
+    if stype == 'sources':
+        values = scope.get('values') or []
+        if not isinstance(values, list) or not values:
+            return None, None
+        params = []
+        for urn in values:
+            if not urn:
+                continue
+            try:
+                from routes.inventory import sanitize_urn
+                sanitized = sanitize_urn(urn)
+            except Exception:
+                sanitized = urn
+            params.extend([urn, sanitized])
+        if not params:
+            return None, None
+        placeholders = ', '.join(['%s'] * len(params))
+        return f"{alias}.source_urn IN ({placeholders})", params
+
     if not value:
         return None, None
     if stype == 'source':
@@ -449,6 +469,50 @@ def compare_metrados():
         return jsonify(resp)
     except Exception as e:
         logger.error(f"metrados diff fallo: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@compare_bp.route('/api/compare/element-metrados', methods=['POST'])
+def compare_element_metrados():
+    """Diff 5D por elemento bajo demanda.
+
+    Evita enviar el mapa completo {external_id -> metrados} al frontend cuando el
+    usuario solo necesita el tooltip del elemento bajo hover.
+    """
+    data = request.get_json(silent=True) or {}
+    ext_id = data.get('external_id')
+    cond_a, par_a = _scope_filter(data.get('a'), 'ia')
+    cond_b, par_b = _scope_filter(data.get('b'), 'ia')
+    if not ext_id or not cond_a or not cond_b:
+        return jsonify({'error': 'Faltan external_id o scopes a/b'}), 400
+
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SET statement_timeout = '30000'")
+
+            def fetch_side(cond, params):
+                cur.execute(f"""
+                    SELECT ia.external_id, kv.key, kv.value
+                    FROM inventory_assets ia,
+                         jsonb_each(ia.properties) g,
+                         jsonb_each_text(CASE WHEN jsonb_typeof(g.value) = 'object'
+                                              THEN g.value ELSE '{{}}'::jsonb END) kv
+                    WHERE {cond}
+                      AND ia.external_id = %s
+                      AND (kv.key ~ 'DSI_CodigoDePartida[0-9]\\s*$'
+                           OR kv.key ~ 'DSI_Metrado[0-9]\\s*$'
+                           OR kv.key ~ 'DSI_Unidad[0-9]\\s*$'
+                           OR kv.key ~* '(Volume|Volumen|Area|Ãrea|Length|Longitud)\\s*$')
+                """, params + [ext_id])
+                return _pivot_dsi_rows(cur.fetchall()).get(ext_id, {})
+
+            side_a = fetch_side(cond_a, par_a)
+            side_b = fetch_side(cond_b, par_b)
+
+        return jsonify({'external_id': ext_id, 'a': side_a, 'b': side_b})
+    except Exception as e:
+        logger.error(f"element metrados diff fallo: {e}")
         return jsonify({'error': str(e)}), 500
 
 
