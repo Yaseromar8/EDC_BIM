@@ -487,7 +487,7 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
         const data = await res.json();
         if (data.success && data.url) {
           // Abrir ventana flotante en lugar de nueva pestaña
-          setPreviewFile({ name: adj.name, url: data.url });
+          setPreviewFile({ name: adj.name, url: data.url, nodeId: adj.id || null });
         } else {
           alert('Error: ' + (data.error || 'No se pudo generar la URL.'));
         }
@@ -1292,7 +1292,8 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
               {/* Content */}
               <div style={{ flex: 1, position: 'relative', background: '#f5f5f5', overflow: 'hidden' }}>
                 {isPdf && (
-                  <PDFViewer url={previewFile.url} fileName={previewFile.name} />
+                  <PDFViewer url={previewFile.url} fileName={previewFile.name}
+                    nodeId={previewFile.nodeId || null} projectPrefix={projectPrefix} />
                 )}
                 {isImage && (
                   <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
