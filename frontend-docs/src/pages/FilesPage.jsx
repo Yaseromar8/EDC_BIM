@@ -56,6 +56,21 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
 
   const { isAdmin, projectPrefix } = fe;
 
+  // ── Búsqueda global del proyecto (no solo carpeta actual) ──
+  const [globalResults, setGlobalResults] = React.useState(null);
+  React.useEffect(() => {
+    const q = fe.searchQuery.trim();
+    if (q.length < 3 || fe.isTrashMode || fe.sidebarView !== 'files') { setGlobalResults(null); return; }
+    const t = setTimeout(() => {
+      apiFetch(`${API}/api/docs/search?q=${encodeURIComponent(q)}&model_urn=${encodeURIComponent(fe.projectPrefix)}`)
+        .then(r => r.json())
+        .then(d => { if (d.success) setGlobalResults(d.data || []); })
+        .catch(() => {});
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fe.searchQuery, fe.isTrashMode, fe.sidebarView]);
+
   // Sincronizar historial de versiones con el archivo abierto en el visor.
   // Sin esto, el dropdown de versiones mostraba el historial del último archivo
   // consultado en la tabla (o un spinner infinito) y "Hacer actual" podía
@@ -139,6 +154,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                 { label: 'Informes', mode: 'reports', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg>, onClick: () => fe.setSidebarView('reports') },
                 { label: 'Miembros', mode: 'members', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>, onClick: () => { fe.setSidebarView('members'); fe.setMembersLoading(true); apiFetch(`${API}/api/users`).then(r => r.json()).then(d => fe.setMembersList(d.users || d || [])).catch(() => fe.setMembersList([])).finally(() => fe.setMembersLoading(false)); } },
                 { label: 'Configuración', mode: 'settings', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>, onClick: () => fe.setSidebarView('settings') },
+                { label: 'Actividad', mode: 'activity', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>, onClick: () => fe.setSidebarView('activity') },
                 // Sala de Cuarentena ISO 19650: solo admins (las acciones dentro son destructivas)
                 ...(isAdmin ? [{ label: 'Cuarentena', mode: 'quarantine', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>, onClick: () => fe.setSidebarView('quarantine') }] : []),
               ].map((item, idx) => (
@@ -185,6 +201,11 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
         {/* QUARANTINE VIEW */}
         {fe.sidebarView === 'quarantine' && !fe.isTrashMode && (
           <QuarantineTable projectPrefix={projectPrefix} API={API} isAdmin={isAdmin} user={user} />
+        )}
+
+        {/* ACTIVITY VIEW */}
+        {fe.sidebarView === 'activity' && (
+          <ActivityView projectPrefix={projectPrefix} />
         )}
 
         {/* RFIs VIEW */}
@@ -414,7 +435,46 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
               })()}
 
               <div style={{ flex: 1, overflow: 'hidden' }}>
-                {fe.loading ? (
+                {globalResults !== null && !fe.isTrashMode ? (
+                  <div style={{ height: '100%', overflowY: 'auto', background: '#fff' }}>
+                    <div style={{ padding: '10px 16px', fontSize: 12, color: '#888', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>{globalResults.length} resultado{globalResults.length !== 1 ? 's' : ''} en todo el proyecto para "{fe.searchQuery}"</span>
+                      <button onClick={() => fe.setSearchQuery('')} style={{ background: 'none', border: 'none', color: '#0696d7', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>✕ Limpiar</button>
+                    </div>
+                    {globalResults.length === 0 && (
+                      <div style={{ padding: 48, textAlign: 'center', color: '#999', fontSize: 13 }}>Sin coincidencias en nombres de archivos o carpetas.</div>
+                    )}
+                    {globalResults.map(r => {
+                      const isFolder = r.type === 'FOLDER';
+                      const dir = r.path.includes('/') ? r.path.slice(0, r.path.lastIndexOf('/')) : '';
+                      return (
+                        <div key={r.id}
+                          onClick={() => {
+                            fe.setSearchQuery('');
+                            if (isFolder) {
+                              fe.navigate(`${projectPrefix}/${r.path}/`, r.id);
+                            } else {
+                              if (dir) fe.navigate(`${projectPrefix}/${dir}/`, null);
+                              fe.setActiveFile({ id: r.id, name: r.name, type: 'file', fullName: r.path, version: r.version });
+                            }
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid #f4f4f4', cursor: 'pointer' }}
+                          onMouseOver={e => e.currentTarget.style.background = '#f6fbff'}
+                          onMouseOut={e => e.currentTarget.style.background = 'none'}>
+                          {isFolder
+                            ? <svg width="20" height="20" viewBox="0 0 24 24" fill="#f6b73c"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>
+                            : renderFileIconSop(r.name, 20)}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+                            <div style={{ fontSize: 11, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dir || 'Archivos de proyecto'}</div>
+                          </div>
+                          {!isFolder && <span style={{ fontSize: 11, color: '#0696d7', fontWeight: 600 }}>V{r.version || 1}</span>}
+                          <span style={{ fontSize: 11, color: '#aaa', flexShrink: 0 }}>{r.updated_at ? formatDate(r.updated_at) : ''}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : fe.loading ? (
                     <div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
                 ) : fe.isTrashMode ? (
                     <DeletedTable items={fe.deletedItems} selectedIds={fe.selectedDeletedIds} onToggle={fe.setSelectedDeletedIds}
@@ -516,10 +576,67 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
 
       {/* GATEWAY 3D OVERLAY (FRENTES) */}
       {showGateway && (
-        <GatewayPanel 
+        <GatewayPanel
           project={project}
           onClose={() => setShowGateway(false)}
         />
+      )}
+    </div>
+  );
+}
+
+// ── Vista de Actividad del proyecto (feed estilo ACC) ──
+const ACTIVITY_LABELS = {
+  upload: { label: 'Subió', color: '#16a34a' },
+  create_folder: { label: 'Creó carpeta', color: '#0696d7' },
+  rename: { label: 'Renombró', color: '#f59e0b' },
+  move: { label: 'Movió', color: '#8e24aa' },
+  delete: { label: 'Suprimió', color: '#e53935' },
+  restore: { label: 'Restauró', color: '#0696d7' },
+  permanent_delete: { label: 'Eliminó permanentemente', color: '#b71c1c' },
+  set_status: { label: 'Cambió estado', color: '#1e88e5' },
+  promote_version: { label: 'Promovió versión', color: '#0696d7' },
+  share: { label: 'Compartió', color: '#fb8c00' },
+  delete_orphan_photo: { label: 'Purgó foto huérfana', color: '#999' },
+};
+
+function ActivityView({ projectPrefix }) {
+  const [items, setItems] = React.useState(null);
+  React.useEffect(() => {
+    apiFetch(`${API}/api/activity?model_urn=${encodeURIComponent(projectPrefix)}&limit=150`)
+      .then(r => r.json())
+      .then(d => setItems(d.success ? d.data : []))
+      .catch(() => setItems([]));
+  }, [projectPrefix]);
+
+  return (
+    <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
+      <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 4 }}>Actividad</div>
+      <div style={{ fontSize: 13, color: '#888', marginBottom: 20 }}>Registro de auditoría del proyecto — quién hizo qué y cuándo.</div>
+      {items === null ? (
+        <div style={{ textAlign: 'center', padding: 48 }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>
+      ) : items.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 48, color: '#999', fontSize: 13 }}>Aún no hay actividad registrada.</div>
+      ) : (
+        <div style={{ background: '#fff', border: '1px solid #eee', borderRadius: 8, overflow: 'hidden' }}>
+          {items.map((a, i) => {
+            const cfg = ACTIVITY_LABELS[a.action] || { label: a.action, color: '#666' };
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid #f4f4f4' }}>
+                <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#eef3f8', color: '#456', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                  {getInitials(a.performed_by)}
+                </div>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 13 }}>
+                  <span style={{ fontWeight: 600, color: '#333' }}>{a.performed_by}</span>{' '}
+                  <span style={{ color: cfg.color, fontWeight: 600 }}>{cfg.label.toLowerCase()}</span>{' '}
+                  <span style={{ color: '#555', overflowWrap: 'anywhere' }}>{a.entity_name || ''}</span>
+                  {a.details?.dest_parent_id && <span style={{ color: '#999' }}> (a otra carpeta)</span>}
+                </div>
+                <span style={{ fontSize: 11, color: '#aaa', flexShrink: 0 }}>{formatDate(a.created_at)}</span>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
