@@ -34,6 +34,7 @@ import ContextMenu from '../components/ContextMenu';
 import PartidasModule from '../components/PartidasModule';
 import { ReviewModal, ReviewsView } from '../components/ReviewsModule';
 import { TransmittalModal, TransmittalsView } from '../components/TransmittalsModule';
+import { AttributesAdmin, AttributesPanel } from '../components/AttributesModule';
 
 // ── Fase 3: Componentes de Layout ──
 import FolderNode from '../components/FolderNode';
@@ -62,6 +63,8 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
   const [reviewModalItems, setReviewModalItems] = React.useState(null); // null = cerrado
   // ── Transmittals ──
   const [transmittalItems, setTransmittalItems] = React.useState(null); // null = cerrado
+  // ── Atributos personalizados ──
+  const [attributesItem, setAttributesItem] = React.useState(null); // archivo en edición
 
   // ── Búsqueda global del proyecto (no solo carpeta actual) ──
   const [globalResults, setGlobalResults] = React.useState(null);
@@ -299,6 +302,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                 <span style={{ color: '#888', fontWeight: 500 }}>Creado:</span><span style={{ color: '#333' }}>{project.created_at ? new Date(project.created_at).toLocaleDateString() : '—'}</span>
               </div>
             </div>
+            {isAdmin && <AttributesAdmin projectPrefix={projectPrefix} />}
             <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8, padding: 24, marginBottom: 20 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: '#333', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="#0696d7"><path d="M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z"/></svg>Almacenamiento</div>
               <div style={{ fontSize: 13, color: '#888' }}>Google Cloud Storage — activo</div>
@@ -563,7 +567,13 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
         onRename={(data) => fe.setEditingNodeId(data)}
         onShare={(item) => { fe.setShareTarget(item); fe.setShowShareModal(true); }}
         onMove={(item) => fe.setMoveState({ step: 1, items: [item.name], itemIds: [item.id || item.fullName], destPath: '', destId: null })}
-        onDelete={(fullName, id) => { fe.setDeleteTask({ ids: [], count: 1, single: { fullName, id } }); fe.setShowDeleteModal(true); }} />
+        onDelete={(fullName, id) => { fe.setDeleteTask({ ids: [], count: 1, single: { fullName, id } }); fe.setShowDeleteModal(true); }}
+        onAttributes={(item) => setAttributesItem(item)} />
+
+      {attributesItem && (
+        <AttributesPanel item={attributesItem} projectPrefix={projectPrefix} isAdmin={isAdmin}
+          onClose={() => setAttributesItem(null)} />
+      )}
 
       <NewFolderModal isOpen={fe.showNewFolder} folderName={fe.folderName} onFolderNameChange={fe.setFolderName} onCreate={fe.createFolder} onClose={() => fe.setShowNewFolder(false)} />
 

@@ -20,6 +20,7 @@ export default function ContextMenu({
   onShare,
   onMove,
   onDelete,
+  onAttributes,
 }) {
   if (!activeRowMenu) return null;
 
@@ -60,6 +61,12 @@ export default function ContextMenu({
         <button onClick={() => { onClose(); onShare(item); }}>
           <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg></div>
           Compartir
+        </button>
+      )}
+      {item.type !== 'folder' && onAttributes && (
+        <button onClick={() => { onClose(); onAttributes(item); }}>
+          <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></div>
+          Atributos
         </button>
       )}
       {item.type === 'folder' ? (
