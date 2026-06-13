@@ -214,8 +214,45 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     setCurrentPage(clamped);
   };
 
-  const zoomIn = () => setScale(prev => Math.min((prev || 1.0) + 0.25, 5.0));
-  const zoomOut = () => setScale(prev => Math.max((prev || 1.0) - 0.25, 0.25));
+  const zoomIn = () => setScale(prev => Math.min((prev || 1.0) * 1.2, 8.0));
+  const zoomOut = () => setScale(prev => Math.max((prev || 1.0) / 1.2, 0.2));
+
+  // Zoom anclado al cursor: el punto bajo el mouse se mantiene en su sitio
+  const zoomAt = (dir, clientX, clientY) => {
+    const cont = containerRef.current;
+    if (!cont) { dir > 0 ? zoomIn() : zoomOut(); return; }
+    const rect = cont.getBoundingClientRect();
+    const mx = clientX - rect.left + cont.scrollLeft;
+    const my = clientY - rect.top + cont.scrollTop;
+    setScale(prev => {
+      const next = dir > 0 ? Math.min(prev * 1.2, 8.0) : Math.max(prev / 1.2, 0.2);
+      const ratio = next / prev;
+      requestAnimationFrame(() => {
+        cont.scrollLeft = mx * ratio - (clientX - rect.left);
+        cont.scrollTop = my * ratio - (clientY - rect.top);
+      });
+      return next;
+    });
+  };
+
+  // Ajustar a página / ancho según el tamaño real del contenedor
+  const fitTo = useCallback(async (mode) => {
+    const pdf = pdfDocRef.current, cont = containerRef.current;
+    if (!pdf || !cont) return;
+    try {
+      const page = await pdf.getPage(currentPage);
+      const vp1 = page.getViewport({ scale: 1, rotation });
+      const sW = (cont.clientWidth - 64) / vp1.width;
+      const sH = (cont.clientHeight - 64) / vp1.height;
+      setScale(Math.max(0.2, mode === 'width' ? sW : Math.min(sW, sH)));
+    } catch (_) {}
+  }, [currentPage, rotation]);
+
+  // Al abrir un documento, ajustarlo a la vista (no 100% arbitrario)
+  useEffect(() => {
+    if (!loading && pdfDocRef.current) fitTo('page');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
   const rotateRight = () => setRotation(r => (r + 90) % 360);
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -265,9 +302,8 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       e.preventDefault(); 
       
       if (wrapRef.current && wrapRef.current.contains(e.target)) {
-        // Si el mouse está sobre la hoja (canvas u overlay) -> Zoom
-        if (e.deltaY < 0) zoomIn();
-        else zoomOut();
+        // Si el mouse está sobre la hoja (canvas u overlay) -> Zoom anclado al cursor
+        zoomAt(e.deltaY < 0 ? 1 : -1, e.clientX, e.clientY);
       } else if (e.target === container) {
         // Si el mouse está sobre el fondo gris -> Cambiar Página
         const now = Date.now();
@@ -363,6 +399,13 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
           </button>
 
+          <button onClick={() => fitTo('page')} style={styles.toolBtnDark} title="Ajustar página completa">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 8l-2 2 2 2M15 8l2 2-2 2"/></svg>
+          </button>
+          <button onClick={() => fitTo('width')} style={styles.toolBtnDark} title="Ajustar al ancho">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg>
+          </button>
+
           <div style={styles.separatorDark} />
 
           <div style={styles.pageInfoDark}>
@@ -416,21 +459,21 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       {nodeId && (
         <div style={styles.toolsBar}>
           {[
-            { id: 'pan', label: '✋', title: 'Navegar (pan y zoom)' },
-            { id: 'calibrate', label: '⚖', title: 'Calibrar escala: clic en 2 puntos de una distancia conocida' },
-            { id: 'measure', label: '📏', title: 'Medir distancia: clic por puntos, doble clic termina' },
-            { id: 'area', label: '⬠', title: 'Medir área: clic por vértices, doble clic cierra' },
-            { id: 'count', label: '🔢', title: 'Conteo: cada clic suma 1' },
-            { id: 'cloud', label: '☁', title: 'Nube de revisión: arrastrar' },
-            { id: 'arrow', label: '↗', title: 'Flecha: arrastrar' },
-            { id: 'rect', label: '▭', title: 'Rectángulo: arrastrar' },
-            { id: 'pen', label: '✏', title: 'Lápiz libre: arrastrar' },
-            { id: 'text', label: 'T', title: 'Texto: clic donde quieras escribir' },
-            { id: 'erase', label: '🗑', title: 'Borrar: clic sobre una anotación' },
+            { id: 'pan', title: 'Navegar (pan y zoom)', icon: <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/> },
+            { id: 'calibrate', title: 'Calibrar escala: clic en 2 puntos de una distancia conocida', icon: <><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/><path d="M7 17L17 7M10 14l1 1M13 11l1 1"/></> },
+            { id: 'measure', title: 'Medir distancia: clic por puntos, doble clic termina', icon: <><rect x="1" y="9" width="22" height="6" rx="1" transform="rotate(-45 12 12)"/><path d="M8 12l1.5 1.5M11 9l1.5 1.5M14 6l1.5 1.5"/></> },
+            { id: 'area', title: 'Medir área: clic por vértices, doble clic cierra', icon: <path d="M12 2l9 7-3.5 11h-11L3 9z"/> },
+            { id: 'count', title: 'Conteo: cada clic suma 1', icon: <><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></> },
+            { id: 'cloud', title: 'Nube de revisión: arrastrar', icon: <path d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 7 7 0 0 0-13.6 1.9A4 4 0 0 0 6 19z"/> },
+            { id: 'arrow', title: 'Flecha: arrastrar', icon: <path d="M5 19L19 5M19 5h-8M19 5v8"/> },
+            { id: 'rect', title: 'Rectángulo: arrastrar', icon: <rect x="4" y="6" width="16" height="12" rx="1"/> },
+            { id: 'pen', title: 'Lápiz libre: arrastrar', icon: <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/> },
+            { id: 'text', title: 'Texto: clic donde quieras escribir', icon: <path d="M5 6V4h14v2M12 4v16M9 20h6"/> },
+            { id: 'erase', title: 'Borrar: clic sobre una anotación', icon: <><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></> },
           ].map(t => (
             <button key={t.id} onClick={() => setTool(prev => prev === t.id ? 'pan' : t.id)} title={t.title}
               style={{ ...styles.toolsBtn, background: tool === t.id ? '#0696d7' : 'transparent', color: tool === t.id ? '#fff' : '#ccc' }}>
-              {t.label}
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{t.icon}</svg>
             </button>
           ))}
           <div style={{ width: 1, height: 20, background: '#444', margin: '0 6px' }} />
