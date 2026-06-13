@@ -1280,6 +1280,7 @@ def share_document():
     shared_by = data.get('shared_by', 'system')
     role = data.get('role', 'viewer')
     access_type = data.get('access_type', 'restricted')
+    expires_days = data.get('expires_days')  # None/0 = sin vencimiento
 
     if not node_id or not model_urn:
         return jsonify({"success": False, "error": "Missing node_id or model_urn"}), 400
@@ -1295,13 +1296,20 @@ def share_document():
 
     try:
         from db import get_db_connection
+        from datetime import datetime, timedelta, timezone
+        expires_at = None
+        try:
+            if expires_days and int(expires_days) > 0:
+                expires_at = datetime.now(timezone.utc) + timedelta(days=int(expires_days))
+        except (ValueError, TypeError):
+            expires_at = None
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO document_shares (file_node_id, model_urn, shared_by, role, access_type)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO document_shares (file_node_id, model_urn, shared_by, role, access_type, expires_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 RETURNING id
-            """, (node_id, model_urn, shared_by, role, access_type))
+            """, (node_id, model_urn, shared_by, role, access_type, expires_at))
             share_id = cursor.fetchone()[0]
             conn.commit()
             return jsonify({"success": True, "share_id": str(share_id)}), 200
@@ -1319,17 +1327,27 @@ def get_shared_document(share_id):
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT s.role, s.access_type, f.name, f.gcs_urn, f.size_bytes, f.mime_type
+                SELECT s.role, s.access_type, f.name, f.gcs_urn, f.size_bytes, f.mime_type,
+                       s.expires_at, s.revoked
                 FROM document_shares s
                 JOIN file_nodes f ON s.file_node_id = f.id
                 WHERE s.id = %s
             """, (share_id,))
             row = cursor.fetchone()
-            
+
             if not row:
                 return jsonify({"success": False, "error": "Enlace inválido o expirado"}), 404
-                
-            role, access_type, name, gcs_urn, size, mime = row
+
+            role, access_type, name, gcs_urn, size, mime, expires_at, revoked = row
+
+            # Enlace revocado por quien lo creó
+            if revoked:
+                return jsonify({"success": False, "error": "Este enlace fue revocado."}), 410
+            # Enlace vencido
+            if expires_at:
+                from datetime import datetime, timezone
+                if datetime.now(timezone.utc) > expires_at:
+                    return jsonify({"success": False, "error": "Este enlace expiró."}), 410
             
             if not gcs_urn:
                 return jsonify({"success": False, "error": "El archivo físico no existe"}), 404
@@ -1349,6 +1367,72 @@ def get_shared_document(share_id):
             }), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+def _ensure_share_revoked_column():
+    """Añade la columna 'revoked' a document_shares si falta (idempotente)."""
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("ALTER TABLE document_shares ADD COLUMN IF NOT EXISTS revoked BOOLEAN DEFAULT FALSE")
+            conn.commit()
+    except Exception as e:
+        print(f"[shares] ensure revoked column: {e}")
+
+
+@documents_bp.route('/api/docs/shares', methods=['GET'])
+def list_shares():
+    """Lista los enlaces compartidos de un proyecto (para gestionarlos/revocarlos)."""
+    model_urn = request.args.get('model_urn', 'global')
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+    try:
+        from db import get_db_connection
+        from datetime import datetime, timezone
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT s.id, f.name, s.shared_by, s.role, s.created_at, s.expires_at, s.revoked
+                FROM document_shares s JOIN file_nodes f ON s.file_node_id = f.id
+                WHERE s.model_urn = %s ORDER BY s.created_at DESC LIMIT 300
+            """, (model_urn,))
+            now = datetime.now(timezone.utc)
+            shares = []
+            for r in cur.fetchall():
+                expired = bool(r[5] and now > r[5])
+                state = 'revoked' if r[6] else ('expired' if expired else 'active')
+                shares.append({
+                    "id": str(r[0]), "name": r[1], "shared_by": r[2], "role": r[3],
+                    "created_at": r[4].isoformat() if r[4] else None,
+                    "expires_at": r[5].isoformat() if r[5] else None,
+                    "state": state
+                })
+        return jsonify({"success": True, "shares": shares})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@documents_bp.route('/api/docs/shares/<share_id>/revoke', methods=['POST'])
+def revoke_share(share_id):
+    """Revoca (desactiva) un enlace compartido."""
+    data = request.get_json() or {}
+    model_urn = data.get('model_urn', 'global')
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("UPDATE document_shares SET revoked = TRUE WHERE id = %s", (share_id,))
+            conn.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 # ── ENDPOINTS DE CONTROL DE PERMISOS (Fase 3 ISO 19650) ─────────────────
 

@@ -23,6 +23,7 @@ export default function ShareModal({
   shareLinkCopied, setShareLinkCopied,
   onClose
 }) {
+  const [expiresDays, setExpiresDays] = React.useState(0); // 0 = sin vencimiento
   if (!isOpen || !shareTarget) return null;
 
   const handleCopyLink = async () => {
@@ -34,7 +35,8 @@ export default function ShareModal({
           model_urn: projectPrefix,
           shared_by: user?.email || 'Unknown',
           role: shareGeneralRole,
-          access_type: shareGeneralAccess
+          access_type: shareGeneralAccess,
+          expires_days: expiresDays
         })
       });
       const data = await res.json();
@@ -177,6 +179,21 @@ export default function ShareModal({
             </div>
           </div>
         </div>
+
+        {shareGeneralAccess === 'anyone' && (
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#444' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>El enlace caduca en:</span>
+            <select value={expiresDays} onChange={e => setExpiresDays(Number(e.target.value))}
+              style={{ padding: '5px 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, cursor: 'pointer' }}>
+              <option value={0}>Nunca</option>
+              <option value={1}>1 día</option>
+              <option value={7}>7 días</option>
+              <option value={30}>30 días</option>
+              <option value={90}>90 días</option>
+            </select>
+          </div>
+        )}
 
         <div className="share-footer" style={{ position: 'relative' }}>
           <button className="btn-copy-link" style={shareLinkCopied ? { outline: '2px solid #0b57d0', outlineOffset: '2px', background: '#e8f0fe' } : {}} onClick={handleCopyLink}>

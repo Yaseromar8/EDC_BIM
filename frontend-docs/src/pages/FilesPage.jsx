@@ -36,6 +36,7 @@ import { ReviewModal, ReviewsView } from '../components/ReviewsModule';
 import { TransmittalModal, TransmittalsView } from '../components/TransmittalsModule';
 import { AttributesAdmin, AttributesPanel } from '../components/AttributesModule';
 import { AddToSetModal, SetsView } from '../components/SetsModule';
+import SharesManager from '../components/SharesManager';
 
 // ── Fase 3: Componentes de Layout ──
 import FolderNode from '../components/FolderNode';
@@ -312,6 +313,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
               </div>
             </div>
             {isAdmin && <AttributesAdmin projectPrefix={projectPrefix} />}
+            {isAdmin && <SharesManager projectPrefix={projectPrefix} />}
             <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8, padding: 24, marginBottom: 20 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: '#333', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="#0696d7"><path d="M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z"/></svg>Almacenamiento</div>
               <div style={{ fontSize: 13, color: '#888' }}>Google Cloud Storage — activo</div>

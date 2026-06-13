@@ -777,6 +777,8 @@ ensure_sets_tables()
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()
+from routes.documents import _ensure_share_revoked_column
+_ensure_share_revoked_column()
 
 @app.route('/api/inventory/schema', methods=['GET'])
 def get_inventory_schema():
