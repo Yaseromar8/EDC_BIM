@@ -35,6 +35,7 @@ import PartidasModule from '../components/PartidasModule';
 import { ReviewModal, ReviewsView } from '../components/ReviewsModule';
 import { TransmittalModal, TransmittalsView } from '../components/TransmittalsModule';
 import { AttributesAdmin, AttributesPanel } from '../components/AttributesModule';
+import { AddToSetModal, SetsView } from '../components/SetsModule';
 
 // ── Fase 3: Componentes de Layout ──
 import FolderNode from '../components/FolderNode';
@@ -65,6 +66,8 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
   const [transmittalItems, setTransmittalItems] = React.useState(null); // null = cerrado
   // ── Atributos personalizados ──
   const [attributesItem, setAttributesItem] = React.useState(null); // archivo en edición
+  // ── Conjuntos (Sets) ──
+  const [setModalItems, setSetModalItems] = React.useState(null); // null = cerrado
 
   // ── Búsqueda global del proyecto (no solo carpeta actual) ──
   const [globalResults, setGlobalResults] = React.useState(null);
@@ -166,6 +169,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                 { label: 'Configuración', mode: 'settings', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>, onClick: () => fe.setSidebarView('settings') },
                 { label: 'Revisiones', mode: 'reviews', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>, onClick: () => fe.setSidebarView('reviews') },
                 { label: 'Transmittals', mode: 'transmittals', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>, onClick: () => fe.setSidebarView('transmittals') },
+                { label: 'Conjuntos', mode: 'sets', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>, onClick: () => fe.setSidebarView('sets') },
                 { label: 'Actividad', mode: 'activity', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>, onClick: () => fe.setSidebarView('activity') },
                 // Sala de Cuarentena ISO 19650: solo admins (las acciones dentro son destructivas)
                 ...(isAdmin ? [{ label: 'Cuarentena', mode: 'quarantine', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>, onClick: () => fe.setSidebarView('quarantine') }] : []),
@@ -228,6 +232,12 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
         {/* TRANSMITTALS VIEW */}
         {fe.sidebarView === 'transmittals' && (
           <TransmittalsView projectPrefix={projectPrefix} />
+        )}
+
+        {/* SETS VIEW */}
+        {fe.sidebarView === 'sets' && (
+          <SetsView projectPrefix={projectPrefix} isAdmin={isAdmin}
+            onOpenFile={(it) => fe.setActiveFile({ id: it.node_id, name: it.name, type: 'file', fullName: it.name, version: it.version_number })} />
         )}
 
         {/* RFIs VIEW */}
@@ -407,6 +417,17 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                     <button onClick={() => setTransmittalItems(selFiles.map(f => ({ node_id: f.id, name: f.name, version: f.version || 1 })))}
                       style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#fb8c00', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Transmittal
+                    </button>
+                  );
+                })()}
+
+                {!fe.isTrashMode && fe.selected.size > 0 && (() => {
+                  const selFiles = fe.files.filter(f => fe.selected.has(f.fullName));
+                  if (!selFiles.length) return null;
+                  return (
+                    <button onClick={() => setSetModalItems(selFiles.map(f => ({ node_id: f.id, name: f.name, version: f.version || 1 })))}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#8e24aa', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg> Añadir a conjunto
                     </button>
                   );
                 })()}
@@ -634,6 +655,11 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
         projectPrefix={projectPrefix} user={user}
         onClose={() => setTransmittalItems(null)}
         onCreated={() => { fe.setSelected(new Set()); fe.setSidebarView('transmittals'); }} />
+
+      <AddToSetModal isOpen={setModalItems !== null} items={setModalItems || []}
+        projectPrefix={projectPrefix}
+        onClose={() => setSetModalItems(null)}
+        onAdded={() => fe.setSelected(new Set())} />
 
       {/* GATEWAY 3D OVERLAY (FRENTES) */}
       {showGateway && (
