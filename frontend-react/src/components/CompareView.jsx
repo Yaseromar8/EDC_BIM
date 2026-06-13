@@ -32,7 +32,7 @@ const S = {
     overlay: { position: 'fixed', inset: 0, zIndex: 9000, background: T.bg, display: 'flex', flexDirection: 'column', color: T.text, fontFamily: 'inherit', fontSize: 13 },
     // setup
     setupWrap: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 },
-    setupCard: { width: 'min(860px, 94vw)', background: T.panel, border: T.border, borderRadius: 12, padding: '26px 30px' },
+    setupCard: { width: 'min(980px, 94vw)', background: T.panel, border: T.border, borderRadius: 12, padding: '26px 30px' },
     sideCard: { flex: 1, background: T.panelSoft, border: T.borderSoft, borderRadius: T.radius, padding: '16px 18px', minWidth: 0 },
     label: { fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.muted, marginBottom: 10, fontWeight: 600 },
     select: { width: '100%', background: T.bg, color: T.text, border: T.border, borderRadius: 6, padding: '8px 10px', fontSize: 13, outline: 'none', marginBottom: 10 },
@@ -54,12 +54,29 @@ const S = {
     detail: { flex: 1.2, overflowY: 'auto', maxHeight: 180, fontSize: 12.5, background: T.panelSoft, borderRadius: T.radius, padding: '10px 12px', border: T.borderSoft },
 };
 
+const createEmptySide = () => ({
+    pickerSel: '',
+    pickerVersions: [],
+    pickerVUrn: '',
+    pickerLoadingV: false,
+    links: [],
+});
+
+const modelKey = (model) => {
+    if (!model) return '__unknown__';
+    try {
+        return String(model.id || model.getData?.().urn || model.getData?.().guid || '__unknown__');
+    } catch (e) {
+        return '__unknown__';
+    }
+};
+
 export default function CompareView({ BACKEND_URL, onExit }) {
     const [phase, setPhase] = useState('setup');           // 'setup' | 'view'
     const [models, setModels] = useState([]);
     const [side, setSide] = useState({
-        a: { sel: '', versions: [], vUrn: '', loadingV: false },
-        b: { sel: '', versions: [], vUrn: '', loadingV: false },
+        a: createEmptySide(),
+        b: createEmptySide(),
     });
     const [status, setStatus] = useState('');
     const [busy, setBusy] = useState(false);
@@ -73,6 +90,8 @@ export default function CompareView({ BACKEND_URL, onExit }) {
     const tipEl = useRef(null);
     const fiveDRef = useRef(null);
     const scopesRef = useRef(null);
+    const hoverFiveDCacheRef = useRef({});
+    const hoverFetchRef = useRef({ timer: null, seq: 0, pendingExt: null });
     const vs = useRef({ a: null, b: null, maps: {}, rev: {}, syncing: false, selSyncing: false });
 
     useEffect(() => {
@@ -108,7 +127,16 @@ export default function CompareView({ BACKEND_URL, onExit }) {
 
     // ── Seleccion por lado: al elegir modelo, cargar sus versiones ACC ──
     const pickModel = (key, val) => {
-        setSide(prev => ({ ...prev, [key]: { sel: val, versions: [], vUrn: '', loadingV: val && !val.startsWith('frente:') } }));
+        setSide(prev => ({
+            ...prev,
+            [key]: {
+                ...prev[key],
+                pickerSel: val,
+                pickerVersions: [],
+                pickerVUrn: '',
+                pickerLoadingV: val && !val.startsWith('frente:')
+            }
+        }));
         if (!val || val.startsWith('frente:')) return;
         const m = models.find(x => String(x.id) === val);
         if (!m) return;
@@ -117,33 +145,105 @@ export default function CompareView({ BACKEND_URL, onExit }) {
             .then(d => {
                 const versions = d.versions || [{ versionNumber: m.versionNumber, urn: m.urn, isCurrent: true }];
                 const current = versions.find(v => v.isCurrent) || versions[0];
-                setSide(prev => ({ ...prev, [key]: { ...prev[key], versions, vUrn: current ? current.urn : m.urn, loadingV: false } }));
+                setSide(prev => ({
+                    ...prev,
+                    [key]: {
+                        ...prev[key],
+                        pickerVersions: versions,
+                        pickerVUrn: current ? current.urn : m.urn,
+                        pickerLoadingV: false
+                    }
+                }));
             })
             .catch(() => setSide(prev => ({
                 ...prev,
-                [key]: { ...prev[key], versions: [{ versionNumber: m.versionNumber, urn: m.urn, isCurrent: true }], vUrn: m.urn, loadingV: false }
+                [key]: {
+                    ...prev[key],
+                    pickerVersions: [{ versionNumber: m.versionNumber, urn: m.urn, isCurrent: true }],
+                    pickerVUrn: m.urn,
+                    pickerLoadingV: false
+                }
             })));
     };
 
-    const pickVersion = (key, vUrn) => setSide(prev => ({ ...prev, [key]: { ...prev[key], vUrn } }));
+    const pickVersion = (key, vUrn) => setSide(prev => ({ ...prev, [key]: { ...prev[key], pickerVUrn: vUrn } }));
+    const addLink = (key) => {
+        setSide(prev => {
+            const s = prev[key];
+            if (!s.pickerSel) return prev;
+
+            let link = null;
+            if (s.pickerSel.startsWith('frente:')) {
+                const frente = s.pickerSel.slice(7);
+                link = { type: 'frente', value: frente, label: `Frente ${frente}` };
+            } else {
+                const m = models.find(x => String(x.id) === s.pickerSel);
+                if (!m || !s.pickerVUrn) return prev;
+                const v = s.pickerVersions.find(x => x.urn === s.pickerVUrn);
+                link = {
+                    type: 'source',
+                    value: s.pickerVUrn,
+                    modelId: m.id,
+                    label: `${m.name}${v && v.versionNumber ? ` · v${v.versionNumber}` : ''}`,
+                };
+            }
+
+            const currentLinks = link.type === 'frente'
+                ? []
+                : s.links.filter(item => item.type !== 'frente');
+            const exists = currentLinks.some(item => item.type === link.type && item.value === link.value);
+
+            return {
+                ...prev,
+                [key]: {
+                    ...s,
+                    links: exists ? currentLinks : [...currentLinks, link],
+                    pickerSel: '',
+                    pickerVersions: [],
+                    pickerVUrn: '',
+                    pickerLoadingV: false,
+                }
+            };
+        });
+    };
+    const removeLink = (key, idx) => {
+        setSide(prev => ({
+            ...prev,
+            [key]: {
+                ...prev[key],
+                links: prev[key].links.filter((_, i) => i !== idx),
+            }
+        }));
+    };
+    const clearLinks = (key) => {
+        setSide(prev => ({
+            ...prev,
+            [key]: {
+                ...prev[key],
+                links: [],
+            }
+        }));
+    };
     const swapSides = () => setSide(prev => ({ a: prev.b, b: prev.a }));
 
     const scopeOf = (s) => {
-        if (!s.sel) return null;
-        if (s.sel.startsWith('frente:')) return { type: 'frente', value: s.sel.slice(7) };
-        return s.vUrn ? { type: 'source', value: s.vUrn } : null;
+        if (!s.links.length) return null;
+        const front = s.links.find(item => item.type === 'frente');
+        if (front) return { type: 'frente', value: front.value };
+        const values = s.links.filter(item => item.type === 'source').map(item => item.value);
+        if (!values.length) return null;
+        return values.length === 1 ? { type: 'source', value: values[0] } : { type: 'sources', values };
     };
     const labelOf = (s) => {
-        if (!s.sel) return '';
-        if (s.sel.startsWith('frente:')) return `Frente ${s.sel.slice(7)}`;
-        const m = models.find(x => String(x.id) === s.sel);
-        const v = s.versions.find(x => x.urn === s.vUrn);
-        return m ? `${m.name}${v && v.versionNumber ? ` · v${v.versionNumber}` : ''}` : '';
+        if (!s.links.length) return '';
+        if (s.links.length === 1) return s.links[0].label;
+        return `${s.links.length} vínculos`;
     };
 
     // ── Visores ──
     const makeViewer = (container) => {
-        const v = new window.Autodesk.Viewing.GuiViewer3D(container, {});
+        const ViewerCtor = window.Autodesk.Viewing.Viewer3D || window.Autodesk.Viewing.GuiViewer3D;
+        const v = new ViewerCtor(container, {});
         v.start();
         return v;
     };
@@ -155,6 +255,52 @@ export default function CompareView({ BACKEND_URL, onExit }) {
             viewer.loadDocumentNode(doc, doc.getRoot().getDefaultGeometry(), opts || {})
                 .then(resolve).catch(reject);
         }, (err) => reject(new Error('No se pudo cargar esa versión (¿traducida en ACC?): ' + err)));
+    });
+
+    const sourceUrnsOf = (scope) => {
+        if (!scope) return [];
+        if (scope.type === 'source') return [scope.value];
+        if (scope.type === 'sources') return scope.values || [];
+        return [];
+    };
+    const loadUrns = async (viewer, urns, sharedOffset) => {
+        let offset = sharedOffset || null;
+        for (let i = 0; i < urns.length; i++) {
+            const opts = {
+                keepCurrentModels: i > 0 || (viewer.getAllModels && viewer.getAllModels().length > 0),
+                ...(offset ? { globalOffset: offset } : {})
+            };
+            const model = await loadUrn(viewer, urns[i], opts);
+            if (!offset) {
+                try { offset = model.getGlobalOffset && model.getGlobalOffset(); } catch (e) { /* noop */ }
+            }
+        }
+        return offset;
+    };
+    const buildExternalLookups = (viewer) => new Promise(resolve => {
+        const modelsInViewer = viewer.getAllModels ? viewer.getAllModels() : (viewer.model ? [viewer.model] : []);
+        if (!modelsInViewer.length) return resolve({ map: {}, rev: { byModel: {}, flat: {} } });
+
+        const map = {};
+        const rev = { byModel: {}, flat: {} };
+        let pending = modelsInViewer.length;
+
+        modelsInViewer.forEach(model => {
+            const key = modelKey(model);
+            rev.byModel[key] = rev.byModel[key] || {};
+            model.getExternalIdMapping((extMap) => {
+                Object.entries(extMap || {}).forEach(([ext, dbId]) => {
+                    map[ext] = { id: dbId, model };
+                    rev.byModel[key][dbId] = ext;
+                    if (!rev.flat[dbId]) rev.flat[dbId] = ext;
+                });
+                pending -= 1;
+                if (pending === 0) resolve({ map, rev });
+            }, () => {
+                pending -= 1;
+                if (pending === 0) resolve({ map, rev });
+            });
+        });
     });
 
     const wireSync = useCallback(() => {
@@ -184,13 +330,59 @@ export default function CompareView({ BACKEND_URL, onExit }) {
             v.addEventListener(Av.OBJECT_UNDER_MOUSE_CHANGED, (ev) => {
                 const dbId = ev.dbId;
                 const rev = vs.current.rev[k];
-                if (!dbId || dbId <= 0 || !rev || !rev[dbId]) { setTip(null); return; }
-                const ext = rev[dbId];
-                const data = fiveDRef.current && fiveDRef.current.byElement ? fiveDRef.current.byElement[ext] : null;
-                setTip({ side: k, ext, data });
+                const revByModel = rev && ev.model ? rev.byModel?.[modelKey(ev.model)] : null;
+                const ext = revByModel?.[dbId] || rev?.flat?.[dbId];
+                if (!dbId || dbId <= 0 || !ext) {
+                    hoverFetchRef.current.seq += 1;
+                    hoverFetchRef.current.pendingExt = null;
+                    if (hoverFetchRef.current.timer) {
+                        clearTimeout(hoverFetchRef.current.timer);
+                        hoverFetchRef.current.timer = null;
+                    }
+                    setTip(null);
+                    return;
+                }
+                const cached = hoverFiveDCacheRef.current[ext];
+                if (cached) {
+                    hoverFetchRef.current.pendingExt = null;
+                    setTip({ side: k, ext, data: cached, loading: false });
+                    return;
+                }
+                if (hoverFetchRef.current.pendingExt === ext) {
+                    return;
+                }
+
+                hoverFetchRef.current.seq += 1;
+                const fetchSeq = hoverFetchRef.current.seq;
+                hoverFetchRef.current.pendingExt = ext;
+                if (hoverFetchRef.current.timer) clearTimeout(hoverFetchRef.current.timer);
+                setTip(null);
+
+                hoverFetchRef.current.timer = setTimeout(async () => {
+                    try {
+                        const scopes = scopesRef.current;
+                        if (!scopes) return;
+                        const res = await apiFetch(`${BACKEND_URL}/api/compare/element-metrados`, {
+                            method: 'POST',
+                            body: JSON.stringify({ external_id: ext, a: scopes.a, b: scopes.b })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'No se pudo obtener el diff 5D del elemento');
+                        const byElement = { a: data.a || {}, b: data.b || {} };
+                        hoverFiveDCacheRef.current[ext] = byElement;
+                        if (hoverFetchRef.current.seq !== fetchSeq) return;
+                        hoverFetchRef.current.pendingExt = null;
+                        setTip({ side: k, ext, data: byElement });
+                    } catch (e) {
+                        console.warn('[Compare] hover 5D:', e);
+                        if (hoverFetchRef.current.seq !== fetchSeq) return;
+                        hoverFetchRef.current.pendingExt = null;
+                        setTip(null);
+                    }
+                }, 120);
             });
         });
-    }, []);
+    }, [BACKEND_URL]);
 
     const wireMirror = useCallback(() => {
         const Av = window.Autodesk.Viewing;
@@ -207,9 +399,14 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                 try {
                     if (!dbId) { if (ov) ov.clearSelection(); }
                     else {
-                        const ext = vs.current.rev[k] ? vs.current.rev[k][dbId] : null;
-                        const odb = ext && vs.current.maps[other] ? vs.current.maps[other][ext] : null;
-                        if (ov && ov.model) { if (odb) ov.select([odb]); else ov.clearSelection(); }
+                        const rev = vs.current.rev[k];
+                        const revByModel = rev && ev.model ? rev.byModel?.[modelKey(ev.model)] : null;
+                        const ext = revByModel?.[dbId] || rev?.flat?.[dbId] || null;
+                        const target = ext && vs.current.maps[other] ? vs.current.maps[other][ext] : null;
+                        if (ov) {
+                            if (target) ov.select([target.id], target.model);
+                            else ov.clearSelection();
+                        }
                         if (ext) openDetailRef.current({ id: ext, name: 'Elemento …' + String(ext).slice(-10) });
                     }
                 } finally { vs.current.selSyncing = false; }
@@ -220,7 +417,10 @@ export default function CompareView({ BACKEND_URL, onExit }) {
     const themeSide = (viewer, map, list, rgb) => {
         if (!viewer || !viewer.model || !map) return;
         const color = new window.THREE.Vector4(rgb[0], rgb[1], rgb[2], 1);
-        list.forEach(it => { const dbId = map[it.id]; if (dbId) viewer.setThemingColor(dbId, color, viewer.model, true); });
+        list.forEach(it => {
+            const target = map[it.id];
+            if (target) viewer.setThemingColor(target.id, color, target.model, true);
+        });
     };
 
     // ── Extraccion bajo demanda de versiones historicas (scope temporal) ──
@@ -277,17 +477,26 @@ export default function CompareView({ BACKEND_URL, onExit }) {
         const sb = scopeOf(side.b);
         if (!sa || !sb) return;
         scopesRef.current = { a: sa, b: sb };
+        hoverFiveDCacheRef.current = {};
+        hoverFetchRef.current.seq += 1;
+        hoverFetchRef.current.pendingExt = null;
+        if (hoverFetchRef.current.timer) {
+            clearTimeout(hoverFetchRef.current.timer);
+            hoverFetchRef.current.timer = null;
+        }
         setBusy(true); setDiff(null); setFiveD(null); fiveDRef.current = null;
         setDetail(null); setActiveList(null); setTip(null);
         setPhase('view');
         await new Promise(r => setTimeout(r, 60));            // esperar el render de los panes
 
         try {
-            const both3D = sa.type === 'source' && sb.type === 'source';
+            const urnsA = sourceUrnsOf(sa);
+            const urnsB = sourceUrnsOf(sb);
+            const both3D = urnsA.length > 0 && urnsB.length > 0;
 
             // 1) Asegurar que ambas versiones esten extraidas (el diff es en Postgres)
-            if (sa.type === 'source') await ensureExtracted(sa.value, 'lado A');
-            if (sb.type === 'source') await ensureExtracted(sb.value, 'lado B');
+            for (let i = 0; i < urnsA.length; i++) await ensureExtracted(urnsA[i], `lado A · vínculo ${i + 1}`);
+            for (let i = 0; i < urnsB.length; i++) await ensureExtracted(urnsB[i], `lado B · vínculo ${i + 1}`);
 
             // 2) Diff de datos
             setStatus('Comparando datos en PostgreSQL…');
@@ -307,23 +516,20 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                 if (!vs.current.b) vs.current.b = makeViewer(contB.current);
                 // Cargar A primero para conocer su globalOffset (cercano al modelo),
                 // y cargar B con EL MISMO offset -> alineados y sin perder precision.
-                await loadUrn(vs.current.a, sa.value);
-                let _off = null;
-                try { _off = vs.current.a.model.getGlobalOffset && vs.current.a.model.getGlobalOffset(); } catch (e) { /* noop */ }
-                await loadUrn(vs.current.b, sb.value, _off ? { globalOffset: _off } : undefined);
+                const offset = await loadUrns(vs.current.a, urnsA);
+                await loadUrns(vs.current.b, urnsB, offset);
                 wireSync();
 
-                const mapA = await new Promise(r => vs.current.a.model.getExternalIdMapping(r));
-                const mapB = await new Promise(r => vs.current.b.model.getExternalIdMapping(r));
-                vs.current.maps = { a: mapA, b: mapB };
-                const invert = (m) => { const out = {}; Object.keys(m || {}).forEach(k => { out[m[k]] = k; }); return out; };
-                vs.current.rev = { a: invert(mapA), b: invert(mapB) };
+                const lookupA = await buildExternalLookups(vs.current.a);
+                const lookupB = await buildExternalLookups(vs.current.b);
+                vs.current.maps = { a: lookupA.map, b: lookupB.map };
+                vs.current.rev = { a: lookupA.rev, b: lookupB.rev };
                 if (!sideEmpty) {
                     setStatus('Pintando diferencias…');
-                    themeSide(vs.current.b, mapB, d.added, COLORS.added);
-                    themeSide(vs.current.b, mapB, d.modified, COLORS.modified);
-                    themeSide(vs.current.a, mapA, d.removed, COLORS.removed);
-                    themeSide(vs.current.a, mapA, d.modified, COLORS.modified);
+                    themeSide(vs.current.b, lookupB.map, d.added, COLORS.added);
+                    themeSide(vs.current.b, lookupB.map, d.modified, COLORS.modified);
+                    themeSide(vs.current.a, lookupA.map, d.removed, COLORS.removed);
+                    themeSide(vs.current.a, lookupA.map, d.modified, COLORS.modified);
                 }
                 wireHover();
                 wireMirror();
@@ -337,7 +543,7 @@ export default function CompareView({ BACKEND_URL, onExit }) {
             setStatus('Calculando diff 5D (metrados y precios)…');
             try {
                 const r5 = await apiFetch(`${BACKEND_URL}/api/compare/metrados`, {
-                    method: 'POST', body: JSON.stringify({ a: sa, b: sb, include_elements: both3D })
+                    method: 'POST', body: JSON.stringify({ a: sa, b: sb })
                 });
                 const d5 = await r5.json();
                 if (r5.ok) { setFiveD(d5); fiveDRef.current = d5; }
@@ -345,7 +551,7 @@ export default function CompareView({ BACKEND_URL, onExit }) {
 
             if (!sideEmpty) {
                 setStatus(both3D
-                    ? 'Verde: agregado · rojo: eliminado · magenta: modificado · naranja: material natural del modelo (sin cambio). Hover = diff de metrado; click = espejo.'
+                    ? 'Listo. Pasa el mouse por un elemento para ver su metrado; haz clic para resaltarlo en ambos lados.'
                     : 'Diff de datos listo. El 3D se activa comparando dos modelos individuales.');
             }
         } catch (e) {
@@ -367,10 +573,28 @@ export default function CompareView({ BACKEND_URL, onExit }) {
         const viewer = vs.current[k];
         const map = vs.current.maps[k];
         if (!viewer || !viewer.model || !map) return;
-        const ids = list.map(it => map[it.id]).filter(Boolean);
-        if (ids.length) viewer.isolate(ids, viewer.model);
+        const targets = list.map(it => map[it.id]).filter(Boolean);
+        if (!targets.length) return;
+        const aggregate = targets.reduce((acc, target) => {
+            const key = modelKey(target.model);
+            if (!acc[key]) acc[key] = { model: target.model, ids: [] };
+            acc[key].ids.push(target.id);
+            return acc;
+        }, {});
+        const groups = Object.values(aggregate);
+        const vm = viewer.impl && viewer.impl.visibilityManager;
+        if (vm && typeof vm.aggregateIsolate === 'function') {
+            vm.aggregateIsolate(groups);
+            return;
+        }
+        viewer.isolate(groups[0].ids, groups[0].model);
     };
-    const showAll = () => ['a', 'b'].forEach(k => { const v = vs.current[k]; if (v && v.model) v.isolate([], v.model); });
+    const showAll = () => ['a', 'b'].forEach(k => {
+        const v = vs.current[k];
+        if (!v) return;
+        const modelsInViewer = v.getAllModels ? v.getAllModels() : (v.model ? [v.model] : []);
+        modelsInViewer.forEach(model => v.isolate([], model));
+    });
 
     const openDetail = async (item) => {
         try {
@@ -398,6 +622,8 @@ export default function CompareView({ BACKEND_URL, onExit }) {
     openDetailRef.current = openDetail;
 
     useEffect(() => () => {
+        hoverFetchRef.current.seq += 1;
+        if (hoverFetchRef.current.timer) clearTimeout(hoverFetchRef.current.timer);
         ['a', 'b'].forEach(k => { try { vs.current[k] && vs.current[k].finish(); } catch (e) { /* noop */ } });
     }, []);
 
@@ -424,13 +650,35 @@ export default function CompareView({ BACKEND_URL, onExit }) {
 
     // ── Render: selector de lado (setup) ──
     const renderSide = (key, title) => {
-        const s = side[key];
+        const rawSide = side[key];
+        const s = {
+            ...rawSide,
+            sel: rawSide.pickerSel,
+            versions: rawSide.pickerVersions,
+            vUrn: rawSide.pickerVUrn,
+            loadingV: rawSide.pickerLoadingV,
+        };
+        const linkValues = new Set(s.links.map(link => link.value));
+        const duplicateSelected = !!s.pickerSel && !s.pickerSel.startsWith('frente:') && !!s.pickerVUrn && linkValues.has(s.pickerVUrn);
+        const addDisabled = !s.pickerSel || (!s.pickerSel.startsWith('frente:') && !s.pickerVUrn) || duplicateSelected;
+        const sideName = key.toUpperCase();
+        const addLabel = duplicateSelected
+            ? 'Ya esta agregado'
+            : `${s.links.length ? '+ Agregar otro modelo' : '+ Agregar modelo'} a ${sideName}`;
         return (
             <div style={S.sideCard}>
-                <div style={S.label}>{title}</div>
-                <select style={S.select} value={s.sel} onChange={e => pickModel(key, e.target.value)}>
-                    <option value="">Seleccionar modelo o documento…</option>
-                    <optgroup label="Frentes completos (solo datos)">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <div style={S.label}>{title}</div>
+                    <span style={{ fontSize: 10.5, color: T.accent, border: '1px solid rgba(61,126,255,0.35)', borderRadius: 999, padding: '2px 8px', marginBottom: 10 }}>
+                        MULTI-MODELO
+                    </span>
+                </div>
+                <div style={{ fontSize: 11.5, color: T.faint, margin: '-3px 0 10px' }}>
+                    Selecciona un modelo, agregalo a la lista y repite para sumar mas vinculos.
+                </div>
+                <select style={S.select} value={s.pickerSel} onChange={e => pickModel(key, e.target.value)}>
+                    <option value="">Seleccionar modelo para agregar...</option>
+                    <optgroup label="Frentes completos (reemplaza la lista; solo datos)">
                         {frentes.map(f => <option key={'f' + f} value={'frente:' + f}>Frente {f}</option>)}
                     </optgroup>
                     {Object.entries(byFrente).map(([f, ms]) => (
@@ -441,21 +689,88 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                 </select>
                 <div style={{ ...S.label, marginTop: 4 }}>Versión</div>
                 <select
-                    style={{ ...S.select, opacity: s.versions.length ? 1 : 0.5 }}
-                    value={s.vUrn}
-                    disabled={!s.versions.length}
+                    style={{ ...S.select, opacity: s.pickerVersions.length ? 1 : 0.5 }}
+                    value={s.pickerVUrn}
+                    disabled={!s.pickerVersions.length}
                     onChange={e => pickVersion(key, e.target.value)}
                 >
-                    {s.loadingV && <option>Cargando versiones…</option>}
-                    {!s.loadingV && !s.versions.length && <option>{s.sel && !s.sel.startsWith('frente:') ? '—' : 'No aplica (frente completo)'}</option>}
-                    {s.versions.map(v => (
+                    {s.pickerLoadingV && <option>Cargando versiones...</option>}
+                    {!s.pickerLoadingV && !s.pickerVersions.length && <option>{s.pickerSel && !s.pickerSel.startsWith('frente:') ? '-' : 'No aplica (frente completo)'}</option>}
+                    {s.pickerVersions.map(v => (
                         <option key={v.urn} value={v.urn}>
                             v{v.versionNumber}{v.isCurrent ? ' · actual' : ''}{v.createTime ? ` · ${String(v.createTime).slice(0, 10)}` : ''}
                         </option>
                     ))}
                 </select>
                 <div style={{ fontSize: 11.5, color: T.faint, minHeight: 16 }}>
-                    {s.versions.length > 1 && 'Las versiones históricas se extraen automáticamente al comparar.'}
+                    {s.pickerVersions.length > 1 && 'Las versiones historicas se extraen automaticamente al comparar.'}
+                </div>
+                <button
+                    type="button"
+                    style={{
+                        ...S.btnGhost,
+                        width: '100%',
+                        marginTop: 8,
+                        background: addDisabled ? 'transparent' : T.accent,
+                        color: addDisabled ? T.muted : '#fff',
+                        border: addDisabled ? T.border : 'none',
+                        fontWeight: 600,
+                        opacity: addDisabled ? 0.45 : 1,
+                        cursor: addDisabled ? 'default' : 'pointer'
+                    }}
+                    disabled={addDisabled}
+                    onClick={() => addLink(key)}
+                >
+                    {addLabel}
+                </button>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10, maxHeight: 118, overflowY: 'auto' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <div style={{ fontSize: 11, color: T.faint, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                            {s.links.length} vinculo{s.links.length === 1 ? '' : 's'} agregado{s.links.length === 1 ? '' : 's'}
+                        </div>
+                        {s.links.length > 0 && (
+                            <button
+                                type="button"
+                                style={{ ...S.btnGhost, padding: '2px 7px', fontSize: 11 }}
+                                onClick={() => clearLinks(key)}
+                            >
+                                Limpiar
+                            </button>
+                        )}
+                    </div>
+                    {s.links.length === 0 && (
+                        <div style={{ padding: '7px 8px', border: T.borderSoft, borderRadius: 6, color: T.faint, background: 'rgba(255,255,255,0.02)' }}>
+                            Todavia no hay modelos agregados en este lado.
+                        </div>
+                    )}
+                    {s.links.map((link, idx) => (
+                        <div
+                            key={`${link.type}-${link.value}`}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                padding: '6px 8px',
+                                border: T.borderSoft,
+                                borderRadius: 6,
+                                background: 'rgba(255,255,255,0.03)',
+                                minWidth: 0
+                            }}
+                        >
+                            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={link.label}>
+                                {link.label}
+                            </span>
+                            <button
+                                type="button"
+                                style={{ ...S.btnGhost, padding: '2px 7px', fontSize: 12 }}
+                                onClick={() => removeLink(key, idx)}
+                                title="Quitar vínculo"
+                            >
+                                ×
+                            </button>
+                        </div>
+                    ))}
                 </div>
             </div>
         );
@@ -508,6 +823,13 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                         <span style={{ ...S.chipSide, color: T.red }} title={labelOf(side.a)}>A · {labelOf(side.a)}</span>
                         <span style={{ color: T.faint }}>→</span>
                         <span style={{ ...S.chipSide, color: T.green }} title={labelOf(side.b)}>B · {labelOf(side.b)}</span>
+                        {diff && (
+                            <div style={{ display: 'flex', gap: 14, marginLeft: 16, alignItems: 'center' }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: T.muted }}><span style={S.dot(T.green)} />Agregado</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: T.muted }}><span style={S.dot(T.red)} />Eliminado</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: T.muted }}><span style={S.dot(T.magenta)} />Modificado</span>
+                            </div>
+                        )}
                         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
                             <button style={S.btnGhost} onClick={editSelection}>Editar selección</button>
                             <button style={S.btnGhost} onClick={showAll}>Mostrar todo</button>
