@@ -68,19 +68,26 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
 
   // ── Persistencia ──
   const saveMarkup = async (kind, geometry, text = null) => {
-    const local = { id: `tmp_${Date.now()}`, page, kind, geometry, style: { color }, text, created_by: userName };
+    const local = { id: `tmp_${Date.now()}`, page, kind, geometry, style: { color }, text, created_by: userName, _unsaved: true };
     setMarkups(prev => [...prev, local]);
     try {
       const r = await apiFetch(`${API}/api/pdf/markups`, {
         method: 'POST',
         body: JSON.stringify({ node_id: nodeId, model_urn: projectPrefix, page, kind, geometry, style: { color }, text, user: userName })
       });
+      if (r.status === 404) throw new Error('endpoint-404');
       const d = await r.json();
-      if (d.success) setMarkups(prev => prev.map(m => m.id === local.id ? { ...m, id: d.id } : m));
-      else throw new Error(d.error);
+      if (d.success) setMarkups(prev => prev.map(m => m.id === local.id ? { ...m, id: d.id, _unsaved: false } : m));
+      else throw new Error(d.error || 'fallo');
     } catch (e) {
-      toast.error('No se pudo guardar la anotación');
-      setMarkups(prev => prev.filter(m => m.id !== local.id));
+      // No borramos la anotación: el usuario no pierde su trabajo en la sesión.
+      // Queda marcada como no-guardada (no sobrevive a recargar hasta que el
+      // backend responda). Mensaje accionable según el tipo de fallo.
+      if (String(e.message).includes('404')) {
+        toast.error('Backend desactualizado: reinícialo para guardar anotaciones.', { duration: 5000 });
+      } else {
+        toast.error('No se pudo guardar la anotación (revisa el backend).');
+      }
     }
   };
 

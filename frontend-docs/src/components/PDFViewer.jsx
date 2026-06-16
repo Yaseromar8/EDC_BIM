@@ -517,7 +517,10 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
-          <div style={{ padding: '48px 0', display: 'flex', justifyContent: 'center' }}>
+          {/* minWidth 100% + width fit-content: centra cuando el plano es mas
+              chico que la pantalla, pero crece y deja hacer scroll a TODOS los
+              lados cuando el zoom lo hace mas grande (sin recortar los bordes). */}
+          <div style={{ padding: 48, boxSizing: 'border-box', minWidth: '100%', width: 'fit-content', margin: '0 auto', display: 'flex', justifyContent: 'center' }}>
             <div ref={wrapRef} style={{ position: 'relative' }}>
               <canvas ref={canvasRef} style={styles.canvas} />
               {nodeId && vpInfo && (
@@ -557,7 +560,7 @@ const styles = {
   toolsBtn: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 28, border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14, transition: 'background 0.15s' },
 
   sidebar: { width: 220, background: '#f9f9f9', borderRight: '1px solid #ccc', overflowY: 'auto', display: 'flex', flexDirection: 'column', flexShrink: 0 },
-  canvasContainer: { flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' },
+  canvasContainer: { flex: 1, overflow: 'auto' },
   canvas: { boxShadow: '0 4px 16px rgba(0,0,0,0.3)', background: '#fff' },
   downloadBtn: { marginTop: 16, padding: '8px 20px', background: '#0696d7', color: '#fff', border: 'none', borderRadius: 4, textDecoration: 'none', fontSize: 13, fontWeight: 500 },
 };

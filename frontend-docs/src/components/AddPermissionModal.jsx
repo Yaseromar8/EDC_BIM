@@ -22,7 +22,7 @@ export const ACCPillBars = ({ level }) => {
 
 export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClose, onSuccess }) {
   const [email, setEmail] = useState('');
-  const [level, setLevel] = useState('view_only');
+  const [level, setLevel] = useState('view_download');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -39,13 +39,15 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [dropdownRef]);
 
+  // Niveles EXACTOS que reconoce el backend (folder_permissions.PERMISSION_LEVELS).
+  // Antes el modal ofrecía view_only/create/create_upload que NO existen en el
+  // backend -> "Nivel inválido" al otorgar (el default view_only siempre fallaba).
   const PERMISSION_LEVELS = [
-    { value: 'view_only', label: 'Ver', desc: 'Ver archivos' },
-    { value: 'view_download', label: 'Ver', desc: 'Ver y descargar archivos' },
-    { value: 'create', label: 'Crear', desc: 'Ver+descargar+publicar marcas de revisión' },
-    { value: 'create_upload', label: 'Crear', desc: 'Ver+descargar+publicar marcas de revisión+cargar' },
-    { value: 'edit', label: 'Editar', desc: 'Ver+descargar+publicar marcas de revisión+cargar+editar' },
-    { value: 'admin', label: 'Administrar', desc: 'Controles administrativos completos' }
+    { value: 'viewer', label: 'Ver', desc: 'Solo ver archivos' },
+    { value: 'view_download', label: 'Ver y descargar', desc: 'Ver y descargar archivos' },
+    { value: 'view_markup', label: 'Comentar', desc: 'Ver, descargar y publicar marcas de revisión' },
+    { value: 'edit', label: 'Editar', desc: 'Ver, descargar, marcar y subir/editar archivos' },
+    { value: 'admin', label: 'Administrar', desc: 'Control total, incluida eliminación y permisos' }
   ];
 
   const selectedOption = PERMISSION_LEVELS.find(l => l.value === level);
