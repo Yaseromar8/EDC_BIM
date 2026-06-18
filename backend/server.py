@@ -753,6 +753,8 @@ from routes.attributes import attributes_bp, ensure_attributes_tables
 app.register_blueprint(attributes_bp)
 from routes.sets import sets_bp, ensure_sets_tables
 app.register_blueprint(sets_bp)
+from routes.element_docs import element_docs_bp, ensure_element_docs_table
+app.register_blueprint(element_docs_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
@@ -774,6 +776,7 @@ ensure_reviews_table()
 ensure_transmittals_table()
 ensure_attributes_tables()
 ensure_sets_tables()
+ensure_element_docs_table()
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()

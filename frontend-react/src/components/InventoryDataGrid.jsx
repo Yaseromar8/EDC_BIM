@@ -706,7 +706,12 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
     }, []);
 
     const handleCellEdit = useCallback(async (extId, colKey, newValue, modelUrn) => {
-        setFlattenedData(prev => prev.map(r => r.dbId === extId ? { ...r, _isSaving: true, [colKey]: newValue } : r));
+        // Guardar el valor previo para poder revertir si el guardado falla
+        let prevValue;
+        setFlattenedData(prev => prev.map(r => {
+            if (r.dbId === extId) { prevValue = r[colKey]; return { ...r, _isSaving: true, _saveError: false, [colKey]: newValue }; }
+            return r;
+        }));
 
         try {
             const res = await apiFetch(`${BACKEND_URL}/api/inventory`, {
@@ -733,8 +738,10 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
 
         } catch(e) {
             console.error('[LIVE EDIT] Error:', e);
-            alert("Error al guardar: " + e.message);
-            setFlattenedData(prev => prev.map(r => r.dbId === extId ? { ...r, _isSaving: false } : r));
+            // Revertir al valor previo (no mostrar como guardado lo que falló) y marcar la fila
+            setFlattenedData(prev => prev.map(r => r.dbId === extId ? { ...r, _isSaving: false, _saveError: true, [colKey]: prevValue } : r));
+            // Limpiar la marca de error después de unos segundos
+            setTimeout(() => setFlattenedData(prev => prev.map(r => r.dbId === extId ? { ...r, _saveError: false } : r)), 4000);
         }
     }, []);
 
