@@ -12,6 +12,59 @@ inventory_bp = Blueprint('inventory', __name__)
 # Memoria temporal para progreso (en un entorno PROD debería ser Redis/DB)
 EXTRACTION_JOBS = {}
 
+def ensure_extraction_jobs_table():
+    """Estado de jobs en Postgres: visible entre workers de gunicorn y persistente
+    si un worker se reinicia (la memoria por-proceso no basta en produccion)."""
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""CREATE TABLE IF NOT EXISTS extraction_jobs (
+                job_id TEXT PRIMARY KEY, status TEXT, progress INTEGER,
+                message TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+            conn.commit()
+    except Exception as e:
+        print(f"[jobs] ensure table: {e}")
+
+def set_job(job_id, data):
+    """Escribe el estado en memoria (rapido/granular) y lo persiste en Postgres
+    (cross-worker). El tracking nunca debe romper la extraccion -> best-effort."""
+    EXTRACTION_JOBS[job_id] = data
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""INSERT INTO extraction_jobs (job_id, status, progress, message, updated_at)
+                           VALUES (%s,%s,%s,%s,NOW())
+                           ON CONFLICT (job_id) DO UPDATE SET status=EXCLUDED.status,
+                             progress=EXCLUDED.progress, message=EXCLUDED.message, updated_at=NOW()""",
+                        (job_id, data.get('status'), data.get('progress'), data.get('message')))
+            conn.commit()
+    except Exception:
+        pass
+
+def get_job(job_id):
+    """Memoria primero (mismo worker); si no, Postgres (otro worker). Detecta jobs
+    colgados: si lleva >10 min 'pending' sin avanzar, el worker probablemente murio."""
+    job = EXTRACTION_JOBS.get(job_id)
+    if job:
+        return job
+    try:
+        from db import get_db_connection
+        from datetime import datetime, timezone, timedelta
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT status, progress, message, updated_at FROM extraction_jobs WHERE job_id = %s", (job_id,))
+            row = cur.fetchone()
+            if row:
+                status, progress, message, updated = row
+                if status == 'pending' and updated and (datetime.now(timezone.utc) - updated.replace(tzinfo=timezone.utc)) > timedelta(minutes=10):
+                    return {'status': 'error', 'progress': progress or 0, 'message': 'La extraccion se interrumpio (worker reiniciado).'}
+                return {'status': status, 'progress': progress, 'message': message}
+    except Exception:
+        pass
+    return None
+
 APS_MD_URL = "https://developer.api.autodesk.com/modelderivative/v2/designdata"
 
 # =====================================================================
@@ -118,7 +171,7 @@ def extract_metadata_task(urn, target_urn, job_id):
         print(f"[Extractor] URN sanitizado: {urn}")
         print(f"[Extractor] Target URN: {target_urn}")
         
-        EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': 0, 'message': 'Conectando con Autodesk...'}
+        set_job(job_id, {'status': 'pending', 'progress': 0, 'message': 'Conectando con Autodesk...'})
         token_result = get_internal_token()
         if isinstance(token_result, tuple):
             token, err = token_result
@@ -128,10 +181,10 @@ def extract_metadata_task(urn, target_urn, job_id):
         if err or not token:
             raise Exception(f"Token error: {err}")
         print(f"[Extractor] Token obtenido OK")
-        EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': 10, 'message': 'Autenticacion exitosa. Consultando modelo...'}
+        set_job(job_id, {'status': 'pending', 'progress': 10, 'message': 'Autenticacion exitosa. Consultando modelo...'})
 
         # Fase 1: GUID
-        EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': 20, 'message': 'Buscando metadatos 3D del modelo...'}
+        set_job(job_id, {'status': 'pending', 'progress': 20, 'message': 'Buscando metadatos 3D del modelo...'})
         uid_url = f"{APS_MD_URL}/{urn}/metadata"
         headers = {'Authorization': f'Bearer {token}'}
         
@@ -230,7 +283,7 @@ def extract_metadata_task(urn, target_urn, job_id):
         # Fase 2: Extracción Properties (Paginada)
         # Usamos POST .../properties:query con paginación para garantizar cobertura total.
         # Fallback al GET legacy si el POST falla.
-        EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': 40, 'message': 'Descargando propiedades (paginado)...'}
+        set_job(job_id, {'status': 'pending', 'progress': 40, 'message': 'Descargando propiedades (paginado)...'})
         
         collection = None
         PAGE_SIZE = 500
@@ -250,7 +303,7 @@ def extract_metadata_task(urn, target_urn, job_id):
                     resp = requests.post(query_url, headers={**headers, 'Content-Type': 'application/json'}, json=payload)
                     if resp.status_code == 202:
                         pct = 40 + int((page * PAGE_SIZE) / max(1, PAGE_SIZE * 10) * 20)
-                        EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': min(pct, 65), 'message': f'Esperando respuesta de Autodesk (intento {attempt+1})...'}
+                        set_job(job_id, {'status': 'pending', 'progress': min(pct, 65), 'message': f'Esperando respuesta de Autodesk (intento {attempt+1})...'})
                         time.sleep(5)
                         continue
                     break
@@ -261,7 +314,7 @@ def extract_metadata_task(urn, target_urn, job_id):
                 batch = resp.json().get('data', {}).get('collection', [])
                 all_items.extend(batch)
                 print(f"[Extractor] Fase 2 - Página {page+1}: +{len(batch)} elementos (total: {len(all_items)})")
-                EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': min(40 + page * 3, 65), 'message': f'Descargando propiedades ({len(all_items)} elementos)...'}
+                set_job(job_id, {'status': 'pending', 'progress': min(40 + page * 3, 65), 'message': f'Descargando propiedades ({len(all_items)} elementos)...'})
                 
                 if len(batch) < PAGE_SIZE:
                     break  # Última página
@@ -281,7 +334,7 @@ def extract_metadata_task(urn, target_urn, job_id):
                 print(f"[Extractor] Fase 2 (GET fallback) - Intento {attempt+1}/{max_retries}: status={resp.status_code}")
                 if resp.status_code == 202:
                     pct = 40 + int((attempt / max_retries) * 25)
-                    EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': pct, 'message': f'Esperando respuesta de Autodesk (intento {attempt+1})...'}
+                    set_job(job_id, {'status': 'pending', 'progress': pct, 'message': f'Esperando respuesta de Autodesk (intento {attempt+1})...'})
                     time.sleep(5)
                     continue
                 resp.raise_for_status()
@@ -293,7 +346,7 @@ def extract_metadata_task(urn, target_urn, job_id):
             raise Exception("Autodesk tardó demasiado en preparar las propiedades.")
 
         # Fase 2.1: Extracción Árbol Jerárquico (Para Herencia Tipo->Instancia)
-        EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': 70, 'message': 'Descargando árbol jerárquico (Fusión Semántica)...'}
+        set_job(job_id, {'status': 'pending', 'progress': 70, 'message': 'Descargando árbol jerárquico (Fusión Semántica)...'})
         hier_url = f"{APS_MD_URL}/{urn}/metadata/{guid}"
         print(f"[Extractor] Fase 2.1 - GET {hier_url}")
         hier_resp = requests.get(hier_url, headers=headers)
@@ -344,7 +397,7 @@ def extract_metadata_task(urn, target_urn, job_id):
         if missing_leaf_ids:
             print(f"[Extractor] Fase 2.2 - [!] DETECTADOS {len(missing_leaf_ids)} nodos hoja en arbol AUSENTES del collection")
             print(f"[Extractor] Fase 2.2 - Intentando recuperar propiedades individuales para nodos faltantes...")
-            EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': 72, 'message': f'Recuperando {len(missing_leaf_ids)} elementos faltantes...'}
+            set_job(job_id, {'status': 'pending', 'progress': 72, 'message': f'Recuperando {len(missing_leaf_ids)} elementos faltantes...'})
             
             # Intentar recuperar las propiedades de los nodos faltantes en lotes
             missing_list = list(missing_leaf_ids)
@@ -369,7 +422,7 @@ def extract_metadata_task(urn, target_urn, job_id):
             print(f"[Extractor] Fase 2.2 - [OK] Cobertura completa: {len(tree_leaf_ids)} hojas, todas presentes en collection")
 
         # Fase 3: Inserción BD y Fusión Genética
-        EXTRACTION_JOBS[job_id] = {'status': 'pending', 'progress': 80, 'message': 'Estructurando gemelo digital (Fusionando Familias)...'}
+        set_job(job_id, {'status': 'pending', 'progress': 80, 'message': 'Estructurando gemelo digital (Fusionando Familias)...'})
         
         props_by_id = {node.get('objectid'): node.get('properties', {}) for node in collection}
         names_by_id = {node.get('objectid'): node.get('name', 'Unnamed') for node in collection}
@@ -566,7 +619,7 @@ def extract_metadata_task(urn, target_urn, job_id):
         print(f"[Extractor] Fase 3 - {len(inventory_data)} instancias geométricas para insertar ({skipped_nodes} nodos type/category descartados)")
 
         if not inventory_data:
-            EXTRACTION_JOBS[job_id] = {'status': 'success', 'progress': 100, 'message': 'El modelo no contiene objetos con ID.'}
+            set_job(job_id, {'status': 'success', 'progress': 100, 'message': 'El modelo no contiene objetos con ID.'})
             print(f"[Extractor] Sin objetos con ID. Finalizando.")
             return
 
@@ -623,7 +676,7 @@ def extract_metadata_task(urn, target_urn, job_id):
             execute_values(cursor, insert_query, records)
             conn.commit()
 
-        EXTRACTION_JOBS[job_id] = {'status': 'success', 'progress': 100, 'message': f'Extracción completa. {len(inventory_data)} activos insertados.'}
+        set_job(job_id, {'status': 'success', 'progress': 100, 'message': f'Extracción completa. {len(inventory_data)} activos insertados.'})
         print(f"[Extractor] COMPLETADO: {len(inventory_data)} activos insertados en PostgreSQL")
         print(f"[Extractor] ===== FIN JOB: {job_id} =====\n")
 
@@ -631,7 +684,7 @@ def extract_metadata_task(urn, target_urn, job_id):
         import traceback
         traceback.print_exc()
         print(f"[Extractor ERROR] {e}")
-        EXTRACTION_JOBS[job_id] = {'status': 'error', 'progress': 0, 'message': str(e)}
+        set_job(job_id, {'status': 'error', 'progress': 0, 'message': str(e)})
 
 
 @inventory_bp.route('/api/inventory/extract', methods=['POST'])
@@ -657,7 +710,7 @@ def start_extraction():
 
 @inventory_bp.route('/api/inventory/extract/status/<job_id>', methods=['GET'])
 def get_extraction_status(job_id):
-    job = EXTRACTION_JOBS.get(job_id)
+    job = get_job(job_id)
     if not job:
         return jsonify({'error': 'Job not found'}), 404
         
