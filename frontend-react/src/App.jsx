@@ -1693,17 +1693,23 @@ function App() {
     };
   }, [selectedProject]);
 
-  const triggerBackgroundExtraction = async (urn) => {
+  // existingJobId: cuando Update/Relink ya dispararon la extracción en el backend,
+  // pasamos su job_id para SONDEARLO en vez de lanzar una segunda extracción del
+  // mismo URN (antes corrían dos en paralelo, purgando/reinsertando a la vez).
+  const triggerBackgroundExtraction = async (urn, existingJobId = null) => {
     setExtractionJobs(prev => ({ ...prev, [urn]: { progress: 0, status: 'Iniciando extracción...', isActive: true } }));
-    console.log("[Extraction] Iniciando autollamada a la DB para URN:", urn);
+    console.log("[Extraction] URN:", urn, existingJobId ? `(sondeando job ${existingJobId})` : '(nuevo job)');
     try {
-      const res = await apiFetch(`${BACKEND_URL}/api/inventory/extract`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urn, target_urn: selectedProject ? selectedProject.id : urn })
-      });
-      if (!res.ok) throw new Error("Error iniciando job");
-      const { job_id } = await res.json();
+      let job_id = existingJobId;
+      if (!job_id) {
+        const res = await apiFetch(`${BACKEND_URL}/api/inventory/extract`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urn, target_urn: selectedProject ? selectedProject.id : urn })
+        });
+        if (!res.ok) throw new Error("Error iniciando job");
+        job_id = (await res.json()).job_id;
+      }
 
       const pollInterval = setInterval(async () => {
         try {
@@ -1784,7 +1790,8 @@ function App() {
           });
 
           if (data.newUrn) {
-            triggerBackgroundExtraction(data.newUrn);
+            // El backend ya disparó la extracción: sondeamos SU job (no lanzamos otra)
+            triggerBackgroundExtraction(data.newUrn, data.extraction_job_id || null);
           }
 
           // Invalidate inventory caches immediately so stale data from the old URN
@@ -1853,9 +1860,8 @@ function App() {
               setActiveViewableGuids(prev => ({ ...prev, [newModelData.urn]: viewGuid }));
             }
 
-            alert("Model relinked successfully.");
-            // FIRE AND FORGET EXTRACTION
-            triggerBackgroundExtraction(newModelData.urn);
+            // El backend ya disparó la extracción del relink: sondeamos SU job
+            triggerBackgroundExtraction(newModelData.urn, config.extraction_job_id || null);
           }
         } else {
           alert("Failed to relink model.");

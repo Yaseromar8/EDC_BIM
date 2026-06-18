@@ -430,25 +430,28 @@ def update_model_link():
             
             save_project_config_internal(config)
             
-            # AUTO-EXTRACT: Disparar extracción en background (no depende del frontend)
+            # AUTO-EXTRACT: Disparar extracción en background (no depende del frontend).
+            # Devolvemos el job_id para que el frontend SONDEE este mismo job en vez de
+            # lanzar una segunda extracción (antes corrían dos en paralelo del mismo URN).
             target = app_project_id or model.get('appProjectId') or new_urn
+            extraction_job_id = None
             try:
                 from routes.inventory import extract_metadata_task
-                job_id = f"auto_update_{int(time.time())}"
+                extraction_job_id = f"auto_update_{int(time.time())}"
                 thread = threading.Thread(
                     target=extract_metadata_task,
-                    args=(new_urn, target, job_id),
+                    args=(new_urn, target, extraction_job_id),
                     daemon=True
                 )
                 thread.start()
-                print(f"[Update] Auto-extracción iniciada en background (job: {job_id})")
+                print(f"[Update] Auto-extracción iniciada en background (job: {extraction_job_id})")
             except Exception as extract_err:
                 print(f"[Update] Advertencia: No se pudo iniciar auto-extracción: {extract_err}")
-            
+
             if app_project_id:
                 config['models'] = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
-                
-            return jsonify({'updated': True, 'config': config, 'newUrn': new_urn})
+
+            return jsonify({'updated': True, 'config': config, 'newUrn': new_urn, 'extraction_job_id': extraction_job_id})
         else:
             # Self-healing: Update might have occurred before the metadata fix.
             # Force verify if we have the correct lastModifiedTime and versionNumber.
@@ -668,25 +671,29 @@ def relink_model_route():
     
     if model_found:
         if save_project_config_internal(config):
-             # AUTO-EXTRACT: Disparar extracción en background para el nuevo URN
+             # AUTO-EXTRACT: Disparar extracción en background para el nuevo URN.
+             # Devolvemos el job_id para que el frontend sondee este job (evita doble extracción).
              new_urn = new_data.get('urn')
+             extraction_job_id = None
              if new_urn and app_project_id:
                  try:
                      from routes.inventory import extract_metadata_task
-                     job_id = f"auto_relink_{int(time.time())}"
+                     extraction_job_id = f"auto_relink_{int(time.time())}"
                      thread = threading.Thread(
                          target=extract_metadata_task,
-                         args=(new_urn, app_project_id, job_id),
+                         args=(new_urn, app_project_id, extraction_job_id),
                          daemon=True
                      )
                      thread.start()
-                     print(f"[Relink] Auto-extracción iniciada en background (job: {job_id})")
+                     print(f"[Relink] Auto-extracción iniciada en background (job: {extraction_job_id})")
                  except Exception as extract_err:
                      print(f"[Relink] Advertencia: No se pudo iniciar auto-extracción: {extract_err}")
 
              if app_project_id:
                  config['models'] = [m for m in config['models'] if m.get('appProjectId') == app_project_id]
-             return jsonify(config)
+             resp = dict(config)
+             resp['extraction_job_id'] = extraction_job_id
+             return jsonify(resp)
         else:
              return jsonify({"error": "Failed to save config"}), 500
 
