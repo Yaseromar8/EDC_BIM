@@ -7,6 +7,7 @@ import NativeFileTree from './components/NativeFileTree';
 import Viewer from './components/Viewer';
 import SecondaryViewer from './components/SecondaryViewer';
 import ImportModelModal from './components/ImportModelModal';
+import ErrorBoundary from './components/ErrorBoundary';
 import DocumentPanel from './components/DocumentPanel';
 import AddDocumentModal from './components/AddDocumentModal';
 import LandingPage from './components/LandingPage'; // Import Landing Page
@@ -3300,6 +3301,11 @@ function App() {
               {/* 3D VIEWER - Hide when build is active */}
               <div style={{ flex: 1, minHeight: 0, position: 'relative', display: (activePanel === 'build') ? 'none' : 'block' }}>
                 {!compareMode && (
+                  <ErrorBoundary
+                    scope="viewer"
+                    title="El visor 3D falló"
+                    message="El motor 3D (WebGL) encontró un error, posiblemente por memoria de GPU. El resto de la app sigue activo; recarga para reabrir el modelo."
+                  >
                   <Viewer
                     key={selectedProject?.id || 'viewer-default'}
                     accessToken={accessToken}
@@ -3343,6 +3349,7 @@ function App() {
                     aiModelCommand={aiModelCommand}
                     hideToolbar={activePanel === 'progress'}
                   />
+                  </ErrorBoundary>
                 )}
 
                 {/* PIN RELOCATE BANNER */}
