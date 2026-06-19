@@ -19,16 +19,44 @@ const MOCK_PHOTOS = [
 // Fallback image if source missing
 const FALLBACK_IMG = 'data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22300%22%20height%3D%22200%22%3E%3Crect%20width%3D%22300%22%20height%3D%22200%22%20fill%3D%22%23cccccc%22%2F%3E%3Ctext%20x%3D%2250%25%22%20y%3D%2250%25%22%20dominant-baseline%3D%22middle%22%20text-anchor%3D%22middle%22%20font-family%3D%22sans-serif%22%20font-size%3D%2220px%22%20fill%3D%22%23666666%22%3ENo%20Image%3C%2Ftext%3E%3C%2Fsvg%3E';
 
+// Botón compacto del lightbox (zoom +/-)
+const lbBtn = { width: 28, height: 28, borderRadius: '50%', background: 'transparent', border: 'none', color: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+
 const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", photos = [], onAddPhoto, variant = 'modal', onDelete, onDeletePhoto, onRename, modelUrn = 'global', targetPath = '', projectPrefix = 'proyectos/' }) => {
     if (!isOpen) return null;
 
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [tempTitle, setTempTitle] = useState("");
     const [selectedPhoto, setSelectedPhoto] = useState(null);
+    // Lightbox profesional: zoom para inspeccionar detalles en obra
+    const [lbZoom, setLbZoom] = useState(1);
+    const [lbPan, setLbPan] = useState({ x: 0, y: 0 });
+    const lbDrag = useRef(null);
+    const photosRef = useRef([]);
     const [editingDesc, setEditingDesc] = useState(false);
     const [tempDesc, setTempDesc] = useState("");
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
+
+    // Reset del zoom al cambiar de foto
+    useEffect(() => { setLbZoom(1); setLbPan({ x: 0, y: 0 }); }, [selectedPhoto?.id]);
+
+    // Navegación por teclado en el lightbox (← → para mover, +/- zoom, Esc cierra)
+    useEffect(() => {
+        if (!selectedPhoto) return;
+        const onKey = (e) => {
+            const list = photosRef.current || [];
+            const idx = list.findIndex(p => String(p.id) === String(selectedPhoto.id));
+            if (e.key === 'Escape') setSelectedPhoto(null);
+            else if (e.key === 'ArrowLeft' && list.length > 1) setSelectedPhoto(list[idx > 0 ? idx - 1 : list.length - 1]);
+            else if (e.key === 'ArrowRight' && list.length > 1) setSelectedPhoto(list[idx < list.length - 1 ? idx + 1 : 0]);
+            else if (e.key === '+' || e.key === '=') setLbZoom(z => Math.min(z * 1.3, 6));
+            else if (e.key === '-') setLbZoom(z => Math.max(z / 1.3, 1));
+            else if (e.key === '0') { setLbZoom(1); setLbPan({ x: 0, y: 0 }); }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [selectedPhoto]);
     const [showFilters, setShowFilters] = useState(photos.length > 20); // Auto-show if many
     const [dateRange, setDateRange] = useState({ start: '', end: '' });
     const [mediaType, setMediaType] = useState('all'); // 'all' | 'image' | 'video'
@@ -320,6 +348,9 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
         if (isNaN(photoTime)) return true;
         return photoTime >= startTime && photoTime <= endTime;
     });
+
+    // Mantener la lista accesible para la navegación por teclado del lightbox
+    photosRef.current = filteredPhotos;
 
     // Agrupar por fecha
     const groupedPhotos = filteredPhotos.reduce((groups, photo) => {
@@ -728,14 +759,30 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
                 }} onClick={() => setSelectedPhoto(null)}>
 
-                    {/* Close button — top right */}
-                    <button onClick={() => setSelectedPhoto(null)} style={{
-                        position: 'absolute', top: '16px', right: '16px',
-                        background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-                        color: '#fff', width: '36px', height: '36px', borderRadius: '50%',
-                        fontSize: '18px', cursor: 'pointer', zIndex: 99991,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}>✕</button>
+                    {/* Toolbar — top right: zoom, descargar, cerrar */}
+                    <div onClick={e => e.stopPropagation()} style={{
+                        position: 'absolute', top: '16px', right: '16px', zIndex: 99991,
+                        display: 'flex', alignItems: 'center', gap: 8
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 18, padding: '2px' }}>
+                            <button title="Alejar (-)" onClick={() => setLbZoom(z => Math.max(z / 1.3, 1))} style={lbBtn}>−</button>
+                            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, minWidth: 38, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{Math.round(lbZoom * 100)}%</span>
+                            <button title="Acercar (+)" onClick={() => setLbZoom(z => Math.min(z * 1.3, 6))} style={lbBtn}>+</button>
+                        </div>
+                        {lbZoom > 1 && (
+                            <button title="Restablecer (0)" onClick={() => { setLbZoom(1); setLbPan({ x: 0, y: 0 }); }} style={{ ...lbBtn, width: 'auto', padding: '0 10px', borderRadius: 14, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>Ajustar</button>
+                        )}
+                        <a href={selectedPhoto.src} download={(selectedPhoto.name || selectedPhoto.desc || 'foto') + '.jpg'} target="_blank" rel="noopener noreferrer"
+                            title="Descargar" onClick={e => e.stopPropagation()}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', textDecoration: 'none' }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                        </a>
+                        <button onClick={() => setSelectedPhoto(null)} title="Cerrar (Esc)" style={{
+                            background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+                            color: '#fff', width: '36px', height: '36px', borderRadius: '50%',
+                            fontSize: '18px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>✕</button>
+                    </div>
 
                     {/* Counter — top center */}
                     <div style={{
@@ -795,12 +842,30 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                 style={{ maxHeight: (variant === 'panel' && window.innerWidth >= 768) ? '70vh' : '78vh', maxWidth: '100%', borderRadius: '2px' }}
                             />
                         ) : (
-                            <img
-                                src={selectedPhoto.src}
-                                alt={selectedPhoto.desc || ''}
-                                onError={(e) => e.target.src = FALLBACK_IMG}
-                                style={{ maxHeight: (variant === 'panel' && window.innerWidth >= 768) ? '70vh' : '78vh', maxWidth: '100%', objectFit: 'contain', borderRadius: '2px' }}
-                            />
+                            <div
+                                style={{ overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: lbZoom > 1 ? (lbDrag.current ? 'grabbing' : 'grab') : 'zoom-in' }}
+                                onWheel={(e) => {
+                                    e.preventDefault();
+                                    setLbZoom(z => Math.min(Math.max(e.deltaY < 0 ? z * 1.2 : z / 1.2, 1), 6));
+                                }}
+                                onDoubleClick={() => { if (lbZoom > 1) { setLbZoom(1); setLbPan({ x: 0, y: 0 }); } else setLbZoom(2.5); }}
+                                onMouseDown={(e) => { if (lbZoom > 1) lbDrag.current = { x: e.clientX, y: e.clientY, px: lbPan.x, py: lbPan.y }; }}
+                                onMouseMove={(e) => { if (lbDrag.current) setLbPan({ x: lbDrag.current.px + (e.clientX - lbDrag.current.x), y: lbDrag.current.py + (e.clientY - lbDrag.current.y) }); }}
+                                onMouseUp={() => { lbDrag.current = null; }}
+                                onMouseLeave={() => { lbDrag.current = null; }}
+                            >
+                                <img
+                                    src={selectedPhoto.src}
+                                    alt={selectedPhoto.desc || ''}
+                                    draggable={false}
+                                    onError={(e) => e.target.src = FALLBACK_IMG}
+                                    style={{
+                                        maxHeight: (variant === 'panel' && window.innerWidth >= 768) ? '70vh' : '78vh', maxWidth: '100%', objectFit: 'contain', borderRadius: '2px',
+                                        transform: `translate(${lbPan.x}px, ${lbPan.y}px) scale(${lbZoom})`,
+                                        transition: lbDrag.current ? 'none' : 'transform 0.12s ease', userSelect: 'none'
+                                    }}
+                                />
+                            </div>
                         )}
 
                         {/* Caption — minimal */}
