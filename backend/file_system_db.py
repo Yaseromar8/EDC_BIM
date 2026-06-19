@@ -106,7 +106,20 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                 cursor.execute(query.format(parent_cond="parent_id = %s"), (model_urn, parent_id))
         
         rows = cursor.fetchall()
-        
+
+        # Nivel HEREDADO desde la carpeta padre (herencia aditiva): un hijo tiene al
+        # menos el nivel efectivo del padre. Antes la visibilidad miraba solo el
+        # permiso DIRECTO de cada carpeta, asi que las subcarpetas de una carpeta
+        # concedida salian grises aunque el usuario SI tuviera acceso heredado
+        # (las acciones ya lo respetaban). Esto alinea visibilidad con acciones.
+        parent_eff = 'none'
+        if u_id and not is_admin:
+            try:
+                from folder_permissions import get_effective_permission
+                parent_eff = get_effective_permission(u_id, parent_id, model_urn)
+            except Exception as _pe:
+                parent_eff = 'none'
+
         for row in rows:
             r_id, r_name, r_type, r_size, r_version, r_updated, r_gcs, r_status, r_tags, r_metadata, r_description, r_mime, r_u_by, r_perm, r_has_children = row
             bp = base_path if base_path.endswith('/') else (base_path + '/' if base_path else '')
@@ -122,13 +135,12 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                 perm_level = 'admin'
                 has_access = True
             elif u_id and r_type == 'FOLDER':
-                if r_perm:
-                    perm_level = r_perm
-                    has_access = r_perm != 'none'
-                else:
-                    # Sin permiso explícito → ISO 19650 Fail-Closed
-                    perm_level = 'none'
-                    has_access = False
+                # Nivel efectivo = max(permiso directo, heredado del padre).
+                from folder_permissions import PERMISSION_LEVELS as _PL
+                direct = r_perm or 'none'
+                eff = direct if _PL.get(direct, -1) >= _PL.get(parent_eff, -1) else parent_eff
+                perm_level = eff
+                has_access = eff != 'none'  # Fail-closed solo si NO hay ni directo ni heredado
             else:
                 perm_level = 'view_only'
                 has_access = True
