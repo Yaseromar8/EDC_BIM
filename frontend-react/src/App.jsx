@@ -3794,10 +3794,17 @@ function App() {
             onClick={() => { if (isNativeAR()) setNativeArActive(true); else setArModeActive(true); }}
             title={isNativeAR() ? 'Realidad Aumentada (ARCore)' : 'Realidad Aumentada (navegador)'}
             style={{
-              position: 'absolute', bottom: 88, right: 18, zIndex: 50,
+              position: 'absolute',
+              // Responsive: respeta el notch/safe-area y se eleva sobre el panel 5D si está abierto
+              bottom: budgetTabOpen
+                ? `calc(env(safe-area-inset-bottom, 0px) + ${budgetPanelHeight + 16}px)`
+                : 'calc(env(safe-area-inset-bottom, 0px) + 84px)',
+              right: 'calc(env(safe-area-inset-right, 0px) + 16px)',
+              zIndex: 50,
               display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
               background: '#7e9bbd', color: '#fff', border: 'none', borderRadius: 24,
-              fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.35)'
+              fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+              transition: 'bottom 0.25s ease'
             }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
