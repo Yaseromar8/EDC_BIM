@@ -166,47 +166,53 @@ const ARView = ({ models, initialCamera, onExit }) => {
             let loadedCount = 0;
             const totalModels = models.length;
 
-            models.forEach((model, index) => {
-                Autodesk.Viewing.Document.load('urn:' + model.urn, (doc) => {
-                    const defaultModel = doc.getRoot().getDefaultGeometry();
-                    viewer.loadDocumentNode(doc, defaultModel, {
-                        keepCurrentModels: index > 0,
-                        globalOffset: model.globalOffset || { x: 0, y: 0, z: 0 },
-                        placementTransform: model.placementTransform || new THREE.Matrix4()
-                    }).then(() => {
-                        loadedCount++;
-
-                        if (loadedCount === totalModels) {
-                            // alert("Modelos cargados: " + loadedCount);
-                            console.log("[AR] All models loaded.");
-
-                            // USE FIT TO VIEW TO ENSURE VISIBILITY
-                            viewer.fitToView();
-
-                            // Transparency again
-                            if (viewer.impl.renderer()) {
-                                viewer.impl.renderer().setClearColor(0x000000, 0);
-                                viewer.impl.renderer().setClearAlpha(0);
-                            }
-                            viewer.impl.invalidate(true, true, true);
-
-                            // Activate Gyroscope (DeviceOrientation)
-                            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission !== 'function') {
-                                const ext = viewer.getExtension('DeviceOrientationExtension');
-                                if (ext) {
-                                    ext.activate();
-                                    setPermStatus('active');
-                                }
-                            } else {
-                                setPermStatus('pending_ios');
-                            }
-
-                            // Apply initial transform (Grounding)
-                            setModelHeight(-1.6);
+            // Carga SECUENCIAL con offset COMPARTIDO. El primer modelo define el
+            // globalOffset real (LMV lo calcula); los demás se cargan con EXACTAMENTE
+            // ese offset -> el modelo federado queda alineado. Antes cada modelo usaba
+            // su propio offset (o 0,0,0) y el que difería se desfasaba; solo pasaba en
+            // AR porque el visor normal sí comparte el offset entre modelos.
+            (async () => {
+                let sharedOffset = null;
+                for (let index = 0; index < models.length; index++) {
+                    const model = models[index];
+                    try {
+                        const loaded = await new Promise((resolve, reject) => {
+                            Autodesk.Viewing.Document.load('urn:' + model.urn, (doc) => {
+                                const defaultModel = doc.getRoot().getDefaultGeometry();
+                                const opts = {
+                                    keepCurrentModels: index > 0,
+                                    placementTransform: model.placementTransform || new THREE.Matrix4(),
+                                };
+                                if (sharedOffset) opts.globalOffset = sharedOffset;
+                                else if (model.globalOffset) opts.globalOffset = model.globalOffset;
+                                viewer.loadDocumentNode(doc, defaultModel, opts).then(resolve).catch(reject);
+                            }, (err) => reject(err));
+                        });
+                        if (!sharedOffset && loaded && loaded.getGlobalOffset) {
+                            try { sharedOffset = loaded.getGlobalOffset(); } catch (e) { /* noop */ }
                         }
-                    });
-                });
-            });
+                    } catch (e) {
+                        console.warn('[AR] Error cargando modelo', model.urn, e);
+                    }
+                }
+
+                console.log("[AR] All models loaded (offset compartido).");
+                viewer.fitToView();
+                if (viewer.impl.renderer()) {
+                    viewer.impl.renderer().setClearColor(0x000000, 0);
+                    viewer.impl.renderer().setClearAlpha(0);
+                }
+                viewer.impl.invalidate(true, true, true);
+
+                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission !== 'function') {
+                    const ext = viewer.getExtension('DeviceOrientationExtension');
+                    if (ext) { ext.activate(); setPermStatus('active'); }
+                } else {
+                    setPermStatus('pending_ios');
+                }
+
+                setModelHeight(-1.6);
+            })();
         });
 
         return () => {
