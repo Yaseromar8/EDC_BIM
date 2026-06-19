@@ -3794,13 +3794,14 @@ function App() {
             onClick={() => { if (isNativeAR()) setNativeArActive(true); else setArModeActive(true); }}
             title={isNativeAR() ? 'Realidad Aumentada (ARCore)' : 'Realidad Aumentada (navegador)'}
             style={{
-              position: 'absolute',
-              // Responsive: respeta el notch/safe-area y se eleva sobre el panel 5D si está abierto
+              // fixed = relativo a la PANTALLA, no al contenedor padre (que en tablet
+              // puede estar recortado/no llenar la vista). Así aparece en cualquier device.
+              position: 'fixed',
               bottom: budgetTabOpen
                 ? `calc(env(safe-area-inset-bottom, 0px) + ${budgetPanelHeight + 16}px)`
                 : 'calc(env(safe-area-inset-bottom, 0px) + 84px)',
               right: 'calc(env(safe-area-inset-right, 0px) + 16px)',
-              zIndex: 50,
+              zIndex: 8000,
               display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
               background: '#7e9bbd', color: '#fff', border: 'none', borderRadius: 24,
               fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
