@@ -27,31 +27,14 @@ const fmtS = (n, decimals = 2) => {
 // ─── Hatch pattern backgrounds (CSS repeating-linear-gradient) ───
 const HATCH_STYLES = {
   no_link: {
-    background: `repeating-linear-gradient(
-      -45deg,
-      transparent,
-      transparent 3px,
-      rgba(239, 68, 68, 0.25) 3px,
-      rgba(239, 68, 68, 0.25) 5px
-    )`,
+    // Indicador sobrio: borde izquierdo fino en vez de rayado diagonal ruidoso
+    boxShadow: 'inset 3px 0 0 rgba(189, 133, 133, 0.65)',
   },
   no_metrado: {
-    background: `repeating-linear-gradient(
-      -45deg,
-      transparent,
-      transparent 3px,
-      rgba(234, 179, 8, 0.3) 3px,
-      rgba(234, 179, 8, 0.3) 5px
-    )`,
+    boxShadow: 'inset 3px 0 0 rgba(194, 168, 120, 0.65)',
   },
   complete: {
-    background: `repeating-linear-gradient(
-      -45deg,
-      transparent,
-      transparent 3px,
-      rgba(34, 197, 94, 0.2) 3px,
-      rgba(34, 197, 94, 0.2) 5px
-    )`,
+    boxShadow: 'inset 3px 0 0 rgba(126, 168, 143, 0.6)',
   },
 };
 
@@ -130,9 +113,9 @@ function generatePopoutHTML(flatRows, engineResults) {
   const fmtQty = (n) => n != null ? Number(n).toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
   
   const hatchCSS = `
-    .hatch-no_link { background: repeating-linear-gradient(-45deg, transparent, transparent 3px, rgba(239,68,68,0.25) 3px, rgba(239,68,68,0.25) 5px); }
-    .hatch-no_metrado { background: repeating-linear-gradient(-45deg, transparent, transparent 3px, rgba(234,179,8,0.3) 3px, rgba(234,179,8,0.3) 5px); }
-    .hatch-complete { background: repeating-linear-gradient(-45deg, transparent, transparent 3px, rgba(34,197,94,0.2) 3px, rgba(34,197,94,0.2) 5px); }
+    .hatch-no_link { box-shadow: inset 3px 0 0 rgba(189,133,133,0.65); }
+    .hatch-no_metrado { box-shadow: inset 3px 0 0 rgba(194,168,120,0.65); }
+    .hatch-complete { box-shadow: inset 3px 0 0 rgba(126,168,143,0.6); }
   `;
   
   const rows = flatRows.map(r => {
@@ -163,21 +146,21 @@ function generatePopoutHTML(flatRows, engineResults) {
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background:#1a1b1f; color:#e0e0e0; font-size:12px; }
   .header { background:#222; padding:8px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #333; }
-  .header h3 { margin:0; font-size:14px; color:#3aa0ff; }
-  .dock-btn { background:#3aa0ff; color:#fff; border:none; padding:5px 14px; border-radius:4px; cursor:pointer; font-size:12px; }
-  .dock-btn:hover { background:#2980d9; }
+  .header h3 { margin:0; font-size:14px; color:#7e9bbd; }
+  .dock-btn { background:#7e9bbd; color:#fff; border:none; padding:5px 14px; border-radius:4px; cursor:pointer; font-size:12px; }
+  .dock-btn:hover { background:#5f7fa3; }
   table { width:100%; border-collapse:collapse; }
   th { background:#2a2b30; color:#aaa; padding:6px 8px; text-align:left; font-size:11px; font-weight:600; position:sticky; top:0; z-index:2; border-bottom:1px solid #333; }
   th.num { text-align:right; }
   .row { border-bottom:1px solid #2a2b30; cursor:pointer; transition:background 0.15s; }
   .row:hover { background:#2a2b30; }
-  .row.selected { background:#1a3a5c; }
+  .row.selected { background:#262c36; }
   .row.titulo { font-weight:700; background:#1e1f23; }
   .row.titulo td { color:#ccc; }
   .row.n1 { font-size:13px; }
   .row.n1 td { padding:8px; }
   td { padding:4px 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .cell-item { color:#3aa0ff; min-width:140px; }
+  .cell-item { color:#7e9bbd; min-width:140px; }
   .cell-desc { max-width:400px; }
   .cell-und { text-align:center; color:#888; min-width:50px; }
   .cell-num { text-align:right; min-width:100px; font-variant-numeric:tabular-nums; }
@@ -966,7 +949,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
         flexShrink: 0
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '14px', fontWeight: 700, color: '#3aa0ff' }}>5D</span>
+          <span style={{ fontSize: '14px', fontWeight: 700, color: '#7e9bbd' }}>5D</span>
           <span style={{ color: '#666', fontSize: '10px' }}>{engineLabel}</span>
         </div>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -1048,7 +1031,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                     height: `${ROW_HEIGHT}px`,
                     alignItems: 'center',
                     borderBottom: '1px solid #2a2b30',
-                    background: isSelected ? '#1a3a5c' : isElement ? '#151619' : isTitulo ? '#1e1f23' : 'transparent',
+                    background: isSelected ? '#262c36' : isElement ? '#151619' : isTitulo ? '#1e1f23' : 'transparent',
                     fontWeight: isTitulo ? 700 : 400,
                     fontStyle: isElement ? 'italic' : 'normal',
                     transition: 'background 0.12s'
@@ -1073,7 +1056,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                     }}
                     style={{
                     padding: '0 8px', paddingLeft: `${(node.nivel - 1) * 18 + 8}px`,
-                    color: isElement ? '#6a737d' : '#3aa0ff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    color: isElement ? '#6a737d' : '#7e9bbd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', gap: '5px',
                     cursor: hasChildren ? 'pointer' : 'default', height: '100%'
                   }}>
@@ -1123,7 +1106,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                        
                        <div style={{ padding: '0 8px', borderRight: '1px solid #2a2b30', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{node.rawProps[`02_01_DSI_Unidad${node.matchedSlot}`] || node.parent_unidad || '-'}</div>
                        
-                       <div style={{ padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: '#4caf50', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                       <div style={{ padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: '#cdd3da', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
                           {metradoReal != null && metradoReal !== 0 ? fmt(metradoReal) : ''}
                        </div>
                     </div>
@@ -1154,7 +1137,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                       <div style={{
                         padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
                         borderRight: '1px solid #2a2b30', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                        color: cellStatus === 'complete' ? '#22c55e' : cellStatus === 'no_metrado' ? '#eab308' : cellStatus === 'no_link' ? '#ef4444' : '#4caf50',
+                        color: cellStatus === 'complete' ? '#7ea88f' : cellStatus === 'no_metrado' ? '#c2a878' : cellStatus === 'no_link' ? '#bd8585' : '#cdd3da',
                         fontWeight: 600,
                         ...hatchStyle
                       }}>
@@ -1171,7 +1154,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                       {/* P. PARCIAL REAL + XLS ICON */}
                       <div style={{
                         padding: '0 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px',
-                        color: cellStatus === 'complete' ? '#22c55e' : cellStatus === 'no_metrado' ? '#eab308' : cellStatus === 'no_link' ? '#ef4444' : '#4caf50',
+                        color: cellStatus === 'complete' ? '#7ea88f' : cellStatus === 'no_metrado' ? '#c2a878' : cellStatus === 'no_link' ? '#bd8585' : '#cdd3da',
                         fontWeight: 600,
                         ...hatchStyle
                       }}>
@@ -1198,7 +1181,7 @@ const BudgetTree = ({ activeModelUrn = 'global', onClose, onPoppedOut }) => {
                             width: '20px',
                             height: '18px',
                             borderRadius: '3px',
-                            background: '#1a7a3a',
+                            background: '#3a5573',
                             color: '#fff',
                             fontSize: '7.5px',
                             fontWeight: 800,
