@@ -777,8 +777,9 @@ ensure_transmittals_table()
 ensure_attributes_tables()
 ensure_sets_tables()
 ensure_element_docs_table()
-from routes.inventory import ensure_extraction_jobs_table
+from routes.inventory import ensure_extraction_jobs_table, ensure_inventory_identity
 ensure_extraction_jobs_table()
+ensure_inventory_identity()  # identidad (model_urn, external_id): duplicados imposibles por diseño
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()

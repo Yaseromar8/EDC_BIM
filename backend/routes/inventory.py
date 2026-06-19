@@ -20,6 +20,37 @@ import threading as _threading
 _EXTRACTING_KEYS = set()
 _EXTRACTING_LOCK = _threading.Lock()
 
+
+def ensure_inventory_identity():
+    """Migra inventory_assets a identidad (model_urn, external_id) -> un elemento
+    es una sola fila por frente, así un duplicado es IMPOSIBLE por diseño (lo
+    impone la BD, no un DELETE ni un decode base64).
+
+    Idempotente y SEGURO: solo migra si no hay colisiones (verificado: 0). Si las
+    hubiera, mantiene la llave vieja y avisa, sin romper el arranque.
+    """
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""SELECT 1 FROM pg_constraint
+                           WHERE conrelid = 'inventory_assets'::regclass AND contype = 'u'
+                             AND conname = 'inventory_assets_modelext_key'""")
+            if cur.fetchone():
+                return  # ya migrado
+            cur.execute("SELECT COUNT(*) - COUNT(DISTINCT (model_urn, external_id)) FROM inventory_assets")
+            collisions = cur.fetchone()[0] or 0
+            if collisions > 0:
+                print(f"[migracion] inventory_assets: {collisions} colisiones en (model_urn, external_id); "
+                      f"se MANTIENE la llave vieja (revisar manualmente).")
+                return
+            cur.execute("ALTER TABLE inventory_assets DROP CONSTRAINT IF EXISTS inventory_assets_composite_key")
+            cur.execute("ALTER TABLE inventory_assets ADD CONSTRAINT inventory_assets_modelext_key UNIQUE (model_urn, external_id)")
+            conn.commit()
+            print("[migracion] inventory_assets: identidad -> (model_urn, external_id). Duplicados imposibles por diseño.")
+    except Exception as e:
+        print(f"[migracion] ensure_inventory_identity: {e}")
+
 def ensure_extraction_jobs_table():
     """Estado de jobs en Postgres: visible entre workers de gunicorn y persistente
     si un worker se reinicia (la memoria por-proceso no basta en produccion)."""
@@ -646,7 +677,15 @@ def extract_metadata_task(urn, target_urn, job_id):
         with get_db_connection() as conn:
             cursor = conn.cursor()
             
-            # WIPE QUIRÚRGICO: Elimina versiones históricas para no acumular basura en PostgreSQL
+            # IDENTIDAD (model_urn, external_id): un elemento = una fila por frente.
+            # El upsert actualiza la MISMA fila (incl. su source_urn a la versión nueva)
+            # -> duplicado IMPOSIBLE por diseño, sin depender de decodificar URNs.
+            #
+            # El linaje (base_urn) se usa SOLO para acotar la limpieza de elementos
+            # REMOVIDOS a ESTE modelo dentro del frente (los presentes ya pasan a
+            # source_urn=urn en el upsert; lo que quede bajo una source_urn vieja del
+            # mismo linaje = elemento eliminado en la versión nueva). Si el decode
+            # falla, a lo sumo queda algún removido sin limpiar — NUNCA un duplicado.
             import base64
             def get_base_urn(b64_urn):
                 try:
@@ -656,23 +695,10 @@ def extract_metadata_task(urn, target_urn, job_id):
                     return decoded.split('?')[0]
                 except Exception:
                     return b64_urn
-            
-            # SEGURIDAD: la purga es LOCAL al scope destino (model_urn = target_urn).
-            # Antes barria toda la tabla por lineage, lo que podia borrar el inventario
-            # del frente real al extraer una version vieja a un scope temporal de
-            # comparacion ('__cmp__'). Dentro del frente, el comportamiento es identico.
-            base_urn_to_delete = get_base_urn(urn)
-            cursor.execute("SELECT DISTINCT source_urn FROM inventory_assets WHERE model_urn = %s", (target_urn,))
-            all_source_urns = cursor.fetchall()
-            urns_to_delete = []
-            for (s_urn,) in all_source_urns:
-                if get_base_urn(s_urn) == base_urn_to_delete:
-                    urns_to_delete.append(s_urn)
 
-            if urns_to_delete:
-                format_strings = ','.join(['%s'] * len(urns_to_delete))
-                print(f"[Extractor] Eliminando {len(urns_to_delete)} versiones historicas del archivo (scope {target_urn}).")
-                cursor.execute(f"DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN ({format_strings})", [target_urn] + urns_to_delete)
+            base_urn = get_base_urn(urn)
+            cursor.execute("SELECT DISTINCT source_urn FROM inventory_assets WHERE model_urn = %s", (target_urn,))
+            old_lineage = [s for (s,) in cursor.fetchall() if s and s != urn and get_base_urn(s) == base_urn]
 
             current_time = datetime.now()
             from db import resolve_project_id
@@ -686,7 +712,8 @@ def extract_metadata_task(urn, target_urn, job_id):
             insert_query = """
                 INSERT INTO inventory_assets (external_id, model_urn, source_urn, name, properties, last_updated, project_id)
                 VALUES %s
-                ON CONFLICT (model_urn, source_urn, external_id) DO UPDATE SET
+                ON CONFLICT (model_urn, external_id) DO UPDATE SET
+                    source_urn = EXCLUDED.source_urn,
                     name = EXCLUDED.name,
                     properties = EXCLUDED.properties,
                     last_updated = EXCLUDED.last_updated,
@@ -694,21 +721,18 @@ def extract_metadata_task(urn, target_urn, job_id):
             """
             execute_values(cursor, insert_query, records)
 
-            # ANTI-DUPLICADO BULLETPROOF: tras insertar la versión nueva, eliminar
-            # cualquier fila de los MISMOS elementos que venga de OTRO source_urn
-            # (versiones viejas que la purga por base_urn pudo no atrapar). Garantiza
-            # que cada elemento exista UNA sola vez por frente, sin depender del
-            # decode base64. No toca otros modelos del federado (sus external_id son
-            # distintos). Misma transacción -> atómico.
-            new_ext_ids = [item['external_id'] for item in inventory_data]
-            if new_ext_ids:
+            # Limpiar elementos REMOVIDOS de este modelo: los presentes ya migraron a
+            # source_urn=urn; lo que siga bajo una source_urn vieja del mismo linaje
+            # es un elemento que ya no existe en la versión nueva.
+            if old_lineage:
+                fmt = ','.join(['%s'] * len(old_lineage))
                 cursor.execute(
-                    "DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn <> %s AND external_id = ANY(%s)",
-                    (target_urn, urn, new_ext_ids)
+                    f"DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN ({fmt})",
+                    [target_urn] + old_lineage
                 )
-                dup_removed = cursor.rowcount
-                if dup_removed:
-                    print(f"[Extractor] Anti-duplicado: {dup_removed} filas viejas del mismo elemento eliminadas.")
+                removed = cursor.rowcount
+                if removed:
+                    print(f"[Extractor] Limpieza: {removed} elementos eliminados en la versión nueva.")
 
             conn.commit()
 
