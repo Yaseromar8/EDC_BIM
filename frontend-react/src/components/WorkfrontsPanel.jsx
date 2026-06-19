@@ -181,13 +181,13 @@ const WorkfrontsPanel = ({ workfronts, setWorkfronts, onClose, isVisible }) => {
                 <button 
                     onClick={addWorkfront}
                     style={{
-                        width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#3AA0FF', 
-                        border: '1px dashed #3AA0FF', borderRadius: '4px', fontSize: '13px', fontWeight: '500', 
+                        width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#7e9bbd', 
+                        border: '1px dashed #7e9bbd', borderRadius: '4px', fontSize: '13px', fontWeight: '500', 
                         cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
                         transition: 'all 0.2s'
                     }}
                     onMouseEnter={(e) => { e.target.style.backgroundColor = 'rgba(58, 160, 255, 0.1)'; e.target.style.color = '#4db8ff'; }}
-                    onMouseLeave={(e) => { e.target.style.backgroundColor = 'transparent'; e.target.style.color = '#3AA0FF'; }}
+                    onMouseLeave={(e) => { e.target.style.backgroundColor = 'transparent'; e.target.style.color = '#7e9bbd'; }}
                 >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     Agregar Segmento

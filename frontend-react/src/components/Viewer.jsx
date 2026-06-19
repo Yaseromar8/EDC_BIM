@@ -1042,7 +1042,7 @@ const Viewer = ({
             console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Recibido: theme-property-bucket - propId: ${propId}, active: ${active}`);
             
             const PALETTE = [
-                '#3AA0FF', '#F97316', '#10B981', '#F43F5E', '#A855F7', '#0EA5E9', '#EAB308',
+                '#7e9bbd', '#F97316', '#10B981', '#F43F5E', '#A855F7', '#5f7fa3', '#EAB308',
                 '#EF4444', '#8B5CF6', '#EC4899', '#6366F1', '#14B8A6', '#84CC16', '#F59E0B'
             ];
 
@@ -2018,12 +2018,12 @@ const Viewer = ({
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
         const palette = [
-            '#3AA0FF',
+            '#7e9bbd',
             '#F97316',
             '#10B981',
             '#F43F5E',
             '#A855F7',
-            '#0EA5E9',
+            '#5f7fa3',
             '#EAB308'
         ].map(color => new window.THREE.Color(color));
 
@@ -3359,7 +3359,7 @@ const Viewer = ({
         if (!viewer) return;
 
         const PALETTE = [
-            '#3AA0FF', '#F97316', '#10B981', '#F43F5E', '#A855F7', '#0EA5E9', '#EAB308',
+            '#7e9bbd', '#F97316', '#10B981', '#F43F5E', '#A855F7', '#5f7fa3', '#EAB308',
             '#EF4444', '#8B5CF6', '#EC4899', '#6366F1', '#14B8A6', '#84CC16', '#F59E0B'
         ];
 
@@ -4022,7 +4022,7 @@ const Viewer = ({
                         justifyContent: 'center',
                         transition: 'color 0.2s'
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = '#3AA0FF'}
+                    onMouseEnter={(e) => e.currentTarget.style.color = '#7e9bbd'}
                     onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(180, 180, 180, 0.7)'}
                 >
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

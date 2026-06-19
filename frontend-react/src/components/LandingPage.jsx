@@ -129,7 +129,7 @@ const LandingPage = ({ onSelectProject }) => {
 
     // ── Project color by type ────────────────────────────────────────────────
     const typeColor = (type) => {
-        if (!type) return '#4488cc';
+        if (!type) return '#5f7fa3';
         const t = type.toLowerCase();
         if (t.includes('infraest')) return '#3b82f6';
         if (t.includes('vial') || t.includes('canal')) return '#10b981';
@@ -205,10 +205,10 @@ const LandingPage = ({ onSelectProject }) => {
                 <div className="acc-topbar-left">
                     <div className="acc-logo">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                            <rect x="2" y="2" width="9" height="9" rx="1.5" fill="#4488cc" />
-                            <rect x="13" y="2" width="9" height="9" rx="1.5" fill="#4488cc" opacity="0.6" />
-                            <rect x="2" y="13" width="9" height="9" rx="1.5" fill="#4488cc" opacity="0.6" />
-                            <rect x="13" y="13" width="9" height="9" rx="1.5" fill="#4488cc" opacity="0.3" />
+                            <rect x="2" y="2" width="9" height="9" rx="1.5" fill="#5f7fa3" />
+                            <rect x="13" y="2" width="9" height="9" rx="1.5" fill="#5f7fa3" opacity="0.6" />
+                            <rect x="2" y="13" width="9" height="9" rx="1.5" fill="#5f7fa3" opacity="0.6" />
+                            <rect x="13" y="13" width="9" height="9" rx="1.5" fill="#5f7fa3" opacity="0.3" />
                         </svg>
                         <span>VISOR ECD</span>
                     </div>

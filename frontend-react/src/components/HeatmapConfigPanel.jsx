@@ -3,10 +3,10 @@ import ReactDOM from 'react-dom';
 import './HeatmapConfigPanel.css';
 
 export const THEME_PALETTES = {
-    'Classic Tandem': ['#3AA0FF', '#F97316', '#10B981', '#F43F5E', '#A855F7', '#0EA5E9', '#EAB308', '#EF4444', '#8B5CF6', '#EC4899', '#6366F1', '#14B8A6', '#84CC16', '#F59E0B'],
+    'Classic Tandem': ['#7e9bbd', '#F97316', '#10B981', '#F43F5E', '#A855F7', '#5f7fa3', '#EAB308', '#EF4444', '#8B5CF6', '#EC4899', '#6366F1', '#14B8A6', '#84CC16', '#F59E0B'],
     'Purple - Red': ['#6366F1', '#8B5CF6', '#A855F7', '#EC4899', '#F43F5E', '#EF4444'],
-    'Blue - Green': ['#0EA5E9', '#3AA0FF', '#14B8A6', '#10B981', '#84CC16'],
-    'Heatmap (Cold-Hot)': ['#3AA0FF', '#10B981', '#F59E0B', '#F97316', '#EF4444']
+    'Blue - Green': ['#5f7fa3', '#7e9bbd', '#14B8A6', '#10B981', '#84CC16'],
+    'Heatmap (Cold-Hot)': ['#7e9bbd', '#10B981', '#F59E0B', '#F97316', '#EF4444']
 };
 
 const HeatmapConfigPanel = ({ propId, propName, initialPalette, onApply, onClose }) => {

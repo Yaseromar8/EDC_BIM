@@ -88,7 +88,7 @@ const DocsPanel = ({ selectedElement }) => {
                     {selectedElement ? (
                         extId ? (
                             <>
-                                <span style={{ color: '#3aa0ff', fontWeight: 'bold' }}>ID …{String(extId).slice(-12)}</span><br />
+                                <span style={{ color: '#7e9bbd', fontWeight: 'bold' }}>ID …{String(extId).slice(-12)}</span><br />
                                 <span style={{ color: '#666', fontSize: '10px' }}>{selectedElement.urn?.split('/').pop()}</span>
                             </>
                         ) : (
@@ -106,7 +106,7 @@ const DocsPanel = ({ selectedElement }) => {
                         <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0f1115', border: '1px solid #2a2f3a', borderRadius: 4, padding: '8px 10px', marginBottom: 6 }}>
                             <span>{TYPE_ICON[doc.doc_type] || '🔗'}</span>
                             <a href={doc.url} target="_blank" rel="noopener noreferrer" title={doc.url}
-                                style={{ flex: 1, color: '#3aa0ff', fontSize: 12, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                style={{ flex: 1, color: '#7e9bbd', fontSize: 12, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {doc.title || doc.url}
                             </a>
                             <button onClick={() => handleRemove(doc.id)} title="Quitar"

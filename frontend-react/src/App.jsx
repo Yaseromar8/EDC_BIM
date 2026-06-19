@@ -2786,7 +2786,7 @@ function App() {
   // const [filterColors, setFilterColors] = useState({});
 
   const PALETTE = [
-    '#3AA0FF', '#F97316', '#10B981', '#F43F5E', '#A855F7', '#0EA5E9', '#EAB308',
+    '#7e9bbd', '#F97316', '#10B981', '#F43F5E', '#A855F7', '#5f7fa3', '#EAB308',
     '#EF4444', '#8B5CF6', '#EC4899', '#6366F1', '#14B8A6', '#84CC16', '#F59E0B'
   ];
 
@@ -3666,7 +3666,7 @@ function App() {
                           <div style={{ textAlign: 'center', padding: 20 }}>
                             <div style={{ fontSize: '3rem' }}>📄</div>
                             <p>Vista previa no disponible para {openedDoc.type}</p>
-                            <a href={openedDoc.url} target="_blank" rel="noreferrer" style={{ color: '#3aa0ff' }}>Descargar Archivo</a>
+                            <a href={openedDoc.url} target="_blank" rel="noreferrer" style={{ color: '#7e9bbd' }}>Descargar Archivo</a>
                           </div>
                         )}
                       </div>
@@ -3725,7 +3725,7 @@ function App() {
                               <div style={{ flex: 1 }}>
                                 <div style={{ fontWeight: '500', fontSize: '0.9rem', color: '#111' }}>{doc.name}</div>
                               </div>
-                              <div style={{ color: '#3aa0ff', fontSize: '1.2rem' }}>›</div>
+                              <div style={{ color: '#7e9bbd', fontSize: '1.2rem' }}>›</div>
                             </li>
                           ))}
                         </ul>

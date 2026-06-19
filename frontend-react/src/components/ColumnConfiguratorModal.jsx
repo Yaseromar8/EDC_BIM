@@ -153,7 +153,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                         <button
                             onClick={handleReset}
                             style={{
-                                background: 'transparent', color: '#3aa0ff', border: 'none',
+                                background: 'transparent', color: '#7e9bbd', border: 'none',
                                 fontSize: '13px', cursor: 'pointer', fontWeight: 500, padding: 0
                             }}
                         >
@@ -212,7 +212,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                                                         }}
                                                         onClick={(e) => toggleCategorySelection(e, props)}
                                                         onChange={() => {}}
-                                                        style={{ cursor: 'pointer', accentColor: '#3aa0ff', width: '14px', height: '14px' }}
+                                                        style={{ cursor: 'pointer', accentColor: '#7e9bbd', width: '14px', height: '14px' }}
                                                     />
                                                 </div>
                                             </div>
@@ -327,7 +327,7 @@ const ColumnConfiguratorModal = ({ open, onClose, availableColumns = [], selecte
                         Cancel
                     </button>
                     <button onClick={handleSave} style={{
-                        padding: '6px 16px', background: '#3aa0ff', border: 'none',
+                        padding: '6px 16px', background: '#7e9bbd', border: 'none',
                         color: '#fff', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600
                     }}>
                         Update

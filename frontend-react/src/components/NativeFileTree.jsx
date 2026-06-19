@@ -159,8 +159,8 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId, projectId: context
                                 width: '16px',
                                 height: '16px',
                                 borderRadius: '3px',
-                                border: `1.5px solid ${isChecked ? '#3aa0ff' : '#555'}`,
-                                background: isChecked ? '#3aa0ff' : 'transparent',
+                                border: `1.5px solid ${isChecked ? '#7e9bbd' : '#555'}`,
+                                background: isChecked ? '#7e9bbd' : 'transparent',
                                 marginRight: '8px',
                                 cursor: 'pointer',
                                 flexShrink: 0,
@@ -174,7 +174,7 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId, projectId: context
                         </div>
                     )}
 
-                    <i className={getIcon()} style={{ marginRight: '8px', color: isFolder ? '#FFC107' : (isChecked ? '#3aa0ff' : '#aaa'), fontSize: '14px' }}></i>
+                    <i className={getIcon()} style={{ marginRight: '8px', color: isFolder ? '#FFC107' : (isChecked ? '#7e9bbd' : '#aaa'), fontSize: '14px' }}></i>
                     <span style={{ fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: isFolder ? 0.9 : 0.8 }}>
                         {node.attributes.displayName || node.attributes.name}
                     </span>

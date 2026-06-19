@@ -133,7 +133,7 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
             onClick={() => { if(!editingCol) onRowClick(row.dbId, row.source_urn || row.model_urn); }}
         >
             <div style={{ width: '40px', flexShrink: 0, padding: '0 4px', color: '#666', borderRight: '1px solid #32363e', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-                <input type="checkbox" checked={!!isChecked} onChange={(e) => { e.stopPropagation(); onToggleCheck(row.dbId); }} onClick={e => e.stopPropagation()} style={{ accentColor: '#3aa0ff', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }} />
+                <input type="checkbox" checked={!!isChecked} onChange={(e) => { e.stopPropagation(); onToggleCheck(row.dbId); }} onClick={e => e.stopPropagation()} style={{ accentColor: '#7e9bbd', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }} />
                 <span style={{ fontSize: '10px', minWidth: '18px', textAlign: 'right' }}>{index + 1}</span>
             </div>
             {columns.map(col => {
@@ -155,7 +155,7 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
                         }}
                     >
                         {isEditing ? (
-                            <input ref={inputRef} type="text" style={{ width: '100%', height: '100%', background: '#3aa0ff', color: '#fff', border: 'none', padding: '0 12px', outline: 'none', fontSize: '12.5px' }}
+                            <input ref={inputRef} type="text" style={{ width: '100%', height: '100%', background: '#7e9bbd', color: '#fff', border: 'none', padding: '0 12px', outline: 'none', fontSize: '12.5px' }}
                                 value={editValue} onChange={(e) => setEditValue(e.target.value)}
                                 onBlur={() => { if(editValue !== displayText) onCellEdit(row.dbId, col.key, editValue, row.model_urn); setEditingCol(null); }}
                                 onKeyDown={(e) => {
@@ -974,7 +974,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                                             style={{
                                                 background: 'transparent',
                                                 border: 'none',
-                                                color: (!mergedSyncIds || isSyncDisabled) ? '#4fc3f7' : '#aaa',
+                                                color: (!mergedSyncIds || isSyncDisabled) ? '#7e9bbd' : '#aaa',
                                                 padding: '4px 8px',
                                                 borderRadius: '4px',
                                                 fontSize: '11.5px',
@@ -1026,9 +1026,9 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                     </button>
                     <button 
                         onClick={() => setTotalsPickerOpen(true)}
-                        style={{ background: 'none', border: '1px solid #444', color: totalColumns.size > 0 ? '#4fc3f7' : '#ccc', padding: '4px 10px', fontSize: '11.5px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
+                        style={{ background: 'none', border: '1px solid #444', color: totalColumns.size > 0 ? '#7e9bbd' : '#ccc', padding: '4px 10px', fontSize: '11.5px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
                         onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = totalColumns.size > 0 ? '#4fc3f7' : '#ccc'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = totalColumns.size > 0 ? '#7e9bbd' : '#ccc'; e.currentTarget.style.backgroundColor = 'transparent'; }}
                         title="Configure Column Totals"
                     >
                         <Icons.Sigma /> Totals {totalColumns.size > 0 ? `(${totalColumns.size})` : ''}
@@ -1054,7 +1054,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                     padding: '0 12px', borderBottom: '1px solid #252630', gap: '8px',
                     animation: 'fadeIn 0.15s ease-out'
                 }}>
-                    <span style={{ fontSize: '11px', color: '#4fc3f7', fontWeight: 600, whiteSpace: 'nowrap' }}>{checkedIds.size} sel.</span>
+                    <span style={{ fontSize: '11px', color: '#7e9bbd', fontWeight: 600, whiteSpace: 'nowrap' }}>{checkedIds.size} sel.</span>
                     <div style={{ width: '1px', height: '16px', background: '#333' }} />
                     <select
                         value={bulkField}
@@ -1115,7 +1115,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                             }
                         }}
                         style={{
-                            background: (bulkAssigning || !bulkValue.trim()) ? '#444' : 'linear-gradient(135deg, #3AA0FF, #2d8fa5)',
+                            background: (bulkAssigning || !bulkValue.trim()) ? '#444' : 'linear-gradient(135deg, #7e9bbd, #2d8fa5)',
                             border: 'none', color: '#fff', padding: '3px 10px', fontSize: '11px', borderRadius: '3px',
                             cursor: (bulkAssigning || !bulkValue.trim()) ? 'not-allowed' : 'pointer',
                             display: 'flex', alignItems: 'center', gap: '4px',
@@ -1175,7 +1175,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                                         setCheckedIds(new Set(flattenedData.map(r => r.dbId)));
                                     }
                                 }}
-                                style={{ accentColor: '#3aa0ff', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }}
+                                style={{ accentColor: '#7e9bbd', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }}
                                 title={checkedIds.size === flattenedData.length ? 'Deselect all' : `Select all ${flattenedData.length} items`}
                             />
                         </div>
@@ -1214,7 +1214,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                                             cx={20 + 14 * Math.cos((i * Math.PI * 2) / 8)}
                                             cy={20 + 14 * Math.sin((i * Math.PI * 2) / 8)}
                                             r={2.2 + (i * 0.35)}
-                                            fill="#3AA0FF"
+                                            fill="#7e9bbd"
                                             opacity={0.25 + (i * 0.1)}
                                         />
                                     ))}
@@ -1252,7 +1252,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                             display: 'flex', 
                             background: 'repeating-linear-gradient(45deg, #1a1b20, #1a1b20 10px, #22252a 10px, #22252a 20px)',
                             borderTop: '1px solid #333',
-                            alignItems: 'center', fontSize: '12px', fontWeight: 600, color: '#4fc3f7', flexShrink: 0, height: '34px',
+                            alignItems: 'center', fontSize: '12px', fontWeight: 600, color: '#7e9bbd', flexShrink: 0, height: '34px',
                             position: 'sticky', bottom: 0, zIndex: 2
                         }}>
                             <div style={{ width: '40px', flexShrink: 0, borderRight: '1px solid #333', display: 'flex', justifyContent: 'center' }}>
@@ -1356,8 +1356,8 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                                     >
                                         <div style={{
                                             width: '18px', height: '18px', borderRadius: '3px',
-                                            border: isSelected ? '2px solid #4fc3f7' : '2px solid #555',
-                                            background: isSelected ? '#4fc3f7' : 'transparent',
+                                            border: isSelected ? '2px solid #7e9bbd' : '2px solid #555',
+                                            background: isSelected ? '#7e9bbd' : 'transparent',
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             flexShrink: 0, transition: 'all 0.15s'
                                         }}>
@@ -1379,7 +1379,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                                             )}
                                         </div>
                                         {isSelected && (
-                                            <div style={{ fontSize: '11px', color: '#4fc3f7', fontWeight: 600 }}>Σ</div>
+                                            <div style={{ fontSize: '11px', color: '#7e9bbd', fontWeight: 600 }}>Σ</div>
                                         )}
                                     </div>
                                 );

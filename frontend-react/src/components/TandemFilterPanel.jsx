@@ -57,7 +57,7 @@ const FilterCategory = React.memo(({
 
     const PRESET_COLORS = [
         '#10B981', '#059669', '#34D399', // Greens
-        '#3AA0FF', '#0EA5E9', '#6366F1', // Blues
+        '#7e9bbd', '#5f7fa3', '#6366F1', // Blues
         '#F97316', '#EAB308', '#F59E0B', // Oranges/Yellows
         '#EF4444', '#F43F5E', '#EC4899', // Reds/Pinks
         '#A855F7', '#8B5CF6', '#14B8A6', // Purples/Teals
@@ -331,7 +331,7 @@ const TandemFilterPanel = ({
                 {`
           .progressbg { position: absolute; inset: 0; background: rgba(0,0,0,0.5); z-index: 50; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
           .spinner { margin: 100px auto 0; width: 70px; text-align: center; }
-          .spinner > div { width: 14px; height: 14px; background-color: #3aa0ff; border-radius: 100%; display: inline-block; animation: sk-bouncedelay 1.4s infinite ease-in-out both; margin: 0 2px; }
+          .spinner > div { width: 14px; height: 14px; background-color: #7e9bbd; border-radius: 100%; display: inline-block; animation: sk-bouncedelay 1.4s infinite ease-in-out both; margin: 0 2px; }
           .spinner .bounce1 { animation-delay: -0.32s; }
           .spinner .bounce2 { animation-delay: -0.16s; }
           @keyframes sk-bouncedelay { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
@@ -363,7 +363,7 @@ const TandemFilterPanel = ({
           .tandem-group-header:hover .tandem-actions { opacity: 1; }
           .tandem-action-btn { background: none; border: none; color: #999; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
           .tandem-action-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
-          .tandem-action-btn.active { color: #3aa0ff; background: rgba(58, 160, 255, 0.15); }
+          .tandem-action-btn.active { color: #7e9bbd; background: rgba(58, 160, 255, 0.15); }
           .tandem-list { list-style: none; padding: 0; margin: 0; display: none; }
           .tandem-list.open { display: block; }
           .tandem-item { display: flex; align-items: center; padding: 2px 16px 2px 36px; min-height: 28px; transition: background 0.1s; }

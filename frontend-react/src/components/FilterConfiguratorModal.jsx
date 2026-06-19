@@ -149,7 +149,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                         <button
                             onClick={handleReset}
                             style={{
-                                background: 'transparent', color: '#3aa0ff', border: 'none',
+                                background: 'transparent', color: '#7e9bbd', border: 'none',
                                 fontSize: '13px', cursor: 'pointer', fontWeight: 500, padding: 0
                             }}
                         >
@@ -309,7 +309,7 @@ const FilterConfiguratorModal = ({ open, onClose, availableProperties = [], sele
                         Cancel
                     </button>
                     <button onClick={handleSave} style={{
-                        padding: '6px 16px', background: '#3aa0ff', border: 'none',
+                        padding: '6px 16px', background: '#7e9bbd', border: 'none',
                         color: '#fff', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600
                     }}>
                         Update

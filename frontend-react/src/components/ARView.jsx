@@ -551,7 +551,7 @@ const ARView = ({ models, initialCamera, onExit }) => {
                                 style={{
                                     flex: 1,
                                     padding: '10px',
-                                    background: '#3aa0ff',
+                                    background: '#7e9bbd',
                                     fontSize: '13px'
                                 }}
                             >
