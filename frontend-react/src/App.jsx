@@ -14,6 +14,8 @@ import LandingPage from './components/LandingPage'; // Import Landing Page
 import LoginScreen from './components/LoginScreen';
 import FilterConfiguratorModal from './components/FilterConfiguratorModal';
 import ARView from './components/ARView';
+import NativeARView from './components/NativeARView';
+import { isNativeAR } from './native/arcore';
 import PhotoAlbumModal from './components/PhotoAlbumModal';
 import ProgressDetailPanel from './components/ProgressDetailPanel';
 import DocumentManager from './components/DocumentManager';
@@ -825,6 +827,7 @@ function App() {
   const [minimapActive, setMinimapActive] = useState(false);
   const [vrActive, setVrActive] = useState(false);
   const [arModeActive, setArModeActive] = useState(false);
+  const [nativeArActive, setNativeArActive] = useState(false); // AR nativo (ARCore en APK)
   const [arInitialCamera, setArInitialCamera] = useState(null);
 
   // Album Modal State
@@ -3768,7 +3771,7 @@ function App() {
           }}
         />
 
-        {/* AR VIEW OVERLAY */}
+        {/* AR VIEW OVERLAY (WebXR — navegador) */}
         {arModeActive && (
           <ARView
             models={models}
@@ -3778,6 +3781,30 @@ function App() {
               setArInitialCamera(null);
             }}
           />
+        )}
+
+        {/* AR NATIVO (ARCore — APK) */}
+        {nativeArActive && (
+          <NativeARView onExit={() => setNativeArActive(false)} />
+        )}
+
+        {/* Botón flotante AR: visible cuando hay un proyecto/modelo abierto */}
+        {!isSharedMode && !compareMode && !arModeActive && !nativeArActive && selectedProject && models && models.length > 0 && (
+          <button
+            onClick={() => { if (isNativeAR()) setNativeArActive(true); else setArModeActive(true); }}
+            title={isNativeAR() ? 'Realidad Aumentada (ARCore)' : 'Realidad Aumentada (navegador)'}
+            style={{
+              position: 'absolute', bottom: 88, right: 18, zIndex: 50,
+              display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
+              background: '#7e9bbd', color: '#fff', border: 'none', borderRadius: 24,
+              fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.35)'
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2l8.66 5v10L12 22l-8.66-5V7L12 2z" /><path d="M12 22V12M3.34 7L12 12l8.66-5" />
+            </svg>
+            AR
+          </button>
         )}
 
         {/* GESTOR DOCUMENTAL GCS */}
