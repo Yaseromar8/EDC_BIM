@@ -3132,170 +3132,78 @@ function App() {
         )}
 
         <div className="app-viewer">
-          {!isSharedMode && activePanel === 'progress' && (
-            <div className="tracking-toolbar" style={{
-              left: panelDocked && (
-                (trackingTab === 'fotos' && photoAlbumOpen && selectedAlbumPin) ||
-                (trackingTab === 'avance' && progressPanelOpen && selectedProgressPin) ||
-                (trackingTab === 'docs' && docPinPanelOpen && selectedDocPin) ||
-                (trackingTab === 'restricciones' && docPinPanelOpen && selectedDocPin) ||
-                (trackingTab === 'rfis' && docPinPanelOpen && selectedDocPin)
-              ) ? '25%' : '50%'
-            }}>
-              <button
-                className="secondary-btn"
-                style={{
-                  background: trackingTab === 'avance' ? '#22c55e' : 'transparent',
-                  color: trackingTab === 'avance' ? '#fff' : '#bbb',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  fontSize: '11px',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                onClick={() => setTrackingTab(prev => prev === 'avance' ? null : 'avance')}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                </svg>
-                AVANCE
-              </button>
-              <button
-                className="secondary-btn"
-                style={{
-                  background: trackingTab === 'fotos' ? '#3b82f6' : 'transparent',
-                  color: trackingTab === 'fotos' ? '#fff' : '#bbb',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  fontSize: '11px',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                onClick={() => setTrackingTab(prev => prev === 'fotos' ? null : 'fotos')}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                  <polyline points="21 15 16 10 5 21"></polyline>
-                </svg>
-                FOTOS
-              </button>
-              <button
-                className="secondary-btn"
-                style={{
-                  background: trackingTab === 'docs' ? '#8b5cf6' : 'transparent',
-                  color: trackingTab === 'docs' ? '#fff' : '#bbb',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  fontSize: '11px',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                onClick={() => setTrackingTab(prev => prev === 'docs' ? null : 'docs')}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
-                  <line x1="16" y1="13" x2="8" y2="13"></line>
-                  <line x1="16" y1="17" x2="8" y2="17"></line>
-                  <polyline points="10 9 9 9 8 9"></polyline>
-                </svg>
-                DOC
-              </button>
-              <button
-                className="secondary-btn"
-                style={{
-                  background: trackingTab === 'rfis' ? '#ef4444' : 'transparent',
-                  color: trackingTab === 'rfis' ? '#fff' : '#bbb',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  fontSize: '11px',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                onClick={() => setTrackingTab(prev => prev === 'rfis' ? null : 'rfis')}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="12" y1="16" x2="12" y2="12"></line>
-                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                </svg>
-                RFI
-              </button>
-              <button
-                className="secondary-btn"
-                style={{
-                  background: trackingTab === 'restricciones' ? '#f59e0b' : 'transparent',
-                  color: trackingTab === 'restricciones' ? '#fff' : '#bbb',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  fontSize: '10px',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-                onClick={() => setTrackingTab(prev => prev === 'restricciones' ? null : 'restricciones')}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                  <line x1="12" y1="9" x2="12" y2="13"></line>
-                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                </svg>
-                RESTR.
-              </button>
-
-
+          {!isSharedMode && activePanel === 'progress' && (() => {
+            // Diseño sobrio: acento de color sutil (icono + subrayado) en vez de
+            // fondo saturado. Contador de pins por categoría para ver de un vistazo.
+            const TABS = [
+              { id: 'avance', label: 'Avance', color: '#7ea88f', icon: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /> },
+              { id: 'fotos', label: 'Fotos', color: '#7e9bbd', icon: <><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></> },
+              { id: 'docs', label: 'Documentos', color: '#9a8fb0', icon: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></> },
+              { id: 'rfis', label: 'RFI', color: '#bd8585', icon: <><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></> },
+              { id: 'restricciones', label: 'Restricciones', color: '#c2a878', icon: <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></> },
+            ];
+            const docked = panelDocked && (
+              (trackingTab === 'fotos' && photoAlbumOpen && selectedAlbumPin) ||
+              (trackingTab === 'avance' && progressPanelOpen && selectedProgressPin) ||
+              ((trackingTab === 'docs' || trackingTab === 'restricciones' || trackingTab === 'rfis') && docPinPanelOpen && selectedDocPin)
+            );
+            return (
+            <div className="tracking-toolbar" style={{ left: docked ? '25%' : '50%' }}>
+              {TABS.map(t => {
+                const active = trackingTab === t.id;
+                const count = (trackingData[t.id] || []).length;
+                return (
+                  <button
+                    key={t.id}
+                    title={t.label}
+                    onClick={() => setTrackingTab(prev => prev === t.id ? null : t.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 7, padding: '7px 13px',
+                      background: active ? 'rgba(255,255,255,0.06)' : 'transparent',
+                      color: active ? '#eef1f5' : '#9aa3b0',
+                      border: 'none', borderBottom: active ? `2px solid ${t.color}` : '2px solid transparent',
+                      borderRadius: '6px 6px 0 0', fontWeight: 600, fontSize: 12, cursor: 'pointer',
+                      transition: 'all 0.15s ease', whiteSpace: 'nowrap'
+                    }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.color = '#cdd3da'; }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.color = '#9aa3b0'; }}
+                  >
+                    <span style={{ display: 'inline-flex', color: active ? t.color : '#7a828e' }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{t.icon}</svg>
+                    </span>
+                    {t.label}
+                    {count > 0 && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, lineHeight: '14px', minWidth: 16, textAlign: 'center',
+                        padding: '0 5px', borderRadius: 9,
+                        background: active ? t.color : 'rgba(255,255,255,0.1)',
+                        color: active ? '#15181d' : '#aab1bb'
+                      }}>{count}</span>
+                    )}
+                  </button>
+                );
+              })}
               {trackingTab && (
-                <button
-                  className="secondary-btn"
-                  title="Nuevo Marcador"
-                  style={{
-                    background: trackingPlacementMode ? '#ef4444' : 'rgba(255, 255, 255, 0.15)',
-                    color: 'white',
-                    border: 'none',
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '18px',
-                    transition: 'all 0.2s ease',
-                    marginLeft: '4px'
-                  }}
-                  onClick={() => setTrackingPlacementMode(prev => !prev)}
-                >
-                  {trackingPlacementMode ? '✕' : '+'}
-                </button>
+                <>
+                  <div style={{ width: 1, height: 22, background: 'rgba(255,255,255,0.12)', margin: '0 6px' }} />
+                  <button
+                    title={trackingPlacementMode ? 'Cancelar colocación' : 'Colocar un nuevo marcador en el modelo'}
+                    onClick={() => setTrackingPlacementMode(prev => !prev)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
+                      background: trackingPlacementMode ? '#bd8585' : '#7e9bbd', color: '#fff',
+                      border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {trackingPlacementMode ? '✕ Cancelar' : '+ Nuevo'}
+                  </button>
+                </>
               )}
             </div>
-          )}
+            );
+          })()}
+
           <div className="split-view-container">
             <div className="split-3d" style={{ position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               {/* 3D VIEWER - Hide when build is active */}
