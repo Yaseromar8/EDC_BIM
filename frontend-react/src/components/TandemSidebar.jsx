@@ -40,6 +40,8 @@ const TandemSidebar = ({
     activeViewableGuids,
     handleLoadSpecificView,
     handleModelUpdate,
+    handleUpdateAll,
+    updateAllBusy,
     removeModel,
     setRelinkTargetModel,
     setImportModalOpen,
@@ -192,6 +194,8 @@ const TandemSidebar = ({
                     activeViewableGuids={activeViewableGuids}
                     onLoadView={handleLoadSpecificView}
                     onUpdate={handleModelUpdate}
+                    onUpdateAll={handleUpdateAll}
+                    updateAllBusy={updateAllBusy}
                     onRelink={(model) => {
                         setRelinkTargetModel(model);
                         setImportModalOpen(true);

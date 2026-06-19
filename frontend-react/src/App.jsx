@@ -1823,6 +1823,21 @@ function App() {
     }
   }, [selectedProject]);
 
+  // Update masivo: actualiza TODOS los modelos que tienen versión nueva, de forma
+  // SECUENCIAL (no hammerea el config) y tolerante a fallos (si uno falla, sigue
+  // con los demás). Las extracciones corren en background con su guard de
+  // concurrencia, así que no se pisan.
+  const [updateAllBusy, setUpdateAllBusy] = useState(false);
+  const handleUpdateAll = useCallback(async () => {
+    const pending = (models || []).filter(m => availableUpdates[m.id]?.has_update);
+    if (!pending.length || updateAllBusy) return;
+    setUpdateAllBusy(true);
+    for (const m of pending) {
+      try { await handleModelUpdate(m.urn); } catch (e) { console.warn('[UpdateAll] falló', m.urn, e); }
+    }
+    setUpdateAllBusy(false);
+  }, [models, availableUpdates, updateAllBusy, handleModelUpdate]);
+
   const handleLinkDocs = useCallback(async (modelsInput, isGemelo = false, viewGuid = null) => {
     // Determine if input is array
     const models = Array.isArray(modelsInput) ? modelsInput : [modelsInput];
@@ -3087,6 +3102,8 @@ function App() {
             activeViewableGuids={activeViewableGuids}
             handleLoadSpecificView={handleLoadSpecificView}
             handleModelUpdate={handleModelUpdate}
+            handleUpdateAll={handleUpdateAll}
+            updateAllBusy={updateAllBusy}
             removeModel={removeModel}
             setRelinkTargetModel={setRelinkTargetModel}
             extractionJobs={extractionJobs}
