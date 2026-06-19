@@ -614,7 +614,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                         {browseMode === 'folder' && (
                                             <button 
                                                 onClick={(e) => { e.stopPropagation(); handleSelectFromECD(f); }}
-                                                style={{ background: '#3b82f6', border: 'none', color: 'white', borderRadius: '4px', padding: '4px 8px', fontSize: '10px' }}
+                                                style={{ background: '#7e9bbd', border: 'none', color: 'white', borderRadius: '4px', padding: '4px 8px', fontSize: '10px' }}
                                             >
                                                 SELECCIONAR
                                             </button>
@@ -637,7 +637,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                         >
                                             <span style={{ color: '#333' }}>{isImg ? '🖼️' : isVid ? '🎬' : '📄'} {f.name}</span>
                                             {browseMode === 'link' && (
-                                                <span style={{ fontSize: '10px', color: '#3b82f6' }}>VINCULAR</span>
+                                                <span style={{ fontSize: '10px', color: '#7e9bbd' }}>VINCULAR</span>
                                             )}
                                         </div>
                                     );
@@ -655,7 +655,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white'
                     }}>
                         <div className="dm-progress-track" style={{ width: '200px', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden', marginBottom: '12px' }}>
-                            <div className="dm-progress-fill" style={{ width: `${uploadProgress}%`, height: '100%', background: '#3b82f6', transition: 'width 0.2s ease' }} />
+                            <div className="dm-progress-fill" style={{ width: `${uploadProgress}%`, height: '100%', background: '#7e9bbd', transition: 'width 0.2s ease' }} />
                         </div>
                         <span style={{ fontWeight: 600, fontSize: '14px' }}>Subiendo... {uploadProgress}%</span>
                     </div>

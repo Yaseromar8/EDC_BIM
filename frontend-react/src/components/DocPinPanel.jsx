@@ -666,11 +666,11 @@ const DocPinPanel = ({
 
     const getFileIcon = (name) => {
         const ext = name.split('.').pop().toLowerCase();
-        if (ext === 'pdf') return <IconPDF color="#ef4444" />;
-        if (ext === 'docx' || ext === 'doc') return <IconFile color="#3b82f6" />;
-        if (ext === 'xlsx' || ext === 'xls') return <IconFile color="#22c55e" />;
-        if (ext === 'dwg') return <IconFile color="#f97316" />;
-        if (['png', 'jpg', 'jpeg'].includes(ext)) return <IconFile color="#8b5cf6" />;
+        if (ext === 'pdf') return <IconPDF color="#bd8585" />;
+        if (ext === 'docx' || ext === 'doc') return <IconFile color="#7e9bbd" />;
+        if (ext === 'xlsx' || ext === 'xls') return <IconFile color="#7ea88f" />;
+        if (ext === 'dwg') return <IconFile color="#c2a878" />;
+        if (['png', 'jpg', 'jpeg'].includes(ext)) return <IconFile color="#9a8fb0" />;
         return <IconFile />;
     };
 
@@ -703,7 +703,7 @@ const DocPinPanel = ({
                                         }}
                                         style={{
                                             background: '#1a1b1e',
-                                            border: '1px solid #3b82f6',
+                                            border: '1px solid #7e9bbd',
                                             color: '#fff',
                                             fontSize: '14px',
                                             padding: '2px 8px',
@@ -1157,7 +1157,7 @@ const DocPinPanel = ({
                         }}>
                             <span style={{ fontSize: '20px' }}>📢</span>
                             <div>
-                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#f59e0b', textTransform: 'uppercase', marginBottom: '2px' }}>Descripción</div>
+                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#c2a878', textTransform: 'uppercase', marginBottom: '2px' }}>Descripción</div>
                                 <div style={{ fontSize: '14px', color: '#eee', fontWeight: 500 }}>{pin.val}</div>
                             </div>
                         </div>
@@ -1273,7 +1273,7 @@ const DocPinPanel = ({
                                                         onClick={(e) => e.stopPropagation()}
                                                         style={{
                                                             background: 'rgba(255,255,255,0.05)',
-                                                            border: '1px solid #3b82f6',
+                                                            border: '1px solid #7e9bbd',
                                                             borderRadius: '4px',
                                                             color: 'white',
                                                             padding: '4px 8px',
