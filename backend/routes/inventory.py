@@ -12,6 +12,14 @@ inventory_bp = Blueprint('inventory', __name__)
 # Memoria temporal para progreso (en un entorno PROD debería ser Redis/DB)
 EXTRACTION_JOBS = {}
 
+# Guard contra extracciones concurrentes del MISMO modelo (urn+scope). Evita que
+# un Update/Relink dispare dos extracciones a la vez (backend + frontend) que se
+# pisen purgando/insertando -> data parcial o duplicada. Belt-and-suspenders
+# sobre el fix de "el frontend sondea el job del backend".
+import threading as _threading
+_EXTRACTING_KEYS = set()
+_EXTRACTING_LOCK = _threading.Lock()
+
 def ensure_extraction_jobs_table():
     """Estado de jobs en Postgres: visible entre workers de gunicorn y persistente
     si un worker se reinicia (la memoria por-proceso no basta en produccion)."""
@@ -162,12 +170,23 @@ def sanitize_urn(urn):
 
 def extract_metadata_task(urn, target_urn, job_id):
     """ Tarea en segundo plano para extraer metadata de Autodesk. """
+    # Clave de concurrencia: mismo modelo + mismo scope
+    _key = None
     try:
         print(f"\n[Extractor] ===== INICIO JOB: {job_id} =====")
         print(f"[Extractor] URN recibido (raw): {urn}")
-        
+
         # Sanitizar URN a URL-safe base64
         urn = sanitize_urn(urn)
+        _key = f"{urn}::{target_urn}"
+        with _EXTRACTING_LOCK:
+            if _key in _EXTRACTING_KEYS:
+                print(f"[Extractor] Ya hay una extracción en curso para {_key}; este job se omite.")
+                set_job(job_id, {'status': 'success', 'progress': 100,
+                                 'message': 'Ya había una extracción en curso para este modelo.'})
+                _key = None  # no liberar lo que no tomamos
+                return
+            _EXTRACTING_KEYS.add(_key)
         print(f"[Extractor] URN sanitizado: {urn}")
         print(f"[Extractor] Target URN: {target_urn}")
         
@@ -674,6 +693,23 @@ def extract_metadata_task(urn, target_urn, job_id):
                     project_id = EXCLUDED.project_id;
             """
             execute_values(cursor, insert_query, records)
+
+            # ANTI-DUPLICADO BULLETPROOF: tras insertar la versión nueva, eliminar
+            # cualquier fila de los MISMOS elementos que venga de OTRO source_urn
+            # (versiones viejas que la purga por base_urn pudo no atrapar). Garantiza
+            # que cada elemento exista UNA sola vez por frente, sin depender del
+            # decode base64. No toca otros modelos del federado (sus external_id son
+            # distintos). Misma transacción -> atómico.
+            new_ext_ids = [item['external_id'] for item in inventory_data]
+            if new_ext_ids:
+                cursor.execute(
+                    "DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn <> %s AND external_id = ANY(%s)",
+                    (target_urn, urn, new_ext_ids)
+                )
+                dup_removed = cursor.rowcount
+                if dup_removed:
+                    print(f"[Extractor] Anti-duplicado: {dup_removed} filas viejas del mismo elemento eliminadas.")
+
             conn.commit()
 
         set_job(job_id, {'status': 'success', 'progress': 100, 'message': f'Extracción completa. {len(inventory_data)} activos insertados.'})
@@ -685,6 +721,11 @@ def extract_metadata_task(urn, target_urn, job_id):
         traceback.print_exc()
         print(f"[Extractor ERROR] {e}")
         set_job(job_id, {'status': 'error', 'progress': 0, 'message': str(e)})
+    finally:
+        # Liberar el guard de concurrencia para este modelo+scope
+        if _key:
+            with _EXTRACTING_LOCK:
+                _EXTRACTING_KEYS.discard(_key)
 
 
 @inventory_bp.route('/api/inventory/extract', methods=['POST'])
