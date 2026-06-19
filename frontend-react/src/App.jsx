@@ -22,7 +22,7 @@ import InventoryDataGrid from './components/InventoryDataGrid';
 import BudgetTree from './components/BudgetTree';
 import TandemSidebar from './components/TandemSidebar';
 import TandemFilterPanel from './components/TandemFilterPanel';
-import PdfViewer from './components/PdfViewer';
+import PdfReader from './components/PdfReader';
 import CompareView from './components/CompareView';
 
 
@@ -3561,9 +3561,9 @@ function App() {
 
                     {/* CASE A: VIWING A SPECIFIC DOCUMENT */}
                     {openedDoc ? (
-                      <div style={{ flex: 1, background: '#e5e7eb', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+                      <div style={{ flex: 1, background: '#e5e7eb', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', position: 'relative' }}>
                         {openedDoc.type === 'pdf' ? (
-                          <PdfViewer url={openedDoc.nodeId ? `${import.meta.env.VITE_BACKEND_URL}/api/docs/proxy?id=${openedDoc.nodeId}` : openedDoc.url} />
+                          <PdfReader url={openedDoc.nodeId ? `${import.meta.env.VITE_BACKEND_URL}/api/docs/proxy?id=${openedDoc.nodeId}` : openedDoc.url} fileName={openedDoc.name || 'documento.pdf'} />
                         ) : openedDoc.type === 'image' ? (
                           <img src={openedDoc.url} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} alt="Doc" />
                         ) : (openedDoc.source === 'acc' || openedDoc.urn) ? (

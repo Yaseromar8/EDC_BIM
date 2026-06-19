@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import './DocPinPanel.css';
 import { apiFetch, getUploadAuthHeaders } from '../utils/apiFetch';
 import { Document, Page, pdfjs } from 'react-pdf';
-import PdfViewer from './PdfViewer';
+import PdfReader from './PdfReader';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -787,7 +787,7 @@ const DocPinPanel = ({
                     {/* Wrapper relativo para superponer la command bar sobre el iframe */}
                     <div className="docpin-viewer-body">
                         {viewingDoc.type === 'pdf' || viewingDoc.name?.toLowerCase().endsWith('.pdf') ? (
-                            <PdfViewer url={viewingDoc.nodeId ? `${PROXY_API}?id=${viewingDoc.nodeId}` : viewingDoc.url} />
+                            <PdfReader url={viewingDoc.nodeId ? `${PROXY_API}?id=${viewingDoc.nodeId}` : viewingDoc.url} fileName={viewingDoc.name || 'documento.pdf'} />
                         ) : (
                             <iframe
                                 className="docpin-iframe"
