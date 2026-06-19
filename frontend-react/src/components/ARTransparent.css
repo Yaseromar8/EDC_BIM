@@ -1,17 +1,155 @@
-/* AR MODE TRANSPARENCY */
-body.ar-active,
+html.ar-active,
+html.ar-active body,
 body.ar-active #root,
-body.ar-active .app-container {
+body.ar-active .app-layout,
+body.ar-active .app-container,
+body.ar-active .app-viewer {
     background: transparent !important;
     background-color: transparent !important;
+    background-image: none !important;
 }
 
-/* Hide UI elements in AR Mode if strictly needed, or just make viewer transparent */
-body.ar-active .adsk-viewing-viewer {
-    background: transparent !important;
+body.ar-active .top-bar,
+body.ar-active .app-left-rail,
+body.ar-active .desktop-rail-toggle {
+    visibility: hidden !important;
 }
 
-/* Ensure the canvas is transparent */
-body.ar-active canvas {
+body.ar-active .adsk-viewing-viewer,
+body.ar-active .adsk-viewing-viewer canvas {
     background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+}
+
+.native-ar-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    pointer-events: none;
+}
+
+.native-ar-status {
+    position: absolute;
+    top: env(safe-area-inset-top, 0);
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    color: #fff;
+    font-size: 12px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+    pointer-events: auto;
+}
+
+.native-ar-status > span:first-child {
+    flex: 0 0 auto;
+    padding: 4px 8px;
+    border-radius: 12px;
+    color: #15181d;
+    font-size: 11px;
+    font-weight: 800;
+    text-shadow: none;
+}
+
+.native-ar-status .tracking-ok {
+    background: rgba(126, 168, 143, 0.94);
+}
+
+.native-ar-status .tracking-wait {
+    background: rgba(194, 168, 120, 0.94);
+}
+
+.native-ar-reticle {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    width: 28px;
+    height: 28px;
+    margin: -14px 0 0 -14px;
+    border: 2px solid rgba(255, 255, 255, 0.95);
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65), 0 2px 12px rgba(0, 0, 0, 0.45);
+}
+
+.native-ar-reticle::before,
+.native-ar-reticle::after {
+    content: "";
+    position: absolute;
+    background: rgba(255, 255, 255, 0.95);
+}
+
+.native-ar-reticle::before {
+    left: 12px;
+    top: -7px;
+    width: 2px;
+    height: 38px;
+}
+
+.native-ar-reticle::after {
+    left: -7px;
+    top: 12px;
+    width: 38px;
+    height: 2px;
+}
+
+.native-ar-controls {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    pointer-events: auto;
+}
+
+.native-ar-controls > button {
+    min-height: 44px;
+    padding: 11px 20px;
+    border-radius: 24px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 800;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.native-ar-primary {
+    border: none;
+    background: #6287b4;
+}
+
+.native-ar-primary:disabled {
+    background: #555;
+    color: #aaa;
+}
+
+.native-ar-exit {
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    background: rgba(20, 22, 26, 0.78);
+}
+
+.native-ar-yaw {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-radius: 22px;
+    background: rgba(20, 22, 26, 0.78);
+    color: #fff;
+    font-size: 12px;
+}
+
+.native-ar-yaw button {
+    min-width: 42px;
+    height: 34px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 17px;
+    background: rgba(126, 155, 189, 0.9);
+    color: #fff;
+    font-weight: 800;
 }

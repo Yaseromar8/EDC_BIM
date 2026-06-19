@@ -2,6 +2,7 @@ package com.visoraps.app;
 
 import android.Manifest;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.view.ViewGroup;
@@ -13,14 +14,17 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
-
 import com.google.ar.core.Anchor;
 import com.google.ar.core.ArCoreApk;
 import com.google.ar.core.Camera;
 import com.google.ar.core.Config;
 import com.google.ar.core.Frame;
+import com.google.ar.core.HitResult;
+import com.google.ar.core.Plane;
+import com.google.ar.core.Point;
 import com.google.ar.core.Pose;
 import com.google.ar.core.Session;
+import com.google.ar.core.Trackable;
 import com.google.ar.core.TrackingState;
 
 import java.util.ArrayList;
@@ -30,18 +34,8 @@ import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
 /**
- * Plugin Capacitor "ARCore" — Capa 0 del sándwich transparente.
- *
- * Arranca ARCore, dibuja la cámara real en una GLSurfaceView DETRÁS del WebView
- * (que se pone transparente) y emite la pose de la cámara por frame a JS:
- *   onCameraPose  { view:[16], proj:[16] }
- *   onTracking    { state:'tracking'|'paused'|'stopped', reason }
- *
- * JS (arViewerBridge.js) usa la pose para mover la cámara del viewer de Autodesk,
- * cuyo canvas flota transparente sobre la cámara real.
- *
- * Esqueleto para compilar y empezar a iterar en device. Marcas [TUNE]/[TODO]
- * indican lo que se ajusta contra el celular real.
+ * Capacitor plugin that renders the ARCore camera behind the transparent
+ * WebView and streams camera matrices to the Autodesk Viewer.
  */
 @CapacitorPlugin(
     name = "ARCore",
@@ -49,17 +43,28 @@ import javax.microedition.khronos.opengles.GL10;
 )
 public class ARCorePlugin extends Plugin {
 
+    private static final long POSE_INTERVAL_NS = 33_333_333L; // 30 Hz to reduce JS bridge load.
+
     private Session session;
     private GLSurfaceView glView;
     private BackgroundRenderer bgRenderer;
-    private boolean running = false;
+    private volatile boolean running = false;
     private final float[] projMatrix = new float[16];
     private final float[] viewMatrix = new float[16];
     private final List<Anchor> anchors = new ArrayList<>();
-    private PluginCall pendingAnchorCall = null;
+    private volatile PluginCall pendingAnchorCall = null;
+    private volatile int viewportWidth = 0;
+    private volatile int viewportHeight = 0;
+    private Drawable originalWebViewBackground = null;
+    private long lastPoseEmitNs = 0L;
+    private TrackingState lastState = null;
 
     @PluginMethod
     public void start(final PluginCall call) {
+        if (running && session != null) {
+            call.resolve();
+            return;
+        }
         if (getPermissionState("camera") != com.getcapacitor.PermissionState.GRANTED) {
             requestPermissionForAlias("camera", call, "cameraPermsCallback");
             return;
@@ -72,26 +77,31 @@ public class ARCorePlugin extends Plugin {
         if (getPermissionState("camera") == com.getcapacitor.PermissionState.GRANTED) {
             startInternal(call);
         } else {
-            call.reject("Permiso de cámara denegado");
+            call.reject("Permiso de camara denegado");
         }
     }
 
     private void startInternal(final PluginCall call) {
         getActivity().runOnUiThread(() -> {
             try {
-                // 1) Asegurar ARCore instalado/actualizado
-                ArCoreApk.Availability avail = ArCoreApk.getInstance().checkAvailability(getContext());
-                if (avail.isTransient()) { call.reject("ARCore verificando disponibilidad, reintenta"); return; }
-                if (!avail.isSupported()) { call.reject("Este dispositivo no soporta ARCore"); return; }
+                ArCoreApk.Availability availability =
+                        ArCoreApk.getInstance().checkAvailability(getContext());
+                if (availability.isTransient()) {
+                    call.reject("ARCore esta verificando disponibilidad. Reintenta.");
+                    return;
+                }
+                if (!availability.isSupported()) {
+                    call.reject("Este dispositivo no soporta ARCore");
+                    return;
+                }
 
                 ArCoreApk.InstallStatus installStatus =
                         ArCoreApk.getInstance().requestInstall(getActivity(), true);
                 if (installStatus == ArCoreApk.InstallStatus.INSTALL_REQUESTED) {
-                    call.reject("Instalando ARCore (Google Play Services for AR), reintenta luego");
+                    call.reject("Instalando Google Play Services for AR. Reintenta al terminar.");
                     return;
                 }
 
-                // 2) Crear sesión
                 session = new Session(getContext());
                 Config config = new Config(session);
                 config.setUpdateMode(Config.UpdateMode.LATEST_CAMERA_IMAGE);
@@ -99,9 +109,9 @@ public class ARCorePlugin extends Plugin {
                 config.setPlaneFindingMode(Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL);
                 session.configure(config);
 
-                // 3) GLSurfaceView de fondo, DETRÁS del WebView transparente
                 final WebView webView = getBridge().getWebView();
                 final ViewGroup parent = (ViewGroup) webView.getParent();
+                originalWebViewBackground = webView.getBackground();
 
                 bgRenderer = new BackgroundRenderer();
                 glView = new GLSurfaceView(getContext());
@@ -111,18 +121,19 @@ public class ARCorePlugin extends Plugin {
                 glView.setRenderer(renderer);
                 glView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
 
-                // WebView transparente y por delante (Capa 1/2)
                 webView.setBackgroundColor(Color.TRANSPARENT);
                 parent.addView(glView, 0, new ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT));
                 webView.bringToFront();
 
                 session.resume();
-                glView.onResume();
                 running = true;
+                glView.onResume();
                 call.resolve();
-            } catch (Exception e) {
-                call.reject("No se pudo iniciar ARCore: " + e.getMessage(), e);
+            } catch (Exception error) {
+                cleanupSession();
+                call.reject("No se pudo iniciar ARCore: " + error.getMessage(), error);
             }
         });
     }
@@ -130,33 +141,24 @@ public class ARCorePlugin extends Plugin {
     @PluginMethod
     public void stop(final PluginCall call) {
         getActivity().runOnUiThread(() -> {
-            running = false;
-            try {
-                if (glView != null) {
-                    glView.onPause();
-                    ViewGroup parent = (ViewGroup) glView.getParent();
-                    if (parent != null) parent.removeView(glView);
-                    glView = null;
-                }
-                if (getBridge() != null && getBridge().getWebView() != null) {
-                    getBridge().getWebView().setBackgroundColor(Color.WHITE);
-                }
-                if (session != null) { session.pause(); session.close(); session = null; }
-                anchors.clear();
-            } catch (Exception e) { /* noop */ }
+            cleanupSession();
             call.resolve();
         });
     }
 
-    /** Fija el mundo en la pose actual de la cámara (anchor). El modelo se bloquea ahí. */
     @PluginMethod
     public void createAnchor(PluginCall call) {
-        if (session == null) { call.reject("Sesión AR no activa"); return; }
-        // Se crea en el hilo GL en el próximo frame (necesita el Frame actual)
+        if (!running || session == null) {
+            call.reject("Sesion AR no activa");
+            return;
+        }
+        if (pendingAnchorCall != null) {
+            call.reject("Ya hay una solicitud de anchor en curso");
+            return;
+        }
         pendingAnchorCall = call;
     }
 
-    // ── Renderer del hilo GL: dibuja cámara + extrae pose por frame ──
     private final GLSurfaceView.Renderer renderer = new GLSurfaceView.Renderer() {
         @Override
         public void onSurfaceCreated(GL10 gl, EGLConfig config) {
@@ -168,6 +170,8 @@ public class ARCorePlugin extends Plugin {
         @Override
         public void onSurfaceChanged(GL10 gl, int width, int height) {
             GLES20.glViewport(0, 0, width, height);
+            viewportWidth = width;
+            viewportHeight = height;
             if (session != null) {
                 int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
                 session.setDisplayGeometry(rotation, width, height);
@@ -178,60 +182,152 @@ public class ARCorePlugin extends Plugin {
         public void onDrawFrame(GL10 gl) {
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
             if (session == null || !running) return;
+
             try {
                 session.setCameraTextureName(bgRenderer.getTextureId());
                 Frame frame = session.update();
                 bgRenderer.draw(frame);
 
                 Camera camera = frame.getCamera();
-                TrackingState ts = camera.getTrackingState();
-                emitTracking(ts);
-                if (ts != TrackingState.TRACKING) return;
+                TrackingState trackingState = camera.getTrackingState();
+                emitTracking(trackingState);
+                if (trackingState != TrackingState.TRACKING) return;
 
-                // Atender un createAnchor pendiente con la pose actual
-                if (pendingAnchorCall != null) {
-                    Anchor a = session.createAnchor(camera.getPose());
-                    anchors.add(a);
-                    float[] m = new float[16];
-                    a.getPose().toMatrix(m, 0);
-                    JSObject ret = new JSObject();
-                    ret.put("anchorId", String.valueOf(anchors.size() - 1));
-                    ret.put("matrix", floatsToJsonArray(m));
-                    pendingAnchorCall.resolve(ret);
-                    pendingAnchorCall = null;
+                resolvePendingAnchor(frame);
+
+                long timestamp = frame.getTimestamp();
+                if (timestamp - lastPoseEmitNs >= POSE_INTERVAL_NS) {
+                    lastPoseEmitNs = timestamp;
+                    camera.getViewMatrix(viewMatrix, 0);
+                    camera.getProjectionMatrix(projMatrix, 0, 0.05f, 2000f);
+                    JSObject pose = new JSObject();
+                    pose.put("view", floatsToJsonArray(viewMatrix));
+                    pose.put("proj", floatsToJsonArray(projMatrix));
+                    notifyListeners("onCameraPose", pose);
                 }
-
-                // Pose por frame -> JS
-                camera.getViewMatrix(viewMatrix, 0);
-                camera.getProjectionMatrix(projMatrix, 0, 0.05f, 2000f); // [TUNE] near/far
-                JSObject pose = new JSObject();
-                pose.put("view", floatsToJsonArray(viewMatrix));
-                pose.put("proj", floatsToJsonArray(projMatrix));
-                notifyListeners("onCameraPose", pose);
-            } catch (Throwable t) {
-                // No reventar el hilo GL; el siguiente frame reintenta
+            } catch (Throwable error) {
+                PluginCall anchorCall = pendingAnchorCall;
+                pendingAnchorCall = null;
+                if (anchorCall != null) {
+                    anchorCall.reject("Error creando el anchor: " + error.getMessage());
+                }
             }
         }
     };
 
-    private TrackingState lastState = null;
-    private void emitTracking(TrackingState ts) {
-        if (ts == lastState) return;
-        lastState = ts;
-        JSObject o = new JSObject();
-        o.put("state", ts == TrackingState.TRACKING ? "tracking"
-                : ts == TrackingState.PAUSED ? "paused" : "stopped");
-        notifyListeners("onTracking", o);
+    private void resolvePendingAnchor(Frame frame) {
+        PluginCall anchorCall = pendingAnchorCall;
+        if (anchorCall == null) return;
+        pendingAnchorCall = null;
+
+        Anchor anchor = createAnchorFromCenterHit(frame);
+        if (anchor == null) {
+            anchorCall.reject(
+                    "No se detecto una superficie en el reticulo. "
+                    + "Mueve el celular lentamente y vuelve a intentar.");
+            return;
+        }
+
+        for (Anchor oldAnchor : anchors) oldAnchor.detach();
+        anchors.clear();
+        anchors.add(anchor);
+
+        float[] matrix = new float[16];
+        anchor.getPose().toMatrix(matrix, 0);
+        JSObject result = new JSObject();
+        result.put("anchorId", "0");
+        result.put("matrix", floatsToJsonArray(matrix));
+        anchorCall.resolve(result);
     }
 
-    private static com.getcapacitor.JSArray floatsToJsonArray(float[] m) {
-        com.getcapacitor.JSArray arr = new com.getcapacitor.JSArray();
-        for (float v : m) arr.put((double) v);
-        return arr;
+    private Anchor createAnchorFromCenterHit(Frame frame) {
+        if (viewportWidth <= 0 || viewportHeight <= 0) return null;
+
+        List<HitResult> hits =
+                frame.hitTest(viewportWidth * 0.5f, viewportHeight * 0.5f);
+        HitResult pointFallback = null;
+        for (HitResult hit : hits) {
+            Trackable trackable = hit.getTrackable();
+            if (trackable instanceof Plane) {
+                Plane plane = (Plane) trackable;
+                if (plane.getTrackingState() == TrackingState.TRACKING
+                        && plane.getType() == Plane.Type.HORIZONTAL_UPWARD_FACING
+                        && plane.isPoseInPolygon(hit.getHitPose())) {
+                    return createWorldAlignedAnchor(hit);
+                }
+            } else if (trackable instanceof Point
+                    && trackable.getTrackingState() == TrackingState.TRACKING
+                    && pointFallback == null) {
+                pointFallback = hit;
+            }
+        }
+        return pointFallback != null ? createWorldAlignedAnchor(pointFallback) : null;
+    }
+
+    private Anchor createWorldAlignedAnchor(HitResult hit) {
+        Pose hitPose = hit.getHitPose();
+        Pose worldAlignedPose = new Pose(
+                hitPose.getTranslation(),
+                new float[] { 0f, 0f, 0f, 1f });
+        return session.createAnchor(worldAlignedPose);
+    }
+
+    private void emitTracking(TrackingState trackingState) {
+        if (trackingState == lastState) return;
+        lastState = trackingState;
+        JSObject payload = new JSObject();
+        payload.put("state", trackingState == TrackingState.TRACKING ? "tracking"
+                : trackingState == TrackingState.PAUSED ? "paused" : "stopped");
+        notifyListeners("onTracking", payload);
+    }
+
+    private void cleanupSession() {
+        running = false;
+        PluginCall anchorCall = pendingAnchorCall;
+        pendingAnchorCall = null;
+        if (anchorCall != null) {
+            anchorCall.reject("La sesion AR termino antes de crear el anchor");
+        }
+
+        try {
+            if (glView != null) {
+                glView.onPause();
+                ViewGroup parent = (ViewGroup) glView.getParent();
+                if (parent != null) parent.removeView(glView);
+                glView = null;
+            }
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                getBridge().getWebView().setBackground(originalWebViewBackground);
+            }
+            for (Anchor anchor : anchors) anchor.detach();
+            anchors.clear();
+            if (session != null) {
+                session.pause();
+                session.close();
+                session = null;
+            }
+        } catch (Exception ignored) {
+            // Cleanup must remain idempotent.
+        }
+
+        viewportWidth = 0;
+        viewportHeight = 0;
+        lastPoseEmitNs = 0L;
+        lastState = null;
+    }
+
+    private static com.getcapacitor.JSArray floatsToJsonArray(float[] matrix) {
+        com.getcapacitor.JSArray result = new com.getcapacitor.JSArray();
+        try {
+            for (float value : matrix) result.put((double) value);
+        } catch (org.json.JSONException error) {
+            error.printStackTrace();
+        }
+        return result;
     }
 
     @Override
     protected void handleOnDestroy() {
-        try { if (session != null) { session.close(); session = null; } } catch (Exception e) {}
+        cleanupSession();
     }
 }

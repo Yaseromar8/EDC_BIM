@@ -482,6 +482,11 @@ const Viewer = ({
                 // Custom extensions removed to simplify UI
 
                 const config = {
+                    canvasConfig: {
+                        alpha: true,
+                        premultipliedAlpha: false,
+                        preserveDrawingBuffer: false
+                    },
                     extensions: [
                         'BaseExtension',
                         'Autodesk.BIM360.Extension.PushPin',

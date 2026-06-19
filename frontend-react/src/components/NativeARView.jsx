@@ -1,94 +1,158 @@
-// NativeARView.jsx — Overlay de AR nativo (ARCore vía plugin Capacitor).
-// Arranca la cámara nativa, conecta la pose a la cámara del viewer abierto, y
-// da los controles "Anclar aquí" / "Salir". El modelo de Autodesk flota sobre
-// la cámara real gracias al WebView transparente.
 import React, { useEffect, useRef, useState } from 'react';
-import { startSession, stopSession, createAnchor } from '../native/arcore';
+import { createAnchor, onTracking, startSession, stopSession } from '../native/arcore';
 import { attachArToViewer } from '../native/arViewerBridge';
+import './ARTransparent.css';
 
 export default function NativeARView({ onExit }) {
-  const [status, setStatus] = useState('Iniciando cámara…');
+  const [status, setStatus] = useState('Iniciando camara...');
   const [tracking, setTracking] = useState('paused');
   const [anchored, setAnchored] = useState(false);
+  const [yawDegrees, setYawDegrees] = useState(0);
   const detachRef = useRef(null);
-  const prevBodyBg = useRef(null);
+  const trackingCleanupRef = useRef(null);
+  const modelOriginRef = useRef(null);
+  const previousStylesRef = useRef(null);
+  const rendererStateRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
       const viewer = window.NOP_VIEWER;
-      if (!viewer || !viewer.model) { setStatus('No hay un modelo abierto para ver en AR.'); return; }
+      if (!viewer || !viewer.model) {
+        setStatus('No hay un modelo abierto para ver en AR.');
+        return;
+      }
+
       try {
-        // Fondo transparente para que se vea la cámara nativa por detrás
-        prevBodyBg.current = document.body.style.background;
+        const target = viewer.navigation.getTarget();
+        modelOriginRef.current = { x: target.x, y: target.y, z: target.z };
+
+        previousStylesRef.current = {
+          body: document.body.style.background,
+          html: document.documentElement.style.background,
+          viewer: viewer.container.style.background,
+        };
+        document.body.classList.add('ar-active');
+        document.documentElement.classList.add('ar-active');
         document.body.style.background = 'transparent';
-        try { viewer.setBackgroundColor && viewer.setBackgroundColor(0, 0, 0, 0, 0, 0); } catch (e) {}
+        document.documentElement.style.background = 'transparent';
+
+        try {
+          const renderer = viewer.impl.renderer();
+          rendererStateRef.current = {
+            color: renderer.getClearColor?.().clone?.() || null,
+            alpha: renderer.getClearAlpha?.() ?? 1,
+          };
+          renderer.setClearColor(0x000000, 0);
+          renderer.setClearAlpha?.(0);
+          viewer.container.style.background = 'transparent';
+          viewer.impl.invalidate(true, true, true);
+        } catch (e) {
+          console.warn('[NativeAR] No se pudo transparentar el renderer:', e);
+        }
+
+        // Subscribe before start: ARCore only emits when the tracking state changes.
+        trackingCleanupRef.current = onTracking((next) => setTracking(next.state));
 
         await startSession();
-        if (cancelled) { stopSession(); return; }
+        if (cancelled) {
+          stopSession();
+          return;
+        }
 
-        const off = (viewer.model.getGlobalOffset && viewer.model.getGlobalOffset()) || { x: 0, y: 0, z: 0 };
         detachRef.current = attachArToViewer(viewer, {
-          modelOffset: off,
-          scale: 1,
-          onStatus: (s) => setTracking(s.state),
+          modelOrigin: modelOriginRef.current,
+          unitsPerMeter: 1000,
         });
-        setStatus('Mueve el celular para que reconozca el espacio, luego pulsa "Anclar aquí".');
-      } catch (e) {
-        setStatus('No se pudo iniciar AR: ' + (e?.message || e));
+        setStatus('Escanea el suelo y apunta el reticulo al punto fisico equivalente al punto BIM que estabas mirando.');
+      } catch (error) {
+        setStatus('No se pudo iniciar AR: ' + (error?.message || error));
       }
     })();
 
     return () => {
       cancelled = true;
-      if (detachRef.current) { try { detachRef.current(); } catch (e) {} }
+      try { detachRef.current?.(); } catch { /* Cleanup is best effort. */ }
+      try { trackingCleanupRef.current?.(); } catch { /* Cleanup is best effort. */ }
       stopSession();
-      document.body.style.background = prevBodyBg.current || '';
+
+      document.body.classList.remove('ar-active');
+      document.documentElement.classList.remove('ar-active');
+      const previous = previousStylesRef.current;
+      document.body.style.background = previous?.body || '';
+      document.documentElement.style.background = previous?.html || '';
+
+      try {
+        const viewer = window.NOP_VIEWER;
+        if (viewer) {
+          viewer.container.style.background = previous?.viewer || '';
+          const renderer = viewer.impl.renderer();
+          const saved = rendererStateRef.current;
+          if (renderer && saved) {
+            renderer.setClearColor(saved.color || 0x000000, saved.alpha);
+            renderer.setClearAlpha?.(saved.alpha);
+            viewer.impl.invalidate(true, true, true);
+          }
+        }
+      } catch {
+        // The viewer may already be disposed while the React tree unmounts.
+      }
     };
   }, []);
 
   const handleAnchor = async () => {
     try {
-      const res = await createAnchor();
-      setAnchored(true);
-      setStatus('Anclado. El modelo está fijo en ese punto físico.');
-      // El detach previo se reemplaza con uno re-originado al anchor
-      const viewer = window.NOP_VIEWER;
-      if (res?.matrix && viewer) {
-        if (detachRef.current) detachRef.current();
-        const off = (viewer.model.getGlobalOffset && viewer.model.getGlobalOffset()) || { x: 0, y: 0, z: 0 };
-        detachRef.current = attachArToViewer(viewer, {
-          modelOffset: off, scale: 1, anchorMatrix: res.matrix,
-          onStatus: (s) => setTracking(s.state),
-        });
+      setStatus('Buscando superficie en el reticulo...');
+      const result = await createAnchor();
+      if (result?.matrix && detachRef.current?.setAnchorMatrix) {
+        detachRef.current.setAnchorMatrix(result.matrix);
       }
-    } catch (e) {
-      setStatus('No se pudo anclar: ' + (e?.message || e));
+      setAnchored(true);
+      setStatus('Anclado sobre la superficie. Ajusta el giro hasta alinear el modelo con la obra.');
+    } catch (error) {
+      setStatus('No se pudo anclar: ' + (error?.message || error));
     }
   };
 
+  const changeYaw = (delta) => {
+    setYawDegrees((current) => {
+      const next = current + delta;
+      detachRef.current?.setYawDegrees?.(next);
+      return next;
+    });
+  };
+
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9000, pointerEvents: 'none' }}>
-      {/* Barra de estado superior */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, pointerEvents: 'auto' }}>
-        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 10, background: tracking === 'tracking' ? 'rgba(126,168,143,0.9)' : 'rgba(194,168,120,0.9)', color: '#15181d' }}>
-          {tracking === 'tracking' ? 'Tracking OK' : 'Reconociendo…'}
+    <div className="native-ar-overlay">
+      <div className="native-ar-status">
+        <span className={tracking === 'tracking' ? 'tracking-ok' : 'tracking-wait'}>
+          {tracking === 'tracking' ? 'Tracking OK' : 'Reconociendo...'}
         </span>
-        <span style={{ flex: 1, fontSize: 12, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>{status}</span>
+        <span>{status}</span>
       </div>
 
-      {/* Controles inferiores */}
-      <div style={{ position: 'absolute', bottom: 24, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 12, pointerEvents: 'auto' }}>
-        <button onClick={handleAnchor} disabled={tracking !== 'tracking'}
-          style={{ padding: '12px 22px', borderRadius: 24, border: 'none', fontWeight: 700, fontSize: 14, cursor: 'pointer',
-            background: tracking === 'tracking' ? '#7e9bbd' : '#555', color: '#fff', boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}>
-          {anchored ? 'Re-anclar aquí' : 'Anclar aquí'}
+      <div className="native-ar-reticle" aria-hidden="true" />
+
+      <div className="native-ar-controls">
+        <button
+          className="native-ar-primary"
+          onClick={handleAnchor}
+          disabled={tracking !== 'tracking'}
+        >
+          {anchored ? 'Re-anclar aqui' : 'Anclar aqui'}
         </button>
-        <button onClick={onExit}
-          style={{ padding: '12px 22px', borderRadius: 24, border: '1px solid rgba(255,255,255,0.4)', fontWeight: 700, fontSize: 14, cursor: 'pointer',
-            background: 'rgba(20,22,26,0.7)', color: '#fff', boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}>
-          Salir AR
-        </button>
+
+        {anchored && (
+          <div className="native-ar-yaw">
+            <button onClick={() => changeYaw(-5)} aria-label="Girar cinco grados a la izquierda">-5</button>
+            <span>Giro {yawDegrees} grados</span>
+            <button onClick={() => changeYaw(5)} aria-label="Girar cinco grados a la derecha">+5</button>
+            <button onClick={() => changeYaw(90)} aria-label="Girar noventa grados">+90</button>
+          </div>
+        )}
+
+        <button className="native-ar-exit" onClick={onExit}>Salir AR</button>
       </div>
     </div>
   );
