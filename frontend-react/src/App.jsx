@@ -598,6 +598,7 @@ function App() {
   const [models, setModels] = useState([]);
   const [relinkTargetModel, setRelinkTargetModel] = useState(null); // Relink State
   const [extractionJobs, setExtractionJobs] = useState({}); // Tracking BG extractions
+  const pollIntervalsRef = useRef({}); // intervalos de sondeo de extracción por urn (para topar/limpiar)
 
   const [hiddenModelUrns, setHiddenModelUrns] = useState([]);
 
@@ -1715,7 +1716,27 @@ function App() {
         job_id = (await res.json()).job_id;
       }
 
+      // Limpiar cualquier sondeo previo del MISMO urn → no se acumulan intervalos.
+      if (pollIntervalsRef.current[urn]) {
+        clearInterval(pollIntervalsRef.current[urn]);
+        delete pollIntervalsRef.current[urn];
+      }
+
+      let attempts = 0;
+      const MAX_ATTEMPTS = 100; // ~5 min a 3s; tope para no sondear infinito si el job se cuelga
+
+      const stopPoll = () => {
+        clearInterval(pollInterval);
+        delete pollIntervalsRef.current[urn];
+      };
+
       const pollInterval = setInterval(async () => {
+        attempts++;
+        if (attempts > MAX_ATTEMPTS) {
+          stopPoll();
+          setExtractionJobs(prev => ({ ...prev, [urn]: { ...prev[urn], status: 'La extracción tardó demasiado (reintenta)', isActive: false } }));
+          return;
+        }
         try {
           const stRes = await apiFetch(`${BACKEND_URL}/api/inventory/extract/status/${job_id}`);
           if (stRes.ok) {
@@ -1727,14 +1748,14 @@ function App() {
             }));
 
             if (stData.status === 'success') {
-              clearInterval(pollInterval);
+              stopPoll();
               setExtractionJobs(prev => ({ ...prev, [urn]: { ...prev[urn], progress: 100, isActive: false } }));
               // Invalida cache de inventario global para que fuerce una llamada fresca al DB
               window.__inventoryCache = null;
               // Disparar recarga reactiva de inventario y filtros
               window.dispatchEvent(new CustomEvent('inventory-needs-refresh'));
             } else if (stData.status === 'error') {
-              clearInterval(pollInterval);
+              stopPoll();
               setExtractionJobs(prev => ({ ...prev, [urn]: { ...prev[urn], status: 'Error', isActive: false } }));
             }
           }
@@ -1742,13 +1763,20 @@ function App() {
           console.error("Polling error:", e);
         }
       }, 3000);
+      pollIntervalsRef.current[urn] = pollInterval;
     } catch (e) {
       console.error("[Extraction] Error:", e);
       setExtractionJobs(prev => ({ ...prev, [urn]: { status: 'Fallo al iniciar', isActive: false } }));
     }
   };
 
-  // Per-model update check status: { [urn]: { status: 'checking'|'up_to_date'|'updating'|'error', message? } }
+  // Limpieza: al desmontar, cortar todos los sondeos de extracción vivos.
+  useEffect(() => () => {
+    Object.values(pollIntervalsRef.current).forEach(id => clearInterval(id));
+    pollIntervalsRef.current = {};
+  }, []);
+
+  // Per-model update check status: { [urn]: { status: 'checking'|'up_to_date'|'updating'|'error'|'pending', message? } }
   const [updateCheckStatus, setUpdateCheckStatus] = useState({});
 
   const handleModelUpdate = useCallback(async (urn) => {
@@ -1764,6 +1792,13 @@ function App() {
       });
       if (res.ok) {
         const data = await res.json();
+        if (data.pending_translation) {
+          // Versión nueva detectada pero aún traduciéndose en ACC → no cambiamos nada,
+          // mostramos aviso y dejamos que reintente. Evita el update "que no trae datos".
+          setUpdateCheckStatus(prev => ({ ...prev, [urn]: { status: 'pending', message: data.message || 'Traduciéndose en ACC…' } }));
+          setTimeout(() => setUpdateCheckStatus(prev => { const n = { ...prev }; delete n[urn]; return n; }), 7000);
+          return;
+        }
         if (data.updated && data.config?.models) {
           // New version found and applied
           setUpdateCheckStatus(prev => ({ ...prev, [urn]: { status: 'updating', message: 'Updated! Extracting...' } }));

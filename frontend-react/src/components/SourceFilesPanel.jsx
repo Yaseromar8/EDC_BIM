@@ -223,6 +223,9 @@ const SourceFilesPanel = ({
                                         {checkStatus.status === 'error' && (
                                             <span style={{ color: '#f87171' }}>⚠ {checkStatus.message}</span>
                                         )}
+                                        {checkStatus.status === 'pending' && (
+                                            <span style={{ color: '#c2a878' }}>⏳ {checkStatus.message}</span>
+                                        )}
                                     </span>
                                 )}
 

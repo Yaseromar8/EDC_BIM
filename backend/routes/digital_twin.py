@@ -385,7 +385,20 @@ def update_model_link():
             # Calculate new URN
             urn_bytes = base64.urlsafe_b64encode(latest_version_id.encode('utf-8'))
             new_urn = urn_bytes.decode('utf-8').rstrip('=')
-            
+
+            # PRE-CHEQUEO DE TRADUCCIÓN (igual que Relink): si la versión nueva todavía
+            # NO está traducida en ACC, no cambiamos el modelo ni disparamos una extracción
+            # condenada a fallar (properties 202 → timeout). El modelo se queda en su versión
+            # vieja —que funciona— y el usuario reintenta en unos minutos. Esto elimina los
+            # updates "que no traen datos" (causa #1 de inestabilidad).
+            if not _is_model_translated(new_urn, token):
+                print(f"[Update] Versión nueva de {model['name']} aún traduciéndose; se pospone.")
+                return jsonify({
+                    'updated': False,
+                    'pending_translation': True,
+                    'message': 'La nueva versión aún se está traduciendo en ACC. Reintenta en unos minutos.'
+                }), 200
+
             # SEGURIDAD TRANSACCIONAL (Fase 6): NO se borra el inventario viejo aqui.
             # Es la misma version-lineage (mismo base_urn), asi que extract_metadata_task
             # purga las versiones historicas y re-inserta en UNA sola transaccion atomica.
