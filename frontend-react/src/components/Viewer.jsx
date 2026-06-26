@@ -1337,8 +1337,11 @@ const Viewer = ({
     // ═══════════════════════════════════════════════════════════════════════
     useEffect(() => {
         const viewer = viewerRef.current;
-        if (!viewer || !viewerReady || !viewer.toolController) return;
-        const THREE = window.THREE;
+        if (!viewer || !viewerReady) return;
+        if (!viewer.toolController) { console.warn('[Marquee] toolController no disponible aún.'); return; }
+        const THREE = window.THREE
+            || (window.Autodesk && Autodesk.Viewing && Autodesk.Viewing.Private && Autodesk.Viewing.Private.THREE)
+            || (typeof globalThis !== 'undefined' && globalThis.THREE);
         if (!THREE) { console.warn('[Marquee] THREE no disponible; marquee completo deshabilitado.'); return; }
 
         let dragging = false;
@@ -1413,6 +1416,9 @@ const Viewer = ({
                     if (ids.length) aggregate.push({ model, ids });
                 }
 
+                const _total = aggregate.reduce((n, a) => n + a.ids.length, 0);
+                console.log(`[Marquee] caja → ${_total} elementos seleccionados (incluye ocluidos)`);
+
                 window._deepSelecting = true; // ya son hojas: que el deep-select no reprocese
                 try {
                     if (aggregate.length) viewer.setAggregateSelection(aggregate);
@@ -1439,6 +1445,7 @@ const Viewer = ({
                     start = { cx: event.canvasX, cy: event.canvasY };
                     last = start;
                     updateOverlay(start, start);
+                    console.log('[Marquee] inicio arrastre (Shift)');
                     return true; // consume → no orbita
                 }
                 return false;
@@ -1468,8 +1475,13 @@ const Viewer = ({
         const safetyUp = () => { if (dragging) { dragging = false; removeOverlay(); } };
         window.addEventListener('mouseup', safetyUp, true);
 
-        viewer.toolController.registerTool(tool);
-        viewer.toolController.activateTool('CompleteBoxSelectTool');
+        try {
+            viewer.toolController.registerTool(tool);
+            const ok = viewer.toolController.activateTool('CompleteBoxSelectTool');
+            console.log(`[Marquee] tool registrado y activado (ok=${ok}). Usa Shift + arrastre.`);
+        } catch (e) {
+            console.warn('[Marquee] no se pudo registrar/activar el tool:', e);
+        }
 
         return () => {
             window.removeEventListener('mouseup', safetyUp, true);
