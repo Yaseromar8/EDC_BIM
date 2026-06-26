@@ -199,8 +199,14 @@ def sanitize_urn(urn):
     urn = urn.replace('+', '-').replace('/', '_').rstrip('=')
     return urn
 
-def extract_metadata_task(urn, target_urn, job_id):
-    """ Tarea en segundo plano para extraer metadata de Autodesk. """
+def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
+    """ Tarea en segundo plano para extraer metadata de Autodesk.
+
+    purge_source_urns: lista opcional de source_urn (de OTRO linaje) a borrar de
+    forma ATÓMICA tras una extracción exitosa. La usa el Relink: el modelo viejo
+    apunta a otro archivo, así que la limpieza por linaje no lo cubre. Se borra
+    DENTRO de la misma transacción que inserta los datos nuevos -> si la extracción
+    falla, NO se borra nada y el inventario viejo queda intacto. """
     # Clave de concurrencia: mismo modelo + mismo scope
     _key = None
     try:
@@ -733,6 +739,32 @@ def extract_metadata_task(urn, target_urn, job_id):
                 removed = cursor.rowcount
                 if removed:
                     print(f"[Extractor] Limpieza: {removed} elementos eliminados en la versión nueva.")
+
+            # Purga ATÓMICA de Relink: borra el inventario del/los URN viejos (otro
+            # linaje) DENTRO de esta misma transacción, ya con los datos nuevos
+            # insertados. Si la extracción hubiera fallado antes, no llegamos aquí
+            # y la data vieja sigue intacta -> el frente nunca queda vacío por error.
+            if purge_source_urns:
+                purge_norm = []
+                for u in purge_source_urns:
+                    if not u:
+                        continue
+                    purge_norm.append(u)
+                    su = sanitize_urn(u)
+                    if su != u:
+                        purge_norm.append(su)
+                purge_norm = list(dict.fromkeys(purge_norm))  # dedup, mantiene orden
+                # No borrar el propio URN nuevo (por si coincidiera tras sanitizar)
+                purge_norm = [u for u in purge_norm if u != urn]
+                if purge_norm:
+                    fmtp = ','.join(['%s'] * len(purge_norm))
+                    cursor.execute(
+                        f"DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN ({fmtp})",
+                        [target_urn] + purge_norm
+                    )
+                    purged = cursor.rowcount
+                    if purged:
+                        print(f"[Extractor] Relink: {purged} elementos del modelo anterior purgados (atómico).")
 
             conn.commit()
 

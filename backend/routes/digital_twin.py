@@ -619,9 +619,9 @@ def relink_model_route():
         return jsonify({"error": "Missing targetId or newModel data"}), 400
 
     # SEGURIDAD TRANSACCIONAL (Fase 6): el relink apunta a OTRO archivo (otro base_urn),
-    # asi que la extraccion no purga la data vieja: hay que borrarla aqui. Pero NO la
-    # borramos si el nuevo modelo aun no esta traducido (la extraccion fallaria y
-    # quedaria sin datos). Verificamos primero.
+    # así que la limpieza por linaje de la extracción no cubre la data vieja.
+    # Pre-chequeo: no seguimos si el nuevo modelo aún no está traducido (la
+    # extracción fallaría y daría una mala UX inmediata).
     _new_urn = new_data.get('urn')
     if _new_urn:
         _tok, _ = get_internal_token()
@@ -631,9 +631,13 @@ def relink_model_route():
                 "code": "TRANSLATION_PENDING"
             }), 409
 
-    # LIMPIEZA: Borrar inventario del URN viejo antes de relinkear
-    # COHERENCIA: sanitize_urn asegura match con el formato de source_urn en inventory_assets.
-    if old_urn and app_project_id:
+    # El borrado del inventario viejo se hace de forma ATÓMICA dentro de la
+    # extracción (purge_source_urns): solo se borra cuando los datos nuevos ya
+    # están insertados y a punto de commitear. Si la extracción falla, NO se
+    # pierde la data vieja -> el frente nunca queda vacío por un error.
+    # Solo si NO vamos a extraer (faltan urn/proyecto) caemos al borrado directo.
+    will_extract = bool(_new_urn and app_project_id)
+    if old_urn and app_project_id and not will_extract:
         try:
             from db import get_db_connection
             old_urn_sanitized = sanitize_urn(old_urn)
@@ -645,7 +649,7 @@ def relink_model_route():
                 )
                 deleted = cursor.rowcount
                 conn.commit()
-                print(f"[Relink] Limpieza inventario: {deleted} registros del URN viejo eliminados")
+                print(f"[Relink] Limpieza inventario (respaldo, sin extracción): {deleted} registros eliminados")
         except Exception as cleanup_err:
             print(f"[Relink] Advertencia: Error limpiando inventario viejo: {cleanup_err}")
 
@@ -682,6 +686,7 @@ def relink_model_route():
                      thread = threading.Thread(
                          target=extract_metadata_task,
                          args=(new_urn, app_project_id, extraction_job_id),
+                         kwargs={'purge_source_urns': [old_urn] if old_urn else None},
                          daemon=True
                      )
                      thread.start()
