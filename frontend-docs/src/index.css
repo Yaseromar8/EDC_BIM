@@ -497,7 +497,7 @@ body {
 .acc-top-strip {
   width: 100%;
   min-height: 3px;
-  background: linear-gradient(90deg, #5f7fa3, #7e9bbd);
+  background: #5f7fa3;
 }
 
 .acc-top-header {

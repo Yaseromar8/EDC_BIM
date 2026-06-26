@@ -103,7 +103,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
   return (
     <div className="acc-root" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', background: '#fff' }}>
       <Toaster position="bottom-right" />
-      <div className="acc-top-strip" style={{ height: 4, background: 'linear-gradient(90deg, #5f7fa3, #7e9bbd)', flexShrink: 0 }} />
+      <div className="acc-top-strip" style={{ height: 3, background: '#5f7fa3', flexShrink: 0 }} />
 
       {/* ─── HEADER ─── */}
       <header className="acc-top-header" style={{ height: 48, borderBottom: '1px solid #e7e9ee', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', flexShrink: 0 }}>
