@@ -189,7 +189,8 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
     const [totalColumns, setTotalColumns] = useState(new Set()); // Set of column keys
     const [checkedIds, setCheckedIds] = useState(new Set()); // BULK SELECTION
     const [bulkAssigning, setBulkAssigning] = useState(false);
-    const [bulkField, setBulkField] = useState('Status'); // Default column for bulk edit
+    const [bulkField, setBulkField] = useState('Status'); // Default column for bulk edit ('__new__' = crear campo propio)
+    const [bulkNewField, setBulkNewField] = useState(''); // Nombre del parámetro NUEVO (campo propio)
     const [bulkValue, setBulkValue] = useState('');
     
     const parseNumericCell = (val) => {
@@ -1047,14 +1048,19 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                 </div>
             </div>
 
-            {/* BULK EDIT TOOLBAR — Second Row (only when checks active) */}
-            {checkedIds.size > 0 && (
+            {/* BULK EDIT TOOLBAR — opera sobre los checks del grid Y/O la selección 3D */}
+            {(() => {
+                const bulkTargetIds = checkedIds.size > 0
+                    ? checkedIds
+                    : (localSelIds && localSelIds.size > 0 ? localSelIds : null);
+                if (!bulkTargetIds) return null;
+                return (
                 <div style={{
                     display: 'flex', background: '#1a2332', minHeight: '34px', alignItems: 'center',
                     padding: '0 12px', borderBottom: '1px solid #252630', gap: '8px',
                     animation: 'fadeIn 0.15s ease-out'
                 }}>
-                    <span style={{ fontSize: '11px', color: '#7e9bbd', fontWeight: 600, whiteSpace: 'nowrap' }}>{checkedIds.size} sel.</span>
+                    <span style={{ fontSize: '11px', color: '#7e9bbd', fontWeight: 600, whiteSpace: 'nowrap' }}>{bulkTargetIds.size} sel.{checkedIds.size === 0 ? ' (3D)' : ''}</span>
                     <div style={{ width: '1px', height: '16px', background: '#333' }} />
                     <select
                         value={bulkField}
@@ -1068,7 +1074,23 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                         {columns.filter(c => c.key !== 'dbId').map(c => (
                             <option key={c.key} value={c.key}>{c.header}</option>
                         ))}
+                        <option disabled>──────────</option>
+                        <option value="__new__">+ Nuevo campo…</option>
                     </select>
+                    {bulkField === '__new__' && (
+                        <input
+                            type="text"
+                            value={bulkNewField}
+                            onChange={e => setBulkNewField(e.target.value)}
+                            placeholder="Nombre del campo"
+                            title="Crea tu propio parámetro (ej. Responsable, Frente, Prioridad)"
+                            style={{
+                                background: '#1a1c22', border: '1px solid #7e9bbd', color: '#fff',
+                                padding: '3px 8px', fontSize: '11px', borderRadius: '3px', outline: 'none',
+                                width: '120px'
+                            }}
+                        />
+                    )}
                     <input
                         type="text"
                         value={bulkValue}
@@ -1083,28 +1105,42 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                     />
                     <button
                         id="bulk-apply-btn"
-                        disabled={bulkAssigning || !bulkValue.trim()}
+                        disabled={bulkAssigning || !bulkValue.trim() || (bulkField === '__new__' && !bulkNewField.trim())}
                         onClick={async () => {
-                            if (bulkAssigning || !bulkValue.trim()) return;
-                            const fieldName = bulkField;
+                            const isNew = bulkField === '__new__';
+                            const fieldName = (isNew ? bulkNewField : bulkField).trim();
                             const fieldValue = bulkValue.trim();
+                            if (bulkAssigning || !fieldValue || !fieldName) return;
+                            if (isNew && (fieldName.toLowerCase() === 'dbId'.toLowerCase() || fieldName === 'EXT ID')) {
+                                alert('Ese nombre está reservado. Elige otro.');
+                                return;
+                            }
                             setBulkAssigning(true);
-                            const ids = [...checkedIds];
+                            const ids = [...bulkTargetIds];
                             try {
                                 await apiFetch(`${BACKEND_URL}/api/inventory/bulk`, {
                                     method: 'PATCH',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ external_ids: ids, fieldName, fieldValue })
                                 });
-                                setFlattenedData(prev => prev.map(r => checkedIds.has(r.dbId) ? { ...r, [fieldName]: fieldValue } : r));
-                                setRawData(prev => prev.map(r => checkedIds.has(r.dbId) ? { ...r, [fieldName]: fieldValue } : r));
+                                setFlattenedData(prev => prev.map(r => bulkTargetIds.has(r.dbId) ? { ...r, [fieldName]: fieldValue } : r));
+                                setRawData(prev => prev.map(r => bulkTargetIds.has(r.dbId) ? { ...r, [fieldName]: fieldValue } : r));
                                 if (window.postgresInventory) {
                                     window.postgresInventory.forEach(node => {
-                                        if (checkedIds.has(node.dbId)) node[fieldName] = fieldValue;
+                                        if (bulkTargetIds.has(node.dbId)) node[fieldName] = fieldValue;
                                     });
                                     window.dispatchEvent(new CustomEvent('recalculate-filters'));
                                 }
                                 window.__inventoryCache = null;
+                                // Campo PROPIO nuevo: mostrarlo como columna al instante y refrescar
+                                // por la vía canónica para que aparezca como facet de filtro.
+                                if (isNew) {
+                                    setColumns(prev => prev.some(c => c.key === fieldName) ? prev : [...prev, { key: fieldName, header: fieldName, width: 160 }]);
+                                    setAllPropertyKeys(prev => prev.includes(fieldName) ? prev : [...prev, fieldName]);
+                                    setBulkField(fieldName);
+                                    setBulkNewField('');
+                                    window.dispatchEvent(new CustomEvent('inventory-needs-refresh'));
+                                }
                                 setCheckedIds(new Set());
                                 setBulkValue('');
                             } catch (e) {
@@ -1126,14 +1162,15 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                         {bulkAssigning ? '...' : '▶'} Aplicar
                     </button>
                     <button
-                        onClick={() => setCheckedIds(new Set())}
+                        onClick={() => { setCheckedIds(new Set()); setLocalSelIds(null); }}
                         style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' }}
                         title="Clear selection"
                     >
                         <Icons.Close />
                     </button>
                 </div>
-            )}
+                );
+            })()}
 
             {/* Sub-header Summary */}
             <div style={{ padding: '6px 12px', background: '#18191e', fontSize: '11px', color: '#7a808b', borderBottom: '1px solid #252630', display: 'flex', justifyContent: 'space-between' }}>

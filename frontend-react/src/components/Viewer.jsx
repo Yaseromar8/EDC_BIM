@@ -1273,8 +1273,58 @@ const Viewer = ({
 
         viewer.addEventListener(Autodesk.Viewing.AGGREGATE_SELECTION_CHANGED_EVENT, handleSelection);
 
+        // ── SELECCIÓN PROFUNDA ──────────────────────────────────────────
+        // Al seleccionar un grupo/nodo padre, expandir la selección REAL del visor
+        // a TODOS sus descendientes hoja → certeza de que en grupos grandes "se
+        // seleccionó todo", no solo algunos. Compatible con multiselección
+        // (Ctrl/Cmd+clic): cada grupo que agregues también se expande. Guard contra
+        // bucle de re-selección: si ya está todo en hojas, no re-selecciona.
+        const expandSelectionDeep = () => {
+            if (window._deepSelecting) return;
+            let agg = [];
+            try { agg = viewer.getAggregateSelection() || []; } catch (e) { return; }
+            if (!agg.length) return;
+
+            const next = [];
+            let changed = false;
+            for (const entry of agg) {
+                const model = entry.model;
+                const sel = entry.selection || entry.dbIdArray || entry.ids || [];
+                if (!model || !sel.length) continue;
+                const tree = model.getInstanceTree && model.getInstanceTree();
+                if (!tree) { next.push({ model, ids: sel }); continue; }
+
+                const leaves = new Set();
+                for (const dbId of sel) {
+                    if (tree.getChildCount(dbId) === 0) {
+                        leaves.add(dbId);
+                    } else {
+                        // recursive=true → recorre TODOS los descendientes; tomamos las hojas
+                        tree.enumNodeChildren(dbId, (childId) => {
+                            if (tree.getChildCount(childId) === 0) leaves.add(childId);
+                        }, true);
+                    }
+                }
+                const ids = Array.from(leaves);
+                if (ids.length !== sel.length) changed = true;
+                next.push({ model, ids });
+            }
+
+            if (!changed) return; // ya estaba expandida → evita re-seleccionar en bucle
+            window._deepSelecting = true;
+            try {
+                viewer.setAggregateSelection(next);
+            } catch (e) {
+                console.warn('[DeepSelect] no se pudo expandir la selección:', e);
+            } finally {
+                setTimeout(() => { window._deepSelecting = false; }, 0);
+            }
+        };
+        viewer.addEventListener(Autodesk.Viewing.AGGREGATE_SELECTION_CHANGED_EVENT, expandSelectionDeep);
+
         return () => {
             viewer.removeEventListener(Autodesk.Viewing.AGGREGATE_SELECTION_CHANGED_EVENT, handleSelection);
+            viewer.removeEventListener(Autodesk.Viewing.AGGREGATE_SELECTION_CHANGED_EVENT, expandSelectionDeep);
         }
     }, [viewerReady, onSelectionChanged]);
 
