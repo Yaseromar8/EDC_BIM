@@ -1328,6 +1328,159 @@ const Viewer = ({
         }
     }, [viewerReady, onSelectionChanged]);
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // MARQUEE COMPLETO (Shift + arrastre) — selección por CAJA DELIMITADORA
+    // El marquee nativo lee píxeles visibles → olvida los elementos ocluidos
+    // (detrás de otros). Este selecciona TODO elemento cuya bounding box, al
+    // proyectarse a pantalla, toca el rectángulo — incluidos los ocluidos.
+    // Excluye los OCULTOS (Hide/aislados fuera), no los simplemente tapados.
+    // ═══════════════════════════════════════════════════════════════════════
+    useEffect(() => {
+        const viewer = viewerRef.current;
+        if (!viewer || !viewerReady || !viewer.toolController) return;
+        const THREE = window.THREE;
+        if (!THREE) { console.warn('[Marquee] THREE no disponible; marquee completo deshabilitado.'); return; }
+
+        let dragging = false;
+        let start = null;     // {cx, cy} en px de canvas
+        let last = null;
+        let overlay = null;
+
+        const getCanvasRect = () => (viewer.impl?.canvas || viewer.canvas).getBoundingClientRect();
+
+        const ensureOverlay = () => {
+            if (overlay) return overlay;
+            overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed; border:1px solid #7e9bbd; background:rgba(126,155,189,0.18); pointer-events:none; z-index:9000;';
+            document.body.appendChild(overlay);
+            return overlay;
+        };
+        const removeOverlay = () => { if (overlay) { overlay.remove(); overlay = null; } };
+        const updateOverlay = (a, b) => {
+            const rect = getCanvasRect();
+            const o = ensureOverlay();
+            o.style.left = (rect.left + Math.min(a.cx, b.cx)) + 'px';
+            o.style.top = (rect.top + Math.min(a.cy, b.cy)) + 'px';
+            o.style.width = Math.abs(a.cx - b.cx) + 'px';
+            o.style.height = Math.abs(a.cy - b.cy) + 'px';
+        };
+
+        const performBoxSelect = (a, b) => {
+            try {
+                const rect = getCanvasRect();
+                const minX = Math.min(a.cx, b.cx), maxX = Math.max(a.cx, b.cx);
+                const minY = Math.min(a.cy, b.cy), maxY = Math.max(a.cy, b.cy);
+                const camera = viewer.impl.camera;
+                const models = viewer.impl.modelQueue().getModels();
+                const aggregate = [];
+                const tmp = new THREE.Vector3();
+                const box = new THREE.Box3();
+                const fbox = new THREE.Box3();
+
+                for (const model of models) {
+                    const tree = model.getInstanceTree && model.getInstanceTree();
+                    const frags = model.getFragmentList && model.getFragmentList();
+                    if (!tree || !frags) continue;
+                    const ids = [];
+                    tree.enumNodeChildren(tree.getRootId(), (dbId) => {
+                        if (tree.getChildCount(dbId) !== 0) return; // solo hojas
+                        box.makeEmpty();
+                        let has = false, vis = false;
+                        tree.enumNodeFragments(dbId, (fragId) => {
+                            frags.getWorldBounds(fragId, fbox);
+                            box.union(fbox);
+                            has = true;
+                            if (frags.isFragVisible && frags.isFragVisible(fragId)) vis = true;
+                        }, false);
+                        if (!has || box.isEmpty() || !vis) return; // saltar ocultos
+                        // Proyectar las 8 esquinas → AABB en pantalla
+                        let sMinX = Infinity, sMinY = Infinity, sMaxX = -Infinity, sMaxY = -Infinity, anyFront = false;
+                        for (let i = 0; i < 8; i++) {
+                            tmp.set((i & 1) ? box.max.x : box.min.x,
+                                    (i & 2) ? box.max.y : box.min.y,
+                                    (i & 4) ? box.max.z : box.min.z);
+                            tmp.project(camera);
+                            if (tmp.z <= 1) anyFront = true;
+                            const sx = (tmp.x * 0.5 + 0.5) * rect.width;
+                            const sy = (-tmp.y * 0.5 + 0.5) * rect.height;
+                            if (sx < sMinX) sMinX = sx; if (sx > sMaxX) sMaxX = sx;
+                            if (sy < sMinY) sMinY = sy; if (sy > sMaxY) sMaxY = sy;
+                        }
+                        if (!anyFront) return;
+                        // Intersección AABB pantalla vs rectángulo marquee
+                        if (sMaxX >= minX && sMinX <= maxX && sMaxY >= minY && sMinY <= maxY) ids.push(dbId);
+                    }, true);
+                    if (ids.length) aggregate.push({ model, ids });
+                }
+
+                window._deepSelecting = true; // ya son hojas: que el deep-select no reprocese
+                try {
+                    if (aggregate.length) viewer.setAggregateSelection(aggregate);
+                    else viewer.clearSelection();
+                } finally {
+                    setTimeout(() => { window._deepSelecting = false; }, 0);
+                }
+            } catch (e) {
+                console.warn('[Marquee] error en selección por caja:', e);
+            }
+        };
+
+        const tool = {
+            getNames: () => ['CompleteBoxSelectTool'],
+            getPriority: () => 1000, // alta: intercepta antes que orbitar/marquee nativo
+            register: () => {},
+            deregister: () => { removeOverlay(); },
+            activate: () => {},
+            deactivate: () => { dragging = false; removeOverlay(); },
+            update: () => false,
+            handleButtonDown: (event, button) => {
+                if (button === 0 && event.shiftKey) {
+                    dragging = true;
+                    start = { cx: event.canvasX, cy: event.canvasY };
+                    last = start;
+                    updateOverlay(start, start);
+                    return true; // consume → no orbita
+                }
+                return false;
+            },
+            handleMouseMove: (event) => {
+                if (!dragging) return false;
+                last = { cx: event.canvasX, cy: event.canvasY };
+                updateOverlay(start, last);
+                return true;
+            },
+            handleButtonUp: (event, button) => {
+                if (!dragging || button !== 0) return false;
+                dragging = false;
+                const end = { cx: event.canvasX, cy: event.canvasY };
+                removeOverlay();
+                // Arrastre real (no un click): >3px en algún eje
+                if (Math.abs(end.cx - start.cx) > 3 || Math.abs(end.cy - start.cy) > 3) {
+                    performBoxSelect(start, end);
+                }
+                return true;
+            },
+            handleGesture: () => dragging,
+            handleBlur: () => { dragging = false; removeOverlay(); return false; },
+        };
+
+        // Red de seguridad: si el mouseup ocurre fuera del canvas, cerrar el arrastre.
+        const safetyUp = () => { if (dragging) { dragging = false; removeOverlay(); } };
+        window.addEventListener('mouseup', safetyUp, true);
+
+        viewer.toolController.registerTool(tool);
+        viewer.toolController.activateTool('CompleteBoxSelectTool');
+
+        return () => {
+            window.removeEventListener('mouseup', safetyUp, true);
+            removeOverlay();
+            try {
+                viewer.toolController.deactivateTool('CompleteBoxSelectTool');
+                viewer.toolController.deregisterTool(tool);
+            } catch (e) { /* viewer ya destruido */ }
+        };
+    }, [viewerReady]);
+
     // ═══════════════════════════════════════════════════════════
     // Isolation → Inventory Sync
     // En su propio useEffect([viewerReady]) para que se re-registre con HMR,
