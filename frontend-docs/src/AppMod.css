@@ -1,8 +1,8 @@
 /* AppMod.css - Enterprise CDE Styles */
 
 :root {
-  --adsk-blue: #0696D7;
-  --adsk-dark-blue: #057db3;
+  --adsk-blue: #5f7fa3;
+  --adsk-dark-blue: #4d6a8f;
   --adsk-bg-gray: #f5f5f5;
   --adsk-border: #e0e0e0;
   --adsk-text: #3c3c3c;
@@ -62,7 +62,7 @@
 }
 
 .folder-row:hover { background: #eee; }
-.folder-row.active { background: #e6f4fa; border-left-color: var(--adsk-blue); color: var(--adsk-blue); font-weight: 500; }
+.folder-row.active { background: #eef2f7; border-left-color: var(--adsk-blue); color: var(--adsk-blue); font-weight: 500; }
 
 .folder-row .expander { width: 20px; display: flex; align-items: center; }
 .folder-row .icon { margin-right: 8px; font-size: 16px; }

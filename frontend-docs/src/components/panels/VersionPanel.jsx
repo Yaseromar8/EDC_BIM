@@ -78,8 +78,8 @@ export default function VersionPanel({
                 ) : versionHistory.map((v, i) => {
                   const isSelected = selectedVersions.has(v.id);
                   return (
-                    <tr key={i} style={{ borderBottom: '1px solid #eee', verticalAlign: 'top', background: isSelected ? '#f6fbff' : '#fff' }}>
-                      <td style={{ padding: '16px 12px', position: 'sticky', left: 0, background: isSelected ? '#f6fbff' : '#fff', zIndex: 5 }}>
+                    <tr key={i} style={{ borderBottom: '1px solid #eee', verticalAlign: 'top', background: isSelected ? '#f4f6f9' : '#fff' }}>
+                      <td style={{ padding: '16px 12px', position: 'sticky', left: 0, background: isSelected ? '#f4f6f9' : '#fff', zIndex: 5 }}>
                         <input 
                           type="checkbox" 
                           checked={isSelected} 
@@ -90,7 +90,7 @@ export default function VersionPanel({
                           }} 
                         />
                       </td>
-                      <td style={{ padding: '16px 12px', position: 'sticky', left: 40, background: isSelected ? '#f6fbff' : '#fff', zIndex: 5 }}>
+                      <td style={{ padding: '16px 12px', position: 'sticky', left: 40, background: isSelected ? '#f4f6f9' : '#fff', zIndex: 5 }}>
                          <span className="version-link-acc">{v.version_number ? `V${v.version_number}` : 'V1'}</span>
                       </td>
                       <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>
@@ -151,7 +151,7 @@ export default function VersionPanel({
                  onClick={() => canCompare && setCompareOpen(true)}
                  disabled={!canCompare}
                  title={canCompare ? 'Comparar las 2 versiones seleccionadas' : 'Marca exactamente 2 versiones para comparar'}
-                 style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: canCompare ? '#0696d7' : '#f0f0f0', color: canCompare ? '#fff' : '#aaa', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: canCompare ? 'pointer' : 'default' }}>
+                 style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: canCompare ? '#5f7fa3' : '#f0f0f0', color: canCompare ? '#fff' : '#aaa', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: canCompare ? 'pointer' : 'default' }}>
                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="9" height="16" rx="1"/><rect x="13" y="4" width="9" height="16" rx="1"/></svg>
                  Comparar versiones
                </button>

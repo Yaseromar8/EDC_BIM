@@ -336,7 +336,7 @@ export default function PdfToolsOverlay({ vpInfo, page, nodeId, projectPrefix, t
             <option value="m">m</option><option value="cm">cm</option><option value="km">km</option><option value="ft">ft</option>
           </select>
           <button onClick={() => confirmCalibration(parseFloat(document.getElementById('calib-input').value), document.getElementById('calib-unit').value)}
-            style={{ background: '#0696d7', border: 'none', color: '#fff', padding: '6px 14px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>OK</button>
+            style={{ background: '#5f7fa3', border: 'none', color: '#fff', padding: '6px 14px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>OK</button>
           <button onClick={() => setCalibAsk(null)} style={{ background: 'transparent', border: '1px solid #555', color: '#bbb', padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>✕</button>
         </div>
       )}

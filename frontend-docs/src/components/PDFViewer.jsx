@@ -74,7 +74,7 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
       }}
     >
       <div style={{
-        boxShadow: isActive ? '0 0 0 2px #0696d7' : '0 2px 5px rgba(0,0,0,0.2)',
+        boxShadow: isActive ? '0 0 0 2px #5f7fa3' : '0 2px 5px rgba(0,0,0,0.2)',
         background: '#fff', padding: 2, borderRadius: 2
       }}>
         <canvas ref={canvasRef} />
@@ -472,7 +472,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
             { id: 'erase', title: 'Borrar: clic sobre una anotación', icon: <><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></> },
           ].map(t => (
             <button key={t.id} onClick={() => setTool(prev => prev === t.id ? 'pan' : t.id)} title={t.title}
-              style={{ ...styles.toolsBtn, background: tool === t.id ? '#0696d7' : 'transparent', color: tool === t.id ? '#fff' : '#ccc' }}>
+              style={{ ...styles.toolsBtn, background: tool === t.id ? '#5f7fa3' : 'transparent', color: tool === t.id ? '#fff' : '#ccc' }}>
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{t.icon}</svg>
             </button>
           ))}
@@ -542,7 +542,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
 // --- Inline Styles ---
 const styles = {
   center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', width: '100%', gap: 4, background: '#f5f5f5' },
-  spinner: { width: 36, height: 36, border: '3px solid #e0e0e0', borderTop: '3px solid #0696d7', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' },
+  spinner: { width: 36, height: 36, border: '3px solid #e0e0e0', borderTop: '3px solid #5f7fa3', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' },
   
   toolbar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', height: 48, background: '#222222', color: '#fff', flexShrink: 0, zIndex: 10 },
   toolbarGroupLeft: { display: 'flex', alignItems: 'center', flex: 1 },
@@ -562,5 +562,5 @@ const styles = {
   sidebar: { width: 220, background: '#f9f9f9', borderRight: '1px solid #ccc', overflowY: 'auto', display: 'flex', flexDirection: 'column', flexShrink: 0 },
   canvasContainer: { flex: 1, overflow: 'auto' },
   canvas: { boxShadow: '0 4px 16px rgba(0,0,0,0.3)', background: '#fff' },
-  downloadBtn: { marginTop: 16, padding: '8px 20px', background: '#0696d7', color: '#fff', border: 'none', borderRadius: 4, textDecoration: 'none', fontSize: 13, fontWeight: 500 },
+  downloadBtn: { marginTop: 16, padding: '8px 20px', background: '#5f7fa3', color: '#fff', border: 'none', borderRadius: 4, textDecoration: 'none', fontSize: 13, fontWeight: 500 },
 };

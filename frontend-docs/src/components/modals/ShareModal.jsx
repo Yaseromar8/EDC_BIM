@@ -100,7 +100,7 @@ export default function ShareModal({
                 </div>
               ))}
               {searchShareUser.includes('@') && (
-                <div className="share-result-item" style={{ padding: '8px 16px', borderTop: '1px solid #eee', fontSize: 13, color: '#0696D7', cursor: 'pointer' }} onClick={() => {
+                <div className="share-result-item" style={{ padding: '8px 16px', borderTop: '1px solid #eee', fontSize: 13, color: '#5f7fa3', cursor: 'pointer' }} onClick={() => {
                   setSharedUsers([...sharedUsers, { email: searchShareUser, name: searchShareUser.split('@')[0], initials: searchShareUser.slice(0,2).toUpperCase(), role: 'viewer', isExternal: true }]);
                   setSearchShareUser('');
                   setShowShareResults(false);
@@ -143,7 +143,7 @@ export default function ShareModal({
         <div style={{ marginTop: 8 }}>
           <div className="share-section-title">Acceso general</div>
           <div className="share-general-access">
-            <div className="share-access-icon" style={{ background: shareGeneralAccess === 'restricted' ? '#f1f3f4' : '#e8f0fe', color: shareGeneralAccess === 'restricted' ? '#444746' : '#0b57d0' }}>
+            <div className="share-access-icon" style={{ background: shareGeneralAccess === 'restricted' ? '#f1f3f4' : '#eef2f7', color: shareGeneralAccess === 'restricted' ? '#444746' : '#5f7fa3' }}>
               {shareGeneralAccess === 'restricted' ? (
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
               ) : (
@@ -164,7 +164,7 @@ export default function ShareModal({
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={{ position: 'absolute', right: 0, pointerEvents: 'none' }}><path d="M7 10l5 5 5-5H7z"/></svg>
                 </div>
                 {shareGeneralAccess === 'anyone' && (
-                  <select className="role-select-acc" style={{ color: '#0b57d0', fontWeight: 500 }} value={shareGeneralRole} onChange={e => setShareGeneralRole(e.target.value)}>
+                  <select className="role-select-acc" style={{ color: '#5f7fa3', fontWeight: 500 }} value={shareGeneralRole} onChange={e => setShareGeneralRole(e.target.value)}>
                     <option value="viewer">Lector</option>
                     <option value="commenter">Comentador</option>
                     <option value="editor">Editor</option>
@@ -196,7 +196,7 @@ export default function ShareModal({
         )}
 
         <div className="share-footer" style={{ position: 'relative' }}>
-          <button className="btn-copy-link" style={shareLinkCopied ? { outline: '2px solid #0b57d0', outlineOffset: '2px', background: '#e8f0fe' } : {}} onClick={handleCopyLink}>
+          <button className="btn-copy-link" style={shareLinkCopied ? { outline: '2px solid #5f7fa3', outlineOffset: '2px', background: '#eef2f7' } : {}} onClick={handleCopyLink}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
             Copiar enlace
           </button>

@@ -103,14 +103,17 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
   return (
     <div className="acc-root" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', background: '#fff' }}>
       <Toaster position="bottom-right" />
-      <div className="acc-top-strip" style={{ height: 24, background: '#000', flexShrink: 0 }} />
+      <div className="acc-top-strip" style={{ height: 4, background: 'linear-gradient(90deg, #5f7fa3, #7e9bbd)', flexShrink: 0 }} />
 
       {/* ─── HEADER ─── */}
-      <header className="acc-top-header" style={{ height: 48, borderBottom: '1px solid #dcdcdc', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', flexShrink: 0 }}>
+      <header className="acc-top-header" style={{ height: 48, borderBottom: '1px solid #e7e9ee', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', flexShrink: 0 }}>
         <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div className="module-selector" onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', color: '#0696d7', fontWeight: 600 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 12l2.12 2.12L12 6.24l7.88 7.88L22 12 12 2z"/></svg>
-            <span style={{ fontSize: 14 }}>Docs</span>
+          <div className="module-selector" onClick={onBack} title="Cambiar proyecto" style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontWeight: 700 }}>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-label="ECD-VISIION">
+              <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="#5f7fa3"/>
+              <path d="M7 8.5l5 8 5-8" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <span style={{ fontSize: 15, letterSpacing: '0.3px', color: '#2b333d' }}>ECD<span style={{ color: '#5f7fa3', fontWeight: 600 }}>-VISIION</span></span>
           </div>
           <div className="separator-line" style={{ width: 1, height: 20, background: '#eee', margin: '0 8px' }} />
           <button 
@@ -118,7 +121,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
             onClick={() => setShowGateway(true)}
             style={{ 
               display: 'flex', alignItems: 'center', gap: 6, 
-              background: '#0696d7', color: '#fff', 
+              background: '#5f7fa3', color: '#fff', 
               border: 'none', borderRadius: '4px', 
               padding: '4px 12px', fontSize: 13, 
               fontWeight: 600, cursor: 'pointer',
@@ -135,13 +138,13 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
         </div>
         <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div className="header-user" style={{ position: 'relative' }}>
-             <div className="header-avatar" onClick={() => fe.setProfileMenuOpen(!fe.profileMenuOpen)} style={{ width: 32, height: 32, borderRadius: '50%', background: '#ff6b35', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{getInitials(user.name)}</div>
+             <div className="header-avatar" onClick={() => fe.setProfileMenuOpen(!fe.profileMenuOpen)} style={{ width: 32, height: 32, borderRadius: '50%', background: '#5f7fa3', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{getInitials(user.name)}</div>
              {fe.profileMenuOpen && (
                <div style={{ position: 'absolute', top: 40, right: 0, background: '#fff', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,.15)', minWidth: 220, zIndex: 9999, border: '1px solid #e5e5e5', overflow: 'hidden' }}>
                  <div style={{ padding: '14px 16px', borderBottom: '1px solid #eee' }}>
                    <div style={{ fontWeight: 600, fontSize: 13, color: '#333' }}>{user.name}</div>
                    <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>{user.email}</div>
-                   <div style={{ fontSize: 10, color: '#0696d7', marginTop: 4, textTransform: 'uppercase', fontWeight: 600 }}>{user.role || 'user'}</div>
+                   <div style={{ fontSize: 10, color: '#5f7fa3', marginTop: 4, textTransform: 'uppercase', fontWeight: 600 }}>{user.role || 'user'}</div>
                  </div>
                  <button onClick={() => { fe.setProfileMenuOpen(false); onBack(); }} style={{ width: '100%', padding: '10px 16px', border: 'none', background: 'none', textAlign: 'left', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: '#333' }} onMouseOver={e => e.currentTarget.style.background='#f5f5f5'} onMouseOut={e => e.currentTarget.style.background='none'}>
                    <span style={{ fontSize: 16 }}>🔄</span> Cambiar proyecto
@@ -178,8 +181,8 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                 <li key={idx} style={{ marginBottom: 2 }}>
                   <button onClick={() => { if (item.onClick) item.onClick(); }}
                     style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '8px 12px',
-                      background: fe.sidebarView === item.mode && !fe.isTrashMode ? '#e8f0fe' : 'none', border: 'none',
-                      color: fe.sidebarView === item.mode && !fe.isTrashMode ? '#0696d7' : '#5f6368', fontSize: '13px',
+                      background: fe.sidebarView === item.mode && !fe.isTrashMode ? '#eef2f7' : 'none', border: 'none',
+                      color: fe.sidebarView === item.mode && !fe.isTrashMode ? '#5f7fa3' : '#5f6368', fontSize: '13px',
                       fontWeight: fe.sidebarView === item.mode && !fe.isTrashMode ? '500' : '400', borderRadius: '0 20px 20px 0', cursor: 'pointer' }}>
                     {item.icon}
                     <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
@@ -188,7 +191,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
               ))}
               <li
                 onClick={() => fe.setSidebarView('partidas')}
-                style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 16px', borderRadius: '0 20px 20px 0', cursor: 'pointer', marginBottom: 4, background: fe.sidebarView === 'partidas' ? '#e8f0fe' : 'transparent', color: fe.sidebarView === 'partidas' ? '#0696d7' : '#5f6368', fontWeight: fe.sidebarView === 'partidas' ? 600 : 500, transition: 'all 0.2s ease', position: 'relative' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 16px', borderRadius: '0 20px 20px 0', cursor: 'pointer', marginBottom: 4, background: fe.sidebarView === 'partidas' ? '#eef2f7' : 'transparent', color: fe.sidebarView === 'partidas' ? '#5f7fa3' : '#5f6368', fontWeight: fe.sidebarView === 'partidas' ? 600 : 500, transition: 'all 0.2s ease', position: 'relative' }}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
                 <span style={{ fontSize: 13, whiteSpace: 'nowrap' }}>Metrados</span>
@@ -196,8 +199,8 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
               <li style={{ marginBottom: 2 }}>
                 <button onClick={() => fe.switchMode(true)}
                   style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '8px 12px',
-                    background: fe.isTrashMode ? '#e8f0fe' : 'none', border: 'none',
-                    color: fe.isTrashMode ? '#0696d7' : '#5f6368', fontSize: '13px',
+                    background: fe.isTrashMode ? '#eef2f7' : 'none', border: 'none',
+                    color: fe.isTrashMode ? '#5f7fa3' : '#5f6368', fontSize: '13px',
                     fontWeight: fe.isTrashMode ? '500' : '400', cursor: 'pointer', borderRadius: '0 20px 20px 0', transition: 'background 0.2s' }}>
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M11 15H5a2.25 2.25 0 0 1-2.25-2.25V5.72a.75.75,0,0,1 1.5 0v7.07a.74.74,0,0,0 .75.75h6a.74.74,0,0,0 .75-.75V5.72a.75.75,0,0,1 1.5 0v7.07A2.25 2.25 0 0 1 11 15Zm3-12h-3a2.26 2.26 0 0 0-2.24-2h-1.5A2.26 2.26 0 0 0 5 3H2a.75.75,0,0,0 0 1.5h12A.75.75,0,0,0,14 3Zm-3.75 8V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Zm-3 0V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Z"></path></svg>
                   <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Elementos suprimidos</span>
@@ -263,7 +266,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
               <svg width="64" height="64" viewBox="0 0 24 24" fill="#b0b0b0" style={{ marginBottom: 16 }}><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg>
               <div style={{ fontSize: 16, fontWeight: 500, color: '#333', marginBottom: 8 }}>Informes del Proyecto</div>
               <div style={{ fontSize: 13, color: '#888', maxWidth: 400, margin: '0 auto', lineHeight: 1.6 }}>Los informes generados aparecerán aquí.</div>
-              <div style={{ marginTop: 24, padding: '10px 20px', background: '#e8f0fe', borderRadius: 6, display: 'inline-block', color: '#0696d7', fontSize: 13, fontWeight: 500 }}>Próximamente disponible</div>
+              <div style={{ marginTop: 24, padding: '10px 20px', background: '#eef2f7', borderRadius: 6, display: 'inline-block', color: '#5f7fa3', fontSize: 13, fontWeight: 500 }}>Próximamente disponible</div>
             </div>
           </div>
         )}
@@ -284,11 +287,11 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                   {fe.membersList.map((m, i) => (
                     <tr key={m.id || i} style={{ borderBottom: '1px solid #f0f0f0' }} onMouseOver={e => e.currentTarget.style.background='#fafbfc'} onMouseOut={e => e.currentTarget.style.background='none'}>
                       <td style={{ padding: '12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: m.role === 'admin' ? '#0696d7' : '#ff6b35', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{getInitials(m.name || m.email || '?')}</div>
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: m.role === 'admin' ? '#5f7fa3' : '#5f7fa3', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{getInitials(m.name || m.email || '?')}</div>
                         <span style={{ fontWeight: 500 }}>{m.name || '—'}</span>
                       </td>
                       <td style={{ padding: '12px', color: '#666' }}>{m.email}</td>
-                      <td style={{ padding: '12px' }}><span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', background: m.role === 'admin' ? '#e3f2fd' : '#f3e5f5', color: m.role === 'admin' ? '#1565c0' : '#7b1fa2' }}>{m.role || 'user'}</span></td>
+                      <td style={{ padding: '12px' }}><span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', background: m.role === 'admin' ? '#eef2f7' : '#eef2f7', color: m.role === 'admin' ? '#4d6a8f' : '#4d6a8f' }}>{m.role || 'user'}</span></td>
                       <td style={{ padding: '12px', color: '#999', fontSize: 12 }}>{m.created_at ? new Date(m.created_at).toLocaleDateString() : '—'}</td>
                     </tr>
                   ))}
@@ -303,7 +306,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
           <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
             <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 24 }}>Configuración</div>
             <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8, padding: 24, marginBottom: 20 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#333', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="#0696d7"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>Información del Proyecto</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#333', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="#5f7fa3"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>Información del Proyecto</div>
               <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '12px 16px', fontSize: 13 }}>
                 <span style={{ color: '#888', fontWeight: 500 }}>Nombre:</span><span style={{ color: '#333' }}>{project.name}</span>
                 <span style={{ color: '#888', fontWeight: 500 }}>Número:</span><span style={{ color: '#333' }}>{project.number || '—'}</span>
@@ -315,9 +318,9 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
             {isAdmin && <AttributesAdmin projectPrefix={projectPrefix} />}
             {isAdmin && <SharesManager projectPrefix={projectPrefix} />}
             <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8, padding: 24, marginBottom: 20 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#333', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="#0696d7"><path d="M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z"/></svg>Almacenamiento</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#333', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="#5f7fa3"><path d="M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z"/></svg>Almacenamiento</div>
               <div style={{ fontSize: 13, color: '#888' }}>Google Cloud Storage — activo</div>
-              <div style={{ marginTop: 12, background: '#f5f5f5', borderRadius: 8, height: 8, overflow: 'hidden' }}><div style={{ width: '15%', height: '100%', background: 'linear-gradient(90deg, #0696d7, #4fc3f7)', borderRadius: 8 }} /></div>
+              <div style={{ marginTop: 12, background: '#f5f5f5', borderRadius: 8, height: 8, overflow: 'hidden' }}><div style={{ width: '15%', height: '100%', background: 'linear-gradient(90deg, #5f7fa3, #7e9bbd)', borderRadius: 8 }} /></div>
               <div style={{ fontSize: 11, color: '#999', marginTop: 6 }}>Uso estimado del proyecto</div>
             </div>
           </div>
@@ -330,7 +333,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
             {!fe.isTrashMode && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #dcdcdc' }}>
                 <div style={{ display: 'flex', gap: 32 }}>
-                  <div style={{ paddingBottom: 8, fontSize: 13, borderBottom: '2px solid #0696d7', color: '#0696d7', fontWeight: 600 }}>Carpetas</div>
+                  <div style={{ paddingBottom: 8, fontSize: 13, borderBottom: '2px solid #5f7fa3', color: '#5f7fa3', fontWeight: 600 }}>Carpetas</div>
                 </div>
                 <div style={{ display: 'flex', gap: 20, paddingBottom: 8 }}>
                    <button onClick={() => fe.switchMode(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer', padding: '4px 8px', borderRadius: 4 }}>
@@ -397,7 +400,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
             <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <div className="acc-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#fff', borderBottom: '1px solid #eee', flexShrink: 0 }}>
                 {isAdmin && (
-                  <button onClick={() => fe.setShowUploadModal(true)} style={{ padding: '6px 16px', background: '#0696D7', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Cargar archivos</button>
+                  <button onClick={() => fe.setShowUploadModal(true)} style={{ padding: '6px 16px', background: '#5f7fa3', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Cargar archivos</button>
                 )}
 
                 {!fe.isTrashMode && fe.selected.size > 0 && (() => {
@@ -405,7 +408,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                   if (!selFiles.length) return null;
                   return (
                     <button onClick={() => setReviewModalItems(selFiles.map(f => ({ node_id: f.id, name: f.name, version: f.version || 1 })))}
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#0696D7', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}>
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#5f7fa3', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Enviar a revisión
                     </button>
                   );
@@ -416,7 +419,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                   if (!selFiles.length) return null;
                   return (
                     <button onClick={() => setTransmittalItems(selFiles.map(f => ({ node_id: f.id, name: f.name, version: f.version || 1 })))}
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#fb8c00', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}>
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#5f7fa3', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Transmittal
                     </button>
                   );
@@ -427,7 +430,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                   if (!selFiles.length) return null;
                   return (
                     <button onClick={() => setSetModalItems(selFiles.map(f => ({ node_id: f.id, name: f.name, version: f.version || 1 })))}
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#8e24aa', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}>
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#5f7fa3', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg> Añadir a conjunto
                     </button>
                   );
@@ -439,7 +442,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                         const itemsToMove = Array.from(fe.selected);
                         const itemIds = itemsToMove.map(fn => { const found = [...fe.folders, ...fe.files].find(i => i.fullName === fn); return found?.id; }).filter(id => id !== undefined);
                         fe.setMoveState({ step: 1, items: itemsToMove, itemIds, destPath: '', destId: null });
-                      }} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#0696D7', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}>
+                      }} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#5f7fa3', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><path d="M12 11l3 3-3 3"></path><path d="M9 14h6"></path></svg> Desplazar
                     </button>
                     <button onClick={fe.handleExecuteBatchDelete} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#ff4d4d', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}>
@@ -469,7 +472,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                 {!fe.isTrashMode && (
                   <select value={fe.statusFilter} onChange={e => fe.setStatusFilter(e.target.value)}
                     title="Filtrar por estado de revisión"
-                    style={{ height: 32, padding: '0 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, color: fe.statusFilter === 'ALL' ? '#666' : '#0696d7', fontWeight: fe.statusFilter === 'ALL' ? 400 : 600, background: '#fff', cursor: 'pointer', outline: 'none' }}>
+                    style={{ height: 32, padding: '0 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, color: fe.statusFilter === 'ALL' ? '#666' : '#5f7fa3', fontWeight: fe.statusFilter === 'ALL' ? 400 : 600, background: '#fff', cursor: 'pointer', outline: 'none' }}>
                     <option value="ALL">Todos los estados</option>
                     <option value="WIP">WIP</option>
                     <option value="SHARED">Compartido</option>
@@ -490,7 +493,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                   <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, padding: '8px 16px', fontSize: 13, background: '#fafbfc', borderBottom: '1px solid #f0f0f0', flexShrink: 0 }}>
                     <span
                       onClick={() => fe.navigate(projectPrefix + '/', null)}
-                      style={{ cursor: segments.length ? 'pointer' : 'default', color: segments.length ? '#0696d7' : '#333', fontWeight: segments.length ? 500 : 600 }}
+                      style={{ cursor: segments.length ? 'pointer' : 'default', color: segments.length ? '#5f7fa3' : '#333', fontWeight: segments.length ? 500 : 600 }}
                     >
                       Archivos de proyecto
                     </span>
@@ -502,7 +505,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                           <span style={{ color: '#bbb' }}>/</span>
                           <span
                             onClick={() => { if (!isLast) fe.navigate(pathTo, null); }}
-                            style={{ cursor: isLast ? 'default' : 'pointer', color: isLast ? '#333' : '#0696d7', fontWeight: isLast ? 600 : 500 }}
+                            style={{ cursor: isLast ? 'default' : 'pointer', color: isLast ? '#333' : '#5f7fa3', fontWeight: isLast ? 600 : 500 }}
                           >
                             {seg}
                           </span>
@@ -518,7 +521,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                   <div style={{ height: '100%', overflowY: 'auto', background: '#fff' }}>
                     <div style={{ padding: '10px 16px', fontSize: 12, color: '#888', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span>{globalResults.length} resultado{globalResults.length !== 1 ? 's' : ''} en todo el proyecto para "{fe.searchQuery}"</span>
-                      <button onClick={() => fe.setSearchQuery('')} style={{ background: 'none', border: 'none', color: '#0696d7', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>✕ Limpiar</button>
+                      <button onClick={() => fe.setSearchQuery('')} style={{ background: 'none', border: 'none', color: '#5f7fa3', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>✕ Limpiar</button>
                     </div>
                     {globalResults.length === 0 && (
                       <div style={{ padding: 48, textAlign: 'center', color: '#999', fontSize: 13 }}>Sin coincidencias en nombres de archivos o carpetas.</div>
@@ -538,16 +541,16 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                             }
                           }}
                           style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid #f4f4f4', cursor: 'pointer' }}
-                          onMouseOver={e => e.currentTarget.style.background = '#f6fbff'}
+                          onMouseOver={e => e.currentTarget.style.background = '#f4f6f9'}
                           onMouseOut={e => e.currentTarget.style.background = 'none'}>
                           {isFolder
-                            ? <svg width="20" height="20" viewBox="0 0 24 24" fill="#f6b73c"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>
+                            ? <svg width="20" height="20" viewBox="0 0 24 24" fill="#c2a878"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>
                             : renderFileIconSop(r.name, 20)}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 500, color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
                             <div style={{ fontSize: 11, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dir || 'Archivos de proyecto'}</div>
                           </div>
-                          {!isFolder && <span style={{ fontSize: 11, color: '#0696d7', fontWeight: 600 }}>V{r.version || 1}</span>}
+                          {!isFolder && <span style={{ fontSize: 11, color: '#5f7fa3', fontWeight: 600 }}>V{r.version || 1}</span>}
                           <span style={{ fontSize: 11, color: '#aaa', flexShrink: 0 }}>{r.updated_at ? formatDate(r.updated_at) : ''}</span>
                         </div>
                       );
@@ -690,15 +693,15 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
 // ── Vista de Actividad del proyecto (feed estilo ACC) ──
 const ACTIVITY_LABELS = {
   upload: { label: 'Subió', color: '#16a34a' },
-  create_folder: { label: 'Creó carpeta', color: '#0696d7' },
+  create_folder: { label: 'Creó carpeta', color: '#5f7fa3' },
   rename: { label: 'Renombró', color: '#f59e0b' },
-  move: { label: 'Movió', color: '#8e24aa' },
+  move: { label: 'Movió', color: '#5f7fa3' },
   delete: { label: 'Suprimió', color: '#e53935' },
-  restore: { label: 'Restauró', color: '#0696d7' },
+  restore: { label: 'Restauró', color: '#5f7fa3' },
   permanent_delete: { label: 'Eliminó permanentemente', color: '#b71c1c' },
   set_status: { label: 'Cambió estado', color: '#1e88e5' },
-  promote_version: { label: 'Promovió versión', color: '#0696d7' },
-  share: { label: 'Compartió', color: '#fb8c00' },
+  promote_version: { label: 'Promovió versión', color: '#5f7fa3' },
+  share: { label: 'Compartió', color: '#5f7fa3' },
   delete_orphan_photo: { label: 'Purgó foto huérfana', color: '#999' },
 };
 

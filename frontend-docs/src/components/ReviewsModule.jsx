@@ -83,7 +83,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCre
               {items.map(it => (
                 <div key={it.node_id} style={{ padding: '6px 10px', borderBottom: '1px solid #f5f5f5', display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</span>
-                  <span style={{ color: '#0696d7', fontWeight: 600 }}>V{it.version || 1}</span>
+                  <span style={{ color: '#5f7fa3', fontWeight: 600 }}>V{it.version || 1}</span>
                 </div>
               ))}
             </div>
@@ -93,7 +93,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCre
             <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>Secuencia de revisores (en orden)</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
               {steps.map((s, i) => (
-                <span key={s.email} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#e8f0fe', color: '#1a56a8', padding: '4px 10px', borderRadius: 14, fontSize: 12, fontWeight: 600 }}>
+                <span key={s.email} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eef2f7', color: '#1a56a8', padding: '4px 10px', borderRadius: 14, fontSize: 12, fontWeight: 600 }}>
                   {i + 1}. {s.name || s.email}
                   <button onClick={() => setSteps(prev => prev.filter(x => x.email !== s.email))} style={{ background: 'none', border: 'none', color: '#1a56a8', cursor: 'pointer', padding: 0, fontSize: 13 }}>×</button>
                 </span>
@@ -104,8 +104,8 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCre
               {users.filter(u => !steps.find(s => s.email === u.email)).map(u => (
                 <div key={u.email} onClick={() => setSteps(prev => [...prev, { email: u.email, name: u.name }])}
                   style={{ padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', borderBottom: '1px solid #f5f5f5' }}
-                  onMouseOver={e => e.currentTarget.style.background = '#f6fbff'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
-                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: '#0696d7', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{getInitials(u.name || u.email)}</span>
+                  onMouseOver={e => e.currentTarget.style.background = '#f4f6f9'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
+                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: '#5f7fa3', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{getInitials(u.name || u.email)}</span>
                   <span>{u.name || '—'} <span style={{ color: '#999', fontSize: 11 }}>{u.email}</span></span>
                 </div>
               ))}
@@ -125,7 +125,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCre
         </div>
         <div style={{ padding: '14px 20px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', gap: 10, background: '#fcfcfc' }}>
           <button onClick={onClose} style={{ padding: '8px 16px', background: '#fff', border: '1px solid #dcdcdc', borderRadius: 4, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={submit} disabled={saving} style={{ padding: '8px 20px', background: '#0696d7', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+          <button onClick={submit} disabled={saving} style={{ padding: '8px 20px', background: '#5f7fa3', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Creando…' : 'Iniciar revisión'}
           </button>
         </div>
@@ -190,7 +190,7 @@ export function ReviewsView({ projectPrefix, user, isAdmin }) {
               <span>📄 {rev.items.length} documento{rev.items.length !== 1 ? 's' : ''}:</span>
               {rev.items.map(i => (
                 <button key={i.node_id} onClick={() => openDoc(i)} title="Abrir para revisar"
-                  style={{ background: '#f0f7fc', border: '1px solid #cfe7f5', color: '#0696d7', padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  style={{ background: '#f0f7fc', border: '1px solid #cfe7f5', color: '#5f7fa3', padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   {i.name} (V{i.version || 1}) ↗
                 </button>
               ))}
@@ -205,7 +205,7 @@ export function ReviewsView({ projectPrefix, user, isAdmin }) {
                     {i > 0 && <span style={{ color: '#ccc' }}>→</span>}
                     <span title={s.email} style={{
                       fontSize: 12, padding: '3px 10px', borderRadius: 12, fontWeight: 600,
-                      background: done ? '#dcfce7' : failed ? '#fee2e2' : active ? '#e8f0fe' : '#f3f4f6',
+                      background: done ? '#dcfce7' : failed ? '#fee2e2' : active ? '#eef2f7' : '#f3f4f6',
                       color: done ? '#15803d' : failed ? '#b91c1c' : active ? '#1a56a8' : '#888'
                     }}>
                       {done ? '✓ ' : failed ? '✕ ' : active ? '● ' : ''}{s.name || s.email}

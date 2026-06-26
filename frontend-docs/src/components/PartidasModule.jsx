@@ -664,7 +664,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
 
   // --- RECHARTS DATA PREP ---
   const chartBimConv = [
-    { name: 'BIM', value: pctBim, color: '#1a73e8' },
+    { name: 'BIM', value: pctBim, color: '#7e9bbd' },
     { name: 'CONVENCIONAL', value: pctConv, color: '#e37400' }
   ].filter(d => d.value > 0);
 
@@ -726,7 +726,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
 
   return (
     <div style={{ padding: '0px 24px 16px', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ height: 3, background: 'linear-gradient(90deg, #1565c0, #1a73e8, #4285f4)', borderRadius: '0 0 4px 4px', flexShrink: 0 }} />
+      <div style={{ height: 3, background: 'linear-gradient(90deg, #4d6a8f, #7e9bbd, #9bb2cc)', borderRadius: '0 0 4px 4px', flexShrink: 0 }} />
       
       {/* HEADER */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingTop: 16, backgroundColor: '#fff', paddingBottom: 8, borderBottom: '1px solid #eee', flexShrink: 0 }}>
@@ -794,7 +794,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
                   <div
                     onMouseDown={(e) => onResizeStart(e, idx)}
                     style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 6, cursor: 'col-resize' }}
-                    onMouseOver={e => e.currentTarget.style.background = '#0696d7'}
+                    onMouseOver={e => e.currentTarget.style.background = '#5f7fa3'}
                     onMouseOut={e => e.currentTarget.style.background = 'transparent'}
                   />
                 </th>
@@ -819,7 +819,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
                 const isCollapsed = collapsedNodes.has(normalizeWbs(p.item));
                 
                 return (
-                  <tr key={p.id} style={{ borderBottom: '1px solid #eee', background: isEditing ? '#f0f7ff' : (isTitle ? '#fafafa' : '#fff'), fontWeight: isTitle ? '600' : '400', color: isTitle ? '#111' : '#444' }}>
+                  <tr key={p.id} style={{ borderBottom: '1px solid #eee', background: isEditing ? '#f4f6f9' : (isTitle ? '#fafafa' : '#fff'), fontWeight: isTitle ? '600' : '400', color: isTitle ? '#111' : '#444' }}>
                     
                     {/* ITEM */}
                     <td style={{ padding: '4px 10px', background: isTitle ? 'transparent' : '#fafafa' }}>
@@ -892,8 +892,8 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
                       ) : (
                         <span style={{ 
                           padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 'bold',
-                          background: p.metodologia === 'BIM' ? '#e8f0fe' : p.metodologia === 'CONVENCIONAL' ? '#fef7e0' : 'transparent',
-                          color: p.metodologia === 'BIM' ? '#1a73e8' : p.metodologia === 'CONVENCIONAL' ? '#b06000' : '#333'
+                          background: p.metodologia === 'BIM' ? '#eef2f7' : p.metodologia === 'CONVENCIONAL' ? '#fef7e0' : 'transparent',
+                          color: p.metodologia === 'BIM' ? '#7e9bbd' : p.metodologia === 'CONVENCIONAL' ? '#b06000' : '#333'
                         }}>
                           {p.metodologia}
                         </span>
@@ -928,7 +928,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
                       {isEditing ? (
                         <input type="number" min="0" max="100" value={editFormData.avance || 0} onChange={e => handleFieldChange('avance', e.target.value)} style={{ width: '100%', padding: 4 }} />
                       ) : (
-                        <span style={{ fontWeight: 'bold', color: (isTitle ? computedTitleAvance[p.id] : p.avance) >= 99.99 ? '#1e8e3e' : (isTitle ? computedTitleAvance[p.id] : p.avance) > 0 ? '#1a73e8' : '#888' }}>
+                        <span style={{ fontWeight: 'bold', color: (isTitle ? computedTitleAvance[p.id] : p.avance) >= 99.99 ? '#1e8e3e' : (isTitle ? computedTitleAvance[p.id] : p.avance) > 0 ? '#7e9bbd' : '#888' }}>
                           {(isTitle ? computedTitleAvance[p.id] : p.avance) ? parseFloat((isTitle ? computedTitleAvance[p.id] : p.avance)).toFixed(2) + '%' : '0.00%'}
                         </span>
                       )}
@@ -965,7 +965,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
             
             <div style={{ background: '#fff', padding: '12px', borderRadius: 6, border: '1px solid #e0e0e0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>Partidas BIM</div>
-              <div style={{ fontSize: 22, fontWeight: 'bold', color: '#1a73e8' }}>{countBim}</div>
+              <div style={{ fontSize: 22, fontWeight: 'bold', color: '#7e9bbd' }}>{countBim}</div>
             </div>
             <div style={{ background: '#fff', padding: '12px', borderRadius: 6, border: '1px solid #e0e0e0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>Partidas Convencionales</div>

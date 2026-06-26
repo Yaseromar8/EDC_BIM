@@ -57,7 +57,7 @@ export default function GatewayPanel({ project, onClose }) {
       {/* Header del Overlay para mantener estilo nativo ACC */}
       <div className="file-viewer-header" style={{ padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
         <div className="file-viewer-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 16, fontWeight: 500, color: '#0696D7' }}>
+          <span style={{ fontSize: 16, fontWeight: 500, color: '#5f7fa3' }}>
             Frentes 3D — {project.name}
           </span>
         </div>
