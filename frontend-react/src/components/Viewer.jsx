@@ -86,6 +86,7 @@ const Viewer = ({
     const viewerRef = useRef(null);
     const containerRef = useRef(null);
     const loadedModelsRef = useRef({});
+    const loadingUrnsRef = useRef(new Set()); // URNs con carga EN CURSO (anti-duplicado por carrera)
     const loadedViewGuidsRef = useRef({}); // Tracks the GUID of the currently loaded view per model URN
     const baseOffsetRef = useRef(null);
     const basePlacementRef = useRef(null);
@@ -1688,9 +1689,14 @@ const Viewer = ({
     const loadModelSequentially = async (model) => {
         const viewer = viewerRef.current;
         if (!viewer) return;
-        if (!model?.urn || loadedModelsRef.current[model.urn]) return;
+        // Guard anti-duplicado: descarta si ya está cargado O si hay una carga EN CURSO
+        // del mismo URN. loadedModelsRef se setea recién al TERMINAR la carga async, así
+        // que dos efectos podían cargar el mismo modelo a la vez → geometría duplicada.
+        if (!model?.urn || loadedModelsRef.current[model.urn] || loadingUrnsRef.current.has(model.urn)) return;
+        loadingUrnsRef.current.add(model.urn);
 
-        return new Promise((resolve, reject) => {
+        try {
+        return await new Promise((resolve, reject) => {
             Autodesk.Viewing.Document.load(
                 `urn:${model.urn}`,
                 async (doc) => {
@@ -1907,6 +1913,9 @@ const Viewer = ({
                 }
             );
         });
+        } finally {
+            loadingUrnsRef.current.delete(model.urn);
+        }
     };
 
     // Cursor Management for Placement Mode
