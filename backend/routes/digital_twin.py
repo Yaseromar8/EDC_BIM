@@ -969,3 +969,77 @@ def parse_storage_urn(urn):
         pass
     return None, None
 
+@digital_twin_bp.route('/api/4d-lob/data', methods=['GET', 'OPTIONS'])
+def get_lob_data():
+    """Retorna los datos de las tareas 4D LOB (Lineas de Balance)."""
+    from flask import request, jsonify
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+        
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Asegurar que la tabla exista
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS lob_schedule_tasks_v2 (
+                        id SERIAL PRIMARY KEY,
+                        task_name VARCHAR(255) NOT NULL,
+                        color VARCHAR(50) DEFAULT '#ffffff',
+                        date_range DATERANGE,
+                        pk_range NUMRANGE
+                    )
+                """)
+                
+                # Verificar si la tabla tiene datos
+                cur.execute("SELECT COUNT(*) FROM lob_schedule_tasks_v2")
+                count = cur.fetchone()[0]
+                
+                if count == 0:
+                    # Insertar datos dummy si esta vacia
+                    print("[LOB] Inyectando tareas dummy en lob_schedule_tasks_v2...")
+                    cur.execute("""
+                        INSERT INTO lob_schedule_tasks_v2 (task_name, color, date_range, pk_range)
+                        VALUES 
+                            ('Excavacion', '#ffaaaa', '[2024-01-01, 2024-01-15]', '[0, 300]'),
+                            ('Base', '#9c27b0', '[2024-01-05, 2024-01-20]', '[0, 300]')
+                    """)
+                    conn.commit()
+                    
+                cur.execute("""
+                    SELECT id, task_name, color, 
+                           lower(date_range)::text as start_date, 
+                           upper(date_range)::text as end_date,
+                           lower(pk_range) as start_pk,
+                           upper(pk_range) as end_pk
+                    FROM lob_schedule_tasks_v2
+                    ORDER BY lower(date_range)
+                """)
+                
+                rows = cur.fetchall()
+                
+                tasks = []
+                for r in rows:
+                    tasks.append({
+                        "id": r[0],
+                        "task_name": r[1],
+                        "color": r[2],
+                        "start_date": r[3],
+                        "end_date": r[4],
+                        "start_pk": float(r[5]) if r[5] else 0,
+                        "end_pk": float(r[6]) if r[6] else 0
+                    })
+                    
+                return jsonify({"elements": tasks}), 200
+        
+    except Exception as e:
+        import traceback
+        import os
+        print("[LOB] Error en get_lob_data:")
+        traceback.print_exc()
+        try:
+            with open("error_lob.txt", "w") as f2:
+                traceback.print_exc(file=f2)
+        except:
+            pass
+        return jsonify({"error": str(e)}), 500

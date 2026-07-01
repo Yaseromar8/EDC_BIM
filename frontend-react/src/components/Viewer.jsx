@@ -6,6 +6,7 @@ import { BaseExtension } from '../aps/extensions/BaseExtension';
 import { findLeafNodes, getBulkProperties, calculateDynamicFilterBucketsNative, extractPartidasNative, extractSchemaNative, calculateBucketsFromPostgres } from '../aps/utils/model';
 import IconMarkupExtension from '../aps/extensions/IconMarkupExtension';
 import ProgressiveExtension from '../aps/extensions/ProgressiveExtension';
+import LOB4DExtension from '../aps/extensions/LOB4DExtension';
 import WorkfrontsPanel from './WorkfrontsPanel';
 import StationTracker from './StationTracker';
 import { DataVizEngine } from '../aps/utils/DataVizEngine';
@@ -480,6 +481,7 @@ const Viewer = ({
                 Autodesk.Viewing.theExtensionManager.registerExtension('BaseExtension', BaseExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('IconMarkupExtension', IconMarkupExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('ProgressiveExtension', ProgressiveExtension);
+                Autodesk.Viewing.theExtensionManager.registerExtension('LOB4DExtension', LOB4DExtension);
                 // Custom extensions removed to simplify UI
 
                 const config = {
@@ -495,6 +497,7 @@ const Viewer = ({
                         'Autodesk.AEC.LevelsExtension',
                         'Autodesk.AEC.Minimap3DExtension',
                         'ProgressiveExtension',
+                        'LOB4DExtension',
                         'Autodesk.DataVisualization'
                     ],
                     disabledExtensions: {
@@ -505,6 +508,22 @@ const Viewer = ({
 
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);
                 viewer.start();
+                
+                // Expose globally for panels and extensions
+                window.viewer = viewer;
+                window.NOP_VIEWER = viewer;
+
+                // ── FORZAR COMPORTAMIENTO NATIVO DE CLIC ──────────────────────
+                // Forzamos explícitamente que el clic simple seleccione y deseleccione,
+                // previniendo que extensiones como DataVisualization o PushPin interfieran.
+                try {
+                    if (viewer.setClickConfig) {
+                        viewer.setClickConfig("click", "onObject", ["selectOnly"]);
+                        viewer.setClickConfig("click", "offObject", ["deselectAll"]);
+                    }
+                } catch (e) {
+                    console.warn('[Viewer] Error seteando click config:', e);
+                }
 
                 // INYECCIÓN DE EVENTOS DE CICLO DE VIDA (TRACING)
                 // ═══════════════════════════════════════════════════════════
@@ -1274,58 +1293,8 @@ const Viewer = ({
 
         viewer.addEventListener(Autodesk.Viewing.AGGREGATE_SELECTION_CHANGED_EVENT, handleSelection);
 
-        // ── SELECCIÓN PROFUNDA ──────────────────────────────────────────
-        // Al seleccionar un grupo/nodo padre, expandir la selección REAL del visor
-        // a TODOS sus descendientes hoja → certeza de que en grupos grandes "se
-        // seleccionó todo", no solo algunos. Compatible con multiselección
-        // (Ctrl/Cmd+clic): cada grupo que agregues también se expande. Guard contra
-        // bucle de re-selección: si ya está todo en hojas, no re-selecciona.
-        const expandSelectionDeep = () => {
-            if (window._deepSelecting) return;
-            let agg = [];
-            try { agg = viewer.getAggregateSelection() || []; } catch (e) { return; }
-            if (!agg.length) return;
-
-            const next = [];
-            let changed = false;
-            for (const entry of agg) {
-                const model = entry.model;
-                const sel = entry.selection || entry.dbIdArray || entry.ids || [];
-                if (!model || !sel.length) continue;
-                const tree = model.getInstanceTree && model.getInstanceTree();
-                if (!tree) { next.push({ model, ids: sel }); continue; }
-
-                const leaves = new Set();
-                for (const dbId of sel) {
-                    if (tree.getChildCount(dbId) === 0) {
-                        leaves.add(dbId);
-                    } else {
-                        // recursive=true → recorre TODOS los descendientes; tomamos las hojas
-                        tree.enumNodeChildren(dbId, (childId) => {
-                            if (tree.getChildCount(childId) === 0) leaves.add(childId);
-                        }, true);
-                    }
-                }
-                const ids = Array.from(leaves);
-                if (ids.length !== sel.length) changed = true;
-                next.push({ model, ids });
-            }
-
-            if (!changed) return; // ya estaba expandida → evita re-seleccionar en bucle
-            window._deepSelecting = true;
-            try {
-                viewer.setAggregateSelection(next);
-            } catch (e) {
-                console.warn('[DeepSelect] no se pudo expandir la selección:', e);
-            } finally {
-                setTimeout(() => { window._deepSelecting = false; }, 0);
-            }
-        };
-        viewer.addEventListener(Autodesk.Viewing.AGGREGATE_SELECTION_CHANGED_EVENT, expandSelectionDeep);
-
         return () => {
             viewer.removeEventListener(Autodesk.Viewing.AGGREGATE_SELECTION_CHANGED_EVENT, handleSelection);
-            viewer.removeEventListener(Autodesk.Viewing.AGGREGATE_SELECTION_CHANGED_EVENT, expandSelectionDeep);
         }
     }, [viewerReady, onSelectionChanged]);
 
@@ -1414,19 +1383,14 @@ const Viewer = ({
                         // Intersección AABB pantalla vs rectángulo marquee
                         if (sMaxX >= minX && sMinX <= maxX && sMaxY >= minY && sMinY <= maxY) ids.push(dbId);
                     }, true);
-                    if (ids.length) aggregate.push({ model, ids });
+                    if (ids.length) aggregate.push({ model, selection: ids });
                 }
 
-                const _total = aggregate.reduce((n, a) => n + a.ids.length, 0);
+                const _total = aggregate.reduce((n, a) => n + (a.selection ? a.selection.length : 0), 0);
                 console.log(`[Marquee] caja → ${_total} elementos seleccionados (incluye ocluidos)`);
 
-                window._deepSelecting = true; // ya son hojas: que el deep-select no reprocese
-                try {
-                    if (aggregate.length) viewer.setAggregateSelection(aggregate);
-                    else viewer.clearSelection();
-                } finally {
-                    setTimeout(() => { window._deepSelecting = false; }, 0);
-                }
+                if (aggregate.length) viewer.setAggregateSelection(aggregate);
+                else viewer.clearSelection();
             } catch (e) {
                 console.warn('[Marquee] error en selección por caja:', e);
             }
@@ -1451,6 +1415,23 @@ const Viewer = ({
                 }
                 return false;
             },
+            handleSingleClick: (event, button) => {
+                if (button === 0) {
+                    // El raycast natively ignora elementos ocultos/ghosted según la config
+                    const hit = viewer.impl.hitTest(event.canvasX, event.canvasY, false);
+                    if (hit && hit.dbId) {
+                        viewer.select(hit.dbId, hit.model);
+                    } else {
+                        viewer.clearSelection();
+                    }
+                    // Retornamos true para consumir el evento y evitar que extensiones rebeldes
+                    // (como BIM360 PushPin) se roben el clic. Los sprites (DataViz) están a salvo
+                    // porque son interceptados en la fase de captura antes de llegar aquí.
+                    return true;
+                }
+                return false;
+            },
+            handleDoubleClick: () => false,
             handleMouseMove: (event) => {
                 if (!dragging) return false;
                 last = { cx: event.canvasX, cy: event.canvasY };
@@ -4200,6 +4181,8 @@ const Viewer = ({
                 markers={stationTrackerMarkers}
                 viewerRef={viewerRef}
             />
+
+            {/* Civil Station Tracker Panel (ACC Style) */}
 
             {/* Botón de Captura de Pantalla Global */}
             {viewerReady && (

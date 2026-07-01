@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { apiFetch } from '../utils/apiFetch';
+import { loadAlignedModels } from '../aps/utils/loadAlignedModels';
 
 /**
  * CompareView — Comparador (contractual vs avance), estilo ACC Compare pero propio.
@@ -247,35 +248,11 @@ export default function CompareView({ BACKEND_URL, onExit }) {
         v.start();
         return v;
     };
-    const loadUrn = (viewer, urn, opts) => new Promise((resolve, reject) => {
-        window.Autodesk.Viewing.Document.load('urn:' + urn, (doc) => {
-            // opts.globalOffset: pasamos el MISMO offset a ambos panes para alinear,
-            // pero un offset cercano al modelo (no 0,0,0) -> sin perder precision en
-            // modelos georreferenciados (evita deformacion y parpadeo/z-fighting).
-            viewer.loadDocumentNode(doc, doc.getRoot().getDefaultGeometry(), opts || {})
-                .then(resolve).catch(reject);
-        }, (err) => reject(new Error('No se pudo cargar esa versión (¿traducida en ACC?): ' + err)));
-    });
-
     const sourceUrnsOf = (scope) => {
         if (!scope) return [];
         if (scope.type === 'source') return [scope.value];
         if (scope.type === 'sources') return scope.values || [];
         return [];
-    };
-    const loadUrns = async (viewer, urns, sharedOffset) => {
-        let offset = sharedOffset || null;
-        for (let i = 0; i < urns.length; i++) {
-            const opts = {
-                keepCurrentModels: i > 0 || (viewer.getAllModels && viewer.getAllModels().length > 0),
-                ...(offset ? { globalOffset: offset } : {})
-            };
-            const model = await loadUrn(viewer, urns[i], opts);
-            if (!offset) {
-                try { offset = model.getGlobalOffset && model.getGlobalOffset(); } catch (e) { /* noop */ }
-            }
-        }
-        return offset;
     };
     const buildExternalLookups = (viewer) => new Promise(resolve => {
         const modelsInViewer = viewer.getAllModels ? viewer.getAllModels() : (viewer.model ? [viewer.model] : []);
@@ -516,8 +493,8 @@ export default function CompareView({ BACKEND_URL, onExit }) {
                 if (!vs.current.b) vs.current.b = makeViewer(contB.current);
                 // Cargar A primero para conocer su globalOffset (cercano al modelo),
                 // y cargar B con EL MISMO offset -> alineados y sin perder precision.
-                const offset = await loadUrns(vs.current.a, urnsA);
-                await loadUrns(vs.current.b, urnsB, offset);
+                const offset = await loadAlignedModels(vs.current.a, urnsA);
+                await loadAlignedModels(vs.current.b, urnsB, { sharedOffset: offset });
                 wireSync();
 
                 const lookupA = await buildExternalLookups(vs.current.a);

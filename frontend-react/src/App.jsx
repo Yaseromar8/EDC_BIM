@@ -26,6 +26,7 @@ import TandemSidebar from './components/TandemSidebar';
 import TandemFilterPanel from './components/TandemFilterPanel';
 import PdfReader from './components/PdfReader';
 import CompareView from './components/CompareView';
+import LOB4DPanel from './components/LOB4DPanel';
 
 
 import { uploadFile } from './services/uploadService';
@@ -235,6 +236,27 @@ const ProgressIcon = () => (
 );
 
 
+
+
+const FourDIcon = () => (
+  <svg className="rail-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7 21 13 3"></path>
+    <path d="M17 21 11 3"></path>
+    <path d="M8.3 17h7.4"></path>
+    <path d="M9.6 13h4.8"></path>
+    <path d="M10.8 9h2.4"></path>
+  </svg>
+);
+
+const CivilRoadIcon = () => (
+  <svg className="rail-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 22L9 2" />
+    <path d="M20 22L15 2" />
+    <path d="M12 22v-4" />
+    <path d="M12 14v-4" />
+    <path d="M12 6V2" />
+  </svg>
+);
 
 const InventoryIcon = () => (
   <svg
@@ -619,6 +641,7 @@ function App() {
   const [budgetTabOpen, setBudgetTabOpen] = useState(false);
   const [budgetPoppedOut, setBudgetPoppedOut] = useState(false);
   const [budgetPanelHeight, setBudgetPanelHeight] = useState(320);
+  const [lob4dTabOpen, setLob4dTabOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [isolatedExtIds, setIsolatedExtIds] = useState(null); // Lifted from InventoryDataGrid — persists across mount/unmount
 
@@ -3050,6 +3073,36 @@ function App() {
 
             <button
               type="button"
+              className={`rail-button ${lob4dTabOpen ? 'active' : ''}`}
+              onClick={() => {
+                const nextOpen = !lob4dTabOpen;
+                setLob4dTabOpen(nextOpen);
+                if (nextOpen) {
+                  setCompareMode(false);
+                  setBudgetTabOpen(false);
+                  setInventoryTabOpen(false);
+                  setActivePanel(null);
+                  setPanelVisible(false);
+                }
+              }}
+              title="4D LOB"
+            >
+              <FourDIcon />
+              <span className="rail-label" style={{ fontWeight: 700 }}>4D LOB</span>
+            </button>
+
+            <button
+              type="button"
+              className={`rail-button ${activePanel === 'civil' && panelVisible ? 'active' : ''}`}
+              onClick={() => togglePanel('civil')}
+              title="Herramientas de civil"
+            >
+              <CivilRoadIcon />
+              <span className="rail-label" style={{ fontWeight: 700 }}>Civil</span>
+            </button>
+
+            <button
+              type="button"
               className={`rail-button ${compareMode ? 'active' : ''}`}
               onClick={() => setCompareMode(true)}
               title="Comparar (contractual vs avance)"
@@ -3103,6 +3156,14 @@ function App() {
           <CompareView BACKEND_URL={BACKEND_URL} onExit={() => setCompareMode(false)} />
         )}
 
+        {lob4dTabOpen && (
+          <LOB4DPanel
+            models={models}
+            activeViewableGuids={activeViewableGuids}
+            onClose={() => setLob4dTabOpen(false)}
+          />
+        )}
+
 
         {!isSharedMode && (
           <TandemSidebar
@@ -3111,6 +3172,7 @@ function App() {
             sidebarWidth={sidebarWidth}
             setSidebarWidth={setSidebarWidth}
             models={models}
+            activeModelUrn={selectedProject?.id || 'global'}
             hiddenModelUrns={hiddenModelUrns}
             selectedElement={selectedElement}
 
@@ -3159,6 +3221,7 @@ function App() {
             universalSearch={universalSearch}
             onOpenDocument={handleOpenDocByNodeId}
             onCloseUniversalSearch={() => setPanelVisible(false)}
+            onClosePanel={() => setPanelVisible(false)}
             BACKEND_URL={BACKEND_URL}
 
 

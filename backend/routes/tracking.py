@@ -142,8 +142,15 @@ def get_tracking_data(model_urn='global'):
                 if pin_id not in fotos_dict:
                     fotos_dict[pin_id] = {"pinId": pin_id, "photos": []}
                 
-                # Use proxy URL if possible
-                urn = row[4] or (row[1].split('?')[0].split('.com/')[1] if '?' in row[1] else None)
+                # Use proxy URL if possible. Parse defensivo: una gcs_url malformada
+                # (sin '.com/') NO debe romper toda la carga de seguimiento.
+                urn = row[4]
+                if not urn and row[1]:
+                    try:
+                        if '.com/' in row[1]:
+                            urn = row[1].split('?')[0].split('.com/')[1]
+                    except Exception:
+                        urn = None
                 final_url = f"/api/docs/proxy?urn={urn}" if urn else row[1]
                 
                 fotos_dict[pin_id]["photos"].append({

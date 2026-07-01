@@ -704,6 +704,7 @@ def link_acc_document():
 
 from routes.maps import maps_bp
 from routes.digital_twin import digital_twin_bp
+from routes.civil_design_automation import civil_da_bp
 from routes.views import views_bp
 from routes.pins import pins_bp
 from routes.tracking import tracking_bp
@@ -724,6 +725,7 @@ from routes.presupuesto import presupuesto_bp
 from routes.compare import compare_bp
 
 app.register_blueprint(digital_twin_bp)
+app.register_blueprint(civil_da_bp)
 app.register_blueprint(audit_bp)
 app.register_blueprint(diag_bp)
 app.register_blueprint(maps_bp)
