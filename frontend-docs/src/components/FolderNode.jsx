@@ -114,7 +114,7 @@ export default function FolderNode({
     <>
       <div
         className={`folder-tree-item ${isActive ? 'active' : ''} ${isChildrenActive ? 'child-active' : ''} ${nodeId === rightClickedId ? 'context-active' : ''}`}
-        style={{ paddingLeft: `${8 + (level * 28)}px`, color: isActive ? '#0696D7' : folder._syncing ? '#999' : '#3c3c3c' }}
+        style={{ paddingLeft: `${8 + (level * 28)}px`, color: isActive ? '#5f7fa3' : folder._syncing ? '#999' : '#3c3c3c' }}
         onClick={(e) => { e.stopPropagation(); onNavigate(folderFullName, folder.id); if (level === 0 && onReset) onReset(); }}
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const item = { ...folder, type: 'folder', id: nodeId }; onRowMenu(item, e); }}
       >

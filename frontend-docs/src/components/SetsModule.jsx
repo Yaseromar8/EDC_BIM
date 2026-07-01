@@ -61,7 +61,7 @@ export function AddToSetModal({ isOpen, onClose, items, projectPrefix, onAdded }
               {sets.map(s => (
                 <div key={s.id} onClick={() => !saving && addTo(s.id)}
                   style={{ padding: '9px 12px', borderBottom: '1px solid #f5f5f5', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}
-                  onMouseOver={e => e.currentTarget.style.background = '#f6fbff'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
+                  onMouseOver={e => e.currentTarget.style.background = '#f4f6f9'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
                   <span style={{ fontWeight: 600, color: '#333' }}>{s.name}</span>
                   <span style={{ color: '#999', fontSize: 12 }}>{s.items_count} docs</span>
                 </div>
@@ -73,7 +73,7 @@ export function AddToSetModal({ isOpen, onClose, items, projectPrefix, onAdded }
               onKeyDown={e => { if (e.key === 'Enter') createAndAdd(); }}
               style={{ flex: 1, padding: '8px 10px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, outline: 'none' }} />
             <button onClick={createAndAdd} disabled={saving}
-              style={{ padding: '8px 14px', background: '#0696d7', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Crear</button>
+              style={{ padding: '8px 14px', background: '#5f7fa3', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Crear</button>
           </div>
         </div>
       </div>
@@ -131,7 +131,7 @@ export function SetsView({ projectPrefix, isAdmin }) {
           <div onClick={() => toggle(s)} style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" style={{ transform: expanded[s.id] ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}><polyline points="9 18 15 12 9 6"/></svg>
             <span style={{ fontSize: 14, fontWeight: 600, color: '#333', flex: 1 }}>{s.name}</span>
-            <span style={{ fontSize: 12, color: '#0696d7', fontWeight: 600 }}>{s.items_count} documento{s.items_count !== 1 ? 's' : ''}</span>
+            <span style={{ fontSize: 12, color: '#5f7fa3', fontWeight: 600 }}>{s.items_count} documento{s.items_count !== 1 ? 's' : ''}</span>
             <span style={{ fontSize: 11, color: '#aaa' }}>{s.created_by} · {formatDate(s.created_at)}</span>
             {isAdmin && (
               <button onClick={e => { e.stopPropagation(); removeSet(s); }} title="Eliminar conjunto"
@@ -144,7 +144,7 @@ export function SetsView({ projectPrefix, isAdmin }) {
                 <div style={{ padding: 16, fontSize: 12, color: '#999' }}>Conjunto vacío.</div>
               ) : expanded[s.id].map(it => (
                 <div key={it.node_id} style={{ padding: '8px 16px 8px 44px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #f7f7f7', fontSize: 13 }}>
-                  <span onClick={() => openDoc(it)} title="Abrir documento" style={{ flex: 1, color: '#0696d7', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name} ↗</span>
+                  <span onClick={() => openDoc(it)} title="Abrir documento" style={{ flex: 1, color: '#5f7fa3', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name} ↗</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#555', background: '#f0f0f0', padding: '2px 8px', borderRadius: 10 }}>V{it.version_number || 1} congelada</span>
                   <span style={{ fontSize: 11, color: '#aaa' }}>{formatDate(it.added_at)}</span>
                   {isAdmin && (

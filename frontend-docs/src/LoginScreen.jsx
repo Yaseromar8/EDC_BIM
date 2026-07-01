@@ -256,6 +256,13 @@ const LoginScreen = ({ onLogin }) => {
         <div className="stitch-login">
             {/* ══ NAV ════════════════════════════════════════════════ */}
             <nav className="c-nav">
+                <div className="c-brand">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-label="ECD-VISIION">
+                        <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="#fff" />
+                        <path d="M7 8.5l5 8 5-8" stroke="#2b333d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span>ECD<span className="c-brand-accent">-VISIION</span></span>
+                </div>
                 <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
                     <div className="c-lang-dropdown" ref={langMenuRef}>
                         <div className="c-lang-trigger" onClick={(e) => { e.stopPropagation(); setLangMenuOpen(!langMenuOpen); }}>
@@ -355,7 +362,7 @@ const LoginScreen = ({ onLogin }) => {
                                     </div>
                                     <div className="flex items-start gap-2 pt-2">
                                         <input className="mt-1" id="marketing" required type="checkbox" />
-                                        <label className="text-[0.65rem] opacity-70" htmlFor="marketing">I agree to receive marketing communications from Revizto.</label>
+                                        <label className="text-[0.65rem] opacity-70" htmlFor="marketing">I agree to receive marketing communications from ECD-VISIION.</label>
                                     </div>
                                     <div className="pt-4">
                                         <button className="c-btn w-full justify-center" type="submit">SUBMIT</button>
@@ -369,7 +376,7 @@ const LoginScreen = ({ onLogin }) => {
                             <div className="c-success-wrap">
                                 <span className="u-sub-small text-red-500 font-bold mb-4 block">THANK YOU!</span>
                                 <h2 className="text-3xl font-bold mb-4">Thank you for requesting a demo!</h2>
-                                <p className="text-sm opacity-80 leading-relaxed mb-8">Our team will be in touch shortly to learn more about your needs and set up a time to share how <b>Revizto</b> can help address them.</p>
+                                <p className="text-sm opacity-80 leading-relaxed mb-8">Our team will be in touch shortly to learn more about your needs and set up a time to share how <b>ECD-VISIION</b> can help address them.</p>
                                 <button className="c-btn" onClick={() => showLeftState('hero')}>
                                     <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>home</span>
                                     <span>BACK TO HOME</span>

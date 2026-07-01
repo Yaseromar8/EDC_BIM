@@ -107,15 +107,6 @@ const BuildPanel = ({
         }
     };
 
-    const [isConnected, setIsConnected] = React.useState(false);
-
-    React.useEffect(() => {
-        fetch('/api/auth/status')
-            .then(res => res.json())
-            .then(data => setIsConnected(data.connected))
-            .catch(err => console.error('Auth check failed', err));
-    }, []);
-
     // activeTab state definition must be BEFORE useMemo
     const [activeTab, setActiveTab] = useState('DATA');
 
@@ -274,8 +265,8 @@ const BuildPanel = ({
                                         }}
                                         className="sfp-import-text-btn"
                                         style={{
-                                            background: placementMode ? '#3b82f6' : 'transparent',
-                                            borderColor: placementMode ? '#3b82f6' : 'rgba(255,255,255,0.2)',
+                                            background: placementMode ? '#5f7fa3' : 'transparent',
+                                            borderColor: placementMode ? '#5f7fa3' : 'rgba(255,255,255,0.2)',
                                             color: placementMode ? 'white' : '#e0e0e0'
                                         }}
                                         title={`Crear nuevo pin de ${activeTabDef.label.toLowerCase()}`}
@@ -343,7 +334,7 @@ const BuildPanel = ({
                                                         }}
                                                         style={{
                                                             flex: 1, minWidth: 0, background: '#12151a',
-                                                            border: '1px solid #3b82f6', borderRadius: '4px',
+                                                            border: '1px solid #5f7fa3', borderRadius: '4px',
                                                             color: '#fff', padding: '3px 6px', fontSize: '12px', outline: 'none'
                                                         }}
                                                     />

@@ -12,6 +12,45 @@ inventory_bp = Blueprint('inventory', __name__)
 # Memoria temporal para progreso (en un entorno PROD debería ser Redis/DB)
 EXTRACTION_JOBS = {}
 
+# Guard contra extracciones concurrentes del MISMO modelo (urn+scope). Evita que
+# un Update/Relink dispare dos extracciones a la vez (backend + frontend) que se
+# pisen purgando/insertando -> data parcial o duplicada. Belt-and-suspenders
+# sobre el fix de "el frontend sondea el job del backend".
+import threading as _threading
+_EXTRACTING_KEYS = set()
+_EXTRACTING_LOCK = _threading.Lock()
+
+
+def ensure_inventory_identity():
+    """Migra inventory_assets a identidad (model_urn, external_id) -> un elemento
+    es una sola fila por frente, así un duplicado es IMPOSIBLE por diseño (lo
+    impone la BD, no un DELETE ni un decode base64).
+
+    Idempotente y SEGURO: solo migra si no hay colisiones (verificado: 0). Si las
+    hubiera, mantiene la llave vieja y avisa, sin romper el arranque.
+    """
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""SELECT 1 FROM pg_constraint
+                           WHERE conrelid = 'inventory_assets'::regclass AND contype = 'u'
+                             AND conname = 'inventory_assets_modelext_key'""")
+            if cur.fetchone():
+                return  # ya migrado
+            cur.execute("SELECT COUNT(*) - COUNT(DISTINCT (model_urn, external_id)) FROM inventory_assets")
+            collisions = cur.fetchone()[0] or 0
+            if collisions > 0:
+                print(f"[migracion] inventory_assets: {collisions} colisiones en (model_urn, external_id); "
+                      f"se MANTIENE la llave vieja (revisar manualmente).")
+                return
+            cur.execute("ALTER TABLE inventory_assets DROP CONSTRAINT IF EXISTS inventory_assets_composite_key")
+            cur.execute("ALTER TABLE inventory_assets ADD CONSTRAINT inventory_assets_modelext_key UNIQUE (model_urn, external_id)")
+            conn.commit()
+            print("[migracion] inventory_assets: identidad -> (model_urn, external_id). Duplicados imposibles por diseño.")
+    except Exception as e:
+        print(f"[migracion] ensure_inventory_identity: {e}")
+
 def ensure_extraction_jobs_table():
     """Estado de jobs en Postgres: visible entre workers de gunicorn y persistente
     si un worker se reinicia (la memoria por-proceso no basta en produccion)."""
@@ -160,14 +199,31 @@ def sanitize_urn(urn):
     urn = urn.replace('+', '-').replace('/', '_').rstrip('=')
     return urn
 
-def extract_metadata_task(urn, target_urn, job_id):
-    """ Tarea en segundo plano para extraer metadata de Autodesk. """
+def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
+    """ Tarea en segundo plano para extraer metadata de Autodesk.
+
+    purge_source_urns: lista opcional de source_urn (de OTRO linaje) a borrar de
+    forma ATÓMICA tras una extracción exitosa. La usa el Relink: el modelo viejo
+    apunta a otro archivo, así que la limpieza por linaje no lo cubre. Se borra
+    DENTRO de la misma transacción que inserta los datos nuevos -> si la extracción
+    falla, NO se borra nada y el inventario viejo queda intacto. """
+    # Clave de concurrencia: mismo modelo + mismo scope
+    _key = None
     try:
         print(f"\n[Extractor] ===== INICIO JOB: {job_id} =====")
         print(f"[Extractor] URN recibido (raw): {urn}")
-        
+
         # Sanitizar URN a URL-safe base64
         urn = sanitize_urn(urn)
+        _key = f"{urn}::{target_urn}"
+        with _EXTRACTING_LOCK:
+            if _key in _EXTRACTING_KEYS:
+                print(f"[Extractor] Ya hay una extracción en curso para {_key}; este job se omite.")
+                set_job(job_id, {'status': 'success', 'progress': 100,
+                                 'message': 'Ya había una extracción en curso para este modelo.'})
+                _key = None  # no liberar lo que no tomamos
+                return
+            _EXTRACTING_KEYS.add(_key)
         print(f"[Extractor] URN sanitizado: {urn}")
         print(f"[Extractor] Target URN: {target_urn}")
         
@@ -627,7 +683,15 @@ def extract_metadata_task(urn, target_urn, job_id):
         with get_db_connection() as conn:
             cursor = conn.cursor()
             
-            # WIPE QUIRÚRGICO: Elimina versiones históricas para no acumular basura en PostgreSQL
+            # IDENTIDAD (model_urn, external_id): un elemento = una fila por frente.
+            # El upsert actualiza la MISMA fila (incl. su source_urn a la versión nueva)
+            # -> duplicado IMPOSIBLE por diseño, sin depender de decodificar URNs.
+            #
+            # El linaje (base_urn) se usa SOLO para acotar la limpieza de elementos
+            # REMOVIDOS a ESTE modelo dentro del frente (los presentes ya pasan a
+            # source_urn=urn en el upsert; lo que quede bajo una source_urn vieja del
+            # mismo linaje = elemento eliminado en la versión nueva). Si el decode
+            # falla, a lo sumo queda algún removido sin limpiar — NUNCA un duplicado.
             import base64
             def get_base_urn(b64_urn):
                 try:
@@ -637,23 +701,10 @@ def extract_metadata_task(urn, target_urn, job_id):
                     return decoded.split('?')[0]
                 except Exception:
                     return b64_urn
-            
-            # SEGURIDAD: la purga es LOCAL al scope destino (model_urn = target_urn).
-            # Antes barria toda la tabla por lineage, lo que podia borrar el inventario
-            # del frente real al extraer una version vieja a un scope temporal de
-            # comparacion ('__cmp__'). Dentro del frente, el comportamiento es identico.
-            base_urn_to_delete = get_base_urn(urn)
-            cursor.execute("SELECT DISTINCT source_urn FROM inventory_assets WHERE model_urn = %s", (target_urn,))
-            all_source_urns = cursor.fetchall()
-            urns_to_delete = []
-            for (s_urn,) in all_source_urns:
-                if get_base_urn(s_urn) == base_urn_to_delete:
-                    urns_to_delete.append(s_urn)
 
-            if urns_to_delete:
-                format_strings = ','.join(['%s'] * len(urns_to_delete))
-                print(f"[Extractor] Eliminando {len(urns_to_delete)} versiones historicas del archivo (scope {target_urn}).")
-                cursor.execute(f"DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN ({format_strings})", [target_urn] + urns_to_delete)
+            base_urn = get_base_urn(urn)
+            cursor.execute("SELECT DISTINCT source_urn FROM inventory_assets WHERE model_urn = %s", (target_urn,))
+            old_lineage = [s for (s,) in cursor.fetchall() if s and s != urn and get_base_urn(s) == base_urn]
 
             current_time = datetime.now()
             from db import resolve_project_id
@@ -667,13 +718,54 @@ def extract_metadata_task(urn, target_urn, job_id):
             insert_query = """
                 INSERT INTO inventory_assets (external_id, model_urn, source_urn, name, properties, last_updated, project_id)
                 VALUES %s
-                ON CONFLICT (model_urn, source_urn, external_id) DO UPDATE SET
+                ON CONFLICT (model_urn, external_id) DO UPDATE SET
+                    source_urn = EXCLUDED.source_urn,
                     name = EXCLUDED.name,
                     properties = EXCLUDED.properties,
                     last_updated = EXCLUDED.last_updated,
                     project_id = EXCLUDED.project_id;
             """
             execute_values(cursor, insert_query, records)
+
+            # Limpiar elementos REMOVIDOS de este modelo: los presentes ya migraron a
+            # source_urn=urn; lo que siga bajo una source_urn vieja del mismo linaje
+            # es un elemento que ya no existe en la versión nueva.
+            if old_lineage:
+                fmt = ','.join(['%s'] * len(old_lineage))
+                cursor.execute(
+                    f"DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN ({fmt})",
+                    [target_urn] + old_lineage
+                )
+                removed = cursor.rowcount
+                if removed:
+                    print(f"[Extractor] Limpieza: {removed} elementos eliminados en la versión nueva.")
+
+            # Purga ATÓMICA de Relink: borra el inventario del/los URN viejos (otro
+            # linaje) DENTRO de esta misma transacción, ya con los datos nuevos
+            # insertados. Si la extracción hubiera fallado antes, no llegamos aquí
+            # y la data vieja sigue intacta -> el frente nunca queda vacío por error.
+            if purge_source_urns:
+                purge_norm = []
+                for u in purge_source_urns:
+                    if not u:
+                        continue
+                    purge_norm.append(u)
+                    su = sanitize_urn(u)
+                    if su != u:
+                        purge_norm.append(su)
+                purge_norm = list(dict.fromkeys(purge_norm))  # dedup, mantiene orden
+                # No borrar el propio URN nuevo (por si coincidiera tras sanitizar)
+                purge_norm = [u for u in purge_norm if u != urn]
+                if purge_norm:
+                    fmtp = ','.join(['%s'] * len(purge_norm))
+                    cursor.execute(
+                        f"DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN ({fmtp})",
+                        [target_urn] + purge_norm
+                    )
+                    purged = cursor.rowcount
+                    if purged:
+                        print(f"[Extractor] Relink: {purged} elementos del modelo anterior purgados (atómico).")
+
             conn.commit()
 
         set_job(job_id, {'status': 'success', 'progress': 100, 'message': f'Extracción completa. {len(inventory_data)} activos insertados.'})
@@ -685,6 +777,11 @@ def extract_metadata_task(urn, target_urn, job_id):
         traceback.print_exc()
         print(f"[Extractor ERROR] {e}")
         set_job(job_id, {'status': 'error', 'progress': 0, 'message': str(e)})
+    finally:
+        # Liberar el guard de concurrencia para este modelo+scope
+        if _key:
+            with _EXTRACTING_LOCK:
+                _EXTRACTING_KEYS.discard(_key)
 
 
 @inventory_bp.route('/api/inventory/extract', methods=['POST'])

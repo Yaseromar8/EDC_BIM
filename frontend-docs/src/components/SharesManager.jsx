@@ -71,7 +71,7 @@ export default function SharesManager({ projectPrefix }) {
                   <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {s.state === 'active' && (
                       <>
-                        <button onClick={() => copy(s.id)} style={{ background: 'none', border: 'none', color: '#0696d7', cursor: 'pointer', fontSize: 12, fontWeight: 600, marginRight: 12 }}>Copiar</button>
+                        <button onClick={() => copy(s.id)} style={{ background: 'none', border: 'none', color: '#5f7fa3', cursor: 'pointer', fontSize: 12, fontWeight: 600, marginRight: 12 }}>Copiar</button>
                         <button onClick={() => revoke(s)} style={{ background: 'none', border: 'none', color: '#e53935', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Revocar</button>
                       </>
                     )}

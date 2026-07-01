@@ -43,7 +43,7 @@ function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSel
   return (
     <div style={{ marginLeft: 16 }}>
       <div
-        style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', cursor: 'pointer', background: isSelected ? '#e6f3fa' : 'transparent', color: isSelected ? '#0696D7' : '#333', borderRadius: 4 }}
+        style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', cursor: 'pointer', background: isSelected ? '#e6f3fa' : 'transparent', color: isSelected ? '#5f7fa3' : '#333', borderRadius: 4 }}
         onClick={() => onSelect(folder.fullName, folder.id)}
       >
         <div style={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 4, cursor: 'pointer' }} onClick={handleToggle}>
@@ -53,7 +53,7 @@ function SelectFolderNode({ folder, defaultExpanded = false, selectedPath, onSel
             </svg>
           )}
         </div>
-        <svg fill={isSelected ? "#0696D7" : "#888"} viewBox="0 0 24 24" width="18" height="18" style={{ marginRight: 6 }}>
+        <svg fill={isSelected ? "#5f7fa3" : "#888"} viewBox="0 0 24 24" width="18" height="18" style={{ marginRight: 6 }}>
           <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path>
         </svg>
         <span style={{ fontSize: 13, userSelect: 'none', whiteSpace: 'nowrap', flex: 1 }}>{folder.name.replace(/\/$/, '')}</span>
@@ -103,7 +103,7 @@ export default function MoveModal({ moveState, setMoveState, projectPrefix, proj
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 24px', borderTop: '1px solid #eee', background: '#fafafa' }}>
           {moveState.step === 2 && (
-            <div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 8, color: '#0696d7', fontSize: 12 }}>
+            <div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 8, color: '#5f7fa3', fontSize: 12 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2"/><path d="M12 16v-4m0-4h.01"/></svg>
               <span>¿Estos archivos se sincronizan...?</span>
             </div>
@@ -111,7 +111,7 @@ export default function MoveModal({ moveState, setMoveState, projectPrefix, proj
           <button 
             className="acc-btn-flat" 
             onClick={close}
-            style={{ padding: '8px 16px', background: 'none', border: 'none', color: '#0696d7', fontWeight: 600, cursor: 'pointer' }}
+            style={{ padding: '8px 16px', background: 'none', border: 'none', color: '#5f7fa3', fontWeight: 600, cursor: 'pointer' }}
           >
             Cancelar
           </button>
@@ -121,7 +121,7 @@ export default function MoveModal({ moveState, setMoveState, projectPrefix, proj
             onClick={() => moveState.step === 1 ? setMoveState({ ...moveState, step: 2 }) : onExecuteMove()}
             style={{ 
               padding: '8px 24px', 
-              background: (moveState.step === 2 && !moveState.destPath) ? '#eeeeee' : '#0696D7', 
+              background: (moveState.step === 2 && !moveState.destPath) ? '#eeeeee' : '#5f7fa3', 
               color: (moveState.step === 2 && !moveState.destPath) ? '#999' : '#fff', 
               border: 'none', borderRadius: 4, fontWeight: 600, 
               cursor: (moveState.step === 2 && !moveState.destPath) ? 'default' : 'pointer' 

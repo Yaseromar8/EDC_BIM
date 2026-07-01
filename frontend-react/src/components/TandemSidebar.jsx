@@ -4,6 +4,7 @@ import SourceFilesPanel from './SourceFilesPanel';
 import DocumentPanel from './DocumentPanel';
 import DiscoverySearchPanel from './DiscoverySearchPanel';
 import BuildPanel from './BuildPanel';
+import CivilToolsPanel from './CivilToolsPanel';
 
 import DocsPanel from './DocsPanel';
 
@@ -14,6 +15,7 @@ const TandemSidebar = ({
     sidebarWidth,
     setSidebarWidth,
     models,
+    activeModelUrn,
     hiddenModelUrns,
     dynamicFilterBuckets,
     filterSelections,
@@ -40,6 +42,8 @@ const TandemSidebar = ({
     activeViewableGuids,
     handleLoadSpecificView,
     handleModelUpdate,
+    handleUpdateAll,
+    updateAllBusy,
     removeModel,
     setRelinkTargetModel,
     setImportModalOpen,
@@ -61,6 +65,7 @@ const TandemSidebar = ({
 
     onOpenDocument,
     onCloseUniversalSearch,
+    onClosePanel,
     onUniversalSearch,
 
     // BuildPanel Props
@@ -192,6 +197,8 @@ const TandemSidebar = ({
                     activeViewableGuids={activeViewableGuids}
                     onLoadView={handleLoadSpecificView}
                     onUpdate={handleModelUpdate}
+                    onUpdateAll={handleUpdateAll}
+                    updateAllBusy={updateAllBusy}
                     onRelink={(model) => {
                         setRelinkTargetModel(model);
                         setImportModalOpen(true);
@@ -232,6 +239,14 @@ const TandemSidebar = ({
 
             {activePanel === 'accdocs' && (
                 <DocsPanel selectedElement={selectedElement} />
+            )}
+
+            {activePanel === 'civil' && (
+                <CivilToolsPanel
+                    activeModelUrn={activeModelUrn}
+                    models={models}
+                    onClose={onClosePanel}
+                />
             )}
 
             {activePanel === 'progress' && (() => {

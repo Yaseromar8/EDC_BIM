@@ -93,7 +93,7 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
   const STATES = [
     { value: 'Emitido',      bg: '#f1f3f4', text: '#5f6368', icon: '●' },
     { value: 'En revisión',  bg: '#fef7e0', text: '#b06000', icon: '◐' },
-    { value: 'Respondido',   bg: '#e8f0fe', text: '#1a73e8', icon: '◉' },
+    { value: 'Respondido',   bg: '#eef2f7', text: '#7e9bbd', icon: '◉' },
     { value: 'Cerrado',      bg: '#e6f4ea', text: '#1e8e3e', icon: '✓' },
   ];
 
@@ -445,7 +445,7 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
   );
   const CadIcon = () => (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="1" width="18" height="22" rx="2" fill="#1565C0" />
+      <rect x="3" y="1" width="18" height="22" rx="2" fill="#4d6a8f" />
       <text x="12" y="15" textAnchor="middle" fill="#fff" fontWeight="bold" fontSize="6" fontFamily="sans-serif">CAD</text>
     </svg>
   );
@@ -618,7 +618,7 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
   return (
     <div style={{ padding: '0px 24px 16px', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* RFI ACCENT BAR */}
-      <div style={{ height: 3, background: 'linear-gradient(90deg, #1565c0, #1a73e8, #4285f4)', borderRadius: '0 0 4px 4px', flexShrink: 0 }} />
+      <div style={{ height: 3, background: 'linear-gradient(90deg, #4d6a8f, #7e9bbd, #9bb2cc)', borderRadius: '0 0 4px 4px', flexShrink: 0 }} />
       {/* HEADER */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingTop: 16, backgroundColor: '#fff', paddingBottom: 8, borderBottom: '1px solid #eee', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -626,9 +626,9 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
           {dashFilter && (
             <span
               onClick={() => setDashFilter(null)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#e8f0fe', color: '#1a73e8', fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 20, cursor: 'pointer', transition: 'background 0.15s' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eef2f7', color: '#7e9bbd', fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 20, cursor: 'pointer', transition: 'background 0.15s' }}
               onMouseOver={e => e.currentTarget.style.background = '#d2e3fc'}
-              onMouseOut={e => e.currentTarget.style.background = '#e8f0fe'}
+              onMouseOut={e => e.currentTarget.style.background = '#eef2f7'}
             >
               {dashFilter.type === 'respuesta' ? `Respuesta: ${dashFilter.value}` : `Estado: ${dashFilter.value}`}
               <span style={{ fontWeight: 400, fontSize: 14 }}>&times;</span>
@@ -704,7 +704,7 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
                       position: 'absolute', right: 0, top: 0, bottom: 0, width: 6,
                       cursor: 'col-resize', background: 'transparent',
                     }}
-                    onMouseOver={e => e.currentTarget.style.background = '#0696d7'}
+                    onMouseOver={e => e.currentTarget.style.background = '#5f7fa3'}
                     onMouseOut={e => e.currentTarget.style.background = 'transparent'}
                   />
                 </th>
@@ -724,7 +724,7 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
                 const currentAdjuntos = isEditing ? editFormData.adjuntos : (rfi.adjuntos || []);
 
                 return (
-                  <tr key={rfi.id} style={{ borderBottom: '1px solid #eee', background: isEditing ? '#f0f7ff' : '#fff', transition: 'background 0.2s' }}>
+                  <tr key={rfi.id} style={{ borderBottom: '1px solid #eee', background: isEditing ? '#f4f6f9' : '#fff', transition: 'background 0.2s' }}>
 
                     {/* CODIGO */}
                     <td style={{ padding: '3px 10px', fontWeight: 600, color: '#0a8af6', fontFamily: 'monospace', fontSize: 11 }}>
@@ -843,11 +843,11 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
                                   onClick={() => { handleFieldChange('responsable', name); setShowResponsableDropdown(false); }}
                                   style={{
                                     padding: '8px 12px', fontSize: 13, cursor: 'pointer',
-                                    background: editFormData.responsable === name ? '#e8f0fe' : '#fff',
+                                    background: editFormData.responsable === name ? '#eef2f7' : '#fff',
                                     borderBottom: '1px solid #f5f5f5'
                                   }}
-                                  onMouseOver={e => e.currentTarget.style.background = '#f0f7ff'}
-                                  onMouseOut={e => e.currentTarget.style.background = editFormData.responsable === name ? '#e8f0fe' : '#fff'}
+                                  onMouseOver={e => e.currentTarget.style.background = '#f4f6f9'}
+                                  onMouseOut={e => e.currentTarget.style.background = editFormData.responsable === name ? '#eef2f7' : '#fff'}
                                 >
                                   {name}
                                 </div>
@@ -929,12 +929,12 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
                                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                                 borderRadius: 4, padding: 2, transition: 'transform 0.15s, box-shadow 0.15s, background 0.15s',
                                 transform: isLoadingThis ? 'scale(0.85)' : 'scale(1)',
-                                background: isLoadingThis ? '#e3f2fd' : 'transparent',
-                                boxShadow: isLoadingThis ? '0 0 0 2px #0696d7' : 'none',
+                                background: isLoadingThis ? '#eef2f7' : 'transparent',
+                                boxShadow: isLoadingThis ? '0 0 0 2px #5f7fa3' : 'none',
                                 opacity: isLoadingThis ? 0.6 : 1,
                                 position: 'relative'
                               }}
-                              onMouseOver={e => { if (!isEditing && !isLoadingThis) { e.currentTarget.style.transform = 'scale(1.15)'; e.currentTarget.style.background = '#e3f2fd'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(6,150,215,0.25)'; }}}
+                              onMouseOver={e => { if (!isEditing && !isLoadingThis) { e.currentTarget.style.transform = 'scale(1.15)'; e.currentTarget.style.background = '#eef2f7'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(95, 127, 163,0.25)'; }}}
                               onMouseOut={e => { if (!isLoadingThis) { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.boxShadow = 'none'; }}}
                               onMouseDown={e => { if (!isEditing) e.currentTarget.style.transform = 'scale(0.85)'; }}
                               onMouseUp={e => { if (!isEditing) e.currentTarget.style.transform = 'scale(1.15)'; }}
@@ -945,7 +945,7 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
                                   position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                                   background: 'rgba(255,255,255,0.7)', borderRadius: 4
                                 }}>
-                                  <span style={{ width: 14, height: 14, border: '2px solid #0696d7', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin-acc 0.6s linear infinite' }} />
+                                  <span style={{ width: 14, height: 14, border: '2px solid #5f7fa3', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin-acc 0.6s linear infinite' }} />
                                 </span>
                               )}
                             </span>
@@ -973,7 +973,7 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
                     <td style={{ padding: '3px 10px', textAlign: 'center' }}>
                       {isEditing ? (
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
-                          <button onClick={() => saveRfi(rfi.id)} disabled={saving} style={{ background: '#1a73e8', color: '#fff', border: 'none', padding: '5px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
+                          <button onClick={() => saveRfi(rfi.id)} disabled={saving} style={{ background: '#7e9bbd', color: '#fff', border: 'none', padding: '5px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
                             {saving ? '...' : 'Guardar'}
                           </button>
                           <button onClick={cancelEditing} style={{ background: 'none', border: '1px solid #ddd', color: '#888', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>
@@ -1157,8 +1157,8 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
                   <svg width="100%" viewBox={`0 0 ${tW} ${tH}`} style={{ display: 'block' }}>
                     <defs>
                       <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#4285f4" stopOpacity="0.18"/>
-                        <stop offset="100%" stopColor="#4285f4" stopOpacity="0.01"/>
+                        <stop offset="0%" stopColor="#9bb2cc" stopOpacity="0.18"/>
+                        <stop offset="100%" stopColor="#9bb2cc" stopOpacity="0.01"/>
                       </linearGradient>
                     </defs>
                     {[0, 0.5, 1].map((pct, i) => {
@@ -1173,14 +1173,14 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
                     {/* Area fill (real data only) */}
                     <path d={tArea} fill="url(#trendGrad)"/>
                     {/* Real line */}
-                    <path d={tLine} fill="none" stroke="#4285f4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d={tLine} fill="none" stroke="#9bb2cc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     {/* Projected line (dashed) */}
                     {projLine && <path d={projLine} fill="none" stroke="#f9ab00" strokeWidth="1.5" strokeDasharray="4 3" strokeLinecap="round"/>}
                     {/* Real points */}
                     {realPts.map((p, i) => (
                       <g key={`r${i}`}>
-                        <circle cx={p.x} cy={p.y} r="4" fill="#fff" stroke="#4285f4" strokeWidth="2"/>
-                        <text x={p.x} y={p.y - 8} textAnchor="middle" fill="#4285f4" fontSize="9" fontWeight="700">{p.avg}d</text>
+                        <circle cx={p.x} cy={p.y} r="4" fill="#fff" stroke="#9bb2cc" strokeWidth="2"/>
+                        <text x={p.x} y={p.y - 8} textAnchor="middle" fill="#9bb2cc" fontSize="9" fontWeight="700">{p.avg}d</text>
                         <text x={p.x} y={tH - 2} textAnchor="middle" fill="#666" fontSize="8">{p.label}</text>
                         <rect x={p.x - 16} y={tPT} width="32" height={tAH + tPB} fill="transparent" style={{ cursor: 'pointer' }}>
                           <title>{p.label}: {p.avg} día(s) — {p.count} RFI(s)</title>
@@ -1246,7 +1246,7 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
                   {isImage && <ImgIcon />}
                   {isVideo && (
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                      <rect x="3" y="1" width="18" height="22" rx="2" fill="#7B1FA2" />
+                      <rect x="3" y="1" width="18" height="22" rx="2" fill="#4d6a8f" />
                       <text x="12" y="15" textAnchor="middle" fill="#fff" fontWeight="bold" fontSize="6" fontFamily="sans-serif">VID</text>
                     </svg>
                   )}
@@ -1336,7 +1336,7 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
                 <React.Fragment key={idx}>
                   <span
                     onClick={() => navigateBreadcrumb(idx)}
-                    style={{ cursor: 'pointer', color: idx === selectorPath.length - 1 ? '#333' : '#0696d7', fontWeight: idx === selectorPath.length - 1 ? 600 : 400 }}
+                    style={{ cursor: 'pointer', color: idx === selectorPath.length - 1 ? '#333' : '#5f7fa3', fontWeight: idx === selectorPath.length - 1 ? 600 : 400 }}
                   >
                     {crumb.name}
                   </span>
@@ -1358,7 +1358,7 @@ const RfiModule = ({ project, API, user, isAdmin }) => {
                       key={node.id}
                       onClick={() => onNodeClick(node)}
                       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 24px', borderBottom: '1px solid #f5f5f5', cursor: 'pointer', transition: 'background 0.15s' }}
-                      onMouseOver={e => e.currentTarget.style.background = '#f0f7ff'}
+                      onMouseOver={e => e.currentTarget.style.background = '#f4f6f9'}
                       onMouseOut={e => e.currentTarget.style.background = 'none'}
                     >
                       {node._isFolder ? (

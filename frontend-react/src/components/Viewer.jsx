@@ -6,6 +6,7 @@ import { BaseExtension } from '../aps/extensions/BaseExtension';
 import { findLeafNodes, getBulkProperties, calculateDynamicFilterBucketsNative, extractPartidasNative, extractSchemaNative, calculateBucketsFromPostgres } from '../aps/utils/model';
 import IconMarkupExtension from '../aps/extensions/IconMarkupExtension';
 import ProgressiveExtension from '../aps/extensions/ProgressiveExtension';
+import LOB4DExtension from '../aps/extensions/LOB4DExtension';
 import WorkfrontsPanel from './WorkfrontsPanel';
 import StationTracker from './StationTracker';
 import { DataVizEngine } from '../aps/utils/DataVizEngine';
@@ -86,6 +87,7 @@ const Viewer = ({
     const viewerRef = useRef(null);
     const containerRef = useRef(null);
     const loadedModelsRef = useRef({});
+    const loadingUrnsRef = useRef(new Set()); // URNs con carga EN CURSO (anti-duplicado por carrera)
     const loadedViewGuidsRef = useRef({}); // Tracks the GUID of the currently loaded view per model URN
     const baseOffsetRef = useRef(null);
     const basePlacementRef = useRef(null);
@@ -479,6 +481,7 @@ const Viewer = ({
                 Autodesk.Viewing.theExtensionManager.registerExtension('BaseExtension', BaseExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('IconMarkupExtension', IconMarkupExtension);
                 Autodesk.Viewing.theExtensionManager.registerExtension('ProgressiveExtension', ProgressiveExtension);
+                Autodesk.Viewing.theExtensionManager.registerExtension('LOB4DExtension', LOB4DExtension);
                 // Custom extensions removed to simplify UI
 
                 const config = {
@@ -494,6 +497,7 @@ const Viewer = ({
                         'Autodesk.AEC.LevelsExtension',
                         'Autodesk.AEC.Minimap3DExtension',
                         'ProgressiveExtension',
+                        'LOB4DExtension',
                         'Autodesk.DataVisualization'
                     ],
                     disabledExtensions: {
@@ -504,6 +508,22 @@ const Viewer = ({
 
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);
                 viewer.start();
+                
+                // Expose globally for panels and extensions
+                window.viewer = viewer;
+                window.NOP_VIEWER = viewer;
+
+                // ── FORZAR COMPORTAMIENTO NATIVO DE CLIC ──────────────────────
+                // Forzamos explícitamente que el clic simple seleccione y deseleccione,
+                // previniendo que extensiones como DataVisualization o PushPin interfieran.
+                try {
+                    if (viewer.setClickConfig) {
+                        viewer.setClickConfig("click", "onObject", ["selectOnly"]);
+                        viewer.setClickConfig("click", "offObject", ["deselectAll"]);
+                    }
+                } catch (e) {
+                    console.warn('[Viewer] Error seteando click config:', e);
+                }
 
                 // INYECCIÓN DE EVENTOS DE CICLO DE VIDA (TRACING)
                 // ═══════════════════════════════════════════════════════════
@@ -1278,6 +1298,183 @@ const Viewer = ({
         }
     }, [viewerReady, onSelectionChanged]);
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // MARQUEE COMPLETO (Shift + arrastre) — selección por CAJA DELIMITADORA
+    // El marquee nativo lee píxeles visibles → olvida los elementos ocluidos
+    // (detrás de otros). Este selecciona TODO elemento cuya bounding box, al
+    // proyectarse a pantalla, toca el rectángulo — incluidos los ocluidos.
+    // Excluye los OCULTOS (Hide/aislados fuera), no los simplemente tapados.
+    // ═══════════════════════════════════════════════════════════════════════
+    useEffect(() => {
+        const viewer = viewerRef.current;
+        if (!viewer || !viewerReady) return;
+        if (!viewer.toolController) { console.warn('[Marquee] toolController no disponible aún.'); return; }
+        const THREE = window.THREE
+            || (window.Autodesk && Autodesk.Viewing && Autodesk.Viewing.Private && Autodesk.Viewing.Private.THREE)
+            || (typeof globalThis !== 'undefined' && globalThis.THREE);
+        if (!THREE) { console.warn('[Marquee] THREE no disponible; marquee completo deshabilitado.'); return; }
+
+        let dragging = false;
+        let start = null;     // {cx, cy} en px de canvas
+        let last = null;
+        let overlay = null;
+
+        const getCanvasRect = () => (viewer.impl?.canvas || viewer.canvas).getBoundingClientRect();
+
+        const ensureOverlay = () => {
+            if (overlay) return overlay;
+            overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed; border:1px solid #7e9bbd; background:rgba(126,155,189,0.18); pointer-events:none; z-index:9000;';
+            document.body.appendChild(overlay);
+            return overlay;
+        };
+        const removeOverlay = () => { if (overlay) { overlay.remove(); overlay = null; } };
+        const updateOverlay = (a, b) => {
+            const rect = getCanvasRect();
+            const o = ensureOverlay();
+            o.style.left = (rect.left + Math.min(a.cx, b.cx)) + 'px';
+            o.style.top = (rect.top + Math.min(a.cy, b.cy)) + 'px';
+            o.style.width = Math.abs(a.cx - b.cx) + 'px';
+            o.style.height = Math.abs(a.cy - b.cy) + 'px';
+        };
+
+        const performBoxSelect = (a, b) => {
+            try {
+                const rect = getCanvasRect();
+                const minX = Math.min(a.cx, b.cx), maxX = Math.max(a.cx, b.cx);
+                const minY = Math.min(a.cy, b.cy), maxY = Math.max(a.cy, b.cy);
+                const camera = viewer.impl.camera;
+                const models = viewer.impl.modelQueue().getModels();
+                const aggregate = [];
+                const tmp = new THREE.Vector3();
+                const box = new THREE.Box3();
+                const fbox = new THREE.Box3();
+
+                for (const model of models) {
+                    const tree = model.getInstanceTree && model.getInstanceTree();
+                    const frags = model.getFragmentList && model.getFragmentList();
+                    if (!tree || !frags) continue;
+                    const ids = [];
+                    tree.enumNodeChildren(tree.getRootId(), (dbId) => {
+                        if (tree.getChildCount(dbId) !== 0) return; // solo hojas
+                        box.makeEmpty();
+                        let has = false, vis = false;
+                        tree.enumNodeFragments(dbId, (fragId) => {
+                            frags.getWorldBounds(fragId, fbox);
+                            box.union(fbox);
+                            has = true;
+                            if (frags.isFragVisible && frags.isFragVisible(fragId)) vis = true;
+                        }, false);
+                        if (!has || box.isEmpty() || !vis) return; // saltar ocultos
+                        // Proyectar las 8 esquinas → AABB en pantalla
+                        let sMinX = Infinity, sMinY = Infinity, sMaxX = -Infinity, sMaxY = -Infinity, anyFront = false;
+                        for (let i = 0; i < 8; i++) {
+                            tmp.set((i & 1) ? box.max.x : box.min.x,
+                                    (i & 2) ? box.max.y : box.min.y,
+                                    (i & 4) ? box.max.z : box.min.z);
+                            tmp.project(camera);
+                            if (tmp.z <= 1) anyFront = true;
+                            const sx = (tmp.x * 0.5 + 0.5) * rect.width;
+                            const sy = (-tmp.y * 0.5 + 0.5) * rect.height;
+                            if (sx < sMinX) sMinX = sx; if (sx > sMaxX) sMaxX = sx;
+                            if (sy < sMinY) sMinY = sy; if (sy > sMaxY) sMaxY = sy;
+                        }
+                        if (!anyFront) return;
+                        // Intersección AABB pantalla vs rectángulo marquee
+                        if (sMaxX >= minX && sMinX <= maxX && sMaxY >= minY && sMinY <= maxY) ids.push(dbId);
+                    }, true);
+                    if (ids.length) aggregate.push({ model, selection: ids });
+                }
+
+                const _total = aggregate.reduce((n, a) => n + (a.selection ? a.selection.length : 0), 0);
+                console.log(`[Marquee] caja → ${_total} elementos seleccionados (incluye ocluidos)`);
+
+                if (aggregate.length) viewer.setAggregateSelection(aggregate);
+                else viewer.clearSelection();
+            } catch (e) {
+                console.warn('[Marquee] error en selección por caja:', e);
+            }
+        };
+
+        const tool = {
+            getNames: () => ['CompleteBoxSelectTool'],
+            getPriority: () => 1000, // alta: intercepta antes que orbitar/marquee nativo
+            register: () => {},
+            deregister: () => { removeOverlay(); },
+            activate: () => {},
+            deactivate: () => { dragging = false; removeOverlay(); },
+            update: () => false,
+            handleButtonDown: (event, button) => {
+                if (button === 0 && event.shiftKey) {
+                    dragging = true;
+                    start = { cx: event.canvasX, cy: event.canvasY };
+                    last = start;
+                    updateOverlay(start, start);
+                    console.log('[Marquee] inicio arrastre (Shift)');
+                    return true; // consume → no orbita
+                }
+                return false;
+            },
+            handleSingleClick: (event, button) => {
+                if (button === 0) {
+                    // El raycast natively ignora elementos ocultos/ghosted según la config
+                    const hit = viewer.impl.hitTest(event.canvasX, event.canvasY, false);
+                    if (hit && hit.dbId) {
+                        viewer.select(hit.dbId, hit.model);
+                    } else {
+                        viewer.clearSelection();
+                    }
+                    // Retornamos true para consumir el evento y evitar que extensiones rebeldes
+                    // (como BIM360 PushPin) se roben el clic. Los sprites (DataViz) están a salvo
+                    // porque son interceptados en la fase de captura antes de llegar aquí.
+                    return true;
+                }
+                return false;
+            },
+            handleDoubleClick: () => false,
+            handleMouseMove: (event) => {
+                if (!dragging) return false;
+                last = { cx: event.canvasX, cy: event.canvasY };
+                updateOverlay(start, last);
+                return true;
+            },
+            handleButtonUp: (event, button) => {
+                if (!dragging || button !== 0) return false;
+                dragging = false;
+                const end = { cx: event.canvasX, cy: event.canvasY };
+                removeOverlay();
+                // Arrastre real (no un click): >3px en algún eje
+                if (Math.abs(end.cx - start.cx) > 3 || Math.abs(end.cy - start.cy) > 3) {
+                    performBoxSelect(start, end);
+                }
+                return true;
+            },
+            handleGesture: () => dragging,
+            handleBlur: () => { dragging = false; removeOverlay(); return false; },
+        };
+
+        // Red de seguridad: si el mouseup ocurre fuera del canvas, cerrar el arrastre.
+        const safetyUp = () => { if (dragging) { dragging = false; removeOverlay(); } };
+        window.addEventListener('mouseup', safetyUp, true);
+
+        try {
+            viewer.toolController.registerTool(tool);
+            const ok = viewer.toolController.activateTool('CompleteBoxSelectTool');
+            console.log(`[Marquee] tool registrado y activado (ok=${ok}). Usa Shift + arrastre.`);
+        } catch (e) {
+            console.warn('[Marquee] no se pudo registrar/activar el tool:', e);
+        }
+
+        return () => {
+            window.removeEventListener('mouseup', safetyUp, true);
+            removeOverlay();
+            try {
+                viewer.toolController.deactivateTool('CompleteBoxSelectTool');
+                viewer.toolController.deregisterTool(tool);
+            } catch (e) { /* viewer ya destruido */ }
+        };
+    }, [viewerReady]);
+
     // ═══════════════════════════════════════════════════════════
     // Isolation → Inventory Sync
     // En su propio useEffect([viewerReady]) para que se re-registre con HMR,
@@ -1473,9 +1670,14 @@ const Viewer = ({
     const loadModelSequentially = async (model) => {
         const viewer = viewerRef.current;
         if (!viewer) return;
-        if (!model?.urn || loadedModelsRef.current[model.urn]) return;
+        // Guard anti-duplicado: descarta si ya está cargado O si hay una carga EN CURSO
+        // del mismo URN. loadedModelsRef se setea recién al TERMINAR la carga async, así
+        // que dos efectos podían cargar el mismo modelo a la vez → geometría duplicada.
+        if (!model?.urn || loadedModelsRef.current[model.urn] || loadingUrnsRef.current.has(model.urn)) return;
+        loadingUrnsRef.current.add(model.urn);
 
-        return new Promise((resolve, reject) => {
+        try {
+        return await new Promise((resolve, reject) => {
             Autodesk.Viewing.Document.load(
                 `urn:${model.urn}`,
                 async (doc) => {
@@ -1692,6 +1894,9 @@ const Viewer = ({
                 }
             );
         });
+        } finally {
+            loadingUrnsRef.current.delete(model.urn);
+        }
     };
 
     // Cursor Management for Placement Mode
@@ -3976,6 +4181,8 @@ const Viewer = ({
                 markers={stationTrackerMarkers}
                 viewerRef={viewerRef}
             />
+
+            {/* Civil Station Tracker Panel (ACC Style) */}
 
             {/* Botón de Captura de Pantalla Global */}
             {viewerReady && (

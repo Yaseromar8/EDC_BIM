@@ -704,6 +704,7 @@ def link_acc_document():
 
 from routes.maps import maps_bp
 from routes.digital_twin import digital_twin_bp
+from routes.civil_design_automation import civil_da_bp
 from routes.views import views_bp
 from routes.pins import pins_bp
 from routes.tracking import tracking_bp
@@ -724,6 +725,7 @@ from routes.presupuesto import presupuesto_bp
 from routes.compare import compare_bp
 
 app.register_blueprint(digital_twin_bp)
+app.register_blueprint(civil_da_bp)
 app.register_blueprint(audit_bp)
 app.register_blueprint(diag_bp)
 app.register_blueprint(maps_bp)
@@ -777,8 +779,9 @@ ensure_transmittals_table()
 ensure_attributes_tables()
 ensure_sets_tables()
 ensure_element_docs_table()
-from routes.inventory import ensure_extraction_jobs_table
+from routes.inventory import ensure_extraction_jobs_table, ensure_inventory_identity
 ensure_extraction_jobs_table()
+ensure_inventory_identity()  # identidad (model_urn, external_id): duplicados imposibles por diseño
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()

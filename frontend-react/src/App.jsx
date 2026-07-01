@@ -26,6 +26,7 @@ import TandemSidebar from './components/TandemSidebar';
 import TandemFilterPanel from './components/TandemFilterPanel';
 import PdfReader from './components/PdfReader';
 import CompareView from './components/CompareView';
+import LOB4DPanel from './components/LOB4DPanel';
 
 
 import { uploadFile } from './services/uploadService';
@@ -235,6 +236,27 @@ const ProgressIcon = () => (
 );
 
 
+
+
+const FourDIcon = () => (
+  <svg className="rail-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7 21 13 3"></path>
+    <path d="M17 21 11 3"></path>
+    <path d="M8.3 17h7.4"></path>
+    <path d="M9.6 13h4.8"></path>
+    <path d="M10.8 9h2.4"></path>
+  </svg>
+);
+
+const CivilRoadIcon = () => (
+  <svg className="rail-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 22L9 2" />
+    <path d="M20 22L15 2" />
+    <path d="M12 22v-4" />
+    <path d="M12 14v-4" />
+    <path d="M12 6V2" />
+  </svg>
+);
 
 const InventoryIcon = () => (
   <svg
@@ -598,6 +620,7 @@ function App() {
   const [models, setModels] = useState([]);
   const [relinkTargetModel, setRelinkTargetModel] = useState(null); // Relink State
   const [extractionJobs, setExtractionJobs] = useState({}); // Tracking BG extractions
+  const pollIntervalsRef = useRef({}); // intervalos de sondeo de extracción por urn (para topar/limpiar)
 
   const [hiddenModelUrns, setHiddenModelUrns] = useState([]);
 
@@ -618,6 +641,7 @@ function App() {
   const [budgetTabOpen, setBudgetTabOpen] = useState(false);
   const [budgetPoppedOut, setBudgetPoppedOut] = useState(false);
   const [budgetPanelHeight, setBudgetPanelHeight] = useState(320);
+  const [lob4dTabOpen, setLob4dTabOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [isolatedExtIds, setIsolatedExtIds] = useState(null); // Lifted from InventoryDataGrid — persists across mount/unmount
 
@@ -1715,7 +1739,27 @@ function App() {
         job_id = (await res.json()).job_id;
       }
 
+      // Limpiar cualquier sondeo previo del MISMO urn → no se acumulan intervalos.
+      if (pollIntervalsRef.current[urn]) {
+        clearInterval(pollIntervalsRef.current[urn]);
+        delete pollIntervalsRef.current[urn];
+      }
+
+      let attempts = 0;
+      const MAX_ATTEMPTS = 100; // ~5 min a 3s; tope para no sondear infinito si el job se cuelga
+
+      const stopPoll = () => {
+        clearInterval(pollInterval);
+        delete pollIntervalsRef.current[urn];
+      };
+
       const pollInterval = setInterval(async () => {
+        attempts++;
+        if (attempts > MAX_ATTEMPTS) {
+          stopPoll();
+          setExtractionJobs(prev => ({ ...prev, [urn]: { ...prev[urn], status: 'La extracción tardó demasiado (reintenta)', isActive: false } }));
+          return;
+        }
         try {
           const stRes = await apiFetch(`${BACKEND_URL}/api/inventory/extract/status/${job_id}`);
           if (stRes.ok) {
@@ -1727,14 +1771,14 @@ function App() {
             }));
 
             if (stData.status === 'success') {
-              clearInterval(pollInterval);
+              stopPoll();
               setExtractionJobs(prev => ({ ...prev, [urn]: { ...prev[urn], progress: 100, isActive: false } }));
               // Invalida cache de inventario global para que fuerce una llamada fresca al DB
               window.__inventoryCache = null;
               // Disparar recarga reactiva de inventario y filtros
               window.dispatchEvent(new CustomEvent('inventory-needs-refresh'));
             } else if (stData.status === 'error') {
-              clearInterval(pollInterval);
+              stopPoll();
               setExtractionJobs(prev => ({ ...prev, [urn]: { ...prev[urn], status: 'Error', isActive: false } }));
             }
           }
@@ -1742,13 +1786,20 @@ function App() {
           console.error("Polling error:", e);
         }
       }, 3000);
+      pollIntervalsRef.current[urn] = pollInterval;
     } catch (e) {
       console.error("[Extraction] Error:", e);
       setExtractionJobs(prev => ({ ...prev, [urn]: { status: 'Fallo al iniciar', isActive: false } }));
     }
   };
 
-  // Per-model update check status: { [urn]: { status: 'checking'|'up_to_date'|'updating'|'error', message? } }
+  // Limpieza: al desmontar, cortar todos los sondeos de extracción vivos.
+  useEffect(() => () => {
+    Object.values(pollIntervalsRef.current).forEach(id => clearInterval(id));
+    pollIntervalsRef.current = {};
+  }, []);
+
+  // Per-model update check status: { [urn]: { status: 'checking'|'up_to_date'|'updating'|'error'|'pending', message? } }
   const [updateCheckStatus, setUpdateCheckStatus] = useState({});
 
   const handleModelUpdate = useCallback(async (urn) => {
@@ -1764,6 +1815,13 @@ function App() {
       });
       if (res.ok) {
         const data = await res.json();
+        if (data.pending_translation) {
+          // Versión nueva detectada pero aún traduciéndose en ACC → no cambiamos nada,
+          // mostramos aviso y dejamos que reintente. Evita el update "que no trae datos".
+          setUpdateCheckStatus(prev => ({ ...prev, [urn]: { status: 'pending', message: data.message || 'Traduciéndose en ACC…' } }));
+          setTimeout(() => setUpdateCheckStatus(prev => { const n = { ...prev }; delete n[urn]; return n; }), 7000);
+          return;
+        }
         if (data.updated && data.config?.models) {
           // New version found and applied
           setUpdateCheckStatus(prev => ({ ...prev, [urn]: { status: 'updating', message: 'Updated! Extracting...' } }));
@@ -1822,6 +1880,21 @@ function App() {
       setTimeout(() => setUpdateCheckStatus(prev => { const n = { ...prev }; delete n[urn]; return n; }), 4000);
     }
   }, [selectedProject]);
+
+  // Update masivo: actualiza TODOS los modelos que tienen versión nueva, de forma
+  // SECUENCIAL (no hammerea el config) y tolerante a fallos (si uno falla, sigue
+  // con los demás). Las extracciones corren en background con su guard de
+  // concurrencia, así que no se pisan.
+  const [updateAllBusy, setUpdateAllBusy] = useState(false);
+  const handleUpdateAll = useCallback(async () => {
+    const pending = (models || []).filter(m => availableUpdates[m.id]?.has_update);
+    if (!pending.length || updateAllBusy) return;
+    setUpdateAllBusy(true);
+    for (const m of pending) {
+      try { await handleModelUpdate(m.urn); } catch (e) { console.warn('[UpdateAll] falló', m.urn, e); }
+    }
+    setUpdateAllBusy(false);
+  }, [models, availableUpdates, updateAllBusy, handleModelUpdate]);
 
   const handleLinkDocs = useCallback(async (modelsInput, isGemelo = false, viewGuid = null) => {
     // Determine if input is array
@@ -3000,6 +3073,36 @@ function App() {
 
             <button
               type="button"
+              className={`rail-button ${lob4dTabOpen ? 'active' : ''}`}
+              onClick={() => {
+                const nextOpen = !lob4dTabOpen;
+                setLob4dTabOpen(nextOpen);
+                if (nextOpen) {
+                  setCompareMode(false);
+                  setBudgetTabOpen(false);
+                  setInventoryTabOpen(false);
+                  setActivePanel(null);
+                  setPanelVisible(false);
+                }
+              }}
+              title="4D LOB"
+            >
+              <FourDIcon />
+              <span className="rail-label" style={{ fontWeight: 700 }}>4D LOB</span>
+            </button>
+
+            <button
+              type="button"
+              className={`rail-button ${activePanel === 'civil' && panelVisible ? 'active' : ''}`}
+              onClick={() => togglePanel('civil')}
+              title="Herramientas de civil"
+            >
+              <CivilRoadIcon />
+              <span className="rail-label" style={{ fontWeight: 700 }}>Civil</span>
+            </button>
+
+            <button
+              type="button"
               className={`rail-button ${compareMode ? 'active' : ''}`}
               onClick={() => setCompareMode(true)}
               title="Comparar (contractual vs avance)"
@@ -3053,6 +3156,14 @@ function App() {
           <CompareView BACKEND_URL={BACKEND_URL} onExit={() => setCompareMode(false)} />
         )}
 
+        {lob4dTabOpen && (
+          <LOB4DPanel
+            models={models}
+            activeViewableGuids={activeViewableGuids}
+            onClose={() => setLob4dTabOpen(false)}
+          />
+        )}
+
 
         {!isSharedMode && (
           <TandemSidebar
@@ -3061,6 +3172,7 @@ function App() {
             sidebarWidth={sidebarWidth}
             setSidebarWidth={setSidebarWidth}
             models={models}
+            activeModelUrn={selectedProject?.id || 'global'}
             hiddenModelUrns={hiddenModelUrns}
             selectedElement={selectedElement}
 
@@ -3087,6 +3199,8 @@ function App() {
             activeViewableGuids={activeViewableGuids}
             handleLoadSpecificView={handleLoadSpecificView}
             handleModelUpdate={handleModelUpdate}
+            handleUpdateAll={handleUpdateAll}
+            updateAllBusy={updateAllBusy}
             removeModel={removeModel}
             setRelinkTargetModel={setRelinkTargetModel}
             extractionJobs={extractionJobs}
@@ -3107,6 +3221,7 @@ function App() {
             universalSearch={universalSearch}
             onOpenDocument={handleOpenDocByNodeId}
             onCloseUniversalSearch={() => setPanelVisible(false)}
+            onClosePanel={() => setPanelVisible(false)}
             BACKEND_URL={BACKEND_URL}
 
 

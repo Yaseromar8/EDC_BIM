@@ -29,8 +29,8 @@ export default function SharedViewer({ shareId }) {
   if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f5f5f5' }}>
-        <div className="acc-mini-spinner" style={{ width: 40, height: 40, border: '3px solid #0696d7', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-        <p style={{ marginTop: 20, color: '#666', fontFamily: 'ArtifaktElement', fontSize: 14 }}>Preparando visor de documento seguro...</p>
+        <div className="acc-mini-spinner" style={{ width: 40, height: 40, border: '3px solid #5f7fa3', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <p style={{ marginTop: 20, color: '#666', fontFamily: 'Inter', fontSize: 14 }}>Preparando visor de documento seguro...</p>
       </div>
     );
   }
@@ -39,8 +39,8 @@ export default function SharedViewer({ shareId }) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f5f5f5', color: '#333' }}>
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d32f2f" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-        <h2 style={{ fontFamily: 'ArtifaktElement', marginTop: 16 }}>Acceso Denegado</h2>
-        <p style={{ fontFamily: 'ArtifaktElement', color: '#666' }}>{error}</p>
+        <h2 style={{ fontFamily: 'Inter', marginTop: 16 }}>Acceso Denegado</h2>
+        <p style={{ fontFamily: 'Inter', color: '#666' }}>{error}</p>
       </div>
     );
   }

@@ -262,7 +262,15 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout }) 
   return (
     <div className="app-shell">
       <header className="top-header">
-        <div className="header-left"><span className="header-logo">☁️ Plataforma BIM</span></div>
+        <div className="header-left">
+          <span className="header-logo" style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-label="ECD-VISIION">
+              <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="#fff"/>
+              <path d="M7 8.5l5 8 5-8" stroke="#2b333d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <span style={{ letterSpacing: '0.3px' }}>ECD<span style={{ opacity: 0.7, fontWeight: 600 }}>-VISIION</span></span>
+          </span>
+        </div>
         <div className="header-right">
           <a href={VISOR_URL} className="header-nav-item">🏗️ Visor 3D</a>
           <div className="header-user" onClick={onLogout} title="Cerrar sesión">
@@ -318,7 +326,7 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout }) 
                   <tbody>
                     {filtered.map(p => (
                       <tr key={p.id} onClick={() => onSelectProject(p)}>
-                        <td style={{ fontSize: 12, color: '#0696d7', fontWeight: 600 }}>{p.hub_name || 'Gral'}</td>
+                        <td style={{ fontSize: 12, color: '#5f7fa3', fontWeight: 600 }}>{p.hub_name || 'Gral'}</td>
                         <td><div className="project-name-main">{p.name}</div>{p.location && <div className="project-name-sub">{p.location}</div>}</td>
                         <td>{p.number || '—'}</td>
                         <td><span className="access-badge access-badge-docs">📁 Docs</span></td>

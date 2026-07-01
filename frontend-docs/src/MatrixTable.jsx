@@ -331,7 +331,7 @@ const TableRow = ({ index, style, data }) => {
               <svg 
                 className="pencil-icon-acc name-pencil" 
                 onClick={startEditingName}
-                width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0696d7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
+                width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5f7fa3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
                 style={{ cursor: 'pointer' }}
               >
                 <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
@@ -394,7 +394,7 @@ const TableRow = ({ index, style, data }) => {
             <>
               <span className="description-text-value">{item.description || ''}</span>
               {isAdmin && !isGrey && (
-                <svg className="pencil-icon-acc" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0696d7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="pencil-icon-acc" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5f7fa3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
                 </svg>
               )}

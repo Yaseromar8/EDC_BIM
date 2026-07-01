@@ -116,9 +116,9 @@ const getActiveViewName = (modelUrn, modelViews, activeViewableGuids, defaultVie
     return first3d ? first3d.name : views[0]?.name || null;
 };
 
-const SourceFilesPanel = ({ 
-    models, hiddenModels = [], onImport, onRemove, onToggleVisibility, 
-    modelViews, activeViewableGuids, onLoadView, onUpdate, onRelink, 
+const SourceFilesPanel = ({
+    models, hiddenModels = [], onImport, onRemove, onToggleVisibility,
+    modelViews, activeViewableGuids, onLoadView, onUpdate, onUpdateAll, updateAllBusy = false, onRelink,
     extractionJobs = {}, availableUpdates = {}, updateCheckStatus = {}
 }) => {
     const [expandedModels, setExpandedModels] = useState({});
@@ -128,18 +128,42 @@ const SourceFilesPanel = ({
         setExpandedModels(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
+    // Coherencia global: cuántos tienen versión nueva y cuántos están extrayendo
+    const pendingCount = models.filter(m => availableUpdates[m.id]?.has_update).length;
+    const extractingCount = models.filter(m => extractionJobs[m.urn]?.isActive).length;
+
     return (
         <div className="source-files-panel">
             <div className="sfp-header">
-                <h3>SOURCE FILES</h3>
+                <h3>MODELOS</h3>
                 <button className="sfp-import-btn" onClick={onImport}>
-                    <PlusIcon /> <span style={{ marginLeft: 4 }}>Import Model</span>
+                    <PlusIcon /> <span style={{ marginLeft: 4 }}>Importar</span>
                 </button>
             </div>
 
+            {/* Barra de acciones globales: actualizar todos + estado de extracción */}
+            {(pendingCount > 0 || extractingCount > 0) && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid #2a2b30', fontSize: 12 }}>
+                    {pendingCount > 0 && (
+                        <button
+                            onClick={() => onUpdateAll && onUpdateAll()}
+                            disabled={updateAllBusy}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: updateAllBusy ? '#3a3f47' : '#7e9bbd', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: updateAllBusy ? 'default' : 'pointer' }}
+                        >
+                            {updateAllBusy ? 'Actualizando…' : `Actualizar todos (${pendingCount})`}
+                        </button>
+                    )}
+                    {extractingCount > 0 && (
+                        <span style={{ color: '#c2a878', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span className="sfp-check-spinner" /> Extrayendo {extractingCount} modelo{extractingCount !== 1 ? 's' : ''}…
+                        </span>
+                    )}
+                </div>
+            )}
+
             <div className="sfp-list">
                 {models.length === 0 && (
-                    <div className="sfp-empty">No models loaded</div>
+                    <div className="sfp-empty">No hay modelos cargados</div>
                 )}
                 {models.map(model => {
                     const norm = (u) => String(u || '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -199,6 +223,9 @@ const SourceFilesPanel = ({
                                         {checkStatus.status === 'error' && (
                                             <span style={{ color: '#f87171' }}>⚠ {checkStatus.message}</span>
                                         )}
+                                        {checkStatus.status === 'pending' && (
+                                            <span style={{ color: '#c2a878' }}>⏳ {checkStatus.message}</span>
+                                        )}
                                     </span>
                                 )}
 
@@ -245,11 +272,18 @@ const SourceFilesPanel = ({
                                 </div>
                             </div>
 
-                            {/* EXTRACTION PROGRESS — below the row */}
+                            {/* PROGRESO DE EXTRACCIÓN — debajo de la fila */}
                             {isExtracting && (
-                                <div className="sfp-extraction-bar">
-                                    <div className="sfp-check-spinner" style={{ width: 10, height: 10 }} />
-                                    <span>Extracting metadata: {Math.round(extractData.progress)}%</span>
+                                <div className="sfp-extraction-bar" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 5 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <div className="sfp-check-spinner" style={{ width: 10, height: 10 }} />
+                                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {extractData.status || 'Extrayendo metadata'} · {Math.round(extractData.progress || 0)}%
+                                        </span>
+                                    </div>
+                                    <div style={{ height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+                                        <div style={{ height: '100%', width: `${Math.round(extractData.progress || 0)}%`, background: '#7e9bbd', borderRadius: 2, transition: 'width 0.3s ease' }} />
+                                    </div>
                                 </div>
                             )}
 
