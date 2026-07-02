@@ -757,6 +757,8 @@ from routes.sets import sets_bp, ensure_sets_tables
 app.register_blueprint(sets_bp)
 from routes.element_docs import element_docs_bp, ensure_element_docs_table
 app.register_blueprint(element_docs_bp)
+from routes.lob4d import lob4d_bp, ensure_lob4d_tables
+app.register_blueprint(lob4d_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
@@ -782,6 +784,7 @@ ensure_element_docs_table()
 from routes.inventory import ensure_extraction_jobs_table, ensure_inventory_identity
 ensure_extraction_jobs_table()
 ensure_inventory_identity()  # identidad (model_urn, external_id): duplicados imposibles por diseño
+ensure_lob4d_tables()  # LOB 4D: cronograma/metrados por frente (fuente de verdad del 4D)
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()
