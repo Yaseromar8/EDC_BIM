@@ -262,6 +262,222 @@ def extract_alignment():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@civil_da_bp.route('/api/civil/extract-sections-test', methods=['POST'])
+def extract_sections_test():
+    """
+    Endpoint experimental aislado para probar la extracción de secciones transversales
+    y volúmenes desde Civil 3D, sin afectar el pipeline de alineamientos principal.
+    """
+    try:
+        data = request.json
+        urn = data.get('urn')
+        project_id = data.get('project_id')
+        input_url = data.get('input_url')
+        output_url = data.get('output_url')
+        # Usamos un nombre diferente para no chocar con los JSONs de curvas
+        result_object_name = f"section_result_{uuid.uuid4().hex}.json"
+        
+        with open('da_debug_sections.txt', 'a') as f:
+            f.write(f"--- NUEVO REQUEST SECCIONES ---\n")
+            f.write(f"URN original: {urn}\n")
+            f.write(f"Project ID: {project_id}\n")
+
+        token = get_internal_token()
+        error_reason = "Unknown error"
+        upload_key = None
+
+        if urn and not input_url:
+            import base64
+            import urllib.parse
+            
+            decoded_urn = urn
+            try:
+                if not urn.startswith('urn:'):
+                    padding = '=' * (-len(urn) % 4)
+                    decoded_urn = base64.urlsafe_b64decode(urn + padding).decode('utf-8')
+            except Exception:
+                pass
+                
+            if decoded_urn.startswith('urn:adsk.objects:os.object:'):
+                parts = decoded_urn.replace('urn:adsk.objects:os.object:', '').split('/')
+                bucket = parts[0]
+                obj = '/'.join(parts[1:])
+                safe_obj = urllib.parse.quote(obj, safe='')
+                input_url = f"https://developer.api.autodesk.com/oss/v2/buckets/{bucket}/objects/{safe_obj}"
+                output_url, upload_key = create_signed_result_upload(token, result_object_name)
+            elif decoded_urn.startswith('urn:adsk.wipprod:fs.file:vf') and project_id:
+                if not project_id.startswith('b.'):
+                    project_id = 'b.' + project_id
+                
+                token_3legged = get_3legged_token() or token
+                clean_version_urn = decoded_urn
+                safe_version_id = urllib.parse.quote(clean_version_urn, safe='')
+                version_url = f"https://developer.api.autodesk.com/data/v1/projects/{project_id}/versions/{safe_version_id}"
+                
+                v_resp = requests.get(version_url, headers={'Authorization': f'Bearer {token_3legged}'})
+                storage_urn = None
+                if v_resp.ok:
+                    storage_urn = v_resp.json().get('data', {}).get('relationships', {}).get('storage', {}).get('data', {}).get('id')
+                else:
+                    error_reason = f"Error al obtener version de ACC: {v_resp.status_code} - {v_resp.text}"
+                
+                if storage_urn:
+                    if storage_urn.startswith('urn:adsk.objects:os.object:'):
+                        parts = storage_urn.replace('urn:adsk.objects:os.object:', '').split('/')
+                        bucket = parts[0]
+                        obj = parts[1]
+                        
+                        safe_obj = urllib.parse.quote(obj, safe='')
+                        sign_url = f"https://developer.api.autodesk.com/oss/v2/buckets/{bucket}/objects/{safe_obj}/signeds3download?minutesExpiration={DA_SIGNED_URL_EXPIRATION_MIN}"
+                        sign_resp = requests.get(sign_url, headers={'Authorization': f'Bearer {token_3legged}'})
+                        
+                        if not sign_resp.ok and DA_SIGNED_URL_EXPIRATION_MIN != 60:
+                            fallback_sign_url = f"https://developer.api.autodesk.com/oss/v2/buckets/{bucket}/objects/{safe_obj}/signeds3download?minutesExpiration=60"
+                            sign_resp = requests.get(fallback_sign_url, headers={'Authorization': f'Bearer {token_3legged}'})
+                            
+                        if sign_resp.ok:
+                            input_url = sign_resp.json().get('url')
+                        else:
+                            input_url = f"https://developer.api.autodesk.com/oss/v2/buckets/{bucket}/objects/{safe_obj}"
+                        
+                        output_url, upload_key = create_signed_result_upload(token, result_object_name)
+                    else:
+                        error_reason = f"Storage URN no soportado: {storage_urn}"
+                else:
+                    if not error_reason:
+                        error_reason = "Storage URN no encontrado"
+            else:
+                error_reason = f"El URN decodificado no es soportado: {decoded_urn}"
+
+        if not input_url or not output_url:
+            return jsonify({"error": f"Falta URN o input_url/output_url válidos. Detalle: {error_reason}"}), 400
+
+        token = get_internal_token()
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json'
+        }
+
+        # IMPORTANT: We use a DIFFERENT Activity ID for the section extractor
+        # Activity name is 'ExtractSectionsActivity'
+        activity_id = f"{APS_CLIENT_ID}.ExtractSectionsActivity+prod"
+
+        download_token = get_3legged_token() if (project_id and 'wip.dm.prod' in input_url) else token
+
+        host_dwg_arg = { "url": input_url }
+        if 'amazonaws.com' not in input_url:
+            host_dwg_arg["headers"] = { "Authorization": f"Bearer {download_token}" }
+            
+        result_arg = { "verb": "put", "url": output_url }
+        if 'amazonaws.com' not in output_url:
+            result_arg["headers"] = { "Authorization": f"Bearer {token}" }
+
+        workitem_payload = {
+            "activityId": activity_id,
+            "limitProcessingTimeSec": DA_LIMIT_PROCESSING_TIME_SEC,
+            "arguments": {
+                "HostDwg": host_dwg_arg,
+                "Result": result_arg
+            }
+        }
+        
+        # Ejecutando el WorkItem real en Autodesk Design Automation
+        da_url = f"{APS_BASE_URL}/da/us-east/v3/workitems"
+        resp = requests.post(da_url, headers=headers, json=workitem_payload)
+        
+        if resp.status_code not in [200, 201]:
+            with open('da_debug_sections.txt', 'a') as f:
+                f.write(f"DA API Error: {resp.status_code} - {resp.text}\n")
+            return jsonify({"error": "Falló al iniciar WorkItem de Secciones", "details": resp.text}), 500
+            
+        wi_data = resp.json()
+        workitem_id = wi_data.get('id')
+        
+        if upload_key:
+            UPLOAD_KEYS[workitem_id] = upload_key
+        RESULT_OBJECTS[workitem_id] = result_object_name
+        
+        return jsonify({
+            "status": "In Progress",
+            "message": "WorkItem de Secciones enviado a la nube de Civil 3D exitosamente.",
+            "workitem_id": workitem_id,
+            "result_object": result_object_name
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ── Persistencia de alineamientos ─────────────────────────────────────────────
+# La PRIMERA extracción queda guardada por URN/frente; solo se reemplaza cuando
+# el usuario vuelve a dar "Extraer". El 4D LOB y Civil leen de aquí.
+
+def ensure_civil_alignments_table():
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS civil_alignments (
+                    urn        TEXT PRIMARY KEY,
+                    model_urn  TEXT,
+                    data       JSONB NOT NULL,
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_civil_alignments_model ON civil_alignments(model_urn)")
+            conn.commit()
+            print("[civil] Tabla civil_alignments lista.")
+    except Exception as e:
+        print(f"[civil] ensure_civil_alignments_table: {e}")
+
+
+@civil_da_bp.route('/api/civil/alignments', methods=['GET', 'POST'])
+def civil_alignments():
+    """GET ?urn= (o ?model_urn= para todos los del frente) → JSON persistido.
+    POST {urn, model_urn, data} → guarda/reemplaza la extracción (explícito)."""
+    import json as _json
+    try:
+        from db import get_db_connection
+        if request.method == 'GET':
+            urn = request.args.get('urn')
+            model_urn = request.args.get('model_urn')
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                if urn:
+                    cur.execute("SELECT data, updated_at::text FROM civil_alignments WHERE urn = %s", (urn,))
+                    row = cur.fetchone()
+                    if not row:
+                        return jsonify({'found': False}), 200
+                    return jsonify({'found': True, 'data': row[0], 'updated_at': row[1]}), 200
+                if model_urn:
+                    cur.execute("""SELECT urn, data, updated_at::text FROM civil_alignments
+                                   WHERE model_urn = %s ORDER BY updated_at DESC""", (model_urn,))
+                    return jsonify({'items': [
+                        {'urn': r[0], 'data': r[1], 'updated_at': r[2]} for r in cur.fetchall()
+                    ]}), 200
+            return jsonify({'error': 'Falta urn o model_urn'}), 400
+
+        payload = request.get_json() or {}
+        urn = payload.get('urn')
+        data = payload.get('data')
+        if not urn or data is None:
+            return jsonify({'error': 'Faltan urn o data'}), 400
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO civil_alignments (urn, model_urn, data, updated_at)
+                VALUES (%s, %s, %s::jsonb, NOW())
+                ON CONFLICT (urn) DO UPDATE SET
+                    model_urn = EXCLUDED.model_urn,
+                    data = EXCLUDED.data,
+                    updated_at = NOW()""",
+                (urn, payload.get('model_urn'), _json.dumps(data)))
+            conn.commit()
+        return jsonify({'status': 'ok'}), 200
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @civil_da_bp.route('/api/civil/alignment-result', methods=['GET'])
 def get_alignment_result():
     """Downloads alignment_result.json from the app bucket and returns it to the frontend."""
@@ -307,7 +523,15 @@ def get_workitem_status(workitem_id):
             status_data = resp.json()
             
             # If successful, complete the S3 upload
-            if status_data.get('status') == 'success':
+            if status_data.get('status') in ['success', 'failed', 'successWithErrors']:
+                report_url = status_data.get('reportUrl')
+                # Guardar la URL del reporte para inspección
+                try:
+                    with open('last_report.txt', 'w') as f:
+                        f.write(report_url if report_url else 'none')
+                except Exception as e:
+                    pass
+                
                 upload_key = UPLOAD_KEYS.pop(workitem_id, None)
                 if upload_key:
                     from routes.digital_twin import get_app_bucket_key

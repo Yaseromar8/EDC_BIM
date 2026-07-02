@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './SourceFilesPanel.css';
 import { apiFetch } from '../utils/apiFetch';
+import SectionViewer from './SectionViewer';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || (
+const { VITE_API_URL } = import.meta.env;
+const BACKEND_URL = VITE_API_URL || (
     typeof window !== 'undefined' && window.location.hostname === 'localhost'
         ? 'http://localhost:3000'
         : 'https://visor-ecd-backend.onrender.com'
@@ -302,6 +304,11 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
     const [searchOpen, setSearchOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [stationLabelsVisible, setStationLabelsVisible] = useState(initialCache.stationLabelsVisible ?? true);
+    
+    const [pollingInterval, setPollingInterval] = useState(null);
+    const [sectionJSON, setSectionJSON] = useState(null);
+    const [sectionIndex, setSectionIndex] = useState(0);
+    const [showSectionViewer, setShowSectionViewer] = useState(false);
     const extensionRef = useRef(null);
     const pollTimeoutRef = useRef(null);
     const restoredKeyRef = useRef(null);
@@ -431,7 +438,24 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
         setExtractMessage('');
         setExtractError('');
         setExtractReportUrl('');
-    }, [activeCacheKey]);
+
+        // PERSISTENCIA: sin caché de sesión, buscar la extracción GUARDADA en el
+        // backend (la primera extracción es permanente; solo cambia al re-extraer).
+        const persistUrn = selectedDwgUrn || activeModelUrn;
+        if (!persistUrn) return;
+        let alive = true;
+        apiFetch(`${BACKEND_URL}/api/civil/alignments?urn=${encodeURIComponent(persistUrn)}`)
+            .then((r) => r.json())
+            .then((d) => {
+                if (!alive || !d.found || !Array.isArray(d.data) || !d.data.length) return;
+                const alignmentJSON = normalizeAlignments(d.data);
+                setAlignmentData(alignmentJSON);
+                setExtractMessage(`Extracción guardada: ${alignmentJSON.length} ejes (${(d.updated_at || '').slice(0, 10)})`);
+                window.__lobCivilAlignments = alignmentJSON; // visible para 4D LOB
+            })
+            .catch(() => { /* sin persistencia aún */ });
+        return () => { alive = false; };
+    }, [activeCacheKey, selectedDwgUrn, activeModelUrn]);
 
     useEffect(() => {
         const handleContextChange = (e) => {
@@ -680,6 +704,14 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
                         setExtractProgress(100);
                         setExtractMessage(`Listo: ${alignmentJSON.length} ejes / ${countVisibleProfiles(alignmentJSON)} perfiles utiles`);
 
+                        // PERSISTIR: la extracción queda guardada (permanente hasta re-extraer)
+                        window.__lobCivilAlignments = alignmentJSON; // visible para 4D LOB
+                        apiFetch(`${BACKEND_URL}/api/civil/alignments`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ urn: realUrn, model_urn: activeModelUrn, data: alignmentJSON })
+                        }).catch((e) => console.warn('[CivilTools] No se pudo persistir la extracción:', e));
+
                         if (alignmentJSON.length > 0) {
                             const first = alignmentJSON[0];
                             await applyAlignment(first.alignmentId, alignmentJSON, {
@@ -720,6 +752,93 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
             setExtractMessage(message);
             setIsExtracting(false);
             alert(message);
+        }
+    };
+
+    const handleExtractSectionsTest = async () => {
+        let realUrn = selectedDwgUrn || activeModelUrn;
+        let realProjectId = null;
+
+        if (selectedDwgUrn) {
+            const model = dwgModelsList.find(item => item.urn === selectedDwgUrn);
+            if (model) realProjectId = model.projectId;
+        }
+
+        if (!realUrn) {
+            alert('Se necesita un URN válido para extraer secciones.');
+            return;
+        }
+
+        alert('Llamando al endpoint de extracción de secciones...');
+        try {
+            const res = await apiFetch(`${BACKEND_URL}/api/civil/extract-sections-test`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ urn: realUrn, project_id: realProjectId })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert('Error al iniciar WorkItem de Secciones: ' + (data.error || 'Error desconocido'));
+                return;
+            }
+            alert('¡WorkItem de Secciones iniciado! ID: ' + data.workitem_id + '\nIniciando polling para descargar resultado...');
+            
+            let pollCount = 0;
+            const pollStatus = async () => {
+                try {
+                    pollCount += 1;
+                    const statusRes = await apiFetch(`${BACKEND_URL}/api/civil/workitem-status/${data.workitem_id}`);
+                    const statusData = await statusRes.json();
+                    const status = String(statusData.status || '').toLowerCase();
+
+                    if (status === 'pending' || status === 'inprogress') {
+                        console.log(`[Sections] Polling ${pollCount} - Status: ${status}`);
+                        setTimeout(pollStatus, 3000);
+                        return;
+                    }
+
+                    if (status.startsWith('failed') || status === 'cancelled') {
+                        console.error('[Sections] WorkItem failed:', statusData);
+                        alert(`Extracción falló: ${statusData.status}`);
+                        return;
+                    }
+
+                    if (status === 'success') {
+                        console.log('[Sections] Éxito! Descargando JSON de secciones...');
+                        const resultParams = new URLSearchParams({
+                            workitem_id: data.workitem_id,
+                            object_name: data.result_object || ''
+                        });
+                        const jsonRes = await apiFetch(`${BACKEND_URL}/api/civil/alignment-result?${resultParams.toString()}`);
+                        if (!jsonRes.ok) {
+                            alert('Error al descargar el JSON de secciones.');
+                            return;
+                        }
+
+                        const sectionJSON = await jsonRes.json();
+                        console.log('[Sections] JSON RESULTANTE: ', sectionJSON);
+                        
+                        if (sectionJSON && sectionJSON.length > 0) {
+                            setSectionJSON(sectionJSON);
+                            setSectionIndex(0);
+                            alert(`¡Secciones descargadas correctamente!\nTotal de secciones: ${sectionJSON.length}`);
+                        } else {
+                            alert('La extracción devolvió un array vacío.');
+                        }
+                        
+                        return;
+                    }
+
+                } catch (err) {
+                    console.error('Error in polling status:', err);
+                }
+            };
+
+            setTimeout(pollStatus, 3000);
+
+        } catch (err) {
+            console.error('Error in section extraction test:', err);
+            alert('Error de red al intentar probar la extracción.');
         }
     };
 
@@ -831,6 +950,30 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
                     >
                         <DownloadIcon />
                         {isExtracting ? `${extractProgress}%` : 'Extraer'}
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={handleExtractSectionsTest}
+                        disabled={isExtracting}
+                        title="Probar Extracción de Secciones (Beta)"
+                        style={{
+                            height: 34,
+                            border: '1px solid #ffaa00',
+                            background: isExtracting ? '#3a3f47' : 'transparent',
+                            color: '#ffaa00',
+                            borderRadius: 4,
+                            padding: '0 10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 7,
+                            cursor: isExtracting ? 'wait' : 'pointer',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        Sec
                     </button>
 
                     {searchOpen && (
@@ -1140,7 +1283,42 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
                         </>
                     )}
                 </div>
+
+                {/* Visualizador de Secciones */}
+                {sectionJSON && sectionJSON.length > 0 && (
+                    <div style={{ marginTop: 20, marginBottom: 20 }}>
+                        <button
+                            onClick={() => setShowSectionViewer(true)}
+                            style={{
+                                width: '100%',
+                                padding: '10px',
+                                backgroundColor: '#10b981',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '4px',
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                gap: '8px'
+                            }}
+                        >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                            </svg>
+                            Abrir Visualizador 2D Interactivo
+                        </button>
+                    </div>
+                )}
             </div>
+            
+            {showSectionViewer && sectionJSON && (
+                <SectionViewer 
+                    sectionsData={sectionJSON} 
+                    onClose={() => setShowSectionViewer(false)} 
+                />
+            )}
         </div>
     );
 };

@@ -166,6 +166,9 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
     const [simPeriod, setSimPeriod] = useState(0);     // posición del timeline (0..maxPeriod, continuo)
     const [simPlaying, setSimPlaying] = useState(false);
     const [hud, setHud] = useState(HUD);
+    const [activeFrente, setActiveFrente] = useState(null); // frente del Excel (MAPEO_FRENTES); null = todos
+    const rectRafRef = useRef(null);                   // rAF del tracking del visor (sin lag)
+    const lastViewerSizeRef = useRef({ w: 0, h: 0 });
 
     const lobFrente = useMemo(
         () => modelFrontOf(models?.[0]) !== 'Frente actual'
@@ -214,7 +217,11 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
         if (!lobData) return;
         const current = Math.floor(simPeriod) + 1;           // periodo 1-based en curso
         const byCode = lobData.avance || {};
-        const partidas = lobData.partidas || [];
+        // FRENTE activo (del Excel MAPEO_FRENTES): filtra las partidas por prefijo
+        const codBases = activeFrente ? (lobData.frentes?.[activeFrente] || []) : null;
+        const partidas = (lobData.partidas || []).filter(
+            (p) => !codBases || codBases.some((cb) => String(p.codigo).startsWith(cb))
+        );
 
         const completedTasks = [];
         const activeTasks = [];
@@ -268,9 +275,9 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
         });
 
         window.dispatchEvent(new CustomEvent('lob-time-update', {
-            detail: { date: dateISO, tasks: activeTasks, completedTasks, plannedTasks, progress },
+            detail: { date: dateISO, tasks: activeTasks, completedTasks, plannedTasks, progress, frente: activeFrente },
         }));
-    }, [lobData, simPeriod]);
+    }, [lobData, simPeriod, activeFrente]);
 
     const availableModels = useMemo(() => {
         return (models || [])
@@ -301,6 +308,7 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
         return () => {
             if (pollRef.current) window.clearInterval(pollRef.current);
             if (rectTimerRef.current) window.clearInterval(rectTimerRef.current);
+            if (rectRafRef.current) window.cancelAnimationFrame(rectRafRef.current);
             // Limpiar theming 4D que la extensión del visor PRINCIPAL pudo aplicar
             // (también escucha 'lob-time-update' mientras está pausado).
             try { window.dispatchEvent(new CustomEvent('lob-clear')); } catch (e) { /* noop */ }
@@ -330,6 +338,58 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
             .catch((err) => { console.warn('[LOB4D] Excel EDT:', err); if (alive) setExcelInfo([]); });
         return () => { alive = false; };
     }, []);
+
+    // 2a EXPLORADOR EDT: tabla REAL cruzada (EDT ⨯ Metrados ⨯ Valorizaciones),
+    // filtrada por el frente activo. De aquí "se sirve" 1b (misma fuente lobData).
+    useEffect(() => {
+        if (!workspaceReady || !lobData) return;
+        const doc = iframeRef.current?.contentDocument;
+        const edt = doc?.getElementById('2a');
+        if (!doc || !edt) return;
+
+        doc.getElementById('lob-edt-data-status')?.remove();
+        doc.getElementById('lob-edt-cross')?.remove();
+
+        const codBases = activeFrente ? (lobData.frentes?.[activeFrente] || []) : null;
+        const partidas = (lobData.partidas || [])
+            .filter((p) => !codBases || codBases.some((cb) => String(p.codigo).startsWith(cb)));
+        const byCode = lobData.avance || {};
+        const fmt = (v, d = 2) => (v == null ? '—' : Number(v).toLocaleString('es-PE', { maximumFractionDigits: d }));
+
+        const rows = partidas.slice(0, 400).map((p) => {
+            const ejec = Object.values(byCode[p.codigo] || {}).reduce((a, b) => a + b, 0);
+            const pct = p.metrado > 0 ? Math.min(100, (ejec / p.metrado) * 100) : null;
+            return `<tr style="border-top:1px solid #1c1f25;">
+                <td style="padding:6px 8px;font-family:'IBM Plex Mono',monospace;color:#8ecbff;white-space:nowrap;">${p.codigo}</td>
+                <td style="padding:6px 8px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.descripcion || ''}">${p.descripcion || '—'}</td>
+                <td style="padding:6px 8px;color:#8a919c;">${p.unidad || ''}</td>
+                <td style="padding:6px 8px;text-align:right;">${fmt(p.metrado)}</td>
+                <td style="padding:6px 8px;text-align:right;color:#8a919c;">${fmt(p.duracion, 1)}</td>
+                <td style="padding:6px 8px;text-align:right;color:${pct == null ? '#5d6672' : pct >= 99.5 ? '#22c55e' : pct > 0 ? '#e0982a' : '#5d6672'};font-weight:700;">${pct == null ? '—' : fmt(pct, 1) + '%'}</td>
+            </tr>`;
+        }).join('');
+
+        const panel = doc.createElement('div');
+        panel.id = 'lob-edt-cross';
+        panel.style.cssText = 'margin-top:14px;background:#0e1014;border:1px solid #23262d;border-radius:10px;padding:14px 16px;font-family:Inter,system-ui,sans-serif;color:#d7dbe2;font-size:12px;';
+        panel.innerHTML = `
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#6b7280;font-weight:700;">EDT cruzado — Duraciones ⨯ Metrados ⨯ Valorizaciones</div>
+            <div style="margin-left:auto;font-family:'IBM Plex Mono',monospace;color:#8a919c;">${activeFrente || 'TODOS LOS FRENTES'} · ${partidas.length} partidas</div>
+          </div>
+          <div style="max-height:46vh;overflow:auto;border:1px solid #1c1f25;border-radius:8px;">
+            <table style="width:100%;border-collapse:collapse;">
+              <thead><tr style="position:sticky;top:0;background:#12151a;color:#6b7280;text-transform:uppercase;font-size:10px;letter-spacing:.08em;">
+                <th style="padding:8px;text-align:left;">EDT / Partida</th><th style="padding:8px;text-align:left;">Descripción</th>
+                <th style="padding:8px;text-align:left;">Und</th><th style="padding:8px;text-align:right;">Metrado</th>
+                <th style="padding:8px;text-align:right;">Duración (d)</th><th style="padding:8px;text-align:right;">Avance</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>`;
+        const inner = edt.querySelector('div[style*="height"]') || edt;
+        inner.appendChild(panel);
+    }, [workspaceReady, lobData, activeFrente]);
 
     const updateViewerRect = useCallback((iframe, frame) => {
         const iframeBox = iframe.getBoundingClientRect();
@@ -394,6 +454,7 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
     const showOnlyWorkspace = useCallback((iframe) => {
         if (pollRef.current) window.clearInterval(pollRef.current);
         if (rectTimerRef.current) window.clearInterval(rectTimerRef.current);
+        if (rectRafRef.current) window.cancelAnimationFrame(rectRafRef.current);
         setWorkspaceReady(false);
         setViewerRect(null);
         let attempts = 0;
@@ -500,12 +561,22 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
                 wireStandaloneControls(doc);
                 setWorkspaceReady(true);
 
-                rectTimerRef.current = window.setInterval(() => {
-                    fitWorkspace();
-                    wireStandaloneControls(doc);
-                    const currentFrame = findViewerFrame(doc);
-                    if (currentFrame) updateViewerRect(iframe, currentFrame);
-                }, 350);
+                // Tracking del área "VISTA 3D" por rAF (cada frame) con frame CACHEADO:
+                // el visor sigue al layout sin el lag/flotado del polling de 350ms.
+                if (rectRafRef.current) window.cancelAnimationFrame(rectRafRef.current);
+                let cachedFrame = null;
+                let tickCount = 0;
+                const track = () => {
+                    tickCount += 1;
+                    if (!cachedFrame || !cachedFrame.isConnected || tickCount % 45 === 0) {
+                        cachedFrame = findViewerFrame(doc);
+                        fitWorkspace();
+                        wireStandaloneControls(doc);
+                    }
+                    if (cachedFrame) updateViewerRect(iframe, cachedFrame);
+                    rectRafRef.current = window.requestAnimationFrame(track);
+                };
+                rectRafRef.current = window.requestAnimationFrame(track);
 
                 window.setTimeout(fitWorkspace, 250);
                 window.setTimeout(fitWorkspace, 900);
@@ -564,7 +635,19 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
                 try { viewer.fitToView(); } catch (e) { /* noop */ }
                 // Motor 4D en ESTE visor: la extensión escucha 'lob-time-update' y
                 // colorea POR ELEMENTO (índice por CodigoDePartida/ActivityID).
-                try { await viewer.loadExtension('LOB4DExtension'); } catch (e) { console.warn('[LOB4D] ext:', e); }
+                try {
+                    const ext = await viewer.loadExtension('LOB4DExtension');
+                    // Reconocer lo activado en CIVIL: si hay eje/progresivas seleccionados
+                    // (sesión o persistencia), dibujarlos también en el visor 4D.
+                    const session = window.__civilToolsSession;
+                    const rec = session?.records?.[session?.lastKey];
+                    const civilData = rec?.alignmentData?.length ? rec.alignmentData : window.__lobCivilAlignments;
+                    const civilSel = rec?.selectedAlignmentId || (civilData?.[0]?.alignmentId);
+                    if (ext && civilData?.length && civilSel) {
+                        ext.setStationAnnotationsVisible?.(rec?.stationLabelsVisible ?? true);
+                        ext.bakeAlignment(civilData, civilSel);
+                    }
+                } catch (e) { console.warn('[LOB4D] ext:', e); }
                 setViewerStatus(`${configs.length} modelo${configs.length === 1 ? '' : 's'} cargado${configs.length === 1 ? '' : 's'} en 4D LOB.`);
             } catch (err) {
                 console.error('[LOB4D] Viewer load:', err);
@@ -575,6 +658,12 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
     }, [models, viewerRect, activeViewableGuids, selectedUrns]);
 
     useEffect(() => {
+        // resize() del visor SOLO cuando cambia el tamaño (no en cada movimiento):
+        // re-layout del canvas en cada frame causaba el "flotado"/lag.
+        if (!viewerRect) return;
+        const last = lastViewerSizeRef.current;
+        if (Math.abs(last.w - viewerRect.width) < 2 && Math.abs(last.h - viewerRect.height) < 2) return;
+        lastViewerSizeRef.current = { w: viewerRect.width, h: viewerRect.height };
         try { lobViewerRef.current?.resize?.(); } catch (e) { /* noop */ }
     }, [viewerRect]);
 
@@ -587,6 +676,21 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
 
     const selectFront = (front) => {
         setSelectedUrns(front.items.map((model) => model._lobUrn));
+        setPickerMode(null);
+    };
+
+    // Frentes REALES del Excel (MAPEO_FRENTES). Elegir uno filtra la simulación,
+    // el EDT y los datos de todas las pestañas; además auto-selecciona los modelos
+    // cuyo frente de app coincide por tokens (ej. 'DRENAJE URBANO' ↔ 'DRENAJE_URBANO').
+    const excelFronts = useMemo(() => Object.keys(lobData?.frentes || {}), [lobData]);
+    const selectExcelFront = (name) => {
+        setActiveFrente((prev) => (prev === name ? null : name));
+        const tokens = String(name).toUpperCase().split(/[^A-ZÑ0-9]+/).filter((t) => t.length >= 4);
+        const matched = availableModels.filter((m) => {
+            const hay = `${m._lobFront} ${m._lobLabel}`.toUpperCase();
+            return tokens.some((t) => hay.includes(t));
+        });
+        if (matched.length) setSelectedUrns(matched.map((m) => m._lobUrn));
         setPickerMode(null);
     };
 
@@ -700,7 +804,49 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
                         </div>
 
                         <div style={{ padding: 18, maxHeight: '55vh', overflow: 'auto' }}>
-                            {pickerMode === 'fronts' ? (
+                            {pickerMode === 'fronts' && excelFronts.length > 0 ? (
+                                <div style={{ display: 'grid', gap: 10 }}>
+                                    <div style={{ fontSize: 11, color: '#8a919c', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                                        Frentes del cronograma (Excel)
+                                    </div>
+                                    {excelFronts.map((name) => {
+                                        const active = activeFrente === name;
+                                        const nCods = (lobData?.frentes?.[name] || []).length;
+                                        return (
+                                            <button
+                                                key={name}
+                                                type="button"
+                                                onClick={() => selectExcelFront(name)}
+                                                style={{
+                                                    display: 'grid',
+                                                    gridTemplateColumns: '1fr auto',
+                                                    gap: 12,
+                                                    alignItems: 'center',
+                                                    textAlign: 'left',
+                                                    padding: '12px 14px',
+                                                    borderRadius: 8,
+                                                    border: active ? '1px solid #3aa0ff' : '1px solid rgba(255,255,255,0.09)',
+                                                    background: active ? 'rgba(58,160,255,0.16)' : '#1b2027',
+                                                    color: '#d7dbe2',
+                                                    cursor: 'pointer',
+                                                }}
+                                            >
+                                                <span style={{ fontWeight: 800 }}>{name}{active ? ' ✓' : ''}</span>
+                                                <span style={{ color: '#8a919c', fontSize: 12 }}>{nCods} códigos EDT</span>
+                                            </button>
+                                        );
+                                    })}
+                                    {activeFrente && (
+                                        <button
+                                            type="button"
+                                            onClick={() => { setActiveFrente(null); setPickerMode(null); }}
+                                            style={{ border: '1px dashed rgba(255,255,255,0.2)', background: 'transparent', color: '#8a919c', borderRadius: 8, padding: '10px 14px', cursor: 'pointer' }}
+                                        >
+                                            Quitar filtro de frente (ver todo)
+                                        </button>
+                                    )}
+                                </div>
+                            ) : pickerMode === 'fronts' ? (
                                 <div style={{ display: 'grid', gap: 10 }}>
                                     {availableFronts.map((front) => {
                                         const activeCount = front.items.filter((model) => selectedUrns.includes(model._lobUrn)).length;

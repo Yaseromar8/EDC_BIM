@@ -785,6 +785,8 @@ from routes.inventory import ensure_extraction_jobs_table, ensure_inventory_iden
 ensure_extraction_jobs_table()
 ensure_inventory_identity()  # identidad (model_urn, external_id): duplicados imposibles por diseño
 ensure_lob4d_tables()  # LOB 4D: cronograma/metrados por frente (fuente de verdad del 4D)
+from routes.civil_design_automation import ensure_civil_alignments_table
+ensure_civil_alignments_table()  # extracciones civiles persistentes (solo re-extraer explícito)
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()
