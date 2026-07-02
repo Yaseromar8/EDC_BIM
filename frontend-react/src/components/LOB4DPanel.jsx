@@ -186,16 +186,47 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
         return max;
     }, [lobData]);
 
-    // Cargar timeline del backend (fuente de verdad: Excel parseados en Postgres)
+    // Cargar timeline del backend. Si el frente aún no tiene datos, AUTO-IMPORTA
+    // los Excel (servidos en /lob-data) al backend — cero pasos manuales/curl.
     useEffect(() => {
         let alive = true;
-        apiFetch(`${BACKEND_URL}/api/lob/timeline?model_urn=${encodeURIComponent(lobFrente)}`)
-            .then((r) => r.json())
-            .then((d) => {
-                if (!alive || d.error) return;
-                if ((d.partidas || []).length) setLobData(d);
-            })
-            .catch((e) => console.warn('[LOB4D] timeline:', e));
+        const fetchTimeline = async () => {
+            const r = await apiFetch(`${BACKEND_URL}/api/lob/timeline?model_urn=${encodeURIComponent(lobFrente)}`);
+            if (!r.ok) return null;
+            const d = await r.json();
+            return (d && !d.error && (d.partidas || []).length) ? d : null;
+        };
+        (async () => {
+            try {
+                let d = await fetchTimeline();
+                if (!d && alive) {
+                    setViewerStatus('Importando cronograma 4D (Excel → backend)…');
+                    const [durB, metB] = await Promise.all(LOB_DATA_FILES.map(
+                        (u) => fetch(u).then((r) => (r.ok ? r.blob() : null)).catch(() => null)
+                    ));
+                    if (durB || metB) {
+                        const fd = new FormData();
+                        fd.append('model_urn', lobFrente);
+                        if (durB) fd.append('duraciones', new File([durB], 'duraciones.xlsm'));
+                        if (metB) fd.append('metrados', new File([metB], 'metrados.xlsx'));
+                        const ir = await apiFetch(`${BACKEND_URL}/api/lob/import`, { method: 'POST', body: fd, isUpload: true });
+                        const ij = await ir.json().catch(() => ({}));
+                        if (!ir.ok) throw new Error(ij.error || 'Import de cronograma falló');
+                        d = await fetchTimeline();
+                    }
+                }
+                if (!alive) return;
+                if (d) {
+                    setLobData(d);
+                    setViewerStatus(`Cronograma 4D listo: ${d.partidas.length} partidas · ${Object.keys(d.frentes || {}).length} frentes Excel`);
+                } else {
+                    setViewerStatus('4D sin datos: el backend no tiene /api/lob (¿reiniciado?) o el import falló.');
+                }
+            } catch (e) {
+                console.warn('[LOB4D] timeline/import:', e);
+                if (alive) setViewerStatus('4D sin datos: reinicia el backend (rutas /api/lob nuevas).');
+            }
+        })();
         return () => { alive = false; };
     }, [lobFrente]);
 
