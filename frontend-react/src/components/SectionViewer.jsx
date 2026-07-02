@@ -148,7 +148,7 @@ function computeVolumes(stations) {
     return materials;
 }
 
-const SectionViewer = ({ sectionsData, onClose }) => {
+const SectionViewer = ({ sectionsData, onClose, onGoToStation }) => {
     const stations = useMemo(() => normalizeStations(sectionsData), [sectionsData]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [hidden, setHidden] = useState(() => new Set());
@@ -359,6 +359,15 @@ const SectionViewer = ({ sectionsData, onClose }) => {
                         <button onClick={() => setMode('seccion')} style={btn(mode === 'seccion')}>Sección</button>
                         {volumes.length > 0 && (
                             <button onClick={() => setMode('volumenes')} style={btn(mode === 'volumenes')}>Cuadro de volúmenes</button>
+                        )}
+                        {onGoToStation && station?.station != null && (
+                            <button
+                                onClick={() => onGoToStation(station.alignmentId, station.station)}
+                                style={btn(true)}
+                                title="Volar la cámara del modelo 3D hasta esta progresiva"
+                            >
+                                ◎ Ver en el modelo
+                            </button>
                         )}
                         <button onClick={() => setView(null)} style={btn(false)} title="Re-encuadrar">⤢ Encuadrar</button>
                         <button onClick={onClose} style={btn(false)}>✕ Cerrar</button>

@@ -1976,6 +1976,33 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         }
     }
 
+    // Vuela la cámara hasta la progresiva pk del alineamiento (para "ver en el
+    // modelo" desde el visualizador 2D de secciones). Mantiene la dirección de
+    // vista actual y acerca el objetivo al punto del eje.
+    flyToStation(alignmentData, pk) {
+        const THREE = window.THREE;
+        if (!THREE || !this.viewer || !alignmentData) return false;
+        const model = this.getModelForCoordinates();
+        const civilPoint = this.pointAtStation(alignmentData, pk);
+        const target = this.civilToViewerPoint(civilPoint, model);
+        if (!target) return false;
+
+        const nav = this.viewer.navigation;
+        const cam = this.viewer.impl.camera;
+        const dir = new THREE.Vector3().subVectors(cam.position, cam.target);
+        const currentDist = dir.length() || 100;
+        dir.normalize();
+        // distancia cómoda: ni encima ni lejísimos
+        const distance = Math.min(Math.max(currentDist * 0.45, 25), 220);
+        const newPos = target.clone().add(dir.multiplyScalar(distance));
+
+        nav.setView(newPos, target);
+        nav.setPivotPoint(target);
+        try { this.setStation(pk); } catch (e) { /* marcador opcional */ }
+        this.viewer.impl.invalidate(true, true, true);
+        return true;
+    }
+
     simulatePK(alignmentData, pk) {
         if (!this.viewer || !alignmentData || !alignmentData.subEntities) return;
 

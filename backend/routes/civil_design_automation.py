@@ -424,10 +424,60 @@ def ensure_civil_alignments_table():
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_civil_alignments_model ON civil_alignments(model_urn)")
+            # Secciones transversales: mismo patrón (permanente hasta re-extraer)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS civil_sections (
+                    urn        TEXT PRIMARY KEY,
+                    model_urn  TEXT,
+                    data       JSONB NOT NULL,
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )""")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_civil_sections_model ON civil_sections(model_urn)")
             conn.commit()
-            print("[civil] Tabla civil_alignments lista.")
+            print("[civil] Tablas civil_alignments y civil_sections listas.")
     except Exception as e:
         print(f"[civil] ensure_civil_alignments_table: {e}")
+
+
+@civil_da_bp.route('/api/civil/sections', methods=['GET', 'POST'])
+def civil_sections():
+    """Persistencia de secciones extraídas. GET ?urn= → JSON guardado.
+    POST {urn, model_urn, data} → guarda/reemplaza (solo al re-extraer)."""
+    import json as _json
+    try:
+        from db import get_db_connection
+        if request.method == 'GET':
+            urn = request.args.get('urn')
+            if not urn:
+                return jsonify({'error': 'Falta urn'}), 400
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT data, updated_at::text FROM civil_sections WHERE urn = %s", (urn,))
+                row = cur.fetchone()
+                if not row:
+                    return jsonify({'found': False}), 200
+                return jsonify({'found': True, 'data': row[0], 'updated_at': row[1]}), 200
+
+        payload = request.get_json() or {}
+        urn = payload.get('urn')
+        data = payload.get('data')
+        if not urn or data is None:
+            return jsonify({'error': 'Faltan urn o data'}), 400
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO civil_sections (urn, model_urn, data, updated_at)
+                VALUES (%s, %s, %s::jsonb, NOW())
+                ON CONFLICT (urn) DO UPDATE SET
+                    model_urn = EXCLUDED.model_urn,
+                    data = EXCLUDED.data,
+                    updated_at = NOW()""",
+                (urn, payload.get('model_urn'), _json.dumps(data)))
+            conn.commit()
+        return jsonify({'status': 'ok'}), 200
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 @civil_da_bp.route('/api/civil/alignments', methods=['GET', 'POST'])
