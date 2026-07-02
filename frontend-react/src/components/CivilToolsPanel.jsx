@@ -817,13 +817,19 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
 
                         const sectionJSON = await jsonRes.json();
                         console.log('[Sections] JSON RESULTANTE: ', sectionJSON);
-                        
-                        if (sectionJSON && sectionJSON.length > 0) {
+
+                        // v1 = array de estaciones; v2 = { schemaVersion: 2, stations: [...], warnings: [...] }
+                        const stationCount = Array.isArray(sectionJSON)
+                            ? sectionJSON.length
+                            : (sectionJSON?.stations?.length || 0);
+                        if (stationCount > 0) {
                             setSectionJSON(sectionJSON);
                             setSectionIndex(0);
-                            alert(`¡Secciones descargadas correctamente!\nTotal de secciones: ${sectionJSON.length}`);
+                            const warns = (!Array.isArray(sectionJSON) && sectionJSON.warnings?.length)
+                                ? `\nAvisos del extractor: ${sectionJSON.warnings.length}` : '';
+                            alert(`¡Secciones descargadas correctamente!\nTotal de estaciones: ${stationCount}${warns}`);
                         } else {
-                            alert('La extracción devolvió un array vacío.');
+                            alert('La extracción devolvió un resultado vacío.');
                         }
                         
                         return;
@@ -1285,7 +1291,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
                 </div>
 
                 {/* Visualizador de Secciones */}
-                {sectionJSON && sectionJSON.length > 0 && (
+                {sectionJSON && ((Array.isArray(sectionJSON) && sectionJSON.length > 0) || sectionJSON.stations?.length > 0) && (
                     <div style={{ marginTop: 20, marginBottom: 20 }}>
                         <button
                             onClick={() => setShowSectionViewer(true)}
