@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx';
 import { loadAlignedModels } from '../aps/utils/loadAlignedModels';
 import { apiFetch } from '../utils/apiFetch';
+import { renderEdtExplorer } from './lobEdtExplorer';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || (
     typeof window !== 'undefined' && window.location.hostname === 'localhost'
@@ -199,16 +200,20 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
         (async () => {
             try {
                 let d = await fetchTimeline();
-                if (!d && alive) {
-                    setViewerStatus('Importando cronograma 4D (Excel → backend)…');
-                    const [durB, metB] = await Promise.all(LOB_DATA_FILES.map(
-                        (u) => fetch(u).then((r) => (r.ok ? r.blob() : null)).catch(() => null)
-                    ));
-                    if (durB || metB) {
+                // re-importar también si aún no hay fechas P6 (import viejo sin XML)
+                const needsImport = !d || !Object.keys(d.activities || {}).length;
+                if (needsImport && alive) {
+                    setViewerStatus('Importando cronograma 4D (Excel + P6 → backend)…');
+                    const [durB, metB, xmlB] = await Promise.all([
+                        ...LOB_DATA_FILES.map((u) => fetch(u).then((r) => (r.ok ? r.blob() : null)).catch(() => null)),
+                        fetch('/lob-data/cronograma_p6.xml').then((r) => (r.ok ? r.blob() : null)).catch(() => null),
+                    ]);
+                    if (durB || metB || xmlB) {
                         const fd = new FormData();
                         fd.append('model_urn', lobFrente);
                         if (durB) fd.append('duraciones', new File([durB], 'duraciones.xlsm'));
                         if (metB) fd.append('metrados', new File([metB], 'metrados.xlsx'));
+                        if (xmlB) fd.append('cronograma', new File([xmlB], 'cronograma_p6.xml'));
                         const ir = await apiFetch(`${BACKEND_URL}/api/lob/import`, { method: 'POST', body: fd, isUpload: true });
                         const ij = await ir.json().catch(() => ({}));
                         if (!ir.ok) throw new Error(ij.error || 'Import de cronograma falló');
@@ -218,7 +223,7 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
                 if (!alive) return;
                 if (d) {
                     setLobData(d);
-                    setViewerStatus(`Cronograma 4D listo: ${d.partidas.length} partidas · ${Object.keys(d.frentes || {}).length} frentes Excel`);
+                    setViewerStatus(`Cronograma 4D listo: ${d.partidas.length} partidas · ${Object.keys(d.activities || {}).length} fechas P6 · ${Object.keys(d.frentes || {}).length} frentes`);
                 } else {
                     setViewerStatus('4D sin datos: el backend no tiene /api/lob (¿reiniciado?) o el import falló.');
                 }
@@ -370,56 +375,16 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
         return () => { alive = false; };
     }, []);
 
-    // 2a EXPLORADOR EDT: tabla REAL cruzada (EDT ⨯ Metrados ⨯ Valorizaciones),
-    // filtrada por el frente activo. De aquí "se sirve" 1b (misma fuente lobData).
+    // 2a EXPLORADOR EDT dinámico: árbol jerárquico + KPIs + detalle con el cruce
+    // completo (Metrados ⨯ Valorizaciones ⨯ Cronograma P6). Ver lobEdtExplorer.js.
     useEffect(() => {
         if (!workspaceReady || !lobData) return;
         const doc = iframeRef.current?.contentDocument;
-        const edt = doc?.getElementById('2a');
-        if (!doc || !edt) return;
-
+        if (!doc) return;
         doc.getElementById('lob-edt-data-status')?.remove();
         doc.getElementById('lob-edt-cross')?.remove();
-
-        const codBases = activeFrente ? (lobData.frentes?.[activeFrente] || []) : null;
-        const partidas = (lobData.partidas || [])
-            .filter((p) => !codBases || codBases.some((cb) => String(p.codigo).startsWith(cb)));
-        const byCode = lobData.avance || {};
-        const fmt = (v, d = 2) => (v == null ? '—' : Number(v).toLocaleString('es-PE', { maximumFractionDigits: d }));
-
-        const rows = partidas.slice(0, 400).map((p) => {
-            const ejec = Object.values(byCode[p.codigo] || {}).reduce((a, b) => a + b, 0);
-            const pct = p.metrado > 0 ? Math.min(100, (ejec / p.metrado) * 100) : null;
-            return `<tr style="border-top:1px solid #1c1f25;">
-                <td style="padding:6px 8px;font-family:'IBM Plex Mono',monospace;color:#8ecbff;white-space:nowrap;">${p.codigo}</td>
-                <td style="padding:6px 8px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.descripcion || ''}">${p.descripcion || '—'}</td>
-                <td style="padding:6px 8px;color:#8a919c;">${p.unidad || ''}</td>
-                <td style="padding:6px 8px;text-align:right;">${fmt(p.metrado)}</td>
-                <td style="padding:6px 8px;text-align:right;color:#8a919c;">${fmt(p.duracion, 1)}</td>
-                <td style="padding:6px 8px;text-align:right;color:${pct == null ? '#5d6672' : pct >= 99.5 ? '#22c55e' : pct > 0 ? '#e0982a' : '#5d6672'};font-weight:700;">${pct == null ? '—' : fmt(pct, 1) + '%'}</td>
-            </tr>`;
-        }).join('');
-
-        const panel = doc.createElement('div');
-        panel.id = 'lob-edt-cross';
-        panel.style.cssText = 'margin-top:14px;background:#0e1014;border:1px solid #23262d;border-radius:10px;padding:14px 16px;font-family:Inter,system-ui,sans-serif;color:#d7dbe2;font-size:12px;';
-        panel.innerHTML = `
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-            <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#6b7280;font-weight:700;">EDT cruzado — Duraciones ⨯ Metrados ⨯ Valorizaciones</div>
-            <div style="margin-left:auto;font-family:'IBM Plex Mono',monospace;color:#8a919c;">${activeFrente || 'TODOS LOS FRENTES'} · ${partidas.length} partidas</div>
-          </div>
-          <div style="max-height:46vh;overflow:auto;border:1px solid #1c1f25;border-radius:8px;">
-            <table style="width:100%;border-collapse:collapse;">
-              <thead><tr style="position:sticky;top:0;background:#12151a;color:#6b7280;text-transform:uppercase;font-size:10px;letter-spacing:.08em;">
-                <th style="padding:8px;text-align:left;">EDT / Partida</th><th style="padding:8px;text-align:left;">Descripción</th>
-                <th style="padding:8px;text-align:left;">Und</th><th style="padding:8px;text-align:right;">Metrado</th>
-                <th style="padding:8px;text-align:right;">Duración (d)</th><th style="padding:8px;text-align:right;">Avance</th>
-              </tr></thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </div>`;
-        const inner = edt.querySelector('div[style*="height"]') || edt;
-        inner.appendChild(panel);
+        if (doc.__edtState) doc.__edtState.inited = doc.__edtState.inited && true;
+        try { renderEdtExplorer(doc, lobData, activeFrente); } catch (e) { console.warn('[LOB4D] EDT explorer:', e); }
     }, [workspaceReady, lobData, activeFrente]);
 
     const updateViewerRect = useCallback((iframe, frame) => {

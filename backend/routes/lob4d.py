@@ -72,6 +72,22 @@ def ensure_lob4d_tables():
                     dias_por_periodo INTEGER DEFAULT 30,
                     updated_at       TIMESTAMP DEFAULT NOW()
                 )""")
+            # Fechas REALES por actividad (XML de Primavera P6): la llave activity_id
+            # une P6 ↔ EDT (col W) ↔ elementos BIM (propiedad ActivityID/Partida).
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS lob_activities (
+                    model_urn    TEXT NOT NULL,
+                    activity_id  TEXT NOT NULL,
+                    nombre       TEXT,
+                    start_date   DATE,
+                    finish_date  DATE,
+                    percent      DOUBLE PRECISION,
+                    status       TEXT,
+                    PRIMARY KEY (model_urn, activity_id)
+                )""")
+            # 'titulo' = filas agrupadoras de CONTROL_OBRA: dan nombre a los niveles
+            # del árbol EDT (05, 05.03, 05.03.02…)
+            cur.execute("ALTER TABLE lob_partidas ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT 'partida'")
             conn.commit()
             print("[lob4d] Tablas LOB listas.")
     except Exception as e:
@@ -126,15 +142,20 @@ def parse_duraciones(file_bytes):
 
 
 def parse_metrados(file_bytes):
-    """CONTROL_OBRA + VALORIZACIONES + MAPEO_FRENTES → metrados reales, avance y mapeo."""
+    """CONTROL_OBRA + VALORIZACIONES + MAPEO_FRENTES → metrados reales, avance,
+    mapeo de frentes y TÍTULOS (nombres de los niveles del árbol EDT)."""
     import openpyxl
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
 
     control = {}
+    titulos = {}
     if 'CONTROL_OBRA' in wb.sheetnames:
         for row in wb['CONTROL_OBRA'].iter_rows(min_row=2, max_col=9, values_only=True):
             codigo, tipo = _txt(row[0]), _txt(row[1])
-            if not codigo or (tipo and tipo.upper() == 'TITULO'):
+            if not codigo:
+                continue
+            if tipo and tipo.upper() == 'TITULO':
+                titulos[codigo] = _txt(row[2])
                 continue
             control[codigo] = {
                 'descripcion': _txt(row[2]),
@@ -167,7 +188,30 @@ def parse_metrados(file_bytes):
                 frentes.append({'frente': frente, 'cod_base': cod})
 
     wb.close()
-    return {'control': control, 'avance': avance, 'frentes': frentes}
+    return {'control': control, 'avance': avance, 'frentes': frentes, 'titulos': titulos}
+
+
+def parse_p6_xml(file_stream):
+    """XML de Primavera P6 (API BusinessObjects) → fechas reales por Activity Id.
+    Streaming (iterparse): el export pesa ~85 MB; nunca se carga entero en RAM."""
+    import xml.etree.ElementTree as ET
+    NS = '{http://xmlns.oracle.com/Primavera/P6Professional/V23.12/API/BusinessObjects}'
+    acts = {}
+    for _, elem in ET.iterparse(file_stream, events=('end',)):
+        if elem.tag != f'{NS}Activity':
+            continue
+        get = lambda name: (elem.findtext(f'{NS}{name}') or '').strip() or None
+        act_id = get('Id')
+        if act_id:
+            acts[act_id] = {
+                'nombre': get('Name'),
+                'start': (get('StartDate') or '')[:10] or None,
+                'finish': (get('FinishDate') or '')[:10] or None,
+                'percent': float(get('PercentComplete') or 0),
+                'status': get('Status'),
+            }
+        elem.clear()  # liberar memoria del subárbol ya procesado
+    return acts
 
 
 # ─────────────────────────── Endpoints ───────────────────────────
@@ -184,11 +228,13 @@ def lob_import():
 
         f_dur = request.files.get('duraciones')
         f_met = request.files.get('metrados')
-        if not f_dur and not f_met:
-            return jsonify({'error': 'Adjunta al menos un archivo (duraciones o metrados).'}), 400
+        f_xml = request.files.get('cronograma')
+        if not f_dur and not f_met and not f_xml:
+            return jsonify({'error': 'Adjunta al menos un archivo (duraciones, metrados o cronograma).'}), 400
 
         partidas = parse_duraciones(f_dur.read()) if f_dur else []
-        met = parse_metrados(f_met.read()) if f_met else {'control': {}, 'avance': {}, 'frentes': []}
+        met = parse_metrados(f_met.read()) if f_met else {'control': {}, 'avance': {}, 'frentes': [], 'titulos': {}}
+        activities = parse_p6_xml(f_xml.stream) if f_xml else {}
 
         # merge: CONTROL_OBRA manda en metrado/pu (replanteado real)
         by_code = {p['codigo']: p for p in partidas}
@@ -213,16 +259,35 @@ def lob_import():
             cur.execute("DELETE FROM lob_partidas WHERE model_urn = %s", (model_urn,))
             cur.execute("DELETE FROM lob_avance WHERE model_urn = %s", (model_urn,))
             cur.execute("DELETE FROM lob_frentes WHERE model_urn = %s", (model_urn,))
+            if activities:
+                cur.execute("DELETE FROM lob_activities WHERE model_urn = %s", (model_urn,))
 
             if by_code:
                 execute_values(cur, """
                     INSERT INTO lob_partidas (model_urn, codigo, descripcion, unidad, metrado,
-                        pu, rendimiento, duracion, activity_id, frente_label, orden, updated_at)
+                        pu, rendimiento, duracion, activity_id, frente_label, orden, tipo, updated_at)
                     VALUES %s""",
                     [(model_urn, p['codigo'], p['descripcion'], p['unidad'], p['metrado'],
                       p['pu'], p['rendimiento'], p['duracion'], p['activity_id'],
-                      p['frente_label'], p['orden'], None) for p in by_code.values()],
-                    template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())")
+                      p['frente_label'], p['orden'], 'partida') for p in by_code.values()],
+                    template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())")
+
+            # Títulos: nombres de los niveles del árbol EDT (sin metrado)
+            titulos = {c: d for c, d in (met.get('titulos') or {}).items() if c not in by_code}
+            if titulos:
+                execute_values(cur, """
+                    INSERT INTO lob_partidas (model_urn, codigo, descripcion, tipo, updated_at)
+                    VALUES %s""",
+                    [(model_urn, c, d, 'titulo') for c, d in titulos.items()],
+                    template="(%s,%s,%s,%s,NOW())")
+
+            if activities:
+                execute_values(cur, """
+                    INSERT INTO lob_activities (model_urn, activity_id, nombre, start_date,
+                        finish_date, percent, status)
+                    VALUES %s""",
+                    [(model_urn, aid, a['nombre'], a['start'], a['finish'], a['percent'], a['status'])
+                     for aid, a in activities.items()])
 
             rows_avance = [(model_urn, codigo, per, val)
                            for codigo, periodos in met['avance'].items()
@@ -245,6 +310,8 @@ def lob_import():
         return jsonify({
             'status': 'ok',
             'partidas': len(by_code),
+            'titulos': len(met.get('titulos') or {}),
+            'actividades_p6': len(activities),
             'partidas_con_avance': len(met['avance']),
             'frentes_mapeados': len(met['frentes']),
         }), 200
@@ -275,7 +342,7 @@ def lob_timeline():
                       'dias_por_periodo': (row[1] if row else None) or 30}
 
             q = """SELECT codigo, descripcion, unidad, metrado, pu, rendimiento,
-                          duracion, activity_id, frente_label, orden
+                          duracion, activity_id, frente_label, orden, tipo
                    FROM lob_partidas WHERE model_urn = %s"""
             params = [model_urn]
             if prefix:
@@ -286,8 +353,15 @@ def lob_timeline():
             partidas = [{
                 'codigo': r[0], 'descripcion': r[1], 'unidad': r[2], 'metrado': r[3],
                 'pu': r[4], 'rendimiento': r[5], 'duracion': r[6], 'activity_id': r[7],
-                'frente_label': r[8], 'orden': r[9],
+                'frente_label': r[8], 'orden': r[9], 'tipo': r[10] or 'partida',
             } for r in cur.fetchall()]
+
+            # Fechas reales del P6 por activity_id (para cruce en el EDT/gantt)
+            cur.execute("""
+                SELECT activity_id, start_date::text, finish_date::text, percent, status
+                FROM lob_activities WHERE model_urn = %s""", (model_urn,))
+            activities = {r[0]: {'start': r[1], 'finish': r[2], 'percent': r[3], 'status': r[4]}
+                          for r in cur.fetchall()}
 
             cur.execute("""
                 SELECT codigo, periodo, metrado_ejec FROM lob_avance
@@ -304,7 +378,8 @@ def lob_timeline():
                 frentes.setdefault(frente, []).append(cod)
 
         return jsonify({'config': config, 'partidas': partidas,
-                        'avance': avance, 'frentes': frentes}), 200
+                        'avance': avance, 'frentes': frentes,
+                        'activities': activities}), 200
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
