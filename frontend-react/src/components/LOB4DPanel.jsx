@@ -168,10 +168,10 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
     const [hud, setHud] = useState(HUD);
 
     const lobFrente = useMemo(
-        () => availableModels[0]?._lobFront && availableModels[0]._lobFront !== 'Frente actual'
-            ? availableModels[0]._lobFront
-            : (models[0]?.appProjectId || 'global'),
-        [availableModels, models]
+        () => modelFrontOf(models?.[0]) !== 'Frente actual'
+            ? modelFrontOf(models?.[0])
+            : 'global',
+        [models]
     );
 
     const maxPeriod = useMemo(() => {
