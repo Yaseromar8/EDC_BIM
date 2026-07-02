@@ -295,6 +295,190 @@ export const statusColor = (status) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// TIMELAPSE POR CALENDARIO REAL (fechas P6) — reemplaza el scrub por VAL cuando
+// hay cronograma vinculado. Clasificación por fecha: done (fin pasado),
+// executing (en ventana), planned (futuro). El % del anillo = avance PROGRAMADO
+// a la fecha (construcción simulada), ponderado por costo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getScheduleDomain = (lobData, activeFrente) => {
+    const activities = lobData?.activities || {};
+    let min = Infinity;
+    let max = -Infinity;
+    getFilteredPartidas(lobData, activeFrente).forEach((p) => {
+        const act = p.activity_id ? activities[p.activity_id] : null;
+        if (!act?.start || !act?.finish) return;
+        const s = Date.parse(`${String(act.start).slice(0, 10)}T00:00:00`);
+        const f = Date.parse(`${String(act.finish).slice(0, 10)}T00:00:00`);
+        if (Number.isFinite(s)) min = Math.min(min, s);
+        if (Number.isFinite(f)) max = Math.max(max, f);
+    });
+    return Number.isFinite(min) && max > min ? { min, max } : null;
+};
+
+export const computeSimulationStateByDate = (lobData, activeFrente, atMs) => {
+    const DAY = 86400000;
+    const activities = lobData?.activities || {};
+    const avance = lobData?.avance || {};
+    const partidas = getFilteredPartidas(lobData, activeFrente);
+
+    const completedTasks = [];
+    const activeTasks = [];
+    const plannedTasks = [];
+    const taskRows = [];
+    let pv = 0;
+    let totalConFechas = 0;
+
+    partidas.forEach((partida) => {
+        const metrado = Number(partida.metrado || 0);
+        const pu = Number(partida.pu || 0);
+        const cost = metrado * pu;
+        const ejecutado = Object.values(avance[partida.codigo] || {})
+            .reduce((acc, val) => acc + Number(val || 0), 0);
+        const realPct = metrado > 0 ? Math.min(100, (ejecutado / metrado) * 100) : 0;
+
+        const act = partida.activity_id ? activities[partida.activity_id] : null;
+        const start = act?.start ? Date.parse(`${String(act.start).slice(0, 10)}T00:00:00`) : null;
+        const finish = act?.finish ? Date.parse(`${String(act.finish).slice(0, 10)}T00:00:00`) : null;
+
+        let status = 'pending';
+        let plannedPct = 0;
+        if (start != null && finish != null) {
+            plannedPct = atMs <= start ? 0 : atMs >= finish ? 100
+                : ((atMs - start) / Math.max(DAY, finish - start)) * 100;
+            if (cost > 0) { totalConFechas += cost; pv += cost * (plannedPct / 100); }
+            if (atMs >= finish) status = 'done';
+            else if (atMs >= start) status = 'executing';
+            else status = 'planned';
+        } else if (realPct >= 99.5) {
+            status = 'done';
+        }
+
+        const task = {
+            id: partida.activity_id,
+            activityId: partida.activity_id,
+            code: partida.codigo,
+            codigo: partida.codigo,
+        };
+        if (status === 'done') completedTasks.push(task);
+        if (status === 'executing') activeTasks.push(task);
+        if (status === 'planned') plannedTasks.push(task);
+
+        taskRows.push({
+            ...partida,
+            status,
+            percent: status === 'executing' ? plannedPct : realPct,
+            plannedPct,
+            realPct,
+            start: act?.start || null,
+            finish: act?.finish || null,
+        });
+    });
+
+    const date = new Date(atMs);
+    return {
+        mode: 'dates',
+        date,
+        dateISO: date.toISOString(),
+        dateLabel: date.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }),
+        completedTasks,
+        activeTasks,
+        plannedTasks,
+        taskRows,
+        progress: totalConFechas > 0 ? (pv / totalConFechas) * 100 : 0,
+        progressKind: 'programado',
+        counts: {
+            done: completedTasks.length,
+            executing: activeTasks.length,
+            planned: plannedTasks.length,
+            pending: Math.max(0, partidas.length - completedTasks.length - activeTasks.length - plannedTasks.length),
+        },
+    };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LÍNEA DE BALANCE PROFESIONAL — Tiempo (X) × Ubicación (Y).
+// Ubicación = ZONAS del EDT (rama nivel 2, ej. 05.03 = Canal Ppal. Sta. Rita),
+// nombradas con los TÍTULOS reales. Cada FAMILIA de actividad (palabra clave de
+// la descripción) es una serie: un trazo diagonal por zona (inicio→fin) cuya
+// pendiente ES el ritmo. Atrasadas (fin pasado sin avance) se marcan.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const familyOf = (descripcion) => {
+    const s = String(descripcion || '').toUpperCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const words = s.split(/[^A-ZÑ]+/).filter((w) => w.length >= 4);
+    const skip = new Set(['PARA', 'CON', 'TIPO', 'SEGUN']);
+    const first = words.find((w) => !skip.has(w));
+    return first || 'OTROS';
+};
+
+export const buildLobSeries = (lobData, activeFrente, atMs) => {
+    const activities = lobData?.activities || {};
+    const avance = lobData?.avance || {};
+    const partidas = getFilteredPartidas(lobData, activeFrente);
+    const titulos = new Map();
+    (lobData?.partidas || []).forEach((p) => {
+        if ((p.tipo || 'partida') === 'titulo') titulos.set(p.codigo, p.descripcion);
+    });
+
+    const zoneOf = (codigo) => {
+        const segs = String(codigo).split('.');
+        return segs.length >= 2 ? segs.slice(0, 2).join('.') : segs[0];
+    };
+
+    const zonesMap = new Map();   // code -> {code, name}
+    const segments = [];          // {zone, family, start, finish, late, row}
+    let min = Infinity; let max = -Infinity;
+
+    partidas.forEach((partida) => {
+        const act = partida.activity_id ? activities[partida.activity_id] : null;
+        if (!act?.start || !act?.finish) return;
+        const s = Date.parse(`${String(act.start).slice(0, 10)}T00:00:00`);
+        const f = Date.parse(`${String(act.finish).slice(0, 10)}T00:00:00`);
+        if (!Number.isFinite(s) || !Number.isFinite(f) || f <= s) return;
+
+        const zone = zoneOf(partida.codigo);
+        if (!zonesMap.has(zone)) {
+            zonesMap.set(zone, { code: zone, name: titulos.get(zone) || zone });
+        }
+        min = Math.min(min, s); max = Math.max(max, f);
+
+        const metrado = Number(partida.metrado || 0);
+        const ejecutado = Object.values(avance[partida.codigo] || {})
+            .reduce((acc, val) => acc + Number(val || 0), 0);
+        const realPct = metrado > 0 ? Math.min(100, (ejecutado / metrado) * 100) : 0;
+        const late = atMs != null && f < atMs && realPct < 99.5;
+
+        segments.push({
+            zone,
+            family: familyOf(partida.descripcion),
+            start: s,
+            finish: f,
+            late,
+            realPct,
+            codigo: partida.codigo,
+            descripcion: partida.descripcion,
+            activity_id: partida.activity_id,
+        });
+    });
+
+    const zones = [...zonesMap.values()].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+    const familyTotals = new Map();
+    segments.forEach((seg) => familyTotals.set(seg.family, (familyTotals.get(seg.family) || 0) + 1));
+    const families = [...familyTotals.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, count]) => ({ name, count }));
+
+    return {
+        zones,
+        families,
+        segments,
+        domain: Number.isFinite(min) && max > min ? { min, max } : null,
+    };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CONTROL DE OBRA — programado (fechas P6) vs real (valorizaciones), por costo.
 // Valor ganado ligero: PV = Σ costo × %programado(fecha), EV = Σ costo × %real.
 // SPI = EV/PV. Semáforo: atrasadas / en curso / próximas, con brecha en puntos.

@@ -7,6 +7,8 @@ import ProgressMatrixView from './ProgressMatrixView';
 import ControlView from './ControlView';
 import {
     computeSimulationState,
+    computeSimulationStateByDate,
+    getScheduleDomain,
     getFilteredPartidas,
     getMaxPeriod,
     modelFrontOf,
@@ -95,7 +97,9 @@ function Hud({ simulationState }) {
                 <div className="lob4d-kpi-value lob4d-mono">{simulationState?.dateLabel || '-'}</div>
                 <div className="lob4d-muted-row">
                     <span className="lob4d-status-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: '#8d98a8' }} />
-                    VAL {String(simulationState?.current || 1).padStart(2, '0')}
+                    {simulationState?.mode === 'dates'
+                        ? `${simulationState?.counts?.done || 0} listas · ${simulationState?.counts?.executing || 0} en curso`
+                        : `VAL ${String(simulationState?.current || 1).padStart(2, '0')}`}
                 </div>
             </div>
 
@@ -116,7 +120,9 @@ function Hud({ simulationState }) {
                 />
                 <div>
                     <div style={{ fontSize: 22, fontWeight: 900 }}>{percentText(progress)}</div>
-                    <div style={{ color: '#8d98a8', fontSize: 11, marginTop: 4 }}>avance fisico global</div>
+                    <div style={{ color: '#8d98a8', fontSize: 11, marginTop: 4 }}>
+                        {simulationState?.progressKind === 'programado' ? 'avance programado a la fecha' : 'avance fisico global'}
+                    </div>
                 </div>
             </div>
         </>
@@ -205,6 +211,8 @@ function SimulationSidePanel({ simulationState, activeFrente, lobData }) {
     );
 }
 
+const DAY_MS = 86400000;
+
 function SimulationView({
     models,
     selectedUrns,
@@ -215,11 +223,17 @@ function SimulationView({
     simPlaying,
     onPlayToggle,
     onPeriodChange,
+    scheduleDomain,
+    simDate,
+    onDateChange,
+    simSpeed,
+    onSpeedChange,
     viewerStatus,
     setViewerStatus,
     activeFrente,
     lobData,
 }) {
+    const dateMode = !!(scheduleDomain && simDate != null);
     return (
         <div className="lob4d-simulation">
             <div className="lob4d-viewer-shell">
@@ -236,22 +250,53 @@ function SimulationView({
                         type="button"
                         className={`lob4d-play${simPlaying ? ' pause' : ''}`}
                         onClick={onPlayToggle}
-                        title={simPlaying ? 'Pausar' : 'Reproducir'}
+                        title={simPlaying ? 'Pausar' : 'Reproducir timelapse'}
                     >
                         {simPlaying ? '||' : '>'}
                     </button>
-                    <input
-                        type="range"
-                        className="lob4d-range"
-                        min={0}
-                        max={maxPeriod}
-                        step={0.05}
-                        value={simPeriod}
-                        onChange={(event) => onPeriodChange(Number(event.target.value))}
-                    />
-                    <span className="lob4d-mono" style={{ color: '#dce3ee', minWidth: 82, textAlign: 'right' }}>
-                        VAL {String(Math.floor(simPeriod) + 1).padStart(2, '0')}/{String(maxPeriod).padStart(2, '0')}
-                    </span>
+                    {dateMode ? (
+                        <>
+                            {[1, 7, 30].map((speed) => (
+                                <button
+                                    key={speed}
+                                    type="button"
+                                    className={`lob4d-front-button${simSpeed === speed ? ' active' : ''}`}
+                                    style={{ padding: '3px 9px' }}
+                                    onClick={() => onSpeedChange(speed)}
+                                    title={`${speed} día${speed === 1 ? '' : 's'} por paso`}
+                                >
+                                    ×{speed}
+                                </button>
+                            ))}
+                            <input
+                                type="range"
+                                className="lob4d-range"
+                                min={scheduleDomain.min}
+                                max={scheduleDomain.max}
+                                step={DAY_MS}
+                                value={simDate}
+                                onChange={(event) => onDateChange(Number(event.target.value))}
+                            />
+                            <span className="lob4d-mono" style={{ color: '#dce3ee', minWidth: 118, textAlign: 'right' }}>
+                                {simulationState?.dateLabel}
+                            </span>
+                        </>
+                    ) : (
+                        <>
+                            <input
+                                type="range"
+                                className="lob4d-range"
+                                min={0}
+                                max={maxPeriod}
+                                step={0.05}
+                                value={simPeriod}
+                                onChange={(event) => onPeriodChange(Number(event.target.value))}
+                            />
+                            <span className="lob4d-mono" style={{ color: '#dce3ee', minWidth: 82, textAlign: 'right' }}>
+                                VAL {String(Math.floor(simPeriod) + 1).padStart(2, '0')}/{String(maxPeriod).padStart(2, '0')}
+                            </span>
+                        </>
+                    )}
                 </div>
                 <div className="lob4d-viewer-status">{viewerStatus}</div>
             </div>
@@ -270,6 +315,8 @@ export default function LOB4DWorkspace({ onClose, models = [], activeViewableGui
     const [activeFrente, setActiveFrente] = useState(null);
     const [simPeriod, setSimPeriod] = useState(0);
     const [simPlaying, setSimPlaying] = useState(false);
+    const [simDate, setSimDate] = useState(null);   // timelapse por calendario P6 (ms)
+    const [simSpeed, setSimSpeed] = useState(7);    // días por tick: 1 / 7 / 30
 
     const availableModels = useMemo(() => {
         return (models || [])
@@ -288,10 +335,26 @@ export default function LOB4DWorkspace({ onClose, models = [], activeViewableGui
     }, [models]);
 
     const maxPeriod = useMemo(() => getMaxPeriod(lobData), [lobData]);
-    const simulationState = useMemo(
-        () => computeSimulationState(lobData, simPeriod, activeFrente),
-        [lobData, simPeriod, activeFrente]
-    );
+
+    // Timelapse REAL: dominio de fechas P6 del frente activo. Si existe, el
+    // scrub es por calendario (día a día); si no, cae al modo VAL antiguo.
+    const scheduleDomain = useMemo(() => getScheduleDomain(lobData, activeFrente), [lobData, activeFrente]);
+
+    useEffect(() => {
+        if (!scheduleDomain) return;
+        setSimDate((prev) => {
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const seed = prev ?? today.getTime();
+            return Math.max(scheduleDomain.min, Math.min(scheduleDomain.max, seed));
+        });
+    }, [scheduleDomain]);
+
+    const simulationState = useMemo(() => {
+        if (scheduleDomain && simDate != null) {
+            return computeSimulationStateByDate(lobData, activeFrente, simDate);
+        }
+        return computeSimulationState(lobData, simPeriod, activeFrente);
+    }, [lobData, simPeriod, activeFrente, scheduleDomain, simDate]);
 
     useEffect(() => {
         setSelectedUrns((prev) => {
@@ -380,18 +443,30 @@ export default function LOB4DWorkspace({ onClose, models = [], activeViewableGui
 
     useEffect(() => {
         if (!simPlaying) return undefined;
+        const DAY = 86400000;
         const timer = window.setInterval(() => {
-            setSimPeriod((prev) => {
-                const next = prev + 0.05;
-                if (next >= maxPeriod) {
-                    setSimPlaying(false);
-                    return maxPeriod;
-                }
-                return next;
-            });
-        }, 120);
+            if (scheduleDomain) {
+                setSimDate((prev) => {
+                    const next = (prev ?? scheduleDomain.min) + simSpeed * DAY;
+                    if (next >= scheduleDomain.max) {
+                        setSimPlaying(false);
+                        return scheduleDomain.max;
+                    }
+                    return next;
+                });
+            } else {
+                setSimPeriod((prev) => {
+                    const next = prev + 0.05;
+                    if (next >= maxPeriod) {
+                        setSimPlaying(false);
+                        return maxPeriod;
+                    }
+                    return next;
+                });
+            }
+        }, 130);
         return () => window.clearInterval(timer);
-    }, [simPlaying, maxPeriod]);
+    }, [simPlaying, maxPeriod, scheduleDomain, simSpeed]);
 
     const toggleModel = (urn) => {
         setSelectedUrns((prev) => {
@@ -480,6 +555,11 @@ export default function LOB4DWorkspace({ onClose, models = [], activeViewableGui
                         simPlaying={simPlaying}
                         onPlayToggle={() => setSimPlaying((prev) => !prev)}
                         onPeriodChange={onPeriodChange}
+                        scheduleDomain={scheduleDomain}
+                        simDate={simDate}
+                        onDateChange={(value) => { setSimPlaying(false); setSimDate(value); }}
+                        simSpeed={simSpeed}
+                        onSpeedChange={setSimSpeed}
                         viewerStatus={viewerStatus}
                         setViewerStatus={setViewerStatus}
                         activeFrente={activeFrente}
