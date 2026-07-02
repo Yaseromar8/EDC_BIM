@@ -505,6 +505,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             'taskid',
             'wbs',
             'edt',
+            'codigodepartida',   // 03_05_DSI_CodigoDePartida{1..4}: llave partida/EDT de los elementos
         ];
         return keys.some((key) => name.includes(key));
     }
