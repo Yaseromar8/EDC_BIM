@@ -181,16 +181,36 @@ function detailHtml(n, lobData) {
 // texto "PRESUPUESTO CONTRACTUAL" y sube hasta el bloque grande de la vista.
 export function findVisibleEdtHost(doc) {
     if (!doc?.body) return null;
-    const walker = doc.createTreeWalker(doc.body, doc.defaultView?.NodeFilter?.SHOW_TEXT || 4);
+    const workspace = doc.getElementById('3a') || doc.body;
+    const isVisible = (el) => {
+        if (!el || !workspace.contains(el)) return false;
+        let node = el;
+        while (node && node !== workspace.parentElement) {
+            const style = doc.defaultView?.getComputedStyle?.(node);
+            if (style && (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')) return false;
+            node = node.parentElement;
+        }
+        const rect = el.getBoundingClientRect();
+        return rect.width > 1 && rect.height > 1;
+    };
+
+    const walker = doc.createTreeWalker(workspace, doc.defaultView?.NodeFilter?.SHOW_TEXT || 4);
     let node = walker.nextNode();
     let label = null;
     while (node) {
-        if (String(node.nodeValue || '').includes('PRESUPUESTO CONTRACTUAL')) { label = node.parentElement; break; }
+        if (String(node.nodeValue || '').includes('PRESUPUESTO CONTRACTUAL') && isVisible(node.parentElement)) {
+            label = node.parentElement;
+            break;
+        }
         node = walker.nextNode();
     }
     if (!label) return null;
     let el = label;
-    for (let i = 0; i < 14 && el; i += 1) {
+    for (let i = 0; i < 14 && el && workspace.contains(el); i += 1) {
+        if (!isVisible(el)) {
+            el = el.parentElement;
+            continue;
+        }
         const r = el.getBoundingClientRect();
         if (r.height > 380 && r.width > 700) return el;
         el = el.parentElement;

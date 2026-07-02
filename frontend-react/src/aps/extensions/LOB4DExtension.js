@@ -31,7 +31,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         this._onStationCursorPointerMove = this.onStationCursorPointerMove.bind(this);
         this._onStationCursorPointerUp = this.onStationCursorPointerUp.bind(this);
         this.onStationCameraChange = this.onStationCameraChange.bind(this);
-        this.directThemedDbIds = new Set();
+        this.directThemedDbIds = new Map();
 
         this.vertexShader = `
             attribute float aInstancePKOffset;
@@ -539,18 +539,37 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             .filter((value) => Number.isInteger(value) && value > 0);
     }
 
+    getThemingModels() {
+        const models = this.viewer.getAllModels?.() || this.viewer.getVisibleModels?.() || [];
+        if (models.length) return models;
+        return this.viewer.model ? [this.viewer.model] : [];
+    }
+
+    modelKey(model) {
+        try {
+            const data = model?.getData?.() || {};
+            return String(data.urn || data.guid || model?.id || model?.getModelId?.() || 'model');
+        } catch {
+            return String(model?.id || 'model');
+        }
+    }
+
+    directThemingKey(model, dbId) {
+        return `${this.modelKey(model)}:${dbId}`;
+    }
+
     clear4DTheming() {
         if (this.activityToDbIds) {
             for (const items of Object.values(this.activityToDbIds)) {
                 for (const item of items) {
-                    this.viewer.setThemingColor(item.dbId, null, this.viewer.model, true);
+                    this.viewer.setThemingColor(item.dbId, null, item.model || this.viewer.model, true);
                     item.state = 'normal';
                 }
             }
         }
         if (this.directThemedDbIds) {
-            for (const dbId of this.directThemedDbIds) {
-                this.viewer.setThemingColor(dbId, null, this.viewer.model, true);
+            for (const item of this.directThemedDbIds.values()) {
+                this.viewer.setThemingColor(item.dbId, null, item.model || this.viewer.model, true);
             }
             this.directThemedDbIds.clear();
         }
@@ -559,58 +578,75 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
 
     buildPropertyIndex() {
         return new Promise((resolve) => {
-            const model = this.viewer.model;
-            if (!model) return resolve();
-
-            const tree = model.getInstanceTree();
-            if (!tree) return resolve();
-
             this.activityToDbIds = {}; // "PQ08_1090" -> [{dbId: 12, state: 'normal'}, ...]
 
             console.log('[LOB4DExtension] Building property index...');
-            
-            const leafDbIds = [];
-            tree.enumNodeChildren(tree.getRootId(), (dbId) => {
-                let hasFrag = false;
-                tree.enumNodeFragments(dbId, () => { hasFrag = true; });
-                if (hasFrag) leafDbIds.push(dbId);
-            }, true);
 
-            // Removing propFilter to ensure we catch the property regardless of internal category prefixes
-            model.getBulkProperties(leafDbIds, undefined, (results) => {
-                for (const res of results) {
-                    const activityIds = new Set();
-                    for (const prop of res.properties) {
-                        if (!this.isActivityPropertyName(prop.displayName)) continue;
-                        const value = this.normalize4DKey(prop.displayValue);
-                        if (value && value.length <= 120) {
-                            value.split(/[;,|]/).forEach((part) => {
-                                const clean = this.normalize4DKey(part);
-                                if (clean) activityIds.add(clean);
-                            });
-                        }
-                    }
-                    for (const activityId of activityIds) {
-                        if (!this.activityToDbIds[activityId]) {
-                            this.activityToDbIds[activityId] = [];
-                        }
-                        this.activityToDbIds[activityId].push({ dbId: res.dbId, state: 'normal' });
-                    }
-                }
+            const models = this.getThemingModels();
+            if (!models.length) return resolve();
+
+            let pending = models.length;
+            const done = () => {
+                pending -= 1;
+                if (pending > 0) return;
                 this.propertyIndexBuilt = true;
                 const foundIds = Object.keys(this.activityToDbIds);
                 console.log(`[LOB4DExtension] Property index built. Found ${foundIds.length} unique Activity IDs.`);
                 window.dispatchEvent(new CustomEvent('lob-activities-found', { detail: { ids: foundIds } }));
                 resolve();
-            }, (err) => {
-                console.error('[LOB4DExtension] Failed to build property index', err);
-                resolve();
+            };
+
+            models.forEach((model) => {
+                const tree = model?.getInstanceTree?.();
+                if (!tree) {
+                    done();
+                    return;
+                }
+
+                const leafDbIds = [];
+                tree.enumNodeChildren(tree.getRootId(), (dbId) => {
+                    let hasFrag = false;
+                    tree.enumNodeFragments(dbId, () => { hasFrag = true; });
+                    if (hasFrag) leafDbIds.push(dbId);
+                }, true);
+
+                if (!leafDbIds.length) {
+                    done();
+                    return;
+                }
+
+                // Sin propFilter para capturar el parametro aunque venga con prefijos/categorias internas.
+                model.getBulkProperties(leafDbIds, undefined, (results) => {
+                    for (const res of results) {
+                        const activityIds = new Set();
+                        for (const prop of res.properties || []) {
+                            if (!this.isActivityPropertyName(prop.displayName)) continue;
+                            const value = this.normalize4DKey(prop.displayValue);
+                            if (value && value.length <= 120) {
+                                value.split(/[;,|]/).forEach((part) => {
+                                    const clean = this.normalize4DKey(part);
+                                    if (clean) activityIds.add(clean);
+                                });
+                            }
+                        }
+                        for (const activityId of activityIds) {
+                            if (!this.activityToDbIds[activityId]) {
+                                this.activityToDbIds[activityId] = [];
+                            }
+                            this.activityToDbIds[activityId].push({ dbId: res.dbId, model, state: 'normal' });
+                        }
+                    }
+                    done();
+                }, (err) => {
+                    console.error('[LOB4DExtension] Failed to build property index', err);
+                    done();
+                });
             });
         });
     }
 
     async simulate4D(date, activeTasks, payload = {}) {
-        if (!this.viewer.model) return;
+        if (!this.getThemingModels().length) return;
         
         if (!this.propertyIndexBuilt) {
             await this.buildPropertyIndex();
@@ -648,13 +684,13 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             for (const item of items) {
                 if (item.state !== newState) {
                     if (newState === 'executing') {
-                        this.viewer.setThemingColor(item.dbId, colorExecuting, this.viewer.model, true);
+                        this.viewer.setThemingColor(item.dbId, colorExecuting, item.model || this.viewer.model, true);
                     } else if (newState === 'done') {
-                        this.viewer.setThemingColor(item.dbId, colorDone, this.viewer.model, true);
+                        this.viewer.setThemingColor(item.dbId, colorDone, item.model || this.viewer.model, true);
                     } else if (newState === 'planned') {
-                        this.viewer.setThemingColor(item.dbId, colorProgrammed, this.viewer.model, true);
+                        this.viewer.setThemingColor(item.dbId, colorProgrammed, item.model || this.viewer.model, true);
                     } else {
-                        this.viewer.setThemingColor(item.dbId, null, this.viewer.model, true);
+                        this.viewer.setThemingColor(item.dbId, null, item.model || this.viewer.model, true);
                     }
                     item.state = newState;
                     needsUpdate = true;
@@ -663,9 +699,9 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         }
 
         if (this.directThemedDbIds) {
-            for (const dbId of this.directThemedDbIds) {
-                if (!directStates.has(dbId)) {
-                    this.viewer.setThemingColor(dbId, null, this.viewer.model, true);
+            for (const item of this.directThemedDbIds.values()) {
+                if (!directStates.has(item.dbId)) {
+                    this.viewer.setThemingColor(item.dbId, null, item.model || this.viewer.model, true);
                     needsUpdate = true;
                 }
             }
@@ -673,13 +709,14 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         }
 
         for (const [dbId, state] of directStates) {
+            const model = this.viewer.model;
             const color = state === 'executing'
                 ? colorExecuting
                 : state === 'done'
                     ? colorDone
                     : colorProgrammed;
-            this.viewer.setThemingColor(dbId, color, this.viewer.model, true);
-            this.directThemedDbIds.add(dbId);
+            this.viewer.setThemingColor(dbId, color, model, true);
+            this.directThemedDbIds.set(this.directThemingKey(model, dbId), { dbId, model });
             needsUpdate = true;
         }
 
@@ -1168,7 +1205,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         return sprite;
     }
 
-    chooseStationInterval(length) {
+    chooseStationInterval() {
         return 10;
     }
 

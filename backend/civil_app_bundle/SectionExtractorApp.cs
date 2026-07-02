@@ -44,6 +44,9 @@ namespace AlignmentExtractorApp
         public string layer { get; set; }
         public double? area { get; set; }
         public bool closed { get; set; }
+        public bool draw { get; set; } = true;
+        public string exactColor { get; set; }
+        public bool isHatch { get; set; }
         // [[offset, elevation], ...] en ORDEN de dibujo de Civil
         public List<double?[]> points { get; set; } = new List<double?[]>();
         // solo shapes de corredor: true si offset/elev son absolutos (via XYZ)
@@ -149,6 +152,41 @@ namespace AlignmentExtractorApp
 
             using (Transaction trans = db.TransactionManager.StartTransaction())
             {
+                var secOverridesMap = new Dictionary<ObjectId, dynamic>();
+                try {
+                    var bt = trans.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                    var ms = trans.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
+                    int ms_count = 0;
+                    int sv_count = 0;
+                    foreach (ObjectId entId in ms) {
+                        ms_count++;
+                        try {
+                            string objName = entId.ObjectClass.Name;
+                            if (objName.IndexOf("SectionView", StringComparison.OrdinalIgnoreCase) >= 0) {
+                                sv_count++;
+                                dynamic sv = trans.GetObject(entId, OpenMode.ForRead);
+                                if (!secOverridesMap.ContainsKey(entId)) {
+                                    Type t = sv.GetType();
+                                    var propNames = new System.Collections.Generic.List<string>();
+                                    foreach (var p in t.GetProperties()) { propNames.Add(p.Name); }
+                                    string props = string.Join(",", propNames);
+                                    result.warnings.Add($"SV Props ({objName}): {props}");
+                                }
+                                dynamic overrides = null;
+                                try { overrides = sv.SectionOverrides; } catch { }
+                                if (overrides != null) {
+                                    foreach (dynamic ov in overrides) {
+                                        try { secOverridesMap[TryGet(ov, "SectionId")] = ov; } catch {}
+                                    }
+                                }
+                            }
+                        } catch {}
+                    }
+                    result.warnings.Add($"Total MS objects: {ms_count}, SV found: {sv_count}");
+                } catch (Exception e) {
+                    result.warnings.Add("Error in MS iteration: " + e.Message);
+                }
+
                 var civilDoc = Autodesk.Civil.ApplicationServices.CivilApplication.ActiveDocument;
                 ObjectIdCollection alignIds = civilDoc.GetAlignmentIds();
                 if (alignIds.Count == 0) result.warnings.Add("El DWG no tiene alineamientos.");
@@ -198,8 +236,55 @@ namespace AlignmentExtractorApp
                                 };
 
                                 // Identidad LIMPIA: estilo + objeto de origen + material QTO + capa
-                                try { shape.styleName = ResolveName(trans, (ObjectId)(TryGet(section, "StyleId") ?? ObjectId.Null)); }
-                                catch { }
+                                bool draw = true;
+                                ObjectId? styleId = null;
+                                
+                                if (secOverridesMap.TryGetValue(secId, out dynamic ov)) {
+                                    try {
+                                        if (TryGet(ov, "Draw") is bool drw) draw = drw;
+                                        if (TryGet(ov, "UseOverrideStyle") is bool uo && uo) {
+                                            styleId = TryGet(ov, "OverrideStyleId") as ObjectId?;
+                                        }
+                                    } catch {}
+                                }
+                                if (styleId == null || !styleId.HasValue || styleId.Value.IsNull) {
+                                    styleId = TryGet(section, "StyleId") as ObjectId?;
+                                }
+                                
+                                shape.draw = draw;
+                                try { shape.styleName = ResolveName(trans, (ObjectId)(styleId ?? ObjectId.Null)); } catch { }
+                                
+                                if (styleId.HasValue && !styleId.Value.IsNull) {
+                                    try {
+                                        dynamic style = trans.GetObject(styleId.Value, OpenMode.ForRead);
+                                        var method = style.GetType().GetMethod("GetDisplayStyleSection") ?? style.GetType().GetMethod("GetDisplayStylePlan");
+                                        if (method != null) {
+                                            dynamic displayStyle = null;
+                                            bool isHatch = false;
+                                            var parameters = method.GetParameters();
+                                            if (parameters.Length == 1) {
+                                                var enumType = parameters[0].ParameterType;
+                                                foreach (var enumVal in Enum.GetValues(enumType)) {
+                                                    try {
+                                                        dynamic ds = method.Invoke(style, new object[] { enumVal });
+                                                        if (ds != null && (bool)ds.Visible) {
+                                                            displayStyle = ds;
+                                                            string enumName = enumVal.ToString();
+                                                            if (enumName != null && (enumName.Contains("Area") || enumName.Contains("Hatch"))) {
+                                                                isHatch = true; break;
+                                                            }
+                                                        }
+                                                    } catch {}
+                                                }
+                                            }
+                                            if (displayStyle != null) {
+                                                var cadColor = displayStyle.Color;
+                                                shape.exactColor = $"#{cadColor.ColorValue.R:X2}{cadColor.ColorValue.G:X2}{cadColor.ColorValue.B:X2}";
+                                                shape.isHatch = isHatch;
+                                            }
+                                        }
+                                    } catch {}
+                                }
                                 try { shape.sourceName = ResolveName(trans, section.SourceId); } catch { }
                                 shape.materialName = TryGet(section, "MaterialName") as string;
                                 shape.layer = TryGet(section, "Layer") as string;

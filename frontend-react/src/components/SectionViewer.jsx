@@ -173,18 +173,30 @@ const SectionViewer = ({ sectionsData, onClose }) => {
             const cls = classify(sec.materialName || sec.styleName || sec.name);
             // v2: puntos YA ordenados por Civil → dibujar tal cual
             if (Array.isArray(sec.points) && sec.points.length >= 2) {
+                if (sec.draw === false) return; // Si Civil dice NO dibujar, lo saltamos por completo
+                
                 const pts = sec.points
                     .map((p) => [Number(p?.[0]), Number(p?.[1])])
                     .filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
                 if (pts.length < 2) return;
-                // Visibilidad como en Civil: estilos "_Invisible" NO se dibujan
-                // (existen solo para el cómputo de materiales) → apagados por defecto.
+                
+                // Si el backend nos dio el color exacto, lo respetamos (clon visual)
+                let finalCls = { ...cls };
+                if (sec.exactColor) {
+                    finalCls.color = sec.exactColor;
+                    finalCls.fill = !!sec.isHatch;
+                    finalCls.key = sec.styleName ? `style:${sec.styleName}` : `exact:${sec.exactColor}`;
+                    finalCls.label = sec.styleName || finalCls.label;
+                }
+                
+                // Visibilidad como en Civil: estilos "_Invisible" NO se dibujan (se ocultan por defecto)
                 const invisible = /invisible/i.test(sec.styleName || '') || /invisible/i.test(sec.layer || '');
                 // shape de corredor SIN coordenadas absolutas → grupo aparte, apagado
                 const relCorr = sec.sourceType === 'CorridorShape' && sec.absolute === false;
-                let finalCls = cls;
-                if (relCorr) finalCls = { ...cls, key: `corr:${cls.key}`, label: `${cls.label} (corredor)` };
-                else if (invisible) finalCls = { ...cls, key: `inv:${cls.key}`, label: `${cls.label} (oculto en Civil)` };
+                
+                if (relCorr) finalCls = { ...finalCls, key: `corr:${finalCls.key}`, label: `${finalCls.label} (corredor)` };
+                else if (invisible) finalCls = { ...finalCls, key: `inv:${finalCls.key}`, label: `${finalCls.label} (oculto en Civil)` };
+                
                 const closed = (sec.closed === true) && finalCls.fill;
                 out.push({ id: `s${i}`, cls: finalCls, pts, closed, area: sec.area, corridor: relCorr || invisible });
                 return;
