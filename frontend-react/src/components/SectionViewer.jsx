@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 
 // ── Clasificación de materiales/superficies desde el "Name" de Civil 3D ──
 // Nivel 1 (sin re-deploy): la identidad ya viene embebida en section.Name, p.ej.
@@ -47,16 +48,64 @@ const classify = (name) => {
     return { key: `auto:${label.toLowerCase()}`, label, color: hashColor(label.toLowerCase()), fill: true };
 };
 
+// ── Reconstrucción de cadenas continuas (como dibuja Civil 3D) ──
+// Los links llegan como segmentos SUELTOS y desordenados. Cerrarlos "a ciegas"
+// produce polígonos basura cruzando toda la sección. Aquí unimos segmentos por
+// sus extremos (tolerancia) → cadenas; solo la cadena que CIERRA de verdad se
+// rellena como área; lo abierto se dibuja como línea.
+const EPS = 0.03;
+const ptEq = (a, b) => Math.abs(a[0] - b[0]) < EPS && Math.abs(a[1] - b[1]) < EPS;
+
+function buildChains(links) {
+    const segs = (links || [])
+        .map((l) => [[l.startOffset, l.startElevation], [l.endOffset, l.endElevation]])
+        .filter((s) => s.every((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]))
+            && !ptEq(s[0], s[1]));
+    const used = new Array(segs.length).fill(false);
+    const chains = [];
+    for (let i = 0; i < segs.length; i += 1) {
+        if (used[i]) continue;
+        used[i] = true;
+        const chain = [...segs[i]];
+        let extended = true;
+        while (extended) {
+            extended = false;
+            for (let j = 0; j < segs.length; j += 1) {
+                if (used[j]) continue;
+                const [a, b] = segs[j];
+                const head = chain[0];
+                const tail = chain[chain.length - 1];
+                if (ptEq(tail, a)) { chain.push(b); used[j] = true; extended = true; }
+                else if (ptEq(tail, b)) { chain.push(a); used[j] = true; extended = true; }
+                else if (ptEq(head, b)) { chain.unshift(a); used[j] = true; extended = true; }
+                else if (ptEq(head, a)) { chain.unshift(b); used[j] = true; extended = true; }
+            }
+        }
+        const closed = chain.length > 3 && ptEq(chain[0], chain[chain.length - 1]);
+        chains.push({ pts: chain, closed });
+    }
+    return chains;
+}
+
+// Firma geométrica para deduplicar cadenas idénticas (varias Material List
+// re-trazan las mismas superficies).
+const chainSig = (pts) => {
+    let sx = 0; let sy = 0;
+    pts.forEach(([x, y]) => { sx += x; sy += y; });
+    return `${pts.length}:${sx.toFixed(2)}:${sy.toFixed(2)}`;
+};
+
 const SectionViewer = ({ sectionsData, onClose }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [hidden, setHidden] = useState(() => new Set()); // keys ocultos por la leyenda
 
     if (!sectionsData || sectionsData.length === 0) {
-        return (
+        return createPortal(
             <div style={overlayStyle}>
                 <p style={{ color: '#d7dbe2' }}>No hay datos de secciones disponibles.</p>
                 <button onClick={onClose} style={btn(true)}>Cerrar</button>
-            </div>
+            </div>,
+            document.body
         );
     }
 
@@ -65,27 +114,53 @@ const SectionViewer = ({ sectionsData, onClose }) => {
         ? `PK ${formatStation(station.station)}`
         : (station?.sampleLineName || `Estación ${currentIndex}`);
 
-    // Clasificar cada shape una vez; recolectar puntos (links y polygons).
+    // Clasificar y reconstruir SOLO lo visible de la sección (estilo Civil/InfraWorks):
+    // 1) cadenas continuas desde los links (cerrada→área, abierta→línea),
+    // 2) deduplicado geométrico (las Material List re-trazan las mismas superficies),
+    // 3) polígonos del corredor solo si su elevación es compatible con la sección
+    //    (vienen relativos a la rasante → si no calzan, son la "sección fantasma").
     const shapes = useMemo(() => {
         const out = [];
+        const seen = new Set();
+        let elevMin = Infinity;
+        let elevMax = -Infinity;
+
         (station.sections || []).forEach((sec, i) => {
             const cls = classify(sec.name);
-            // Polígonos del corredor (ya cerrados)
-            (sec.polygons || []).forEach((poly, j) => {
-                const cP = classify(poly.name || sec.name);
-                const pts = (poly.points || []).map((p) => [p.startOffset, p.startElevation]);
-                if (pts.length >= 2) out.push({ id: `p${i}-${j}`, cls: cP, pts, closed: true });
+            buildChains(sec.links).forEach((chain, c) => {
+                const sig = chainSig(chain.pts);
+                if (seen.has(sig)) return;             // duplicado exacto de otra sección
+                seen.add(sig);
+                chain.pts.forEach(([, y]) => { elevMin = Math.min(elevMin, y); elevMax = Math.max(elevMax, y); });
+                if (chain.closed && cls.fill) {
+                    out.push({ id: `l${i}-${c}`, cls, pts: chain.pts, closed: true });
+                } else if (!cls.fill || !chain.closed) {
+                    // superficies → línea; contornos de material que NO cierran → línea fina
+                    out.push({ id: `l${i}-${c}`, cls, pts: chain.pts, closed: false, thin: cls.fill });
+                }
             });
-            // Links (superficie o área de material): reconstruir polilínea ordenada
-            if (sec.links && sec.links.length) {
-                const pts = [];
-                sec.links.forEach((l, k) => {
-                    if (k === 0) pts.push([l.startOffset, l.startElevation]);
-                    pts.push([l.endOffset, l.endElevation]);
-                });
-                out.push({ id: `l${i}`, cls, pts, closed: cls.fill });
-            }
         });
+
+        // Polígonos del corredor: incluir solo si su rango de elevación intersecta
+        // el de las superficies (si no, están en coordenadas relativas → excluir).
+        (station.sections || []).forEach((sec, i) => {
+            (sec.polygons || []).forEach((poly, j) => {
+                const pts = (poly.points || [])
+                    .map((p) => [p.startOffset, p.startElevation])
+                    .filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+                if (pts.length < 3) return;
+                const ys = pts.map(([, y]) => y);
+                const pMin = Math.min(...ys);
+                const pMax = Math.max(...ys);
+                const compatible = !Number.isFinite(elevMin) || (pMax >= elevMin && pMin <= elevMax);
+                if (!compatible) return;
+                const sig = chainSig(pts);
+                if (seen.has(sig)) return;
+                seen.add(sig);
+                out.push({ id: `p${i}-${j}`, cls: classify(poly.name || sec.name), pts, closed: true });
+            });
+        });
+
         return out;
     }, [station]);
 
@@ -119,10 +194,11 @@ const SectionViewer = ({ sectionsData, onClose }) => {
         const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n;
     });
 
-    return (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column', background: 'rgba(10,11,13,0.97)', backdropFilter: 'blur(6px)', fontFamily: 'Inter, system-ui, sans-serif' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid #23262d', background: '#101317' }}>
+    return createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: '85vw', height: '85vh', display: 'flex', flexDirection: 'column', background: 'rgba(10,11,13,0.97)', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.1)', fontFamily: 'Inter, system-ui, sans-serif' }}>
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderBottom: '1px solid #23262d', background: '#101317' }}>
                 <div>
                     <div style={{ fontSize: 17, fontWeight: 800, color: '#e6e8ec' }}>Secciones transversales · Civil 3D</div>
                     <div style={{ fontSize: 12, color: '#8a919c', marginTop: 2 }}>
@@ -147,7 +223,10 @@ const SectionViewer = ({ sectionsData, onClose }) => {
                         ))}
                         {shapes.filter((s) => !s.closed && !hidden.has(s.cls.key)).map((s) => (
                             <polyline key={s.id} points={s.pts.map(([x, y]) => `${toX(x)},${toY(y)}`).join(' ')}
-                                fill="none" stroke={s.cls.color} strokeWidth={stroke * 1.6} strokeLinejoin="round" strokeLinecap="round">
+                                fill="none" stroke={s.cls.color}
+                                strokeWidth={s.thin ? stroke * 0.7 : stroke * 1.6}
+                                strokeOpacity={s.thin ? 0.55 : 1}
+                                strokeLinejoin="round" strokeLinecap="round">
                                 <title>{s.cls.label}</title>
                             </polyline>
                         ))}
@@ -187,6 +266,8 @@ const SectionViewer = ({ sectionsData, onClose }) => {
                 <button onClick={() => go(currentIndex + 1)} disabled={currentIndex === sectionsData.length - 1} style={btn(false, currentIndex === sectionsData.length - 1)}>Siguiente →</button>
             </div>
         </div>
+        </div>,
+        document.body
     );
 };
 
@@ -197,7 +278,7 @@ function formatStation(m) {
     return `${km}+${rest}`;
 }
 
-const overlayStyle = { position: 'absolute', inset: 0, zIndex: 50, background: 'rgba(10,11,13,0.95)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 };
+const overlayStyle = { position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(3px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 };
 const btn = (primary, disabled) => ({
     padding: '8px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: disabled ? 'default' : 'pointer',
     border: primary ? 'none' : '1px solid rgba(255,255,255,0.14)',
