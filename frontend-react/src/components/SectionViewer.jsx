@@ -109,10 +109,52 @@ function formatStation(m) {
     return `${km}+${rest}`;
 }
 
+// ── Cuadro de volúmenes (método de áreas medias, como la tabla de Civil) ──
+// Requiere esquema v2 (materialName + area por estación).
+function computeVolumes(stations) {
+    const byAlign = new Map();
+    stations.forEach((st) => {
+        if (st?.station == null) return;
+        (st.sections || []).forEach((sec) => {
+            const mat = sec.materialName || null;
+            if (!mat || sec.area == null || !Number.isFinite(Number(sec.area))) return;
+            const key = st.alignmentId || '—';
+            if (!byAlign.has(key)) byAlign.set(key, new Map());
+            const mats = byAlign.get(key);
+            if (!mats.has(mat)) mats.set(mat, new Map());
+            const rows = mats.get(mat);
+            rows.set(st.station, (rows.get(st.station) || 0) + Number(sec.area));
+        });
+    });
+
+    const materials = [];
+    byAlign.forEach((mats, alignmentId) => {
+        mats.forEach((rows, mat) => {
+            const sorted = [...rows.entries()].sort((a, b) => a[0] - b[0]);
+            let acum = 0;
+            const table = sorted.map(([pk, area], i) => {
+                let parcial = 0;
+                if (i > 0) {
+                    const [pkPrev, areaPrev] = sorted[i - 1];
+                    parcial = ((areaPrev + area) / 2) * (pk - pkPrev); // áreas medias
+                }
+                acum += parcial;
+                return { pk, area, parcial, acum };
+            });
+            materials.push({ alignmentId, material: mat, table, total: acum });
+        });
+    });
+    materials.sort((a, b) => a.material.localeCompare(b.material));
+    return materials;
+}
+
 const SectionViewer = ({ sectionsData, onClose }) => {
     const stations = useMemo(() => normalizeStations(sectionsData), [sectionsData]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [hidden, setHidden] = useState(() => new Set());
+    const [mode, setMode] = useState('seccion');       // 'seccion' | 'volumenes'
+    const [volMaterial, setVolMaterial] = useState(0); // índice del material activo
+    const volumes = useMemo(() => computeVolumes(stations), [stations]);
     const userTouchedRef = useRef(new Set());   // keys que el usuario toggleó (no auto-ocultar)
     const [view, setView] = useState(null);     // viewBox {x,y,w,h} para zoom/pan
     const dragRef = useRef(null);
@@ -127,20 +169,24 @@ const SectionViewer = ({ sectionsData, onClose }) => {
         const seen = new Set();
 
         (station.sections || []).forEach((sec, i) => {
-            const cls = classify(sec.styleName || sec.name);
+            // Identidad: material QTO exacto > estilo > nombre
+            const cls = classify(sec.materialName || sec.styleName || sec.name);
             // v2: puntos YA ordenados por Civil → dibujar tal cual
             if (Array.isArray(sec.points) && sec.points.length >= 2) {
                 const pts = sec.points
                     .map((p) => [Number(p?.[0]), Number(p?.[1])])
                     .filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
                 if (pts.length < 2) return;
+                // Visibilidad como en Civil: estilos "_Invisible" NO se dibujan
+                // (existen solo para el cómputo de materiales) → apagados por defecto.
+                const invisible = /invisible/i.test(sec.styleName || '') || /invisible/i.test(sec.layer || '');
                 // shape de corredor SIN coordenadas absolutas → grupo aparte, apagado
                 const relCorr = sec.sourceType === 'CorridorShape' && sec.absolute === false;
-                const finalCls = relCorr
-                    ? { ...cls, key: `corr:${cls.key}`, label: `${cls.label} (corredor)` }
-                    : cls;
+                let finalCls = cls;
+                if (relCorr) finalCls = { ...cls, key: `corr:${cls.key}`, label: `${cls.label} (corredor)` };
+                else if (invisible) finalCls = { ...cls, key: `inv:${cls.key}`, label: `${cls.label} (oculto en Civil)` };
                 const closed = (sec.closed === true) && finalCls.fill;
-                out.push({ id: `s${i}`, cls: finalCls, pts, closed, area: sec.area, corridor: relCorr });
+                out.push({ id: `s${i}`, cls: finalCls, pts, closed, area: sec.area, corridor: relCorr || invisible });
                 return;
             }
             // v1: reconstruir cadenas desde links sueltos
@@ -298,12 +344,73 @@ const SectionViewer = ({ sectionsData, onClose }) => {
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => setMode('seccion')} style={btn(mode === 'seccion')}>Sección</button>
+                        {volumes.length > 0 && (
+                            <button onClick={() => setMode('volumenes')} style={btn(mode === 'volumenes')}>Cuadro de volúmenes</button>
+                        )}
                         <button onClick={() => setView(null)} style={btn(false)} title="Re-encuadrar">⤢ Encuadrar</button>
                         <button onClick={onClose} style={btn(false)}>✕ Cerrar</button>
                     </div>
                 </div>
 
-                <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+                {mode === 'volumenes' && volumes.length > 0 && (
+                    <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+                        {/* Lista de materiales (como las Material Lists de Civil) */}
+                        <div style={{ width: 280, flexShrink: 0, borderRight: '1px solid #23262d', background: '#0e1014', padding: 14, overflowY: 'auto' }}>
+                            <div style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#6b7280', fontWeight: 700, marginBottom: 10 }}>
+                                Cómputo de materiales ({volumes.length})
+                            </div>
+                            {volumes.map((m, i) => (
+                                <button key={`${m.alignmentId}:${m.material}`} onClick={() => setVolMaterial(i)}
+                                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 10px', borderRadius: 7, marginBottom: 6, cursor: 'pointer', border: volMaterial === i ? '1px solid #3aa0ff' : '1px solid rgba(255,255,255,0.07)', background: volMaterial === i ? 'rgba(58,160,255,0.12)' : 'transparent' }}>
+                                    <div style={{ fontSize: 12.5, fontWeight: 700, color: '#d7dbe2' }}>{m.material}</div>
+                                    <div style={{ fontSize: 10.5, color: '#8a919c', marginTop: 3, fontFamily: 'IBM Plex Mono, monospace' }}>
+                                        {m.table.length} PKs · {m.total.toLocaleString('es-PE', { maximumFractionDigits: 1 })} m³
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                        {/* Tabla PK / Área / Vol parcial / Vol acumulado */}
+                        <div style={{ flex: 1, minWidth: 0, overflow: 'auto', background: '#0a0b0d' }}>
+                            {volumes[Math.min(volMaterial, volumes.length - 1)] && (() => {
+                                const m = volumes[Math.min(volMaterial, volumes.length - 1)];
+                                return (
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                        <thead>
+                                            <tr style={{ position: 'sticky', top: 0, background: '#12151a', color: '#6b7280', textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.08em' }}>
+                                                <th style={{ padding: '9px 14px', textAlign: 'left' }}>Progresiva</th>
+                                                <th style={{ padding: '9px 14px', textAlign: 'right' }}>Área (m²)</th>
+                                                <th style={{ padding: '9px 14px', textAlign: 'right' }}>Vol. parcial (m³)</th>
+                                                <th style={{ padding: '9px 14px', textAlign: 'right' }}>Vol. acumulado (m³)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#c8cdd6' }}>
+                                            {m.table.map((r) => (
+                                                <tr key={r.pk} style={{ borderTop: '1px solid #14171c' }}>
+                                                    <td style={{ padding: '7px 14px', color: '#8ecbff' }}>{formatStation(r.pk)}</td>
+                                                    <td style={{ padding: '7px 14px', textAlign: 'right' }}>{r.area.toFixed(2)}</td>
+                                                    <td style={{ padding: '7px 14px', textAlign: 'right' }}>{r.parcial.toFixed(2)}</td>
+                                                    <td style={{ padding: '7px 14px', textAlign: 'right', fontWeight: 700 }}>{r.acum.toFixed(2)}</td>
+                                                </tr>
+                                            ))}
+                                            <tr style={{ borderTop: '2px solid #2a2f37', background: '#101317' }}>
+                                                <td style={{ padding: '9px 14px', fontWeight: 800, color: '#e6e8ec' }}>TOTAL · {m.material}</td>
+                                                <td />
+                                                <td />
+                                                <td style={{ padding: '9px 14px', textAlign: 'right', fontWeight: 800, color: '#22c55e' }}>{m.total.toFixed(2)}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                );
+                            })()}
+                            <div style={{ padding: '10px 14px', fontSize: 10.5, color: '#5d6672' }}>
+                                Volúmenes por método de áreas medias entre PKs consecutivos (como la tabla de Civil 3D), a partir de las áreas de Material List extraídas.
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div style={{ flex: 1, minHeight: 0, display: mode === 'seccion' ? 'flex' : 'none' }}>
                     {/* Dibujo */}
                     <div style={{ flex: 1, minWidth: 0, background: '#0b1220', position: 'relative' }}>
                         <svg

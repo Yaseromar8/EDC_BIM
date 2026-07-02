@@ -38,6 +38,10 @@ namespace AlignmentExtractorApp
         public string styleName { get; set; }
         public string sourceType { get; set; }
         public string sourceName { get; set; }
+        // identidad EXACTA del material QTO ("Corte. Eject.", "Rell. Over")
+        public string materialName { get; set; }
+        // capa de dibujo ("09.03 Materiales", "02.09 Vista de secciones")
+        public string layer { get; set; }
         public double? area { get; set; }
         public bool closed { get; set; }
         // [[offset, elevation], ...] en ORDEN de dibujo de Civil
@@ -193,10 +197,12 @@ namespace AlignmentExtractorApp
                                     sourceType = section.GetType().Name,
                                 };
 
-                                // Identidad LIMPIA: estilo + objeto de origen
+                                // Identidad LIMPIA: estilo + objeto de origen + material QTO + capa
                                 try { shape.styleName = ResolveName(trans, (ObjectId)(TryGet(section, "StyleId") ?? ObjectId.Null)); }
                                 catch { }
                                 try { shape.sourceName = ResolveName(trans, section.SourceId); } catch { }
+                                shape.materialName = TryGet(section, "MaterialName") as string;
+                                shape.layer = TryGet(section, "Layer") as string;
 
                                 // Área si Civil la expone (Material List la tiene calculada)
                                 shape.area = Clean(TryNum(section, "Area"));
