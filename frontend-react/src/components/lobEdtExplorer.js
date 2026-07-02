@@ -176,8 +176,30 @@ function detailHtml(n, lobData) {
     </div>`;
 }
 
-export function renderEdtExplorer(doc, lobData, activeFrente) {
-    const edtTab = doc.getElementById('2a');
+// Busca el contenedor VISIBLE de la vista "Explorador EDT" del workspace (la
+// maqueta lo dibuja dentro de #3a, no en la sección oculta #2a): se ancla al
+// texto "PRESUPUESTO CONTRACTUAL" y sube hasta el bloque grande de la vista.
+export function findVisibleEdtHost(doc) {
+    if (!doc?.body) return null;
+    const walker = doc.createTreeWalker(doc.body, doc.defaultView?.NodeFilter?.SHOW_TEXT || 4);
+    let node = walker.nextNode();
+    let label = null;
+    while (node) {
+        if (String(node.nodeValue || '').includes('PRESUPUESTO CONTRACTUAL')) { label = node.parentElement; break; }
+        node = walker.nextNode();
+    }
+    if (!label) return null;
+    let el = label;
+    for (let i = 0; i < 14 && el; i += 1) {
+        const r = el.getBoundingClientRect();
+        if (r.height > 380 && r.width > 700) return el;
+        el = el.parentElement;
+    }
+    return null;
+}
+
+export function renderEdtExplorer(doc, lobData, activeFrente, hostOverride = null) {
+    const edtTab = hostOverride || doc.getElementById('2a');
     if (!edtTab || !lobData) return;
 
     // estado vivo entre re-renders (guardado en el propio doc del iframe)
@@ -206,12 +228,14 @@ export function renderEdtExplorer(doc, lobData, activeFrente) {
     };
     roots.forEach(walk);
 
-    let host = doc.getElementById('lob-edt-live');
+    // lookup DENTRO del contenedor destino (no doc-wide: la sección #2a oculta
+    // puede tener su propia copia y bloquearía la inyección en la vista visible)
+    let host = edtTab.querySelector(':scope #lob-edt-live') || (edtTab.id === 'lob-edt-live' ? edtTab : null);
     if (!host) {
         host = doc.createElement('div');
         host.id = 'lob-edt-live';
-        // reemplaza TODO el contenido del tab 2a por el explorador dinámico
-        const inner = edtTab.querySelector('div[style*="height"]') || edtTab;
+        // reemplaza TODO el contenido de la vista por el explorador dinámico
+        const inner = hostOverride ? edtTab : (edtTab.querySelector('div[style*="height"]') || edtTab);
         inner.innerHTML = '';
         inner.appendChild(host);
     }
@@ -252,7 +276,7 @@ export function renderEdtExplorer(doc, lobData, activeFrente) {
         if (lvlBtn) {
             st.maxLevel = Number(lvlBtn.dataset.lvl);
             st.expanded = new Set([...nodes.keys()].filter((c) => c.split('.').length < st.maxLevel));
-            renderEdtExplorer(doc, lobData, activeFrente);
+            renderEdtExplorer(doc, lobData, activeFrente, hostOverride || edtTab);
             return;
         }
         const row = ev.target.closest('.edt-row');
@@ -266,6 +290,6 @@ export function renderEdtExplorer(doc, lobData, activeFrente) {
             st.selected = code;
             if (node?.hijos?.length && !st.expanded.has(code)) st.expanded.add(code);
         }
-        renderEdtExplorer(doc, lobData, activeFrente);
+        renderEdtExplorer(doc, lobData, activeFrente, hostOverride || edtTab);
     };
 }

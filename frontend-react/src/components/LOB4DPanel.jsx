@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx';
 import { loadAlignedModels } from '../aps/utils/loadAlignedModels';
 import { apiFetch } from '../utils/apiFetch';
-import { renderEdtExplorer } from './lobEdtExplorer';
+import { renderEdtExplorer, findVisibleEdtHost } from './lobEdtExplorer';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || (
     typeof window !== 'undefined' && window.location.hostname === 'localhost'
@@ -377,14 +377,24 @@ export default function LOB4DPanel({ onClose, models = [], activeViewableGuids =
 
     // 2a EXPLORADOR EDT dinámico: árbol jerárquico + KPIs + detalle con el cruce
     // completo (Metrados ⨯ Valorizaciones ⨯ Cronograma P6). Ver lobEdtExplorer.js.
+    // La vista 2a VISIBLE vive dentro del workspace #3a (la maqueta la dibuja al
+    // clicar su tab), así que un intervalo la localiza por texto y la reemplaza;
+    // si la maqueta la redibuja, se re-inyecta sola.
     useEffect(() => {
         if (!workspaceReady || !lobData) return;
-        const doc = iframeRef.current?.contentDocument;
-        if (!doc) return;
-        doc.getElementById('lob-edt-data-status')?.remove();
-        doc.getElementById('lob-edt-cross')?.remove();
-        if (doc.__edtState) doc.__edtState.inited = doc.__edtState.inited && true;
-        try { renderEdtExplorer(doc, lobData, activeFrente); } catch (e) { console.warn('[LOB4D] EDT explorer:', e); }
+        const timer = window.setInterval(() => {
+            const doc = iframeRef.current?.contentDocument;
+            if (!doc) return;
+            doc.getElementById('lob-edt-data-status')?.remove();
+            doc.getElementById('lob-edt-cross')?.remove();
+            try {
+                const visibleHost = findVisibleEdtHost(doc);
+                if (visibleHost && !visibleHost.querySelector('#lob-edt-live')) {
+                    renderEdtExplorer(doc, lobData, activeFrente, visibleHost);
+                }
+            } catch (e) { console.warn('[LOB4D] EDT explorer:', e); }
+        }, 500);
+        return () => window.clearInterval(timer);
     }, [workspaceReady, lobData, activeFrente]);
 
     const updateViewerRect = useCallback((iframe, frame) => {
