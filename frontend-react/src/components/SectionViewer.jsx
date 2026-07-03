@@ -380,25 +380,25 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
     return createPortal(
         <div style={dockStyle}>
             {/* Título */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #23262d', background: '#101317', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #23262d', background: '#202020', flexShrink: 0 }}>
                 <span style={{ fontSize: 13, fontWeight: 800, color: '#e6e8ec' }}>Sección transversal</span>
                 <span style={{ fontSize: 11, color: '#8a919c' }}>{station.alignmentId}</span>
                 <div style={{ flex: 1 }} />
                 {/* Spinner de progresiva (estilo InfraWorks) */}
-                <div style={{ display: 'flex', alignItems: 'center', background: '#0a0b0d', border: '1px solid #2a2f37', borderRadius: 6, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', background: '#161616', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 6, overflow: 'hidden' }}>
                     <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 700, color: '#e6e8ec', padding: '5px 10px' }}>
                         {formatStation(station.station)}
                     </span>
-                    <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid #2a2f37' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(255,255,255,0.14)' }}>
                         <button onClick={() => goIndex(currentIndex + 1)} disabled={currentIndex >= stations.length - 1} style={spinBtn}>▲</button>
-                        <button onClick={() => goIndex(currentIndex - 1)} disabled={currentIndex === 0} style={{ ...spinBtn, borderTop: '1px solid #2a2f37' }}>▼</button>
+                        <button onClick={() => goIndex(currentIndex - 1)} disabled={currentIndex === 0} style={{ ...spinBtn, borderTop: '1px solid rgba(255,255,255,0.14)' }}>▼</button>
                     </div>
                 </div>
                 <button onClick={onClose} style={{ ...btn(false), padding: '5px 9px' }} title="Cerrar">✕</button>
             </div>
 
             {/* Áreas + controles */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 14px', borderBottom: '1px solid #1c1f25', background: '#0e1014', flexShrink: 0, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: '#1a1a1a', flexShrink: 0, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 11.5 }}>
                     <span style={{ color: '#ef4444', fontWeight: 700 }}>Área de desmonte:</span>{' '}
                     <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#e6e8ec' }}>{cutFill.cut.toFixed(3)} m²</span>
@@ -415,7 +415,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
 
             {/* Dibujo o volúmenes */}
             {mode === 'seccion' ? (
-                <div style={{ flex: 1, minHeight: 0, position: 'relative', background: '#0b1220' }}>
+                <div style={{ flex: 1, minHeight: 0, position: 'relative', background: '#17191c' }}>
                     <svg
                         ref={svgRef}
                         style={{ width: '100%', height: '100%', cursor: dragRef.current ? 'grabbing' : 'grab', touchAction: 'none', display: 'block' }}
@@ -427,25 +427,25 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
                         onDoubleClick={() => setView(null)}
                     >
                         {gridX.map((gx) => (
-                            <line key={`gx${gx}`} x1={gx} y1={v.y} x2={gx} y2={v.y + v.h} stroke="#1d2942" strokeWidth={px} />
+                            <line key={`gx${gx}`} x1={gx} y1={v.y} x2={gx} y2={v.y + v.h} stroke="#2b2f34" strokeWidth={px} />
                         ))}
                         {gridY.map((gy) => (
-                            <line key={`gy${gy}`} x1={v.x} y1={gy} x2={v.x + v.w} y2={gy} stroke="#1d2942" strokeWidth={px} />
+                            <line key={`gy${gy}`} x1={v.x} y1={gy} x2={v.x + v.w} y2={gy} stroke="#2b2f34" strokeWidth={px} />
                         ))}
                         <line x1={0} y1={v.y} x2={0} y2={v.y + v.h} stroke="#3f9e63" strokeWidth={px * 1.3} strokeDasharray={`${px * 9} ${px * 5}`} />
 
                         {/* offsets abajo · elevaciones a AMBOS lados (valor real) */}
                         {gridX.map((gx) => (
-                            <text key={`tx${gx}`} x={gx + px * 3} y={v.y + v.h - fontSize * 0.5} fill="#5b7db1" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">
+                            <text key={`tx${gx}`} x={gx + px * 3} y={v.y + v.h - fontSize * 0.5} fill="#7f8791" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">
                                 {Math.abs(gx) < 1e-9 ? '0' : `${gx.toFixed(gx % 1 ? 1 : 0)}m`}
                             </text>
                         ))}
                         {gridY.map((gy) => (
                             <g key={`ty${gy}`}>
-                                <text x={v.x + px * 5} y={gy - px * 3} fill="#5b7db1" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">
+                                <text x={v.x + px * 5} y={gy - px * 3} fill="#7f8791" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">
                                     {(-gy / aspect).toFixed(0)}m
                                 </text>
-                                <text x={v.x + v.w - px * 5} y={gy - px * 3} fill="#5b7db1" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace" textAnchor="end">
+                                <text x={v.x + v.w - px * 5} y={gy - px * 3} fill="#7f8791" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace" textAnchor="end">
                                     {(-gy / aspect).toFixed(0)}m
                                 </text>
                             </g>
@@ -472,8 +472,8 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
                     </div>
                 </div>
             ) : (
-                <div style={{ flex: 1, minHeight: 0, display: 'flex', background: '#0a0b0d' }}>
-                    <div style={{ width: 190, flexShrink: 0, borderRight: '1px solid #23262d', background: '#0e1014', padding: 10, overflowY: 'auto' }}>
+                <div style={{ flex: 1, minHeight: 0, display: 'flex', background: '#191b1e' }}>
+                    <div style={{ width: 190, flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.06)', background: '#1a1a1a', padding: 10, overflowY: 'auto' }}>
                         {volumes.map((m, i) => (
                             <button key={`${m.alignmentId}:${m.material}`} onClick={() => setVolMaterial(i)}
                                 style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 8px', borderRadius: 6, marginBottom: 5, cursor: 'pointer', border: volMaterial === i ? '1px solid #3aa0ff' : '1px solid rgba(255,255,255,0.07)', background: volMaterial === i ? 'rgba(58,160,255,0.12)' : 'transparent' }}>
@@ -490,7 +490,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
                             return (
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
                                     <thead>
-                                        <tr style={{ position: 'sticky', top: 0, background: '#12151a', color: '#6b7280', textTransform: 'uppercase', fontSize: 9.5, letterSpacing: '0.08em' }}>
+                                        <tr style={{ position: 'sticky', top: 0, background: '#202020', color: '#8a8f98', textTransform: 'uppercase', fontSize: 9.5, letterSpacing: '0.08em' }}>
                                             <th style={{ padding: '8px 12px', textAlign: 'left' }}>Progresiva</th>
                                             <th style={{ padding: '8px 12px', textAlign: 'right' }}>Área m²</th>
                                             <th style={{ padding: '8px 12px', textAlign: 'right' }}>Parcial m³</th>
@@ -499,14 +499,14 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
                                     </thead>
                                     <tbody style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#c8cdd6' }}>
                                         {m.table.map((r) => (
-                                            <tr key={r.pk} style={{ borderTop: '1px solid #14171c' }}>
+                                            <tr key={r.pk} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                                                 <td style={{ padding: '6px 12px', color: '#8ecbff' }}>{formatStation(r.pk)}</td>
                                                 <td style={{ padding: '6px 12px', textAlign: 'right' }}>{r.area.toFixed(2)}</td>
                                                 <td style={{ padding: '6px 12px', textAlign: 'right' }}>{r.parcial.toFixed(2)}</td>
                                                 <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: 700 }}>{r.acum.toFixed(2)}</td>
                                             </tr>
                                         ))}
-                                        <tr style={{ borderTop: '2px solid #2a2f37', background: '#101317' }}>
+                                        <tr style={{ borderTop: '2px solid rgba(255,255,255,0.14)', background: '#202020' }}>
                                             <td style={{ padding: '8px 12px', fontWeight: 800, color: '#e6e8ec' }}>TOTAL</td>
                                             <td /><td />
                                             <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#22c55e' }}>{m.total.toFixed(2)}</td>
@@ -520,7 +520,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
             )}
 
             {/* Barra inferior: slider + relación + vistas + capas */}
-            <div style={{ padding: '8px 12px', background: '#101317', borderTop: '1px solid #23262d', flexShrink: 0 }}>
+            <div style={{ padding: '8px 12px', background: '#202020', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <input type="range" min={0} max={Math.max(0, stations.length - 1)} value={currentIndex}
                         onChange={(e) => goIndex(parseInt(e.target.value, 10))} style={{ flex: 1, accentColor: '#3aa0ff' }} />
@@ -563,6 +563,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
     );
 };
 
+// Paleta de la interfaz principal del visor (grises neutros + acento #0078d4)
 const dockStyle = {
     position: 'fixed',
     top: 62,
@@ -572,25 +573,25 @@ const dockStyle = {
     zIndex: 9999,
     display: 'flex',
     flexDirection: 'column',
-    background: 'rgba(10,11,13,0.97)',
-    border: '1px solid rgba(255,255,255,0.12)',
-    borderRadius: 10,
+    background: '#1e1e1e',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 8,
     overflow: 'hidden',
-    boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
-    fontFamily: 'Inter, system-ui, sans-serif',
-    color: '#e6e8ec',
+    boxShadow: '0 16px 40px rgba(0,0,0,0.55)',
+    fontFamily: 'inherit',
+    color: '#e0e0e0',
 };
 
 const spinBtn = {
-    border: 'none', background: 'transparent', color: '#8ecbff', cursor: 'pointer',
+    border: 'none', background: 'transparent', color: '#9aa3ad', cursor: 'pointer',
     fontSize: 8, lineHeight: '11px', padding: '1px 7px',
 };
 
 const btn = (primary, disabled) => ({
-    padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: disabled ? 'default' : 'pointer',
-    border: primary ? '1px solid #3aa0ff' : '1px solid rgba(255,255,255,0.14)',
-    background: primary ? 'rgba(58,160,255,0.16)' : 'rgba(255,255,255,0.04)',
-    color: primary ? '#8ecbff' : '#d7dbe2',
+    padding: '5px 12px', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: disabled ? 'default' : 'pointer',
+    border: primary ? '1px solid #0078d4' : '1px solid rgba(255,255,255,0.12)',
+    background: primary ? 'rgba(0,120,212,0.18)' : 'transparent',
+    color: primary ? '#4db2ff' : '#c9ced4',
     opacity: disabled ? 0.4 : 1,
 });
 

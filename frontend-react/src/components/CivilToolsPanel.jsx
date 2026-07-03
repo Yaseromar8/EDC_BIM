@@ -641,8 +641,12 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
         }
         if (opts.fly) ext?.flyToStation?.(target, pk);
         updateStation(pk); // marcador + cursor + contexto (sin mover cámara)
-        if (opts.cut) ext?.setSectionCutPlane?.(target, pk);
-        else if (opts.cut === false) ext?.clearSectionCutPlane?.();
+        if (opts.cut) {
+            const ok = ext?.setSectionCutPlane?.(target, pk);
+            if (!ok) setSectionMessage('No se pudo aplicar el corte 3D en esta progresiva (revisa la consola).');
+        } else if (opts.cut === false) {
+            ext?.clearSectionCutPlane?.();
+        }
     }, [alignmentData, selectedAlignment, selectedAlignmentId, applyAlignment, getExtension, updateStation]);
 
     const handleExtractCurves = async () => {

@@ -2003,8 +2003,29 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         return true;
     }
 
-    // Corte REAL en el modelo: plano perpendicular al eje en la progresiva pk
-    // (como la sección de InfraWorks). La tangente se toma del propio JSON.
+    // Aplica planos de corte de forma compatible: LMV moderno usa cut-plane SETS
+    // (nuestro set propio no pisa el de la herramienta de sección del toolbar);
+    // fallback al API clásico viewer.setCutPlanes.
+    _applyCutPlanes(planes) {
+        const impl = this.viewer?.impl;
+        try {
+            if (impl && typeof impl.setCutPlaneSet === 'function') {
+                impl.setCutPlaneSet('LOB4D_SECTION', planes && planes.length ? planes : undefined);
+                impl.invalidate(true, true, true);
+                return true;
+            }
+        } catch (e) { console.warn('[LOB4D] setCutPlaneSet falló:', e); }
+        try {
+            this.viewer.setCutPlanes(planes || []);
+            return true;
+        } catch (e) {
+            console.error('[LOB4D] setCutPlanes falló:', e);
+            return false;
+        }
+    }
+
+    // Corte REAL en el modelo: plano vertical perpendicular al eje en la
+    // progresiva pk (como InfraWorks). La tangente se toma del propio JSON.
     setSectionCutPlane(alignmentData, pk) {
         const THREE = window.THREE;
         if (!THREE || !this.viewer || !alignmentData) return false;
@@ -2014,21 +2035,25 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         const pkAhead = Math.min((alignmentData.endStation ?? pk + step), pk + step);
         const p2 = this.civilToViewerPoint(this.pointAtStation(alignmentData, pkAhead), model)
             || this.civilToViewerPoint(this.pointAtStation(alignmentData, pk - step), model);
-        if (!p1 || !p2) return false;
+        if (!p1 || !p2) {
+            console.warn('[LOB4D] corte: progresiva fuera del eje extraído', pk);
+            return false;
+        }
 
         const normal = new THREE.Vector3().subVectors(p2, p1);
-        normal.z = 0; // corte vertical (plano perpendicular al eje en planta)
+        normal.z = 0; // corte vertical (perpendicular al eje en planta)
         if (normal.lengthSq() < 1e-9) return false;
         normal.normalize();
         const d = -normal.dot(p1);
-        this.viewer.setCutPlanes([new THREE.Vector4(normal.x, normal.y, normal.z, d)]);
-        this.sectionCutActive = true;
-        return true;
+        const ok = this._applyCutPlanes([new THREE.Vector4(normal.x, normal.y, normal.z, d)]);
+        this.sectionCutActive = ok;
+        console.log(`[LOB4D] corte 3D @PK ${pk}:`, ok ? 'aplicado' : 'FALLÓ', { normal, d });
+        return ok;
     }
 
     clearSectionCutPlane() {
         if (!this.viewer) return;
-        try { this.viewer.setCutPlanes([]); } catch (e) { /* noop */ }
+        this._applyCutPlanes(null);
         this.sectionCutActive = false;
     }
 
