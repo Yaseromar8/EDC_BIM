@@ -559,10 +559,12 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
         }
         
         values.sort(function(a, b) {
-             const aIsUnassigned = (a.value === '(Unassigned)' || a.value === 'Unassigned' || a.value === 'Sin asignar');
-             const bIsUnassigned = (b.value === '(Unassigned)' || b.value === 'Unassigned' || b.value === 'Sin asignar');
-             if (aIsUnassigned && !bIsUnassigned) return 1;
-             if (!aIsUnassigned && bIsUnassigned) return -1;
+             // Orden: valores reales (por conteo) → '(Unassigned)' → '(No aplica)'
+             const rank = (v) => (v === '(No aplica)') ? 2
+                 : (v === '(Unassigned)' || v === 'Unassigned' || v === 'Sin asignar') ? 1 : 0;
+             const ra = rank(a.value);
+             const rb = rank(b.value);
+             if (ra !== rb) return ra - rb;
 
              if (b.count === a.count) return a.value.localeCompare(b.value);
              return b.count - a.count;
