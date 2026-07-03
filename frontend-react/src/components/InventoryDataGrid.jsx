@@ -345,7 +345,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                                 } else if (catName.toUpperCase() === 'PROPERTY SETS' && pName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)) {
                                     pName = pName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)[1];
                                 }
-                                const rawVal = (pVal === null || pVal === undefined) ? '' : String(pVal).trim();
+                                const rawVal = (pVal === null || pVal === undefined) ? '' : (Array.isArray(pVal) ? pVal.map(x => String(x ?? '').trim()).filter(Boolean).join(', ') : String(pVal).trim());
                                 const val = formatFractionalInch(rawVal);
                                 if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
                                     row[pName] = val;

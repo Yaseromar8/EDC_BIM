@@ -1544,7 +1544,7 @@ function App() {
                   } else if (cName.toUpperCase() === 'PROPERTY SETS' && pName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)) {
                     pName = pName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)[1];
                   }
-                  const val = String(pVal).trim();
+                  const val = Array.isArray(pVal) ? pVal.map(x => String(x ?? '').trim()).filter(Boolean).join(', ') : String(pVal).trim();
                   // FIX: Solo sobreescribir si el nuevo valor no está vacío,
                   // o si la propiedad aún no existe. Esto protege los valores válidos.
                   if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
@@ -1642,7 +1642,7 @@ function App() {
                     for (const d of [' - ', ' \u2013 ', ' \u2014 ']) {
                       if (pName.startsWith(cName + d)) { pName = pName.slice((cName + d).length); break; }
                     }
-                    const val = String(pVal).trim();
+                    const val = Array.isArray(pVal) ? pVal.map(x => String(x ?? '').trim()).filter(Boolean).join(', ') : String(pVal).trim();
                     if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
                       row[pName] = val;
                     }
@@ -2097,7 +2097,7 @@ function App() {
                       for (const d of [' - ', ' \u2013 ', ' \u2014 ']) {
                         if (pName.startsWith(cName + d)) { pName = pName.slice((cName + d).length); break; }
                       }
-                      const val = String(pVal).trim();
+                      const val = Array.isArray(pVal) ? pVal.map(x => String(x ?? '').trim()).filter(Boolean).join(', ') : String(pVal).trim();
                       if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
                         row[pName] = val;
                       }

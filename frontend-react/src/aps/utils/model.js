@@ -419,14 +419,17 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
     const hasAnySelection = Object.keys(filterSelections).some(k => filterSelections[k] && filterSelections[k].length > 0);
     const globalValidDbIds = [];
 
-    // ── Semántica de "(Unassigned)" (estilo Tandem) ──────────────────────────
-    // 1) Valores "basura" (solo separadores/espacios, ej. "," de multi-slots
-    //    vacíos unidos) NO son información → cuentan como sin valor.
+    // ── Semántica de "(Unassigned)" para AUDITORÍA ───────────────────────────
+    // 1) Solo lo VACÍO de verdad cuenta como sin valor. Cualquier cosa tecleada
+    //    (un '-', una letra, un signo por error) es un valor y se muestra como
+    //    su propio bucket — así la auditoría detecta datos mal llenados.
+    //    Los ARREGLOS multi-slot se aplanan uniendo solo las casillas con
+    //    contenido (["",""] → vacío; ["PQ08_1",""] → "PQ08_1"; ["-",""] → "-").
     const normVal = (raw) => {
-        const s = String(raw ?? '').trim();
-        if (!s) return '';
-        if (/^[\s,;|·\-–—.]+$/.test(s)) return '';
-        return s;
+        if (Array.isArray(raw)) {
+            return raw.map(x => String(x ?? '').trim()).filter(Boolean).join(', ');
+        }
+        return String(raw ?? '').trim();
     };
 
     // 2) "(Unassigned)" se ACOTA a los modelos donde el parámetro EXISTE:
