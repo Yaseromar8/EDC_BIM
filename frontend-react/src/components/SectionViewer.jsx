@@ -113,19 +113,33 @@ function formatStation(m) {
     return `${km}+${rest}`;
 }
 
-// Cuadro de volúmenes (áreas medias) — v2 con materialName+area
+// Cuadro de volúmenes (áreas medias). Fuente de área por prioridad:
+// 1) area real de Civil (v2, cuando la API la expone y es > 0)
+// 2) shoelace de los puntos ORDENADOS y cerrados (v2 siempre los trae)
+// Material: materialName de Civil o, si no llega, el nombre de la Material List.
 function computeVolumes(stations) {
     const byAlign = new Map();
     stations.forEach((st) => {
         if (st?.station == null) return;
         (st.sections || []).forEach((sec) => {
-            const mat = sec.materialName || null;
-            if (!mat || sec.area == null || !Number.isFinite(Number(sec.area))) return;
+            const isMaterial = !!sec.materialName || /material list/i.test(sec.name || '');
+            if (!isMaterial) return;
+            const mat = sec.materialName || labelFromName(sec.name);
+            if (!mat) return;
+            let area = Number(sec.area);
+            if (!Number.isFinite(area) || area <= 0) {
+                const pts = (sec.points || [])
+                    .map((p) => [Number(p?.[0]), Number(p?.[1])])
+                    .filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+                if (sec.closed && pts.length >= 3) area = shoelace(pts);
+                else return;
+            }
+            if (!Number.isFinite(area) || area <= 0) return;
             const key = st.alignmentId || '—';
             if (!byAlign.has(key)) byAlign.set(key, new Map());
             const mats = byAlign.get(key);
             if (!mats.has(mat)) mats.set(mat, new Map());
-            mats.get(mat).set(st.station, (mats.get(mat).get(st.station) || 0) + Number(sec.area));
+            mats.get(mat).set(st.station, (mats.get(mat).get(st.station) || 0) + area);
         });
     });
     const materials = [];
@@ -274,7 +288,8 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
         let cut = 0; let fill = 0;
         shapes.forEach((s) => {
             if (!s.closed || s.corridor) return;
-            const a = s.area != null && Number.isFinite(Number(s.area)) ? Number(s.area) : shoelace(s.pts);
+            // Civil a veces reporta area=0 aunque el contorno exista → shoelace de respaldo
+            const a = (Number.isFinite(Number(s.area)) && Number(s.area) > 0) ? Number(s.area) : shoelace(s.pts);
             if (s.cls.key === 'corte') cut += a;
             else if (s.cls.key === 'relleno') fill += a;
         });

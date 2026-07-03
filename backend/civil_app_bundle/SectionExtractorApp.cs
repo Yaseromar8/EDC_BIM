@@ -6,6 +6,11 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.Civil.ApplicationServices;
 using Autodesk.Civil.DatabaseServices;
 
+// CRÍTICO: cuando el assembly declara atributos CommandClass (hay uno en
+// AlignmentExtractorApp.cs), AutoCAD SOLO escanea esas clases. Sin esta línea,
+// ExtractSectionsJSON queda como "Unknown command" en accoreconsole.
+[assembly: Autodesk.AutoCAD.Runtime.CommandClass(typeof(AlignmentExtractorApp.SectionCommands))]
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SectionExtractor v2 — "extraer TODO lo que Civil ya procesó, descartar después"
 //
