@@ -2003,6 +2003,35 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         return true;
     }
 
+    // Corte REAL en el modelo: plano perpendicular al eje en la progresiva pk
+    // (como la sección de InfraWorks). La tangente se toma del propio JSON.
+    setSectionCutPlane(alignmentData, pk) {
+        const THREE = window.THREE;
+        if (!THREE || !this.viewer || !alignmentData) return false;
+        const model = this.getModelForCoordinates();
+        const p1 = this.civilToViewerPoint(this.pointAtStation(alignmentData, pk), model);
+        const step = 1.0;
+        const pkAhead = Math.min((alignmentData.endStation ?? pk + step), pk + step);
+        const p2 = this.civilToViewerPoint(this.pointAtStation(alignmentData, pkAhead), model)
+            || this.civilToViewerPoint(this.pointAtStation(alignmentData, pk - step), model);
+        if (!p1 || !p2) return false;
+
+        const normal = new THREE.Vector3().subVectors(p2, p1);
+        normal.z = 0; // corte vertical (plano perpendicular al eje en planta)
+        if (normal.lengthSq() < 1e-9) return false;
+        normal.normalize();
+        const d = -normal.dot(p1);
+        this.viewer.setCutPlanes([new THREE.Vector4(normal.x, normal.y, normal.z, d)]);
+        this.sectionCutActive = true;
+        return true;
+    }
+
+    clearSectionCutPlane() {
+        if (!this.viewer) return;
+        try { this.viewer.setCutPlanes([]); } catch (e) { /* noop */ }
+        this.sectionCutActive = false;
+    }
+
     simulatePK(alignmentData, pk) {
         if (!this.viewer || !alignmentData || !alignmentData.subEntities) return;
 

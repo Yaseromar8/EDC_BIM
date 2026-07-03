@@ -623,22 +623,26 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
         return () => { alive = false; };
     }, [selectedDwgUrn, activeModelUrn, sectionJSON]);
 
-    // RETO: desde el visualizador 2D → volar la cámara del modelo a esa sección.
-    const handleGoToSection = useCallback(async (alignName, station) => {
+    // SYNC DUAL con el visualizador de secciones: mueve marcador PK, opcionalmente
+    // vuela la cámara (fly) y aplica/quita el plano de corte real (cut).
+    const handleSectionSync = useCallback(async (alignName, station, opts = {}) => {
+        const ext = await getExtension();
+        if (opts.clearOnly) { ext?.clearSectionCutPlane?.(); return; }
+
         const target = alignmentData.find((a) => a.alignmentId === alignName || a.name === alignName)
             || (selectedAlignment || alignmentData[0]);
         if (!target) {
             setSectionMessage('Extrae los alineamientos (Extraer) para poder ubicar la sección en el modelo.');
             return;
         }
-        setShowSectionViewer(false);
+        const pk = Number(station) || 0;
         if (target.alignmentId !== selectedAlignmentId) {
-            await applyAlignment(target.alignmentId, alignmentData, { station });
+            await applyAlignment(target.alignmentId, alignmentData, { station: pk });
         }
-        const ext = await getExtension();
-        const ok = ext?.flyToStation?.(target, Number(station) || 0);
-        if (ok) updateStation(Number(station) || 0);
-        else setSectionMessage('La progresiva está fuera del eje extraído.');
+        if (opts.fly) ext?.flyToStation?.(target, pk);
+        updateStation(pk); // marcador + cursor + contexto (sin mover cámara)
+        if (opts.cut) ext?.setSectionCutPlane?.(target, pk);
+        else if (opts.cut === false) ext?.clearSectionCutPlane?.();
     }, [alignmentData, selectedAlignment, selectedAlignmentId, applyAlignment, getExtension, updateStation]);
 
     const handleExtractCurves = async () => {
@@ -1403,8 +1407,11 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
             {showSectionViewer && sectionJSON && (
                 <SectionViewer
                     sectionsData={sectionJSON}
-                    onClose={() => setShowSectionViewer(false)}
-                    onGoToStation={handleGoToSection}
+                    onClose={() => {
+                        setShowSectionViewer(false);
+                        getExtension().then((ext) => ext?.clearSectionCutPlane?.());
+                    }}
+                    onSync={handleSectionSync}
                 />
             )}
         </div>

@@ -1,14 +1,13 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 
-// ── SectionViewer — secciones transversales estilo Civil 3D ──
-// Soporta 2 esquemas del extractor C#:
-//   v1 (actual): [{ station, sections: [{ name, links: [segmentos sueltos], polygons }] }]
-//       → reconstruimos cadenas continuas (heurística) y clasificamos por nombre.
-//   v2 (Nivel 2): { schemaVersion: 2, stations: [{ station, sections: [{ name,
-//       styleName, area, closed, points: [[off, elev], ...] (YA ordenados) }] }] }
-//       → dibujamos tal cual, clasificamos por styleName (exacto).
-// Cuadrícula con ejes rotulados, zoom (rueda), pan (arrastre), leyenda con aislamiento.
+// ── SectionViewer — panel de secciones estilo InfraWorks, DOCKEADO a la derecha ──
+// El modelo queda visible. Sincronización DUAL con el visor 3D:
+//   panel → modelo: cambiar estación mueve el marcador PK (y el corte si está activo)
+//   modelo → panel: mover la progresiva en el 3D (evento LOB4D_PK_CONTEXT_CHANGED)
+//                   salta a la sección más cercana.
+// "Corte 3D" activa un plano de corte real perpendicular al eje en esa progresiva.
+// Esquemas v1 (links sueltos → cadenas) y v2 (puntos ordenados + estilo + área).
 
 const KNOWN_TYPES = [
     { test: /terreno|natural|existing|\beg\b|\bng\b/i, key: 'terreno', label: 'Terreno natural', color: '#10b981', fill: false },
@@ -46,7 +45,6 @@ const classify = (name) => {
     return { key: `auto:${label.toLowerCase()}`, label, color: hashColor(label.toLowerCase()), fill: true };
 };
 
-// ── Reconstrucción de cadenas (solo esquema v1: links sueltos y desordenados) ──
 const EPS = 0.03;
 const ptEq = (a, b) => Math.abs(a[0] - b[0]) < EPS && Math.abs(a[1] - b[1]) < EPS;
 
@@ -86,15 +84,21 @@ const chainSig = (pts) => {
     return `${pts.length}:${sx.toFixed(2)}:${sy.toFixed(2)}`;
 };
 
-// Normaliza v1/v2 a una lista de estaciones uniforme.
+const shoelace = (pts) => {
+    let area = 0;
+    for (let i = 0; i < pts.length - 1; i += 1) {
+        area += pts[i][0] * pts[i + 1][1] - pts[i + 1][0] * pts[i][1];
+    }
+    return Math.abs(area) / 2;
+};
+
 function normalizeStations(raw) {
     if (!raw) return [];
-    if (Array.isArray(raw)) return raw;                       // v1
-    if (raw.schemaVersion >= 2 && Array.isArray(raw.stations)) return raw.stations; // v2
+    if (Array.isArray(raw)) return raw;
+    if (raw.schemaVersion >= 2 && Array.isArray(raw.stations)) return raw.stations;
     return [];
 }
 
-// Paso "bonito" para la cuadrícula (1/2/5 × 10^n).
 function niceStep(range, target = 8) {
     const rough = range / target;
     const pow = Math.pow(10, Math.floor(Math.log10(rough || 1)));
@@ -109,8 +113,7 @@ function formatStation(m) {
     return `${km}+${rest}`;
 }
 
-// ── Cuadro de volúmenes (método de áreas medias, como la tabla de Civil) ──
-// Requiere esquema v2 (materialName + area por estación).
+// Cuadro de volúmenes (áreas medias) — v2 con materialName+area
 function computeVolumes(stations) {
     const byAlign = new Map();
     stations.forEach((st) => {
@@ -122,11 +125,9 @@ function computeVolumes(stations) {
             if (!byAlign.has(key)) byAlign.set(key, new Map());
             const mats = byAlign.get(key);
             if (!mats.has(mat)) mats.set(mat, new Map());
-            const rows = mats.get(mat);
-            rows.set(st.station, (rows.get(st.station) || 0) + Number(sec.area));
+            mats.get(mat).set(st.station, (mats.get(mat).get(st.station) || 0) + Number(sec.area));
         });
     });
-
     const materials = [];
     byAlign.forEach((mats, alignmentId) => {
         mats.forEach((rows, mat) => {
@@ -136,7 +137,7 @@ function computeVolumes(stations) {
                 let parcial = 0;
                 if (i > 0) {
                     const [pkPrev, areaPrev] = sorted[i - 1];
-                    parcial = ((areaPrev + area) / 2) * (pk - pkPrev); // áreas medias
+                    parcial = ((areaPrev + area) / 2) * (pk - pkPrev);
                 }
                 acum += parcial;
                 return { pk, area, parcial, acum };
@@ -148,60 +149,88 @@ function computeVolumes(stations) {
     return materials;
 }
 
-const SectionViewer = ({ sectionsData, onClose, onGoToStation }) => {
+const SectionViewer = ({ sectionsData, onClose, onSync }) => {
     const stations = useMemo(() => normalizeStations(sectionsData), [sectionsData]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [hidden, setHidden] = useState(() => new Set());
-    const [mode, setMode] = useState('seccion');       // 'seccion' | 'volumenes'
-    const [volMaterial, setVolMaterial] = useState(0); // índice del material activo
-    const volumes = useMemo(() => computeVolumes(stations), [stations]);
-    const userTouchedRef = useRef(new Set());   // keys que el usuario toggleó (no auto-ocultar)
-    const [view, setView] = useState(null);     // viewBox {x,y,w,h} para zoom/pan
+    const userTouchedRef = useRef(new Set());
+    const [view, setView] = useState(null);
+    const [mode, setMode] = useState('seccion');
+    const [volMaterial, setVolMaterial] = useState(0);
+    const [aspect, setAspect] = useState(1);            // relación anchura/altura (exageración vertical)
+    const [cutOn, setCutOn] = useState(false);          // corte 3D real en el modelo
+    const [syncOn, setSyncOn] = useState(true);         // dual: modelo→panel
+    const [legendOpen, setLegendOpen] = useState(false);
     const dragRef = useRef(null);
     const svgRef = useRef(null);
+    const lastSyncRef = useRef(null);
+    const volumes = useMemo(() => computeVolumes(stations), [stations]);
 
     const station = stations[Math.min(currentIndex, Math.max(0, stations.length - 1))];
 
-    // ── Shapes de la estación actual ──
+    // panel → modelo (marcador PK + corte si está activo)
+    const pushToModel = useCallback((st, opts = {}) => {
+        if (!onSync || !st || st.station == null) return;
+        lastSyncRef.current = st.station;
+        onSync(st.alignmentId, st.station, { cut: cutOn, ...opts });
+    }, [onSync, cutOn]);
+
+    const goIndex = useCallback((i, push = true) => {
+        const idx = Math.max(0, Math.min(stations.length - 1, i));
+        setCurrentIndex(idx);
+        if (push) pushToModel(stations[idx]);
+    }, [stations, pushToModel]);
+
+    // modelo → panel: la progresiva del 3D mueve la sección mostrada
+    useEffect(() => {
+        if (!syncOn || !stations.length) return undefined;
+        const handler = (e) => {
+            const pk = e.detail?.station;
+            if (pk == null) return;
+            if (lastSyncRef.current != null && Math.abs(lastSyncRef.current - pk) < 0.01) return; // eco propio
+            let best = 0; let bestD = Infinity;
+            stations.forEach((st, i) => {
+                const d = Math.abs((st.station ?? Infinity) - pk);
+                if (d < bestD) { bestD = d; best = i; }
+            });
+            if (bestD < 50) setCurrentIndex(best);   // solo si hay una sección razonablemente cerca
+        };
+        window.addEventListener('LOB4D_PK_CONTEXT_CHANGED', handler);
+        return () => window.removeEventListener('LOB4D_PK_CONTEXT_CHANGED', handler);
+    }, [syncOn, stations]);
+
+    // corte 3D: aplicar/limpiar al toggle y al cambiar de estación con corte activo
+    useEffect(() => {
+        if (!onSync || !station) return;
+        if (cutOn) pushToModel(station, { cut: true });
+        else onSync(station.alignmentId, station.station, { cut: false, markerOnly: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cutOn]);
+
+    useEffect(() => () => { try { onSync?.(null, null, { cut: false, clearOnly: true }); } catch { /* noop */ } }, [onSync]);
+
+    // ── Shapes de la estación actual (v1: cadenas · v2: puntos ordenados) ──
     const shapes = useMemo(() => {
         if (!station) return [];
         const out = [];
         const seen = new Set();
 
         (station.sections || []).forEach((sec, i) => {
-            // Identidad: material QTO exacto > estilo > nombre
             const cls = classify(sec.materialName || sec.styleName || sec.name);
-            // v2: puntos YA ordenados por Civil → dibujar tal cual
             if (Array.isArray(sec.points) && sec.points.length >= 2) {
-                if (sec.draw === false) return; // Si Civil dice NO dibujar, lo saltamos por completo
-                
                 const pts = sec.points
                     .map((p) => [Number(p?.[0]), Number(p?.[1])])
                     .filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
                 if (pts.length < 2) return;
-                
-                // Si el backend nos dio el color exacto, lo respetamos (clon visual)
-                let finalCls = { ...cls };
-                if (sec.exactColor) {
-                    finalCls.color = sec.exactColor;
-                    finalCls.fill = !!sec.isHatch;
-                    finalCls.key = sec.styleName ? `style:${sec.styleName}` : `exact:${sec.exactColor}`;
-                    finalCls.label = sec.styleName || finalCls.label;
-                }
-                
-                // Visibilidad como en Civil: estilos "_Invisible" NO se dibujan (se ocultan por defecto)
                 const invisible = /invisible/i.test(sec.styleName || '') || /invisible/i.test(sec.layer || '');
-                // shape de corredor SIN coordenadas absolutas → grupo aparte, apagado
                 const relCorr = sec.sourceType === 'CorridorShape' && sec.absolute === false;
-                
-                if (relCorr) finalCls = { ...finalCls, key: `corr:${finalCls.key}`, label: `${finalCls.label} (corredor)` };
-                else if (invisible) finalCls = { ...finalCls, key: `inv:${finalCls.key}`, label: `${finalCls.label} (oculto en Civil)` };
-                
+                let finalCls = cls;
+                if (relCorr) finalCls = { ...cls, key: `corr:${cls.key}`, label: `${cls.label} (corredor)` };
+                else if (invisible) finalCls = { ...cls, key: `inv:${cls.key}`, label: `${cls.label} (oculto en Civil)` };
                 const closed = (sec.closed === true) && finalCls.fill;
                 out.push({ id: `s${i}`, cls: finalCls, pts, closed, area: sec.area, corridor: relCorr || invisible });
                 return;
             }
-            // v1: reconstruir cadenas desde links sueltos
             buildChains(sec.links).forEach((chain, c) => {
                 const sig = chainSig(chain.pts);
                 if (seen.has(sig)) return;
@@ -211,8 +240,6 @@ const SectionViewer = ({ sectionsData, onClose, onGoToStation }) => {
             });
         });
 
-        // Shapes del corredor (v1: elevación RELATIVA a la rasante → grupo aparte,
-        // apagado por defecto; el usuario puede encenderlo en la leyenda).
         (station.sections || []).forEach((sec, i) => {
             (sec.polygons || []).forEach((poly, j) => {
                 const pts = (poly.points || [])
@@ -230,19 +257,28 @@ const SectionViewer = ({ sectionsData, onClose, onGoToStation }) => {
                 });
             });
         });
-
         return out;
     }, [station]);
 
-    // Auto-ocultar shapes de corredor (coordenadas relativas) salvo que el usuario los active.
     useEffect(() => {
         setHidden((prev) => {
             const next = new Set(prev);
-            shapes.forEach((s) => {
-                if (s.corridor && !userTouchedRef.current.has(s.cls.key)) next.add(s.cls.key);
-            });
+            shapes.forEach((s) => { if (s.corridor && !userTouchedRef.current.has(s.cls.key)) next.add(s.cls.key); });
             return next;
         });
+    }, [shapes]);
+
+    // Áreas de DESMONTE (corte) y TERRAPLÉN (relleno) de la estación — como InfraWorks.
+    // v2: usa las áreas reales de Material List; v1: shoelace de las cadenas cerradas.
+    const cutFill = useMemo(() => {
+        let cut = 0; let fill = 0;
+        shapes.forEach((s) => {
+            if (!s.closed || s.corridor) return;
+            const a = s.area != null && Number.isFinite(Number(s.area)) ? Number(s.area) : shoelace(s.pts);
+            if (s.cls.key === 'corte') cut += a;
+            else if (s.cls.key === 'relleno') fill += a;
+        });
+        return { cut, fill };
     }, [shapes]);
 
     const legend = useMemo(() => {
@@ -251,7 +287,7 @@ const SectionViewer = ({ sectionsData, onClose, onGoToStation }) => {
         return [...map.values()];
     }, [shapes]);
 
-    // BBox del contenido VISIBLE (sin los ocultos → el fantasma no arruina el encuadre).
+    // BBox visible (Y multiplicada por la exageración vertical)
     const bbox = useMemo(() => {
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, has = false;
         shapes.forEach((s) => {
@@ -267,22 +303,22 @@ const SectionViewer = ({ sectionsData, onClose, onGoToStation }) => {
         return { minX: minX - px, maxX: maxX + px, minY: minY - py, maxY: maxY + py };
     }, [shapes, hidden]);
 
-    // Vista (viewBox) en coordenadas MUNDO-X / MUNDO-Y-invertida.
     const world = useMemo(() => ({
-        x: bbox.minX, y: -bbox.maxY, w: bbox.maxX - bbox.minX, h: bbox.maxY - bbox.minY,
-    }), [bbox]);
+        x: bbox.minX,
+        y: -bbox.maxY * aspect,
+        w: bbox.maxX - bbox.minX,
+        h: (bbox.maxY - bbox.minY) * aspect,
+    }), [bbox, aspect]);
 
-    useEffect(() => { setView(null); }, [world.x, world.y, world.w, world.h]); // re-encuadrar al cambiar estación/leyenda
+    useEffect(() => { setView(null); }, [world.x, world.y, world.w, world.h]);
 
     const v = view || world;
     const toX = (x) => x;
-    const toY = (y) => -y;              // invertir Y una sola vez (SVG crece hacia abajo)
-    const px = v.w / 900;               // 1 "pixel" visual en unidades de mundo (constante al zoom)
+    const toY = (y) => -y * aspect;
+    const px = v.w / 700;
 
-    // ── Zoom con rueda (centrado en el cursor) + pan con arrastre ──
     const clientToWorld = useCallback((ev) => {
         const rect = svgRef.current.getBoundingClientRect();
-        // preserveAspectRatio=xMidYMid meet → escala uniforme con letterbox
         const scale = Math.max(v.w / rect.width, v.h / rect.height);
         const dispW = v.w / scale; const dispH = v.h / scale;
         const offX = (rect.width - dispW) / 2; const offY = (rect.height - dispH) / 2;
@@ -298,7 +334,7 @@ const SectionViewer = ({ sectionsData, onClose, onGoToStation }) => {
 
     useEffect(() => {
         const el = svgRef.current;
-        if (!el) return;
+        if (!el) return undefined;
         el.addEventListener('wheel', onWheel, { passive: false });
         return () => el.removeEventListener('wheel', onWheel);
     }, [onWheel]);
@@ -315,7 +351,6 @@ const SectionViewer = ({ sectionsData, onClose, onGoToStation }) => {
     };
     const onPointerUp = () => { dragRef.current = null; };
 
-    const go = (i) => setCurrentIndex(Math.max(0, Math.min(stations.length - 1, i)));
     const toggle = (key) => {
         userTouchedRef.current.add(key);
         setHidden((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
@@ -323,215 +358,239 @@ const SectionViewer = ({ sectionsData, onClose, onGoToStation }) => {
 
     if (!station) {
         return createPortal(
-            <div style={overlayStyle}>
-                <p style={{ color: '#d7dbe2' }}>No hay datos de secciones disponibles.</p>
+            <div style={dockStyle}>
+                <div style={{ padding: 20, color: '#8a919c', fontSize: 12 }}>No hay datos de secciones disponibles.</div>
                 <button onClick={onClose} style={btn(true)}>Cerrar</button>
             </div>,
             document.body
         );
     }
 
-    const stationLabel = station.station != null ? `PK ${formatStation(station.station)}` : (station.sampleLineName || `Estación ${currentIndex}`);
-
-    // ── Cuadrícula (recalculada con el zoom actual) ──
+    // Cuadrícula (los rótulos de elevación muestran el valor REAL, sin exageración)
     const gridX = [];
     const gridY = [];
     {
-        const stepX = niceStep(v.w, 10);
-        const stepY = niceStep(v.h, 7);
+        const stepX = niceStep(v.w, 8);
+        const stepY = niceStep(v.h / aspect, 6) * aspect;
         for (let gx = Math.ceil(v.x / stepX) * stepX; gx <= v.x + v.w; gx += stepX) gridX.push(gx);
         for (let gy = Math.ceil(v.y / stepY) * stepY; gy <= v.y + v.h; gy += stepY) gridY.push(gy);
     }
-    const fontSize = 11 * px * (900 / 760);
+    const fontSize = 10.5 * px * (700 / 620);
 
     return createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ width: '88vw', height: '88vh', display: 'flex', flexDirection: 'column', background: 'rgba(10,11,13,0.97)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.1)', fontFamily: 'Inter, system-ui, sans-serif' }}>
-                {/* Header */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 22px', borderBottom: '1px solid #23262d', background: '#101317' }}>
-                    <div>
-                        <div style={{ fontSize: 16, fontWeight: 800, color: '#e6e8ec' }}>Secciones transversales · Civil 3D</div>
-                        <div style={{ fontSize: 12, color: '#8a919c', marginTop: 2 }}>
-                            {station.alignmentId} · {station.sampleLineGroupId} · <span style={{ color: '#8ecbff', fontFamily: 'IBM Plex Mono, monospace' }}>{stationLabel}</span>
-                        </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                        <button onClick={() => setMode('seccion')} style={btn(mode === 'seccion')}>Sección</button>
-                        {volumes.length > 0 && (
-                            <button onClick={() => setMode('volumenes')} style={btn(mode === 'volumenes')}>Cuadro de volúmenes</button>
-                        )}
-                        {onGoToStation && station?.station != null && (
-                            <button
-                                onClick={() => onGoToStation(station.alignmentId, station.station)}
-                                style={btn(true)}
-                                title="Volar la cámara del modelo 3D hasta esta progresiva"
-                            >
-                                ◎ Ver en el modelo
-                            </button>
-                        )}
-                        <button onClick={() => setView(null)} style={btn(false)} title="Re-encuadrar">⤢ Encuadrar</button>
-                        <button onClick={onClose} style={btn(false)}>✕ Cerrar</button>
+        <div style={dockStyle}>
+            {/* Título */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #23262d', background: '#101317', flexShrink: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#e6e8ec' }}>Sección transversal</span>
+                <span style={{ fontSize: 11, color: '#8a919c' }}>{station.alignmentId}</span>
+                <div style={{ flex: 1 }} />
+                {/* Spinner de progresiva (estilo InfraWorks) */}
+                <div style={{ display: 'flex', alignItems: 'center', background: '#0a0b0d', border: '1px solid #2a2f37', borderRadius: 6, overflow: 'hidden' }}>
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 700, color: '#e6e8ec', padding: '5px 10px' }}>
+                        {formatStation(station.station)}
+                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid #2a2f37' }}>
+                        <button onClick={() => goIndex(currentIndex + 1)} disabled={currentIndex >= stations.length - 1} style={spinBtn}>▲</button>
+                        <button onClick={() => goIndex(currentIndex - 1)} disabled={currentIndex === 0} style={{ ...spinBtn, borderTop: '1px solid #2a2f37' }}>▼</button>
                     </div>
                 </div>
+                <button onClick={onClose} style={{ ...btn(false), padding: '5px 9px' }} title="Cerrar">✕</button>
+            </div>
 
-                {mode === 'volumenes' && volumes.length > 0 && (
-                    <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-                        {/* Lista de materiales (como las Material Lists de Civil) */}
-                        <div style={{ width: 280, flexShrink: 0, borderRight: '1px solid #23262d', background: '#0e1014', padding: 14, overflowY: 'auto' }}>
-                            <div style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#6b7280', fontWeight: 700, marginBottom: 10 }}>
-                                Cómputo de materiales ({volumes.length})
-                            </div>
-                            {volumes.map((m, i) => (
-                                <button key={`${m.alignmentId}:${m.material}`} onClick={() => setVolMaterial(i)}
-                                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 10px', borderRadius: 7, marginBottom: 6, cursor: 'pointer', border: volMaterial === i ? '1px solid #3aa0ff' : '1px solid rgba(255,255,255,0.07)', background: volMaterial === i ? 'rgba(58,160,255,0.12)' : 'transparent' }}>
-                                    <div style={{ fontSize: 12.5, fontWeight: 700, color: '#d7dbe2' }}>{m.material}</div>
-                                    <div style={{ fontSize: 10.5, color: '#8a919c', marginTop: 3, fontFamily: 'IBM Plex Mono, monospace' }}>
-                                        {m.table.length} PKs · {m.total.toLocaleString('es-PE', { maximumFractionDigits: 1 })} m³
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                        {/* Tabla PK / Área / Vol parcial / Vol acumulado */}
-                        <div style={{ flex: 1, minWidth: 0, overflow: 'auto', background: '#0a0b0d' }}>
-                            {volumes[Math.min(volMaterial, volumes.length - 1)] && (() => {
-                                const m = volumes[Math.min(volMaterial, volumes.length - 1)];
-                                return (
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                                        <thead>
-                                            <tr style={{ position: 'sticky', top: 0, background: '#12151a', color: '#6b7280', textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.08em' }}>
-                                                <th style={{ padding: '9px 14px', textAlign: 'left' }}>Progresiva</th>
-                                                <th style={{ padding: '9px 14px', textAlign: 'right' }}>Área (m²)</th>
-                                                <th style={{ padding: '9px 14px', textAlign: 'right' }}>Vol. parcial (m³)</th>
-                                                <th style={{ padding: '9px 14px', textAlign: 'right' }}>Vol. acumulado (m³)</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#c8cdd6' }}>
-                                            {m.table.map((r) => (
-                                                <tr key={r.pk} style={{ borderTop: '1px solid #14171c' }}>
-                                                    <td style={{ padding: '7px 14px', color: '#8ecbff' }}>{formatStation(r.pk)}</td>
-                                                    <td style={{ padding: '7px 14px', textAlign: 'right' }}>{r.area.toFixed(2)}</td>
-                                                    <td style={{ padding: '7px 14px', textAlign: 'right' }}>{r.parcial.toFixed(2)}</td>
-                                                    <td style={{ padding: '7px 14px', textAlign: 'right', fontWeight: 700 }}>{r.acum.toFixed(2)}</td>
-                                                </tr>
-                                            ))}
-                                            <tr style={{ borderTop: '2px solid #2a2f37', background: '#101317' }}>
-                                                <td style={{ padding: '9px 14px', fontWeight: 800, color: '#e6e8ec' }}>TOTAL · {m.material}</td>
-                                                <td />
-                                                <td />
-                                                <td style={{ padding: '9px 14px', textAlign: 'right', fontWeight: 800, color: '#22c55e' }}>{m.total.toFixed(2)}</td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                );
-                            })()}
-                            <div style={{ padding: '10px 14px', fontSize: 10.5, color: '#5d6672' }}>
-                                Volúmenes por método de áreas medias entre PKs consecutivos (como la tabla de Civil 3D), a partir de las áreas de Material List extraídas.
-                            </div>
-                        </div>
-                    </div>
-                )}
+            {/* Áreas + controles */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 14px', borderBottom: '1px solid #1c1f25', background: '#0e1014', flexShrink: 0, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11.5 }}>
+                    <span style={{ color: '#ef4444', fontWeight: 700 }}>Área de desmonte:</span>{' '}
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#e6e8ec' }}>{cutFill.cut.toFixed(3)} m²</span>
+                </span>
+                <span style={{ fontSize: 11.5 }}>
+                    <span style={{ color: '#22c55e', fontWeight: 700 }}>Área de terraplén:</span>{' '}
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#e6e8ec' }}>{cutFill.fill.toFixed(3)} m²</span>
+                </span>
+                <div style={{ flex: 1 }} />
+                <button onClick={() => pushToModel(station, { fly: true })} style={btn(true)} title="Volar la cámara del modelo a esta progresiva">◎ Volar</button>
+                <button onClick={() => setCutOn((p) => !p)} style={btn(cutOn)} title="Plano de corte real en el modelo 3D">✂ Corte 3D</button>
+                <button onClick={() => setSyncOn((p) => !p)} style={btn(syncOn)} title="El panel sigue la progresiva que muevas en el modelo">⇄ Sync</button>
+            </div>
 
-                <div style={{ flex: 1, minHeight: 0, display: mode === 'seccion' ? 'flex' : 'none' }}>
-                    {/* Dibujo */}
-                    <div style={{ flex: 1, minWidth: 0, background: '#0b1220', position: 'relative' }}>
-                        <svg
-                            ref={svgRef}
-                            style={{ width: '100%', height: '100%', cursor: dragRef.current ? 'grabbing' : 'grab', touchAction: 'none', display: 'block' }}
-                            viewBox={`${v.x} ${v.y} ${v.w} ${v.h}`}
-                            preserveAspectRatio="xMidYMid meet"
-                            onPointerDown={onPointerDown}
-                            onPointerMove={onPointerMove}
-                            onPointerUp={onPointerUp}
-                            onDoubleClick={() => setView(null)}
-                        >
-                            {/* Cuadrícula estilo Civil */}
-                            {gridX.map((gx) => (
-                                <line key={`gx${gx}`} x1={gx} y1={v.y} x2={gx} y2={v.y + v.h} stroke="#22304a" strokeWidth={px} />
-                            ))}
-                            {gridY.map((gy) => (
-                                <line key={`gy${gy}`} x1={v.x} y1={gy} x2={v.x + v.w} y2={gy} stroke="#22304a" strokeWidth={px} />
-                            ))}
-                            {/* Eje central (offset 0) */}
-                            <line x1={0} y1={v.y} x2={0} y2={v.y + v.h} stroke="#3f9e63" strokeWidth={px * 1.4} strokeDasharray={`${px * 10} ${px * 6}`} />
-                            <text x={px * 6} y={v.y + fontSize * 1.6} fill="#3f9e63" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">CL</text>
+            {/* Dibujo o volúmenes */}
+            {mode === 'seccion' ? (
+                <div style={{ flex: 1, minHeight: 0, position: 'relative', background: '#0b1220' }}>
+                    <svg
+                        ref={svgRef}
+                        style={{ width: '100%', height: '100%', cursor: dragRef.current ? 'grabbing' : 'grab', touchAction: 'none', display: 'block' }}
+                        viewBox={`${v.x} ${v.y} ${v.w} ${v.h}`}
+                        preserveAspectRatio="xMidYMid meet"
+                        onPointerDown={onPointerDown}
+                        onPointerMove={onPointerMove}
+                        onPointerUp={onPointerUp}
+                        onDoubleClick={() => setView(null)}
+                    >
+                        {gridX.map((gx) => (
+                            <line key={`gx${gx}`} x1={gx} y1={v.y} x2={gx} y2={v.y + v.h} stroke="#1d2942" strokeWidth={px} />
+                        ))}
+                        {gridY.map((gy) => (
+                            <line key={`gy${gy}`} x1={v.x} y1={gy} x2={v.x + v.w} y2={gy} stroke="#1d2942" strokeWidth={px} />
+                        ))}
+                        <line x1={0} y1={v.y} x2={0} y2={v.y + v.h} stroke="#3f9e63" strokeWidth={px * 1.3} strokeDasharray={`${px * 9} ${px * 5}`} />
 
-                            {/* Rótulos: offsets (abajo) y elevaciones (izquierda) */}
-                            {gridX.map((gx) => (
-                                <text key={`tx${gx}`} x={gx + px * 3} y={v.y + v.h - fontSize * 0.6} fill="#5b7db1" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">
-                                    {Math.abs(gx) < 1e-9 ? '0' : gx.toFixed(gx % 1 ? 1 : 0)}
+                        {/* offsets abajo · elevaciones a AMBOS lados (valor real) */}
+                        {gridX.map((gx) => (
+                            <text key={`tx${gx}`} x={gx + px * 3} y={v.y + v.h - fontSize * 0.5} fill="#5b7db1" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">
+                                {Math.abs(gx) < 1e-9 ? '0' : `${gx.toFixed(gx % 1 ? 1 : 0)}m`}
+                            </text>
+                        ))}
+                        {gridY.map((gy) => (
+                            <g key={`ty${gy}`}>
+                                <text x={v.x + px * 5} y={gy - px * 3} fill="#5b7db1" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">
+                                    {(-gy / aspect).toFixed(0)}m
                                 </text>
-                            ))}
-                            {gridY.map((gy) => (
-                                <text key={`ty${gy}`} x={v.x + px * 5} y={gy - px * 3} fill="#5b7db1" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">
-                                    {(-gy).toFixed(gy % 1 ? 1 : 0)}
+                                <text x={v.x + v.w - px * 5} y={gy - px * 3} fill="#5b7db1" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace" textAnchor="end">
+                                    {(-gy / aspect).toFixed(0)}m
                                 </text>
-                            ))}
+                            </g>
+                        ))}
 
-                            {/* Áreas primero, líneas encima */}
-                            {shapes.filter((s) => s.closed && !hidden.has(s.cls.key)).map((s) => (
-                                <polygon key={s.id} points={s.pts.map(([x, y]) => `${toX(x)},${toY(y)}`).join(' ')}
-                                    fill={s.cls.color} fillOpacity={0.30} stroke={s.cls.color} strokeWidth={px * 1.4} strokeOpacity={0.95}>
-                                    <title>{s.cls.label}{s.area != null ? ` · ${Number(s.area).toFixed(2)} m²` : ''}</title>
-                                </polygon>
-                            ))}
-                            {shapes.filter((s) => !s.closed && !hidden.has(s.cls.key)).map((s) => (
-                                <polyline key={s.id} points={s.pts.map(([x, y]) => `${toX(x)},${toY(y)}`).join(' ')}
-                                    fill="none" stroke={s.cls.color}
-                                    strokeWidth={s.thin ? px * 1.1 : px * 2.2}
-                                    strokeOpacity={s.thin ? 0.55 : 1}
-                                    strokeLinejoin="round" strokeLinecap="round">
-                                    <title>{s.cls.label}</title>
-                                </polyline>
-                            ))}
-                        </svg>
-                        <div style={{ position: 'absolute', right: 12, bottom: 10, fontSize: 10.5, color: '#43506b', pointerEvents: 'none' }}>
-                            rueda = zoom · arrastre = mover · doble clic = encuadrar
-                        </div>
+                        {shapes.filter((s) => s.closed && !hidden.has(s.cls.key)).map((s) => (
+                            <polygon key={s.id} points={s.pts.map(([x, y]) => `${toX(x)},${toY(y)}`).join(' ')}
+                                fill={s.cls.color} fillOpacity={0.28} stroke={s.cls.color} strokeWidth={px * 1.3} strokeOpacity={0.95}>
+                                <title>{s.cls.label}{s.area != null ? ` · ${Number(s.area).toFixed(2)} m²` : ''}</title>
+                            </polygon>
+                        ))}
+                        {shapes.filter((s) => !s.closed && !hidden.has(s.cls.key)).map((s) => (
+                            <polyline key={s.id} points={s.pts.map(([x, y]) => `${toX(x)},${toY(y)}`).join(' ')}
+                                fill="none" stroke={s.cls.color}
+                                strokeWidth={s.thin ? px * 1.0 : px * 2.0}
+                                strokeOpacity={s.thin ? 0.55 : 1}
+                                strokeLinejoin="round" strokeLinecap="round">
+                                <title>{s.cls.label}</title>
+                            </polyline>
+                        ))}
+                    </svg>
+                    <div style={{ position: 'absolute', right: 10, bottom: 8, fontSize: 10, color: '#43506b', pointerEvents: 'none' }}>
+                        rueda = zoom · arrastre = mover · doble clic = encuadrar
                     </div>
+                </div>
+            ) : (
+                <div style={{ flex: 1, minHeight: 0, display: 'flex', background: '#0a0b0d' }}>
+                    <div style={{ width: 190, flexShrink: 0, borderRight: '1px solid #23262d', background: '#0e1014', padding: 10, overflowY: 'auto' }}>
+                        {volumes.map((m, i) => (
+                            <button key={`${m.alignmentId}:${m.material}`} onClick={() => setVolMaterial(i)}
+                                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 8px', borderRadius: 6, marginBottom: 5, cursor: 'pointer', border: volMaterial === i ? '1px solid #3aa0ff' : '1px solid rgba(255,255,255,0.07)', background: volMaterial === i ? 'rgba(58,160,255,0.12)' : 'transparent' }}>
+                                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#d7dbe2' }}>{m.material}</div>
+                                <div style={{ fontSize: 10, color: '#8a919c', marginTop: 2, fontFamily: 'IBM Plex Mono, monospace' }}>
+                                    {m.total.toLocaleString('es-PE', { maximumFractionDigits: 1 })} m³
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
+                        {volumes[Math.min(volMaterial, volumes.length - 1)] && (() => {
+                            const m = volumes[Math.min(volMaterial, volumes.length - 1)];
+                            return (
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                                    <thead>
+                                        <tr style={{ position: 'sticky', top: 0, background: '#12151a', color: '#6b7280', textTransform: 'uppercase', fontSize: 9.5, letterSpacing: '0.08em' }}>
+                                            <th style={{ padding: '8px 12px', textAlign: 'left' }}>Progresiva</th>
+                                            <th style={{ padding: '8px 12px', textAlign: 'right' }}>Área m²</th>
+                                            <th style={{ padding: '8px 12px', textAlign: 'right' }}>Parcial m³</th>
+                                            <th style={{ padding: '8px 12px', textAlign: 'right' }}>Acum. m³</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#c8cdd6' }}>
+                                        {m.table.map((r) => (
+                                            <tr key={r.pk} style={{ borderTop: '1px solid #14171c' }}>
+                                                <td style={{ padding: '6px 12px', color: '#8ecbff' }}>{formatStation(r.pk)}</td>
+                                                <td style={{ padding: '6px 12px', textAlign: 'right' }}>{r.area.toFixed(2)}</td>
+                                                <td style={{ padding: '6px 12px', textAlign: 'right' }}>{r.parcial.toFixed(2)}</td>
+                                                <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: 700 }}>{r.acum.toFixed(2)}</td>
+                                            </tr>
+                                        ))}
+                                        <tr style={{ borderTop: '2px solid #2a2f37', background: '#101317' }}>
+                                            <td style={{ padding: '8px 12px', fontWeight: 800, color: '#e6e8ec' }}>TOTAL</td>
+                                            <td /><td />
+                                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#22c55e' }}>{m.total.toFixed(2)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            );
+                        })()}
+                    </div>
+                </div>
+            )}
 
-                    {/* Leyenda */}
-                    <div style={{ width: 240, flexShrink: 0, borderLeft: '1px solid #23262d', background: '#0e1014', padding: 14, overflowY: 'auto' }}>
-                        <div style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#6b7280', fontWeight: 700, marginBottom: 10 }}>
-                            Materiales / superficies ({legend.length})
-                        </div>
+            {/* Barra inferior: slider + relación + vistas + capas */}
+            <div style={{ padding: '8px 12px', background: '#101317', borderTop: '1px solid #23262d', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <input type="range" min={0} max={Math.max(0, stations.length - 1)} value={currentIndex}
+                        onChange={(e) => goIndex(parseInt(e.target.value, 10))} style={{ flex: 1, accentColor: '#3aa0ff' }} />
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10.5, color: '#8a919c' }}>
+                        {currentIndex + 1}/{stations.length}
+                    </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 10.5, color: '#8a919c' }}>Relación</span>
+                    {[1, 2, 4].map((a) => (
+                        <button key={a} onClick={() => setAspect(a)} style={{ ...btn(aspect === a), padding: '3px 8px', fontSize: 11 }}>{a.toFixed(1)}</button>
+                    ))}
+                    <span style={{ width: 1, height: 16, background: '#2a2f37' }} />
+                    <button onClick={() => setMode('seccion')} style={{ ...btn(mode === 'seccion'), padding: '3px 10px', fontSize: 11 }}>Sección</button>
+                    {volumes.length > 0 && (
+                        <button onClick={() => setMode('volumenes')} style={{ ...btn(mode === 'volumenes'), padding: '3px 10px', fontSize: 11 }}>Volúmenes</button>
+                    )}
+                    <div style={{ flex: 1 }} />
+                    <button onClick={() => setLegendOpen((p) => !p)} style={{ ...btn(legendOpen), padding: '3px 10px', fontSize: 11 }}>
+                        Capas ({legend.length})
+                    </button>
+                </div>
+                {legendOpen && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8, maxHeight: 96, overflowY: 'auto' }}>
                         {legend.map((t) => {
                             const off = hidden.has(t.key);
                             return (
-                                <button key={t.key} onClick={() => toggle(t.key)} title="Mostrar / ocultar"
-                                    style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left', padding: '7px 6px', borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', opacity: off ? 0.38 : 1 }}>
-                                    <span style={{ width: 14, height: 14, borderRadius: 3, background: t.color, flexShrink: 0 }} />
-                                    <span style={{ fontSize: 12, color: '#d7dbe2', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.label}</span>
-                                    <span style={{ fontSize: 9, color: '#6b7280' }}>{t.fill ? 'área' : 'línea'}</span>
+                                <button key={t.key} onClick={() => toggle(t.key)}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 5, border: '1px solid rgba(255,255,255,0.10)', background: 'transparent', cursor: 'pointer', opacity: off ? 0.38 : 1 }}>
+                                    <span style={{ width: 10, height: 10, borderRadius: 2, background: t.color }} />
+                                    <span style={{ fontSize: 10.5, color: '#d7dbe2' }}>{t.label}</span>
                                 </button>
                             );
                         })}
-                        <div style={{ marginTop: 14, fontSize: 10.5, color: '#5d6672', lineHeight: 1.5 }}>
-                            {shapes.length} shapes en esta estación. Los shapes "(corredor)" vienen en elevación relativa: apagados por defecto.
-                        </div>
                     </div>
-                </div>
-
-                {/* Controles de estación */}
-                <div style={{ padding: '11px 18px', background: '#101317', borderTop: '1px solid #23262d', display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <button onClick={() => go(currentIndex - 1)} disabled={currentIndex === 0} style={btn(false, currentIndex === 0)}>← Anterior</button>
-                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, color: '#c8cdd6', minWidth: 150, textAlign: 'center' }}>
-                        {stationLabel} · {currentIndex + 1}/{stations.length}
-                    </span>
-                    <input type="range" min={0} max={stations.length - 1} value={currentIndex}
-                        onChange={(e) => go(parseInt(e.target.value, 10))} style={{ flex: 1, accentColor: '#3aa0ff' }} />
-                    <button onClick={() => go(currentIndex + 1)} disabled={currentIndex === stations.length - 1} style={btn(false, currentIndex === stations.length - 1)}>Siguiente →</button>
-                </div>
+                )}
             </div>
         </div>,
         document.body
     );
 };
 
-const overlayStyle = { position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 };
+const dockStyle = {
+    position: 'fixed',
+    top: 62,
+    right: 12,
+    bottom: 14,
+    width: 'min(46vw, 720px)',
+    zIndex: 9999,
+    display: 'flex',
+    flexDirection: 'column',
+    background: 'rgba(10,11,13,0.97)',
+    border: '1px solid rgba(255,255,255,0.12)',
+    borderRadius: 10,
+    overflow: 'hidden',
+    boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
+    fontFamily: 'Inter, system-ui, sans-serif',
+    color: '#e6e8ec',
+};
+
+const spinBtn = {
+    border: 'none', background: 'transparent', color: '#8ecbff', cursor: 'pointer',
+    fontSize: 8, lineHeight: '11px', padding: '1px 7px',
+};
+
 const btn = (primary, disabled) => ({
-    padding: '8px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: disabled ? 'default' : 'pointer',
-    border: primary ? 'none' : '1px solid rgba(255,255,255,0.14)',
-    background: primary ? '#3aa0ff' : 'rgba(255,255,255,0.04)', color: primary ? '#fff' : '#d7dbe2',
+    padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: disabled ? 'default' : 'pointer',
+    border: primary ? '1px solid #3aa0ff' : '1px solid rgba(255,255,255,0.14)',
+    background: primary ? 'rgba(58,160,255,0.16)' : 'rgba(255,255,255,0.04)',
+    color: primary ? '#8ecbff' : '#d7dbe2',
     opacity: disabled ? 0.4 : 1,
 });
 
