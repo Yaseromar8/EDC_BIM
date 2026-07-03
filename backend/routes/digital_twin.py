@@ -833,6 +833,33 @@ def ensure_frentes_table():
         print(f"[frentes] ensure_frentes_table: {e}")
 
 
+@digital_twin_bp.route('/api/frentes', methods=['DELETE'])
+def delete_project_frente():
+    """Elimina la TARJETA del frente (no toca los datos de su scope:
+    si el frente tenía modelos/inventario, siguen en la BD por si se recrea)."""
+    try:
+        data = request.get_json() or {}
+        base = data.get('base_project_id')
+        front_id = (data.get('front_id') or '').strip().upper()
+        if not base or not front_id:
+            return jsonify({'error': 'Faltan base_project_id o front_id'}), 400
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                DELETE FROM project_frentes
+                WHERE base_project_id = %s AND front_id = %s
+                RETURNING front_id""", (base, front_id))
+            row = cur.fetchone()
+            conn.commit()
+        if not row:
+            return jsonify({'error': 'Frente no encontrado'}), 404
+        return jsonify({'status': 'ok', 'frontId': front_id}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @digital_twin_bp.route('/api/frentes', methods=['GET', 'POST'])
 def project_frentes():
     """GET ?base=<projectId> → frentes personalizados del proyecto.

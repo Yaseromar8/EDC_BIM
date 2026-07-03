@@ -218,13 +218,28 @@ const LandingPage = ({ onSelectProject }) => {
                             </div>
                         )}
                         {customFrentes.map(f => (
-                            <div key={f.frontId} className="frente-card" onClick={() => handleFrontSelect(f.frontId, f.name)}>
+                            <div key={f.frontId} className="frente-card" style={{ position: 'relative' }} onClick={() => handleFrontSelect(f.frontId, f.name)}>
                                 <div className="frente-card-icon">{f.icon || '📌'}</div>
                                 <div className="frente-card-content">
                                     <h3>{f.name}</h3>
                                     <p>{f.description || 'Frente de trabajo personalizado.'}</p>
                                 </div>
                                 <div className="frente-card-arrow">→</div>
+                                <button
+                                    title="Eliminar frente (solo la tarjeta; los datos de su scope no se tocan)"
+                                    onClick={async (e) => {
+                                        e.stopPropagation();
+                                        if (!window.confirm(`¿Eliminar el frente "${f.name}" de este proyecto?`)) return;
+                                        try {
+                                            const res = await apiFetch(`${BACKEND_URL}/api/frentes`, {
+                                                method: 'DELETE',
+                                                body: JSON.stringify({ base_project_id: selectedBaseProject.id, front_id: f.frontId })
+                                            });
+                                            if (res.ok) setCustomFrentes(prev => prev.filter(x => x.frontId !== f.frontId));
+                                        } catch { /* noop */ }
+                                    }}
+                                    style={{ position: 'absolute', top: 8, right: 10, width: 22, height: 22, borderRadius: 5, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(0,0,0,0.25)', color: '#8a919c', cursor: 'pointer', fontSize: 12, lineHeight: '18px', padding: 0 }}
+                                >✕</button>
                             </div>
                         ))}
 
