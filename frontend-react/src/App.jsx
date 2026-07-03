@@ -2061,8 +2061,12 @@ function App() {
               setActiveViewableGuids(prev => ({ ...prev, [model.urn]: viewGuid }));
             }
           }
+        } else if (res.status === 409) {
+          // Duplicado (guard estilo Tandem): el modelo ya está vinculado al frente
+          const err = await res.json().catch(() => ({}));
+          alert(err.message || 'Ese modelo ya está vinculado a este frente.');
         } else {
-          const err = await res.json();
+          const err = await res.json().catch(() => ({}));
           alert(`Error: ${err.error || 'Failed to link model'}`);
         }
       }
@@ -2147,26 +2151,62 @@ function App() {
   }, [selectedProject, relinkTargetModel]);
 
 
+  // UPLOAD LOCAL profesional (2 fases, paridad con Tandem):
+  //   1) subir archivo + disparar traducción (0–60%)
+  //   2) sondear la traducción en ACC (60–95%) y, al estar lista, el backend
+  //      agrega el modelo (con su vista 3D por defecto) y ENCOLA la extracción
+  //      de metadata — el mismo pipeline que update/relink/DOCS.
+  // onProgress(percent, message) mantiene informado al modal en cada fase.
   const handleLocalUpload = useCallback(async (file, label, onProgress) => {
-    if (!selectedProject) return alert("Error: No project context.");
+    if (!selectedProject) throw new Error("No hay proyecto seleccionado.");
+    const report = (p, msg) => { try { onProgress?.(p, msg); } catch (e) { /* noop */ } };
 
-    try {
-      const url = `${BACKEND_URL}/api/config/project/upload`;
-      const data = await uploadFile(file, url, {
-        onProgress,
-        formData: {
-          label: label,
-          project: selectedProject.id
-        }
-      });
+    // Fase 1: subir (el % de red se mapea a 0–60)
+    report(2, 'Subiendo archivo…');
+    const url = `${BACKEND_URL}/api/config/project/upload`;
+    const data = await uploadFile(file, url, {
+      onProgress: (p) => report(Math.round((p || 0) * 0.6), 'Subiendo archivo…'),
+      formData: { label, project: selectedProject.id }
+    });
+    if (!data?.urn) throw new Error(data?.error || 'El upload no devolvió URN.');
 
-      if (data.config && data.config.models) {
-        setModels(data.config.models.map(m => ({ ...m, label: m.name })));
+    // Fase 2: sondear traducción → finalize agrega el modelo y encola extracción
+    report(62, 'Traduciendo en ACC…');
+    const started = Date.now();
+    const TIMEOUT_MS = 20 * 60 * 1000; // 20 min para modelos grandes
+    while (true) {
+      if (Date.now() - started > TIMEOUT_MS) {
+        throw new Error('La traducción tardó demasiado. Reintenta en unos minutos (el archivo ya quedó subido).');
       }
-    } catch (e) {
-      console.error("Upload error:", e);
-      alert("Error uploading file.");
-      throw e; // Rethrow to allow component to handle error state
+      const fRes = await apiFetch(`${BACKEND_URL}/api/config/project/upload/finalize`, {
+        method: 'POST',
+        body: JSON.stringify({ urn: data.urn, label, project: selectedProject.id })
+      });
+      const fin = await fRes.json().catch(() => ({}));
+      if (!fRes.ok) throw new Error(fin.error || `Finalize HTTP ${fRes.status}`);
+      if (fin.failed) throw new Error(fin.message || 'La traducción falló en ACC.');
+
+      if (fin.ready) {
+        // Modelo agregado: aplicar config, hidratar vista y sondear SU extracción
+        if (fin.config?.models) {
+          const mapped = fin.config.models.map(m => ({ ...m, label: m.name }));
+          if (fin.defaultViewGuid) {
+            setActiveViewableGuids(prev => ({ ...prev, [fin.urn]: fin.defaultViewGuid }));
+          }
+          setModels(mapped);
+        }
+        window.__inventoryCache = null;
+        if (fin.extraction_job_id) triggerBackgroundExtraction(fin.urn, fin.extraction_job_id);
+        report(100, 'Modelo listo. Extrayendo metadata en segundo plano…');
+        return fin;
+      }
+
+      const pctText = String(fin.progress || '');
+      const match = pctText.match(/(\d+)\s*%/);
+      const transPct = match ? Number(match[1]) : null;
+      report(transPct != null ? 62 + Math.round(transPct * 0.33) : 70,
+        `Traduciendo en ACC… ${transPct != null ? transPct + '%' : ''}`.trim());
+      await new Promise(r => setTimeout(r, 5000));
     }
   }, [selectedProject]);
 

@@ -45,7 +45,6 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
   const [extractionDone, setExtractionDone] = useState(false); // extraction finished 100%
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState('');
-  const [visibleInDefault, setVisibleInDefault] = useState(true);
   const pollRef = useRef(null);
   const pendingDocsRef = useRef(null); // store docs to import after view selection
 
@@ -60,11 +59,8 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
   const [isDragOver, setIsDragOver] = useState(false);
   const [localUploading, setLocalUploading] = useState(false);
   const [localProgress, setLocalProgress] = useState(0);
-
-  // Phase/View for local file upload
-  const [selectorMode, setSelectorMode] = useState('Phase');
-  const [selectorDropdownOpen, setSelectorDropdownOpen] = useState(false);
-  const [phaseValue, setPhaseValue] = useState('New Construction');
+  const [localMsg, setLocalMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   // Fetch Hubs
   useEffect(() => {
@@ -104,9 +100,10 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
       setActiveTab('UPLOAD'); setExtracting(false); setExtractionDone(false);
       setProgress(0); setProgressMsg('');
       setAccountMenuOpen(false); setProjectMenuOpen(false);
-      setSelectorDropdownOpen(false); setViewDropdownOpen(false);
+      setViewDropdownOpen(false);
       setModelViews([]); setSelectedViewGuid(null); setLoadingViews(false);
       setLocalFile(null); setLocalUploading(false); setLocalProgress(0);
+      setLocalMsg(''); setErrorMsg('');
       pendingDocsRef.current = null;
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     }
@@ -133,9 +130,28 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
     }
   };
 
+  // Cancelar el flujo DOCS: si ya se extrajo metadata pero el modelo NO se
+  // vinculó, purgamos esas filas del inventario (no dejamos huérfanos).
+  const purgeOrphanExtraction = () => {
+    const docs = pendingDocsRef.current;
+    if (!docs?.length || !selectedProject) return;
+    let urn = docs[0].id || docs[0].urn;
+    if (urn && urn.includes('urn:adsk')) {
+      try { urn = btoa(urn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); } catch (e) { }
+    }
+    if (!urn) return;
+    apiFetch(`${BACKEND_URL}/api/inventory/purge-source`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_urn: urn, project: selectedProject.id })
+    }).catch(() => { /* limpieza best-effort */ });
+  };
+
   const cancelProcess = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    if (extracting || extractionDone) purgeOrphanExtraction();
     setExtracting(false); setExtractionDone(false); setProgress(0); setProgressMsg('');
+    setErrorMsg('');
     setModelViews([]); setSelectedViewGuid(null); pendingDocsRef.current = null;
   };
 
@@ -218,7 +234,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
     } catch (e) {
       setExtracting(false); setProgress(0);
       console.error(e);
-      alert("Error de conexion: " + e.message);
+      setErrorMsg('Error de conexión: ' + e.message);
     }
   };
 
@@ -239,16 +255,23 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
     onClose();
   };
 
-  // ── LOCAL FILE UPLOAD ──
+  // ── LOCAL FILE UPLOAD (2 fases: subir → traducir → modelo listo) ──
   const handleLocalUpload = async () => {
     if (!localFile) return;
-    setLocalUploading(true); setLocalProgress(0);
+    setLocalUploading(true); setLocalProgress(0); setErrorMsg('');
+    setLocalMsg('Subiendo archivo…');
     try {
-      await onUploadLocal?.(localFile, uploadLabel || localFile.name, (p) => setLocalProgress(p));
+      await onUploadLocal?.(localFile, uploadLabel || localFile.name, (p, msg) => {
+        setLocalProgress(p);
+        if (msg) setLocalMsg(msg);
+      });
       setLocalProgress(100);
-      setTimeout(() => { onClose(); }, 1500);
+      setLocalMsg('Modelo listo. La metadata se extrae en segundo plano.');
+      setTimeout(() => { onClose(); }, 1800);
     } catch (e) {
       console.error("Upload error:", e);
+      setErrorMsg(e.message || 'Error subiendo el archivo.');
+      setLocalMsg('');
       setLocalUploading(false);
     }
   };
@@ -267,7 +290,12 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
         {/* HEADER */}
         <div className="import-header">
           <h3>IMPORT MODEL</h3>
-          {!isProcessing && <button className="import-close-btn" onClick={onClose}><CloseIcon /></button>}
+          {!isProcessing && (
+            <button className="import-close-btn" onClick={() => {
+              if (extractionDone) cancelProcess(); // purga huérfanos si extrajo y no importó
+              onClose();
+            }}><CloseIcon /></button>
+          )}
         </div>
 
         {/* TABS */}
@@ -332,14 +360,24 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
                       <input type="file" id="import-file-input" hidden
                         accept=".rvt,.ifc,.nwd,.nwc,.dwg,.laz,.las,.e57,.rcp,.rcs,.pts" onChange={handleFileChange} />
                       {localFile ? (
-                        <div className="import-file-selected">
-                          <span style={{ flex: 1, fontSize: 13, color: '#ccc' }}>{localFile.name}</span>
-                          {localUploading ? (
-                            <span style={{ fontSize: 13, color: '#3b9eff', fontWeight: 600 }}>{Math.round(localProgress)}%</span>
-                          ) : (
-                            <button className="import-file-inline-x" onClick={(e) => { e.stopPropagation(); setLocalFile(null); setUploadLabel(''); }}>
-                              <CloseIcon />
-                            </button>
+                        <div className="import-file-selected" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ flex: 1, fontSize: 13, color: '#ccc' }}>{localFile.name}</span>
+                            {localUploading ? (
+                              <span style={{ fontSize: 13, color: localProgress >= 100 ? '#2ecc71' : '#3b9eff', fontWeight: 600 }}>{Math.round(localProgress)}%</span>
+                            ) : (
+                              <button className="import-file-inline-x" onClick={(e) => { e.stopPropagation(); setLocalFile(null); setUploadLabel(''); }}>
+                                <CloseIcon />
+                              </button>
+                            )}
+                          </div>
+                          {localUploading && (
+                            <>
+                              <div className="import-progress-track">
+                                <div className="import-progress-fill" style={{ width: `${localProgress}%`, background: localProgress >= 100 ? '#2ecc71' : undefined }} />
+                              </div>
+                              {localMsg && <span style={{ fontSize: 11, color: '#888' }}>{localMsg}</span>}
+                            </>
                           )}
                         </div>
                       ) : (
@@ -347,7 +385,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
                           <UploadIcon />
                           <p>Drag and drop a file here, or click to select a file</p>
                           <span className="import-drop-formats">
-                            (only files with extension <span className="import-ext-highlight">".dwg, .ifc, .nwc, .nwd, .rvt"</span> are accepted)
+                            (formatos: <span className="import-ext-highlight">.rvt, .ifc, .nwd, .nwc, .dwg</span> y nubes de puntos <span className="import-ext-highlight">.rcp, .rcs, .e57, .laz, .las, .pts</span>)
                           </span>
                         </div>
                       )}
@@ -356,11 +394,12 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
                 )}
               </div>
 
-              {/* Phase / View selector */}
+              {/* Selector de vista (solo cuando la extracción DOCS terminó y hay vistas reales) */}
+              {extractionDone && (
               <div className="import-field">
-                <label className="import-label">Import elements from phase or view:</label>
+                <label className="import-label">Vista a importar:</label>
 
-                {extractionDone && modelViews.length > 0 ? (
+                {modelViews.length > 0 ? (
                   /* Real views from Revit/ACC after extraction */
                   <div style={{ position: 'relative' }}>
                     <button className="import-view-selector" onClick={() => setViewDropdownOpen(!viewDropdownOpen)}>
@@ -385,48 +424,20 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
                       </div>
                     )}
                   </div>
-                ) : extractionDone && loadingViews ? (
+                ) : (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}>
                     <div className="import-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
                     <span style={{ fontSize: 12, color: '#888' }}>Cargando vistas disponibles...</span>
                   </div>
-                ) : (
-                  /* Default Phase/View text input (disabled during extraction) */
-                  <div className="import-phase-row">
-                    <div className="import-phase-selector" style={{ position: 'relative' }}>
-                      <button className="import-phase-btn" disabled={extracting}
-                        onClick={() => !extracting && setSelectorDropdownOpen(!selectorDropdownOpen)}>
-                        <span>{selectorMode}</span> <ChevronDownIcon />
-                      </button>
-                      {selectorDropdownOpen && (
-                        <div className="import-phase-dropdown">
-                          <div className={`import-phase-option ${selectorMode === 'Phase' ? 'active' : ''}`}
-                            onClick={() => { setSelectorMode('Phase'); setSelectorDropdownOpen(false); }}>Phase</div>
-                          <div className={`import-phase-option ${selectorMode === 'View' ? 'active' : ''}`}
-                            onClick={() => { setSelectorMode('View'); setSelectorDropdownOpen(false); }}>View</div>
-                        </div>
-                      )}
-                    </div>
-                    <input type="text" className="import-phase-input" value={phaseValue}
-                      onChange={e => setPhaseValue(e.target.value)} disabled={extracting}
-                      placeholder={selectorMode === 'Phase' ? 'New Construction' : '{3D}'} />
-                  </div>
                 )}
               </div>
+              )}
 
-              {/* Visible in default view */}
-              <div className="import-checkbox-row">
-                <label className="import-check-label" onClick={() => setVisibleInDefault(!visibleInDefault)}>
-                  <span className={`import-check-box ${visibleInDefault ? 'checked' : ''}`}>
-                    {visibleInDefault && (
-                      <svg viewBox="0 0 24 24" width="12" height="12">
-                        <path fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" d="M6,12 L10,16 L18,7" />
-                      </svg>
-                    )}
-                  </span>
-                  Visible in default view
-                </label>
-              </div>
+              {errorMsg && (
+                <div style={{ marginTop: 4, padding: '8px 12px', borderRadius: 6, background: 'rgba(231,76,60,0.12)', border: '1px solid rgba(231,76,60,0.4)', color: '#e74c3c', fontSize: 12 }}>
+                  {errorMsg}
+                </div>
+              )}
             </div>
           )}
 
@@ -472,27 +483,17 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
                 <NativeFileTree onSelectionChange={handleDocSelection}
                   forcedHubId={selectedAccountId} forcedProjectId={selectedProjectId} />
               </div>
-
-              {/* Visible */}
-              <div className="import-checkbox-row">
-                <label className="import-check-label" onClick={() => setVisibleInDefault(!visibleInDefault)}>
-                  <span className={`import-check-box ${visibleInDefault ? 'checked' : ''}`}>
-                    {visibleInDefault && (
-                      <svg viewBox="0 0 24 24" width="12" height="12">
-                        <path fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" d="M6,12 L10,16 L18,7" />
-                      </svg>
-                    )}
-                  </span>
-                  Visible in default view
-                </label>
-              </div>
             </div>
           )}
         </div>
 
         {/* FOOTER */}
         <div className="import-footer">
-          <button className="import-btn-cancel" onClick={isProcessing ? cancelProcess : onClose}>Cancel</button>
+          <button className="import-btn-cancel" onClick={() => {
+            if (isProcessing) { cancelProcess(); return; }       // procesando: aborta (y purga si aplica), modal queda abierto
+            if (extractionDone) cancelProcess();                 // extraído sin importar: purga huérfanos antes de cerrar
+            onClose();
+          }}>Cancel</button>
 
           {activeTab === 'DOCS' ? (
             /* AUTODESK DOCS: Start extraction */

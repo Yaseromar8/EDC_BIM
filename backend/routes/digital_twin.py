@@ -305,10 +305,26 @@ def list_project_frentes(project_id):
 def add_model_route():
     data = request.json
     config = get_project_config_internal()
-    
+
     app_project_id = data.get('project') # "DRENAJE_URBANO" or "CANAL"
     name = data.get('name')
     print(f"\n[DIAG-ADD] project={app_project_id}, name={name}, urn=...{str(data.get('urn',''))[-20:]}")
+
+    # GUARD ANTI-DUPLICADOS (estilo Tandem): el mismo URN no puede vincularse
+    # dos veces al mismo frente — evita doble entrada en config y doble carga
+    # en el visor. También bloquea por itemId (misma pieza de ACC en otra versión).
+    dup = next((m for m in config.get('models', [])
+                if m.get('appProjectId') == app_project_id and (
+                    m.get('urn') == data.get('urn')
+                    or (data.get('itemId') and m.get('itemId') == data.get('itemId'))
+                )), None)
+    if dup:
+        return jsonify({
+            "error": "duplicate",
+            "message": f"'{dup.get('name')}' ya está vinculado a este frente"
+                       + (" (misma pieza de ACC; usa Update para traer la versión nueva)."
+                          if dup.get('urn') != data.get('urn') else "."),
+        }), 409
 
     new_model = {
         "id": str(int(time.time() * 1000)),
@@ -658,28 +674,141 @@ def upload_local_model():
         urn = urn_bytes.decode('utf-8').rstrip('=')
         
         translation_triggered = trigger_translation(urn, token, filename=file.filename)
-       # 6. Update Config
-        config = get_project_config_internal()
-        new_model = {
-            "id": str(int(time.time() * 1000)),
-            "name": label,
+
+        # FASE 1 completa: archivo subido + traducción disparada. El modelo NO se
+        # agrega al config todavía — eso lo hace /upload/finalize cuando la
+        # traducción termina (así el visor nunca recibe un modelo a medio traducir
+        # y la extracción de metadata corre en el momento correcto).
+        return jsonify({
+            "status": "uploaded",
             "urn": urn,
-            "source": "LOCAL",
-            "region": "US",
-            "added_at": datetime.now().isoformat(),
-            "appProjectId": app_project_id
-        }
-        config.setdefault('models', []).append(new_model)
-        if save_project_config_internal(config):
-            # Return filtered list
-            if app_project_id:
-                 config['models'] = [m for m in config['models'] if m.get('appProjectId') == app_project_id]
-            return jsonify({"status": "success", "urn": urn, "config": config})
-        else:
-            return jsonify({"error": "Failed to save config"}), 500
+            "translation_triggered": bool(translation_triggered),
+        })
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+
+@digital_twin_bp.route('/api/config/project/upload/finalize', methods=['POST'])
+def finalize_local_upload():
+    """FASE 2 del upload local (sondeada por el frontend cada pocos segundos):
+    - Si la traducción sigue en curso → {ready: false, progress}.
+    - Si falló → {ready: false, failed: true, message}.
+    - Si terminó → agrega el modelo al config (con guard anti-duplicados y la
+      primera vista 3D como defaultViewGuid), dispara la extracción de metadata
+      (mismo pipeline que update/relink) y devuelve el config + job."""
+    try:
+        data = request.get_json() or {}
+        urn = data.get('urn')
+        label = data.get('label') or 'Modelo local'
+        app_project_id = data.get('project')
+        if not urn or not app_project_id:
+            return jsonify({'error': 'Faltan urn o project'}), 400
+
+        token, error = get_internal_token()
+        if error or not token:
+            return jsonify({'error': 'Internal auth failed'}), 500
+
+        # Estado real de la traducción (manifest)
+        r = requests.get(
+            f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn}/manifest",
+            headers={'Authorization': f'Bearer {token}'}, timeout=15)
+        if not r.ok:
+            return jsonify({'ready': False, 'progress': 'Esperando manifest…'}), 200
+        manifest = r.json() or {}
+        status = manifest.get('status')
+        if status in ('pending', 'inprogress'):
+            return jsonify({'ready': False, 'progress': manifest.get('progress') or 'Traduciendo…'}), 200
+        if status in ('failed', 'timeout'):
+            return jsonify({'ready': False, 'failed': True,
+                            'message': f"La traducción falló ({status}). Revisa el archivo."}), 200
+
+        # Traducción lista → primera vista 3D (fallback: primera geometría)
+        default_guid = None
+        try:
+            for d in manifest.get('derivatives', []):
+                for ch in d.get('children', []):
+                    if ch.get('type') == 'geometry':
+                        if ch.get('role') == '3d':
+                            default_guid = ch.get('guid')
+                            break
+                        default_guid = default_guid or ch.get('guid')
+                if default_guid:
+                    break
+        except Exception:
+            pass
+
+        config = get_project_config_internal()
+        existing = next((m for m in config.get('models', [])
+                         if m.get('urn') == urn and m.get('appProjectId') == app_project_id), None)
+        if not existing:
+            new_model = {
+                "id": str(int(time.time() * 1000)),
+                "name": label,
+                "urn": urn,
+                "source": "LOCAL",
+                "region": "US",
+                "added_at": datetime.now().isoformat(),
+                "appProjectId": app_project_id,
+            }
+            if default_guid:
+                new_model["defaultViewGuid"] = default_guid
+            config.setdefault('models', []).append(new_model)
+            if not save_project_config_internal(config):
+                return jsonify({'error': 'Failed to save config'}), 500
+
+        # Auto-extracción de metadata (paridad con update/relink/DOCS)
+        extraction_job_id = None
+        try:
+            from routes.inventory import extract_metadata_task, set_job
+            extraction_job_id = f"auto_upload_{int(time.time())}"
+            set_job(extraction_job_id, {'status': 'queued', 'progress': 0, 'message': 'En cola de extracción…'})
+            threading.Thread(target=extract_metadata_task,
+                             args=(urn, app_project_id, extraction_job_id), daemon=True).start()
+        except Exception as ee:
+            print(f"[UploadFinalize] extracción no iniciada: {ee}")
+
+        config['models'] = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
+        return jsonify({'ready': True, 'config': config, 'urn': urn,
+                        'defaultViewGuid': default_guid, 'extraction_job_id': extraction_job_id})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@digital_twin_bp.route('/api/inventory/purge-source', methods=['POST'])
+def purge_inventory_source():
+    """Limpia filas de inventory_assets extraídas para un modelo que NUNCA se
+    vinculó (usuario canceló el import de DOCS después de la extracción).
+    Seguridad: si el URN está vinculado al frente en el config, NO se purga."""
+    try:
+        data = request.get_json() or {}
+        source_urn = data.get('source_urn')
+        target = data.get('project')
+        if not source_urn or not target:
+            return jsonify({'error': 'Faltan source_urn o project'}), 400
+
+        config = get_project_config_internal()
+        linked = any(m.get('urn') == source_urn and m.get('appProjectId') == target
+                     for m in config.get('models', []))
+        if linked:
+            return jsonify({'purged': 0, 'linked': True}), 200
+
+        from db import get_db_connection
+        urns = list(dict.fromkeys([source_urn, sanitize_urn(source_urn)]))
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            fmt = ','.join(['%s'] * len(urns))
+            cursor.execute(
+                f"DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN ({fmt})",
+                [target] + urns)
+            purged = cursor.rowcount
+            conn.commit()
+        print(f"[PurgeSource] {purged} filas huérfanas eliminadas (import cancelado).")
+        return jsonify({'purged': purged}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 
 @digital_twin_bp.route('/api/config/project/remove', methods=['POST'])
 def remove_model_route():
