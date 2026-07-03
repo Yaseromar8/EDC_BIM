@@ -157,41 +157,50 @@ namespace AlignmentExtractorApp
 
             using (Transaction trans = db.TransactionManager.StartTransaction())
             {
+                // ── SectionViews: escanear TODOS los BlockTableRecords (no solo ModelSpace)
+                // y volcar diagnóstico de clases + props de override para mapear Draw/Style.
                 var secOverridesMap = new Dictionary<ObjectId, dynamic>();
                 try {
                     var bt = trans.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
-                    var ms = trans.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
-                    int ms_count = 0;
-                    int sv_count = 0;
-                    foreach (ObjectId entId in ms) {
-                        ms_count++;
-                        try {
-                            string objName = entId.ObjectClass.Name;
-                            if (objName.IndexOf("SectionView", StringComparison.OrdinalIgnoreCase) >= 0) {
-                                sv_count++;
-                                dynamic sv = trans.GetObject(entId, OpenMode.ForRead);
-                                if (!secOverridesMap.ContainsKey(entId)) {
-                                    Type t = sv.GetType();
-                                    var propNames = new System.Collections.Generic.List<string>();
-                                    foreach (var p in t.GetProperties()) { propNames.Add(p.Name); }
-                                    string props = string.Join(",", propNames);
-                                    result.warnings.Add($"SV Props ({objName}): {props}");
-                                }
-                                dynamic overrides = null;
-                                try { overrides = sv.SectionOverrides; } catch { }
-                                if (overrides != null) {
-                                    foreach (dynamic ov in overrides) {
-                                        try { secOverridesMap[TryGet(ov, "SectionId")] = ov; } catch {}
+                    var classCounts = new Dictionary<string, int>();
+                    var dumpedTypes = new HashSet<string>();
+                    foreach (ObjectId btrId in bt) {
+                        BlockTableRecord btr = null;
+                        try { btr = trans.GetObject(btrId, OpenMode.ForRead) as BlockTableRecord; } catch { }
+                        if (btr == null) continue;
+                        foreach (ObjectId entId in btr) {
+                            string cls;
+                            try { cls = entId.ObjectClass.Name; } catch { continue; }
+                            if (cls.IndexOf("Section", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                            classCounts[cls] = (classCounts.TryGetValue(cls, out var c) ? c : 0) + 1;
+
+                            if (cls == "AeccDbGraphCrossSection" || cls == "AeccDbGraphSectionView" || cls == "AeccDbSectionView") {
+                                dynamic sv = null;
+                                try { sv = trans.GetObject(entId, OpenMode.ForRead); } catch { }
+                                if (sv == null) continue;
+                                if (dumpedTypes.Add(cls)) {
+                                    var names = new List<string>();
+                                    foreach (var p in ((object)sv).GetType().GetProperties()) names.Add(p.Name);
+                                    result.warnings.Add($"DIAG {cls} props: {string.Join(",", names)}");
+                                    var mnames = new List<string>();
+                                    foreach (var m in ((object)sv).GetType().GetMethods()) {
+                                        if (m.Name.IndexOf("Section", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                            m.Name.IndexOf("Display", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                            m.Name.IndexOf("Graph", StringComparison.OrdinalIgnoreCase) >= 0) mnames.Add(m.Name);
                                     }
+                                    result.warnings.Add($"DIAG {cls} methods: {string.Join(",", mnames)}");
                                 }
                             }
-                        } catch {}
+                        }
                     }
-                    result.warnings.Add($"Total MS objects: {ms_count}, SV found: {sv_count}");
+                    var summary = new List<string>();
+                    foreach (var kv in classCounts) summary.Add($"{kv.Key}={kv.Value}");
+                    result.warnings.Add($"DIAG clases Section*: {string.Join(" | ", summary)}");
                 } catch (Exception e) {
-                    result.warnings.Add("Error in MS iteration: " + e.Message);
+                    result.warnings.Add("Error escaneando SectionViews: " + e.Message);
                 }
 
+                var sectionTypesDumped = new HashSet<string>();
                 var civilDoc = Autodesk.Civil.ApplicationServices.CivilApplication.ActiveDocument;
                 ObjectIdCollection alignIds = civilDoc.GetAlignmentIds();
                 if (alignIds.Count == 0) result.warnings.Add("El DWG no tiene alineamientos.");
@@ -253,11 +262,34 @@ namespace AlignmentExtractorApp
                                     } catch {}
                                 }
                                 if (styleId == null || !styleId.HasValue || styleId.Value.IsNull) {
-                                    styleId = TryGet(section, "StyleId") as ObjectId?;
+                                    try { styleId = section.StyleId; } catch { }
+                                }
+                                // StyleName es propiedad DIRECTA del SDK (descubierto por DIAG).
+                                // Capturamos la excepción UNA vez para saber la verdad si falla.
+                                try { shape.styleName = section.StyleName; }
+                                catch (Exception exSn) {
+                                    if (sectionTypesDumped.Add("SNERR")) result.warnings.Add($"DIAG StyleName lanza: {exSn.GetType().Name} {exSn.Message}");
+                                }
+
+                                // MaterialSection: clase propia con la identidad del material QTO
+                                if (section is MaterialSection matSec)
+                                {
+                                    if (sectionTypesDumped.Add("MATPROPS")) {
+                                        var pn = new List<string>();
+                                        foreach (var p in typeof(MaterialSection).GetProperties()) pn.Add(p.Name);
+                                        result.warnings.Add($"DIAG MaterialSection TODAS: {string.Join(",", pn)}");
+                                    }
+                                    shape.materialName = TryGet(matSec, "MaterialName") as string
+                                        ?? TryGet(matSec, "Material") as string;
+                                    var matArea = Clean(TryNum(matSec, "Area", "SectionArea"));
+                                    if (matArea.HasValue && matArea.Value > 0) shape.area = matArea;
                                 }
                                 
                                 shape.draw = draw;
-                                try { shape.styleName = ResolveName(trans, (ObjectId)(styleId ?? ObjectId.Null)); } catch { }
+                                // Solo como respaldo: NO pisar el StyleName directo si ya lo tenemos
+                                if (string.IsNullOrEmpty(shape.styleName)) {
+                                    try { shape.styleName = ResolveName(trans, (ObjectId)(styleId ?? ObjectId.Null)); } catch { }
+                                }
                                 
                                 if (styleId.HasValue && !styleId.Value.IsNull) {
                                     try {

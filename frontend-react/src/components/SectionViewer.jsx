@@ -41,6 +41,12 @@ const labelFromName = (raw) => {
 
 const classify = (name) => {
     for (const t of KNOWN_TYPES) if (t.test.test(name || '')) return t;
+    // Estilos de Civil tipo "01 Linea Top", "04 Linea Proyeccion", "All Codes - DR":
+    // son LÍNEAS de diseño (no áreas), cada una con color estable propio.
+    if (/l[ií]nea|projection|proyeccion|all codes/i.test(name || '')) {
+        const label = String(name).replace(/^\d+\s*/, '').trim();
+        return { key: `ln:${label.toLowerCase()}`, label, color: hashColor(label.toLowerCase()), fill: false };
+    }
     const label = labelFromName(name);
     return { key: `auto:${label.toLowerCase()}`, label, color: hashColor(label.toLowerCase()), fill: true };
 };
