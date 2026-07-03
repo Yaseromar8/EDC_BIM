@@ -775,6 +775,91 @@ def finalize_local_upload():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+# ── FRENTES DINÁMICOS ─────────────────────────────────────────────────────────
+# Los 3 frentes base (CANAL / DRENAJE / INFRAWORKS) viven en el frontend;
+# los adicionales (ej. INTERFERENCIAS) se crean desde la UI y persisten aquí.
+# Un frente es solo un scope "{base_project_id}_{front_id}" — todo lo demás
+# (config, inventario, tracking, LOB) ya se aísla por ese id.
+
+def ensure_frentes_table():
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS project_frentes (
+                    id SERIAL PRIMARY KEY,
+                    base_project_id TEXT NOT NULL,
+                    front_id        TEXT NOT NULL,
+                    name            TEXT NOT NULL,
+                    description     TEXT,
+                    icon            TEXT DEFAULT '📌',
+                    created_at      TIMESTAMP DEFAULT NOW(),
+                    UNIQUE (base_project_id, front_id)
+                )""")
+            conn.commit()
+            print("[frentes] Tabla project_frentes lista.")
+    except Exception as e:
+        print(f"[frentes] ensure_frentes_table: {e}")
+
+
+@digital_twin_bp.route('/api/frentes', methods=['GET', 'POST'])
+def project_frentes():
+    """GET ?base=<projectId> → frentes personalizados del proyecto.
+    POST {base_project_id, name, description?, icon?} → crea el frente
+    (front_id se deriva del nombre: 'Interferencias' → 'INTERFERENCIAS')."""
+    try:
+        from db import get_db_connection
+        if request.method == 'GET':
+            base = request.args.get('base')
+            if not base:
+                return jsonify({'error': 'Falta base'}), 400
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT front_id, name, description, icon FROM project_frentes
+                    WHERE base_project_id = %s ORDER BY id""", (base,))
+                return jsonify({'frentes': [
+                    {'frontId': r[0], 'name': r[1], 'description': r[2] or '', 'icon': r[3] or '📌'}
+                    for r in cur.fetchall()
+                ]}), 200
+
+        data = request.get_json() or {}
+        base = data.get('base_project_id')
+        name = (data.get('name') or '').strip()
+        if not base or not name:
+            return jsonify({'error': 'Faltan base_project_id o name'}), 400
+
+        # front_id: slug en mayúsculas, solo A-Z0-9_ (es parte del scope de datos)
+        import re as _re
+        import unicodedata as _ud
+        slug = _ud.normalize('NFD', name).encode('ascii', 'ignore').decode('ascii')
+        slug = _re.sub(r'[^A-Za-z0-9]+', '_', slug).strip('_').upper()
+        if not slug:
+            return jsonify({'error': 'Nombre inválido'}), 400
+        # Reservados: los frentes base hardcodeados
+        if slug in ('CANAL', 'DRENAJE', 'INFRAWORKS'):
+            return jsonify({'error': f"'{slug}' ya existe como frente base."}), 409
+
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO project_frentes (base_project_id, front_id, name, description, icon)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (base_project_id, front_id) DO NOTHING
+                RETURNING front_id""",
+                (base, slug, name, (data.get('description') or '').strip(),
+                 (data.get('icon') or '📌').strip()[:8]))
+            row = cur.fetchone()
+            conn.commit()
+        if not row:
+            return jsonify({'error': f"El frente '{slug}' ya existe en este proyecto."}), 409
+        return jsonify({'status': 'ok', 'frontId': slug, 'name': name}), 201
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @digital_twin_bp.route('/api/inventory/purge-source', methods=['POST'])
 def purge_inventory_source():
     """Limpia filas de inventory_assets extraídas para un modelo que NUNCA se

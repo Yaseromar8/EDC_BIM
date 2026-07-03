@@ -787,6 +787,8 @@ ensure_inventory_identity()  # identidad (model_urn, external_id): duplicados im
 ensure_lob4d_tables()  # LOB 4D: cronograma/metrados por frente (fuente de verdad del 4D)
 from routes.civil_design_automation import ensure_civil_alignments_table
 ensure_civil_alignments_table()  # extracciones civiles persistentes (solo re-extraer explícito)
+from routes.digital_twin import ensure_frentes_table
+ensure_frentes_table()  # frentes dinámicos por proyecto (INTERFERENCIAS, etc.)
 
 from folder_permissions import init_folder_permissions_table
 init_folder_permissions_table()

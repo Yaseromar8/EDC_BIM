@@ -450,9 +450,12 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
         }
     });
 
-    // Valor efectivo de una fila para una propiedad:
-    //   string real | '(Unassigned)' (el modelo usa el parámetro pero esta fila
-    //   no tiene valor) | null (el parámetro no aplica a este modelo).
+    // Valor efectivo de una fila para una propiedad (AUDITORÍA COMPLETA:
+    // ningún elemento vinculado del frente desaparece — la suma de buckets
+    // es el total de elementos):
+    //   valor real (incluye typos)  → su propio bucket
+    //   '(Unassigned)'              → vacío real, en modelos que SÍ usan el parámetro
+    //   '(No aplica)'               → el modelo vinculado no trae ese parámetro
     const getRowValue = (row, propId, safeUrn) => {
         if (propId === 'Standard::Sources') {
             return String(row.source_urn || row.model_urn).trim();
@@ -460,7 +463,7 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
         const pn = propId.split('::')[1] || propId;
         const v = normVal(row[pn]);
         if (v) return v;
-        return propUrnsWithValue[propId]?.has(safeUrn) ? '(Unassigned)' : null;
+        return propUrnsWithValue[propId]?.has(safeUrn) ? '(Unassigned)' : '(No aplica)';
     };
 
     // Nivel 1: Filtrar sólo data activa en el visor (rosetta) y filtrado global
