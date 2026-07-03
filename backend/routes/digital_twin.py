@@ -499,6 +499,127 @@ def update_model_link():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@digital_twin_bp.route('/api/config/project/update-all', methods=['POST'])
+def update_all_models():
+    """UPDATE MASIVO profesional (estilo Tandem), resuelto SERVER-SIDE:
+    - UNA sola lectura y UNA sola escritura del config (sin carreras
+      read-modify-write entre N requests).
+    - Pre-chequeo de traducción por modelo (los no listos se posponen,
+      no rompen el lote).
+    - Extracciones EN COLA (secuenciales en un hilo): no se lanzan N hilos
+      en paralelo contra la API de properties de APS — esa era la causa de
+      los fallos del update masivo.
+    - Devuelve reporte por modelo: updated / up_to_date / pending_translation /
+      no_acc_metadata / error, con su job de extracción para sondear."""
+    data = request.get_json() or {}
+    app_project_id = data.get('project')
+    if not app_project_id:
+        return jsonify({'error': 'Missing project'}), 400
+
+    token, error = get_internal_token()
+    if error or not token:
+        return jsonify({'error': 'Internal auth failed', 'details': error}), 500
+    headers = {'Authorization': f'Bearer {token}'}
+
+    config = get_project_config_internal()
+    project_models = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
+
+    results = []
+    to_extract = []   # [(new_urn, target, job_id)]
+    config_dirty = False
+
+    for model in project_models:
+        entry = {'id': model.get('id'), 'name': model.get('name'), 'urn': model.get('urn')}
+        pid, iid = model.get('projectId'), model.get('itemId')
+        if not pid or not iid:
+            entry.update(status='no_acc_metadata', message='Sin projectId/itemId (usa Relink).')
+            results.append(entry)
+            continue
+        try:
+            resp = requests.get(
+                f"https://developer.api.autodesk.com/data/v1/projects/{pid}/items/{iid}",
+                headers=headers, timeout=15)
+            if not resp.ok:
+                entry.update(status='error', message=f'ACC item {resp.status_code}')
+                results.append(entry)
+                continue
+            latest_version_id = resp.json()['data']['relationships']['tip']['data']['id']
+            if latest_version_id == model.get('versionId'):
+                entry.update(status='up_to_date', versionNumber=model.get('versionNumber'))
+                results.append(entry)
+                continue
+
+            new_urn = base64.urlsafe_b64encode(latest_version_id.encode('utf-8')).decode('utf-8').rstrip('=')
+            if not _is_model_translated(new_urn, token):
+                entry.update(status='pending_translation',
+                             message='La versión nueva aún se traduce en ACC. Reintenta en unos minutos.')
+                results.append(entry)
+                continue
+
+            # Mutar el modelo EN SU LUGAR (misma posición del config = mismo slot en el visor)
+            model['urn'] = new_urn
+            model['versionId'] = latest_version_id
+            try:
+                v_resp = requests.get(
+                    f"https://developer.api.autodesk.com/data/v1/projects/{pid}/versions/{urllib.parse.quote(latest_version_id, safe='')}",
+                    headers=headers, timeout=10)
+                if v_resp.ok:
+                    attrs = v_resp.json().get('data', {}).get('attributes', {})
+                    ext_attrs = attrs.get('extension', {}).get('data', {})
+                    if attrs.get('versionNumber'):
+                        model['versionNumber'] = attrs.get('versionNumber')
+                    lmt = attrs.get('lastModifiedTime') or ext_attrs.get('lastModifiedTime') or attrs.get('createTime')
+                    if lmt:
+                        model['lastModifiedTime'] = lmt
+            except Exception as ve:
+                print(f"[UpdateAll] version details {model.get('name')}: {ve}")
+            if not model.get('lastModifiedTime'):
+                model['lastModifiedTime'] = datetime.now().isoformat() + 'Z'
+            try:
+                model['versionNumber'] = model.get('versionNumber') or int(latest_version_id.split('?version=')[1])
+            except (IndexError, ValueError):
+                pass
+
+            config_dirty = True
+            job_id = f"auto_update_{model.get('id') or new_urn[:8]}_{int(time.time())}"
+            to_extract.append((new_urn, app_project_id, job_id))
+            entry.update(status='updated', newUrn=new_urn,
+                         versionNumber=model.get('versionNumber'), extraction_job_id=job_id)
+            results.append(entry)
+        except Exception as me:
+            traceback.print_exc()
+            entry.update(status='error', message=str(me))
+            results.append(entry)
+
+    if config_dirty:
+        save_project_config_internal(config)
+
+    # Cola de extracciones: UN hilo, secuencial. Jobs pre-registrados como
+    # 'queued' para que el frontend pueda sondear desde ya.
+    if to_extract:
+        from routes.inventory import extract_metadata_task, set_job
+        for (u, t, j) in to_extract:
+            set_job(j, {'status': 'queued', 'progress': 0, 'message': 'En cola de extracción…'})
+
+        def run_queue(queue):
+            for (u, t, j) in queue:
+                try:
+                    extract_metadata_task(u, t, j)
+                except Exception as qe:
+                    print(f"[UpdateAll] extracción {j} falló: {qe}")
+        threading.Thread(target=run_queue, args=(to_extract,), daemon=True).start()
+
+    config['models'] = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
+    summary = {
+        'updated': sum(1 for r in results if r['status'] == 'updated'),
+        'up_to_date': sum(1 for r in results if r['status'] == 'up_to_date'),
+        'pending_translation': sum(1 for r in results if r['status'] == 'pending_translation'),
+        'errors': sum(1 for r in results if r['status'] == 'error'),
+        'no_acc_metadata': sum(1 for r in results if r['status'] == 'no_acc_metadata'),
+    }
+    return jsonify({'results': results, 'summary': summary, 'config': config})
+
+
 @digital_twin_bp.route('/api/config/project/upload', methods=['POST'])
 def upload_local_model():
     try:

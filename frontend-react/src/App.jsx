@@ -1746,7 +1746,9 @@ function App() {
       }
 
       let attempts = 0;
-      const MAX_ATTEMPTS = 100; // ~5 min a 3s; tope para no sondear infinito si el job se cuelga
+      // ~12 min a 3s: las extracciones del update-all corren EN COLA secuencial,
+      // así que el último modelo del lote espera a los anteriores antes de empezar.
+      const MAX_ATTEMPTS = 240;
 
       const stopPoll = () => {
         clearInterval(pollInterval);
@@ -1881,20 +1883,100 @@ function App() {
     }
   }, [selectedProject]);
 
-  // Update masivo: actualiza TODOS los modelos que tienen versión nueva, de forma
-  // SECUENCIAL (no hammerea el config) y tolerante a fallos (si uno falla, sigue
-  // con los demás). Las extracciones corren en background con su guard de
-  // concurrencia, así que no se pisan.
+  // UPDATE MASIVO profesional (estilo Tandem): UNA llamada al backend, que
+  // resuelve todo server-side — config se escribe una sola vez (sin carreras),
+  // pre-chequeo de traducción por modelo, extracciones EN COLA secuencial (no
+  // N hilos en paralelo contra APS: esa era la causa del error del update-all),
+  // y reporte por modelo (updated / al día / traduciéndose / error).
   const [updateAllBusy, setUpdateAllBusy] = useState(false);
   const handleUpdateAll = useCallback(async () => {
     const pending = (models || []).filter(m => availableUpdates[m.id]?.has_update);
-    if (!pending.length || updateAllBusy) return;
+    if (!pending.length || updateAllBusy || !selectedProject) return;
     setUpdateAllBusy(true);
-    for (const m of pending) {
-      try { await handleModelUpdate(m.urn); } catch (e) { console.warn('[UpdateAll] falló', m.urn, e); }
+
+    // Estado "checking" en todos los pendientes de una vez
+    setUpdateCheckStatus(prev => {
+      const next = { ...prev };
+      pending.forEach(m => { next[m.urn] = { status: 'checking' }; });
+      return next;
+    });
+
+    try {
+      const res = await apiFetch(`${BACKEND_URL}/api/config/project/update-all`, {
+        method: 'POST',
+        body: JSON.stringify({ project: selectedProject.id })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+      // Reporte por modelo → chips de estado individuales
+      const statusMap = {
+        updated: (r) => ({ status: 'updating', message: `v${r.versionNumber || '?'} — extrayendo…` }),
+        up_to_date: () => ({ status: 'up_to_date' }),
+        pending_translation: (r) => ({ status: 'pending', message: r.message || 'Traduciéndose en ACC…' }),
+        no_acc_metadata: (r) => ({ status: 'error', message: r.message || 'Sin metadata ACC' }),
+        error: (r) => ({ status: 'error', message: r.message || 'Error' }),
+      };
+      setUpdateCheckStatus(prev => {
+        const next = { ...prev };
+        (data.results || []).forEach(r => {
+          if (r.urn) next[r.urn] = (statusMap[r.status] || statusMap.error)(r);
+        });
+        return next;
+      });
+
+      // Aplicar el config nuevo UNA vez (los modelos quedan en su mismo lugar:
+      // el backend muta cada entrada in-place, el orden no cambia)
+      if (data.config?.models) {
+        const mapped = data.config.models.map(m => ({ ...m, label: m.name }));
+        const updatedViews = {};
+        mapped.forEach(m => { if (m.defaultViewGuid) updatedViews[m.urn] = m.defaultViewGuid; });
+        if (Object.keys(updatedViews).length) setActiveViewableGuids(prev => ({ ...prev, ...updatedViews }));
+        setModels(mapped);
+      }
+
+      // Limpiar avisos de update de los que ya se actualizaron y sondear SU job
+      const updatedResults = (data.results || []).filter(r => r.status === 'updated');
+      if (updatedResults.length) {
+        setAvailableUpdates(prev => {
+          const next = { ...prev };
+          updatedResults.forEach(r => { if (next[r.id]) next[r.id] = { ...next[r.id], has_update: false }; });
+          return next;
+        });
+        window.__inventoryCache = null;
+        window.postgresInventory = null;
+        updatedResults.forEach(r => {
+          if (r.newUrn) triggerBackgroundExtraction(r.newUrn, r.extraction_job_id || null);
+        });
+      }
+
+      const s = data.summary || {};
+      console.log(`[UpdateAll] ${s.updated || 0} actualizados · ${s.up_to_date || 0} al día · ${s.pending_translation || 0} traduciéndose · ${s.errors || 0} errores`);
+
+      // Limpiar chips pasados unos segundos
+      setTimeout(() => setUpdateCheckStatus(prev => {
+        const next = { ...prev };
+        (data.results || []).forEach(r => {
+          if (r.urn && next[r.urn]?.status !== 'updating') delete next[r.urn];
+        });
+        return next;
+      }), 7000);
+    } catch (e) {
+      console.error('[UpdateAll] Error:', e);
+      setUpdateCheckStatus(prev => {
+        const next = { ...prev };
+        pending.forEach(m => { next[m.urn] = { status: 'error', message: e.message || 'Error de conexión' }; });
+        return next;
+      });
+      setTimeout(() => setUpdateCheckStatus(prev => {
+        const next = { ...prev };
+        pending.forEach(m => { delete next[m.urn]; });
+        return next;
+      }), 5000);
+    } finally {
+      setUpdateAllBusy(false);
     }
-    setUpdateAllBusy(false);
-  }, [models, availableUpdates, updateAllBusy, handleModelUpdate]);
+  }, [models, availableUpdates, updateAllBusy, selectedProject]);
 
   const handleLinkDocs = useCallback(async (modelsInput, isGemelo = false, viewGuid = null) => {
     // Determine if input is array
