@@ -209,34 +209,14 @@ const LandingPage = ({ onSelectProject }) => {
                     </div>
 
                     <div className="frente-options">
-                        <div className="frente-card canal" onClick={() => handleFrontSelect('CANAL', 'Frente Canal')}>
-                            <div className="frente-card-icon">🌊</div>
-                            <div className="frente-card-content">
-                                <h3>Frente Canal</h3>
-                                <p>Gestión de infraestructura hidráulica, canales y revestimientos.</p>
+                        {/* Frentes del PROYECTO (100% dinámicos — aislamiento real:
+                            un proyecto nuevo nace vacío, como en ACC). Los 3 frentes
+                            históricos se sembraron como datos de los proyectos existentes. */}
+                        {customFrentes.length === 0 && !showNewFrente && (
+                            <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: '#8a919c', fontSize: 14, padding: '10px 0 2px' }}>
+                                Este proyecto aún no tiene frentes. Crea el primero para empezar.
                             </div>
-                            <div className="frente-card-arrow">→</div>
-                        </div>
-
-                        <div className="frente-card drenaje" onClick={() => handleFrontSelect('DRENAJE', 'Frente Drenaje Urbano')}>
-                            <div className="frente-card-icon">🏙️</div>
-                            <div className="frente-card-content">
-                                <h3>Frente Drenaje Urbano</h3>
-                                <p>Captación pluvial, tuberías, buzones y obras urbanas de drenaje.</p>
-                            </div>
-                            <div className="frente-card-arrow">→</div>
-                        </div>
-
-                        <div className="frente-card infraworks" onClick={() => handleFrontSelect('INFRAWORKS', 'Frente Infraworks')}>
-                            <div className="frente-card-icon">🛣️</div>
-                            <div className="frente-card-content">
-                                <h3>Frente Infraworks</h3>
-                                <p>Visualización de modelos conceptuales y de contexto territorial o urbano.</p>
-                            </div>
-                            <div className="frente-card-arrow">→</div>
-                        </div>
-
-                        {/* Frentes dinámicos del proyecto (creados desde la UI) */}
+                        )}
                         {customFrentes.map(f => (
                             <div key={f.frontId} className="frente-card" onClick={() => handleFrontSelect(f.frontId, f.name)}>
                                 <div className="frente-card-icon">{f.icon || '📌'}</div>

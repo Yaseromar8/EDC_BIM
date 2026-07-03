@@ -200,25 +200,44 @@ def ensure_project_root_node(model_urn):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
-        # 1. Buscar nodo raíz existente (folder_type='PROJECT_ROOT')
+        # 1. Buscar nodo raíz existente (determinista: SIEMPRE la más antigua,
+        #    para que create y list resuelvan la MISMA raíz aunque existan
+        #    duplicados legacy pendientes de sanear)
         cursor.execute("""
-            SELECT id FROM file_nodes 
+            SELECT id FROM file_nodes
             WHERE model_urn = %s AND folder_type = 'PROJECT_ROOT' AND is_deleted = FALSE
+            ORDER BY created_at ASC, id ASC
             LIMIT 1
         """, (model_urn,))
         row = cursor.fetchone()
-        
+
         if row:
             _root_cache[model_urn] = row[0]
             return row[0]
-        
-        # 2. No existe → Crear nodo raíz
+
+        # 2. No existe → Crear nodo raíz. ON CONFLICT (índice único parcial
+        #    uq_file_nodes_project_root) mata la carrera de doble-creación:
+        #    si otro request la creó en paralelo, re-seleccionamos la suya.
         cursor.execute("""
             INSERT INTO file_nodes (model_urn, parent_id, node_type, name, folder_type, created_by)
             VALUES (%s, NULL, 'FOLDER', %s, 'PROJECT_ROOT', 'SYSTEM')
+            ON CONFLICT DO NOTHING
             RETURNING id
         """, (model_urn, ROOT_NAME))
-        root_id = cursor.fetchone()[0]
+        ins = cursor.fetchone()
+        if not ins:
+            conn.commit()
+            cursor.execute("""
+                SELECT id FROM file_nodes
+                WHERE model_urn = %s AND folder_type = 'PROJECT_ROOT' AND is_deleted = FALSE
+                ORDER BY created_at ASC, id ASC LIMIT 1
+            """, (model_urn,))
+            row2 = cursor.fetchone()
+            if row2:
+                _root_cache[model_urn] = row2[0]
+                return row2[0]
+            return None
+        root_id = ins[0]
         
         # 3. Re-parent: mover carpetas huérfanas (parent_id=NULL) bajo el nuevo root
         cursor.execute("""

@@ -797,6 +797,36 @@ def ensure_frentes_table():
                     created_at      TIMESTAMP DEFAULT NOW(),
                     UNIQUE (base_project_id, front_id)
                 )""")
+
+            # SEED ÚNICO: los 3 frentes que antes estaban hardcodeados se migran
+            # a datos SOLO para los proyectos existentes en este momento (con
+            # centinela para no re-sembrar). Los proyectos creados después
+            # nacen VACÍOS — aislamiento real estilo ACC.
+            cur.execute("""SELECT 1 FROM project_frentes
+                           WHERE base_project_id = '__meta__' AND front_id = 'SEEDED_BASE'""")
+            if not cur.fetchone():
+                base = [
+                    ('CANAL', 'Frente Canal', 'Gestión de infraestructura hidráulica, canales y revestimientos.', '🌊'),
+                    ('DRENAJE', 'Frente Drenaje Urbano', 'Captación pluvial, tuberías, buzones y obras urbanas de drenaje.', '🏙️'),
+                    ('INFRAWORKS', 'Frente Infraworks', 'Visualización de modelos conceptuales y de contexto territorial o urbano.', '🛣️'),
+                ]
+                try:
+                    cur.execute("SELECT id FROM projects")
+                    for (pid,) in cur.fetchall():
+                        for fid, name, desc, icon in base:
+                            cur.execute("""
+                                INSERT INTO project_frentes (base_project_id, front_id, name, description, icon)
+                                VALUES (%s, %s, %s, %s, %s)
+                                ON CONFLICT (base_project_id, front_id) DO NOTHING
+                            """, (str(pid), fid, name, desc, icon))
+                    cur.execute("""
+                        INSERT INTO project_frentes (base_project_id, front_id, name, description, icon)
+                        VALUES ('__meta__', 'SEEDED_BASE', 'seed', '', '')
+                        ON CONFLICT DO NOTHING""")
+                    print("[frentes] Frentes base sembrados en proyectos existentes.")
+                except Exception as se:
+                    print(f"[frentes] seed base: {se}")
+
             conn.commit()
             print("[frentes] Tabla project_frentes lista.")
     except Exception as e:
@@ -835,11 +865,8 @@ def project_frentes():
         import unicodedata as _ud
         slug = _ud.normalize('NFD', name).encode('ascii', 'ignore').decode('ascii')
         slug = _re.sub(r'[^A-Za-z0-9]+', '_', slug).strip('_').upper()
-        if not slug:
+        if not slug or slug == '__META__':
             return jsonify({'error': 'Nombre inválido'}), 400
-        # Reservados: los frentes base hardcodeados
-        if slug in ('CANAL', 'DRENAJE', 'INFRAWORKS'):
-            return jsonify({'error': f"'{slug}' ya existe como frente base."}), 409
 
         with get_db_connection() as conn:
             cur = conn.cursor()
