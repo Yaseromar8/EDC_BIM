@@ -619,50 +619,20 @@ export default function MultimediaModule({ project, user }) {
       {selectedPhoto && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,36,0.95)', zIndex: 100000, display: 'flex', flexDirection: 'column' }}>
           
-          <div style={{ padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(to bottom, rgba(0,0,0,0.7), transparent)' }}>
-            <div style={{ color: '#fff' }}>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>{selectedPhoto.desc || 'Sin descripcion'}</div>
-              <button onClick={() => setEditingDescription(true)} style={{ marginTop: 8, border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.12)', color: '#fff', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Editar descripcion</button>
-            </div>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              {false && selectedPhoto.rawMetadata && (
-                  <button onClick={(e) => { e.stopPropagation(); console.log(selectedPhoto.rawMetadata); toast.success('Metadatos EXIF enviados a consola'); }} style={{ background: '#333', color: '#fff', border: '1px solid #555', padding: '6px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>
-                      Ver Metadatos EXIF
-                  </button>
-              )}
-              {false && selectedPhoto.location && (
-                <a 
-                  href={`https://www.google.com/maps/search/?api=1&query=${selectedPhoto.location.lat},${selectedPhoto.location.lng}`} 
-                  target="_blank" rel="noreferrer"
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#e8f0fe', color: '#1a73e8', padding: '6px 12px', borderRadius: 16, textDecoration: 'none', fontSize: 13, fontWeight: 600 }}
-                  onClick={e => e.stopPropagation()}
-                >
-                  📍 Ver en Mapa
-                </a>
-              )}
-              <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 20, padding: 4 }}>
-                <button style={lbBtn} onClick={() => setLbZoom(z => Math.max(z / 1.3, 1))}>-</button>
-                <button style={lbBtn} onClick={() => { setLbZoom(1); setLbPan({x:0, y:0}); }}>1:1</button>
+          {/* Barra superior mínima: fecha + zoom + cerrar (paleta de la interfaz) */}
+          <div style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)', zIndex: 4 }}>
+            <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: 500 }}>
+              {selectedPhoto.displayDate || selectedPhoto.date}
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: 4 }}>
+                <button style={lbBtn} onClick={() => setLbZoom(z => Math.max(z / 1.3, 1))}>−</button>
+                <button style={{ ...lbBtn, width: 36, fontSize: 12 }} onClick={() => { setLbZoom(1); setLbPan({x:0, y:0}); }}>1:1</button>
                 <button style={lbBtn} onClick={() => setLbZoom(z => Math.min(z * 1.3, 6))}>+</button>
               </div>
-              <button onClick={() => setSelectedPhoto(null)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+              <button onClick={() => setSelectedPhoto(null)} title="Cerrar (Esc)" style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 22, cursor: 'pointer', width: 38, height: 38, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
             </div>
           </div>
-
-          {editingDescription && (
-            <div style={{ padding: '0 24px 14px', background: 'rgba(0,0,0,0.65)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-              <textarea
-                value={descriptionDraft}
-                onChange={e => setDescriptionDraft(e.target.value)}
-                placeholder="Escribe una descripcion..."
-                rows={3}
-                style={{ width: 'min(720px, 70vw)', resize: 'vertical', borderRadius: 6, border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.12)', color: '#fff', padding: '8px 10px', outline: 'none' }}
-              />
-              <button onClick={saveSelectedDescription} style={{ border: 'none', background: '#1f7a4d', color: '#fff', padding: '8px 12px', borderRadius: 4, fontWeight: 700, cursor: 'pointer' }}>Guardar</button>
-              <button onClick={() => { setEditingDescription(false); setDescriptionDraft(selectedPhoto.desc || ''); }} style={{ border: '1px solid rgba(255,255,255,0.35)', background: 'transparent', color: '#fff', padding: '8px 12px', borderRadius: 4, cursor: 'pointer' }}>Cancelar</button>
-            </div>
-          )}
 
           <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}
                onWheel={e => {
@@ -693,6 +663,38 @@ export default function MultimediaModule({ project, user }) {
                   <img src={selectedPhoto.fullSrc || selectedPhoto.src} alt="" draggable={false} style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain', transform: `scale(${lbZoom}) translate(${lbPan.x/lbZoom}px, ${lbPan.y/lbZoom}px)`, transition: lbDrag.current ? 'none' : 'transform 0.2s', cursor: lbZoom > 1 ? 'grab' : 'default' }}
                     onError={e => { if (!e.currentTarget.dataset.gen && selectedPhoto.fullSrc) { e.currentTarget.dataset.gen = '1'; e.currentTarget.src = `${selectedPhoto.fullSrc}&gen=1`; } }} />
               )}
+            </div>
+
+            {/* ── Pie de descripción SOBRE la foto (estilo Google Fotos) ── */}
+            <div onClick={e => e.stopPropagation()}
+                 style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '40px 24px 20px', background: 'linear-gradient(transparent, rgba(0,0,0,0.75))', zIndex: 4 }}>
+              <div style={{ maxWidth: 900, margin: '0 auto' }}>
+                {editingDescription ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      autoFocus
+                      value={descriptionDraft}
+                      onChange={e => setDescriptionDraft(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveSelectedDescription(); if (e.key === 'Escape') { setEditingDescription(false); setDescriptionDraft(selectedPhoto.desc || ''); } }}
+                      placeholder="Añade una descripción…"
+                      style={{ flex: 1, background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, color: '#fff', padding: '10px 14px', fontSize: 14, outline: 'none' }}
+                    />
+                    <button onClick={saveSelectedDescription} style={{ border: 'none', background: '#5f7fa3', color: '#fff', padding: '9px 16px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>Guardar</button>
+                    <button onClick={() => { setEditingDescription(false); setDescriptionDraft(selectedPhoto.desc || ''); }} title="Cancelar" style={{ border: '1px solid rgba(255,255,255,0.25)', background: 'transparent', color: '#fff', width: 38, height: 38, borderRadius: 8, cursor: 'pointer', fontSize: 16 }}>×</button>
+                  </div>
+                ) : (
+                  <div onClick={() => { setDescriptionDraft(selectedPhoto.desc || ''); setEditingDescription(true); }}
+                       title="Clic para editar la descripción"
+                       style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'text', color: '#fff' }}>
+                    <span style={{ flex: 1, fontSize: 15, fontWeight: 500, color: selectedPhoto.desc ? '#fff' : 'rgba(255,255,255,0.55)' }}>
+                      {selectedPhoto.desc || 'Añade una descripción…'}
+                    </span>
+                    <span style={{ flexShrink: 0, opacity: 0.85, fontSize: 13, border: '1px solid rgba(255,255,255,0.25)', borderRadius: 8, padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      ✎ Editar
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
