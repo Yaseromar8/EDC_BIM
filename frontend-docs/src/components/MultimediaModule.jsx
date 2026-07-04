@@ -19,9 +19,11 @@ export default function MultimediaModule({ project, user }) {
   // devolvía 401 (imagen en blanco). El middleware acepta ?session_token= como
   // fallback, así que lo anexamos a cada URL de media.
   // thumb=true → miniatura ~20 KB (galería); sin thumb → imagen completa (lightbox).
-  const proxyUrl = (id, thumb = false) => {
+  // variant: 'thumb' (galería ~25KB) | 'display' (lightbox mediana ~150KB) | 'full' (original)
+  const proxyUrl = (id, variant = 'full') => {
     const tok = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token') || '';
-    return `${API}/api/docs/proxy?id=${id}${thumb ? '&thumb=1' : ''}${tok ? `&session_token=${encodeURIComponent(tok)}` : ''}`;
+    const q = variant === 'thumb' ? '&thumb=1' : variant === 'display' ? '&size=display' : '';
+    return `${API}/api/docs/proxy?id=${id}${q}${tok ? `&session_token=${encodeURIComponent(tok)}` : ''}`;
   };
   const PAGE = 80;
   const [offset, setOffset] = useState(0);
@@ -90,8 +92,9 @@ export default function MultimediaModule({ project, user }) {
     const captureDate = f.capture_date || f.created_at || new Date().toISOString();
     return {
       id: f.id,
-      src: proxyUrl(f.id, true),        // GALERÍA: miniatura ligera
-      fullSrc: proxyUrl(f.id, false),   // LIGHTBOX: imagen completa
+      src: proxyUrl(f.id, 'thumb'),       // GALERÍA: miniatura ligera (~25KB)
+      fullSrc: proxyUrl(f.id, 'display'), // LIGHTBOX: mediana 1600px (~150KB, abre rápido)
+      originalSrc: proxyUrl(f.id, 'full'),// descarga/original a resolución completa
       desc: f.description || '',
       filename: f.name,
       mimeType: f.mime_type || '',

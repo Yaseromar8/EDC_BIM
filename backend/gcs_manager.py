@@ -153,41 +153,52 @@ def generate_signed_url(blob_name, expiration_minutes=60*24):
         return None
 
 def get_blob_data(blob_name):
-    """Descarga el contenido de un blob y su tipo MIME."""
+    """Descarga el contenido de un blob y su tipo MIME.
+    OPTIMIZADO: una sola llamada a GCS (download_as_bytes) en vez de tres
+    (exists + reload + download). Desde Perú cada round-trip cuesta ~0.8s, así
+    que esto baja de ~2.5s a ~0.6s por archivo. Si no existe, download lanza y
+    devolvemos None (mismo comportamiento que antes, sin la llamada extra)."""
     try:
+        from google.cloud.exceptions import NotFound
         bucket_name = os.environ.get("GCS_BUCKET_NAME")
         client = get_storage_client()
-        bucket = client.bucket(bucket_name)
-        blob = bucket.blob(blob_name)
-        if not blob.exists():
+        blob = client.bucket(bucket_name).blob(blob_name)
+        try:
+            data = blob.download_as_bytes()
+        except NotFound:
             return None, None
-        blob.reload()
-        return blob.download_as_bytes(), blob.content_type
+        # content_type ya viene poblado tras download_as_bytes (sin reload extra)
+        return data, (blob.content_type or None)
     except Exception as e:
         print(f"Error obteniendo data de GCS: {str(e)}")
         return None, None
 
 
 def get_or_create_thumbnail(blob_name, max_px=420):
-    """Miniatura JPEG (~20 KB) para galerías de miles de fotos. Se cachea en GCS
-    como '<blob>__thumb<max_px>.jpg': la 1ª vez se genera, luego es instantánea.
+    """Versión reducida JPEG cacheada en GCS ('<blob>__thumb<max_px>.jpg').
+    max_px=420 → miniatura de galería (~25 KB); max_px=1600 → 'display' para el
+    lightbox (~150 KB, abre rápido). La 1ª vez se genera, luego es instantánea.
     Devuelve (bytes, 'image/jpeg') o (None, None)."""
     try:
         from io import BytesIO
         from PIL import Image, ImageOps
+        from google.cloud.exceptions import NotFound
         bucket_name = os.environ.get("GCS_BUCKET_NAME")
         client = get_storage_client()
         bucket = client.bucket(bucket_name)
 
         thumb_name = f"{blob_name}__thumb{max_px}.jpg"
-        thumb_blob = bucket.blob(thumb_name)
-        if thumb_blob.exists():
-            return thumb_blob.download_as_bytes(), 'image/jpeg'
+        # Intento directo de descarga (1 llamada): si existe, listo; si no, generamos.
+        try:
+            return bucket.blob(thumb_name).download_as_bytes(), 'image/jpeg'
+        except NotFound:
+            pass
 
-        src = bucket.blob(blob_name)
-        if not src.exists():
+        try:
+            raw = bucket.blob(blob_name).download_as_bytes()
+        except NotFound:
             return None, None
-        raw = src.download_as_bytes()
+        thumb_blob = bucket.blob(thumb_name)
 
         img = Image.open(BytesIO(raw))
         img = ImageOps.exif_transpose(img)      # respeta orientación EXIF del celular

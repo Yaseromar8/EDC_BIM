@@ -401,14 +401,17 @@ def proxy_document():
     # Si es imagen, lo evitamos exponer a redirect/signing issues (soluciona error de imagen negra)
     is_image = any(gcs_urn.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif'])
     if is_image:
-        # ?thumb=1 → miniatura cacheada (~20 KB) para galerías de miles de fotos.
-        if request.args.get('thumb'):
-            tdata, tctype = get_or_create_thumbnail(gcs_urn)
+        # ?thumb=1 → miniatura de galería (~25 KB); ?size=display → mediana 1600px
+        # (~150 KB) para el lightbox: abre rápido y se ve nítida en pantalla. La
+        # original completa solo se sirve sin parámetros (descarga/zoom 1:1).
+        variant = 'thumb' if request.args.get('thumb') else request.args.get('size')
+        if variant in ('thumb', 'display'):
+            tdata, tctype = get_or_create_thumbnail(gcs_urn, 1600 if variant == 'display' else 420)
             if tdata:
                 resp = Response(tdata, mimetype=tctype or 'image/jpeg')
                 resp.headers['Cache-Control'] = 'public, max-age=604800'  # 7 días en el navegador
                 return resp
-            # si la miniatura falla, caemos a la imagen completa abajo
+            # si falla, caemos a la imagen completa abajo
         content, content_type = get_blob_data(gcs_urn)
         if content:
             resp = Response(content, mimetype=content_type or 'image/jpeg')
