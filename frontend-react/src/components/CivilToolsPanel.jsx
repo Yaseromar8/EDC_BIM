@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './SourceFilesPanel.css';
 import { apiFetch } from '../utils/apiFetch';
+import SectionViewer from './SectionViewer';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || (
+const { VITE_API_URL } = import.meta.env;
+const BACKEND_URL = VITE_API_URL || (
     typeof window !== 'undefined' && window.location.hostname === 'localhost'
         ? 'http://localhost:3000'
         : 'https://visor-ecd-backend.onrender.com'
@@ -302,6 +304,14 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
     const [searchOpen, setSearchOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [stationLabelsVisible, setStationLabelsVisible] = useState(initialCache.stationLabelsVisible ?? true);
+    
+    const [pollingInterval, setPollingInterval] = useState(null);
+    const [sectionJSON, setSectionJSON] = useState(null);
+    const [sectionIndex, setSectionIndex] = useState(0);
+    const [showSectionViewer, setShowSectionViewer] = useState(false);
+    const [isExtractingSections, setIsExtractingSections] = useState(false);
+    const [sectionProgress, setSectionProgress] = useState(0);
+    const [sectionMessage, setSectionMessage] = useState('');
     const extensionRef = useRef(null);
     const pollTimeoutRef = useRef(null);
     const restoredKeyRef = useRef(null);
@@ -312,10 +322,16 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
         [models]
     );
 
+    const civilScopeUrn = activeModelUrn || 'global';
+
     const activeCacheKey = useMemo(
-        () => getCacheKey(selectedDwgUrn || activeModelUrn, activeModelUrn),
-        [selectedDwgUrn, activeModelUrn]
+        () => `${civilScopeUrn}::${getCacheKey(selectedDwgUrn || activeModelUrn, activeModelUrn)}`,
+        [civilScopeUrn, selectedDwgUrn, activeModelUrn]
     );
+
+    useEffect(() => {
+        initialReplayRef.current = false;
+    }, [activeCacheKey]);
 
     const selectedAlignment = useMemo(
         () => alignmentData.find(a => a.alignmentId === selectedAlignmentId) || null,
@@ -418,6 +434,10 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
             setExtractProgress(cached.extractProgress || 0);
             setExtractMessage(cached.extractMessage || '');
             setExtractReportUrl(cached.extractReportUrl || '');
+            setSectionJSON(null);
+            setSectionIndex(0);
+            setSectionProgress(0);
+            setSectionMessage('');
             return;
         }
 
@@ -431,7 +451,32 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
         setExtractMessage('');
         setExtractError('');
         setExtractReportUrl('');
-    }, [activeCacheKey]);
+        setSectionJSON(null);
+        setSectionIndex(0);
+        setSectionProgress(0);
+        setSectionMessage('');
+
+        // PERSISTENCIA: sin caché de sesión, buscar la extracción GUARDADA en el
+        // backend (la primera extracción es permanente; solo cambia al re-extraer).
+        const persistUrn = selectedDwgUrn || activeModelUrn;
+        if (!persistUrn) return;
+        let alive = true;
+        const params = new URLSearchParams({
+            urn: persistUrn,
+            scope_urn: civilScopeUrn
+        });
+        apiFetch(`${BACKEND_URL}/api/civil/alignments?${params.toString()}`)
+            .then((r) => r.json())
+            .then((d) => {
+                if (!alive || !d.found || !Array.isArray(d.data) || !d.data.length) return;
+                const alignmentJSON = normalizeAlignments(d.data);
+                setAlignmentData(alignmentJSON);
+                setExtractMessage(`Extracción guardada: ${alignmentJSON.length} ejes (${(d.updated_at || '').slice(0, 10)})`);
+                window.__lobCivilAlignments = alignmentJSON; // visible para 4D LOB
+            })
+            .catch(() => { /* sin persistencia aún */ });
+        return () => { alive = false; };
+    }, [activeCacheKey, selectedDwgUrn, activeModelUrn, civilScopeUrn]);
 
     useEffect(() => {
         const handleContextChange = (e) => {
@@ -557,14 +602,22 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
     }, [alignmentData, getExtension, persistCache, selectedAlignment, stationInput, stationLabelsVisible]);
 
     useEffect(() => {
-        if (initialReplayRef.current || !alignmentData.length || !selectedAlignmentId) return;
+        if (initialReplayRef.current || !alignmentData.length) return;
         initialReplayRef.current = true;
-        applyAlignment(selectedAlignmentId, alignmentData, {
-            profileName: selectedProfileName,
-            station: parseStation(stationInput),
-            stationLabelsVisible
-        });
-    }, [alignmentData, applyAlignment, selectedAlignmentId, selectedProfileName, stationInput, stationLabelsVisible]);
+        
+        if (selectedAlignmentId) {
+            applyAlignment(selectedAlignmentId, alignmentData, {
+                profileName: selectedProfileName,
+                station: parseStation(stationInput),
+                stationLabelsVisible
+            });
+        } else {
+            getExtension().then(ext => {
+                ext?.bakeAlignment?.(alignmentData, 'ALL');
+                ext?.setStationAnnotationsVisible?.(false);
+            });
+        }
+    }, [alignmentData, applyAlignment, selectedAlignmentId, selectedProfileName, stationInput, stationLabelsVisible, getExtension]);
 
     const updateStation = useCallback((station) => {
         const safeStation = Number(station) || 0;
@@ -575,6 +628,56 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
             if (ext?.setStation) ext.setStation(safeStation);
         });
     }, [getExtension, persistCache]);
+
+    // SECCIONES PERSISTENTES: al abrir (o cambiar de DWG), cargar la última
+    // extracción guardada — disponible al instante tras recargar la página.
+    useEffect(() => {
+        const persistUrn = selectedDwgUrn || activeModelUrn;
+        if (!persistUrn || sectionJSON) return undefined;
+        let alive = true;
+        const params = new URLSearchParams({
+            urn: persistUrn,
+            scope_urn: civilScopeUrn
+        });
+        apiFetch(`${BACKEND_URL}/api/civil/sections?${params.toString()}`)
+            .then((r) => r.json())
+            .then((d) => {
+                if (!alive || !d.found || !d.data) return;
+                const count = Array.isArray(d.data) ? d.data.length : (d.data.stations?.length || 0);
+                if (!count) return;
+                setSectionJSON(d.data);
+                setSectionProgress(100);
+                setSectionMessage(`Secciones guardadas: ${count} estaciones · ${(d.updated_at || '').slice(0, 10)}`);
+            })
+            .catch(() => { /* sin persistencia aún */ });
+        return () => { alive = false; };
+    }, [selectedDwgUrn, activeModelUrn, civilScopeUrn, sectionJSON]);
+
+    // SYNC DUAL con el visualizador de secciones: mueve marcador PK, opcionalmente
+    // vuela la cámara (fly) y aplica/quita el plano de corte real (cut).
+    const handleSectionSync = useCallback(async (alignName, station, opts = {}) => {
+        const ext = await getExtension();
+        if (opts.clearOnly) { ext?.clearSectionCutPlane?.(); return; }
+
+        const target = alignmentData.find((a) => a.alignmentId === alignName || a.name === alignName)
+            || (selectedAlignment || alignmentData[0]);
+        if (!target) {
+            setSectionMessage('Extrae los alineamientos (Extraer) para poder ubicar la sección en el modelo.');
+            return;
+        }
+        const pk = Number(station) || 0;
+        if (target.alignmentId !== selectedAlignmentId) {
+            await applyAlignment(target.alignmentId, alignmentData, { station: pk });
+        }
+        if (opts.fly) ext?.flyToStation?.(target, pk);
+        updateStation(pk); // marcador + cursor + contexto (sin mover cámara)
+        if (opts.cut) {
+            const ok = ext?.setSectionCutPlane?.(target, pk);
+            if (!ok) setSectionMessage('No se pudo aplicar el corte 3D en esta progresiva (revisa la consola).');
+        } else if (opts.cut === false) {
+            ext?.clearSectionCutPlane?.();
+        }
+    }, [alignmentData, selectedAlignment, selectedAlignmentId, applyAlignment, getExtension, updateStation]);
 
     const handleExtractCurves = async () => {
         let realUrn = selectedDwgUrn || activeModelUrn;
@@ -680,6 +783,19 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
                         setExtractProgress(100);
                         setExtractMessage(`Listo: ${alignmentJSON.length} ejes / ${countVisibleProfiles(alignmentJSON)} perfiles utiles`);
 
+                        // PERSISTIR: la extracción queda guardada (permanente hasta re-extraer)
+                        window.__lobCivilAlignments = alignmentJSON; // visible para 4D LOB
+                        apiFetch(`${BACKEND_URL}/api/civil/alignments`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                urn: realUrn,
+                                model_urn: civilScopeUrn,
+                                scope_urn: civilScopeUrn,
+                                data: alignmentJSON
+                            })
+                        }).catch((e) => console.warn('[CivilTools] No se pudo persistir la extracción:', e));
+
                         if (alignmentJSON.length > 0) {
                             const first = alignmentJSON[0];
                             await applyAlignment(first.alignmentId, alignmentJSON, {
@@ -720,6 +836,112 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
             setExtractMessage(message);
             setIsExtracting(false);
             alert(message);
+        }
+    };
+
+    // SEC: misma UX de carga que EXTRAER (porcentaje visible, sin alerts) y
+    // resultado PERSISTENTE (se guarda en el backend; se reemplaza al re-extraer).
+    const handleExtractSections = async () => {
+        const realUrn = selectedDwgUrn || activeModelUrn;
+        let realProjectId = null;
+        if (selectedDwgUrn) {
+            const model = dwgModelsList.find(item => item.urn === selectedDwgUrn);
+            if (model) realProjectId = model.projectId;
+        }
+        if (!realUrn || isExtractingSections) return;
+
+        setIsExtractingSections(true);
+        setSectionProgress(5);
+        setSectionMessage('Enviando WorkItem de secciones a Civil 3D…');
+
+        const fail = (msg) => {
+            setSectionMessage(msg);
+            setSectionProgress(0);
+            setIsExtractingSections(false);
+        };
+
+        try {
+            const res = await apiFetch(`${BACKEND_URL}/api/civil/extract-sections-test`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ urn: realUrn, project_id: realProjectId })
+            });
+            const data = await res.json();
+            if (!res.ok) { fail(`No se pudo iniciar: ${data.error || 'error desconocido'}`); return; }
+
+            setSectionProgress(12);
+            setSectionMessage('Procesando en la nube de Civil 3D…');
+
+            let pollCount = 0;
+            const MAX_POLLS = 100;
+            const pollStatus = async () => {
+                try {
+                    pollCount += 1;
+                    if (pollCount > MAX_POLLS) { fail('Tiempo de espera agotado. Reintenta la extracción.'); return; }
+                    const statusRes = await apiFetch(`${BACKEND_URL}/api/civil/workitem-status/${data.workitem_id}`);
+                    const statusData = await statusRes.json();
+                    const status = String(statusData.status || '').toLowerCase();
+
+                    if (status === 'pending' || status === 'inprogress') {
+                        setSectionProgress((prev) => Math.min(82, Math.max(prev, 12 + pollCount * 4)));
+                        setTimeout(pollStatus, 3000);
+                        return;
+                    }
+                    if (status.startsWith('failed') || status === 'cancelled') {
+                        console.error('[Sections] WorkItem failed:', statusData);
+                        fail(`Extracción falló (${statusData.status}). Revisa el DWG o reintenta.`);
+                        return;
+                    }
+                    if (status === 'success') {
+                        setSectionProgress(88);
+                        setSectionMessage('Descargando secciones…');
+                        const resultParams = new URLSearchParams({
+                            workitem_id: data.workitem_id,
+                            object_name: data.result_object || ''
+                        });
+                        const jsonRes = await apiFetch(`${BACKEND_URL}/api/civil/alignment-result?${resultParams.toString()}`);
+                        if (!jsonRes.ok) { fail('No se pudo descargar el JSON de secciones.'); return; }
+
+                        const result = await jsonRes.json();
+                        const stationCount = Array.isArray(result) ? result.length : (result?.stations?.length || 0);
+                        if (!stationCount) { fail('La extracción devolvió un resultado vacío (¿el DWG tiene sample lines?).'); return; }
+
+                        setSectionJSON(result);
+                        setSectionIndex(0);
+                        setSectionProgress(95);
+                        setSectionMessage('Guardando en el servidor…');
+
+                        // PERSISTIR: disponible al instante en la próxima carga
+                        try {
+                            await apiFetch(`${BACKEND_URL}/api/civil/sections`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    urn: realUrn,
+                                    model_urn: civilScopeUrn,
+                                    scope_urn: civilScopeUrn,
+                                    data: result
+                                })
+                            });
+                        } catch (e) { console.warn('[Sections] No se pudo persistir:', e); }
+
+                        const warns = (!Array.isArray(result) && result.warnings?.length)
+                            ? ` · ${result.warnings.length} avisos` : '';
+                        setSectionProgress(100);
+                        setSectionMessage(`Listo: ${stationCount} estaciones${warns}`);
+                        setIsExtractingSections(false);
+                        return;
+                    }
+                    fail(`Estado inesperado: ${statusData.status || 'sin estado'}`);
+                } catch (err) {
+                    console.error('[Sections] polling:', err);
+                    fail('Error consultando el estado de la extracción.');
+                }
+            };
+            setTimeout(pollStatus, 3000);
+        } catch (err) {
+            console.error('[Sections] red:', err);
+            fail('Error de red al iniciar la extracción de secciones.');
         }
     };
 
@@ -831,6 +1053,30 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
                     >
                         <DownloadIcon />
                         {isExtracting ? `${extractProgress}%` : 'Extraer'}
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={handleExtractSections}
+                        disabled={isExtracting || isExtractingSections}
+                        title="Extraer secciones transversales desde Civil 3D"
+                        style={{
+                            height: 34,
+                            border: '1px solid #3aa0ff',
+                            background: isExtractingSections ? '#3a3f47' : 'transparent',
+                            color: isExtractingSections ? '#fff' : '#8ecbff',
+                            borderRadius: 4,
+                            padding: '0 10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 7,
+                            cursor: isExtractingSections ? 'wait' : 'pointer',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        {isExtractingSections ? `${sectionProgress}%` : 'Sec'}
                     </button>
 
                     {searchOpen && (
@@ -1140,7 +1386,78 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
                         </>
                     )}
                 </div>
+
+                {/* Secciones transversales — estado + visualizador (minimalista) */}
+                {(sectionMessage || isExtractingSections || sectionJSON) && (
+                    <div style={{
+                        marginTop: 14,
+                        border: '1px solid rgba(255,255,255,0.10)',
+                        borderRadius: 6,
+                        background: 'rgba(255,255,255,0.03)',
+                        padding: '10px 12px'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{
+                                width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                                background: isExtractingSections ? '#3aa0ff' : sectionJSON ? '#22c55e' : '#8a919c'
+                            }} />
+                            <span style={{
+                                fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
+                                color: '#8a919c', fontWeight: 700
+                            }}>
+                                Secciones transversales
+                            </span>
+                        </div>
+
+                        {isExtractingSections && (
+                            <div style={{ marginTop: 8, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${sectionProgress}%`, background: '#3aa0ff', transition: 'width 300ms ease' }} />
+                            </div>
+                        )}
+
+                        {sectionMessage && (
+                            <div style={{ marginTop: 7, fontSize: 11.5, color: '#c8cdd6', lineHeight: 1.4 }}>
+                                {sectionMessage}
+                            </div>
+                        )}
+
+                        {sectionJSON && !isExtractingSections && (
+                            <button
+                                onClick={() => setShowSectionViewer(true)}
+                                style={{
+                                    marginTop: 10,
+                                    width: '100%',
+                                    height: 32,
+                                    background: 'transparent',
+                                    color: '#8ecbff',
+                                    border: '1px solid #3aa0ff',
+                                    borderRadius: 5,
+                                    fontWeight: 700,
+                                    fontSize: 12,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    gap: 8
+                                }}
+                            >
+                                Visualizador 2D <span style={{ color: '#5d6672', fontWeight: 400 }}>· secciones y volúmenes</span>
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
+            
+            {showSectionViewer && sectionJSON && (
+                <SectionViewer
+                    sectionsData={sectionJSON}
+                    onClose={() => {
+                        setShowSectionViewer(false);
+                        getExtension().then((ext) => ext?.clearSectionCutPlane?.());
+                    }}
+                    onSync={handleSectionSync}
+                />
+            )}
         </div>
     );
 };

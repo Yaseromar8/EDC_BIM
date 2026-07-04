@@ -419,6 +419,53 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
     const hasAnySelection = Object.keys(filterSelections).some(k => filterSelections[k] && filterSelections[k].length > 0);
     const globalValidDbIds = [];
 
+    // ── Semántica de "(Unassigned)" para AUDITORÍA ───────────────────────────
+    // 1) Solo lo VACÍO de verdad cuenta como sin valor. Cualquier cosa tecleada
+    //    (un '-', una letra, un signo por error) es un valor y se muestra como
+    //    su propio bucket — así la auditoría detecta datos mal llenados.
+    //    Los ARREGLOS multi-slot se aplanan uniendo solo las casillas con
+    //    contenido (["",""] → vacío; ["PQ08_1",""] → "PQ08_1"; ["-",""] → "-").
+    const normVal = (raw) => {
+        if (Array.isArray(raw)) {
+            return raw.map(x => String(x ?? '').trim()).filter(Boolean).join(', ');
+        }
+        return String(raw ?? '').trim();
+    };
+
+    // 2) "(Unassigned)" se ACOTA a los modelos donde el parámetro EXISTE:
+    //    un elemento de un modelo que ni siquiera usa ese parámetro no es
+    //    "sin asignar" — simplemente no aplica, y no debe engordar el bucket
+    //    (antes: todos los elementos de los demás modelos del frente caían ahí
+    //    → "(Unassigned)" ≈ todo el modelo).
+    const propScope = Array.from(new Set([...filterProperties, ...Object.keys(filterSelections || {})]))
+        .filter(p => p !== 'Standard::Sources');
+    const propUrnsWithValue = {};
+    propScope.forEach(propId => { propUrnsWithValue[propId] = new Set(); });
+    allData.forEach(row => {
+        const u = row.source_urn || row.model_urn;
+        const su = String(u).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        for (const propId of propScope) {
+            const pn = propId.split('::')[1] || propId;
+            if (normVal(row[pn])) propUrnsWithValue[propId].add(su);
+        }
+    });
+
+    // Valor efectivo de una fila para una propiedad (AUDITORÍA COMPLETA:
+    // ningún elemento vinculado del frente desaparece — la suma de buckets
+    // es el total de elementos):
+    //   valor real (incluye typos)  → su propio bucket
+    //   '(Unassigned)'              → vacío real, en modelos que SÍ usan el parámetro
+    //   '(No aplica)'               → el modelo vinculado no trae ese parámetro
+    const getRowValue = (row, propId, safeUrn) => {
+        if (propId === 'Standard::Sources') {
+            return String(row.source_urn || row.model_urn).trim();
+        }
+        const pn = propId.split('::')[1] || propId;
+        const v = normVal(row[pn]);
+        if (v) return v;
+        return propUrnsWithValue[propId]?.has(safeUrn) ? '(Unassigned)' : '(No aplica)';
+    };
+
     // Nivel 1: Filtrar sólo data activa en el visor (rosetta) y filtrado global
     allData.forEach(row => {
         const extId = row.dbId; // Recordatorio: en mappedData, pospusimos UUID a dbId
@@ -452,19 +499,11 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
             for (let selPropId in filterSelections) {
                 const sVals = filterSelections[selPropId];
                 if (!sVals || sVals.length === 0) continue;
-                
-                // Formato clave: Category::PropertyName
-                let pName = selPropId.split('::')[1] || selPropId;
-                let isSourceFilter = false;
-                if (selPropId === 'Standard::Sources') {
-                   isSourceFilter = true;
-                }
 
-                const rowVal = isSourceFilter 
-                    ? String(row.source_urn || row.model_urn).trim() 
-                    : String(row[pName] || '(Unassigned)').trim();
-                
-                if (!sVals.includes(rowVal)) {
+                // null = el parámetro no aplica a este modelo → no puede
+                // matchear ninguna selección (ni siquiera '(Unassigned)').
+                const rowVal = getRowValue(row, selPropId, safeUrn);
+                if (rowVal === null || !sVals.includes(rowVal)) {
                     passesAllFilters = false;
                     break;
                 }
@@ -477,15 +516,10 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
 
         // Construir buckets (Nivel Facetado - OR para sí mismo)
         for(let propId of filterProperties) {
-            let pName = propId.split('::')[1] || propId;
-            let val = '';
-            
-            if (propId === 'Standard::Sources') {
-                val = String(row.source_urn || row.model_urn).trim();
-            } else {
-                val = String(row[pName] || '(Unassigned)').trim();
-            }
-            if(!val) continue;
+            // null = parámetro no aplica a este modelo → la fila no participa
+            // en los buckets de esta propiedad (tampoco en '(Unassigned)').
+            const val = getRowValue(row, propId, safeUrn);
+            if (val === null || !val) continue;
 
             let passesFacet = true;
             if (hasAnySelection) {
@@ -493,15 +527,9 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
                     if (selPropId === propId) continue; // Faceted OR
                     const sVals = filterSelections[selPropId];
                     if (!sVals || sVals.length === 0) continue;
-                    
-                    let pNameCheck = selPropId.split('::')[1] || selPropId;
-                    let isCheckSourceFilter = false;
-                    if (selPropId === 'Standard::Sources') isCheckSourceFilter = true;
 
-                    const rowVal = isCheckSourceFilter
-                        ? String(row.source_urn || row.model_urn).trim() 
-                        : String(row[pNameCheck] || '(Unassigned)').trim();
-                    if (!sVals.includes(rowVal)) {
+                    const rowVal = getRowValue(row, selPropId, safeUrn);
+                    if (rowVal === null || !sVals.includes(rowVal)) {
                         passesFacet = false;
                         break;
                     }
@@ -531,10 +559,12 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
         }
         
         values.sort(function(a, b) {
-             const aIsUnassigned = (a.value === '(Unassigned)' || a.value === 'Unassigned' || a.value === 'Sin asignar');
-             const bIsUnassigned = (b.value === '(Unassigned)' || b.value === 'Unassigned' || b.value === 'Sin asignar');
-             if (aIsUnassigned && !bIsUnassigned) return 1;
-             if (!aIsUnassigned && bIsUnassigned) return -1;
+             // Orden: valores reales (por conteo) → '(Unassigned)' → '(No aplica)'
+             const rank = (v) => (v === '(No aplica)') ? 2
+                 : (v === '(Unassigned)' || v === 'Unassigned' || v === 'Sin asignar') ? 1 : 0;
+             const ra = rank(a.value);
+             const rb = rank(b.value);
+             if (ra !== rb) return ra - rb;
 
              if (b.count === a.count) return a.value.localeCompare(b.value);
              return b.count - a.count;

@@ -239,26 +239,25 @@ def get_config_route():
         print(f"  [DIAG-GET] model: name={m.get('name')}, appProjectId={m.get('appProjectId')}, urn=...{str(m.get('urn',''))[-20:]}")
     
     if project_id and 'models' in config:
-        # Filtrado inteligente por frente.
-        # project_id viene como "1_CANAL", "1_DRENAJE", "1_INFRAWORKS", etc.
-        # Los appProjectId en la config pueden ser: "CANAL", "1_CANAL", "DRENAJE_URBANO", etc.
-        if '_' in project_id:
-            parts = project_id.split('_', 1)
-            base_id = parts[0]       # ej: "1"
-            frente = parts[1].upper() # ej: "CANAL", "DRENAJE"
-            
-            config['models'] = [
+        # Aislamiento estricto: appProjectId es el scope completo del frente.
+        # Proyecto y frente NO se filtran por texto parcial, porque eso cruza
+        # proyectos distintos que comparten palabras como "DRENAJE".
+        exact_models = [
+            m for m in config['models']
+            if m.get('appProjectId') == project_id
+        ]
+
+        # Compatibilidad solo para scopes legacy guardados como "CANAL" o
+        # "DRENAJE" sin prefijo de proyecto. Se usa unicamente si no hay
+        # coincidencias exactas, nunca como mezcla adicional.
+        if not exact_models and '_' in project_id:
+            frente = project_id.rsplit('_', 1)[1].upper()
+            exact_models = [
                 m for m in config['models']
-                if m.get('appProjectId') == project_id                        # exact: "1_CANAL"
-                or m.get('appProjectId', '').upper() == frente                 # frente name: "CANAL"
-                or frente in m.get('appProjectId', '').upper()                 # partial: "DRENAJE" in "DRENAJE_URBANO"
+                if m.get('appProjectId', '').upper() == frente
             ]
-        else:
-            # Sin frente, filtrar solo por ID exacto
-            config['models'] = [
-                m for m in config['models']
-                if m.get('appProjectId') == project_id
-            ]
+
+        config['models'] = exact_models
     
     
     # NOTA: Se eliminó el Auto-Update silencioso que existía aquí.
@@ -305,10 +304,26 @@ def list_project_frentes(project_id):
 def add_model_route():
     data = request.json
     config = get_project_config_internal()
-    
+
     app_project_id = data.get('project') # "DRENAJE_URBANO" or "CANAL"
     name = data.get('name')
     print(f"\n[DIAG-ADD] project={app_project_id}, name={name}, urn=...{str(data.get('urn',''))[-20:]}")
+
+    # GUARD ANTI-DUPLICADOS (estilo Tandem): el mismo URN no puede vincularse
+    # dos veces al mismo frente — evita doble entrada en config y doble carga
+    # en el visor. También bloquea por itemId (misma pieza de ACC en otra versión).
+    dup = next((m for m in config.get('models', [])
+                if m.get('appProjectId') == app_project_id and (
+                    m.get('urn') == data.get('urn')
+                    or (data.get('itemId') and m.get('itemId') == data.get('itemId'))
+                )), None)
+    if dup:
+        return jsonify({
+            "error": "duplicate",
+            "message": f"'{dup.get('name')}' ya está vinculado a este frente"
+                       + (" (misma pieza de ACC; usa Update para traer la versión nueva)."
+                          if dup.get('urn') != data.get('urn') else "."),
+        }), 409
 
     new_model = {
         "id": str(int(time.time() * 1000)),
@@ -499,6 +514,127 @@ def update_model_link():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@digital_twin_bp.route('/api/config/project/update-all', methods=['POST'])
+def update_all_models():
+    """UPDATE MASIVO profesional (estilo Tandem), resuelto SERVER-SIDE:
+    - UNA sola lectura y UNA sola escritura del config (sin carreras
+      read-modify-write entre N requests).
+    - Pre-chequeo de traducción por modelo (los no listos se posponen,
+      no rompen el lote).
+    - Extracciones EN COLA (secuenciales en un hilo): no se lanzan N hilos
+      en paralelo contra la API de properties de APS — esa era la causa de
+      los fallos del update masivo.
+    - Devuelve reporte por modelo: updated / up_to_date / pending_translation /
+      no_acc_metadata / error, con su job de extracción para sondear."""
+    data = request.get_json() or {}
+    app_project_id = data.get('project')
+    if not app_project_id:
+        return jsonify({'error': 'Missing project'}), 400
+
+    token, error = get_internal_token()
+    if error or not token:
+        return jsonify({'error': 'Internal auth failed', 'details': error}), 500
+    headers = {'Authorization': f'Bearer {token}'}
+
+    config = get_project_config_internal()
+    project_models = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
+
+    results = []
+    to_extract = []   # [(new_urn, target, job_id)]
+    config_dirty = False
+
+    for model in project_models:
+        entry = {'id': model.get('id'), 'name': model.get('name'), 'urn': model.get('urn')}
+        pid, iid = model.get('projectId'), model.get('itemId')
+        if not pid or not iid:
+            entry.update(status='no_acc_metadata', message='Sin projectId/itemId (usa Relink).')
+            results.append(entry)
+            continue
+        try:
+            resp = requests.get(
+                f"https://developer.api.autodesk.com/data/v1/projects/{pid}/items/{iid}",
+                headers=headers, timeout=15)
+            if not resp.ok:
+                entry.update(status='error', message=f'ACC item {resp.status_code}')
+                results.append(entry)
+                continue
+            latest_version_id = resp.json()['data']['relationships']['tip']['data']['id']
+            if latest_version_id == model.get('versionId'):
+                entry.update(status='up_to_date', versionNumber=model.get('versionNumber'))
+                results.append(entry)
+                continue
+
+            new_urn = base64.urlsafe_b64encode(latest_version_id.encode('utf-8')).decode('utf-8').rstrip('=')
+            if not _is_model_translated(new_urn, token):
+                entry.update(status='pending_translation',
+                             message='La versión nueva aún se traduce en ACC. Reintenta en unos minutos.')
+                results.append(entry)
+                continue
+
+            # Mutar el modelo EN SU LUGAR (misma posición del config = mismo slot en el visor)
+            model['urn'] = new_urn
+            model['versionId'] = latest_version_id
+            try:
+                v_resp = requests.get(
+                    f"https://developer.api.autodesk.com/data/v1/projects/{pid}/versions/{urllib.parse.quote(latest_version_id, safe='')}",
+                    headers=headers, timeout=10)
+                if v_resp.ok:
+                    attrs = v_resp.json().get('data', {}).get('attributes', {})
+                    ext_attrs = attrs.get('extension', {}).get('data', {})
+                    if attrs.get('versionNumber'):
+                        model['versionNumber'] = attrs.get('versionNumber')
+                    lmt = attrs.get('lastModifiedTime') or ext_attrs.get('lastModifiedTime') or attrs.get('createTime')
+                    if lmt:
+                        model['lastModifiedTime'] = lmt
+            except Exception as ve:
+                print(f"[UpdateAll] version details {model.get('name')}: {ve}")
+            if not model.get('lastModifiedTime'):
+                model['lastModifiedTime'] = datetime.now().isoformat() + 'Z'
+            try:
+                model['versionNumber'] = model.get('versionNumber') or int(latest_version_id.split('?version=')[1])
+            except (IndexError, ValueError):
+                pass
+
+            config_dirty = True
+            job_id = f"auto_update_{model.get('id') or new_urn[:8]}_{int(time.time())}"
+            to_extract.append((new_urn, app_project_id, job_id))
+            entry.update(status='updated', newUrn=new_urn,
+                         versionNumber=model.get('versionNumber'), extraction_job_id=job_id)
+            results.append(entry)
+        except Exception as me:
+            traceback.print_exc()
+            entry.update(status='error', message=str(me))
+            results.append(entry)
+
+    if config_dirty:
+        save_project_config_internal(config)
+
+    # Cola de extracciones: UN hilo, secuencial. Jobs pre-registrados como
+    # 'queued' para que el frontend pueda sondear desde ya.
+    if to_extract:
+        from routes.inventory import extract_metadata_task, set_job
+        for (u, t, j) in to_extract:
+            set_job(j, {'status': 'queued', 'progress': 0, 'message': 'En cola de extracción…'})
+
+        def run_queue(queue):
+            for (u, t, j) in queue:
+                try:
+                    extract_metadata_task(u, t, j)
+                except Exception as qe:
+                    print(f"[UpdateAll] extracción {j} falló: {qe}")
+        threading.Thread(target=run_queue, args=(to_extract,), daemon=True).start()
+
+    config['models'] = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
+    summary = {
+        'updated': sum(1 for r in results if r['status'] == 'updated'),
+        'up_to_date': sum(1 for r in results if r['status'] == 'up_to_date'),
+        'pending_translation': sum(1 for r in results if r['status'] == 'pending_translation'),
+        'errors': sum(1 for r in results if r['status'] == 'error'),
+        'no_acc_metadata': sum(1 for r in results if r['status'] == 'no_acc_metadata'),
+    }
+    return jsonify({'results': results, 'summary': summary, 'config': config})
+
+
 @digital_twin_bp.route('/api/config/project/upload', methods=['POST'])
 def upload_local_model():
     try:
@@ -537,28 +673,280 @@ def upload_local_model():
         urn = urn_bytes.decode('utf-8').rstrip('=')
         
         translation_triggered = trigger_translation(urn, token, filename=file.filename)
-       # 6. Update Config
-        config = get_project_config_internal()
-        new_model = {
-            "id": str(int(time.time() * 1000)),
-            "name": label,
+
+        # FASE 1 completa: archivo subido + traducción disparada. El modelo NO se
+        # agrega al config todavía — eso lo hace /upload/finalize cuando la
+        # traducción termina (así el visor nunca recibe un modelo a medio traducir
+        # y la extracción de metadata corre en el momento correcto).
+        return jsonify({
+            "status": "uploaded",
             "urn": urn,
-            "source": "LOCAL",
-            "region": "US",
-            "added_at": datetime.now().isoformat(),
-            "appProjectId": app_project_id
-        }
-        config.setdefault('models', []).append(new_model)
-        if save_project_config_internal(config):
-            # Return filtered list
-            if app_project_id:
-                 config['models'] = [m for m in config['models'] if m.get('appProjectId') == app_project_id]
-            return jsonify({"status": "success", "urn": urn, "config": config})
-        else:
-            return jsonify({"error": "Failed to save config"}), 500
+            "translation_triggered": bool(translation_triggered),
+        })
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+
+@digital_twin_bp.route('/api/config/project/upload/finalize', methods=['POST'])
+def finalize_local_upload():
+    """FASE 2 del upload local (sondeada por el frontend cada pocos segundos):
+    - Si la traducción sigue en curso → {ready: false, progress}.
+    - Si falló → {ready: false, failed: true, message}.
+    - Si terminó → agrega el modelo al config (con guard anti-duplicados y la
+      primera vista 3D como defaultViewGuid), dispara la extracción de metadata
+      (mismo pipeline que update/relink) y devuelve el config + job."""
+    try:
+        data = request.get_json() or {}
+        urn = data.get('urn')
+        label = data.get('label') or 'Modelo local'
+        app_project_id = data.get('project')
+        if not urn or not app_project_id:
+            return jsonify({'error': 'Faltan urn o project'}), 400
+
+        token, error = get_internal_token()
+        if error or not token:
+            return jsonify({'error': 'Internal auth failed'}), 500
+
+        # Estado real de la traducción (manifest)
+        r = requests.get(
+            f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn}/manifest",
+            headers={'Authorization': f'Bearer {token}'}, timeout=15)
+        if not r.ok:
+            return jsonify({'ready': False, 'progress': 'Esperando manifest…'}), 200
+        manifest = r.json() or {}
+        status = manifest.get('status')
+        if status in ('pending', 'inprogress'):
+            return jsonify({'ready': False, 'progress': manifest.get('progress') or 'Traduciendo…'}), 200
+        if status in ('failed', 'timeout'):
+            return jsonify({'ready': False, 'failed': True,
+                            'message': f"La traducción falló ({status}). Revisa el archivo."}), 200
+
+        # Traducción lista → primera vista 3D (fallback: primera geometría)
+        default_guid = None
+        try:
+            for d in manifest.get('derivatives', []):
+                for ch in d.get('children', []):
+                    if ch.get('type') == 'geometry':
+                        if ch.get('role') == '3d':
+                            default_guid = ch.get('guid')
+                            break
+                        default_guid = default_guid or ch.get('guid')
+                if default_guid:
+                    break
+        except Exception:
+            pass
+
+        config = get_project_config_internal()
+        existing = next((m for m in config.get('models', [])
+                         if m.get('urn') == urn and m.get('appProjectId') == app_project_id), None)
+        if not existing:
+            new_model = {
+                "id": str(int(time.time() * 1000)),
+                "name": label,
+                "urn": urn,
+                "source": "LOCAL",
+                "region": "US",
+                "added_at": datetime.now().isoformat(),
+                "appProjectId": app_project_id,
+            }
+            if default_guid:
+                new_model["defaultViewGuid"] = default_guid
+            config.setdefault('models', []).append(new_model)
+            if not save_project_config_internal(config):
+                return jsonify({'error': 'Failed to save config'}), 500
+
+        # Auto-extracción de metadata (paridad con update/relink/DOCS)
+        extraction_job_id = None
+        try:
+            from routes.inventory import extract_metadata_task, set_job
+            extraction_job_id = f"auto_upload_{int(time.time())}"
+            set_job(extraction_job_id, {'status': 'queued', 'progress': 0, 'message': 'En cola de extracción…'})
+            threading.Thread(target=extract_metadata_task,
+                             args=(urn, app_project_id, extraction_job_id), daemon=True).start()
+        except Exception as ee:
+            print(f"[UploadFinalize] extracción no iniciada: {ee}")
+
+        config['models'] = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
+        return jsonify({'ready': True, 'config': config, 'urn': urn,
+                        'defaultViewGuid': default_guid, 'extraction_job_id': extraction_job_id})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+# ── FRENTES DINÁMICOS ─────────────────────────────────────────────────────────
+# Los 3 frentes base (CANAL / DRENAJE / INFRAWORKS) viven en el frontend;
+# los adicionales (ej. INTERFERENCIAS) se crean desde la UI y persisten aquí.
+# Un frente es solo un scope "{base_project_id}_{front_id}" — todo lo demás
+# (config, inventario, tracking, LOB) ya se aísla por ese id.
+
+def ensure_frentes_table():
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS project_frentes (
+                    id SERIAL PRIMARY KEY,
+                    base_project_id TEXT NOT NULL,
+                    front_id        TEXT NOT NULL,
+                    name            TEXT NOT NULL,
+                    description     TEXT,
+                    icon            TEXT DEFAULT '📌',
+                    created_at      TIMESTAMP DEFAULT NOW(),
+                    UNIQUE (base_project_id, front_id)
+                )""")
+
+            # SEED ÚNICO: los 3 frentes que antes estaban hardcodeados se migran
+            # a datos SOLO para los proyectos existentes en este momento (con
+            # centinela para no re-sembrar). Los proyectos creados después
+            # nacen VACÍOS — aislamiento real estilo ACC.
+            cur.execute("""SELECT 1 FROM project_frentes
+                           WHERE base_project_id = '__meta__' AND front_id = 'SEEDED_BASE'""")
+            if not cur.fetchone():
+                base = [
+                    ('CANAL', 'Frente Canal', 'Gestión de infraestructura hidráulica, canales y revestimientos.', '🌊'),
+                    ('DRENAJE', 'Frente Drenaje Urbano', 'Captación pluvial, tuberías, buzones y obras urbanas de drenaje.', '🏙️'),
+                    ('INFRAWORKS', 'Frente Infraworks', 'Visualización de modelos conceptuales y de contexto territorial o urbano.', '🛣️'),
+                ]
+                try:
+                    cur.execute("SELECT id FROM projects")
+                    for (pid,) in cur.fetchall():
+                        for fid, name, desc, icon in base:
+                            cur.execute("""
+                                INSERT INTO project_frentes (base_project_id, front_id, name, description, icon)
+                                VALUES (%s, %s, %s, %s, %s)
+                                ON CONFLICT (base_project_id, front_id) DO NOTHING
+                            """, (str(pid), fid, name, desc, icon))
+                    cur.execute("""
+                        INSERT INTO project_frentes (base_project_id, front_id, name, description, icon)
+                        VALUES ('__meta__', 'SEEDED_BASE', 'seed', '', '')
+                        ON CONFLICT DO NOTHING""")
+                    print("[frentes] Frentes base sembrados en proyectos existentes.")
+                except Exception as se:
+                    print(f"[frentes] seed base: {se}")
+
+            conn.commit()
+            print("[frentes] Tabla project_frentes lista.")
+    except Exception as e:
+        print(f"[frentes] ensure_frentes_table: {e}")
+
+
+@digital_twin_bp.route('/api/frentes', methods=['DELETE'])
+def delete_project_frente():
+    """Elimina la TARJETA del frente (no toca los datos de su scope:
+    si el frente tenía modelos/inventario, siguen en la BD por si se recrea)."""
+    try:
+        data = request.get_json() or {}
+        base = data.get('base_project_id')
+        front_id = (data.get('front_id') or '').strip().upper()
+        if not base or not front_id:
+            return jsonify({'error': 'Faltan base_project_id o front_id'}), 400
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                DELETE FROM project_frentes
+                WHERE base_project_id = %s AND front_id = %s
+                RETURNING front_id""", (base, front_id))
+            row = cur.fetchone()
+            conn.commit()
+        if not row:
+            return jsonify({'error': 'Frente no encontrado'}), 404
+        return jsonify({'status': 'ok', 'frontId': front_id}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@digital_twin_bp.route('/api/frentes', methods=['GET', 'POST'])
+def project_frentes():
+    """GET ?base=<projectId> → frentes personalizados del proyecto.
+    POST {base_project_id, name, description?, icon?} → crea el frente
+    (front_id se deriva del nombre: 'Interferencias' → 'INTERFERENCIAS')."""
+    try:
+        from db import get_db_connection
+        if request.method == 'GET':
+            base = request.args.get('base')
+            if not base:
+                return jsonify({'error': 'Falta base'}), 400
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT front_id, name, description, icon FROM project_frentes
+                    WHERE base_project_id = %s ORDER BY id""", (base,))
+                return jsonify({'frentes': [
+                    {'frontId': r[0], 'name': r[1], 'description': r[2] or '', 'icon': r[3] or '📌'}
+                    for r in cur.fetchall()
+                ]}), 200
+
+        data = request.get_json() or {}
+        base = data.get('base_project_id')
+        name = (data.get('name') or '').strip()
+        if not base or not name:
+            return jsonify({'error': 'Faltan base_project_id o name'}), 400
+
+        # front_id: slug en mayúsculas, solo A-Z0-9_ (es parte del scope de datos)
+        import re as _re
+        import unicodedata as _ud
+        slug = _ud.normalize('NFD', name).encode('ascii', 'ignore').decode('ascii')
+        slug = _re.sub(r'[^A-Za-z0-9]+', '_', slug).strip('_').upper()
+        if not slug or slug == '__META__':
+            return jsonify({'error': 'Nombre inválido'}), 400
+
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO project_frentes (base_project_id, front_id, name, description, icon)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (base_project_id, front_id) DO NOTHING
+                RETURNING front_id""",
+                (base, slug, name, (data.get('description') or '').strip(),
+                 (data.get('icon') or '📌').strip()[:8]))
+            row = cur.fetchone()
+            conn.commit()
+        if not row:
+            return jsonify({'error': f"El frente '{slug}' ya existe en este proyecto."}), 409
+        return jsonify({'status': 'ok', 'frontId': slug, 'name': name}), 201
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@digital_twin_bp.route('/api/inventory/purge-source', methods=['POST'])
+def purge_inventory_source():
+    """Limpia filas de inventory_assets extraídas para un modelo que NUNCA se
+    vinculó (usuario canceló el import de DOCS después de la extracción).
+    Seguridad: si el URN está vinculado al frente en el config, NO se purga."""
+    try:
+        data = request.get_json() or {}
+        source_urn = data.get('source_urn')
+        target = data.get('project')
+        if not source_urn or not target:
+            return jsonify({'error': 'Faltan source_urn o project'}), 400
+
+        config = get_project_config_internal()
+        linked = any(m.get('urn') == source_urn and m.get('appProjectId') == target
+                     for m in config.get('models', []))
+        if linked:
+            return jsonify({'purged': 0, 'linked': True}), 200
+
+        from db import get_db_connection
+        urns = list(dict.fromkeys([source_urn, sanitize_urn(source_urn)]))
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            fmt = ','.join(['%s'] * len(urns))
+            cursor.execute(
+                f"DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN ({fmt})",
+                [target] + urns)
+            purged = cursor.rowcount
+            conn.commit()
+        print(f"[PurgeSource] {purged} filas huérfanas eliminadas (import cancelado).")
+        return jsonify({'purged': purged}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 
 @digital_twin_bp.route('/api/config/project/remove', methods=['POST'])
 def remove_model_route():

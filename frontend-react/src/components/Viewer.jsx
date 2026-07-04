@@ -513,6 +513,29 @@ const Viewer = ({
                 window.viewer = viewer;
                 window.NOP_VIEWER = viewer;
 
+                const applyViewerVisualQuality = () => {
+                    try {
+                        if (typeof viewer.setQualityLevel === 'function') {
+                            viewer.setQualityLevel(true, true);
+                        }
+                        if (viewer.prefs && typeof viewer.prefs.set === 'function') {
+                            viewer.prefs.set('ambientShadows', true);
+                            viewer.prefs.set('antialiasing', true);
+                        }
+                        if (typeof viewer.setGroundShadow === 'function') {
+                            viewer.setGroundShadow(true);
+                        }
+                        if (typeof viewer.setGroundReflection === 'function') {
+                            viewer.setGroundReflection(false);
+                        }
+                        viewer.impl?.invalidate?.(true, true, true);
+                    } catch (e) {
+                        console.warn('[Viewer] No se pudo reforzar calidad visual:', e);
+                    }
+                };
+                window.__applyViewerVisualQuality = applyViewerVisualQuality;
+                applyViewerVisualQuality();
+
                 // ── FORZAR COMPORTAMIENTO NATIVO DE CLIC ──────────────────────
                 // Forzamos explícitamente que el clic simple seleccione y deseleccione,
                 // previniendo que extensiones como DataVisualization o PushPin interfieran.
@@ -563,6 +586,7 @@ const Viewer = ({
                      console.log(`[APS LMV] ⏱️ ${performance.now().toFixed(2)}ms - Evento: GEOMETRY_LOADED_EVENT`);
                      window.dispatchEvent(new CustomEvent('viewer-geometry-loaded'));
                      enforceACCGhosting();
+                     applyViewerVisualQuality();
                      console.log('[GHOST ACC] ✅ Modo ACC reforzado en GEOMETRY_LOADED');
                 });
                 
@@ -1070,6 +1094,7 @@ const Viewer = ({
                 '#7e9bbd', '#F97316', '#10B981', '#F43F5E', '#A855F7', '#5f7fa3', '#EAB308',
                 '#EF4444', '#8B5CF6', '#EC4899', '#6366F1', '#14B8A6', '#84CC16', '#F59E0B'
             ];
+            const THEME_COLOR_ALPHA = 0.82;
 
             // Merge custom per-value color overrides (from color picker or global store)
             const customOverrides = customColors || window._customValueColors || {};
@@ -1079,6 +1104,7 @@ const Viewer = ({
             if (!active) {
                 console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Ejecutando: viewer.clearThemingColors()`);
                 modelsQueue.forEach(m => viewer.clearThemingColors(m));
+                window.__applyViewerVisualQuality?.();
                 return;
             }
 
@@ -1106,7 +1132,7 @@ const Viewer = ({
                         const r = ((rgb >> 16) & 255) / 255;
                         const g = ((rgb >> 8) & 255) / 255;
                         const b = (rgb & 255) / 255;
-                        const colorVector = new window.THREE.Vector4(r, g, b, 1);
+                        const colorVector = new window.THREE.Vector4(r, g, b, THEME_COLOR_ALPHA);
 
                         // Mapeo en Diccionario por URN
                         entry.dbIds.forEach(item => {
@@ -1149,6 +1175,7 @@ const Viewer = ({
 
                     // Forzar el repintado final de shader
                     viewer.impl.invalidate(true, true, true);
+                    window.__applyViewerVisualQuality?.();
                     console.log(`[GPU] ⚡ Tema visual re-renderizado asíncronamente en ${(performance.now() - startGPU).toFixed(2)}ms`);
                 };
 
@@ -1166,6 +1193,7 @@ const Viewer = ({
                  viewer.showAll();
                  viewer.isolate();
              }
+             window.__applyViewerVisualQuality?.();
              viewer.fitToView();
         };
 
@@ -2265,6 +2293,7 @@ const Viewer = ({
                 // Force update to remove colors/ghosting immediately
                 viewer.impl.invalidate(true, true, true);
                 viewer.impl.sceneUpdated(true);
+                window.__applyViewerVisualQuality?.();
                 return;
             }
 
@@ -2327,6 +2356,7 @@ const Viewer = ({
 
             // 3. Apply Colors to matching items PER MODEL (GPU Batching ASYNC CHUNKING)
             const applyColorsAsynchronously = async () => {
+                const FILTER_COLOR_ALPHA = 0.82;
                 for (let index = 0; index < (detail.groups || []).length; index++) {
                     const group = detail.groups[index];
                     let color;
@@ -2336,7 +2366,7 @@ const Viewer = ({
                         color = palette[index % palette.length];
                     }
 
-                    const vector = new window.THREE.Vector4(color.r, color.g, color.b, 1);
+                    const vector = new window.THREE.Vector4(color.r, color.g, color.b, FILTER_COLOR_ALPHA);
 
                     // Agrupar elementos por modelo para evitar sobre-búsquedas
                     const itemsByModel = new Map();
@@ -2379,6 +2409,7 @@ const Viewer = ({
                 viewer.setGhosting(true);
                 viewer.impl.invalidate(true, true, true);
                 viewer.impl.sceneUpdated(true);
+                window.__applyViewerVisualQuality?.();
             };
 
             applyColorsAsynchronously();

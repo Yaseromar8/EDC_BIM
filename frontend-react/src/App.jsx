@@ -1544,7 +1544,7 @@ function App() {
                   } else if (cName.toUpperCase() === 'PROPERTY SETS' && pName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)) {
                     pName = pName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)[1];
                   }
-                  const val = String(pVal).trim();
+                  const val = Array.isArray(pVal) ? pVal.map(x => String(x ?? '').trim()).filter(Boolean).join(', ') : String(pVal).trim();
                   // FIX: Solo sobreescribir si el nuevo valor no está vacío,
                   // o si la propiedad aún no existe. Esto protege los valores válidos.
                   if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
@@ -1642,7 +1642,7 @@ function App() {
                     for (const d of [' - ', ' \u2013 ', ' \u2014 ']) {
                       if (pName.startsWith(cName + d)) { pName = pName.slice((cName + d).length); break; }
                     }
-                    const val = String(pVal).trim();
+                    const val = Array.isArray(pVal) ? pVal.map(x => String(x ?? '').trim()).filter(Boolean).join(', ') : String(pVal).trim();
                     if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
                       row[pName] = val;
                     }
@@ -1746,7 +1746,9 @@ function App() {
       }
 
       let attempts = 0;
-      const MAX_ATTEMPTS = 100; // ~5 min a 3s; tope para no sondear infinito si el job se cuelga
+      // ~12 min a 3s: las extracciones del update-all corren EN COLA secuencial,
+      // así que el último modelo del lote espera a los anteriores antes de empezar.
+      const MAX_ATTEMPTS = 240;
 
       const stopPoll = () => {
         clearInterval(pollInterval);
@@ -1881,20 +1883,100 @@ function App() {
     }
   }, [selectedProject]);
 
-  // Update masivo: actualiza TODOS los modelos que tienen versión nueva, de forma
-  // SECUENCIAL (no hammerea el config) y tolerante a fallos (si uno falla, sigue
-  // con los demás). Las extracciones corren en background con su guard de
-  // concurrencia, así que no se pisan.
+  // UPDATE MASIVO profesional (estilo Tandem): UNA llamada al backend, que
+  // resuelve todo server-side — config se escribe una sola vez (sin carreras),
+  // pre-chequeo de traducción por modelo, extracciones EN COLA secuencial (no
+  // N hilos en paralelo contra APS: esa era la causa del error del update-all),
+  // y reporte por modelo (updated / al día / traduciéndose / error).
   const [updateAllBusy, setUpdateAllBusy] = useState(false);
   const handleUpdateAll = useCallback(async () => {
     const pending = (models || []).filter(m => availableUpdates[m.id]?.has_update);
-    if (!pending.length || updateAllBusy) return;
+    if (!pending.length || updateAllBusy || !selectedProject) return;
     setUpdateAllBusy(true);
-    for (const m of pending) {
-      try { await handleModelUpdate(m.urn); } catch (e) { console.warn('[UpdateAll] falló', m.urn, e); }
+
+    // Estado "checking" en todos los pendientes de una vez
+    setUpdateCheckStatus(prev => {
+      const next = { ...prev };
+      pending.forEach(m => { next[m.urn] = { status: 'checking' }; });
+      return next;
+    });
+
+    try {
+      const res = await apiFetch(`${BACKEND_URL}/api/config/project/update-all`, {
+        method: 'POST',
+        body: JSON.stringify({ project: selectedProject.id })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+      // Reporte por modelo → chips de estado individuales
+      const statusMap = {
+        updated: (r) => ({ status: 'updating', message: `v${r.versionNumber || '?'} — extrayendo…` }),
+        up_to_date: () => ({ status: 'up_to_date' }),
+        pending_translation: (r) => ({ status: 'pending', message: r.message || 'Traduciéndose en ACC…' }),
+        no_acc_metadata: (r) => ({ status: 'error', message: r.message || 'Sin metadata ACC' }),
+        error: (r) => ({ status: 'error', message: r.message || 'Error' }),
+      };
+      setUpdateCheckStatus(prev => {
+        const next = { ...prev };
+        (data.results || []).forEach(r => {
+          if (r.urn) next[r.urn] = (statusMap[r.status] || statusMap.error)(r);
+        });
+        return next;
+      });
+
+      // Aplicar el config nuevo UNA vez (los modelos quedan en su mismo lugar:
+      // el backend muta cada entrada in-place, el orden no cambia)
+      if (data.config?.models) {
+        const mapped = data.config.models.map(m => ({ ...m, label: m.name }));
+        const updatedViews = {};
+        mapped.forEach(m => { if (m.defaultViewGuid) updatedViews[m.urn] = m.defaultViewGuid; });
+        if (Object.keys(updatedViews).length) setActiveViewableGuids(prev => ({ ...prev, ...updatedViews }));
+        setModels(mapped);
+      }
+
+      // Limpiar avisos de update de los que ya se actualizaron y sondear SU job
+      const updatedResults = (data.results || []).filter(r => r.status === 'updated');
+      if (updatedResults.length) {
+        setAvailableUpdates(prev => {
+          const next = { ...prev };
+          updatedResults.forEach(r => { if (next[r.id]) next[r.id] = { ...next[r.id], has_update: false }; });
+          return next;
+        });
+        window.__inventoryCache = null;
+        window.postgresInventory = null;
+        updatedResults.forEach(r => {
+          if (r.newUrn) triggerBackgroundExtraction(r.newUrn, r.extraction_job_id || null);
+        });
+      }
+
+      const s = data.summary || {};
+      console.log(`[UpdateAll] ${s.updated || 0} actualizados · ${s.up_to_date || 0} al día · ${s.pending_translation || 0} traduciéndose · ${s.errors || 0} errores`);
+
+      // Limpiar chips pasados unos segundos
+      setTimeout(() => setUpdateCheckStatus(prev => {
+        const next = { ...prev };
+        (data.results || []).forEach(r => {
+          if (r.urn && next[r.urn]?.status !== 'updating') delete next[r.urn];
+        });
+        return next;
+      }), 7000);
+    } catch (e) {
+      console.error('[UpdateAll] Error:', e);
+      setUpdateCheckStatus(prev => {
+        const next = { ...prev };
+        pending.forEach(m => { next[m.urn] = { status: 'error', message: e.message || 'Error de conexión' }; });
+        return next;
+      });
+      setTimeout(() => setUpdateCheckStatus(prev => {
+        const next = { ...prev };
+        pending.forEach(m => { delete next[m.urn]; });
+        return next;
+      }), 5000);
+    } finally {
+      setUpdateAllBusy(false);
     }
-    setUpdateAllBusy(false);
-  }, [models, availableUpdates, updateAllBusy, handleModelUpdate]);
+  }, [models, availableUpdates, updateAllBusy, selectedProject]);
 
   const handleLinkDocs = useCallback(async (modelsInput, isGemelo = false, viewGuid = null) => {
     // Determine if input is array
@@ -1979,8 +2061,12 @@ function App() {
               setActiveViewableGuids(prev => ({ ...prev, [model.urn]: viewGuid }));
             }
           }
+        } else if (res.status === 409) {
+          // Duplicado (guard estilo Tandem): el modelo ya está vinculado al frente
+          const err = await res.json().catch(() => ({}));
+          alert(err.message || 'Ese modelo ya está vinculado a este frente.');
         } else {
-          const err = await res.json();
+          const err = await res.json().catch(() => ({}));
           alert(`Error: ${err.error || 'Failed to link model'}`);
         }
       }
@@ -2011,7 +2097,7 @@ function App() {
                       for (const d of [' - ', ' \u2013 ', ' \u2014 ']) {
                         if (pName.startsWith(cName + d)) { pName = pName.slice((cName + d).length); break; }
                       }
-                      const val = String(pVal).trim();
+                      const val = Array.isArray(pVal) ? pVal.map(x => String(x ?? '').trim()).filter(Boolean).join(', ') : String(pVal).trim();
                       if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
                         row[pName] = val;
                       }
@@ -2064,27 +2150,191 @@ function App() {
     }
   }, [selectedProject, relinkTargetModel]);
 
+  const handleExtractCivilData = useCallback(async (sourceModel, options = {}) => {
+    if (!selectedProject?.id) throw new Error('No hay frente seleccionado para guardar datos Civil.');
+    const urn = sourceModel?.urn || sourceModel?.id;
+    if (!urn) throw new Error('No se encontro URN para extraer datos Civil.');
 
-  const handleLocalUpload = useCallback(async (file, label, onProgress) => {
-    if (!selectedProject) return alert("Error: No project context.");
+    const scopeUrn = options.scopeUrn || selectedProject.id;
+    const projectId = sourceModel?.projectId || sourceModel?.project_id || null;
+    const report = (pct, msg) => {
+      try { options.onProgress?.(pct, msg); } catch (e) { /* noop */ }
+    };
+    const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-    try {
-      const url = `${BACKEND_URL}/api/config/project/upload`;
-      const data = await uploadFile(file, url, {
-        onProgress,
-        formData: {
-          label: label,
-          project: selectedProject.id
-        }
+    const runWorkitem = async ({
+      startEndpoint,
+      persistEndpoint,
+      label,
+      startPct,
+      donePct
+    }) => {
+      report(startPct, `Enviando ${label} a Design Automation...`);
+      const startRes = await apiFetch(`${BACKEND_URL}${startEndpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urn, project_id: projectId })
       });
-
-      if (data.config && data.config.models) {
-        setModels(data.config.models.map(m => ({ ...m, label: m.name })));
+      const startData = await startRes.json().catch(() => ({}));
+      if (!startRes.ok) {
+        throw new Error(startData.error || startData.details || `No se pudo iniciar ${label}.`);
       }
-    } catch (e) {
-      console.error("Upload error:", e);
-      alert("Error uploading file.");
-      throw e; // Rethrow to allow component to handle error state
+
+      const workitemId = startData.workitem_id;
+      const resultObject = startData.result_object || '';
+      if (!workitemId) throw new Error(`Design Automation no devolvio workitem para ${label}.`);
+
+      const startedAt = Date.now();
+      let pollCount = 0;
+      while (true) {
+        if (Date.now() - startedAt > 45 * 60 * 1000) {
+          throw new Error(`${label} tardo demasiado. El WorkItem sigue en Autodesk o fallo por timeout.`);
+        }
+
+        await wait(3000);
+        pollCount += 1;
+        const statusRes = await apiFetch(`${BACKEND_URL}/api/civil/workitem-status/${workitemId}`);
+        const statusData = await statusRes.json().catch(() => ({}));
+        if (!statusRes.ok) {
+          throw new Error(statusData.error || `No se pudo consultar el estado de ${label}.`);
+        }
+
+        const status = String(statusData.status || '').toLowerCase();
+        if (status === 'pending' || status === 'inprogress') {
+          const span = Math.max(1, donePct - startPct - 8);
+          const pct = Math.min(donePct - 8, startPct + 5 + pollCount * Math.max(2, Math.floor(span / 18)));
+          report(pct, status === 'pending'
+            ? `${label}: en cola de Autodesk...`
+            : `${label}: Civil 3D esta procesando...`);
+          continue;
+        }
+
+        if (status === 'success' || status === 'successwitherrors') {
+          report(donePct - 5, `${label}: descargando JSON...`);
+          const resultParams = new URLSearchParams({
+            workitem_id: workitemId,
+            object_name: resultObject
+          });
+          const resultRes = await apiFetch(`${BACKEND_URL}/api/civil/alignment-result?${resultParams.toString()}`);
+          const resultJson = await resultRes.json().catch(() => null);
+          if (!resultRes.ok || resultJson == null) {
+            throw new Error(`No se pudo descargar el JSON de ${label}.`);
+          }
+
+          report(donePct - 2, `${label}: guardando en el frente...`);
+          const persistRes = await apiFetch(`${BACKEND_URL}${persistEndpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              urn,
+              model_urn: scopeUrn,
+              scope_urn: scopeUrn,
+              data: resultJson
+            })
+          });
+          const persistData = await persistRes.json().catch(() => ({}));
+          if (!persistRes.ok) {
+            throw new Error(persistData.error || `No se pudo guardar ${label}.`);
+          }
+
+          report(donePct, `${label}: listo.`);
+          return resultJson;
+        }
+
+        if (status.startsWith('failed') || status === 'cancelled') {
+          const isLimit = status === 'failedlimitprocessingtime';
+          throw new Error(isLimit
+            ? `${label} supero el limite de procesamiento de Autodesk.`
+            : `${label} finalizo con estado ${statusData.status || status}.`);
+        }
+
+        throw new Error(`${label} devolvio estado inesperado: ${statusData.status || 'sin estado'}.`);
+      }
+    };
+
+    const alignments = await runWorkitem({
+      startEndpoint: '/api/civil/extract-curves',
+      persistEndpoint: '/api/civil/alignments',
+      label: 'alineamientos y perfiles',
+      startPct: 5,
+      donePct: options.includeSections ? 58 : 100
+    });
+
+    let sections = null;
+    if (options.includeSections) {
+      sections = await runWorkitem({
+        startEndpoint: '/api/civil/extract-sections-test',
+        persistEndpoint: '/api/civil/sections',
+        label: 'secciones',
+        startPct: 60,
+        donePct: 100
+      });
+    }
+
+    window.__lobCivilAlignments = Array.isArray(alignments) ? alignments : alignments?.items || alignments;
+    window.dispatchEvent(new CustomEvent('civil-data-updated', {
+      detail: { urn, scope_urn: scopeUrn, alignments, sections }
+    }));
+    return { urn, scope_urn: scopeUrn, alignments, sections };
+  }, [selectedProject]);
+
+
+  // UPLOAD LOCAL profesional (2 fases, paridad con Tandem):
+  //   1) subir archivo + disparar traducción (0–60%)
+  //   2) sondear la traducción en ACC (60–95%) y, al estar lista, el backend
+  //      agrega el modelo (con su vista 3D por defecto) y ENCOLA la extracción
+  //      de metadata — el mismo pipeline que update/relink/DOCS.
+  // onProgress(percent, message) mantiene informado al modal en cada fase.
+  const handleLocalUpload = useCallback(async (file, label, onProgress) => {
+    if (!selectedProject) throw new Error("No hay proyecto seleccionado.");
+    const report = (p, msg) => { try { onProgress?.(p, msg); } catch (e) { /* noop */ } };
+
+    // Fase 1: subir (el % de red se mapea a 0–60)
+    report(2, 'Subiendo archivo…');
+    const url = `${BACKEND_URL}/api/config/project/upload`;
+    const data = await uploadFile(file, url, {
+      onProgress: (p) => report(Math.round((p || 0) * 0.6), 'Subiendo archivo…'),
+      formData: { label, project: selectedProject.id }
+    });
+    if (!data?.urn) throw new Error(data?.error || 'El upload no devolvió URN.');
+
+    // Fase 2: sondear traducción → finalize agrega el modelo y encola extracción
+    report(62, 'Traduciendo en ACC…');
+    const started = Date.now();
+    const TIMEOUT_MS = 20 * 60 * 1000; // 20 min para modelos grandes
+    while (true) {
+      if (Date.now() - started > TIMEOUT_MS) {
+        throw new Error('La traducción tardó demasiado. Reintenta en unos minutos (el archivo ya quedó subido).');
+      }
+      const fRes = await apiFetch(`${BACKEND_URL}/api/config/project/upload/finalize`, {
+        method: 'POST',
+        body: JSON.stringify({ urn: data.urn, label, project: selectedProject.id })
+      });
+      const fin = await fRes.json().catch(() => ({}));
+      if (!fRes.ok) throw new Error(fin.error || `Finalize HTTP ${fRes.status}`);
+      if (fin.failed) throw new Error(fin.message || 'La traducción falló en ACC.');
+
+      if (fin.ready) {
+        // Modelo agregado: aplicar config, hidratar vista y sondear SU extracción
+        if (fin.config?.models) {
+          const mapped = fin.config.models.map(m => ({ ...m, label: m.name }));
+          if (fin.defaultViewGuid) {
+            setActiveViewableGuids(prev => ({ ...prev, [fin.urn]: fin.defaultViewGuid }));
+          }
+          setModels(mapped);
+        }
+        window.__inventoryCache = null;
+        if (fin.extraction_job_id) triggerBackgroundExtraction(fin.urn, fin.extraction_job_id);
+        report(100, 'Modelo listo. Extrayendo metadata en segundo plano…');
+        return fin;
+      }
+
+      const pctText = String(fin.progress || '');
+      const match = pctText.match(/(\d+)\s*%/);
+      const transPct = match ? Number(match[1]) : null;
+      report(transPct != null ? 62 + Math.round(transPct * 0.33) : 70,
+        `Traduciendo en ACC… ${transPct != null ? transPct + '%' : ''}`.trim());
+      await new Promise(r => setTimeout(r, 5000));
     }
   }, [selectedProject]);
 
@@ -3845,6 +4095,7 @@ function App() {
           onClose={() => setImportModalOpen(false)}
           onLinkDocs={handleLinkDocs}
           onUploadLocal={handleLocalUpload}
+          onExtractCivilData={handleExtractCivilData}
           selectedProject={selectedProject}
         />
 
@@ -3943,4 +4194,3 @@ function App() {
 }
 
 export default App;
-

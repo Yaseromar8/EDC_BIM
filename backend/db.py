@@ -212,6 +212,36 @@ def ensure_file_nodes_table():
                 ON file_nodes(model_urn, name, node_type)
                 WHERE is_deleted = FALSE;
             """)
+
+            # ── 2.0.1 SANEAR raíces duplicadas (PROJECT_ROOT) ────────────────
+            # Una carrera al abrir Docs por primera vez podía crear DOS nodos
+            # raíz para el mismo proyecto: las carpetas colgaban de una raíz y
+            # el listado (LIMIT 1 sin ORDER) a veces leía la otra → "carpetas
+            # que desaparecen". Curamos: conservar la raíz MÁS ANTIGUA,
+            # re-colgar los hijos de las demás y soft-borrar las sobrantes.
+            cursor.execute("""
+                SELECT model_urn, array_agg(id ORDER BY created_at ASC, id ASC)
+                FROM file_nodes
+                WHERE folder_type = 'PROJECT_ROOT' AND is_deleted = FALSE
+                GROUP BY model_urn HAVING count(*) > 1
+            """)
+            for dup_urn, root_ids in cursor.fetchall():
+                keeper, extras = root_ids[0], root_ids[1:]
+                cursor.execute(
+                    "UPDATE file_nodes SET parent_id = %s WHERE parent_id = ANY(%s::uuid[]) AND is_deleted = FALSE",
+                    (keeper, extras))
+                moved = cursor.rowcount
+                cursor.execute(
+                    "UPDATE file_nodes SET is_deleted = TRUE WHERE id = ANY(%s::uuid[])",
+                    (extras,))
+                print(f"[DB] PROJECT_ROOT duplicado sanado en '{dup_urn}': {len(extras)} raíces extra, {moved} hijos re-colgados.")
+
+            # Índice único parcial: la carrera queda IMPOSIBLE por diseño.
+            cursor.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_file_nodes_project_root
+                ON file_nodes(model_urn)
+                WHERE folder_type = 'PROJECT_ROOT' AND is_deleted = FALSE;
+            """)
             # ── 2.1 UNIQUE constraint: evitar duplicados en misma ubicación ──
             cursor.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_node_in_parent

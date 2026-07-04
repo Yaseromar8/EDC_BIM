@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './LandingPage.css';
 import { Capacitor } from '@capacitor/core';
+import { apiFetch } from '../utils/apiFetch';
 
 const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location.hostname.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) ? `http://${window.location.hostname}:3000` : 'https://visor-ecd-backend.onrender.com')));
 
@@ -33,6 +34,54 @@ const LandingPage = ({ onSelectProject }) => {
 
     // --- NEW: Frentes Logic ---
     const [selectedBaseProject, setSelectedBaseProject] = useState(null);
+
+    // Frentes DINÁMICOS del proyecto (los 3 base son fijos; estos se crean
+    // desde la UI y persisten en Postgres — un frente nuevo = scope de datos
+    // nuevo "{proyecto}_{FRENTE}", aislado como CANAL/DRENAJE/INFRAWORKS).
+    const [customFrentes, setCustomFrentes] = useState([]);
+    const [showNewFrente, setShowNewFrente] = useState(false);
+    const [newFrenteName, setNewFrenteName] = useState('');
+    const [newFrenteDesc, setNewFrenteDesc] = useState('');
+    const [newFrenteIcon, setNewFrenteIcon] = useState('⚠️');
+    const [savingFrente, setSavingFrente] = useState(false);
+    const [frenteError, setFrenteError] = useState('');
+
+    useEffect(() => {
+        if (!selectedBaseProject) { setCustomFrentes([]); setShowNewFrente(false); return; }
+        apiFetch(`${BACKEND_URL}/api/frentes?base=${encodeURIComponent(selectedBaseProject.id)}`)
+            .then(r => r.json())
+            .then(d => setCustomFrentes(d.frentes || []))
+            .catch(() => setCustomFrentes([]));
+    }, [selectedBaseProject]);
+
+    const handleCreateFrente = async () => {
+        if (!newFrenteName.trim() || savingFrente || !selectedBaseProject) return;
+        setSavingFrente(true); setFrenteError('');
+        try {
+            const res = await apiFetch(`${BACKEND_URL}/api/frentes`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    base_project_id: selectedBaseProject.id,
+                    name: newFrenteName.trim(),
+                    description: newFrenteDesc.trim(),
+                    icon: newFrenteIcon || '📌'
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) { setFrenteError(data.error || 'No se pudo crear el frente.'); }
+            else {
+                setCustomFrentes(prev => [...prev, {
+                    frontId: data.frontId, name: newFrenteName.trim(),
+                    description: newFrenteDesc.trim(), icon: newFrenteIcon || '📌'
+                }]);
+                setShowNewFrente(false);
+                setNewFrenteName(''); setNewFrenteDesc('');
+            }
+        } catch (e) {
+            setFrenteError('Error de conexión.');
+        }
+        setSavingFrente(false);
+    };
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -160,32 +209,89 @@ const LandingPage = ({ onSelectProject }) => {
                     </div>
 
                     <div className="frente-options">
-                        <div className="frente-card canal" onClick={() => handleFrontSelect('CANAL', 'Frente Canal')}>
-                            <div className="frente-card-icon">🌊</div>
-                            <div className="frente-card-content">
-                                <h3>Frente Canal</h3>
-                                <p>Gestión de infraestructura hidráulica, canales y revestimientos.</p>
+                        {/* Frentes del PROYECTO (100% dinámicos — aislamiento real:
+                            un proyecto nuevo nace vacío, como en ACC). Los 3 frentes
+                            históricos se sembraron como datos de los proyectos existentes. */}
+                        {customFrentes.length === 0 && !showNewFrente && (
+                            <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: '#8a919c', fontSize: 14, padding: '10px 0 2px' }}>
+                                Este proyecto aún no tiene frentes. Crea el primero para empezar.
                             </div>
-                            <div className="frente-card-arrow">→</div>
-                        </div>
+                        )}
+                        {customFrentes.map(f => (
+                            <div key={f.frontId} className="frente-card" style={{ position: 'relative' }} onClick={() => handleFrontSelect(f.frontId, f.name)}>
+                                <div className="frente-card-icon">{f.icon || '📌'}</div>
+                                <div className="frente-card-content">
+                                    <h3>{f.name}</h3>
+                                    <p>{f.description || 'Frente de trabajo personalizado.'}</p>
+                                </div>
+                                <div className="frente-card-arrow">→</div>
+                                <button
+                                    title="Eliminar frente (solo la tarjeta; los datos de su scope no se tocan)"
+                                    onClick={async (e) => {
+                                        e.stopPropagation();
+                                        if (!window.confirm(`¿Eliminar el frente "${f.name}" de este proyecto?`)) return;
+                                        try {
+                                            const res = await apiFetch(`${BACKEND_URL}/api/frentes`, {
+                                                method: 'DELETE',
+                                                body: JSON.stringify({ base_project_id: selectedBaseProject.id, front_id: f.frontId })
+                                            });
+                                            if (res.ok) setCustomFrentes(prev => prev.filter(x => x.frontId !== f.frontId));
+                                        } catch { /* noop */ }
+                                    }}
+                                    style={{ position: 'absolute', top: 8, right: 10, width: 22, height: 22, borderRadius: 5, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(0,0,0,0.25)', color: '#8a919c', cursor: 'pointer', fontSize: 12, lineHeight: '18px', padding: 0 }}
+                                >✕</button>
+                            </div>
+                        ))}
 
-                        <div className="frente-card drenaje" onClick={() => handleFrontSelect('DRENAJE', 'Frente Drenaje Urbano')}>
-                            <div className="frente-card-icon">🏙️</div>
-                            <div className="frente-card-content">
-                                <h3>Frente Drenaje Urbano</h3>
-                                <p>Captación pluvial, tuberías, buzones y obras urbanas de drenaje.</p>
+                        {/* Crear frente nuevo */}
+                        {showNewFrente ? (
+                            <div className="frente-card" style={{ cursor: 'default', flexDirection: 'column', alignItems: 'stretch', gap: 10 }} onClick={(e) => e.stopPropagation()}>
+                                <div style={{ display: 'flex', gap: 10 }}>
+                                    <input
+                                        value={newFrenteIcon}
+                                        onChange={e => setNewFrenteIcon(e.target.value)}
+                                        maxLength={4}
+                                        title="Ícono (emoji)"
+                                        style={{ width: 52, textAlign: 'center', fontSize: 20, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8, color: '#fff', padding: '8px 4px' }}
+                                    />
+                                    <input
+                                        autoFocus
+                                        value={newFrenteName}
+                                        onChange={e => setNewFrenteName(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleCreateFrente(); }}
+                                        placeholder="Nombre del frente (ej. Interferencias)"
+                                        style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8, color: '#fff', padding: '8px 12px', fontSize: 14 }}
+                                    />
+                                </div>
+                                <input
+                                    value={newFrenteDesc}
+                                    onChange={e => setNewFrenteDesc(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleCreateFrente(); }}
+                                    placeholder="Descripción (ej. Modelo contractual con interferencias de campo)"
+                                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8, color: '#ccc', padding: '8px 12px', fontSize: 13 }}
+                                />
+                                {frenteError && <span style={{ color: '#ef4444', fontSize: 12 }}>{frenteError}</span>}
+                                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                                    <button onClick={() => { setShowNewFrente(false); setFrenteError(''); }}
+                                        style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', color: '#aab', borderRadius: 7, padding: '7px 14px', cursor: 'pointer', fontSize: 13 }}>
+                                        Cancelar
+                                    </button>
+                                    <button onClick={handleCreateFrente} disabled={!newFrenteName.trim() || savingFrente}
+                                        style={{ background: '#5f7fa3', border: 'none', color: '#fff', borderRadius: 7, padding: '7px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 700, opacity: (!newFrenteName.trim() || savingFrente) ? 0.5 : 1 }}>
+                                        {savingFrente ? 'Creando…' : 'Crear frente'}
+                                    </button>
+                                </div>
                             </div>
-                            <div className="frente-card-arrow">→</div>
-                        </div>
-
-                        <div className="frente-card infraworks" onClick={() => handleFrontSelect('INFRAWORKS', 'Frente Infraworks')}>
-                            <div className="frente-card-icon">🛣️</div>
-                            <div className="frente-card-content">
-                                <h3>Frente Infraworks</h3>
-                                <p>Visualización de modelos conceptuales y de contexto territorial o urbano.</p>
+                        ) : (
+                            <div className="frente-card" style={{ borderStyle: 'dashed', opacity: 0.85 }} onClick={() => setShowNewFrente(true)}>
+                                <div className="frente-card-icon" style={{ opacity: 0.8 }}>➕</div>
+                                <div className="frente-card-content">
+                                    <h3>Crear frente</h3>
+                                    <p>Nuevo frente de trabajo con sus propios modelos y datos aislados.</p>
+                                </div>
+                                <div className="frente-card-arrow">＋</div>
                             </div>
-                            <div className="frente-card-arrow">→</div>
-                        </div>
+                        )}
                     </div>
 
                     <div className="frente-footer">

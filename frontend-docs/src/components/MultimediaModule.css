@@ -1,0 +1,28 @@
+.multimedia-module * {
+  box-sizing: border-box;
+}
+
+.acc-filter-btn {
+  padding: 6px 12px;
+  background: #eef2f7;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #5f6368;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+.acc-filter-btn:hover {
+  background: #dfe6f0;
+}
+
+/* Tiles estilo Google Fotos: zoom sutil al hover */
+.mm-tile img { display: block; }
+.mm-tile:hover img { transform: scale(1.05); }
+.mm-tile::after {
+  content: ""; position: absolute; inset: 0;
+  box-shadow: inset 0 0 0 0 rgba(95,127,163,0); transition: box-shadow .15s;
+  pointer-events: none; border-radius: 6px;
+}
+.mm-tile:hover::after { box-shadow: inset 0 0 0 2px rgba(95,127,163,0.9); }

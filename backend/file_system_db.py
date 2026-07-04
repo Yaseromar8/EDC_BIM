@@ -75,7 +75,7 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
             query = """
                 SELECT fn.id, fn.name, fn.node_type, fn.size_bytes, fn.version_number, 
                        fn.updated_at, fn.gcs_urn, fn.status, fn.tags, fn.metadata, 
-                       fn.description, fn.mime_type,
+                       fn.description, fn.mime_type, fn.created_at,
                        COALESCE(fn.updated_by, fn.created_by, 'Sistema') as u_by,
                        fp.permission_level,
                        EXISTS(SELECT 1 FROM file_nodes c WHERE c.model_urn = fn.model_urn AND c.parent_id = fn.id AND c.is_deleted = FALSE) AS has_children
@@ -92,7 +92,7 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
         else:
             query = """
                 SELECT id, name, node_type, size_bytes, version_number, updated_at, gcs_urn, 
-                       status, tags, metadata, description, mime_type, 
+                       status, tags, metadata, description, mime_type, created_at, 
                        COALESCE(updated_by, created_by, 'Sistema') as u_by,
                        NULL as permission_level,
                        EXISTS(SELECT 1 FROM file_nodes c WHERE c.model_urn = file_nodes.model_urn AND c.parent_id = file_nodes.id AND c.is_deleted = FALSE) AS has_children
@@ -121,7 +121,7 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                 parent_eff = 'none'
 
         for row in rows:
-            r_id, r_name, r_type, r_size, r_version, r_updated, r_gcs, r_status, r_tags, r_metadata, r_description, r_mime, r_u_by, r_perm, r_has_children = row
+            r_id, r_name, r_type, r_size, r_version, r_updated, r_gcs, r_status, r_tags, r_metadata, r_description, r_mime, r_created, r_u_by, r_perm, r_has_children = row
             bp = base_path if base_path.endswith('/') else (base_path + '/' if base_path else '')
             full_name = f"{bp}{r_name}" + ("/" if r_type == 'FOLDER' else "")
             
@@ -150,6 +150,7 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                 "name": r_name,
                 "fullName": full_name,
                 "updated": r_updated.isoformat() if r_updated else None,
+                "created_at": r_created.isoformat() if r_created else None,
                 "updated_by": audit_data,
                 "description": r_description,
                 "permission_level": perm_level,
@@ -169,6 +170,7 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                         "status": r_status,
                         "tags": r_tags or [],
                         "metadata": r_metadata or {},
+                        "custom_attributes": r_metadata or {},
                         "mime_type": r_mime,
                         "gcs_urn": r_gcs
                     })
@@ -200,25 +202,44 @@ def ensure_project_root_node(model_urn):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
-        # 1. Buscar nodo raíz existente (folder_type='PROJECT_ROOT')
+        # 1. Buscar nodo raíz existente (determinista: SIEMPRE la más antigua,
+        #    para que create y list resuelvan la MISMA raíz aunque existan
+        #    duplicados legacy pendientes de sanear)
         cursor.execute("""
-            SELECT id FROM file_nodes 
+            SELECT id FROM file_nodes
             WHERE model_urn = %s AND folder_type = 'PROJECT_ROOT' AND is_deleted = FALSE
+            ORDER BY created_at ASC, id ASC
             LIMIT 1
         """, (model_urn,))
         row = cursor.fetchone()
-        
+
         if row:
             _root_cache[model_urn] = row[0]
             return row[0]
-        
-        # 2. No existe → Crear nodo raíz
+
+        # 2. No existe → Crear nodo raíz. ON CONFLICT (índice único parcial
+        #    uq_file_nodes_project_root) mata la carrera de doble-creación:
+        #    si otro request la creó en paralelo, re-seleccionamos la suya.
         cursor.execute("""
             INSERT INTO file_nodes (model_urn, parent_id, node_type, name, folder_type, created_by)
             VALUES (%s, NULL, 'FOLDER', %s, 'PROJECT_ROOT', 'SYSTEM')
+            ON CONFLICT DO NOTHING
             RETURNING id
         """, (model_urn, ROOT_NAME))
-        root_id = cursor.fetchone()[0]
+        ins = cursor.fetchone()
+        if not ins:
+            conn.commit()
+            cursor.execute("""
+                SELECT id FROM file_nodes
+                WHERE model_urn = %s AND folder_type = 'PROJECT_ROOT' AND is_deleted = FALSE
+                ORDER BY created_at ASC, id ASC LIMIT 1
+            """, (model_urn,))
+            row2 = cursor.fetchone()
+            if row2:
+                _root_cache[model_urn] = row2[0]
+                return row2[0]
+            return None
+        root_id = ins[0]
         
         # 3. Re-parent: mover carpetas huérfanas (parent_id=NULL) bajo el nuevo root
         cursor.execute("""

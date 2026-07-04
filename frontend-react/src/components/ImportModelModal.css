@@ -527,6 +527,93 @@
   background: rgba(239, 68, 68, 0.1);
 }
 
+.import-civil-options {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.import-civil-card {
+  width: 100%;
+  text-align: left;
+  background: #111318;
+  border: 1px solid #333842;
+  color: #d9dde5;
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.import-civil-card:hover {
+  border-color: rgba(59, 158, 255, 0.55);
+  background: #171b22;
+}
+
+.import-civil-card.active {
+  border-color: #3b9eff;
+  background: rgba(59, 158, 255, 0.1);
+  box-shadow: 0 0 0 1px rgba(59, 158, 255, 0.18) inset;
+}
+
+.import-civil-card:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.import-civil-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.import-civil-copy {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #9aa3af;
+}
+
+.import-civil-badge {
+  width: max-content;
+  max-width: 100%;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #7dd3fc;
+  text-transform: uppercase;
+}
+
+.import-civil-note {
+  margin-top: 8px;
+  color: #8b949e;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.import-civil-progress {
+  border: 1px solid rgba(59, 158, 255, 0.28);
+  background: rgba(59, 158, 255, 0.08);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.import-civil-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #cbd5e1;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.import-civil-progress-head strong {
+  color: #7dd3fc;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── View Selector (DOCS tab) ── */
 .import-view-selector {
   width: 100%;

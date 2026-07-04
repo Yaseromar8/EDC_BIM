@@ -22,7 +22,7 @@ const FALLBACK_IMG = 'data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%
 // Botón compacto del lightbox (zoom +/-)
 const lbBtn = { width: 28, height: 28, borderRadius: '50%', background: 'transparent', border: 'none', color: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
-const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", photos = [], onAddPhoto, variant = 'modal', onDelete, onDeletePhoto, onRename, modelUrn = 'global', targetPath = '', projectPrefix = 'proyectos/' }) => {
+const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", photos = [], onAddPhoto, variant = 'modal', onDelete, onDeletePhoto, onUpdatePhoto, onRename, modelUrn = 'global', targetPath = '', projectPrefix = 'proyectos/' }) => {
     if (!isOpen) return null;
 
     const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -872,13 +872,52 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                         <div style={{
                             marginTop: '10px', color: 'rgba(255,255,255,0.8)',
                             fontSize: '13px', textAlign: 'center', maxWidth: '90vw',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                            display: 'flex', flexDirection: 'column', alignItems: 'center'
                         }}>
-                            <span>{selectedPhoto.desc || ''}</span>
-                            {selectedPhoto.displayDate && (
-                                <span style={{ color: 'rgba(255,255,255,0.4)', marginLeft: '10px' }}>
-                                    {selectedPhoto.displayDate}
-                                </span>
+                            {editingDesc ? (
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                                    <input 
+                                        autoFocus
+                                        value={tempDesc}
+                                        onChange={e => setTempDesc(e.target.value)}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter') {
+                                                if (onUpdatePhoto) onUpdatePhoto(pinId, selectedPhoto.id, { desc: tempDesc });
+                                                setSelectedPhoto({ ...selectedPhoto, desc: tempDesc });
+                                                setEditingDesc(false);
+                                            }
+                                            if (e.key === 'Escape') setEditingDesc(false);
+                                            e.stopPropagation();
+                                        }}
+                                        style={{
+                                            background: 'rgba(0,0,0,0.5)', border: '1px solid #444', 
+                                            color: '#fff', borderRadius: '4px', padding: '4px 8px', fontSize: '13px', width: '250px'
+                                        }}
+                                    />
+                                    <button onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (onUpdatePhoto) onUpdatePhoto(pinId, selectedPhoto.id, { desc: tempDesc });
+                                        setSelectedPhoto({ ...selectedPhoto, desc: tempDesc });
+                                        setEditingDesc(false);
+                                    }} style={{ background: '#3b82f6', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>Guardar</button>
+                                    <button onClick={(e) => { e.stopPropagation(); setEditingDesc(false); }} style={{ background: 'transparent', border: '1px solid #444', color: '#ccc', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>Cancelar</button>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70vw' }}>{selectedPhoto.desc || ''}</span>
+                                    <button onClick={(e) => {
+                                        e.stopPropagation();
+                                        setTempDesc(selectedPhoto.desc || '');
+                                        setEditingDesc(true);
+                                    }} style={{ background: 'transparent', border: 'none', color: '#aaa', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Editar comentario">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                                    </button>
+                                    {selectedPhoto.displayDate && (
+                                        <span style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                            {selectedPhoto.displayDate}
+                                        </span>
+                                    )}
+                                </div>
                             )}
                         </div>
                     </div>
