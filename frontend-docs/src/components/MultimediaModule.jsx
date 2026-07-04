@@ -118,9 +118,13 @@ export default function MultimediaModule({ project, user }) {
   // cada render con la lista filtrada actual.
   const filteredRef = useRef([]);
   const navPhoto = (dir) => {
-    const list = filteredRef.current || [];
-    if (list.length < 2 || !selectedPhoto) return;
-    const idx = list.findIndex(p => String(p.id) === String(selectedPhoto.id));
+    if (!selectedPhoto) return;
+    // navegar en el orden VISIBLE (filtrado); si por alguna razón la foto no está
+    // ahí, caer a la lista completa. Nunca saltar al primero por un findIndex=-1.
+    let list = filteredRef.current || [];
+    let idx = list.findIndex(p => String(p.id) === String(selectedPhoto.id));
+    if (idx === -1) { list = photosRef.current || []; idx = list.findIndex(p => String(p.id) === String(selectedPhoto.id)); }
+    if (idx === -1 || list.length < 2) return;
     const next = (idx + dir + list.length) % list.length;
     setSelectedPhoto(list[next]);
   };
@@ -690,9 +694,6 @@ export default function MultimediaModule({ project, user }) {
                     onError={e => { if (!e.currentTarget.dataset.gen && selectedPhoto.fullSrc) { e.currentTarget.dataset.gen = '1'; e.currentTarget.src = `${selectedPhoto.fullSrc}&gen=1`; } }} />
               )}
             </div>
-            
-            <button onClick={(e) => { e.stopPropagation(); const list = photosRef.current; const idx = list.findIndex(p => String(p.id) === String(selectedPhoto.id)); if(list.length>1) setSelectedPhoto(list[idx > 0 ? idx - 1 : list.length - 1]); }} style={{ position: 'absolute', left: 24, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none', width: 48, height: 48, borderRadius: '50%', fontSize: 24, cursor: 'pointer', zIndex: 10 }}>‹</button>
-            <button onClick={(e) => { e.stopPropagation(); const list = photosRef.current; const idx = list.findIndex(p => String(p.id) === String(selectedPhoto.id)); if(list.length>1) setSelectedPhoto(list[idx < list.length - 1 ? idx + 1 : 0]); }} style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none', width: 48, height: 48, borderRadius: '50%', fontSize: 24, cursor: 'pointer', zIndex: 10 }}>›</button>
           </div>
         </div>
       )}
