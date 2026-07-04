@@ -568,7 +568,8 @@ export default function MultimediaModule({ project, user }) {
                       {p.mediaType === 'video' || String(p.mimeType || '').startsWith('video/') || isVideoFile(p.filename || p.desc) ? (
                         <video src={p.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} preload="metadata" />
                       ) : (
-                        <img src={p.src} alt={p.desc} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: p.isUploading ? 0.5 : 1, transition: 'transform .25s' }} loading="lazy" />
+                        <img src={p.src} alt={p.desc} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: p.isUploading ? 0.5 : 1, transition: 'transform .25s' }} loading="lazy"
+                          onError={e => { if (!e.currentTarget.dataset.gen) { e.currentTarget.dataset.gen = '1'; e.currentTarget.src = `${p.src}&gen=1`; } }} />
                       )}
                       {(p.mediaType === 'video' || isVideoFile(p.filename || p.desc)) && (
                         <div style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 6px' }}>▶ video</div>
@@ -685,7 +686,8 @@ export default function MultimediaModule({ project, user }) {
               {selectedPhoto.mediaType === 'video' || String(selectedPhoto.mimeType || '').startsWith('video/') || isVideoFile(selectedPhoto.filename || selectedPhoto.desc) ? (
                   <video src={selectedPhoto.src} controls autoPlay style={{ maxWidth: '90%', maxHeight: '90%', transform: `scale(${lbZoom}) translate(${lbPan.x/lbZoom}px, ${lbPan.y/lbZoom}px)`, transition: lbDrag.current ? 'none' : 'transform 0.2s' }} />
               ) : (
-                  <img src={selectedPhoto.fullSrc || selectedPhoto.src} alt="" draggable={false} style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain', transform: `scale(${lbZoom}) translate(${lbPan.x/lbZoom}px, ${lbPan.y/lbZoom}px)`, transition: lbDrag.current ? 'none' : 'transform 0.2s', cursor: lbZoom > 1 ? 'grab' : 'default' }} />
+                  <img src={selectedPhoto.fullSrc || selectedPhoto.src} alt="" draggable={false} style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain', transform: `scale(${lbZoom}) translate(${lbPan.x/lbZoom}px, ${lbPan.y/lbZoom}px)`, transition: lbDrag.current ? 'none' : 'transform 0.2s', cursor: lbZoom > 1 ? 'grab' : 'default' }}
+                    onError={e => { if (!e.currentTarget.dataset.gen && selectedPhoto.fullSrc) { e.currentTarget.dataset.gen = '1'; e.currentTarget.src = `${selectedPhoto.fullSrc}&gen=1`; } }} />
               )}
             </div>
             

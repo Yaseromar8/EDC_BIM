@@ -418,7 +418,17 @@ def proxy_document():
         # original completa solo se sirve sin parámetros (descarga/zoom 1:1).
         variant = 'thumb' if request.args.get('thumb') else request.args.get('size')
         if variant in ('thumb', 'display'):
-            tdata, tctype = get_or_create_thumbnail(gcs_urn, 1600 if variant == 'display' else 420)
+            max_px = 1600 if variant == 'display' else 420
+            thumb_name = f"{gcs_urn}__thumb{max_px}.jpg"
+            # RÁPIDO: la miniatura ya está cacheada → 302 a una URL firmada y el
+            # NAVEGADOR la baja DIRECTO de Google (en paralelo, sin el doble salto
+            # por el backend → ~1.6s baja a ~0.2-0.4s). gen=1 fuerza la generación
+            # (fotos nuevas aún sin miniatura) sirviendo los bytes.
+            if not request.args.get('gen'):
+                signed = generate_signed_url(thumb_name)
+                if signed:
+                    return redirect(signed, code=302)
+            tdata, tctype = get_or_create_thumbnail(gcs_urn, max_px)
             if tdata:
                 resp = Response(tdata, mimetype=tctype or 'image/jpeg')
                 resp.headers['Cache-Control'] = 'public, max-age=604800'  # 7 días en el navegador
