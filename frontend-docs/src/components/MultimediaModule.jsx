@@ -657,41 +657,42 @@ export default function MultimediaModule({ project, user }) {
               </>
             )}
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {selectedPhoto.mediaType === 'video' || String(selectedPhoto.mimeType || '').startsWith('video/') || isVideoFile(selectedPhoto.filename || selectedPhoto.desc) ? (
-                  <video src={selectedPhoto.src} controls autoPlay style={{ maxWidth: '90%', maxHeight: '90%', transform: `scale(${lbZoom}) translate(${lbPan.x/lbZoom}px, ${lbPan.y/lbZoom}px)`, transition: lbDrag.current ? 'none' : 'transform 0.2s' }} />
-              ) : (
-                  <img src={selectedPhoto.fullSrc || selectedPhoto.src} alt="" draggable={false} style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain', transform: `scale(${lbZoom}) translate(${lbPan.x/lbZoom}px, ${lbPan.y/lbZoom}px)`, transition: lbDrag.current ? 'none' : 'transform 0.2s', cursor: lbZoom > 1 ? 'grab' : 'default' }}
-                    onError={e => { if (!e.currentTarget.dataset.gen && selectedPhoto.fullSrc) { e.currentTarget.dataset.gen = '1'; e.currentTarget.src = `${selectedPhoto.fullSrc}&gen=1`; } }} />
-              )}
-            </div>
-
-            {/* ── Pie de descripción SOBRE la foto (estilo Google Fotos) ── */}
-            <div onClick={e => e.stopPropagation()}
-                 style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '40px 24px 20px', background: 'linear-gradient(transparent, rgba(0,0,0,0.75))', zIndex: 4 }}>
-              <div style={{ maxWidth: 900, margin: '0 auto' }}>
-                {editingDescription ? (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input
-                      autoFocus
-                      value={descriptionDraft}
-                      onChange={e => setDescriptionDraft(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') saveSelectedDescription(); if (e.key === 'Escape') { setEditingDescription(false); setDescriptionDraft(selectedPhoto.desc || ''); } }}
-                      placeholder="Añade una descripción…"
-                      style={{ flex: 1, background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, color: '#fff', padding: '10px 14px', fontSize: 14, outline: 'none' }}
-                    />
-                    <button onClick={saveSelectedDescription} style={{ border: 'none', background: '#5f7fa3', color: '#fff', padding: '9px 16px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>Guardar</button>
-                    <button onClick={() => { setEditingDescription(false); setDescriptionDraft(selectedPhoto.desc || ''); }} title="Cancelar" style={{ border: '1px solid rgba(255,255,255,0.25)', background: 'transparent', color: '#fff', width: 38, height: 38, borderRadius: 8, cursor: 'pointer', fontSize: 16 }}>×</button>
-                  </div>
+              {/* Envoltorio del tamaño EXACTO de la foto → el pie queda dentro y centrado */}
+              <div style={{ position: 'relative', display: 'inline-block', maxWidth: '90%', maxHeight: '90%' }}>
+                {selectedPhoto.mediaType === 'video' || String(selectedPhoto.mimeType || '').startsWith('video/') || isVideoFile(selectedPhoto.filename || selectedPhoto.desc) ? (
+                    <video src={selectedPhoto.src} controls autoPlay style={{ display: 'block', maxWidth: '90vw', maxHeight: '86vh', width: 'auto', height: 'auto', transform: `scale(${lbZoom}) translate(${lbPan.x/lbZoom}px, ${lbPan.y/lbZoom}px)`, transition: lbDrag.current ? 'none' : 'transform 0.2s' }} />
                 ) : (
-                  <div onClick={() => { setDescriptionDraft(selectedPhoto.desc || ''); setEditingDescription(true); }}
-                       title="Clic para editar la descripción"
-                       style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'text', color: '#fff' }}>
-                    <span style={{ flex: 1, fontSize: 15, fontWeight: 500, color: selectedPhoto.desc ? '#fff' : 'rgba(255,255,255,0.55)' }}>
-                      {selectedPhoto.desc || 'Añade una descripción…'}
-                    </span>
-                    <span style={{ flexShrink: 0, opacity: 0.85, fontSize: 13, border: '1px solid rgba(255,255,255,0.25)', borderRadius: 8, padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      ✎ Editar
-                    </span>
+                    <img src={selectedPhoto.fullSrc || selectedPhoto.src} alt="" draggable={false} style={{ display: 'block', maxWidth: '90vw', maxHeight: '86vh', width: 'auto', height: 'auto', transform: `scale(${lbZoom}) translate(${lbPan.x/lbZoom}px, ${lbPan.y/lbZoom}px)`, transition: lbDrag.current ? 'none' : 'transform 0.2s', cursor: lbZoom > 1 ? 'grab' : 'default' }}
+                      onError={e => { if (!e.currentTarget.dataset.gen && selectedPhoto.fullSrc) { e.currentTarget.dataset.gen = '1'; e.currentTarget.src = `${selectedPhoto.fullSrc}&gen=1`; } }} />
+                )}
+
+                {/* ── Pie de descripción DENTRO de la foto, centrado (oculto al hacer zoom) ── */}
+                {lbZoom === 1 && (
+                  <div onClick={e => e.stopPropagation()}
+                       style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '34px 16px 14px', background: 'linear-gradient(transparent, rgba(0,0,0,0.72))', borderRadius: '0 0 4px 4px' }}>
+                    {editingDescription ? (
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          autoFocus
+                          value={descriptionDraft}
+                          onChange={e => setDescriptionDraft(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveSelectedDescription(); if (e.key === 'Escape') { setEditingDescription(false); setDescriptionDraft(selectedPhoto.desc || ''); } }}
+                          placeholder="Añade una descripción…"
+                          style={{ flex: 1, background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, color: '#fff', padding: '9px 12px', fontSize: 14, outline: 'none', textAlign: 'center' }}
+                        />
+                        <button onClick={saveSelectedDescription} style={{ border: 'none', background: '#5f7fa3', color: '#fff', padding: '9px 14px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>Guardar</button>
+                        <button onClick={() => { setEditingDescription(false); setDescriptionDraft(selectedPhoto.desc || ''); }} title="Cancelar" style={{ border: '1px solid rgba(255,255,255,0.25)', background: 'transparent', color: '#fff', width: 36, height: 36, borderRadius: 8, cursor: 'pointer', fontSize: 16 }}>×</button>
+                      </div>
+                    ) : (
+                      <div onClick={() => { setDescriptionDraft(selectedPhoto.desc || ''); setEditingDescription(true); }}
+                           title="Clic para editar la descripción"
+                           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'text', textAlign: 'center' }}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: selectedPhoto.desc ? '#fff' : 'rgba(255,255,255,0.6)', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
+                          {selectedPhoto.desc || 'Añade una descripción…'}
+                        </span>
+                        <span style={{ opacity: 0.8, fontSize: 13 }}>✎</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
