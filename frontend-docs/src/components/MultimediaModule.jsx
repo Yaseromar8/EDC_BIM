@@ -415,6 +415,28 @@ export default function MultimediaModule({ project, user }) {
     return true;
   }).sort((a, b) => new Date(b.date) - new Date(a.date));
 
+  // Línea de tiempo estilo Google Fotos: agrupar por día (desc).
+  const groupedPhotos = (() => {
+    const map = new Map();
+    filteredPhotos.forEach(p => {
+      const key = p.date || 'sin-fecha';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(p);
+    });
+    return [...map.entries()].sort((a, b) => String(b[0]).localeCompare(String(a[0])));
+  })();
+
+  const formatDayHeader = (dayKey) => {
+    if (!dayKey || dayKey === 'sin-fecha') return 'Sin fecha';
+    const d = new Date(`${dayKey}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dayKey;
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    const ayer = new Date(hoy); ayer.setDate(hoy.getDate() - 1);
+    if (d.getTime() === hoy.getTime()) return 'Hoy';
+    if (d.getTime() === ayer.getTime()) return 'Ayer';
+    return d.toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  };
+
   return (
     <div className="multimedia-module" style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f5f7f9', width: '100%' }}>
       
@@ -451,104 +473,65 @@ export default function MultimediaModule({ project, user }) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 13, color: '#666' }}>{filteredPhotos.length} ítems</span>
-          <button 
+          <button
             onClick={() => fileInputRef.current?.click()}
             style={{ background: '#5f7fa3', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 4, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
           >
             Subir multimedia
           </button>
-          <button
-            onClick={previewWhatsappImport}
-            disabled={whatsappLoading}
-            style={{ background: '#1f7a4d', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 4, fontWeight: 600, cursor: whatsappLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 8, opacity: whatsappLoading ? 0.7 : 1 }}
-            title="Carga historica temporal desde la carpeta local de WhatsApp"
-          >
-            {whatsappLoading ? 'Revisando...' : 'Importar WhatsApp'}
-          </button>
           <input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/*,video/*" style={{ display: 'none' }} />
         </div>
       </div>
 
-      {/* ── Galería Grid ── */}
-      {(whatsappPreview || whatsappStatus) && (
-        <div style={{ padding: '12px 24px', background: '#fff', borderBottom: '1px solid #e0e0e0' }}>
-          {whatsappPreview && !whatsappStatus && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, background: '#f5faf7', border: '1px solid #bfe4cf', borderRadius: 6, padding: '12px 14px' }}>
-              <div style={{ color: '#24543a', fontSize: 13 }}>
-                <strong>Carga historica WhatsApp:</strong> {whatsappPreview.total} archivos ({whatsappPreview.images} fotos / {whatsappPreview.videos} videos), fechas {whatsappPreview.date_start || '-'} a {whatsappPreview.date_end || '-'}.
-                <span style={{ marginLeft: 8, color: '#6b7c72' }}>{whatsappPreview.skipped} archivos omitidos por nombre o extension.</span>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setWhatsappPreview(null)} style={{ border: '1px solid #b7c8bf', background: '#fff', color: '#24543a', padding: '7px 12px', borderRadius: 4, cursor: 'pointer' }}>Cancelar</button>
-                <button onClick={startWhatsappImport} disabled={whatsappLoading || !whatsappPreview.total} style={{ border: 'none', background: '#1f7a4d', color: '#fff', padding: '8px 14px', borderRadius: 4, fontWeight: 700, cursor: whatsappLoading ? 'wait' : 'pointer' }}>Iniciar importacion</button>
-              </div>
-            </div>
-          )}
-          {whatsappStatus && (
-            <div style={{ background: '#f6f8fb', border: '1px solid #ccd6e2', borderRadius: 6, padding: '12px 14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', fontSize: 13, color: '#263447' }}>
-                <strong>{whatsappStatus.message || 'Importando multimedia...'}</strong>
-                <span>{whatsappStatus.progress || 0}%</span>
-              </div>
-              <div style={{ height: 8, background: '#d9e2ec', borderRadius: 999, marginTop: 8, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${Math.min(100, Number(whatsappStatus.progress || 0))}%`, background: whatsappStatus.status === 'failed' ? '#d9534f' : '#1f7a4d', transition: 'width 0.25s ease' }} />
-              </div>
-              <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 12, color: '#667085' }}>
-                <span>Procesados: {whatsappStatus.processed || 0}/{whatsappStatus.total || 0}</span>
-                <span>Importados: {whatsappStatus.imported || 0}</span>
-                <span>Duplicados: {whatsappStatus.skipped || 0}</span>
-                <span>Errores: {whatsappStatus.failed || 0}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
+      <div style={{ flex: 1, padding: '8px 24px 24px', overflowY: 'auto' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>Cargando multimedia...</div>
         ) : filteredPhotos.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>No se encontraron archivos multimedia. Sube fotos usando el botón superior.</div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
-            {filteredPhotos.map((p) => (
-              <div 
-                key={p.id} 
-                onClick={() => setSelectedPhoto(p)}
-                style={{ background: '#fff', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer', border: '1px solid #eaeaea', transition: 'transform 0.2s', position: 'relative' }}
-                onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-                onMouseOut={e => e.currentTarget.style.transform = 'none'}
-              >
-                <div style={{ height: 160, background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                  {p.mediaType === 'video' || String(p.mimeType || '').startsWith('video/') || isVideoFile(p.filename || p.desc) ? (
-                    <video src={p.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    <img src={p.src} alt={p.desc} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: p.isUploading ? 0.5 : 1 }} loading="lazy" />
-                  )}
-                  {p.isUploading && (
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.7)', fontWeight: 600, color: '#5f7fa3' }}>
-                        Subiendo...
-                    </div>
-                  )}
-                  {p.location && (
-                    <div style={{ position: 'absolute', bottom: 8, right: 8, background: 'rgba(0,0,0,0.7)', padding: '4px 8px', borderRadius: 12, fontSize: 11, color: '#fff', display: 'flex', alignItems: 'center', gap: 4 }} title="Con Ubicación GPS">
-                      📍 GPS
-                    </div>
-                  )}
-                </div>
-                <div style={{ padding: 12 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#333', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.desc}>{p.desc || 'Sin descripción'}</div>
-                  <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>{p.displayDate || p.date}</div>
-                </div>
+          /* ── Línea de tiempo estilo Google Fotos: agrupado por día ── */
+          groupedPhotos.map(([dayKey, dayPhotos]) => (
+            <section key={dayKey} style={{ marginBottom: 26 }}>
+              <div style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f5f7f9', padding: '8px 2px 10px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#2b3440', textTransform: 'capitalize' }}>{formatDayHeader(dayKey)}</h3>
+                <span style={{ fontSize: 12, color: '#8a94a3' }}>{dayPhotos.length} {dayPhotos.length === 1 ? 'elemento' : 'elementos'}</span>
               </div>
-            ))}
-          </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 5 }}>
+                {dayPhotos.map((p) => (
+                  <div
+                    key={p.id}
+                    onClick={() => setSelectedPhoto(p)}
+                    className="mm-tile"
+                    style={{ position: 'relative', aspectRatio: '1 / 1', borderRadius: 6, overflow: 'hidden', cursor: 'pointer', background: '#e9edf2' }}
+                  >
+                    {p.mediaType === 'video' || String(p.mimeType || '').startsWith('video/') || isVideoFile(p.filename || p.desc) ? (
+                      <video src={p.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <img src={p.src} alt={p.desc} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: p.isUploading ? 0.5 : 1, transition: 'transform .25s' }} loading="lazy" />
+                    )}
+                    {(p.mediaType === 'video' || isVideoFile(p.filename || p.desc)) && (
+                      <div style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 6px' }}>▶ video</div>
+                    )}
+                    {p.location && (
+                      <div style={{ position: 'absolute', bottom: 6, left: 6, background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 10, fontSize: 10, padding: '2px 6px' }} title="Con ubicación GPS">📍</div>
+                    )}
+                    {p.desc && (
+                      <div className="mm-tile-desc" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 8px 6px', background: 'linear-gradient(transparent, rgba(0,0,0,0.7))', color: '#fff', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</div>
+                    )}
+                    {p.isUploading && (
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.7)', fontWeight: 600, color: '#5f7fa3', fontSize: 12 }}>Subiendo…</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))
         )}
 
-        {/* Sentinel de scroll infinito: al entrar en vista, trae la siguiente tanda */}
+        {/* Sentinel de scroll infinito */}
         {hasMore && !searchTerm && !dateRange.start && (
-          <div ref={sentinelRef} style={{ textAlign: 'center', padding: 24, color: '#999', fontSize: 13 }}>
-            {loadingMore ? 'Cargando más fotos…' : `Mostrando ${photos.length}… desliza para ver más`}
+          <div ref={sentinelRef} style={{ textAlign: 'center', padding: 24, color: '#8a94a3', fontSize: 13 }}>
+            {loadingMore ? 'Cargando más fotos…' : `${photos.length} cargadas · desliza para ver más`}
           </div>
         )}
       </div>
