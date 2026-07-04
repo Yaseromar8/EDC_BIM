@@ -1114,6 +1114,16 @@ def confirm_upload():
         log_activity(model_urn, 'upload_file', 'file',
                      entity_name=node_path, performed_by=performed_by)
 
+        # Pre-generar la miniatura EN SEGUNDO PLANO (solo imágenes) para que
+        # aparezca instantánea en la galería (sin el retardo de generarla al
+        # primer clic). Best-effort: si falla, el fallback ?gen=1 la genera.
+        try:
+            if str(mime_type or '').startswith('image/'):
+                from gcs_manager import get_or_create_thumbnail
+                threading.Thread(target=get_or_create_thumbnail, args=(gcs_urn, 420), daemon=True).start()
+        except Exception as te:
+            print(f"[upload-confirm] thumb bg: {te}")
+
         return jsonify({
             "success": True,
             "message": "File record created",

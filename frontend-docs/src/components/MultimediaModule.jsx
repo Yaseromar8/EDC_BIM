@@ -369,7 +369,7 @@ export default function MultimediaModule({ project, user }) {
                 const confirmData = await confirmResp.json();
 
                 if (confirmData.success) {
-                    const finalUrl = proxyUrl(confirmData.file?.id || urlData.gcs_urn);
+                    const finalUrl = proxyUrl(confirmData.file?.id || urlData.gcs_urn, 'thumb');
                     
                     // Actualizar UI quitando el estado de 'isUploading'
                     setPhotos(prev => prev.map(p => p.id === currentTempId ? {
