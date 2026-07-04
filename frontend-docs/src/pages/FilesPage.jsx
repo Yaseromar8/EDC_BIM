@@ -37,6 +37,7 @@ import { TransmittalModal, TransmittalsView } from '../components/TransmittalsMo
 import { AttributesAdmin, AttributesPanel } from '../components/AttributesModule';
 import { AddToSetModal, SetsView } from '../components/SetsModule';
 import SharesManager from '../components/SharesManager';
+import MultimediaModule from '../components/MultimediaModule';
 
 // ── Fase 3: Componentes de Layout ──
 import FolderNode from '../components/FolderNode';
@@ -175,6 +176,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                 { label: 'Transmittals', mode: 'transmittals', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>, onClick: () => fe.setSidebarView('transmittals') },
                 { label: 'Conjuntos', mode: 'sets', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>, onClick: () => fe.setSidebarView('sets') },
                 { label: 'Actividad', mode: 'activity', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>, onClick: () => fe.setSidebarView('activity') },
+                { label: 'Multimedia', mode: 'multimedia', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>, onClick: () => fe.setSidebarView('multimedia') },
                 // Sala de Cuarentena ISO 19650: solo admins (las acciones dentro son destructivas)
                 ...(isAdmin ? [{ label: 'Cuarentena', mode: 'quarantine', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>, onClick: () => fe.setSidebarView('quarantine') }] : []),
               ].map((item, idx) => (
@@ -256,6 +258,11 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
         {/* PARTIDAS VIEW */}
         {fe.sidebarView === 'partidas' && (
           <PartidasModule project={project} API={API} user={user} isAdmin={isAdmin} />
+        )}
+
+        {/* MULTIMEDIA VIEW */}
+        {fe.sidebarView === 'multimedia' && (
+          <MultimediaModule project={project} user={user} />
         )}
 
         {/* REPORTS VIEW */}
