@@ -14,6 +14,14 @@ export default function MultimediaModule({ project, user }) {
   // El scope de Docs es 'proyectos/{nombre}' (igual que useFileExplorer/todo el
   // resto). Usamos ESE mismo scope para que las fotos aparezcan en esta pestaña.
   const modelUrn = `proyectos/${String(project?.name || '').replace(/ /g, '_')}`;
+
+  // Un <img>/<video> no puede mandar el header Authorization → el proxy protegido
+  // devolvía 401 (imagen en blanco). El middleware acepta ?session_token= como
+  // fallback, así que lo anexamos a cada URL de media.
+  const proxyUrl = (id) => {
+    const tok = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token') || '';
+    return `${API}/api/docs/proxy?id=${id}${tok ? `&session_token=${encodeURIComponent(tok)}` : ''}`;
+  };
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -70,7 +78,7 @@ export default function MultimediaModule({ project, user }) {
             const captureDate = attrs.capture_date || f.created_at || f.updated || new Date().toISOString();
             return {
               id: f.id,
-              src: `${API}/api/docs/proxy?id=${f.id}`,
+              src: proxyUrl(f.id),
               desc: f.description || '',
               filename: f.name,
               mimeType: f.mime_type || '',
@@ -348,7 +356,7 @@ export default function MultimediaModule({ project, user }) {
                 const confirmData = await confirmResp.json();
 
                 if (confirmData.success) {
-                    const finalUrl = `${API}/api/docs/proxy?id=${confirmData.file?.id || urlData.gcs_urn}`;
+                    const finalUrl = proxyUrl(confirmData.file?.id || urlData.gcs_urn);
                     
                     // Actualizar UI quitando el estado de 'isUploading'
                     setPhotos(prev => prev.map(p => p.id === currentTempId ? {
