@@ -24,7 +24,39 @@ const CloseIcon = () => (
   </svg>
 );
 
-const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedProject }) => {
+const CAD_CIVIL_EXTENSIONS = new Set(['dwg', 'dxf', 'dgn']);
+
+const getSourceName = (source) => (
+  source?.name ||
+  source?.label ||
+  source?.attributes?.displayName ||
+  source?.fileName ||
+  ''
+);
+
+const getSourceExt = (source) => {
+  const name = getSourceName(source);
+  const match = String(name).toLowerCase().match(/\.([a-z0-9]+)$/);
+  return match ? match[1] : '';
+};
+
+const isCadCivilSource = (source) => CAD_CIVIL_EXTENSIONS.has(getSourceExt(source));
+
+const toViewerUrn = (rawUrn) => {
+  let b64Urn = rawUrn;
+  if (rawUrn && rawUrn.includes('urn:adsk')) {
+    try { b64Urn = btoa(rawUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); } catch (e) { }
+  }
+  return b64Urn;
+};
+
+const CIVIL_MODES = {
+  VIEWER_ONLY: 'viewer-only',
+  VIEWER_AND_DATA: 'viewer-and-data',
+  DATA_ONLY: 'data-only'
+};
+
+const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractCivilData, selectedProject }) => {
   const [activeTab, setActiveTab] = useState('UPLOAD');
 
   // Docs State
@@ -61,6 +93,10 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
   const [localProgress, setLocalProgress] = useState(0);
   const [localMsg, setLocalMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [civilMode, setCivilMode] = useState(CIVIL_MODES.DATA_ONLY);
+  const [civilProcessing, setCivilProcessing] = useState(false);
+  const [civilProgress, setCivilProgress] = useState(0);
+  const [civilMsg, setCivilMsg] = useState('');
 
   // Fetch Hubs
   useEffect(() => {
@@ -104,13 +140,20 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
       setModelViews([]); setSelectedViewGuid(null); setLoadingViews(false);
       setLocalFile(null); setLocalUploading(false); setLocalProgress(0);
       setLocalMsg(''); setErrorMsg('');
+      setCivilMode(CIVIL_MODES.DATA_ONLY); setCivilProcessing(false);
+      setCivilProgress(0); setCivilMsg('');
       pendingDocsRef.current = null;
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     }
   }, [open]);
 
   // Doc selection in tree
-  const handleDocSelection = useCallback((files) => setSelectedDocs(files), []);
+  const handleDocSelection = useCallback((files) => {
+    setSelectedDocs(files);
+    if (files?.[0] && isCadCivilSource(files[0])) {
+      setCivilMode(CIVIL_MODES.DATA_ONLY);
+    }
+  }, []);
 
   // Local file handlers
   const handleDrop = useCallback((e) => {
@@ -119,6 +162,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
     if (e.dataTransfer.files?.[0]) {
       const file = e.dataTransfer.files[0];
       setLocalFile(file); setUploadLabel(file.name.split('.').slice(0, -1).join('.'));
+      if (isCadCivilSource(file)) setCivilMode(CIVIL_MODES.VIEWER_AND_DATA);
     }
   }, [extracting, localUploading]);
 
@@ -127,6 +171,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
     if (e.target.files?.[0]) {
       const file = e.target.files[0];
       setLocalFile(file); setUploadLabel(file.name.split('.').slice(0, -1).join('.'));
+      if (isCadCivilSource(file)) setCivilMode(CIVIL_MODES.VIEWER_AND_DATA);
     }
   };
 
@@ -151,6 +196,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     if (extracting || extractionDone) purgeOrphanExtraction();
     setExtracting(false); setExtractionDone(false); setProgress(0); setProgressMsg('');
+    setCivilProcessing(false); setCivilProgress(0); setCivilMsg('');
     setErrorMsg('');
     setModelViews([]); setSelectedViewGuid(null); pendingDocsRef.current = null;
   };
@@ -181,17 +227,41 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
     const docName = doc.name || doc.label || 'Modelo';
     pendingDocsRef.current = selectedDocs;
 
+    if (isCadCivilSource(doc) && civilMode === CIVIL_MODES.DATA_ONLY) {
+      setActiveTab('UPLOAD');
+      setUploadLabel(docName);
+      setCivilProcessing(true);
+      setCivilProgress(3);
+      setCivilMsg('Preparando extraccion Civil...');
+      setErrorMsg('');
+      try {
+        const urn = toViewerUrn(doc.id || doc.urn);
+        await onExtractCivilData?.({ ...doc, urn, id: urn }, {
+          scopeUrn: selectedProject?.id,
+          includeSections: false,
+          onProgress: (pct, msg) => {
+            setCivilProgress(Number.isFinite(Number(pct)) ? Number(pct) : 0);
+            if (msg) setCivilMsg(msg);
+          }
+        });
+        setCivilProgress(100);
+        setCivilMsg('Datos Civil guardados para este frente.');
+        setTimeout(() => { onClose(); }, 1000);
+      } catch (e) {
+        console.error('[ImportModelModal] Civil data-only error:', e);
+        setErrorMsg(e.message || 'No se pudo extraer la data Civil.');
+        setCivilProcessing(false);
+      }
+      return;
+    }
+
     // Switch to FILE UPLOAD tab
     setActiveTab('UPLOAD');
     setUploadLabel(docName);
     setExtracting(true); setExtractionDone(false);
     setProgress(0); setProgressMsg('Conectando con Autodesk...');
 
-    let urn = doc.id || doc.urn;
-    const rawUrn = urn; // keep original for viewables
-    if (urn && urn.includes('urn:adsk')) {
-      try { urn = btoa(urn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); } catch (e) { }
-    }
+    let urn = toViewerUrn(doc.id || doc.urn);
 
     try {
       const res = await apiFetch(`${BACKEND_URL}/api/inventory/extract`, {
@@ -239,18 +309,49 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
   };
 
   // ── FINAL IMPORT: User selected view, now load model in viewer ──
-  const handleFinalImport = () => {
+  const handleFinalImport = async () => {
     const docs = pendingDocsRef.current;
     if (docs && docs.length > 0) {
       const processedDocs = docs.map(doc => {
         let rawUrn = doc.id || doc.urn;
-        let b64Urn = rawUrn;
-        if (rawUrn && rawUrn.includes('urn:adsk')) {
-           try { b64Urn = btoa(rawUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); } catch(e){}
-        }
+        let b64Urn = toViewerUrn(rawUrn);
         return { ...doc, urn: b64Urn, id: b64Urn };
       });
-      onLinkDocs?.(processedDocs, true, selectedViewGuid);
+      const sourceDoc = processedDocs[0];
+      const isCivilCad = isCadCivilSource(sourceDoc);
+      const shouldExtractCivil = isCivilCad && civilMode !== CIVIL_MODES.VIEWER_ONLY;
+      const shouldLoadViewer = !isCivilCad || civilMode !== CIVIL_MODES.DATA_ONLY;
+
+      try {
+        if (shouldLoadViewer) {
+          await onLinkDocs?.(processedDocs, true, selectedViewGuid);
+        }
+
+        if (shouldExtractCivil) {
+          setCivilProcessing(true);
+          setCivilProgress(3);
+          setCivilMsg('Preparando extraccion Civil...');
+          await onExtractCivilData?.(sourceDoc, {
+            scopeUrn: selectedProject?.id,
+            includeSections: false,
+            onProgress: (pct, msg) => {
+              setCivilProgress(Number.isFinite(Number(pct)) ? Number(pct) : 0);
+              if (msg) setCivilMsg(msg);
+            }
+          });
+          setCivilProgress(100);
+          setCivilMsg('Datos Civil guardados para este frente.');
+        }
+
+        if (!shouldLoadViewer && extractionDone) {
+          purgeOrphanExtraction();
+        }
+      } catch (e) {
+        console.error('[ImportModelModal] Civil import error:', e);
+        setErrorMsg(e.message || 'No se pudo completar la importacion Civil.');
+        setCivilProcessing(false);
+        return;
+      }
     }
     onClose();
   };
@@ -261,10 +362,30 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
     setLocalUploading(true); setLocalProgress(0); setErrorMsg('');
     setLocalMsg('Subiendo archivo…');
     try {
-      await onUploadLocal?.(localFile, uploadLabel || localFile.name, (p, msg) => {
+      const uploadResult = await onUploadLocal?.(localFile, uploadLabel || localFile.name, (p, msg) => {
         setLocalProgress(p);
         if (msg) setLocalMsg(msg);
       });
+      if (isCadCivilSource(localFile) && civilMode === CIVIL_MODES.VIEWER_AND_DATA && uploadResult?.urn) {
+        setCivilProcessing(true);
+        setCivilProgress(3);
+        setCivilMsg('Preparando extraccion Civil...');
+        await onExtractCivilData?.({
+          ...uploadResult,
+          name: uploadLabel || localFile.name,
+          urn: uploadResult.urn,
+          id: uploadResult.urn
+        }, {
+          scopeUrn: selectedProject?.id,
+          includeSections: false,
+          onProgress: (pct, msg) => {
+            setCivilProgress(Number.isFinite(Number(pct)) ? Number(pct) : 0);
+            if (msg) setCivilMsg(msg);
+          }
+        });
+        setCivilProgress(100);
+        setCivilMsg('Datos Civil guardados para este frente.');
+      }
       setLocalProgress(100);
       setLocalMsg('Modelo listo. La metadata se extrae en segundo plano.');
       setTimeout(() => { onClose(); }, 1800);
@@ -273,15 +394,22 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
       setErrorMsg(e.message || 'Error subiendo el archivo.');
       setLocalMsg('');
       setLocalUploading(false);
+      setCivilProcessing(false);
     }
   };
 
   if (!open) return null;
 
+  const docsCivilSource = pendingDocsRef.current?.[0] || selectedDocs[0] || null;
+  const docsIsCivilCad = isCadCivilSource(docsCivilSource);
+  const localIsCivilCad = isCadCivilSource(localFile);
+  const showDocsCivilOptions = activeTab === 'UPLOAD' && extractionDone && docsIsCivilCad;
+  const showLocalCivilOptions = activeTab === 'UPLOAD' && !extractionDone && localIsCivilCad;
+
   // Determine what state the FILE UPLOAD tab is in
-  const isProcessing = extracting || localUploading;
+  const isProcessing = extracting || localUploading || civilProcessing;
   const showExtractionInDropzone = extracting || extractionDone;
-  const canImport = extractionDone && selectedViewGuid && !loadingViews;
+  const canImport = extractionDone && !loadingViews && !civilProcessing && (civilMode === CIVIL_MODES.DATA_ONLY || selectedViewGuid);
 
   return (
     <div className="import-overlay" onClick={(e) => { if (e.target === e.currentTarget && !isProcessing) onClose(); }}>
@@ -395,7 +523,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
               </div>
 
               {/* Selector de vista (solo cuando la extracción DOCS terminó y hay vistas reales) */}
-              {extractionDone && (
+              {extractionDone && (!docsIsCivilCad || civilMode !== CIVIL_MODES.DATA_ONLY) && (
               <div className="import-field">
                 <label className="import-label">Vista a importar:</label>
 
@@ -431,6 +559,63 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
                   </div>
                 )}
               </div>
+              )}
+
+              {(showDocsCivilOptions || showLocalCivilOptions) && (
+                <div className="import-field">
+                  <label className="import-label">Modo CAD / Civil 3D</label>
+                  <div className="import-civil-options">
+                    {showDocsCivilOptions && (
+                      <button
+                        type="button"
+                        className={`import-civil-card ${civilMode === CIVIL_MODES.DATA_ONLY ? 'active' : ''}`}
+                        disabled={isProcessing}
+                        onClick={() => setCivilMode(CIVIL_MODES.DATA_ONLY)}
+                      >
+                        <span className="import-civil-title">Solo datos Civil</span>
+                        <span className="import-civil-copy">Extrae alineamientos y perfiles para este frente, sin cargar el DWG al visor.</span>
+                        <span className="import-civil-badge">Recomendado para DWG inteligente</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      className={`import-civil-card ${civilMode === CIVIL_MODES.VIEWER_AND_DATA ? 'active' : ''}`}
+                      disabled={isProcessing}
+                      onClick={() => setCivilMode(CIVIL_MODES.VIEWER_AND_DATA)}
+                    >
+                      <span className="import-civil-title">Visor + datos Civil</span>
+                      <span className="import-civil-copy">Carga la vista seleccionada y además guarda la data Civil bajo el frente activo.</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`import-civil-card ${civilMode === CIVIL_MODES.VIEWER_ONLY ? 'active' : ''}`}
+                      disabled={isProcessing}
+                      onClick={() => setCivilMode(CIVIL_MODES.VIEWER_ONLY)}
+                    >
+                      <span className="import-civil-title">Solo visor</span>
+                      <span className="import-civil-copy">Comportamiento actual. En DWG Civil puede aparecer geometria proxy/2D.</span>
+                    </button>
+                  </div>
+                  {showLocalCivilOptions && (
+                    <div className="import-civil-note">
+                      Para usar un DWG local solo como fuente de datos Civil, primero subelo a Docs y seleccionalo desde Autodesk Docs.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {civilProcessing && (
+                <div className="import-civil-progress">
+                  <div className="import-civil-progress-head">
+                    <span>{civilMsg || 'Procesando datos Civil...'}</span>
+                    <strong>{Math.round(civilProgress)}%</strong>
+                  </div>
+                  <div className="import-progress-track">
+                    <div className="import-progress-fill" style={{ width: `${civilProgress}%` }} />
+                  </div>
+                </div>
               )}
 
               {errorMsg && (
@@ -483,6 +668,42 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, selectedPr
                 <NativeFileTree onSelectionChange={handleDocSelection}
                   forcedHubId={selectedAccountId} forcedProjectId={selectedProjectId} />
               </div>
+
+              {selectedDocs.length > 0 && isCadCivilSource(selectedDocs[0]) && (
+                <div className="import-field">
+                  <label className="import-label">Modo CAD / Civil 3D</label>
+                  <div className="import-civil-options">
+                    <button
+                      type="button"
+                      className={`import-civil-card ${civilMode === CIVIL_MODES.DATA_ONLY ? 'active' : ''}`}
+                      disabled={isProcessing}
+                      onClick={() => setCivilMode(CIVIL_MODES.DATA_ONLY)}
+                    >
+                      <span className="import-civil-title">Solo datos Civil</span>
+                      <span className="import-civil-copy">Extrae alineamientos y perfiles para este frente, sin cargar el DWG al visor.</span>
+                      <span className="import-civil-badge">Recomendado para DWG inteligente</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`import-civil-card ${civilMode === CIVIL_MODES.VIEWER_AND_DATA ? 'active' : ''}`}
+                      disabled={isProcessing}
+                      onClick={() => setCivilMode(CIVIL_MODES.VIEWER_AND_DATA)}
+                    >
+                      <span className="import-civil-title">Visor + datos Civil</span>
+                      <span className="import-civil-copy">Carga la vista seleccionada y ademas guarda la data Civil bajo el frente activo.</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`import-civil-card ${civilMode === CIVIL_MODES.VIEWER_ONLY ? 'active' : ''}`}
+                      disabled={isProcessing}
+                      onClick={() => setCivilMode(CIVIL_MODES.VIEWER_ONLY)}
+                    >
+                      <span className="import-civil-title">Solo visor</span>
+                      <span className="import-civil-copy">Comportamiento actual. En DWG Civil puede aparecer geometria proxy/2D.</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

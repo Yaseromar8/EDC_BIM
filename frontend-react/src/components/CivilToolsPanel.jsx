@@ -322,10 +322,16 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
         [models]
     );
 
+    const civilScopeUrn = activeModelUrn || 'global';
+
     const activeCacheKey = useMemo(
-        () => getCacheKey(selectedDwgUrn || activeModelUrn, activeModelUrn),
-        [selectedDwgUrn, activeModelUrn]
+        () => `${civilScopeUrn}::${getCacheKey(selectedDwgUrn || activeModelUrn, activeModelUrn)}`,
+        [civilScopeUrn, selectedDwgUrn, activeModelUrn]
     );
+
+    useEffect(() => {
+        initialReplayRef.current = false;
+    }, [activeCacheKey]);
 
     const selectedAlignment = useMemo(
         () => alignmentData.find(a => a.alignmentId === selectedAlignmentId) || null,
@@ -428,6 +434,10 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
             setExtractProgress(cached.extractProgress || 0);
             setExtractMessage(cached.extractMessage || '');
             setExtractReportUrl(cached.extractReportUrl || '');
+            setSectionJSON(null);
+            setSectionIndex(0);
+            setSectionProgress(0);
+            setSectionMessage('');
             return;
         }
 
@@ -441,13 +451,21 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
         setExtractMessage('');
         setExtractError('');
         setExtractReportUrl('');
+        setSectionJSON(null);
+        setSectionIndex(0);
+        setSectionProgress(0);
+        setSectionMessage('');
 
         // PERSISTENCIA: sin caché de sesión, buscar la extracción GUARDADA en el
         // backend (la primera extracción es permanente; solo cambia al re-extraer).
         const persistUrn = selectedDwgUrn || activeModelUrn;
         if (!persistUrn) return;
         let alive = true;
-        apiFetch(`${BACKEND_URL}/api/civil/alignments?urn=${encodeURIComponent(persistUrn)}`)
+        const params = new URLSearchParams({
+            urn: persistUrn,
+            scope_urn: civilScopeUrn
+        });
+        apiFetch(`${BACKEND_URL}/api/civil/alignments?${params.toString()}`)
             .then((r) => r.json())
             .then((d) => {
                 if (!alive || !d.found || !Array.isArray(d.data) || !d.data.length) return;
@@ -458,7 +476,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
             })
             .catch(() => { /* sin persistencia aún */ });
         return () => { alive = false; };
-    }, [activeCacheKey, selectedDwgUrn, activeModelUrn]);
+    }, [activeCacheKey, selectedDwgUrn, activeModelUrn, civilScopeUrn]);
 
     useEffect(() => {
         const handleContextChange = (e) => {
@@ -584,14 +602,22 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
     }, [alignmentData, getExtension, persistCache, selectedAlignment, stationInput, stationLabelsVisible]);
 
     useEffect(() => {
-        if (initialReplayRef.current || !alignmentData.length || !selectedAlignmentId) return;
+        if (initialReplayRef.current || !alignmentData.length) return;
         initialReplayRef.current = true;
-        applyAlignment(selectedAlignmentId, alignmentData, {
-            profileName: selectedProfileName,
-            station: parseStation(stationInput),
-            stationLabelsVisible
-        });
-    }, [alignmentData, applyAlignment, selectedAlignmentId, selectedProfileName, stationInput, stationLabelsVisible]);
+        
+        if (selectedAlignmentId) {
+            applyAlignment(selectedAlignmentId, alignmentData, {
+                profileName: selectedProfileName,
+                station: parseStation(stationInput),
+                stationLabelsVisible
+            });
+        } else {
+            getExtension().then(ext => {
+                ext?.bakeAlignment?.(alignmentData, 'ALL');
+                ext?.setStationAnnotationsVisible?.(false);
+            });
+        }
+    }, [alignmentData, applyAlignment, selectedAlignmentId, selectedProfileName, stationInput, stationLabelsVisible, getExtension]);
 
     const updateStation = useCallback((station) => {
         const safeStation = Number(station) || 0;
@@ -609,7 +635,11 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
         const persistUrn = selectedDwgUrn || activeModelUrn;
         if (!persistUrn || sectionJSON) return undefined;
         let alive = true;
-        apiFetch(`${BACKEND_URL}/api/civil/sections?urn=${encodeURIComponent(persistUrn)}`)
+        const params = new URLSearchParams({
+            urn: persistUrn,
+            scope_urn: civilScopeUrn
+        });
+        apiFetch(`${BACKEND_URL}/api/civil/sections?${params.toString()}`)
             .then((r) => r.json())
             .then((d) => {
                 if (!alive || !d.found || !d.data) return;
@@ -621,7 +651,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
             })
             .catch(() => { /* sin persistencia aún */ });
         return () => { alive = false; };
-    }, [selectedDwgUrn, activeModelUrn, sectionJSON]);
+    }, [selectedDwgUrn, activeModelUrn, civilScopeUrn, sectionJSON]);
 
     // SYNC DUAL con el visualizador de secciones: mueve marcador PK, opcionalmente
     // vuela la cámara (fly) y aplica/quita el plano de corte real (cut).
@@ -758,7 +788,12 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
                         apiFetch(`${BACKEND_URL}/api/civil/alignments`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ urn: realUrn, model_urn: activeModelUrn, data: alignmentJSON })
+                            body: JSON.stringify({
+                                urn: realUrn,
+                                model_urn: civilScopeUrn,
+                                scope_urn: civilScopeUrn,
+                                data: alignmentJSON
+                            })
                         }).catch((e) => console.warn('[CivilTools] No se pudo persistir la extracción:', e));
 
                         if (alignmentJSON.length > 0) {
@@ -881,7 +916,12 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
                             await apiFetch(`${BACKEND_URL}/api/civil/sections`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ urn: realUrn, model_urn: activeModelUrn, data: result })
+                                body: JSON.stringify({
+                                    urn: realUrn,
+                                    model_urn: civilScopeUrn,
+                                    scope_urn: civilScopeUrn,
+                                    data: result
+                                })
                             });
                         } catch (e) { console.warn('[Sections] No se pudo persistir:', e); }
 

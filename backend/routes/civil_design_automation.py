@@ -411,6 +411,57 @@ def extract_sections_test():
 # La PRIMERA extracción queda guardada por URN/frente; solo se reemplaza cuando
 # el usuario vuelve a dar "Extraer". El 4D LOB y Civil leen de aquí.
 
+def _civil_scope_from_payload(payload):
+    scope = payload.get('scope_urn') or payload.get('model_urn') or 'global'
+    scope = str(scope or '').strip()
+    return scope or 'global'
+
+
+def _civil_scope_from_args():
+    scope = request.args.get('scope_urn') or request.args.get('model_urn')
+    if scope is None:
+        return None
+    scope = str(scope or '').strip()
+    return scope or None
+
+
+def _ensure_scoped_civil_table(cur, table_name):
+    cur.execute(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS scope_urn TEXT")
+    cur.execute(f"""
+        UPDATE {table_name}
+        SET scope_urn = COALESCE(NULLIF(model_urn, ''), 'global')
+        WHERE scope_urn IS NULL OR scope_urn = ''
+    """)
+    cur.execute(f"ALTER TABLE {table_name} ALTER COLUMN scope_urn SET DEFAULT 'global'")
+    cur.execute(f"ALTER TABLE {table_name} ALTER COLUMN scope_urn SET NOT NULL")
+    cur.execute(f"""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conrelid = '{table_name}'::regclass
+                  AND conname = '{table_name}_pkey'
+            ) THEN
+                ALTER TABLE {table_name} DROP CONSTRAINT {table_name}_pkey;
+            END IF;
+        END $$;
+    """)
+    cur.execute(f"""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conrelid = '{table_name}'::regclass
+                  AND conname = '{table_name}_scope_urn_key'
+            ) THEN
+                ALTER TABLE {table_name}
+                ADD CONSTRAINT {table_name}_scope_urn_key UNIQUE (scope_urn, urn);
+            END IF;
+        END $$;
+    """)
+    cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_scope ON {table_name}(scope_urn, urn)")
+
+
 def ensure_civil_alignments_table():
     try:
         from db import get_db_connection
@@ -418,20 +469,24 @@ def ensure_civil_alignments_table():
             cur = conn.cursor()
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS civil_alignments (
-                    urn        TEXT PRIMARY KEY,
+                    scope_urn  TEXT NOT NULL DEFAULT 'global',
+                    urn        TEXT NOT NULL,
                     model_urn  TEXT,
                     data       JSONB NOT NULL,
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""")
+            _ensure_scoped_civil_table(cur, 'civil_alignments')
             cur.execute("CREATE INDEX IF NOT EXISTS idx_civil_alignments_model ON civil_alignments(model_urn)")
             # Secciones transversales: mismo patrón (permanente hasta re-extraer)
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS civil_sections (
-                    urn        TEXT PRIMARY KEY,
+                    scope_urn  TEXT NOT NULL DEFAULT 'global',
+                    urn        TEXT NOT NULL,
                     model_urn  TEXT,
                     data       JSONB NOT NULL,
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""")
+            _ensure_scoped_civil_table(cur, 'civil_sections')
             cur.execute("CREATE INDEX IF NOT EXISTS idx_civil_sections_model ON civil_sections(model_urn)")
             conn.commit()
             print("[civil] Tablas civil_alignments y civil_sections listas.")
@@ -448,33 +503,48 @@ def civil_sections():
         from db import get_db_connection
         if request.method == 'GET':
             urn = request.args.get('urn')
+            scope_urn = _civil_scope_from_args()
             if not urn:
                 return jsonify({'error': 'Falta urn'}), 400
             with get_db_connection() as conn:
                 cur = conn.cursor()
-                cur.execute("SELECT data, updated_at::text FROM civil_sections WHERE urn = %s", (urn,))
+                if scope_urn:
+                    cur.execute("""
+                        SELECT data, updated_at::text, scope_urn
+                        FROM civil_sections
+                        WHERE scope_urn = %s AND urn = %s
+                    """, (scope_urn, urn))
+                else:
+                    cur.execute("""
+                        SELECT data, updated_at::text, scope_urn
+                        FROM civil_sections
+                        WHERE urn = %s
+                        ORDER BY updated_at DESC
+                        LIMIT 1
+                    """, (urn,))
                 row = cur.fetchone()
                 if not row:
                     return jsonify({'found': False}), 200
-                return jsonify({'found': True, 'data': row[0], 'updated_at': row[1]}), 200
+                return jsonify({'found': True, 'data': row[0], 'updated_at': row[1], 'scope_urn': row[2]}), 200
 
         payload = request.get_json() or {}
         urn = payload.get('urn')
         data = payload.get('data')
+        scope_urn = _civil_scope_from_payload(payload)
         if not urn or data is None:
             return jsonify({'error': 'Faltan urn o data'}), 400
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
-                INSERT INTO civil_sections (urn, model_urn, data, updated_at)
-                VALUES (%s, %s, %s::jsonb, NOW())
-                ON CONFLICT (urn) DO UPDATE SET
+                INSERT INTO civil_sections (scope_urn, urn, model_urn, data, updated_at)
+                VALUES (%s, %s, %s, %s::jsonb, NOW())
+                ON CONFLICT (scope_urn, urn) DO UPDATE SET
                     model_urn = EXCLUDED.model_urn,
                     data = EXCLUDED.data,
                     updated_at = NOW()""",
-                (urn, payload.get('model_urn'), _json.dumps(data)))
+                (scope_urn, urn, payload.get('model_urn'), _json.dumps(data)))
             conn.commit()
-        return jsonify({'status': 'ok'}), 200
+        return jsonify({'status': 'ok', 'scope_urn': scope_urn}), 200
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -490,39 +560,55 @@ def civil_alignments():
         if request.method == 'GET':
             urn = request.args.get('urn')
             model_urn = request.args.get('model_urn')
+            scope_urn = _civil_scope_from_args()
             with get_db_connection() as conn:
                 cur = conn.cursor()
                 if urn:
-                    cur.execute("SELECT data, updated_at::text FROM civil_alignments WHERE urn = %s", (urn,))
+                    if scope_urn:
+                        cur.execute("""
+                            SELECT data, updated_at::text, scope_urn
+                            FROM civil_alignments
+                            WHERE scope_urn = %s AND urn = %s
+                        """, (scope_urn, urn))
+                    else:
+                        cur.execute("""
+                            SELECT data, updated_at::text, scope_urn
+                            FROM civil_alignments
+                            WHERE urn = %s
+                            ORDER BY updated_at DESC
+                            LIMIT 1
+                        """, (urn,))
                     row = cur.fetchone()
                     if not row:
                         return jsonify({'found': False}), 200
-                    return jsonify({'found': True, 'data': row[0], 'updated_at': row[1]}), 200
+                    return jsonify({'found': True, 'data': row[0], 'updated_at': row[1], 'scope_urn': row[2]}), 200
                 if model_urn:
-                    cur.execute("""SELECT urn, data, updated_at::text FROM civil_alignments
-                                   WHERE model_urn = %s ORDER BY updated_at DESC""", (model_urn,))
+                    cur.execute("""SELECT urn, data, updated_at::text, scope_urn FROM civil_alignments
+                                   WHERE scope_urn = %s OR model_urn = %s
+                                   ORDER BY updated_at DESC""", (scope_urn or model_urn, model_urn))
                     return jsonify({'items': [
-                        {'urn': r[0], 'data': r[1], 'updated_at': r[2]} for r in cur.fetchall()
+                        {'urn': r[0], 'data': r[1], 'updated_at': r[2], 'scope_urn': r[3]} for r in cur.fetchall()
                     ]}), 200
             return jsonify({'error': 'Falta urn o model_urn'}), 400
 
         payload = request.get_json() or {}
         urn = payload.get('urn')
         data = payload.get('data')
+        scope_urn = _civil_scope_from_payload(payload)
         if not urn or data is None:
             return jsonify({'error': 'Faltan urn o data'}), 400
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
-                INSERT INTO civil_alignments (urn, model_urn, data, updated_at)
-                VALUES (%s, %s, %s::jsonb, NOW())
-                ON CONFLICT (urn) DO UPDATE SET
+                INSERT INTO civil_alignments (scope_urn, urn, model_urn, data, updated_at)
+                VALUES (%s, %s, %s, %s::jsonb, NOW())
+                ON CONFLICT (scope_urn, urn) DO UPDATE SET
                     model_urn = EXCLUDED.model_urn,
                     data = EXCLUDED.data,
                     updated_at = NOW()""",
-                (urn, payload.get('model_urn'), _json.dumps(data)))
+                (scope_urn, urn, payload.get('model_urn'), _json.dumps(data)))
             conn.commit()
-        return jsonify({'status': 'ok'}), 200
+        return jsonify({'status': 'ok', 'scope_urn': scope_urn}), 200
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({'error': str(e)}), 500

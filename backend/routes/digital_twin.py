@@ -239,26 +239,25 @@ def get_config_route():
         print(f"  [DIAG-GET] model: name={m.get('name')}, appProjectId={m.get('appProjectId')}, urn=...{str(m.get('urn',''))[-20:]}")
     
     if project_id and 'models' in config:
-        # Filtrado inteligente por frente.
-        # project_id viene como "1_CANAL", "1_DRENAJE", "1_INFRAWORKS", etc.
-        # Los appProjectId en la config pueden ser: "CANAL", "1_CANAL", "DRENAJE_URBANO", etc.
-        if '_' in project_id:
-            parts = project_id.split('_', 1)
-            base_id = parts[0]       # ej: "1"
-            frente = parts[1].upper() # ej: "CANAL", "DRENAJE"
-            
-            config['models'] = [
+        # Aislamiento estricto: appProjectId es el scope completo del frente.
+        # Proyecto y frente NO se filtran por texto parcial, porque eso cruza
+        # proyectos distintos que comparten palabras como "DRENAJE".
+        exact_models = [
+            m for m in config['models']
+            if m.get('appProjectId') == project_id
+        ]
+
+        # Compatibilidad solo para scopes legacy guardados como "CANAL" o
+        # "DRENAJE" sin prefijo de proyecto. Se usa unicamente si no hay
+        # coincidencias exactas, nunca como mezcla adicional.
+        if not exact_models and '_' in project_id:
+            frente = project_id.rsplit('_', 1)[1].upper()
+            exact_models = [
                 m for m in config['models']
-                if m.get('appProjectId') == project_id                        # exact: "1_CANAL"
-                or m.get('appProjectId', '').upper() == frente                 # frente name: "CANAL"
-                or frente in m.get('appProjectId', '').upper()                 # partial: "DRENAJE" in "DRENAJE_URBANO"
+                if m.get('appProjectId', '').upper() == frente
             ]
-        else:
-            # Sin frente, filtrar solo por ID exacto
-            config['models'] = [
-                m for m in config['models']
-                if m.get('appProjectId') == project_id
-            ]
+
+        config['models'] = exact_models
     
     
     # NOTA: Se eliminó el Auto-Update silencioso que existía aquí.

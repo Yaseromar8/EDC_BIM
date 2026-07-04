@@ -2150,6 +2150,134 @@ function App() {
     }
   }, [selectedProject, relinkTargetModel]);
 
+  const handleExtractCivilData = useCallback(async (sourceModel, options = {}) => {
+    if (!selectedProject?.id) throw new Error('No hay frente seleccionado para guardar datos Civil.');
+    const urn = sourceModel?.urn || sourceModel?.id;
+    if (!urn) throw new Error('No se encontro URN para extraer datos Civil.');
+
+    const scopeUrn = options.scopeUrn || selectedProject.id;
+    const projectId = sourceModel?.projectId || sourceModel?.project_id || null;
+    const report = (pct, msg) => {
+      try { options.onProgress?.(pct, msg); } catch (e) { /* noop */ }
+    };
+    const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    const runWorkitem = async ({
+      startEndpoint,
+      persistEndpoint,
+      label,
+      startPct,
+      donePct
+    }) => {
+      report(startPct, `Enviando ${label} a Design Automation...`);
+      const startRes = await apiFetch(`${BACKEND_URL}${startEndpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urn, project_id: projectId })
+      });
+      const startData = await startRes.json().catch(() => ({}));
+      if (!startRes.ok) {
+        throw new Error(startData.error || startData.details || `No se pudo iniciar ${label}.`);
+      }
+
+      const workitemId = startData.workitem_id;
+      const resultObject = startData.result_object || '';
+      if (!workitemId) throw new Error(`Design Automation no devolvio workitem para ${label}.`);
+
+      const startedAt = Date.now();
+      let pollCount = 0;
+      while (true) {
+        if (Date.now() - startedAt > 45 * 60 * 1000) {
+          throw new Error(`${label} tardo demasiado. El WorkItem sigue en Autodesk o fallo por timeout.`);
+        }
+
+        await wait(3000);
+        pollCount += 1;
+        const statusRes = await apiFetch(`${BACKEND_URL}/api/civil/workitem-status/${workitemId}`);
+        const statusData = await statusRes.json().catch(() => ({}));
+        if (!statusRes.ok) {
+          throw new Error(statusData.error || `No se pudo consultar el estado de ${label}.`);
+        }
+
+        const status = String(statusData.status || '').toLowerCase();
+        if (status === 'pending' || status === 'inprogress') {
+          const span = Math.max(1, donePct - startPct - 8);
+          const pct = Math.min(donePct - 8, startPct + 5 + pollCount * Math.max(2, Math.floor(span / 18)));
+          report(pct, status === 'pending'
+            ? `${label}: en cola de Autodesk...`
+            : `${label}: Civil 3D esta procesando...`);
+          continue;
+        }
+
+        if (status === 'success' || status === 'successwitherrors') {
+          report(donePct - 5, `${label}: descargando JSON...`);
+          const resultParams = new URLSearchParams({
+            workitem_id: workitemId,
+            object_name: resultObject
+          });
+          const resultRes = await apiFetch(`${BACKEND_URL}/api/civil/alignment-result?${resultParams.toString()}`);
+          const resultJson = await resultRes.json().catch(() => null);
+          if (!resultRes.ok || resultJson == null) {
+            throw new Error(`No se pudo descargar el JSON de ${label}.`);
+          }
+
+          report(donePct - 2, `${label}: guardando en el frente...`);
+          const persistRes = await apiFetch(`${BACKEND_URL}${persistEndpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              urn,
+              model_urn: scopeUrn,
+              scope_urn: scopeUrn,
+              data: resultJson
+            })
+          });
+          const persistData = await persistRes.json().catch(() => ({}));
+          if (!persistRes.ok) {
+            throw new Error(persistData.error || `No se pudo guardar ${label}.`);
+          }
+
+          report(donePct, `${label}: listo.`);
+          return resultJson;
+        }
+
+        if (status.startsWith('failed') || status === 'cancelled') {
+          const isLimit = status === 'failedlimitprocessingtime';
+          throw new Error(isLimit
+            ? `${label} supero el limite de procesamiento de Autodesk.`
+            : `${label} finalizo con estado ${statusData.status || status}.`);
+        }
+
+        throw new Error(`${label} devolvio estado inesperado: ${statusData.status || 'sin estado'}.`);
+      }
+    };
+
+    const alignments = await runWorkitem({
+      startEndpoint: '/api/civil/extract-curves',
+      persistEndpoint: '/api/civil/alignments',
+      label: 'alineamientos y perfiles',
+      startPct: 5,
+      donePct: options.includeSections ? 58 : 100
+    });
+
+    let sections = null;
+    if (options.includeSections) {
+      sections = await runWorkitem({
+        startEndpoint: '/api/civil/extract-sections-test',
+        persistEndpoint: '/api/civil/sections',
+        label: 'secciones',
+        startPct: 60,
+        donePct: 100
+      });
+    }
+
+    window.__lobCivilAlignments = Array.isArray(alignments) ? alignments : alignments?.items || alignments;
+    window.dispatchEvent(new CustomEvent('civil-data-updated', {
+      detail: { urn, scope_urn: scopeUrn, alignments, sections }
+    }));
+    return { urn, scope_urn: scopeUrn, alignments, sections };
+  }, [selectedProject]);
+
 
   // UPLOAD LOCAL profesional (2 fases, paridad con Tandem):
   //   1) subir archivo + disparar traducción (0–60%)
@@ -3967,6 +4095,7 @@ function App() {
           onClose={() => setImportModalOpen(false)}
           onLinkDocs={handleLinkDocs}
           onUploadLocal={handleLocalUpload}
+          onExtractCivilData={handleExtractCivilData}
           selectedProject={selectedProject}
         />
 
@@ -4065,4 +4194,3 @@ function App() {
 }
 
 export default App;
-
