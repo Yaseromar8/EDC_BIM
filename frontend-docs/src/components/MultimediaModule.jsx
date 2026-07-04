@@ -669,7 +669,7 @@ export default function MultimediaModule({ project, user }) {
                 {/* ── Pie de descripción DENTRO de la foto, centrado (oculto al hacer zoom) ── */}
                 {lbZoom === 1 && (
                   <div onClick={e => e.stopPropagation()}
-                       style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '34px 16px 14px', background: 'linear-gradient(transparent, rgba(0,0,0,0.72))', borderRadius: '0 0 4px 4px' }}>
+                       style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px' }}>
                     {editingDescription ? (
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <input
@@ -687,7 +687,7 @@ export default function MultimediaModule({ project, user }) {
                       <div onClick={() => { setDescriptionDraft(selectedPhoto.desc || ''); setEditingDescription(true); }}
                            title="Clic para editar la descripción"
                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'text', textAlign: 'center' }}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: selectedPhoto.desc ? '#fff' : 'rgba(255,255,255,0.6)', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: selectedPhoto.desc ? '#fff' : 'rgba(255,255,255,0.6)' }}>
                           {selectedPhoto.desc || 'Añade una descripción…'}
                         </span>
                         <span style={{ opacity: 0.8, fontSize: 13 }}>✎</span>
