@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import exifr from 'exifr';
 import { apiFetch } from '../utils/apiFetch';
 import { API } from '../utils/helpers';
@@ -397,7 +397,10 @@ export default function MultimediaModule({ project, user }) {
     }
   };
 
-  const filteredPhotos = photos.filter(p => {
+  // MEMORIZADOS: referencia estable entre renders → evita que el useLayoutEffect
+  // del scrubber (que hace setState) se dispare en cada render y cause un bucle
+  // infinito ("Maximum update depth exceeded").
+  const filteredPhotos = useMemo(() => photos.filter(p => {
     const isVideo = p.mediaType === 'video' || String(p.mimeType || '').startsWith('video/') || isVideoFile(p.filename || p.desc);
     if (mediaType === 'image' && isVideo) return false;
     if (mediaType === 'video' && !isVideo) return false;
@@ -405,11 +408,12 @@ export default function MultimediaModule({ project, user }) {
     if (dateRange.start && p.date < dateRange.start) return false;
     if (dateRange.end && p.date > dateRange.end) return false;
     return true;
-  }).sort((a, b) => new Date(b.date) - new Date(a.date));
+  }).sort((a, b) => new Date(b.date) - new Date(a.date)),
+  [photos, mediaType, searchTerm, dateRange.start, dateRange.end]);
   filteredRef.current = filteredPhotos;   // para navegación del lightbox
 
   // Línea de tiempo estilo Google Fotos: agrupar por día (desc).
-  const groupedPhotos = (() => {
+  const groupedPhotos = useMemo(() => {
     const map = new Map();
     filteredPhotos.forEach(p => {
       const key = p.date || 'sin-fecha';
@@ -417,7 +421,7 @@ export default function MultimediaModule({ project, user }) {
       map.get(key).push(p);
     });
     return [...map.entries()].sort((a, b) => String(b[0]).localeCompare(String(a[0])));
-  })();
+  }, [filteredPhotos]);
 
   const formatDayHeader = (dayKey) => {
     if (!dayKey || dayKey === 'sin-fecha') return 'Sin fecha';
