@@ -18,10 +18,16 @@ export default function MultimediaModule({ project, user }) {
   // Un <img>/<video> no puede mandar el header Authorization → el proxy protegido
   // devolvía 401 (imagen en blanco). El middleware acepta ?session_token= como
   // fallback, así que lo anexamos a cada URL de media.
-  const proxyUrl = (id) => {
+  // thumb=true → miniatura ~20 KB (galería); sin thumb → imagen completa (lightbox).
+  const proxyUrl = (id, thumb = false) => {
     const tok = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token') || '';
-    return `${API}/api/docs/proxy?id=${id}${tok ? `&session_token=${encodeURIComponent(tok)}` : ''}`;
+    return `${API}/api/docs/proxy?id=${id}${thumb ? '&thumb=1' : ''}${tok ? `&session_token=${encodeURIComponent(tok)}` : ''}`;
   };
+  const PAGE = 80;
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sentinelRef = useRef(null);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -58,49 +64,64 @@ export default function MultimediaModule({ project, user }) {
   }, []);
 
   useEffect(() => {
-    if (modelUrn) fetchMultimedia();
+    if (modelUrn) { setPhotos([]); photosRef.current = []; setOffset(0); fetchMultimedia(0, true); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelUrn]);
 
   useEffect(() => () => {
     if (whatsappPollRef.current) clearTimeout(whatsappPollRef.current);
   }, []);
 
-  const fetchMultimedia = async () => {
-    setLoading(true);
+  // Scroll infinito: cuando el sentinel entra en viewport, trae la siguiente tanda.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore || loading) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && !loadingMore && hasMore) {
+        fetchMultimedia(offset, false);
+      }
+    }, { rootMargin: '600px' });
+    io.observe(el);
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, loading, loadingMore, offset]);
+
+  const mapMediaRow = (f) => {
+    const captureDate = f.capture_date || f.created_at || new Date().toISOString();
+    return {
+      id: f.id,
+      src: proxyUrl(f.id, true),        // GALERÍA: miniatura ligera
+      fullSrc: proxyUrl(f.id, false),   // LIGHTBOX: imagen completa
+      desc: f.description || '',
+      filename: f.name,
+      mimeType: f.mime_type || '',
+      mediaType: f.media_type || (String(f.mime_type || '').startsWith('video/') ? 'video' : 'image'),
+      date: String(captureDate).split('T')[0],
+      displayDate: new Date(captureDate).toLocaleDateString(),
+      location: f.latitude ? { lat: f.latitude, lng: f.longitude } : null,
+    };
+  };
+
+  // Carga PAGINADA (scroll infinito): 80 por tanda, miniaturas → arranca al instante.
+  const fetchMultimedia = async (from = 0, reset = false) => {
+    if (from === 0) setLoading(true); else setLoadingMore(true);
     try {
-      const res = await apiFetch(`${API}/api/docs/list?path=MULTIMEDIA/&model_urn=${encodeURIComponent(modelUrn)}`);
+      const res = await apiFetch(`${API}/api/docs/media?model_urn=${encodeURIComponent(modelUrn)}&limit=${PAGE}&offset=${from}`);
       if (res.ok) {
         const data = await res.json();
-        if (data.success && data.data && data.data.files) {
-          const files = data.data.files;
-          const mapped = files.map(f => {
-            const attrs = f.custom_attributes || f.metadata || {};
-            const captureDate = attrs.capture_date || f.created_at || f.updated || new Date().toISOString();
-            return {
-              id: f.id,
-              src: proxyUrl(f.id),
-              desc: f.description || '',
-              filename: f.name,
-              mimeType: f.mime_type || '',
-              mediaType: attrs.media_type || (String(f.mime_type || '').startsWith('video/') ? 'video' : 'image'),
-              date: String(captureDate).split('T')[0],
-              displayDate: new Date(captureDate).toLocaleDateString(),
-              location: attrs.latitude ? { lat: attrs.latitude, lng: attrs.longitude } : null,
-              fullPath: f.fullName,
-              rawMetadata: attrs.exif_data || null
-            };
-          });
-          setPhotos(mapped);
-          photosRef.current = mapped;
-        } else {
-          setPhotos([]);
-          photosRef.current = [];
-        }
+        const mapped = (data.files || []).map(mapMediaRow);
+        setPhotos(prev => {
+          const next = reset ? mapped : [...prev, ...mapped];
+          photosRef.current = next;
+          return next;
+        });
+        setHasMore(!!data.has_more);
+        setOffset(from + mapped.length);
       }
     } catch (err) {
       console.error('Error fetching multimedia:', err);
     } finally {
-      setLoading(false);
+      setLoading(false); setLoadingMore(false);
     }
   };
 
@@ -523,6 +544,13 @@ export default function MultimediaModule({ project, user }) {
             ))}
           </div>
         )}
+
+        {/* Sentinel de scroll infinito: al entrar en vista, trae la siguiente tanda */}
+        {hasMore && !searchTerm && !dateRange.start && (
+          <div ref={sentinelRef} style={{ textAlign: 'center', padding: 24, color: '#999', fontSize: 13 }}>
+            {loadingMore ? 'Cargando más fotos…' : `Mostrando ${photos.length}… desliza para ver más`}
+          </div>
+        )}
       </div>
 
       {/* ── Lightbox Modal ── */}
@@ -587,7 +615,7 @@ export default function MultimediaModule({ project, user }) {
               {selectedPhoto.mediaType === 'video' || String(selectedPhoto.mimeType || '').startsWith('video/') || isVideoFile(selectedPhoto.filename || selectedPhoto.desc) ? (
                   <video src={selectedPhoto.src} controls autoPlay style={{ maxWidth: '90%', maxHeight: '90%', transform: `scale(${lbZoom}) translate(${lbPan.x/lbZoom}px, ${lbPan.y/lbZoom}px)`, transition: lbDrag.current ? 'none' : 'transform 0.2s' }} />
               ) : (
-                  <img src={selectedPhoto.src} alt="" draggable={false} style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain', transform: `scale(${lbZoom}) translate(${lbPan.x/lbZoom}px, ${lbPan.y/lbZoom}px)`, transition: lbDrag.current ? 'none' : 'transform 0.2s', cursor: lbZoom > 1 ? 'grab' : 'default' }} />
+                  <img src={selectedPhoto.fullSrc || selectedPhoto.src} alt="" draggable={false} style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain', transform: `scale(${lbZoom}) translate(${lbPan.x/lbZoom}px, ${lbPan.y/lbZoom}px)`, transition: lbDrag.current ? 'none' : 'transform 0.2s', cursor: lbZoom > 1 ? 'grab' : 'default' }} />
               )}
             </div>
             

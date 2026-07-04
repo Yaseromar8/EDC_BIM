@@ -167,6 +167,46 @@ def get_blob_data(blob_name):
         print(f"Error obteniendo data de GCS: {str(e)}")
         return None, None
 
+
+def get_or_create_thumbnail(blob_name, max_px=420):
+    """Miniatura JPEG (~20 KB) para galerías de miles de fotos. Se cachea en GCS
+    como '<blob>__thumb<max_px>.jpg': la 1ª vez se genera, luego es instantánea.
+    Devuelve (bytes, 'image/jpeg') o (None, None)."""
+    try:
+        from io import BytesIO
+        from PIL import Image, ImageOps
+        bucket_name = os.environ.get("GCS_BUCKET_NAME")
+        client = get_storage_client()
+        bucket = client.bucket(bucket_name)
+
+        thumb_name = f"{blob_name}__thumb{max_px}.jpg"
+        thumb_blob = bucket.blob(thumb_name)
+        if thumb_blob.exists():
+            return thumb_blob.download_as_bytes(), 'image/jpeg'
+
+        src = bucket.blob(blob_name)
+        if not src.exists():
+            return None, None
+        raw = src.download_as_bytes()
+
+        img = Image.open(BytesIO(raw))
+        img = ImageOps.exif_transpose(img)      # respeta orientación EXIF del celular
+        img = img.convert('RGB')
+        img.thumbnail((max_px, max_px), Image.LANCZOS)
+        out = BytesIO()
+        img.save(out, format='JPEG', quality=72, optimize=True)
+        data = out.getvalue()
+
+        # Cachear para próximas veces (best-effort; si falla, igual servimos)
+        try:
+            thumb_blob.upload_from_string(data, content_type='image/jpeg')
+        except Exception as ce:
+            print(f"[thumb] no se pudo cachear {thumb_name}: {ce}")
+        return data, 'image/jpeg'
+    except Exception as e:
+        print(f"[thumb] error generando miniatura de {blob_name}: {e}")
+        return None, None
+
 def list_gcs_contents(prefix=""):
     """
     Simula un sistema de directorios. Retorna archivos y subcarpetas (prefixes)

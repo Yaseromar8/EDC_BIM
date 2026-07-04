@@ -5,6 +5,7 @@ import re
 import time
 import uuid
 import threading
+import traceback
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -317,6 +318,56 @@ def get_document_by_id(node_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@documents_bp.route('/api/docs/media', methods=['GET'])
+def list_media_paginated():
+    """Galería paginada de la carpeta MULTIMEDIA — SIN el sub-query pesado del
+    listado genérico, ordenada por fecha de captura (metadata.capture_date, o
+    created_at). Pensado para miles de fotos con scroll infinito."""
+    try:
+        model_urn = request.args.get('model_urn', 'global')
+        limit = min(int(request.args.get('limit', 80)), 300)
+        offset = max(int(request.args.get('offset', 0)), 0)
+
+        from file_system_db import resolve_path_to_node_id
+        parent_id = resolve_path_to_node_id('MULTIMEDIA/', model_urn, auto_create=False)
+        if not parent_id:
+            return jsonify({"success": True, "files": [], "total": 0, "has_more": False})
+
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""SELECT count(*) FROM file_nodes
+                           WHERE model_urn=%s AND parent_id=%s AND node_type='FILE' AND is_deleted=FALSE""",
+                        (model_urn, parent_id))
+            total = cur.fetchone()[0]
+
+            # Orden por fecha de captura real (cae a created_at si no hay).
+            cur.execute("""
+                SELECT id, name, mime_type, description, metadata, created_at,
+                       COALESCE((metadata->>'capture_date')::timestamptz, created_at) AS sort_date
+                FROM file_nodes
+                WHERE model_urn=%s AND parent_id=%s AND node_type='FILE' AND is_deleted=FALSE
+                ORDER BY sort_date DESC, name ASC
+                LIMIT %s OFFSET %s""",
+                (model_urn, parent_id, limit, offset))
+            files = []
+            for r in cur.fetchall():
+                meta = r[4] or {}
+                cap = meta.get('capture_date') or (r[5].isoformat() if r[5] else None)
+                files.append({
+                    "id": r[0], "name": r[1], "mime_type": r[2],
+                    "description": r[3] or "",
+                    "capture_date": cap,
+                    "media_type": meta.get('media_type') or ('video' if str(r[2] or '').startswith('video/') else 'image'),
+                    "latitude": meta.get('latitude'), "longitude": meta.get('longitude'),
+                })
+        return jsonify({"success": True, "files": files, "total": total,
+                        "has_more": offset + len(files) < total})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @documents_bp.route('/api/docs/proxy', methods=['GET', 'OPTIONS'])
 def proxy_document():
     """Sirve el documento directamente desde GCS para evitar problemas de CORS en el Viewer."""
@@ -344,15 +395,25 @@ def proxy_document():
     if not gcs_urn:
         return jsonify({"success": False, "error": "Document URN not found"}), 404
 
-    from gcs_manager import generate_signed_url, get_blob_data
+    from gcs_manager import generate_signed_url, get_blob_data, get_or_create_thumbnail
     from flask import redirect, Response
 
     # Si es imagen, lo evitamos exponer a redirect/signing issues (soluciona error de imagen negra)
     is_image = any(gcs_urn.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif'])
     if is_image:
+        # ?thumb=1 → miniatura cacheada (~20 KB) para galerías de miles de fotos.
+        if request.args.get('thumb'):
+            tdata, tctype = get_or_create_thumbnail(gcs_urn)
+            if tdata:
+                resp = Response(tdata, mimetype=tctype or 'image/jpeg')
+                resp.headers['Cache-Control'] = 'public, max-age=604800'  # 7 días en el navegador
+                return resp
+            # si la miniatura falla, caemos a la imagen completa abajo
         content, content_type = get_blob_data(gcs_urn)
         if content:
-            return Response(content, mimetype=content_type or 'image/jpeg')
+            resp = Response(content, mimetype=content_type or 'image/jpeg')
+            resp.headers['Cache-Control'] = 'public, max-age=604800'
+            return resp
 
     # Para PDFs o archivos grandes, proxy streaming para esquivar bloqueos de CORS del navegador
     signed_url = generate_signed_url(gcs_urn)
