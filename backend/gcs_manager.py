@@ -52,12 +52,23 @@ def upload_file_to_gcs(file_object, destination_blob_name):
         file_object.seek(0)
         
         print(f"[GCS] Starting streaming transfer... (version {new_version})")
-        blob.upload_from_file(
-            file_object,
-            content_type=content_type,
-            timeout=300,
-            num_retries=3    # Reintentos automáticos en fallos transitorios
-        )
+        # Compat SDK: las versiones nuevas de google-cloud-storage QUITARON el
+        # kwarg 'num_retries' (rompía TODOS los uploads con TypeError). Ahora los
+        # reintentos se pasan vía 'retry'. Intentamos la firma moderna y caemos
+        # a la básica si el SDK es aún más nuevo/viejo.
+        try:
+            from google.cloud.storage.retry import DEFAULT_RETRY
+            blob.upload_from_file(
+                file_object,
+                content_type=content_type,
+                timeout=300,
+                retry=DEFAULT_RETRY,
+            )
+        except TypeError:
+            file_object.seek(0)
+            blob.upload_from_file(file_object, content_type=content_type, timeout=300)
+        except ImportError:
+            blob.upload_from_file(file_object, content_type=content_type, timeout=300)
         print(f"[GCS] Transfer complete.")
         
         # Patch the metadata to store version
@@ -103,11 +114,18 @@ _CONTENT_TYPE_MAP = {
     '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     '.mp4': 'video/mp4',
     '.mov': 'video/quicktime',
+    '.3gp': 'video/3gpp',
+    '.avi': 'video/x-msvideo',
+    '.m4v': 'video/x-m4v',
+    '.webm': 'video/webm',
+    '.ogg': 'video/ogg',
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
     '.png': 'image/png',
     '.webp': 'image/webp',
     '.gif': 'image/gif',
+    '.heic': 'image/heic',
+    '.heif': 'image/heif',
 }
 
 def generate_signed_url(blob_name, expiration_minutes=60*24):

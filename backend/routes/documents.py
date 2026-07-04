@@ -1,7 +1,14 @@
 import os
+import json
+import mimetypes
+import re
 import time
 import uuid
+import threading
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+from pathlib import Path
 from flask import Blueprint, request, jsonify, redirect, Response
 from werkzeug.utils import secure_filename
 from gcs_manager import generate_signed_url, upload_file_to_gcs, delete_gcs_blob
@@ -103,6 +110,110 @@ def verify_project_access(user_or_id, model_urn):
 
 # ─── Tipos MIME → Content-Disposition hint ───────────────────────────────────
 INLINE_MIMES = {'application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'}
+
+WHATSAPP_DEFAULT_SOURCE_DIR = os.environ.get(
+    'WHATSAPP_IMPORT_SOURCE_DIR',
+    r'C:\Users\ASUS\Downloads\Chat de WhatsApp con Producción TALARA PQT08'
+)
+WHATSAPP_IMPORT_FOLDER = 'MULTIMEDIA/'
+WHATSAPP_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif'}
+WHATSAPP_VIDEO_EXTENSIONS = {'.mp4', '.mov', '.3gp', '.avi', '.m4v', '.webm', '.ogg'}
+WHATSAPP_FILENAME_RE = re.compile(r'(IMG|VID)-(\d{8})-WA', re.IGNORECASE)
+WHATSAPP_IMPORT_JOBS = {}
+WHATSAPP_IMPORT_LOCK = threading.Lock()
+
+
+def _docs_actor(user, fallback=None):
+    if isinstance(user, dict):
+        return user.get('email') or user.get('name') or user.get('id') or fallback
+    return fallback
+
+
+def _parse_whatsapp_date(filename):
+    match = WHATSAPP_FILENAME_RE.search(filename)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(2), '%Y%m%d')
+    except ValueError:
+        return None
+
+
+def _scan_whatsapp_media(source_dir):
+    root = Path(source_dir)
+    if not root.exists() or not root.is_dir():
+        raise FileNotFoundError(f"No existe la carpeta: {source_dir}")
+
+    media = []
+    skipped = 0
+    for path in root.rglob('*'):
+        if not path.is_file():
+            continue
+        ext = path.suffix.lower()
+        if ext not in WHATSAPP_IMAGE_EXTENSIONS and ext not in WHATSAPP_VIDEO_EXTENSIONS:
+            skipped += 1
+            continue
+        capture_dt = _parse_whatsapp_date(path.name)
+        if not capture_dt:
+            skipped += 1
+            continue
+        media_type = 'video' if ext in WHATSAPP_VIDEO_EXTENSIONS else 'image'
+        mime_type = mimetypes.guess_type(path.name)[0] or ('video/mp4' if media_type == 'video' else 'image/jpeg')
+        media.append({
+            'path': str(path),
+            'filename': path.name,
+            'date': capture_dt.date().isoformat(),
+            'capture_iso': capture_dt.isoformat(),
+            'media_type': media_type,
+            'mime_type': mime_type,
+            'size': path.stat().st_size,
+        })
+
+    media.sort(key=lambda item: (item['date'], item['filename']))
+    return media, skipped
+
+
+def _whatsapp_job_update(job_id, **updates):
+    with WHATSAPP_IMPORT_LOCK:
+        job = WHATSAPP_IMPORT_JOBS.get(job_id)
+        if job:
+            job.update(updates)
+            job['updated_at'] = datetime.utcnow().isoformat() + 'Z'
+
+
+class _ContentTypedFile:
+    """Envuelve un file object para exponer .content_type (lo que espera
+    upload_file_to_gcs) SIN perder read/seek/tell/etc. El SDK nuevo de GCS
+    llama stream.tell()/seek() en el resumable upload, así que delegamos
+    cualquier atributo no propio al file object real."""
+    def __init__(self, file_obj, content_type):
+        self._file_obj = file_obj
+        self.content_type = content_type
+
+    def __getattr__(self, name):
+        # Solo se invoca si el atributo no existe en la instancia →
+        # delega read, seek, tell, close, etc. al archivo envuelto.
+        return getattr(self._file_obj, name)
+
+    def read(self, *args):
+        return self._file_obj.read(*args)
+
+    def seek(self, *args):
+        return self._file_obj.seek(*args)
+
+
+def _existing_file_id(cursor, model_urn, parent_id, filename):
+    cursor.execute("""
+        SELECT id FROM file_nodes
+        WHERE model_urn = %s
+          AND parent_id IS NOT DISTINCT FROM %s
+          AND name = %s
+          AND node_type = 'FILE'
+          AND is_deleted = FALSE
+        LIMIT 1
+    """, (model_urn, parent_id, filename))
+    row = cursor.fetchone()
+    return row[0] if row else None
 
 
 @documents_bp.route('/api/docs/view', methods=['GET'])
@@ -876,10 +987,13 @@ def confirm_upload():
     size_bytes = data.get('size_bytes', 0)
     mime_type = data.get('mime_type', 'application/octet-stream')
     performed_by = data.get('user', None)
+    custom_attributes = data.get('custom_attributes') or {}
+    description = data.get('description')
 
     # ── TENANT ISOLATION ──
     from flask import g
     user = getattr(g, 'current_user', None)
+    performed_by = performed_by or _docs_actor(user)
     if user and not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
         
@@ -893,19 +1007,267 @@ def confirm_upload():
 
     try:
         from file_system_db import create_file_record, resolve_path_to_node_id
-        from db import log_activity
+        from db import get_db_connection, log_activity
 
         parent_id = resolve_path_to_node_id(folder_path, model_urn, created_by=performed_by) if folder_path else None
-        create_file_record(model_urn, parent_id, filename, size_bytes, gcs_urn, mime_type=mime_type, created_by=performed_by)
+        file_id, version = create_file_record(model_urn, parent_id, filename, size_bytes, gcs_urn, mime_type=mime_type, created_by=performed_by)
+
+        if custom_attributes or description is not None:
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE file_nodes
+                    SET metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb,
+                        description = COALESCE(%s, description),
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s AND model_urn = %s
+                """, (json.dumps(custom_attributes), description, file_id, model_urn))
+                conn.commit()
 
         node_path = (folder_path + filename) if folder_path else filename
         log_activity(model_urn, 'upload_file', 'file',
                      entity_name=node_path, performed_by=performed_by)
 
-        return jsonify({"success": True, "message": "File record created"}), 201
+        return jsonify({
+            "success": True,
+            "message": "File record created",
+            "file": {
+                "id": str(file_id),
+                "name": filename,
+                "fullName": node_path,
+                "version": version,
+                "description": description,
+                "metadata": custom_attributes,
+                "custom_attributes": custom_attributes,
+                "mime_type": mime_type
+            }
+        }), 201
     except Exception as e:
         print(f"[Upload Confirm] Error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+def _run_whatsapp_import_job(job_id, model_urn, source_dir, performed_by, description, limit, overwrite):
+    from db import get_db_connection, log_activity
+    from file_system_db import create_file_record, resolve_path_to_node_id
+
+    def import_one(item, parent_id):
+        filename = item['filename']
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            existing_id = _existing_file_id(cursor, model_urn, parent_id, filename)
+        if existing_id and not overwrite:
+            return {'status': 'skipped', 'filename': filename, 'reason': 'duplicate'}
+
+        safe_filename = secure_filename(filename) or f"whatsapp_{uuid.uuid4().hex}"
+        gcs_urn = f"multimedia-whatsapp/{uuid.uuid4().hex}_{safe_filename}"
+        with open(item['path'], 'rb') as raw_file:
+            uploaded_url = upload_file_to_gcs(_ContentTypedFile(raw_file, item['mime_type']), gcs_urn)
+        if not uploaded_url:
+            raise RuntimeError('GCS upload failed')
+
+        file_id, version = create_file_record(
+            model_urn,
+            parent_id,
+            filename,
+            item['size'],
+            gcs_urn,
+            mime_type=item['mime_type'],
+            created_by=performed_by
+        )
+        metadata = {
+            'source': 'whatsapp_import',
+            'source_dir': source_dir,
+            'original_filename': filename,
+            'capture_date': item['capture_iso'],
+            'whatsapp_date': item['date'],
+            'media_type': item['media_type'],
+            'imported_at': datetime.utcnow().isoformat() + 'Z'
+        }
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE file_nodes
+                SET metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb,
+                    description = COALESCE(%s, description),
+                    created_at = %s::timestamp,
+                    updated_at = %s::timestamp
+                WHERE id = %s AND model_urn = %s
+            """, (json.dumps(metadata), description, item['capture_iso'], item['capture_iso'], file_id, model_urn))
+            conn.commit()
+        return {'status': 'imported', 'filename': filename, 'id': str(file_id), 'version': version}
+
+    try:
+        _whatsapp_job_update(job_id, status='scanning', message='Leyendo carpeta de WhatsApp')
+        media, skipped_scan = _scan_whatsapp_media(source_dir)
+        if limit:
+            media = media[:int(limit)]
+
+        parent_id = resolve_path_to_node_id(WHATSAPP_IMPORT_FOLDER, model_urn, created_by=performed_by)
+        total = len(media)
+        _whatsapp_job_update(
+            job_id,
+            status='running',
+            total=total,
+            scanned=total,
+            skipped_scan=skipped_scan,
+            imported=0,
+            skipped=0,
+            failed=0,
+            progress=0,
+            message=f'Importando {total} archivos'
+        )
+
+        if total == 0:
+            _whatsapp_job_update(job_id, status='completed', progress=100, message='No se encontraron fotos o videos validos')
+            return
+
+        done = 0
+        imported = 0
+        skipped = 0
+        failed = 0
+        errors = []
+        max_workers = min(4, max(1, int(os.environ.get('WHATSAPP_IMPORT_WORKERS', '3'))))
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(import_one, item, parent_id): item for item in media}
+            for future in as_completed(futures):
+                item = futures[future]
+                done += 1
+                try:
+                    result = future.result()
+                    if result.get('status') == 'skipped':
+                        skipped += 1
+                    else:
+                        imported += 1
+                except Exception as exc:
+                    failed += 1
+                    if len(errors) < 50:
+                        errors.append({'filename': item['filename'], 'error': str(exc)})
+
+                _whatsapp_job_update(
+                    job_id,
+                    status='running',
+                    imported=imported,
+                    skipped=skipped,
+                    failed=failed,
+                    processed=done,
+                    progress=round((done / total) * 100, 1),
+                    errors=errors,
+                    message=f'{done}/{total} procesados'
+                )
+
+        final_status = 'completed' if failed == 0 else 'completed_with_errors'
+        _whatsapp_job_update(
+            job_id,
+            status=final_status,
+            imported=imported,
+            skipped=skipped,
+            failed=failed,
+            processed=done,
+            progress=100,
+            errors=errors,
+            message=f'Listo: {imported} importados, {skipped} duplicados, {failed} con error'
+        )
+        log_activity(
+            model_urn,
+            'whatsapp_multimedia_import',
+            'folder',
+            entity_name=WHATSAPP_IMPORT_FOLDER,
+            performed_by=performed_by,
+            details={'source_dir': source_dir, 'imported': imported, 'skipped': skipped, 'failed': failed}
+        )
+    except Exception as exc:
+        _whatsapp_job_update(job_id, status='failed', message=str(exc), error=str(exc), progress=0)
+
+
+@documents_bp.route('/api/docs/multimedia/whatsapp/preview', methods=['POST'])
+def preview_whatsapp_multimedia_import():
+    data = request.get_json() or {}
+    model_urn = data.get('model_urn', 'global')
+    source_dir = data.get('source_dir') or WHATSAPP_DEFAULT_SOURCE_DIR
+
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if user and not verify_project_access(user, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+
+    try:
+        media, skipped = _scan_whatsapp_media(source_dir)
+        images = sum(1 for item in media if item['media_type'] == 'image')
+        videos = sum(1 for item in media if item['media_type'] == 'video')
+        dates = [item['date'] for item in media]
+        return jsonify({
+            'success': True,
+            'source_dir': source_dir,
+            'total': len(media),
+            'images': images,
+            'videos': videos,
+            'skipped': skipped,
+            'date_start': min(dates) if dates else None,
+            'date_end': max(dates) if dates else None,
+            'samples': media[:8]
+        }), 200
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+
+
+@documents_bp.route('/api/docs/multimedia/whatsapp/import', methods=['POST'])
+def start_whatsapp_multimedia_import():
+    data = request.get_json() or {}
+    model_urn = data.get('model_urn', 'global')
+    source_dir = data.get('source_dir') or WHATSAPP_DEFAULT_SOURCE_DIR
+    description = data.get('description')
+    limit = data.get('limit')
+    overwrite = bool(data.get('overwrite', False))
+
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    performed_by = data.get('user') or _docs_actor(user)
+    if user and not verify_project_access(user, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+
+    from file_system_db import resolve_path_to_node_id
+    parent_node_id = resolve_path_to_node_id(WHATSAPP_IMPORT_FOLDER, model_urn, auto_create=False)
+    rbac = check_folder_permission(user, parent_node_id, model_urn, 'create_upload', 'importar multimedia historica')
+    if rbac:
+        return rbac
+
+    job_id = str(uuid.uuid4())
+    with WHATSAPP_IMPORT_LOCK:
+        WHATSAPP_IMPORT_JOBS[job_id] = {
+            'id': job_id,
+            'status': 'queued',
+            'model_urn': model_urn,
+            'source_dir': source_dir,
+            'total': 0,
+            'processed': 0,
+            'imported': 0,
+            'skipped': 0,
+            'failed': 0,
+            'progress': 0,
+            'errors': [],
+            'message': 'En cola',
+            'created_at': datetime.utcnow().isoformat() + 'Z',
+            'updated_at': datetime.utcnow().isoformat() + 'Z'
+        }
+
+    worker = threading.Thread(
+        target=_run_whatsapp_import_job,
+        args=(job_id, model_urn, source_dir, performed_by, description, limit, overwrite),
+        daemon=True
+    )
+    worker.start()
+    return jsonify({'success': True, 'job_id': job_id, 'job': WHATSAPP_IMPORT_JOBS[job_id]}), 202
+
+
+@documents_bp.route('/api/docs/multimedia/whatsapp/import/<job_id>', methods=['GET'])
+def get_whatsapp_multimedia_import_status(job_id):
+    with WHATSAPP_IMPORT_LOCK:
+        job = WHATSAPP_IMPORT_JOBS.get(job_id)
+        if not job:
+            return jsonify({'success': False, 'error': 'Job no encontrado'}), 404
+        return jsonify({'success': True, 'job': dict(job)}), 200
 
 
 @documents_bp.route('/api/activity', methods=['GET'])
