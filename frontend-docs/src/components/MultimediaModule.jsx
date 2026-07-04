@@ -272,6 +272,7 @@ export default function MultimediaModule({ project, user }) {
         let captureDate = new Date();
         let location = null;
         let allExifData = {};
+        let foundExifDate = false;
 
         try {
             if (!isVideoFile(file.name)) {
@@ -281,16 +282,28 @@ export default function MultimediaModule({ project, user }) {
                     allExifData = parsedExif; // Store everything for the backend
                     if (parsedExif.DateTimeOriginal) {
                         captureDate = new Date(parsedExif.DateTimeOriginal);
+                        foundExifDate = true;
                     }
                     if (parsedExif.latitude && parsedExif.longitude) {
                         location = { lat: parsedExif.latitude, lng: parsedExif.longitude };
                     }
+                }
+            }
+            
+            // Si no logramos extraer la fecha real del EXIF, intentamos leerla del nombre de archivo (ej. fotos de WhatsApp)
+            if (!foundExifDate) {
+                // WhatsApp format: IMG-20251230-WA0005.jpg or VID-20260703-WA0033.mp4
+                const waMatch = file.name.match(/(?:IMG|VID)-(\d{4})(\d{2})(\d{2})-WA/i);
+                if (waMatch) {
+                    const year = parseInt(waMatch[1], 10);
+                    const month = parseInt(waMatch[2], 10) - 1;
+                    const day = parseInt(waMatch[3], 10);
+                    captureDate = new Date(year, month, day, 12, 0, 0);
                 } else if (file.lastModified) {
                     captureDate = new Date(file.lastModified);
                 }
-            } else if (file.lastModified) {
-                captureDate = new Date(file.lastModified);
             }
+
         } catch (err) {
             console.warn("Could not extract EXIF date", err);
         }

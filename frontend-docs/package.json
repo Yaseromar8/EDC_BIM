@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@capacitor/core": "^8.1.0",
+    "axios": "^1.18.1",
+    "exifr": "^7.1.3",
     "file-saver": "^2.0.5",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
