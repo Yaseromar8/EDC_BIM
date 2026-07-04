@@ -325,6 +325,7 @@ def list_media_paginated():
     created_at). Pensado para miles de fotos con scroll infinito."""
     try:
         model_urn = request.args.get('model_urn', 'global')
+        want_all = request.args.get('all') in ('1', 'true')
         limit = min(int(request.args.get('limit', 80)), 300)
         offset = max(int(request.args.get('offset', 0)), 0)
 
@@ -341,15 +342,26 @@ def list_media_paginated():
                         (model_urn, parent_id))
             total = cur.fetchone()[0]
 
-            # Orden por fecha de captura real (cae a created_at si no hay).
-            cur.execute("""
-                SELECT id, name, mime_type, description, metadata, created_at,
-                       COALESCE((metadata->>'capture_date')::timestamptz, created_at) AS sort_date
-                FROM file_nodes
-                WHERE model_urn=%s AND parent_id=%s AND node_type='FILE' AND is_deleted=FALSE
-                ORDER BY sort_date DESC, name ASC
-                LIMIT %s OFFSET %s""",
-                (model_urn, parent_id, limit, offset))
+            # all=1 → TODA la metadata liviana (sin bytes de imagen) para timeline,
+            # scrubber por fecha y filtros coherentes; las miniaturas se cargan
+            # solas al ser visibles (lazy). Si no, paginado clásico.
+            if want_all:
+                cur.execute("""
+                    SELECT id, name, mime_type, description, metadata, created_at,
+                           COALESCE((metadata->>'capture_date')::timestamptz, created_at) AS sort_date
+                    FROM file_nodes
+                    WHERE model_urn=%s AND parent_id=%s AND node_type='FILE' AND is_deleted=FALSE
+                    ORDER BY sort_date DESC, name ASC""",
+                    (model_urn, parent_id))
+            else:
+                cur.execute("""
+                    SELECT id, name, mime_type, description, metadata, created_at,
+                           COALESCE((metadata->>'capture_date')::timestamptz, created_at) AS sort_date
+                    FROM file_nodes
+                    WHERE model_urn=%s AND parent_id=%s AND node_type='FILE' AND is_deleted=FALSE
+                    ORDER BY sort_date DESC, name ASC
+                    LIMIT %s OFFSET %s""",
+                    (model_urn, parent_id, limit, offset))
             files = []
             for r in cur.fetchall():
                 meta = r[4] or {}
@@ -362,7 +374,7 @@ def list_media_paginated():
                     "latitude": meta.get('latitude'), "longitude": meta.get('longitude'),
                 })
         return jsonify({"success": True, "files": files, "total": total,
-                        "has_more": offset + len(files) < total})
+                        "has_more": (False if want_all else offset + len(files) < total)})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500

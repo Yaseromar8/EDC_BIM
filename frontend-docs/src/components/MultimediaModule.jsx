@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import exifr from 'exifr';
 import { apiFetch } from '../utils/apiFetch';
 import { API } from '../utils/helpers';
@@ -25,11 +25,7 @@ export default function MultimediaModule({ project, user }) {
     const q = variant === 'thumb' ? '&thumb=1' : variant === 'display' ? '&size=display' : '';
     return `${API}/api/docs/proxy?id=${id}${q}${tok ? `&session_token=${encodeURIComponent(tok)}` : ''}`;
   };
-  const PAGE = 80;
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const sentinelRef = useRef(null);
+  const scrollRef = useRef(null);   // contenedor scrolleable de la galería
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -66,27 +62,13 @@ export default function MultimediaModule({ project, user }) {
   }, []);
 
   useEffect(() => {
-    if (modelUrn) { setPhotos([]); photosRef.current = []; setOffset(0); fetchMultimedia(0, true); }
+    if (modelUrn) { setPhotos([]); photosRef.current = []; fetchMultimedia(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelUrn]);
 
   useEffect(() => () => {
     if (whatsappPollRef.current) clearTimeout(whatsappPollRef.current);
   }, []);
-
-  // Scroll infinito: cuando el sentinel entra en viewport, trae la siguiente tanda.
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el || !hasMore || loading) return undefined;
-    const io = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !loadingMore && hasMore) {
-        fetchMultimedia(offset, false);
-      }
-    }, { rootMargin: '600px' });
-    io.observe(el);
-    return () => io.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasMore, loading, loadingMore, offset]);
 
   const mapMediaRow = (f) => {
     const captureDate = f.capture_date || f.created_at || new Date().toISOString();
@@ -105,26 +87,23 @@ export default function MultimediaModule({ project, user }) {
     };
   };
 
-  // Carga PAGINADA (scroll infinito): 80 por tanda, miniaturas → arranca al instante.
-  const fetchMultimedia = async (from = 0, reset = false) => {
-    if (from === 0) setLoading(true); else setLoadingMore(true);
+  // Carga TODA la metadata liviana de una vez (sin bytes de imagen): habilita
+  // filtros coherentes + scrubber por fecha sobre el set completo. Las miniaturas
+  // se cargan solas al ser visibles (lazy + content-visibility en las tiles).
+  const fetchMultimedia = async () => {
+    setLoading(true);
     try {
-      const res = await apiFetch(`${API}/api/docs/media?model_urn=${encodeURIComponent(modelUrn)}&limit=${PAGE}&offset=${from}`);
+      const res = await apiFetch(`${API}/api/docs/media?model_urn=${encodeURIComponent(modelUrn)}&all=1`);
       if (res.ok) {
         const data = await res.json();
         const mapped = (data.files || []).map(mapMediaRow);
-        setPhotos(prev => {
-          const next = reset ? mapped : [...prev, ...mapped];
-          photosRef.current = next;
-          return next;
-        });
-        setHasMore(!!data.has_more);
-        setOffset(from + mapped.length);
+        setPhotos(mapped);
+        photosRef.current = mapped;
       }
     } catch (err) {
       console.error('Error fetching multimedia:', err);
     } finally {
-      setLoading(false); setLoadingMore(false);
+      setLoading(false);
     }
   };
 
@@ -135,20 +114,30 @@ export default function MultimediaModule({ project, user }) {
     setEditingDescription(false);
   }, [selectedPhoto?.id]);
 
+  // Navegar respetando el ORDEN VISIBLE (filtrado). filteredRef se refresca en
+  // cada render con la lista filtrada actual.
+  const filteredRef = useRef([]);
+  const navPhoto = (dir) => {
+    const list = filteredRef.current || [];
+    if (list.length < 2 || !selectedPhoto) return;
+    const idx = list.findIndex(p => String(p.id) === String(selectedPhoto.id));
+    const next = (idx + dir + list.length) % list.length;
+    setSelectedPhoto(list[next]);
+  };
+
   useEffect(() => {
     if (!selectedPhoto) return;
     const onKey = (e) => {
-        const list = photosRef.current || [];
-        const idx = list.findIndex(p => String(p.id) === String(selectedPhoto.id));
         if (e.key === 'Escape') setSelectedPhoto(null);
-        else if (e.key === 'ArrowLeft' && list.length > 1) setSelectedPhoto(list[idx > 0 ? idx - 1 : list.length - 1]);
-        else if (e.key === 'ArrowRight' && list.length > 1) setSelectedPhoto(list[idx < list.length - 1 ? idx + 1 : 0]);
+        else if (e.key === 'ArrowLeft') navPhoto(-1);
+        else if (e.key === 'ArrowRight') navPhoto(1);
         else if (e.key === '+' || e.key === '=') setLbZoom(z => Math.min(z * 1.3, 6));
         else if (e.key === '-') setLbZoom(z => Math.max(z / 1.3, 1));
         else if (e.key === '0') { setLbZoom(1); setLbPan({ x: 0, y: 0 }); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPhoto]);
 
   const setQuickFilter = (type) => {
@@ -417,6 +406,7 @@ export default function MultimediaModule({ project, user }) {
     if (dateRange.end && p.date > dateRange.end) return false;
     return true;
   }).sort((a, b) => new Date(b.date) - new Date(a.date));
+  filteredRef.current = filteredPhotos;   // para navegación del lightbox
 
   // Línea de tiempo estilo Google Fotos: agrupar por día (desc).
   const groupedPhotos = (() => {
@@ -438,6 +428,69 @@ export default function MultimediaModule({ project, user }) {
     if (d.getTime() === hoy.getTime()) return 'Hoy';
     if (d.getTime() === ayer.getTime()) return 'Ayer';
     return d.toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  };
+
+  // ── SCRUBBER de fecha: marcadores de año en la posición de scroll real de su
+  // primera foto (preciso aunque un día tenga muchas fotos y otro pocas). ──
+  const [yearMarkers, setYearMarkers] = useState([]);
+  const [scrubLabel, setScrubLabel] = useState('');
+  const [scrubY, setScrubY] = useState(0);
+  const scrubbingRef = useRef(false);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || loading) { setYearMarkers([]); return; }
+    // esperar a que el layout de las secciones esté listo
+    const id = requestAnimationFrame(() => {
+      const total = el.scrollHeight || 1;
+      const seenYear = new Set();
+      const marks = [];
+      el.querySelectorAll('section[data-day]').forEach(sec => {
+        const day = sec.getAttribute('data-day');
+        const year = (day || '').slice(0, 4);
+        if (year && !seenYear.has(year)) {
+          seenYear.add(year);
+          marks.push({ year, frac: Math.min(1, sec.offsetTop / total) });
+        }
+      });
+      setYearMarkers(marks);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [groupedPhotos, loading]);
+
+  const dateAtFraction = (frac) => {
+    const el = scrollRef.current;
+    if (!el) return '';
+    const targetTop = frac * (el.scrollHeight - el.clientHeight);
+    let best = null;
+    el.querySelectorAll('section[data-day]').forEach(sec => {
+      if (sec.offsetTop <= targetTop + 4) best = sec;
+    });
+    const day = (best || el.querySelector('section[data-day]'))?.getAttribute('data-day');
+    if (!day) return '';
+    const d = new Date(`${day}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? day : d.toLocaleDateString('es-PE', { month: 'short', year: 'numeric' });
+  };
+
+  const scrubTo = (clientY, currentTarget) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const rect = currentTarget.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    setScrubY(frac);
+    setScrubLabel(dateAtFraction(frac));
+    el.scrollTop = frac * (el.scrollHeight - el.clientHeight);
+  };
+  const onScrubStart = (e) => { scrubbingRef.current = true; scrubTo(e.clientY, e.currentTarget); };
+  const onScrubMove = (e) => { if (scrubbingRef.current) scrubTo(e.clientY, e.currentTarget); };
+  const onScrubEnd = () => { scrubbingRef.current = false; setScrubLabel(''); };
+
+  // Al desplazar la galería, refresca la posición del indicador del scrubber.
+  const onGalleryScroll = () => {
+    const el = scrollRef.current;
+    if (!el || scrubbingRef.current) return;
+    const denom = (el.scrollHeight - el.clientHeight) || 1;
+    setScrubY(Math.max(0, Math.min(1, el.scrollTop / denom)));
   };
 
   return (
@@ -486,55 +539,69 @@ export default function MultimediaModule({ project, user }) {
         </div>
       </div>
 
-      <div style={{ flex: 1, padding: '8px 24px 24px', overflowY: 'auto' }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>Cargando multimedia...</div>
-        ) : filteredPhotos.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>No se encontraron archivos multimedia. Sube fotos usando el botón superior.</div>
-        ) : (
-          /* ── Línea de tiempo estilo Google Fotos: agrupado por día ── */
-          groupedPhotos.map(([dayKey, dayPhotos]) => (
-            <section key={dayKey} style={{ marginBottom: 26 }}>
-              <div style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f5f7f9', padding: '8px 2px 10px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#2b3440', textTransform: 'capitalize' }}>{formatDayHeader(dayKey)}</h3>
-                <span style={{ fontSize: 12, color: '#8a94a3' }}>{dayPhotos.length} {dayPhotos.length === 1 ? 'elemento' : 'elementos'}</span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 5 }}>
-                {dayPhotos.map((p) => (
-                  <div
-                    key={p.id}
-                    onClick={() => setSelectedPhoto(p)}
-                    className="mm-tile"
-                    style={{ position: 'relative', aspectRatio: '1 / 1', borderRadius: 6, overflow: 'hidden', cursor: 'pointer', background: '#e9edf2' }}
-                  >
-                    {p.mediaType === 'video' || String(p.mimeType || '').startsWith('video/') || isVideoFile(p.filename || p.desc) ? (
-                      <video src={p.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <img src={p.src} alt={p.desc} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: p.isUploading ? 0.5 : 1, transition: 'transform .25s' }} loading="lazy" />
-                    )}
-                    {(p.mediaType === 'video' || isVideoFile(p.filename || p.desc)) && (
-                      <div style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 6px' }}>▶ video</div>
-                    )}
-                    {p.location && (
-                      <div style={{ position: 'absolute', bottom: 6, left: 6, background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 10, fontSize: 10, padding: '2px 6px' }} title="Con ubicación GPS">📍</div>
-                    )}
-                    {p.desc && (
-                      <div className="mm-tile-desc" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 8px 6px', background: 'linear-gradient(transparent, rgba(0,0,0,0.7))', color: '#fff', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</div>
-                    )}
-                    {p.isUploading && (
-                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.7)', fontWeight: 600, color: '#5f7fa3', fontSize: 12 }}>Subiendo…</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))
-        )}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        <div ref={scrollRef} onScroll={onGalleryScroll} style={{ position: 'absolute', inset: 0, padding: '8px 40px 24px 24px', overflowY: 'auto' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>Cargando multimedia...</div>
+          ) : filteredPhotos.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>No se encontraron archivos multimedia. Sube fotos usando el botón superior.</div>
+          ) : (
+            /* ── Línea de tiempo estilo Google Fotos: agrupado por día ── */
+            groupedPhotos.map(([dayKey, dayPhotos]) => (
+              <section key={dayKey} data-day={dayKey} style={{ marginBottom: 26 }}>
+                <div style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f5f7f9', padding: '8px 2px 10px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#2b3440', textTransform: 'capitalize' }}>{formatDayHeader(dayKey)}</h3>
+                  <span style={{ fontSize: 12, color: '#8a94a3' }}>{dayPhotos.length} {dayPhotos.length === 1 ? 'elemento' : 'elementos'}</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 5 }}>
+                  {dayPhotos.map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => setSelectedPhoto(p)}
+                      className="mm-tile"
+                      style={{ position: 'relative', aspectRatio: '1 / 1', borderRadius: 6, overflow: 'hidden', cursor: 'pointer', background: '#e9edf2', contentVisibility: 'auto', containIntrinsicSize: '180px' }}
+                    >
+                      {p.mediaType === 'video' || String(p.mimeType || '').startsWith('video/') || isVideoFile(p.filename || p.desc) ? (
+                        <video src={p.src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} preload="metadata" />
+                      ) : (
+                        <img src={p.src} alt={p.desc} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: p.isUploading ? 0.5 : 1, transition: 'transform .25s' }} loading="lazy" />
+                      )}
+                      {(p.mediaType === 'video' || isVideoFile(p.filename || p.desc)) && (
+                        <div style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 4, fontSize: 11, padding: '1px 6px' }}>▶ video</div>
+                      )}
+                      {p.location && (
+                        <div style={{ position: 'absolute', bottom: 6, left: 6, background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 10, fontSize: 10, padding: '2px 6px' }} title="Con ubicación GPS">📍</div>
+                      )}
+                      {p.desc && (
+                        <div className="mm-tile-desc" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 8px 6px', background: 'linear-gradient(transparent, rgba(0,0,0,0.7))', color: '#fff', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</div>
+                      )}
+                      {p.isUploading && (
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.7)', fontWeight: 600, color: '#5f7fa3', fontSize: 12 }}>Subiendo…</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))
+          )}
+        </div>
 
-        {/* Sentinel de scroll infinito */}
-        {hasMore && !searchTerm && !dateRange.start && (
-          <div ref={sentinelRef} style={{ textAlign: 'center', padding: 24, color: '#8a94a3', fontSize: 13 }}>
-            {loadingMore ? 'Cargando más fotos…' : `${photos.length} cargadas · desliza para ver más`}
+        {/* ── Scrubber de fecha (estilo Google Fotos) ── */}
+        {!loading && filteredPhotos.length > 0 && yearMarkers.length > 0 && (
+          <div
+            className="mm-scrubber"
+            onMouseDown={onScrubStart}
+            onMouseMove={onScrubMove}
+            onMouseUp={onScrubEnd}
+            onMouseLeave={onScrubEnd}
+            style={{ position: 'absolute', top: 8, right: 4, bottom: 24, width: 34, cursor: 'ns-resize', zIndex: 5 }}
+          >
+            {yearMarkers.map(m => (
+              <span key={m.year} style={{ position: 'absolute', right: 4, top: `${m.frac * 100}%`, transform: 'translateY(-50%)', fontSize: 11, color: '#8a94a3', background: '#f5f7f9', padding: '1px 4px', borderRadius: 4, pointerEvents: 'none', userSelect: 'none' }}>{m.year}</span>
+            ))}
+            {scrubLabel && (
+              <span style={{ position: 'absolute', right: 40, top: `${scrubY * 100}%`, transform: 'translateY(-50%)', background: '#2b3440', color: '#fff', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6, whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(0,0,0,0.25)', pointerEvents: 'none' }}>{scrubLabel}</span>
+            )}
           </div>
         )}
       </div>
@@ -590,13 +657,26 @@ export default function MultimediaModule({ project, user }) {
 
           <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}
                onWheel={e => {
-                   if (e.ctrlKey) { e.preventDefault(); setLbZoom(z => Math.max(1, Math.min(6, z - e.deltaY * 0.01))); }
+                   // rueda = zoom (sin Ctrl, como Google Fotos); centrado simple
+                   e.preventDefault();
+                   setLbZoom(z => Math.max(1, Math.min(6, z * (e.deltaY < 0 ? 1.12 : 1 / 1.12))));
                }}
                onMouseDown={e => { if (lbZoom > 1) lbDrag.current = { startX: e.clientX - lbPan.x, startY: e.clientY - lbPan.y }; }}
                onMouseMove={e => { if (lbDrag.current) setLbPan({ x: e.clientX - lbDrag.current.startX, y: e.clientY - lbDrag.current.startY }); }}
                onMouseUp={() => lbDrag.current = null}
                onMouseLeave={() => lbDrag.current = null}
           >
+            {/* Flechas en pantalla para pasar fotos */}
+            {filteredRef.current.length > 1 && (
+              <>
+                <button onClick={(e) => { e.stopPropagation(); navPhoto(-1); }}
+                  style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', zIndex: 3, width: 48, height: 48, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 24, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title="Anterior (←)">‹</button>
+                <button onClick={(e) => { e.stopPropagation(); navPhoto(1); }}
+                  style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', zIndex: 3, width: 48, height: 48, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 24, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title="Siguiente (→)">›</button>
+              </>
+            )}
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {selectedPhoto.mediaType === 'video' || String(selectedPhoto.mimeType || '').startsWith('video/') || isVideoFile(selectedPhoto.filename || selectedPhoto.desc) ? (
                   <video src={selectedPhoto.src} controls autoPlay style={{ maxWidth: '90%', maxHeight: '90%', transform: `scale(${lbZoom}) translate(${lbPan.x/lbZoom}px, ${lbPan.y/lbZoom}px)`, transition: lbDrag.current ? 'none' : 'transform 0.2s' }} />
