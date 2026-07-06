@@ -4,6 +4,12 @@ node_modules/
 __pycache__/
 *.pyc
 
+# Build output (Netlify rebuilds from source; committed dist is redundant)
+frontend-react/dist/
+frontend-docs/dist/
+# Agent runtime logs (were causing Windows file-lock issues on checkout/reset)
+.codex/
+
 # Ignore environment and sensitive files
 backend/venv/
 backend/gcp_sa.json
