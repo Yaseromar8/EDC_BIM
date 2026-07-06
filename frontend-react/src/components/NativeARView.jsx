@@ -141,6 +141,13 @@ export default function NativeARView({ onExit }) {
     setUnitsPerMeter(clamped);
   };
 
+  // Giro ABSOLUTO del modelo (dial continuo 0–359°) para alinearlo con la obra.
+  const setYawAbsolute = (deg) => {
+    const norm = ((Math.round(Number(deg)) % 360) + 360) % 360;
+    detachRef.current?.setYawDegrees?.(norm);
+    setYawDegrees(norm);
+  };
+
   return (
     <div className="native-ar-overlay">
       <div className="native-ar-status">
@@ -171,11 +178,24 @@ export default function NativeARView({ onExit }) {
         </div>
 
         {anchored && (
-          <div className="native-ar-yaw">
-            <button onClick={() => changeYaw(-5)} aria-label="Girar cinco grados a la izquierda">-5</button>
-            <span>Giro {yawDegrees} grados</span>
-            <button onClick={() => changeYaw(5)} aria-label="Girar cinco grados a la derecha">+5</button>
-            <button onClick={() => changeYaw(90)} aria-label="Girar noventa grados">+90</button>
+          <div className="native-ar-yaw" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button onClick={() => changeYaw(-5)} aria-label="Girar cinco grados a la izquierda">-5</button>
+              <span style={{ minWidth: 92, textAlign: 'center' }}>Giro {yawDegrees}°</span>
+              <button onClick={() => changeYaw(5)} aria-label="Girar cinco grados a la derecha">+5</button>
+              <button onClick={() => changeYaw(90)} aria-label="Girar noventa grados">+90</button>
+            </div>
+            {/* Dial continuo: alinea el modelo con la obra sin ir de a 5°. */}
+            <input
+              type="range"
+              min="0"
+              max="359"
+              step="1"
+              value={yawDegrees}
+              onChange={(e) => setYawAbsolute(e.target.value)}
+              aria-label="Giro del modelo en grados"
+              style={{ width: '100%' }}
+            />
           </div>
         )}
 
