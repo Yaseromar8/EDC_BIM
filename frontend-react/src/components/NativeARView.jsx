@@ -9,6 +9,7 @@ export default function NativeARView({ onExit }) {
   const [anchored, setAnchored] = useState(false);
   const [yawDegrees, setYawDegrees] = useState(0);
   const [unitsPerMeter, setUnitsPerMeter] = useState(1000);
+  const [aligning, setAligning] = useState(false);
   const oneToOneRef = useRef(1000); // unidades/metro para escala 1:1 real (según unidades del modelo)
   const detachRef = useRef(null);
   const trackingCleanupRef = useRef(null);
@@ -148,6 +149,33 @@ export default function NativeARView({ onExit }) {
     setYawDegrees(norm);
   };
 
+  // Alinear girando el celular (gesto estilo Dalux/Augin).
+  const toggleAlign = () => {
+    const d = detachRef.current;
+    if (!d) return;
+    if (aligning) {
+      d.stopAlign?.();
+      const locked = Math.round(d.getYawDegrees?.() ?? yawDegrees);
+      setYawDegrees(((locked % 360) + 360) % 360);
+      setAligning(false);
+      setStatus('Orientacion fijada. Afina con el dial si hace falta.');
+    } else {
+      if (d.startAlign?.() === false) { setStatus('Espera a "Tracking OK" antes de alinear.'); return; }
+      setAligning(true);
+      setStatus('Gira tu cuerpo hasta que el modelo calce con la obra, luego toca Fijar.');
+    }
+  };
+
+  // Reflejar el giro en vivo mientras alineas (el puente es el dueño del valor).
+  useEffect(() => {
+    if (!aligning) return undefined;
+    const id = setInterval(() => {
+      const y = detachRef.current?.getYawDegrees?.();
+      if (typeof y === 'number') setYawDegrees(((Math.round(y) % 360) + 360) % 360);
+    }, 120);
+    return () => clearInterval(id);
+  }, [aligning]);
+
   return (
     <div className="native-ar-overlay">
       <div className="native-ar-status">
@@ -179,6 +207,13 @@ export default function NativeARView({ onExit }) {
 
         {anchored && (
           <div className="native-ar-yaw" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+            <button
+              className="native-ar-primary"
+              onClick={toggleAlign}
+              style={{ background: aligning ? '#ef4444' : undefined }}
+            >
+              {aligning ? '✔ Fijar orientacion' : '🧭 Alinear con mi direccion'}
+            </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button onClick={() => changeYaw(-5)} aria-label="Girar cinco grados a la izquierda">-5</button>
               <span style={{ minWidth: 92, textAlign: 'center' }}>Giro {yawDegrees}°</span>

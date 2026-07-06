@@ -27,6 +27,11 @@ export function attachArToViewer(viewer, opts = {}) {
   let unitsPerMeter = Number.isFinite(opts.unitsPerMeter) ? opts.unitsPerMeter : 1000;
   const modelOrigin = opts.modelOrigin || { x: 0, y: 0, z: 0 };
   let yawDegrees = Number(opts.yawDegrees) || 0;
+  // "Alinear con mi dirección": mientras aligning=true, el giro del modelo sigue
+  // el giro físico del celular (agarrar el modelo y girarlo con tu cuerpo).
+  let aligning = false;
+  let alignBaseHeading = 0;
+  let alignBaseYaw = 0;
 
   const saved = {
     position: camera.position.clone(),
@@ -45,7 +50,17 @@ export function attachArToViewer(viewer, opts = {}) {
   const mBasis = new THREE.Matrix4().makeRotationX(Math.PI / 2);
   const mYaw = new THREE.Matrix4();
   const mAnchorInv = new THREE.Matrix4().identity();
+  const mHeading = new THREE.Matrix4();
   const cameraScale = new THREE.Vector3();
+
+  // Rumbo del celular en el plano horizontal (ARCore Y-up). Solo usamos deltas,
+  // así que el signo exacto no importa (si gira al revés, se invierte fácil).
+  function headingDeg() {
+    if (!latest?.view) return 0;
+    mHeading.fromArray(latest.view).invert(); // cámara -> mundo
+    const e = mHeading.elements;
+    return THREE.MathUtils.radToDeg(Math.atan2(-e[8], -e[10]));
+  }
 
   function setAnchorMatrix(matrix) {
     if (matrix && matrix.length === 16) {
@@ -78,6 +93,11 @@ export function attachArToViewer(viewer, opts = {}) {
     // Convert the ARCore world basis while keeping the OpenGL camera-local
     // basis unchanged: ARCore (x, y, z) -> APS (x, -z, y).
     mWorld.copy(mBasis).multiply(mRelative);
+
+    // Mientras alineas girando el cuerpo, el yaw del modelo sigue tu rumbo.
+    if (aligning) {
+      yawDegrees = alignBaseYaw + (headingDeg() - alignBaseHeading);
+    }
 
     // Rotating the virtual model clockwise equals rotating the camera in the
     // opposite direction around the matched BIM point.
@@ -134,6 +154,17 @@ export function attachArToViewer(viewer, opts = {}) {
     if (latest && !raf) raf = requestAnimationFrame(apply);
   };
   detach.getUnitsPerMeter = () => unitsPerMeter;
+
+  // Alinear girando el celular: captura el rumbo base y sigue el giro físico.
+  detach.startAlign = () => {
+    if (!latest?.view) return false;
+    alignBaseHeading = headingDeg();
+    alignBaseYaw = yawDegrees;
+    aligning = true;
+    return true;
+  };
+  detach.stopAlign = () => { aligning = false; };
+  detach.getYawDegrees = () => yawDegrees;
 
   return detach;
 }
