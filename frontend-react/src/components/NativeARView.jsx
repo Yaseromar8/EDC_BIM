@@ -10,6 +10,7 @@ export default function NativeARView({ onExit }) {
   const [yawDegrees, setYawDegrees] = useState(0);
   const [unitsPerMeter, setUnitsPerMeter] = useState(1000);
   const [aligning, setAligning] = useState(false);
+  const [hud, setHud] = useState({ frames: 0, upm: 1000, yaw: 0, aligning: false });
   const oneToOneRef = useRef(1000); // unidades/metro para escala 1:1 real (según unidades del modelo)
   const detachRef = useRef(null);
   const trackingCleanupRef = useRef(null);
@@ -76,6 +77,7 @@ export default function NativeARView({ onExit }) {
         detachRef.current = attachArToViewer(viewer, {
           modelOrigin: modelOriginRef.current,
           unitsPerMeter,
+          onFrame: setHud,
         });
         setStatus('Escanea el suelo y apunta el reticulo al punto fisico equivalente al punto BIM que estabas mirando.');
       } catch (error) {
@@ -183,6 +185,14 @@ export default function NativeARView({ onExit }) {
           {tracking === 'tracking' ? 'Tracking OK' : 'Reconociendo...'}
         </span>
         <span>{status}</span>
+      </div>
+
+      {/* Panel de diagnóstico (temporal) para ver por qué el modelo no responde. */}
+      <div style={{ position: 'absolute', top: 74, left: 8, background: 'rgba(0,0,0,0.7)', color: '#3ee87a', font: '12px monospace', padding: '6px 9px', borderRadius: 6, zIndex: 9999, lineHeight: 1.5, pointerEvents: 'none' }}>
+        <div>poses ARCore: {hud.frames} {hud.frames === 0 ? '❌ NO llegan' : '✓ ok'}</div>
+        <div>tracking: {tracking}</div>
+        <div>escala (upm): {hud.upm}</div>
+        <div>giro: {hud.yaw}° {hud.aligning ? '· ALINEANDO' : ''}</div>
       </div>
 
       <div className="native-ar-reticle" aria-hidden="true" />

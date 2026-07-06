@@ -74,6 +74,7 @@ export function attachArToViewer(viewer, opts = {}) {
 
   let raf = null;
   let latest = null;
+  let frameCount = 0; // diagnóstico: cuántas poses de ARCore se han aplicado
 
   const unsubPose = onCameraPose((data) => {
     latest = data;
@@ -125,6 +126,13 @@ export function attachArToViewer(viewer, opts = {}) {
 
     try { viewer.impl.syncCamera(true); } catch { /* Viewer version dependent. */ }
     viewer.impl.invalidate(true, true, true);
+
+    // Diagnóstico en vivo (throttle ~5/seg): confirma que las poses llegan y que
+    // los controles cambian los valores que de verdad usa el puente.
+    frameCount++;
+    if (opts.onFrame && frameCount % 12 === 0) {
+      opts.onFrame({ frames: frameCount, upm: Math.round(unitsPerMeter * 100) / 100, yaw: Math.round(yawDegrees), aligning });
+    }
   }
 
   const detach = function detach() {
