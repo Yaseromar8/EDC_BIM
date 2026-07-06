@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './ARView.css';
 import '../aps/extensions/DeviceOrientationExtension'; // Make sure this path is correct
+import { apiFetch } from '../utils/apiFetch'; // token con sesión (arregla el 401 tras el hardening)
 
 // --- STATIC TOKEN CONFIGURATION ---
 // PASTE YOUR VALID TOKEN HERE IF BACKEND IS DOWN
@@ -16,33 +17,12 @@ const ARView = ({ models, initialCamera, onExit }) => {
     const [modelHeight, setModelHeight] = useState(0);
     const [modelRotationY, setModelRotationY] = useState(0);
 
-    // 1. INITIALIZE WEBXR (With Polyfill Support)
+    // 1. START CAMERA FEED
+    // AR = "sándwich transparente": la cámara va DETRÁS del visor transparente.
+    // Antes esto se saltaba la cámara si el navegador reportaba WebXR (que nunca
+    // estuvo cableado) -> overlay sin fondo. Ahora SIEMPRE abrimos la cámara.
     useEffect(() => {
-        const initWebXR = async () => {
-            // Polyfill should inject navigator.xr
-            if (!navigator.xr) {
-                console.warn("[ARView] WebXR not found even with polyfill.");
-                startCamera(); // Fallback
-                return;
-            }
-
-            try {
-                const supported = await navigator.xr.isSessionSupported('immersive-ar');
-                if (supported) {
-                    console.log("[ARView] WebXR Supported (Native or Polyfill).");
-                    setPermStatus("webxr_ready");
-                } else {
-                    console.warn("[ARView] immersive-ar not supported.");
-                    startCamera(); // Fallback
-                }
-            } catch (e) {
-                console.error("[ARView] WebXR Error:", e);
-                startCamera();
-            }
-        };
-
         const startCamera = async () => {
-            // Standard getUserMedia Fallback
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'environment' }
@@ -51,56 +31,19 @@ const ARView = ({ models, initialCamera, onExit }) => {
                     videoRef.current.srcObject = stream;
                     videoRef.current.play();
                 }
-            } catch (err) { console.error("Camera fallback failed", err); }
+            } catch (err) {
+                console.error("[ARView] Cámara falló:", err);
+                alert("No se pudo abrir la cámara. Concede permiso de cámara y asegúrate de estar en HTTPS.");
+            }
         };
+        startCamera();
 
-        initWebXR();
+        // Apagar la cámara al salir (antes quedaba encendida = luz del cel prendida).
+        return () => {
+            const s = videoRef.current && videoRef.current.srcObject;
+            if (s && s.getTracks) s.getTracks().forEach(t => t.stop());
+        };
     }, []);
-
-    // ... (Viewer Init remains same) ...
-    // ... (Rest of component) ...
-
-    // RENDER (IGNORED):
-    const ignoredJSX = (
-        <div className="ar-view-container">
-            {/* Camera Feed (Fallback/Underlay) */}
-            <video ref={videoRef} className="ar-video-feed" autoPlay playsInline muted />
-
-            {/* Viewer Canvas */}
-            <div ref={viewerDivRef} className="ar-viewer-canvas" />
-
-            {/* UI Overlay */}
-            <div className="ar-ui-overlay">
-                {/* ... Top Bar ... */}
-
-                <div className="ar-bottom-controls">
-                    {/* START AR BUTTON (ALWAYS VISIBLE) */}
-                    <button
-                        className="ar-btn ar-btn-primary"
-                        style={{ background: '#2563eb', display: 'block' }}
-                        onClick={async () => {
-                            try {
-                                const session = await navigator.xr.requestSession('immersive-ar', {
-                                    requiredFeatures: ['hit-test', 'dom-overlay'],
-                                    domOverlay: { root: document.body }
-                                });
-                                // Session started!
-                                // In a real implementation, we would now loop and update camera pose.
-                                // For now, this activates the Native AR view if available.
-                                console.log("Session started", session);
-                            } catch (e) {
-                                alert("Error al iniciar AR: " + e.message);
-                            }
-                        }}
-                    >
-                        🚀 Iniciar AR (Scan)
-                    </button>
-
-                    {/* ... Panel ... */}
-                </div>
-            </div>
-        </div>
-    );
 
     // 2. INITIALIZE AUTODESK VIEWER
     useEffect(() => {
@@ -114,19 +57,20 @@ const ARView = ({ models, initialCamera, onExit }) => {
             if (STATIC_TOKEN && STATIC_TOKEN.length > 10) {
                 console.log("Using STATIC_TOKEN");
                 onSuccess(STATIC_TOKEN, 3600);
-            } else {
-                // Fallback to fetch using full URL
-                fetch(`${BACKEND_URL}/api/token`)
-                    .then(res => {
-                        if (!res.ok) throw new Error("Backend Token Fetch Failed");
-                        return res.json();
-                    })
-                    .then(data => onSuccess(data.access_token, data.expires_in))
-                    .catch(err => {
-                        console.error(err);
-                        alert("Token Error: Backend unreachable. Please use STATIC_TOKEN in ARView.jsx");
-                    });
+                return;
             }
+            // apiFetch inyecta el token de SESIÓN (Authorization: Bearer). El backend
+            // exige sesión desde el hardening; con fetch crudo daba 401 y no cargaba nada.
+            apiFetch(`${BACKEND_URL}/api/token`)
+                .then(res => {
+                    if (!res.ok) throw new Error(`Token fetch ${res.status}`);
+                    return res.json();
+                })
+                .then(data => onSuccess(data.access_token, data.expires_in))
+                .catch(err => {
+                    console.error("[AR] Token error:", err);
+                    alert("Error de token: no se pudo autenticar con el backend. Reingresa al visor desde Docs (para tomar tu sesión) o revisa que tu sesión no haya expirado.");
+                });
         };
 
         const options = {
@@ -411,28 +355,6 @@ const ARView = ({ models, initialCamera, onExit }) => {
 
                 {/* BOTTOM CONTROLS */}
                 <div className="ar-bottom-controls">
-
-
-
-                    {/* WebXR Start Button (Polyfill/Native) */}
-
-                    <button
-                        className="ar-btn ar-btn-primary"
-                        style={{ background: '#2563eb' }}
-                        onClick={async () => {
-                            try {
-                                const session = await navigator.xr.requestSession('immersive-ar', {
-                                    optionalFeatures: ['hit-test', 'dom-overlay', 'local-floor'],
-                                    domOverlay: { root: document.body }
-                                });
-                                console.log("Session started", session);
-                            } catch (e) {
-                                alert("Error al iniciar AR: " + e.message);
-                            }
-                        }}
-                    >
-                        🚀 Iniciar AR (Scan)
-                    </button>
 
                     {/* iOS Permission Button */}
                     {permStatus === 'pending_ios' && (
