@@ -8,6 +8,8 @@ export default function NativeARView({ onExit }) {
   const [tracking, setTracking] = useState('paused');
   const [anchored, setAnchored] = useState(false);
   const [yawDegrees, setYawDegrees] = useState(0);
+  const [unitsPerMeter, setUnitsPerMeter] = useState(1000);
+  const oneToOneRef = useRef(1000); // unidades/metro para escala 1:1 real (según unidades del modelo)
   const detachRef = useRef(null);
   const trackingCleanupRef = useRef(null);
   const modelOriginRef = useRef(null);
@@ -27,6 +29,15 @@ export default function NativeARView({ onExit }) {
       try {
         const target = viewer.navigation.getTarget();
         modelOriginRef.current = { x: target.x, y: target.y, z: target.z };
+
+        // Unidades reales del modelo -> escala 1:1 verdadera. getUnitScale() da
+        // METROS por unidad del visor (modelo en metros -> 1; en mm -> 0.001).
+        // unidades/metro para 1:1 = 1/getUnitScale. Antes se asumía 1000 (mm) fijo,
+        // por eso un modelo en metros se veía 1000x más chico = maqueta.
+        try {
+          const mpu = viewer.model.getUnitScale && viewer.model.getUnitScale();
+          if (mpu && mpu > 0) oneToOneRef.current = 1 / mpu;
+        } catch { /* usa el default 1000 */ }
 
         previousStylesRef.current = {
           body: document.body.style.background,
@@ -63,7 +74,7 @@ export default function NativeARView({ onExit }) {
 
         detachRef.current = attachArToViewer(viewer, {
           modelOrigin: modelOriginRef.current,
-          unitsPerMeter: 1000,
+          unitsPerMeter,
         });
         setStatus('Escanea el suelo y apunta el reticulo al punto fisico equivalente al punto BIM que estabas mirando.');
       } catch (error) {
@@ -123,6 +134,13 @@ export default function NativeARView({ onExit }) {
     });
   };
 
+  // Escala EN VIVO (sin recompilar). Menos unidades/metro = modelo más grande.
+  const applyUpm = (value) => {
+    const clamped = Math.max(0.05, Math.min(200000, value));
+    detachRef.current?.setUnitsPerMeter?.(clamped);
+    setUnitsPerMeter(clamped);
+  };
+
   return (
     <div className="native-ar-overlay">
       <div className="native-ar-status">
@@ -142,6 +160,15 @@ export default function NativeARView({ onExit }) {
         >
           {anchored ? 'Re-anclar aqui' : 'Anclar aqui'}
         </button>
+
+        {/* Escala: maqueta <-> 1:1 real. Se ajusta en vivo desde el celular. */}
+        <div className="native-ar-yaw">
+          <button onClick={() => applyUpm(oneToOneRef.current * 500)} aria-label="Ver como maqueta">Maqueta</button>
+          <button onClick={() => applyUpm(unitsPerMeter * 1.25)} aria-label="Mas chico">− chico</button>
+          <span>1:{Math.max(1, Math.round(unitsPerMeter / oneToOneRef.current))}</span>
+          <button onClick={() => applyUpm(unitsPerMeter / 1.25)} aria-label="Mas grande">+ grande</button>
+          <button onClick={() => applyUpm(oneToOneRef.current)} aria-label="Escala real uno a uno">1:1</button>
+        </div>
 
         {anchored && (
           <div className="native-ar-yaw">

@@ -21,7 +21,10 @@ export function attachArToViewer(viewer, opts = {}) {
   if (!viewer || !THREE) return () => {};
 
   const camera = viewer.impl.camera;
-  const unitsPerMeter = Number.isFinite(opts.unitsPerMeter) ? opts.unitsPerMeter : 1000;
+  // Unidades del visor por METRO físico. En 1:1 = unidades-del-modelo-por-metro
+  // (p.ej. modelo en metros -> 1; en mm -> 1000). Mutable para ajustarlo EN VIVO
+  // desde el celular (botón "1:1" / slider) sin recompilar el APK.
+  let unitsPerMeter = Number.isFinite(opts.unitsPerMeter) ? opts.unitsPerMeter : 1000;
   const modelOrigin = opts.modelOrigin || { x: 0, y: 0, z: 0 };
   let yawDegrees = Number(opts.yawDegrees) || 0;
 
@@ -123,6 +126,14 @@ export function attachArToViewer(viewer, opts = {}) {
     yawDegrees = Number(value) || 0;
     if (latest && !raf) raf = requestAnimationFrame(apply);
   };
+  // Escala en vivo: unidades del visor por metro físico. Menor = modelo más
+  // grande (hacia 1:1); mayor = más chico (maqueta).
+  detach.setUnitsPerMeter = (value) => {
+    const v = Number(value);
+    if (Number.isFinite(v) && v > 0) unitsPerMeter = v;
+    if (latest && !raf) raf = requestAnimationFrame(apply);
+  };
+  detach.getUnitsPerMeter = () => unitsPerMeter;
 
   return detach;
 }
