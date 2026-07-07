@@ -70,6 +70,16 @@ export default function MultimediaModule({ project, user }) {
     if (whatsappPollRef.current) clearTimeout(whatsappPollRef.current);
   }, []);
 
+  // Día calendario en hora LOCAL (Perú UTC-5). Antes se agrupaba por la fecha en
+  // UTC (split('T')[0]) -> una foto del 6 jul por la tarde caía bajo el 7 jul.
+  const toLocalDateKey = (v) => {
+    const s = String(v || '');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s; // fecha pura: ya es día calendario
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return 'sin-fecha';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
   const mapMediaRow = (f) => {
     const captureDate = f.capture_date || f.created_at || new Date().toISOString();
     return {
@@ -81,7 +91,7 @@ export default function MultimediaModule({ project, user }) {
       filename: f.name,
       mimeType: f.mime_type || '',
       mediaType: f.media_type || (String(f.mime_type || '').startsWith('video/') ? 'video' : 'image'),
-      date: String(captureDate).split('T')[0],
+      date: toLocalDateKey(captureDate),
       displayDate: new Date(captureDate).toLocaleDateString(),
       location: f.latitude ? { lat: f.latitude, lng: f.longitude } : null,
     };
@@ -146,18 +156,18 @@ export default function MultimediaModule({ project, user }) {
 
   const setQuickFilter = (type) => {
     const today = new Date();
-    const end = today.toISOString().split('T')[0];
+    const end = toLocalDateKey(today);
     let start = '';
     if (type === 'today') start = end;
     else if (type === 'week') {
         const lastWeek = new Date();
         lastWeek.setDate(today.getDate() - 7);
-        start = lastWeek.toISOString().split('T')[0];
+        start = toLocalDateKey(lastWeek);
     }
     else if (type === 'month') {
         const lastMonth = new Date();
         lastMonth.setMonth(today.getMonth() - 1);
-        start = lastMonth.toISOString().split('T')[0];
+        start = toLocalDateKey(lastMonth);
     }
     setDateRange({ start, end });
   };
@@ -315,7 +325,7 @@ export default function MultimediaModule({ project, user }) {
             id: tempId,
             src: temporaryUrl,
             desc: file.name,
-            date: captureDate.toISOString().split('T')[0],
+            date: toLocalDateKey(captureDate),
             displayDate: captureDate.toLocaleDateString(),
             location: location,
             fullPath: 'Subiendo...',
