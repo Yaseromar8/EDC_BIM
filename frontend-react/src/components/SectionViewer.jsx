@@ -648,8 +648,9 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
                             <pattern id="hatchCut" width={px * 24} height={px * 24} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
                                 <line x1={0} y1={0} x2={0} y2={px * 24} stroke="currentColor" strokeWidth={px * 1.5} opacity={0.7} />
                             </pattern>
-                            <pattern id="hatchFill" width={px * 24} height={px * 24} patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
-                                <line x1={0} y1={0} x2={0} y2={px * 24} stroke="currentColor" strokeWidth={px * 1.5} opacity={0.7} />
+                            <pattern id="hatchFill" width={px * 24} height={px * 24} patternUnits="userSpaceOnUse" patternTransform="rotate(60)">
+                                {/* trazos cortos (como el relleno de Civil), no línea continua: evita la X al solaparse con el corte */}
+                                <line x1={0} y1={0} x2={0} y2={px * 24} stroke="currentColor" strokeWidth={px * 1.5} opacity={0.75} strokeDasharray={`${px * 7} ${px * 6}`} />
                             </pattern>
                             <pattern id="hatchRock" width={px * 26} height={px * 26} patternUnits="userSpaceOnUse">
                                 <circle cx={px * 7} cy={px * 8} r={px * 3.2} fill="none" stroke="currentColor" strokeWidth={px * 1.1} opacity={0.7} />
@@ -692,8 +693,11 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
                                 fill={s.pat ? `url(#${s.pat})` : s.cls.color}
                                 style={{ color: s.cls.color, cursor: 'pointer' }}
                                 fillOpacity={s.pat ? 1 : 0.28}
-                                stroke={selKey === s.cls.key ? '#ffc400' : s.cls.color}
-                                strokeWidth={selKey === s.cls.key ? px * 2.6 : px * 1.3}
+                                // FIEL A CIVIL: un hatch es SOLO patrón — Civil no dibuja el
+                                // contorno del hatch (los bordes visibles son líneas aparte
+                                // del cadista). Borde solo al seleccionar (highlight).
+                                stroke={selKey === s.cls.key ? '#ffc400' : (s.pat ? 'none' : s.cls.color)}
+                                strokeWidth={selKey === s.cls.key ? px * 2.6 : (s.pat ? 0 : px * 1.3)}
                                 strokeOpacity={0.95}
                                 onClick={() => {
                                     if (movedRef.current) return; // fue arrastre, no clic
