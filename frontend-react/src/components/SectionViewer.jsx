@@ -236,6 +236,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
     const movedRef = useRef(false);                     // distingue arrastre de clic
     const [mdlSlice, setMdlSlice] = useState([]);       // corte del modelo 3D del visor en esta estación
     const [showModel, setShowModel] = useState(true);   // toggle capa "Modelo 3D"
+    const [light, setLight] = useState(false);          // modo "Plano": fondo blanco como lámina impresa
     const dragRef = useRef(null);
     const svgRef = useRef(null);
     const lastSyncRef = useRef(null);
@@ -682,6 +683,28 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
     }
     const fontSize = 10.5 * px * (700 / 620);
 
+    // ── Tema de lámina: oscuro (cabina) / claro ("Plano", como impreso) ──
+    const T = light ? {
+        canvas: '#f7f8f9', band: '#eceef1', bandText: '#3a424d', grid: '#dde0e5',
+        axis: '#2f7d4f', frame: '#aab1bb', label: '#1f242b', probe: '#0d74c4', snap: '#b7791f'
+    } : {
+        canvas: '#17191c', band: '#121418', bandText: '#8a919c', grid: '#2b2f34',
+        axis: '#3f9e63', frame: '#39424f', label: '#c6ccd4', probe: '#8ecbff', snap: '#ffc400'
+    };
+    // En modo Plano, el color ACAD 7 (blanco en pantalla oscura) se ve NEGRO,
+    // exactamente como en la lámina impresa del cadista.
+    const dispColor = (c) => {
+        if (!light || !c) return c;
+        const m = /^#([0-9a-f]{6})$/i.exec(c);
+        if (!m) return c;
+        const n = parseInt(m[1], 16);
+        const r = (n >> 16) & 255; const g = (n >> 8) & 255; const b = n & 255;
+        return (r > 225 && g > 225 && b > 225) ? '#1a1a1a' : c;
+    };
+    // Bandas de regla fijas (offsets abajo, cotas a los lados)
+    const bandH = fontSize * 2.1;
+    const bandW = fontSize * 4.0;
+
     return createPortal(
         <div style={dockStyle}>
             {/* Título */}
@@ -720,7 +743,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
 
             {/* Dibujo o volúmenes */}
             {mode === 'seccion' ? (
-                <div style={{ flex: 1, minHeight: 0, position: 'relative', background: '#17191c' }}>
+                <div style={{ flex: 1, minHeight: 0, position: 'relative', background: T.canvas }}>
                     <svg
                         ref={svgRef}
                         style={{ width: '100%', height: '100%', cursor: dragRef.current ? 'grabbing' : 'grab', touchAction: 'none', display: 'block' }}
@@ -752,29 +775,21 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
                             )}
                         </defs>
                         {gridX.map((gx) => (
-                            <line key={`gx${gx}`} x1={gx} y1={v.y} x2={gx} y2={v.y + v.h} stroke="#2b2f34" strokeWidth={px} />
+                            <line key={`gx${gx}`} x1={gx} y1={v.y} x2={gx} y2={v.y + v.h} stroke={T.grid} strokeWidth={px} />
                         ))}
                         {gridY.map((gy) => (
-                            <line key={`gy${gy}`} x1={v.x} y1={gy} x2={v.x + v.w} y2={gy} stroke="#2b2f34" strokeWidth={px} />
+                            <line key={`gy${gy}`} x1={v.x} y1={gy} x2={v.x + v.w} y2={gy} stroke={T.grid} strokeWidth={px} />
                         ))}
-                        <line x1={0} y1={v.y} x2={0} y2={v.y + v.h} stroke="#3f9e63" strokeWidth={px * 1.3} strokeDasharray={`${px * 9} ${px * 5}`} />
+                        <line x1={0} y1={v.y} x2={0} y2={v.y + v.h} stroke={T.axis} strokeWidth={px * 1.3} strokeDasharray={`${px * 9} ${px * 5}`} />
 
-                        {/* offsets abajo · elevaciones a AMBOS lados (valor real) */}
-                        {gridX.map((gx) => (
-                            <text key={`tx${gx}`} x={gx + px * 3} y={v.y + v.h - fontSize * 0.5} fill="#7f8791" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">
-                                {Math.abs(gx) < 1e-9 ? '0' : `${gx.toFixed(gx % 1 ? 1 : 0)}m`}
-                            </text>
-                        ))}
-                        {gridY.map((gy) => (
-                            <g key={`ty${gy}`}>
-                                <text x={v.x + px * 5} y={gy - px * 3} fill="#7f8791" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">
-                                    {(-gy / aspect).toFixed(0)}m
-                                </text>
-                                <text x={v.x + v.w - px * 5} y={gy - px * 3} fill="#7f8791" fontSize={fontSize} fontFamily="IBM Plex Mono, monospace" textAnchor="end">
-                                    {(-gy / aspect).toFixed(0)}m
-                                </text>
+                        {/* Marco de la lámina (Section View del cadista) + eje ℄ */}
+                        {frame && (
+                            <g style={{ pointerEvents: 'none' }}>
+                                <rect x={frame.l} y={-frame.t * aspect} width={frame.r - frame.l} height={(frame.t - frame.b) * aspect}
+                                    fill="none" stroke={T.frame} strokeWidth={px * 1.2} />
+                                <text x={0} y={-frame.t * aspect - px * 6} fill={T.bandText} fontSize={fontSize * 1.15} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">℄</text>
                             </g>
-                        ))}
+                        )}
 
                         <g clipPath={frame ? 'url(#secFrame)' : undefined}>
                         {shapes.filter((s) => s.closed && !hidden.has(s.cls.key)).map((s) => {
@@ -786,10 +801,10 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
                                 .join(' ');
                             return (
                                 <path key={s.id} d={d} fillRule="evenodd"
-                                    fill={s.pat ? `url(#${s.pat})` : s.cls.color}
-                                    style={{ color: s.cls.color, cursor: 'pointer' }}
+                                    fill={s.pat ? `url(#${s.pat})` : dispColor(s.cls.color)}
+                                    style={{ color: dispColor(s.cls.color), cursor: 'pointer' }}
                                     fillOpacity={s.pat ? 1 : 0.28}
-                                    stroke={selKey === s.cls.key ? '#ffc400' : (s.pat ? 'none' : s.cls.color)}
+                                    stroke={selKey === s.cls.key ? T.snap : (s.pat ? 'none' : dispColor(s.cls.color))}
                                     strokeWidth={selKey === s.cls.key ? px * 2.6 : (s.pat ? 0 : px * 1.3)}
                                     strokeOpacity={0.95}
                                     onClick={() => {
@@ -802,7 +817,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
                         })}
                         {shapes.filter((s) => !s.closed && !hidden.has(s.cls.key)).map((s) => (
                             <polyline key={s.id} points={s.pts.map(([x, y]) => `${toX(x)},${toY(y)}`).join(' ')}
-                                fill="none" stroke={s.cls.color}
+                                fill="none" stroke={dispColor(s.cls.color)}
                                 strokeWidth={s.thin ? px * 1.0 : px * 2.0}
                                 strokeOpacity={s.thin ? 0.55 : 1}
                                 strokeLinejoin="round" strokeLinecap="round">
@@ -824,31 +839,88 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
                         ))}
                         </g>
 
-                        {/* CT/CC en el eje, como la etiqueta de sección de Civil */}
+                        {/* ── Reglas FIJAS (offsets abajo · cotas a ambos lados) ── */}
+                        <g style={{ pointerEvents: 'none' }}>
+                            <rect x={v.x} y={v.y + v.h - bandH} width={v.w} height={bandH} fill={T.band} />
+                            <rect x={v.x} y={v.y} width={bandW} height={v.h} fill={T.band} />
+                            <rect x={v.x + v.w - bandW} y={v.y} width={bandW} height={v.h} fill={T.band} />
+                            <line x1={v.x} y1={v.y + v.h - bandH} x2={v.x + v.w} y2={v.y + v.h - bandH} stroke={T.frame} strokeWidth={px} />
+                            <line x1={v.x + bandW} y1={v.y} x2={v.x + bandW} y2={v.y + v.h} stroke={T.frame} strokeWidth={px} />
+                            <line x1={v.x + v.w - bandW} y1={v.y} x2={v.x + v.w - bandW} y2={v.y + v.h} stroke={T.frame} strokeWidth={px} />
+                            {gridX.map((gx) => (
+                                <g key={`rx${gx}`}>
+                                    <line x1={gx} y1={v.y + v.h - bandH} x2={gx} y2={v.y + v.h - bandH + px * 5} stroke={T.bandText} strokeWidth={px} />
+                                    <text x={gx} y={v.y + v.h - bandH * 0.32} fill={T.bandText} fontSize={fontSize} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
+                                        {Math.abs(gx) < 1e-9 ? '0' : `${gx.toFixed(gx % 1 ? 1 : 0)}`}
+                                    </text>
+                                </g>
+                            ))}
+                            {gridY.map((gy) => (
+                                <g key={`ry${gy}`}>
+                                    <text x={v.x + bandW - px * 6} y={gy - px * 3} fill={T.bandText} fontSize={fontSize} fontFamily="IBM Plex Mono, monospace" textAnchor="end">
+                                        {(-gy / aspect).toFixed(0)}
+                                    </text>
+                                    <text x={v.x + v.w - bandW + px * 6} y={gy - px * 3} fill={T.bandText} fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">
+                                        {(-gy / aspect).toFixed(0)}
+                                    </text>
+                                </g>
+                            ))}
+                            <text x={v.x + bandW - px * 6} y={v.y + fontSize * 1.4} fill={T.bandText} fontSize={fontSize * 0.9} fontFamily="IBM Plex Mono, monospace" textAnchor="end">m</text>
+                            <text x={v.x + v.w / 2} y={v.y + v.h - bandH * 0.32 + fontSize} fill={T.bandText} fontSize={fontSize * 0.85} fontFamily="IBM Plex Mono, monospace" textAnchor="middle" opacity={0.0}>offset</text>
+                        </g>
+
+                        {/* CT/CC estilo lámina: bajo el eje ℄, dos líneas como Civil */}
                         {(ctcc.ct != null || ctcc.cc != null) && (
-                            <text x={0} y={v.y + v.h - fontSize * 2.2} fill="#c6ccd4" fontSize={fontSize * 1.05} fontFamily="IBM Plex Mono, monospace" textAnchor="middle" style={{ pointerEvents: 'none' }}>
-                                {ctcc.ct != null ? `CT=${ctcc.ct.toFixed(2)}` : ''}{ctcc.ct != null && ctcc.cc != null ? '  ·  ' : ''}{ctcc.cc != null ? `CC=${ctcc.cc.toFixed(2)}` : ''}
-                            </text>
+                            <g style={{ pointerEvents: 'none' }}>
+                                {ctcc.ct != null && (
+                                    <text x={0} y={v.y + v.h - bandH - fontSize * 2.6} fill={T.label} fontSize={fontSize * 1.05} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
+                                        CT={ctcc.ct.toFixed(2)}
+                                    </text>
+                                )}
+                                {ctcc.cc != null && (
+                                    <text x={0} y={v.y + v.h - bandH - fontSize * 1.2} fill={T.label} fontSize={fontSize * 1.05} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
+                                        CC={ctcc.cc.toFixed(2)}
+                                    </text>
+                                )}
+                            </g>
                         )}
 
-                        {/* Cursor consultable: cruz + offset/cota reales bajo el mouse.
-                            Con imán activo (snapped) marca el vértice exacto. */}
+                        {/* Cursor consultable: cruz hasta las reglas + imán (el valor vive en la cabina) */}
                         {probe && (
                             <g style={{ pointerEvents: 'none' }}>
-                                <line x1={probe.off} y1={v.y} x2={probe.off} y2={v.y + v.h} stroke="#8ecbff" strokeWidth={px * 0.8} strokeDasharray={`${px * 4} ${px * 4}`} opacity={0.55} />
-                                <line x1={v.x} y1={-probe.elev * aspect} x2={v.x + v.w} y2={-probe.elev * aspect} stroke="#8ecbff" strokeWidth={px * 0.8} strokeDasharray={`${px * 4} ${px * 4}`} opacity={0.55} />
+                                <line x1={probe.off} y1={v.y} x2={probe.off} y2={v.y + v.h} stroke={T.probe} strokeWidth={px * 0.8} strokeDasharray={`${px * 4} ${px * 4}`} opacity={0.6} />
+                                <line x1={v.x} y1={-probe.elev * aspect} x2={v.x + v.w} y2={-probe.elev * aspect} stroke={T.probe} strokeWidth={px * 0.8} strokeDasharray={`${px * 4} ${px * 4}`} opacity={0.6} />
+                                {/* valores marcados SOBRE las reglas, como instrumento */}
+                                <text x={probe.off} y={v.y + v.h - bandH * 0.32} fill={T.probe} fontSize={fontSize} fontWeight="700" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
+                                    {probe.off.toFixed(2)}
+                                </text>
+                                <text x={v.x + bandW - px * 6} y={-probe.elev * aspect - px * 3} fill={T.probe} fontSize={fontSize} fontWeight="700" fontFamily="IBM Plex Mono, monospace" textAnchor="end">
+                                    {probe.elev.toFixed(2)}
+                                </text>
                                 {probe.snapped && (
                                     <>
-                                        <circle cx={probe.off} cy={-probe.elev * aspect} r={px * 5} fill="none" stroke="#ffc400" strokeWidth={px * 1.6} />
-                                        <circle cx={probe.off} cy={-probe.elev * aspect} r={px * 1.6} fill="#ffc400" />
+                                        <circle cx={probe.off} cy={-probe.elev * aspect} r={px * 5} fill="none" stroke={T.snap} strokeWidth={px * 1.6} />
+                                        <circle cx={probe.off} cy={-probe.elev * aspect} r={px * 1.6} fill={T.snap} />
                                     </>
                                 )}
-                                <text x={probe.off + px * 10} y={-probe.elev * aspect - px * 8} fill={probe.snapped ? '#ffc400' : '#8ecbff'} fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">
-                                    {`${probe.snapped ? `⊙ ${probe.kind || ''} · ` : ''}${probe.off.toFixed(2)}m · cota ${probe.elev.toFixed(2)}m`}
-                                </text>
                             </g>
                         )}
                     </svg>
+
+                    {/* Cabina de datos: todo lo necesario, fijo y quieto */}
+                    <div style={{ position: 'absolute', left: 10, bottom: 10, background: light ? 'rgba(255,255,255,0.92)' : 'rgba(18,20,24,0.92)', border: `1px solid ${light ? '#c9ced6' : '#2e3540'}`, borderRadius: 6, padding: '7px 10px', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, lineHeight: 1.6, color: light ? '#26303c' : '#c6ccd4', pointerEvents: 'none', minWidth: 148 }}>
+                        <div><span style={{ opacity: 0.65 }}>PK </span>{formatStation(station.station)}</div>
+                        <div>
+                            <span style={{ opacity: 0.65 }}>Off </span>{probe ? `${probe.off.toFixed(2)}m` : '—'}
+                            <span style={{ opacity: 0.65 }}>  Cota </span>{probe ? `${probe.elev.toFixed(2)}m` : '—'}
+                        </div>
+                        {probe?.snapped && <div style={{ color: T.snap }}>⊙ {probe.kind}</div>}
+                        {(ctcc.ct != null || ctcc.cc != null) && (
+                            <div style={{ borderTop: `1px solid ${light ? '#dde1e7' : '#262c35'}`, marginTop: 3, paddingTop: 3 }}>
+                                {ctcc.ct != null ? `CT ${ctcc.ct.toFixed(2)}` : ''}{ctcc.ct != null && ctcc.cc != null ? ' · ' : ''}{ctcc.cc != null ? `CC ${ctcc.cc.toFixed(2)}` : ''}
+                            </div>
+                        )}
+                    </div>
                     <div style={{ position: 'absolute', right: 10, bottom: 8, fontSize: 10, color: '#43506b', pointerEvents: 'none' }}>
                         rueda = zoom · arrastre = mover · doble clic = encuadrar · clic en material = área
                     </div>
@@ -917,10 +989,35 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
 
             {/* Barra inferior: slider + relación + vistas + capas */}
             <div style={{ padding: '8px 12px', background: '#202020', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+                {/* Cinta de progresivas: un tick por sección extraída; clic = saltar */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <input type="range" min={0} max={Math.max(0, stations.length - 1)} value={currentIndex}
-                        onChange={(e) => goIndex(parseInt(e.target.value, 10))} style={{ flex: 1, accentColor: '#3aa0ff' }} />
-                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10.5, color: '#8a919c' }}>
+                    <svg width="100%" height="34" style={{ flex: 1, display: 'block' }}>
+                        {(() => {
+                            const n = stations.length;
+                            if (!n) return null;
+                            const s0 = Number(stations[0].station);
+                            const s1 = Number(stations[n - 1].station);
+                            const span = Math.max(1e-9, s1 - s0);
+                            const X = (st) => 8 + ((Number(st) - s0) / span) * 84; // % con margen
+                            return (
+                                <>
+                                    <line x1="2%" y1="24" x2="98%" y2="24" stroke="#39424f" strokeWidth="1.5" />
+                                    {stations.map((st, i) => (
+                                        <g key={i} style={{ cursor: 'pointer' }} onClick={() => goIndex(i)}>
+                                            <rect x={`${X(st.station) - 1.2}%`} y="10" width="2.4%" height="24" fill="transparent" />
+                                            <line x1={`${X(st.station)}%`} y1={i === currentIndex ? 15 : 19} x2={`${X(st.station)}%`} y2="29"
+                                                stroke={i === currentIndex ? '#8ecbff' : '#5b6572'} strokeWidth={i === currentIndex ? 3 : 1.5} />
+                                            <title>{formatStation(st.station)}</title>
+                                        </g>
+                                    ))}
+                                    <text x={`${X(stations[currentIndex].station)}%`} y="9" fill="#8ecbff" fontSize="10" fontWeight="700" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
+                                        {formatStation(stations[currentIndex].station)}
+                                    </text>
+                                </>
+                            );
+                        })()}
+                    </svg>
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10.5, color: '#8a919c', flexShrink: 0 }}>
                         {currentIndex + 1}/{stations.length}
                     </span>
                 </div>
@@ -944,6 +1041,13 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
                         </button>
                     )}
                     <div style={{ flex: 1 }} />
+                    <button
+                        onClick={() => setLight((p) => !p)}
+                        title="Modo Plano: fondo blanco como la lámina impresa (los revisores comparan 1:1 contra el PDF)"
+                        style={{ ...btn(light), padding: '3px 10px', fontSize: 11 }}
+                    >
+                        {light ? '◑ Oscuro' : '◐ Plano'}
+                    </button>
                     <button onClick={() => setLegendOpen((p) => !p)} style={{ ...btn(legendOpen), padding: '3px 10px', fontSize: 11 }}>
                         Capas ({legend.length})
                     </button>
