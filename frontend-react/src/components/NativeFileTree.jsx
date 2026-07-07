@@ -174,8 +174,8 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId, projectId: context
                         </div>
                     )}
 
-                    <i className={getIcon()} style={{ marginRight: '8px', color: isFolder ? '#FFC107' : (isChecked ? '#7e9bbd' : '#aaa'), fontSize: '14px' }}></i>
-                    <span style={{ fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: isFolder ? 0.9 : 0.8 }}>
+                    <i className={getIcon()} style={{ marginRight: '8px', flexShrink: 0, color: isFolder ? '#FFC107' : (isChecked ? '#7e9bbd' : '#aaa'), fontSize: '14px' }}></i>
+                    <span title={node.attributes.displayName || node.attributes.name} style={{ fontSize: '13px', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.25, opacity: isFolder ? 0.9 : 0.8 }}>
                         {node.attributes.displayName || node.attributes.name}
                     </span>
                 </span>
