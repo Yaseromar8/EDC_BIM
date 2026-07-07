@@ -588,6 +588,17 @@ const Viewer = ({
                      enforceACCGhosting();
                      applyViewerVisualQuality();
                      console.log('[GHOST ACC] ✅ Modo ACC reforzado en GEOMETRY_LOADED');
+                     
+                     // Auto-ocultar grillas de sección de Civil 3D para limpiar el 3D
+                     try {
+                         ['vista de secciones', 'section view', '02.09'].forEach(kw => {
+                             viewer.search(kw, (dbIds) => {
+                                 if (dbIds && dbIds.length > 0) viewer.hide(dbIds);
+                             }, null, ['Layer', 'name']);
+                         });
+                     } catch (e) {
+                         console.warn('[APS LMV] Error ocultando capas de Civil:', e);
+                     }
                 });
                 
                 // ═══════════════════════════════════════════════════════════

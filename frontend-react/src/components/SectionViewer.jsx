@@ -45,7 +45,7 @@ const classify = (name) => {
     // son LÍNEAS de diseño (no áreas), cada una con color estable propio.
     if (/l[ií]nea|projection|proyeccion|all codes/i.test(name || '')) {
         const label = String(name).replace(/^\d+\s*/, '').trim();
-        return { key: `ln:${label.toLowerCase()}`, label, color: hashColor(label.toLowerCase()), fill: false };
+        return { key: `ln:${label.toLowerCase()}`, label, color: hashColor(label.toLowerCase()), fill: false, isLink: true };
     }
     const label = labelFromName(name);
     return { key: `auto:${label.toLowerCase()}`, label, color: hashColor(label.toLowerCase()), fill: true };
@@ -96,6 +96,55 @@ const shoelace = (pts) => {
         area += pts[i][0] * pts[i + 1][1] - pts[i + 1][0] * pts[i][1];
     }
     return Math.abs(area) / 2;
+};
+
+// Un hatch de Civil puede traer VARIOS contornos (islas) concatenados en una sola
+// lista de puntos. Dibujarlo como un solo polígono crea "puentes" que no existen
+// en Civil. Se parte en loops: cada vez que la lista vuelve al punto inicial del
+// loop en curso, ahí cierra uno y empieza el siguiente.
+const splitLoops = (pts, eps = 0.05) => {
+    const loops = [];
+    let start = 0;
+    for (let i = start + 2; i < pts.length; i += 1) {
+        const dx = pts[i][0] - pts[start][0];
+        const dy = pts[i][1] - pts[start][1];
+        if (Math.hypot(dx, dy) < eps) {
+            loops.push(pts.slice(start, i + 1));
+            start = i + 1;
+            i = start + 1;
+        }
+    }
+    if (start < pts.length - 1) loops.push(pts.slice(start));
+    return loops.filter((l) => l.length >= 3);
+};
+
+// Eleva la cota de una polilínea en un offset dado (interpolación lineal en el
+// segmento que cruza ese offset). null si la línea no cruza ahí.
+const elevAt = (pts, off = 0) => {
+    for (let i = 1; i < pts.length; i += 1) {
+        const [x1, y1] = pts[i - 1];
+        const [x2, y2] = pts[i];
+        if ((x1 <= off && x2 >= off) || (x2 <= off && x1 >= off)) {
+            if (Math.abs(x2 - x1) < 1e-9) return y1;
+            return y1 + ((y2 - y1) * (off - x1)) / (x2 - x1);
+        }
+    }
+    return null;
+};
+
+// TODAS las cotas donde un contorno cruza un offset dado (un cuerpo cerrado
+// cruza el eje al menos 2 veces: techo y fondo).
+const elevsAt = (pts, off = 0) => {
+    const res = [];
+    for (let i = 1; i < pts.length; i += 1) {
+        const [x1, y1] = pts[i - 1];
+        const [x2, y2] = pts[i];
+        if ((x1 <= off && x2 >= off) || (x2 <= off && x1 >= off)) {
+            if (Math.abs(x2 - x1) < 1e-9) res.push(y1, y2);
+            else res.push(y1 + ((y2 - y1) * (off - x1)) / (x2 - x1));
+        }
+    }
+    return res;
 };
 
 function normalizeStations(raw) {
@@ -173,6 +222,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
     const stations = useMemo(() => normalizeStations(sectionsData), [sectionsData]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [hidden, setHidden] = useState(() => new Set());
+    const initializedHidden = useRef(false);
     const userTouchedRef = useRef(new Set());
     const [view, setView] = useState(null);
     const [mode, setMode] = useState('seccion');
@@ -181,12 +231,27 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
     const [cutOn, setCutOn] = useState(false);          // corte 3D real en el modelo
     const [syncOn, setSyncOn] = useState(true);         // dual: modelo→panel
     const [legendOpen, setLegendOpen] = useState(false);
+    const [probe, setProbe] = useState(null);           // cursor consultable: {off, elev} reales
+    const [selKey, setSelKey] = useState(null);         // material seleccionado (clic) → áreas
+    const movedRef = useRef(false);                     // distingue arrastre de clic
     const dragRef = useRef(null);
     const svgRef = useRef(null);
     const lastSyncRef = useRef(null);
     const volumes = useMemo(() => computeVolumes(stations), [stations]);
 
     const station = stations[Math.min(currentIndex, Math.max(0, stations.length - 1))];
+
+    // v3: marco de la Section View del cadista → el dibujo se RECORTA a este
+    // rectángulo, igual que Civil (fuera del marco no se dibuja nada).
+    const frame = useMemo(() => {
+        if (!station) return null;
+        const l = Number(station.viewOffsetLeft);
+        const r = Number(station.viewOffsetRight);
+        const b = Number(station.viewElevMin);
+        const t = Number(station.viewElevMax);
+        if ([l, r, b, t].every(Number.isFinite) && r > l && t > b) return { l, r, b, t };
+        return null;
+    }, [station]);
 
     // panel → modelo (marcador PK + corte si está activo)
     const pushToModel = useCallback((st, opts = {}) => {
@@ -236,19 +301,59 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
         const seen = new Set();
 
         (station.sections || []).forEach((sec, i) => {
-            const cls = classify(sec.materialName || sec.styleName || sec.name);
+            // FIDELIDAD CIVIL 3D: se respeta la config del cadista tal cual.
+            // draw=false (check "Draw" de la Section View) e _Invisible NO se dibujan.
+            if (sec.draw === false) return;
+            const styleName = String(sec.styleName || '').trim();
+            const invisible = /invisible/i.test(styleName) || /invisible/i.test(sec.layer || '');
+            if (invisible) return;
+
+            const baseCls = classify(sec.materialName || sec.styleName || sec.name);
+            let cls = { ...baseCls };
+
+            // Propiedades reales extraídas de Civil: color exacto + hatch del estilo.
+            if (sec.exactColor && /^#/.test(sec.exactColor)) cls.color = sec.exactColor;
+            if (sec.isHatch !== undefined) cls.fill = !!sec.isHatch;
+            // Leyenda con el NOMBRE REAL del estilo del cadista (no la clasificación).
+            if (styleName) {
+                cls.key = `st:${styleName.toLowerCase()}`;
+                cls.label = styleName.replace(/^_+/, '');
+            }
+
             if (Array.isArray(sec.points) && sec.points.length >= 2) {
                 const pts = sec.points
                     .map((p) => [Number(p?.[0]), Number(p?.[1])])
                     .filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
                 if (pts.length < 2) return;
-                const invisible = /invisible/i.test(sec.styleName || '') || /invisible/i.test(sec.layer || '');
+                // Secciones "sin datos" en esta estación: Civil exporta una línea
+                // plana exactamente en cota 0.00 (placeholder). Civil no la dibuja
+                // (queda fuera del marco); aquí tampoco. Evita el falso CC=0.
+                const ys = pts.map((p) => p[1]);
+                if (Math.max(...ys) - Math.min(...ys) < 0.001 && Math.abs(ys[0]) < 0.01) return;
                 const relCorr = sec.sourceType === 'CorridorShape' && sec.absolute === false;
-                let finalCls = cls;
-                if (relCorr) finalCls = { ...cls, key: `corr:${cls.key}`, label: `${cls.label} (corredor)` };
-                else if (invisible) finalCls = { ...cls, key: `inv:${cls.key}`, label: `${cls.label} (oculto en Civil)` };
-                const closed = (sec.closed === true) && finalCls.fill;
-                out.push({ id: `s${i}`, cls: finalCls, pts, closed, area: sec.area, corridor: relCorr || invisible });
+
+                if (relCorr) cls = { ...cls, key: `corr:${cls.key}`, label: `${cls.label} (corredor)` };
+
+                // Un hatch ES un área: se cierra aunque la polilínea venga closed=false
+                // (p.ej. _Hatch Relleno viene abierta y por eso no se pintaba).
+                // Patrón de achurado según el estilo (como en Civil): corte=diagonal,
+                // roca/copy=puntos (grava), resto=diagonal inversa.
+                if (sec.isHatch) {
+                    const pat = /corte|excav/i.test(styleName) ? 'hatchCut'
+                        : /copy|roca/i.test(styleName) ? 'hatchRock'
+                        : 'hatchFill';
+                    // Varios contornos vienen concatenados: partirlos evita los
+                    // "puentes" (líneas que no existen en Civil).
+                    const loops = splitLoops(pts);
+                    loops.forEach((loop, k) => {
+                        // El área real de Civil solo aplica si hay UN contorno; con
+                        // varios, shoelace por loop (evita duplicar).
+                        out.push({ id: `s${i}-L${k}`, cls, pts: loop, closed: true, area: loops.length === 1 ? sec.area : 0, corridor: relCorr, pat, rawName: sec.name || '' });
+                    });
+                    return;
+                }
+                const closed = (sec.closed === true) && cls.fill;
+                out.push({ id: `s${i}`, cls, pts, closed, area: sec.area, corridor: relCorr, pat: null, rawName: sec.name || '' });
                 return;
             }
             buildChains(sec.links).forEach((chain, c) => {
@@ -283,7 +388,14 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
     useEffect(() => {
         setHidden((prev) => {
             const next = new Set(prev);
-            shapes.forEach((s) => { if (s.corridor && !userTouchedRef.current.has(s.cls.key)) next.add(s.cls.key); });
+            shapes.forEach((s) => {
+                // Estilos reales del cadista (st:) se muestran tal cual Civil; solo se
+                // auto-ocultan corredores y clasificaciones sintéticas (ln:/auto:).
+                if (s.cls.key.startsWith('st:')) return;
+                if ((s.corridor || s.cls.key.startsWith('ln:') || s.cls.isLink) && !userTouchedRef.current.has(s.cls.key)) {
+                    next.add(s.cls.key);
+                }
+            });
             return next;
         });
     }, [shapes]);
@@ -296,8 +408,11 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
             if (!s.closed || s.corridor) return;
             // Civil a veces reporta area=0 aunque el contorno exista → shoelace de respaldo
             const a = (Number.isFinite(Number(s.area)) && Number(s.area) > 0) ? Number(s.area) : shoelace(s.pts);
-            if (s.cls.key === 'corte') cut += a;
-            else if (s.cls.key === 'relleno') fill += a;
+            // Con leyenda por estilo real, clasificar por nombre/estilo; la roca
+            // ("[Copy]"/ROCA) NO es terraplén.
+            const n = `${s.cls.label} ${s.rawName || ''}`;
+            if (s.cls.key === 'corte' || /corte|excav|desmonte/i.test(n)) cut += a;
+            else if ((s.cls.key === 'relleno' || /relleno|terrapl/i.test(n)) && !/copy|roca/i.test(n)) fill += a;
         });
         return { cut, fill };
     }, [shapes]);
@@ -307,6 +422,19 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
         shapes.forEach((s) => { if (!map.has(s.cls.key)) map.set(s.cls.key, s.cls); });
         return [...map.values()];
     }, [shapes]);
+
+    useEffect(() => {
+        if (!initializedHidden.current && legend.length > 0) {
+            const initial = new Set();
+            legend.forEach(t => {
+                if (t.key.startsWith('ln:') || t.key.startsWith('auto:')) {
+                    initial.add(t.key);
+                }
+            });
+            setHidden(initial);
+            initializedHidden.current = true;
+        }
+    }, [legend]);
 
     // BBox visible (Y multiplicada por la exageración vertical)
     const bbox = useMemo(() => {
@@ -360,17 +488,84 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
         return () => el.removeEventListener('wheel', onWheel);
     }, [onWheel]);
 
+    // Imán: vértices (esquinas/quiebres) de la geometría visible, en coords SVG.
+    // Si hay marco v3, no engancha a vértices recortados (fuera del marco).
+    const snapVerts = useMemo(() => {
+        const verts = [];
+        shapes.forEach((s) => {
+            if (hidden.has(s.cls.key)) return;
+            s.pts.forEach(([x, y]) => {
+                if (frame && (x < frame.l || x > frame.r || y < frame.b || y > frame.t)) return;
+                verts.push([x, -y * aspect, y]);
+            });
+        });
+        return verts;
+    }, [shapes, hidden, aspect, frame]);
+
     const onPointerDown = (ev) => {
+        movedRef.current = false;
         dragRef.current = { start: clientToWorld(ev), view: { ...v } };
         ev.currentTarget.setPointerCapture(ev.pointerId);
     };
     const onPointerMove = (ev) => {
-        if (!dragRef.current) return;
+        // Cursor consultable: offset + cota REAL bajo el mouse (como en Civil),
+        // con IMÁN a la esquina/quiebre más cercano para picar con certeza.
         const [wx, wy] = clientToWorld(ev);
+        const thr = px * 10; // radio de imán (~10px de pantalla)
+        let best = null;
+        let bestD = thr;
+        for (const [sx, sy, yReal] of snapVerts) {
+            const dd = Math.hypot(sx - wx, sy - wy);
+            if (dd < bestD) { bestD = dd; best = { off: sx, elev: yReal }; }
+        }
+        setProbe(best ? { ...best, snapped: true } : { off: wx, elev: -wy / aspect, snapped: false });
+        if (!dragRef.current) return;
         const d = dragRef.current;
+        if (Math.hypot(wx - d.start[0], wy - d.start[1]) > px * 3) movedRef.current = true;
         setView({ ...d.view, x: d.view.x - (wx - d.start[0]), y: d.view.y - (wy - d.start[1]) });
     };
     const onPointerUp = () => { dragRef.current = null; };
+
+    // Áreas del material seleccionado (clic sobre un hatch): usa el área REAL de
+    // Civil cuando viene (>0); si no, shoelace por contorno. Suma todos los
+    // contornos del material en esta estación.
+    const selInfo = useMemo(() => {
+        if (!selKey) return null;
+        let total = 0;
+        let loops = 0;
+        let label = '';
+        let color = '#8ecbff';
+        shapes.forEach((s) => {
+            if (s.cls.key !== selKey || !s.closed || s.corridor) return;
+            total += (Number.isFinite(Number(s.area)) && Number(s.area) > 0) ? Number(s.area) : shoelace(s.pts);
+            loops += 1;
+            label = s.cls.label;
+            color = s.cls.color;
+        });
+        if (!loops) return null;
+        return { label, color, total, loops };
+    }, [selKey, shapes]);
+    const onPointerLeave = () => { setProbe(null); dragRef.current = null; };
+
+    // CT (cota de terreno) y CC (cota de fondo) en el EJE, como en Civil.
+    // Fuente: el material de EXCAVACIÓN del cadista (determinístico, sin
+    // heurísticas): el cuerpo de excavación va del terreno al fondo, así que en
+    // el eje CT = su cota superior y CC = su cota inferior.
+    const ctcc = useMemo(() => {
+        const excav = shapes.filter((s) => s.closed && !hidden.has(s.cls.key)
+            && (s.pat === 'hatchCut' || /corte|excav/i.test(`${s.cls.label} ${s.rawName || ''}`)));
+        const els = [];
+        excav.forEach((s) => els.push(...elevsAt(s.pts, 0)));
+        if (els.length >= 2) return { ct: Math.max(...els), cc: Math.min(...els) };
+        // Sin excavación cruzando el eje: cae al cuerpo cerrado visible (techo/fondo)
+        const all = [];
+        shapes.forEach((s) => {
+            if (!s.closed || hidden.has(s.cls.key)) return;
+            all.push(...elevsAt(s.pts, 0));
+        });
+        if (all.length >= 2) return { ct: Math.max(...all), cc: Math.min(...all) };
+        return { ct: null, cc: null };
+    }, [shapes, hidden]);
 
     const toggle = (key) => {
         userTouchedRef.current.add(key);
@@ -445,8 +640,27 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
                         onPointerDown={onPointerDown}
                         onPointerMove={onPointerMove}
                         onPointerUp={onPointerUp}
+                        onPointerLeave={onPointerLeave}
                         onDoubleClick={() => setView(null)}
                     >
+                        <defs>
+                            {/* Patrones estilo Civil: corte=diagonal, relleno=diagonal inversa, roca=grava */}
+                            <pattern id="hatchCut" width={px * 24} height={px * 24} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                                <line x1={0} y1={0} x2={0} y2={px * 24} stroke="currentColor" strokeWidth={px * 1.5} opacity={0.7} />
+                            </pattern>
+                            <pattern id="hatchFill" width={px * 24} height={px * 24} patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+                                <line x1={0} y1={0} x2={0} y2={px * 24} stroke="currentColor" strokeWidth={px * 1.5} opacity={0.7} />
+                            </pattern>
+                            <pattern id="hatchRock" width={px * 26} height={px * 26} patternUnits="userSpaceOnUse">
+                                <circle cx={px * 7} cy={px * 8} r={px * 3.2} fill="none" stroke="currentColor" strokeWidth={px * 1.1} opacity={0.7} />
+                                <circle cx={px * 18} cy={px * 19} r={px * 2.4} fill="none" stroke="currentColor" strokeWidth={px * 1.1} opacity={0.55} />
+                            </pattern>
+                            {frame && (
+                                <clipPath id="secFrame">
+                                    <rect x={frame.l} y={-frame.t * aspect} width={frame.r - frame.l} height={(frame.t - frame.b) * aspect} />
+                                </clipPath>
+                            )}
+                        </defs>
                         {gridX.map((gx) => (
                             <line key={`gx${gx}`} x1={gx} y1={v.y} x2={gx} y2={v.y + v.h} stroke="#2b2f34" strokeWidth={px} />
                         ))}
@@ -472,9 +686,19 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
                             </g>
                         ))}
 
+                        <g clipPath={frame ? 'url(#secFrame)' : undefined}>
                         {shapes.filter((s) => s.closed && !hidden.has(s.cls.key)).map((s) => (
                             <polygon key={s.id} points={s.pts.map(([x, y]) => `${toX(x)},${toY(y)}`).join(' ')}
-                                fill={s.cls.color} fillOpacity={0.28} stroke={s.cls.color} strokeWidth={px * 1.3} strokeOpacity={0.95}>
+                                fill={s.pat ? `url(#${s.pat})` : s.cls.color}
+                                style={{ color: s.cls.color, cursor: 'pointer' }}
+                                fillOpacity={s.pat ? 1 : 0.28}
+                                stroke={selKey === s.cls.key ? '#ffc400' : s.cls.color}
+                                strokeWidth={selKey === s.cls.key ? px * 2.6 : px * 1.3}
+                                strokeOpacity={0.95}
+                                onClick={() => {
+                                    if (movedRef.current) return; // fue arrastre, no clic
+                                    setSelKey((k) => (k === s.cls.key ? null : s.cls.key));
+                                }}>
                                 <title>{s.cls.label}{s.area != null ? ` · ${Number(s.area).toFixed(2)} m²` : ''}</title>
                             </polygon>
                         ))}
@@ -487,10 +711,50 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
                                 <title>{s.cls.label}</title>
                             </polyline>
                         ))}
+                        </g>
+
+                        {/* CT/CC en el eje, como la etiqueta de sección de Civil */}
+                        {(ctcc.ct != null || ctcc.cc != null) && (
+                            <text x={0} y={v.y + v.h - fontSize * 2.2} fill="#c6ccd4" fontSize={fontSize * 1.05} fontFamily="IBM Plex Mono, monospace" textAnchor="middle" style={{ pointerEvents: 'none' }}>
+                                {ctcc.ct != null ? `CT=${ctcc.ct.toFixed(2)}` : ''}{ctcc.ct != null && ctcc.cc != null ? '  ·  ' : ''}{ctcc.cc != null ? `CC=${ctcc.cc.toFixed(2)}` : ''}
+                            </text>
+                        )}
+
+                        {/* Cursor consultable: cruz + offset/cota reales bajo el mouse.
+                            Con imán activo (snapped) marca el vértice exacto. */}
+                        {probe && (
+                            <g style={{ pointerEvents: 'none' }}>
+                                <line x1={probe.off} y1={v.y} x2={probe.off} y2={v.y + v.h} stroke="#8ecbff" strokeWidth={px * 0.8} strokeDasharray={`${px * 4} ${px * 4}`} opacity={0.55} />
+                                <line x1={v.x} y1={-probe.elev * aspect} x2={v.x + v.w} y2={-probe.elev * aspect} stroke="#8ecbff" strokeWidth={px * 0.8} strokeDasharray={`${px * 4} ${px * 4}`} opacity={0.55} />
+                                {probe.snapped && (
+                                    <>
+                                        <circle cx={probe.off} cy={-probe.elev * aspect} r={px * 5} fill="none" stroke="#ffc400" strokeWidth={px * 1.6} />
+                                        <circle cx={probe.off} cy={-probe.elev * aspect} r={px * 1.6} fill="#ffc400" />
+                                    </>
+                                )}
+                                <text x={probe.off + px * 10} y={-probe.elev * aspect - px * 8} fill={probe.snapped ? '#ffc400' : '#8ecbff'} fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">
+                                    {`${probe.snapped ? '⊙ ' : ''}${probe.off.toFixed(2)}m · cota ${probe.elev.toFixed(2)}m`}
+                                </text>
+                            </g>
+                        )}
                     </svg>
                     <div style={{ position: 'absolute', right: 10, bottom: 8, fontSize: 10, color: '#43506b', pointerEvents: 'none' }}>
-                        rueda = zoom · arrastre = mover · doble clic = encuadrar
+                        rueda = zoom · arrastre = mover · doble clic = encuadrar · clic en material = área
                     </div>
+
+                    {/* Rótulo del material seleccionado: sus áreas respectivas */}
+                    {selInfo && (
+                        <div style={{ position: 'absolute', left: 10, top: 10, background: 'rgba(23,26,31,0.94)', border: '1px solid #33507a', borderRadius: 6, padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 3px 10px rgba(0,0,0,0.45)' }}>
+                            <span style={{ width: 12, height: 12, borderRadius: 3, background: selInfo.color, border: '1px solid rgba(255,255,255,0.35)', flexShrink: 0 }} />
+                            <div style={{ lineHeight: 1.35 }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: '#dfe6ee' }}>{selInfo.label}</div>
+                                <div style={{ fontSize: 12, color: '#8ecbff', fontFamily: 'IBM Plex Mono, monospace' }}>
+                                    Área: {selInfo.total.toFixed(3)} m²{selInfo.loops > 1 ? ` · ${selInfo.loops} contornos` : ''}
+                                </div>
+                            </div>
+                            <button onClick={() => setSelKey(null)} style={{ background: 'transparent', border: 'none', color: '#7f8791', cursor: 'pointer', fontSize: 14, padding: '0 2px' }}>✕</button>
+                        </div>
+                    )}
                 </div>
             ) : (
                 <div style={{ flex: 1, minHeight: 0, display: 'flex', background: '#191b1e' }}>
