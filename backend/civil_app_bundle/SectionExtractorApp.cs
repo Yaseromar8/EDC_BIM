@@ -34,6 +34,12 @@ namespace AlignmentExtractorApp
         public string sampleLineGroupId { get; set; }
         public string sampleLineName { get; set; }
         public double station { get; set; }
+        // v3: marco de la Section View del cadista (Civil recorta el dibujo a
+        // este rectángulo; el visor debe hacer lo mismo).
+        public double? viewOffsetLeft { get; set; }
+        public double? viewOffsetRight { get; set; }
+        public double? viewElevMin { get; set; }
+        public double? viewElevMax { get; set; }
         public List<SectionShapeV2> sections { get; set; } = new List<SectionShapeV2>();
     }
 
@@ -60,7 +66,7 @@ namespace AlignmentExtractorApp
 
     public class SectionResultV2
     {
-        public int schemaVersion { get; set; } = 2;
+        public int schemaVersion { get; set; } = 3;
         public string generatedAt { get; set; }
         public List<string> warnings { get; set; } = new List<string>();
         public List<SectionDataV2> stations { get; set; } = new List<SectionDataV2>();
@@ -120,6 +126,36 @@ namespace AlignmentExtractorApp
             return null;
         }
 
+        // Área (m²) de un contorno con posibles VARIOS loops concatenados (los
+        // hatches de Civil vuelven al punto inicial de cada loop). Shoelace por
+        // loop y suma — la matemática vive AQUÍ, el visor solo dibuja.
+        private static double LoopArea(List<double?[]> pts)
+        {
+            double total = 0;
+            int start = 0;
+            Action<int, int> addLoop = (s, e) => {
+                double a = 0;
+                for (int i = s; i < e; i++) {
+                    var p1 = pts[i]; var p2 = pts[i + 1];
+                    if (!p1[0].HasValue || !p2[0].HasValue) return;
+                    a += p1[0].Value * p2[1].Value - p2[0].Value * p1[1].Value;
+                }
+                total += Math.Abs(a) / 2.0;
+            };
+            for (int i = start + 2; i < pts.Count; i++) {
+                if (!pts[i][0].HasValue || !pts[start][0].HasValue) continue;
+                double dx = pts[i][0].Value - pts[start][0].Value;
+                double dy = pts[i][1].Value - pts[start][1].Value;
+                if (Math.Sqrt(dx * dx + dy * dy) < 0.05) {
+                    addLoop(start, i);
+                    start = i + 1;
+                    i = start + 1;
+                }
+            }
+            if (start < pts.Count - 1) addLoop(start, pts.Count - 1);
+            return total;
+        }
+
         private static double? Clean(double? v)
         {
             if (!v.HasValue) return null;
@@ -157,13 +193,15 @@ namespace AlignmentExtractorApp
 
             using (Transaction trans = db.TransactionManager.StartTransaction())
             {
-                // ── SectionViews: escanear TODOS los BlockTableRecords (no solo ModelSpace)
-                // y volcar diagnóstico de clases + props de override para mapear Draw/Style.
+                // ── SectionViews (AeccDbGraphCrossSection): leer la config REAL del
+                // cadista — (a) marco de la vista (Offset/Elevation min-max) y
+                // (b) GraphOverrides = filas del tab "Sections" (Draw / estilo).
                 var secOverridesMap = new Dictionary<ObjectId, dynamic>();
+                var overridesBySampleLine = new Dictionary<ObjectId, List<dynamic>>();
+                var frameBySampleLine = new Dictionary<ObjectId, double?[]>();
                 try {
                     var bt = trans.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
-                    var classCounts = new Dictionary<string, int>();
-                    var dumpedTypes = new HashSet<string>();
+                    bool ovDumped = false;
                     foreach (ObjectId btrId in bt) {
                         BlockTableRecord btr = null;
                         try { btr = trans.GetObject(btrId, OpenMode.ForRead) as BlockTableRecord; } catch { }
@@ -171,31 +209,48 @@ namespace AlignmentExtractorApp
                         foreach (ObjectId entId in btr) {
                             string cls;
                             try { cls = entId.ObjectClass.Name; } catch { continue; }
-                            if (cls.IndexOf("Section", StringComparison.OrdinalIgnoreCase) < 0) continue;
-                            classCounts[cls] = (classCounts.TryGetValue(cls, out var c) ? c : 0) + 1;
+                            if (cls != "AeccDbGraphCrossSection" && cls != "AeccDbGraphSectionView" && cls != "AeccDbSectionView") continue;
+                            dynamic sv = null;
+                            try { sv = trans.GetObject(entId, OpenMode.ForRead); } catch { }
+                            if (sv == null) continue;
 
-                            if (cls == "AeccDbGraphCrossSection" || cls == "AeccDbGraphSectionView" || cls == "AeccDbSectionView") {
-                                dynamic sv = null;
-                                try { sv = trans.GetObject(entId, OpenMode.ForRead); } catch { }
-                                if (sv == null) continue;
-                                if (dumpedTypes.Add(cls)) {
-                                    var names = new List<string>();
-                                    foreach (var p in ((object)sv).GetType().GetProperties()) names.Add(p.Name);
-                                    result.warnings.Add($"DIAG {cls} props: {string.Join(",", names)}");
-                                    var mnames = new List<string>();
-                                    foreach (var m in ((object)sv).GetType().GetMethods()) {
-                                        if (m.Name.IndexOf("Section", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                            m.Name.IndexOf("Display", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                            m.Name.IndexOf("Graph", StringComparison.OrdinalIgnoreCase) >= 0) mnames.Add(m.Name);
+                            // (a) marco de la vista, indexado por su Sample Line
+                            ObjectId slKey = ObjectId.Null;
+                            try { slKey = (ObjectId)sv.SampleLineId; } catch { }
+                            if (!slKey.IsNull) {
+                                frameBySampleLine[slKey] = new double?[] {
+                                    Clean(TryNum(sv, "OffsetLeft")),
+                                    Clean(TryNum(sv, "OffsetRight")),
+                                    Clean(TryNum(sv, "ElevationMin")),
+                                    Clean(TryNum(sv, "ElevationMax"))
+                                };
+                            }
+
+                            // (b) filas de la Section View: Draw real por sección
+                            try {
+                                dynamic overrides = sv.GraphOverrides;
+                                if (overrides != null) {
+                                    var ovList = new List<dynamic>();
+                                    foreach (var item in overrides) {
+                                        if (!ovDumped) {
+                                            ovDumped = true;
+                                            var pn = new List<string>();
+                                            foreach (var p in ((object)item).GetType().GetProperties()) pn.Add(p.Name);
+                                            result.warnings.Add($"DIAG GraphOverride props: {string.Join(",", pn)}");
+                                        }
+                                        ovList.Add(item);
+                                        // mapear directo por id de la sección si el SDK lo expone
+                                        var secRef = TryGet(item, "SectionId") ?? TryGet(item, "EntityId") ?? TryGet(item, "Id");
+                                        if (secRef is ObjectId oid && !oid.IsNull) secOverridesMap[oid] = item;
                                     }
-                                    result.warnings.Add($"DIAG {cls} methods: {string.Join(",", mnames)}");
+                                    if (!slKey.IsNull) overridesBySampleLine[slKey] = ovList;
                                 }
+                            } catch (Exception goEx) {
+                                result.warnings.Add("GraphOverrides: " + goEx.Message);
                             }
                         }
                     }
-                    var summary = new List<string>();
-                    foreach (var kv in classCounts) summary.Add($"{kv.Key}={kv.Value}");
-                    result.warnings.Add($"DIAG clases Section*: {string.Join(" | ", summary)}");
+                    result.warnings.Add($"DIAG v3: vistas con marco={frameBySampleLine.Count}, overrides mapeados por id={secOverridesMap.Count}, por vista={overridesBySampleLine.Count}");
                 } catch (Exception e) {
                     result.warnings.Add("Error escaneando SectionViews: " + e.Message);
                 }
@@ -233,12 +288,24 @@ namespace AlignmentExtractorApp
                                 station = sl.Station
                             };
 
+                            // v3: marco de la Section View de esta estación (para recortar como Civil)
+                            if (frameBySampleLine.TryGetValue(slId, out var frame)) {
+                                secData.viewOffsetLeft = frame[0];
+                                secData.viewOffsetRight = frame[1];
+                                secData.viewElevMin = frame[2];
+                                secData.viewElevMax = frame[3];
+                            }
+                            List<dynamic> slOverrides = null;
+                            overridesBySampleLine.TryGetValue(slId, out slOverrides);
+
                             var sampledSources = new HashSet<ObjectId>();
 
                             // ── 1) Secciones del sample line: puntos EN ORDEN + estilo + área ──
                             ObjectIdCollection sectionIds = sl.GetSectionIds();
+                            int secIdx = -1;
                             foreach (ObjectId secId in sectionIds)
                             {
+                                secIdx++;
                                 var section = trans.GetObject(secId, OpenMode.ForRead) as Autodesk.Civil.DatabaseServices.Section;
                                 if (section == null) continue;
                                 try { sampledSources.Add(section.SourceId); } catch { }
@@ -252,10 +319,18 @@ namespace AlignmentExtractorApp
                                 // Identidad LIMPIA: estilo + objeto de origen + material QTO + capa
                                 bool draw = true;
                                 ObjectId? styleId = null;
-                                
-                                if (secOverridesMap.TryGetValue(secId, out dynamic ov)) {
+
+                                // Draw REAL del cadista: por id de sección; si el SDK no expone
+                                // el id en la fila, por índice (las filas van en el orden de
+                                // GetSectionIds de la misma sample line).
+                                dynamic ov = null;
+                                if (!secOverridesMap.TryGetValue(secId, out ov)) {
+                                    if (slOverrides != null && secIdx < slOverrides.Count) ov = slOverrides[secIdx];
+                                }
+                                if (ov != null) {
                                     try {
-                                        if (TryGet(ov, "Draw") is bool drw) draw = drw;
+                                        var drawVal = TryGet(ov, "Draw") ?? TryGet(ov, "DrawSection") ?? TryGet(ov, "Visible");
+                                        if (drawVal is bool drw) draw = drw;
                                         if (TryGet(ov, "UseOverrideStyle") is bool uo && uo) {
                                             styleId = TryGet(ov, "OverrideStyleId") as ObjectId?;
                                         }
@@ -363,6 +438,15 @@ namespace AlignmentExtractorApp
                                     if (f[0].HasValue && l[0].HasValue &&
                                         Math.Abs(f[0].Value - l[0].Value) < 0.001 && Math.Abs(f[1].Value - l[1].Value) < 0.001)
                                         shape.closed = true;
+                                }
+
+                                // v3: área oficial calculada AQUÍ (Civil suele exponer 0).
+                                // Solo para cuerpos (hatch/cerrados); shoelace por loop.
+                                if ((!shape.area.HasValue || shape.area.Value <= 0)
+                                    && (shape.isHatch || shape.closed) && shape.points.Count >= 3)
+                                {
+                                    var a = LoopArea(shape.points);
+                                    if (a > 0) shape.area = Math.Round(a, 4);
                                 }
 
                                 secData.sections.Add(shape);
