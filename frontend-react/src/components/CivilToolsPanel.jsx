@@ -287,7 +287,7 @@ const navButtonStyle = {
     fontSize: 15
 };
 
-const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
+const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) => {
     const initialCache = useMemo(getInitialCache, []);
     const [alignmentData, setAlignmentData] = useState(() => initialCache.alignmentData || []);
     const [selectedAlignmentId, setSelectedAlignmentId] = useState(initialCache.selectedAlignmentId || '');
@@ -299,6 +299,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
     const [extractMessage, setExtractMessage] = useState(initialCache.extractMessage || '');
     const [extractError, setExtractError] = useState('');
     const [extractReportUrl, setExtractReportUrl] = useState(initialCache.extractReportUrl || '');
+    const [civilOriginalUrn, setCivilOriginalUrn] = useState(initialCache.civilOriginalUrn || '');
     const [contextData, setContextData] = useState(initialCache.contextData || null);
     const [stationInput, setStationInput] = useState(initialCache.stationInput || '0+000.00');
     const [searchOpen, setSearchOpen] = useState(false);
@@ -318,9 +319,12 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
     const initialReplayRef = useRef(false);
 
     const dwgModelsList = useMemo(
-        () => models.filter(m => m.name && m.name.toLowerCase().includes('.dwg')),
+        () => models.filter(m => m.name && m.name.toLowerCase().endsWith('.dwg')),
         [models]
     );
+
+    const [availableCivilFiles, setAvailableCivilFiles] = useState(initialCache.availableCivilFiles || dwgModelsList);
+    const [civilDbItems, setCivilDbItems] = useState(initialCache.civilDbItems || []);
 
     const civilScopeUrn = activeModelUrn || 'global';
 
@@ -390,12 +394,15 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
             selectedAlignmentId,
             selectedProfileName,
             selectedDwgUrn,
+            civilOriginalUrn,
             contextData,
             stationInput,
             stationLabelsVisible,
             extractProgress,
             extractMessage,
             extractReportUrl,
+            availableCivilFiles,
+            civilDbItems,
             ...patch,
             updatedAt: Date.now()
         };
@@ -408,9 +415,12 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
         extractReportUrl,
         selectedAlignmentId,
         selectedDwgUrn,
+        civilOriginalUrn,
         selectedProfileName,
         stationInput,
-        stationLabelsVisible
+        stationLabelsVisible,
+        availableCivilFiles,
+        civilDbItems
     ]);
 
     useEffect(() => {
@@ -428,9 +438,13 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
             setAlignmentData(cached.alignmentData || []);
             setSelectedAlignmentId(cached.selectedAlignmentId || '');
             setSelectedProfileName(cached.selectedProfileName || '');
+            setSelectedDwgUrn(cached.selectedDwgUrn || '');
+            setCivilOriginalUrn(cached.civilOriginalUrn || '');
             setContextData(cached.contextData || null);
             setStationInput(cached.stationInput || '0+000.00');
             setStationLabelsVisible(cached.stationLabelsVisible ?? true);
+            if (cached.availableCivilFiles) setAvailableCivilFiles(cached.availableCivilFiles);
+            if (cached.civilDbItems) setCivilDbItems(cached.civilDbItems);
             setExtractProgress(cached.extractProgress || 0);
             setExtractMessage(cached.extractMessage || '');
             setExtractReportUrl(cached.extractReportUrl || '');
@@ -451,32 +465,79 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
         setExtractMessage('');
         setExtractError('');
         setExtractReportUrl('');
+        setCivilOriginalUrn('');
         setSectionJSON(null);
         setSectionIndex(0);
         setSectionProgress(0);
         setSectionMessage('');
 
-        // PERSISTENCIA: sin caché de sesión, buscar la extracción GUARDADA en el
-        // backend (la primera extracción es permanente; solo cambia al re-extraer).
-        const persistUrn = selectedDwgUrn || activeModelUrn;
-        if (!persistUrn) return;
+        if (!civilScopeUrn) return;
+        
         let alive = true;
-        const params = new URLSearchParams({
-            urn: persistUrn,
-            scope_urn: civilScopeUrn
-        });
+        const params = new URLSearchParams({ scope_urn: civilScopeUrn });
+        
         apiFetch(`${BACKEND_URL}/api/civil/alignments?${params.toString()}`)
             .then((r) => r.json())
             .then((d) => {
-                if (!alive || !d.found || !Array.isArray(d.data) || !d.data.length) return;
-                const alignmentJSON = normalizeAlignments(d.data);
+                if (!alive) return;
+                
+                const dbItems = d.items || [];
+                if (dbItems.length === 0 && d.found && d.data) {
+                    dbItems.push({
+                        urn: d.urn || civilScopeUrn,
+                        data: d.data,
+                        updated_at: d.updated_at
+                    });
+                }
+
+                setCivilDbItems(dbItems);
+
+                const combined = [...dwgModelsList];
+                const seenUrns = new Set(combined.map(m => m.urn));
+
+                dbItems.forEach(item => {
+                    if (!seenUrns.has(item.urn)) {
+                        const docMatch = docs.find(doc => doc.urn === item.urn);
+                        combined.push({
+                            urn: item.urn,
+                            name: docMatch ? docMatch.name : `Carga en la nube (${item.urn.substring(0, 10)}...)`
+                        });
+                        seenUrns.add(item.urn);
+                    }
+                });
+
+                setAvailableCivilFiles(combined);
+
+                let activeUrn = selectedDwgUrn;
+                if (!activeUrn && combined.length > 0) {
+                    activeUrn = combined[0].urn;
+                    setSelectedDwgUrn(activeUrn);
+                }
+
+                let targetData = null;
+                let targetDate = '';
+                
+                if (activeUrn) {
+                    const activeDbItem = dbItems.find(item => item.urn === activeUrn);
+                    if (activeDbItem) {
+                        targetData = activeDbItem.data;
+                        targetDate = activeDbItem.updated_at || '';
+                        setCivilOriginalUrn(activeDbItem.urn);
+                    }
+                }
+
+                if (!targetData) return;
+                
+                if (!Array.isArray(targetData) || !targetData.length) return;
+                
+                const alignmentJSON = normalizeAlignments(targetData);
                 setAlignmentData(alignmentJSON);
-                setExtractMessage(`Extracción guardada: ${alignmentJSON.length} ejes (${(d.updated_at || '').slice(0, 10)})`);
-                window.__lobCivilAlignments = alignmentJSON; // visible para 4D LOB
+                setExtractMessage(`Extracción de base de datos cargada: ${alignmentJSON.length} ejes (${targetDate.slice(0, 10)})`);
+                window.__lobCivilAlignments = alignmentJSON;
             })
-            .catch(() => { /* sin persistencia aún */ });
+            .catch(() => { });
         return () => { alive = false; };
-    }, [activeCacheKey, selectedDwgUrn, activeModelUrn, civilScopeUrn]);
+    }, [activeCacheKey, activeModelUrn, docs, dwgModelsList, selectedDwgUrn]);
 
     useEffect(() => {
         const handleContextChange = (e) => {
@@ -633,21 +694,37 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
     // extracción guardada — disponible al instante tras recargar la página.
     useEffect(() => {
         const persistUrn = selectedDwgUrn || activeModelUrn;
-        if (!persistUrn || sectionJSON) return undefined;
+        if ((!persistUrn && !civilScopeUrn) || sectionJSON) return undefined;
+        
         let alive = true;
         const params = new URLSearchParams({
-            urn: persistUrn,
-            scope_urn: civilScopeUrn
+            scope_urn: civilScopeUrn || ''
         });
+        if (persistUrn) params.set('urn', persistUrn);
+        
         apiFetch(`${BACKEND_URL}/api/civil/sections?${params.toString()}`)
             .then((r) => r.json())
             .then((d) => {
-                if (!alive || !d.found || !d.data) return;
-                const count = Array.isArray(d.data) ? d.data.length : (d.data.stations?.length || 0);
+                if (!alive) return;
+                
+                let targetData = null;
+                let targetDate = '';
+                
+                if (d.items && d.items.length > 0) {
+                    targetData = d.items[0].data;
+                    targetDate = d.items[0].updated_at || '';
+                } else if (d.found && d.data) {
+                    targetData = d.data;
+                    targetDate = d.updated_at || '';
+                }
+                
+                if (!targetData) return;
+                const count = Array.isArray(targetData) ? targetData.length : (targetData.stations?.length || 0);
                 if (!count) return;
-                setSectionJSON(d.data);
+                
+                setSectionJSON(targetData);
                 setSectionProgress(100);
-                setSectionMessage(`Secciones guardadas: ${count} estaciones · ${(d.updated_at || '').slice(0, 10)}`);
+                setSectionMessage(`Secciones guardadas: ${count} estaciones · ${targetDate.slice(0, 10)}`);
             })
             .catch(() => { /* sin persistencia aún */ });
         return () => { alive = false; };
@@ -679,14 +756,18 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
         }
     }, [alignmentData, selectedAlignment, selectedAlignmentId, applyAlignment, getExtension, updateStation]);
 
+    // Project ACC para resolver urns wipprod (archivos vinculados de Docs):
+    // 1) el proyecto del propio DWG si está cargado en el visor;
+    // 2) el de CUALQUIER modelo cargado (mismo proyecto ACC del frente).
+    const resolveProjectId = (urn) => {
+        const own = dwgModelsList.find(item => item.urn === urn)?.projectId;
+        if (own) return own;
+        return (models.find(m => m?.projectId)?.projectId) || null;
+    };
+
     const handleExtractCurves = async () => {
         let realUrn = selectedDwgUrn || activeModelUrn;
-        let realProjectId = null;
-
-        if (selectedDwgUrn) {
-            const model = dwgModelsList.find(item => item.urn === selectedDwgUrn);
-            if (model) realProjectId = model.projectId;
-        }
+        const realProjectId = resolveProjectId(selectedDwgUrn || realUrn);
 
         if (!realUrn) {
             alert('Se necesita un URN valido para extraer curvas.');
@@ -792,6 +873,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
                                 urn: realUrn,
                                 model_urn: civilScopeUrn,
                                 scope_urn: civilScopeUrn,
+                                acc_project_id: realProjectId,
                                 data: alignmentJSON
                             })
                         }).catch((e) => console.warn('[CivilTools] No se pudo persistir la extracción:', e));
@@ -842,20 +924,22 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
     // SEC: misma UX de carga que EXTRAER (porcentaje visible, sin alerts) y
     // resultado PERSISTENTE (se guarda en el backend; se reemplaza al re-extraer).
     const handleExtractSections = async () => {
-        const realUrn = selectedDwgUrn || activeModelUrn;
-        let realProjectId = null;
-        if (selectedDwgUrn) {
-            const model = dwgModelsList.find(item => item.urn === selectedDwgUrn);
-            if (model) realProjectId = model.projectId;
-        }
+        const realUrn = selectedDwgUrn || civilOriginalUrn || activeModelUrn;
+        const realProjectId = resolveProjectId(selectedDwgUrn || realUrn);
         if (!realUrn || isExtractingSections) return;
+
+        if (sectionJSON) {
+            const reextract = window.confirm('Ya existen secciones extraídas para este archivo. ¿Deseas volver a extraerlas desde Civil 3D?');
+            if (!reextract) return;
+        }
 
         setIsExtractingSections(true);
         setSectionProgress(5);
         setSectionMessage('Enviando WorkItem de secciones a Civil 3D…');
 
         const fail = (msg) => {
-            setSectionMessage(msg);
+            // Claridad: la extracción NO corrió; la data guardada anterior queda intacta.
+            setSectionMessage(`❌ NO se extrajo (se mantiene la data anterior). ${msg}`);
             setSectionProgress(0);
             setIsExtractingSections(false);
         };
@@ -864,7 +948,11 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
             const res = await apiFetch(`${BACKEND_URL}/api/civil/extract-sections-test`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ urn: realUrn, project_id: realProjectId })
+                body: JSON.stringify({ 
+                    urn: realUrn, 
+                    project_id: realProjectId,
+                    scope_urn: civilScopeUrn 
+                })
             });
             const data = await res.json();
             if (!res.ok) { fail(`No se pudo iniciar: ${data.error || 'error desconocido'}`); return; }
@@ -920,6 +1008,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
                                     urn: realUrn,
                                     model_urn: civilScopeUrn,
                                     scope_urn: civilScopeUrn,
+                                    acc_project_id: realProjectId,
                                     data: result
                                 })
                             });
@@ -966,9 +1055,50 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
         persistCache({ selectedAlignmentId: '', selectedProfileName: '', contextData: null });
     };
 
+    // Limpieza explícita: borra ejes+secciones guardados de este archivo en
+    // este frente (BD y estado local). Sin ambigüedad de "¿extrajo o no?":
+    // después de limpiar, lo que veas es SOLO lo que vuelvas a extraer.
+    const handleClearCivilData = async () => {
+        const target = selectedDwgUrn || civilOriginalUrn || activeModelUrn;
+        if (!target) return;
+        const name = availableCivilFiles.find(f => f.urn === target)?.name || 'este archivo';
+        const ok = window.confirm(
+            `Se borrará la extracción guardada (ejes Y secciones) de "${name}" en este frente.\n` +
+            'El DWG no se toca — puedes volver a extraer cuando quieras.\n\n¿Continuar?'
+        );
+        if (!ok) return;
+        try {
+            const q = `urn=${encodeURIComponent(target)}&scope_urn=${encodeURIComponent(civilScopeUrn)}`;
+            await apiFetch(`${BACKEND_URL}/api/civil/alignments?${q}`, { method: 'DELETE' });
+            await apiFetch(`${BACKEND_URL}/api/civil/sections?${q}`, { method: 'DELETE' });
+        } catch (e) { console.warn('[CivilTools] limpieza:', e); }
+        const remaining = civilDbItems.filter(i => i.urn !== target);
+        setCivilDbItems(remaining);
+        setAlignmentData([]);
+        setSectionJSON(null);
+        setSectionIndex(0);
+        setSectionProgress(0);
+        setSectionMessage('');
+        setExtractProgress(0);
+        setExtractError('');
+        setExtractMessage('🗑 Datos limpiados. Extrae de nuevo cuando quieras.');
+        setCivilOriginalUrn('');
+        window.__lobCivilAlignments = null;
+        clearSelection();
+        persistCache({
+            alignmentData: [],
+            civilOriginalUrn: '',
+            extractProgress: 0,
+            extractMessage: '🗑 Datos limpiados. Extrae de nuevo cuando quieras.',
+            civilDbItems: remaining
+        });
+    };
+
     const emptyText = isExtracting
         ? 'Extrayendo alineamientos desde Civil 3D...'
-        : 'Extrae curvas para elegir un eje o perfil.';
+        : (alignmentData && alignmentData.length > 0
+            ? 'Abre el menú superior y selecciona un eje o perfil.'
+            : 'Extrae curvas para elegir un eje o perfil.');
 
     const currentProfileLabel = selectedProfile
         ? `${selectedAlignment?.alignmentId || ''} / ${selectedProfile.name}`
@@ -986,12 +1116,28 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
             </div>
 
             <div className="sfp-list" style={{ padding: 12, gap: 12 }}>
-                {dwgModelsList.length > 1 && (
+                {availableCivilFiles.length > 0 && (
                     <select
                         value={selectedDwgUrn}
+                        disabled={availableCivilFiles.length === 1}
                         onChange={(e) => {
-                            setSelectedDwgUrn(e.target.value);
-                            persistCache({ selectedDwgUrn: e.target.value });
+                            const newUrn = e.target.value;
+                            setSelectedDwgUrn(newUrn);
+                            
+                            // Load data from cache immediately if available
+                            const targetItem = civilDbItems.find(i => i.urn === newUrn);
+                            if (targetItem && Array.isArray(targetItem.data)) {
+                                const newAlignmentJSON = normalizeAlignments(targetItem.data);
+                                setAlignmentData(newAlignmentJSON);
+                                setCivilOriginalUrn(targetItem.urn);
+                                setExtractMessage(`Cambiado a: ${newAlignmentJSON.length} ejes`);
+                            } else {
+                                setAlignmentData([]);
+                                setExtractMessage('');
+                            }
+                            
+                            persistCache({ selectedDwgUrn: newUrn });
+                            clearSelection();
                         }}
                         style={{
                             ...controlStyle,
@@ -1001,7 +1147,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
                             fontSize: 12
                         }}
                     >
-                        {dwgModelsList.map(model => (
+                        {availableCivilFiles.map(model => (
                             <option key={model.urn} value={model.urn}>{model.name}</option>
                         ))}
                     </select>
@@ -1077,6 +1223,26 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], onClose }) => {
                         }}
                     >
                         {isExtractingSections ? `${sectionProgress}%` : 'Sec'}
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={handleClearCivilData}
+                        disabled={isExtracting || isExtractingSections}
+                        title="Limpiar datos extraídos (ejes y secciones) de este archivo en este frente. El DWG no se toca; puedes re-extraer cuando quieras."
+                        style={{
+                            height: 34,
+                            border: '1px solid #7a4a4a',
+                            background: 'transparent',
+                            color: '#d99',
+                            borderRadius: 4,
+                            padding: '0 9px',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        🗑
                     </button>
 
                     {searchOpen && (

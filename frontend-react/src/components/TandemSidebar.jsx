@@ -245,6 +245,7 @@ const TandemSidebar = ({
                 <CivilToolsPanel
                     activeModelUrn={activeModelUrn}
                     models={models}
+                    docs={trackingData?.docs || []}
                     onClose={onClosePanel}
                 />
             )}

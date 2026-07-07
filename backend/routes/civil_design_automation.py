@@ -274,6 +274,26 @@ def extract_sections_test():
         project_id = data.get('project_id')
         input_url = data.get('input_url')
         output_url = data.get('output_url')
+
+        # Archivos vinculados de Docs (urn wipprod) necesitan el project ACC.
+        # Si el navegador no lo tiene (archivo elegido desde la BD), lo buscamos
+        # en la extracción de alineamientos guardada.
+        if urn and not project_id and not input_url:
+            try:
+                from db import get_db_connection
+                with get_db_connection() as _conn:
+                    _cur = _conn.cursor()
+                    _cur.execute("""
+                        SELECT acc_project_id FROM civil_alignments
+                        WHERE urn = %s AND acc_project_id IS NOT NULL
+                        ORDER BY updated_at DESC LIMIT 1
+                    """, (urn,))
+                    _row = _cur.fetchone()
+                    if _row and _row[0]:
+                        project_id = _row[0]
+            except Exception:
+                pass
+
         # Usamos un nombre diferente para no chocar con los JSONs de curvas
         result_object_name = f"section_result_{uuid.uuid4().hex}.json"
         
@@ -476,6 +496,9 @@ def ensure_civil_alignments_table():
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""")
             _ensure_scoped_civil_table(cur, 'civil_alignments')
+            # ACC project (b.xxx): necesario para re-extraer archivos vinculados
+            # de Docs (urn wipprod) sin depender del contexto del navegador.
+            cur.execute("ALTER TABLE civil_alignments ADD COLUMN IF NOT EXISTS acc_project_id TEXT")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_civil_alignments_model ON civil_alignments(model_urn)")
             # Secciones transversales: mismo patrón (permanente hasta re-extraer)
             cur.execute("""
@@ -487,6 +510,7 @@ def ensure_civil_alignments_table():
                     updated_at TIMESTAMP DEFAULT NOW()
                 )""")
             _ensure_scoped_civil_table(cur, 'civil_sections')
+            cur.execute("ALTER TABLE civil_sections ADD COLUMN IF NOT EXISTS acc_project_id TEXT")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_civil_sections_model ON civil_sections(model_urn)")
             conn.commit()
             print("[civil] Tablas civil_alignments y civil_sections listas.")
@@ -494,7 +518,7 @@ def ensure_civil_alignments_table():
         print(f"[civil] ensure_civil_alignments_table: {e}")
 
 
-@civil_da_bp.route('/api/civil/sections', methods=['GET', 'POST'])
+@civil_da_bp.route('/api/civil/sections', methods=['GET', 'POST', 'DELETE'])
 def civil_sections():
     """Persistencia de secciones extraídas. GET ?urn= → JSON guardado.
     POST {urn, model_urn, data} → guarda/reemplaza (solo al re-extraer)."""
@@ -504,8 +528,22 @@ def civil_sections():
         if request.method == 'GET':
             urn = request.args.get('urn')
             scope_urn = _civil_scope_from_args()
-            if not urn:
+            if not urn and not scope_urn:
                 return jsonify({'error': 'Falta urn'}), 400
+            if not urn:
+                # Listado por frente (el panel Civil pide solo ?scope_urn= y toma
+                # items[0]; el más reciente primero).
+                with get_db_connection() as conn:
+                    cur = conn.cursor()
+                    cur.execute("""
+                        SELECT urn, data, updated_at::text, scope_urn
+                        FROM civil_sections
+                        WHERE scope_urn = %s
+                        ORDER BY updated_at DESC
+                    """, (scope_urn,))
+                    return jsonify({'items': [
+                        {'urn': r[0], 'data': r[1], 'updated_at': r[2], 'scope_urn': r[3]} for r in cur.fetchall()
+                    ]}), 200
             with get_db_connection() as conn:
                 cur = conn.cursor()
                 if scope_urn:
@@ -527,6 +565,25 @@ def civil_sections():
                     return jsonify({'found': False}), 200
                 return jsonify({'found': True, 'data': row[0], 'updated_at': row[1], 'scope_urn': row[2]}), 200
 
+        if request.method == 'DELETE':
+            # Limpieza explícita: borra las secciones guardadas del archivo (o de
+            # todo el frente si no llega urn). El usuario decide empezar de cero.
+            urn = request.args.get('urn')
+            scope_urn = _civil_scope_from_args()
+            if not scope_urn and not urn:
+                return jsonify({'error': 'Falta urn o scope_urn'}), 400
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                if urn and scope_urn:
+                    cur.execute("DELETE FROM civil_sections WHERE scope_urn = %s AND urn = %s", (scope_urn, urn))
+                elif urn:
+                    cur.execute("DELETE FROM civil_sections WHERE urn = %s", (urn,))
+                else:
+                    cur.execute("DELETE FROM civil_sections WHERE scope_urn = %s", (scope_urn,))
+                deleted = cur.rowcount
+                conn.commit()
+            return jsonify({'status': 'ok', 'deleted': deleted}), 200
+
         payload = request.get_json() or {}
         urn = payload.get('urn')
         data = payload.get('data')
@@ -536,13 +593,14 @@ def civil_sections():
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
-                INSERT INTO civil_sections (scope_urn, urn, model_urn, data, updated_at)
-                VALUES (%s, %s, %s, %s::jsonb, NOW())
+                INSERT INTO civil_sections (scope_urn, urn, model_urn, data, acc_project_id, updated_at)
+                VALUES (%s, %s, %s, %s::jsonb, %s, NOW())
                 ON CONFLICT (scope_urn, urn) DO UPDATE SET
                     model_urn = EXCLUDED.model_urn,
                     data = EXCLUDED.data,
+                    acc_project_id = COALESCE(EXCLUDED.acc_project_id, civil_sections.acc_project_id),
                     updated_at = NOW()""",
-                (scope_urn, urn, payload.get('model_urn'), _json.dumps(data)))
+                (scope_urn, urn, payload.get('model_urn'), _json.dumps(data), payload.get('acc_project_id')))
             conn.commit()
         return jsonify({'status': 'ok', 'scope_urn': scope_urn}), 200
     except Exception as e:
@@ -550,7 +608,7 @@ def civil_sections():
         return jsonify({'error': str(e)}), 500
 
 
-@civil_da_bp.route('/api/civil/alignments', methods=['GET', 'POST'])
+@civil_da_bp.route('/api/civil/alignments', methods=['GET', 'POST', 'DELETE'])
 def civil_alignments():
     """GET ?urn= (o ?model_urn= para todos los del frente) → JSON persistido.
     POST {urn, model_urn, data} → guarda/reemplaza la extracción (explícito)."""
@@ -582,14 +640,34 @@ def civil_alignments():
                     if not row:
                         return jsonify({'found': False}), 200
                     return jsonify({'found': True, 'data': row[0], 'updated_at': row[1], 'scope_urn': row[2]}), 200
-                if model_urn:
+                if model_urn or scope_urn:
+                    # Listado por frente: el panel Civil pide solo ?scope_urn= para
+                    # poblar el selector multi-archivo (varias topos/DWG por frente).
+                    key = scope_urn or model_urn
                     cur.execute("""SELECT urn, data, updated_at::text, scope_urn FROM civil_alignments
                                    WHERE scope_urn = %s OR model_urn = %s
-                                   ORDER BY updated_at DESC""", (scope_urn or model_urn, model_urn))
+                                   ORDER BY updated_at DESC""", (key, model_urn or key))
                     return jsonify({'items': [
                         {'urn': r[0], 'data': r[1], 'updated_at': r[2], 'scope_urn': r[3]} for r in cur.fetchall()
                     ]}), 200
             return jsonify({'error': 'Falta urn o model_urn'}), 400
+
+        if request.method == 'DELETE':
+            urn = request.args.get('urn')
+            scope_urn = _civil_scope_from_args()
+            if not scope_urn and not urn:
+                return jsonify({'error': 'Falta urn o scope_urn'}), 400
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                if urn and scope_urn:
+                    cur.execute("DELETE FROM civil_alignments WHERE scope_urn = %s AND urn = %s", (scope_urn, urn))
+                elif urn:
+                    cur.execute("DELETE FROM civil_alignments WHERE urn = %s", (urn,))
+                else:
+                    cur.execute("DELETE FROM civil_alignments WHERE scope_urn = %s", (scope_urn,))
+                deleted = cur.rowcount
+                conn.commit()
+            return jsonify({'status': 'ok', 'deleted': deleted}), 200
 
         payload = request.get_json() or {}
         urn = payload.get('urn')
@@ -600,13 +678,14 @@ def civil_alignments():
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
-                INSERT INTO civil_alignments (scope_urn, urn, model_urn, data, updated_at)
-                VALUES (%s, %s, %s, %s::jsonb, NOW())
+                INSERT INTO civil_alignments (scope_urn, urn, model_urn, data, acc_project_id, updated_at)
+                VALUES (%s, %s, %s, %s::jsonb, %s, NOW())
                 ON CONFLICT (scope_urn, urn) DO UPDATE SET
                     model_urn = EXCLUDED.model_urn,
                     data = EXCLUDED.data,
+                    acc_project_id = COALESCE(EXCLUDED.acc_project_id, civil_alignments.acc_project_id),
                     updated_at = NOW()""",
-                (scope_urn, urn, payload.get('model_urn'), _json.dumps(data)))
+                (scope_urn, urn, payload.get('model_urn'), _json.dumps(data), payload.get('acc_project_id')))
             conn.commit()
         return jsonify({'status': 'ok', 'scope_urn': scope_urn}), 200
     except Exception as e:
