@@ -126,9 +126,10 @@ namespace AlignmentExtractorApp
             return null;
         }
 
-        // Área (m²) de un contorno con posibles VARIOS loops concatenados (los
-        // hatches de Civil vuelven al punto inicial de cada loop). Shoelace por
-        // loop y suma — la matemática vive AQUÍ, el visor solo dibuja.
+        // Área (m²) de un hatch con posibles VARIOS loops concatenados (los
+        // hatches de Civil vuelven al punto inicial de cada loop). Shoelace
+        // FIRMADO por loop: los agujeros (islas, sentido opuesto) RESTAN —
+        // coherente con even-odd. La matemática vive AQUÍ, el visor solo dibuja.
         private static double LoopArea(List<double?[]> pts)
         {
             double total = 0;
@@ -140,7 +141,7 @@ namespace AlignmentExtractorApp
                     if (!p1[0].HasValue || !p2[0].HasValue) return;
                     a += p1[0].Value * p2[1].Value - p2[0].Value * p1[1].Value;
                 }
-                total += Math.Abs(a) / 2.0;
+                total += a / 2.0; // firmado: agujero resta
             };
             for (int i = start + 2; i < pts.Count; i++) {
                 if (!pts[i][0].HasValue || !pts[start][0].HasValue) continue;
@@ -153,7 +154,7 @@ namespace AlignmentExtractorApp
                 }
             }
             if (start < pts.Count - 1) addLoop(start, pts.Count - 1);
-            return total;
+            return Math.Abs(total);
         }
 
         private static double? Clean(double? v)
