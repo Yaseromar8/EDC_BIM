@@ -10,7 +10,7 @@ export default function NativeARView({ onExit }) {
   const [yawDegrees, setYawDegrees] = useState(0);
   const [unitsPerMeter, setUnitsPerMeter] = useState(1000);
   const [aligning, setAligning] = useState(false);
-  const [hud, setHud] = useState({ frames: 0, upm: 1000, yaw: 0, aligning: false });
+  const [hud, setHud] = useState({ src: '?', poseEvents: 0, applied: 0, upm: 1000, yaw: 0, aligning: false, err: '' });
   const oneToOneRef = useRef(1000); // unidades/metro para escala 1:1 real (según unidades del modelo)
   const detachRef = useRef(null);
   const trackingCleanupRef = useRef(null);
@@ -189,10 +189,11 @@ export default function NativeARView({ onExit }) {
 
       {/* Panel de diagnóstico (temporal) para ver por qué el modelo no responde. */}
       <div style={{ position: 'absolute', top: 74, left: 8, background: 'rgba(0,0,0,0.7)', color: '#3ee87a', font: '12px monospace', padding: '6px 9px', borderRadius: 6, zIndex: 9999, lineHeight: 1.5, pointerEvents: 'none' }}>
-        <div>poses ARCore: {hud.frames} {hud.frames === 0 ? '❌ NO llegan' : '✓ ok'}</div>
-        <div>tracking: {tracking}</div>
-        <div>escala (upm): {hud.upm}</div>
-        <div>giro: {hud.yaw}° {hud.aligning ? '· ALINEANDO' : ''}</div>
+        <div>eventos pose: {hud.poseEvents} {hud.poseEvents === 0 ? '❌ NO llegan' : '✓'}</div>
+        <div>aplicados: {hud.applied} {hud.applied === 0 && hud.poseEvents > 0 ? '⚠ apply FALLA' : ''}</div>
+        <div>THREE: {hud.src} · track: {tracking}</div>
+        <div>upm: {hud.upm} · giro: {hud.yaw}°{hud.aligning ? ' ·ALIN' : ''}</div>
+        {hud.err ? <div style={{ color: '#ff6b6b', maxWidth: 260, wordBreak: 'break-word' }}>err: {hud.err}</div> : null}
       </div>
 
       <div className="native-ar-reticle" aria-hidden="true" />

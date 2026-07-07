@@ -17,8 +17,13 @@ import { onCameraPose, onTracking } from './arcore';
  * @returns {Function} Cleanup function with setAnchorMatrix/setYawDegrees methods.
  */
 export function attachArToViewer(viewer, opts = {}) {
-  const THREE = window.THREE;
-  if (!viewer || !THREE) return () => {};
+  // APS NO expone THREE en window; el visor lo tiene en Private.THREE. Si esto
+  // quedaba undefined, attach devolvía un no-op -> sin poses, botones muertos,
+  // modelo congelado. Era EL bug de "poses: 0".
+  const THREE = window.THREE
+    || (window.Autodesk && window.Autodesk.Viewing && window.Autodesk.Viewing.Private && window.Autodesk.Viewing.Private.THREE);
+  if (!viewer) { console.warn('[AR] attach: sin viewer'); return () => {}; }
+  if (!THREE) { console.warn('[AR] attach: THREE no encontrado (ni window ni Private)'); return () => {}; }
 
   const camera = viewer.impl.camera;
   // Unidades del visor por METRO físico. En 1:1 = unidades-del-modelo-por-metro
@@ -74,11 +79,19 @@ export function attachArToViewer(viewer, opts = {}) {
 
   let raf = null;
   let latest = null;
-  let frameCount = 0; // diagnóstico: cuántas poses de ARCore se han aplicado
+  let poseEvents = 0; // eventos de pose recibidos del plugin (ANTES de aplicar)
+  let applied = 0;    // veces que apply() completó sin error
+  let lastErr = '';
+  const threeSrc = window.THREE ? 'win' : 'priv';
 
   const unsubPose = onCameraPose((data) => {
+    poseEvents++;
     latest = data;
-    if (!raf) raf = requestAnimationFrame(apply);
+    // Llamar apply() DIRECTO (rAF puede no tickear en el WebView transparente).
+    try { apply(); } catch (e) { lastErr = String((e && e.message) || e); }
+    if (opts.onFrame) {
+      opts.onFrame({ src: threeSrc, poseEvents, applied, upm: Math.round(unitsPerMeter * 100) / 100, yaw: Math.round(yawDegrees), aligning, err: lastErr });
+    }
   });
   const unsubTrack = onTracking((status) => opts.onStatus?.(status));
 
@@ -127,12 +140,7 @@ export function attachArToViewer(viewer, opts = {}) {
     try { viewer.impl.syncCamera(true); } catch { /* Viewer version dependent. */ }
     viewer.impl.invalidate(true, true, true);
 
-    // Diagnóstico en vivo (throttle ~5/seg): confirma que las poses llegan y que
-    // los controles cambian los valores que de verdad usa el puente.
-    frameCount++;
-    if (opts.onFrame && frameCount % 12 === 0) {
-      opts.onFrame({ frames: frameCount, upm: Math.round(unitsPerMeter * 100) / 100, yaw: Math.round(yawDegrees), aligning });
-    }
+    applied++;
   }
 
   const detach = function detach() {
@@ -152,14 +160,14 @@ export function attachArToViewer(viewer, opts = {}) {
   detach.setAnchorMatrix = setAnchorMatrix;
   detach.setYawDegrees = (value) => {
     yawDegrees = Number(value) || 0;
-    if (latest && !raf) raf = requestAnimationFrame(apply);
+    if (latest) { try { apply(); } catch (e) { lastErr = String((e && e.message) || e); } }
   };
   // Escala en vivo: unidades del visor por metro físico. Menor = modelo más
   // grande (hacia 1:1); mayor = más chico (maqueta).
   detach.setUnitsPerMeter = (value) => {
     const v = Number(value);
     if (Number.isFinite(v) && v > 0) unitsPerMeter = v;
-    if (latest && !raf) raf = requestAnimationFrame(apply);
+    if (latest) { try { apply(); } catch (e) { lastErr = String((e && e.message) || e); } }
   };
   detach.getUnitsPerMeter = () => unitsPerMeter;
 
