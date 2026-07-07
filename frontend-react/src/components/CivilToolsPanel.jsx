@@ -1622,6 +1622,10 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                         getExtension().then((ext) => ext?.clearSectionCutPlane?.());
                     }}
                     onSync={handleSectionSync}
+                    getModelSlice={async (st) => {
+                        const ext = await getExtension();
+                        return ext?.sliceModelsAtStation?.(st) || [];
+                    }}
                 />
             )}
         </div>

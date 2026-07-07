@@ -218,7 +218,7 @@ function computeVolumes(stations) {
     return materials;
 }
 
-const SectionViewer = ({ sectionsData, onClose, onSync }) => {
+const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
     const stations = useMemo(() => normalizeStations(sectionsData), [sectionsData]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [hidden, setHidden] = useState(() => new Set());
@@ -234,12 +234,29 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
     const [probe, setProbe] = useState(null);           // cursor consultable: {off, elev} reales
     const [selKey, setSelKey] = useState(null);         // material seleccionado (clic) → áreas
     const movedRef = useRef(false);                     // distingue arrastre de clic
+    const [mdlSlice, setMdlSlice] = useState([]);       // corte del modelo 3D del visor en esta estación
+    const [showModel, setShowModel] = useState(true);   // toggle capa "Modelo 3D"
     const dragRef = useRef(null);
     const svgRef = useRef(null);
     const lastSyncRef = useRef(null);
     const volumes = useMemo(() => computeVolumes(stations), [stations]);
 
     const station = stations[Math.min(currentIndex, Math.max(0, stations.length - 1))];
+
+    // Corte del MODELO 3D del visor en la estación actual (referencia visual;
+    // los números oficiales vienen del JSON). Debounced para no rebanar en
+    // cada tick del slider.
+    useEffect(() => {
+        if (!getModelSlice || !station) { setMdlSlice([]); return undefined; }
+        const st = Number(station.station);
+        if (!Number.isFinite(st)) { setMdlSlice([]); return undefined; }
+        const id = setTimeout(async () => {
+            try { setMdlSlice(await getModelSlice(st) || []); }
+            catch (e) { console.warn('[SectionViewer] slice 3D:', e); setMdlSlice([]); }
+        }, 140);
+        return () => clearTimeout(id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [station?.station, getModelSlice]);
 
     // v3: marco de la Section View del cadista → el dibujo se RECORTA a este
     // rectángulo, igual que Civil (fuera del marco no se dibuja nada).
@@ -510,7 +527,9 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
                 });
             });
         });
-        // Intersecciones (tope de seguridad para no colgar con dibujos enormes)
+        // Intersecciones (tope de seguridad para no colgar con dibujos enormes).
+        // Solo entre líneas del CADISTA — el corte del modelo 3D (malla) metería
+        // miles de cruces sin significado topográfico.
         const inters = [];
         if (segs.length <= 1600) {
             for (let a = 0; a < segs.length; a += 1) {
@@ -527,8 +546,17 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
                 }
             }
         }
+        // El corte del MODELO 3D también es consultable (borde + extremos).
+        if (showModel && mdlSlice.length) {
+            mdlSlice.forEach((m) => m.segs.forEach(([x1, y1, x2, y2]) => {
+                const aIn = inFrame([x1, y1]); const bIn = inFrame([x2, y2]);
+                if (aIn) verts.push([x1, -y1 * aspect]);
+                if (bIn) verts.push([x2, -y2 * aspect]);
+                if (aIn || bIn) segs.push([x1, -y1 * aspect, x2, -y2 * aspect]);
+            }));
+        }
         return { snapVerts: verts, snapSegs: segs, snapInters: inters };
-    }, [shapes, hidden, aspect, frame]);
+    }, [shapes, hidden, aspect, frame, mdlSlice, showModel]);
 
     const onPointerDown = (ev) => {
         movedRef.current = false;
@@ -781,6 +809,19 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
                                 <title>{s.cls.label}</title>
                             </polyline>
                         ))}
+
+                        {/* Corte del MODELO 3D del visor (referencia visual, cian). */}
+                        {showModel && mdlSlice.map((m, mi) => (
+                            <path key={`mdl${mi}`}
+                                d={m.segs.map((sg) => `M ${sg[0]},${-sg[1] * aspect} L ${sg[2]},${-sg[3] * aspect}`).join(' ')}
+                                fill="none"
+                                stroke={['#00d5ff', '#ff9f43', '#a29bfe', '#2ecc71'][mi % 4]}
+                                strokeWidth={px * 1.1}
+                                strokeOpacity={0.9}
+                                strokeLinecap="round">
+                                <title>{`Modelo 3D: ${m.name}`}</title>
+                            </path>
+                        ))}
                         </g>
 
                         {/* CT/CC en el eje, como la etiqueta de sección de Civil */}
@@ -892,6 +933,15 @@ const SectionViewer = ({ sectionsData, onClose, onSync }) => {
                     <button onClick={() => setMode('seccion')} style={{ ...btn(mode === 'seccion'), padding: '3px 10px', fontSize: 11 }}>Sección</button>
                     {volumes.length > 0 && (
                         <button onClick={() => setMode('volumenes')} style={{ ...btn(mode === 'volumenes'), padding: '3px 10px', fontSize: 11 }}>Volúmenes</button>
+                    )}
+                    {mdlSlice.length > 0 && (
+                        <button
+                            onClick={() => setShowModel((p) => !p)}
+                            title="Superponer el corte de los modelos 3D cargados en el visor (referencia visual)"
+                            style={{ ...btn(showModel), padding: '3px 10px', fontSize: 11, color: showModel ? '#00d5ff' : undefined }}
+                        >
+                            Modelo 3D
+                        </button>
                     )}
                     <div style={{ flex: 1 }} />
                     <button onClick={() => setLegendOpen((p) => !p)} style={{ ...btn(legendOpen), padding: '3px 10px', fontSize: 11 }}>

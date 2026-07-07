@@ -233,6 +233,104 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         return next.point.clone().sub(prev.point).normalize();
     }
 
+    // ── Corte del MODELO 3D en una progresiva ─────────────────────────────
+    // Rebana los triángulos de TODOS los modelos cargados con el plano
+    // perpendicular al eje en la estación dada. Devuelve, por modelo, los
+    // segmentos de intersección en coordenadas de sección REALES:
+    // [offset(m, izq−/der+), cota(m)]. Es REFERENCIA VISUAL (malla teselada);
+    // los números oficiales siguen viniendo del JSON del extractor.
+    sliceModelsAtStation(station, maxOffsetMeters = 30) {
+        const THREE = window.THREE;
+        const refModel = this.getModelForCoordinates();
+        if (!THREE || !refModel || !this.activeAlignment) return [];
+
+        const civilPoint = this.pointAtStation(this.activeAlignment, station);
+        const P0 = this.civilToViewerPoint(civilPoint, refModel);
+        if (!P0) return [];
+
+        let dir = this.getDirectionAtStation(station) || new THREE.Vector3(1, 0, 0);
+        dir = new THREE.Vector3(dir.x, dir.y, 0);
+        if (dir.lengthSq() < 1e-10) dir.set(1, 0, 0);
+        dir.normalize();
+        const perp = new THREE.Vector3(-dir.y, dir.x, 0);
+
+        const enumTri = window.Autodesk?.Viewing?.Private?.VertexEnumerator?.enumMeshTriangles;
+        if (!enumTri) return [];
+
+        const models = this.viewer.getAllModels ? this.viewer.getAllModels() : this.viewer.impl.modelQueue().getModels();
+        const out = [];
+        const box = new THREE.Box3();
+        const mtx = new THREE.Matrix4();
+        const c = new THREE.Vector3();
+        const half = new THREE.Vector3();
+        const w = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+
+        models.forEach((model) => {
+            try {
+                if (model.getData()?.is2d) return;
+                const mpu = (model.getUnitScale && model.getUnitScale()) || 1; // metros por unidad
+                const go = model.getData()?.globalOffset || { x: 0, y: 0, z: 0 };
+                const frags = model.getFragmentList();
+                const count = frags?.getCount ? frags.getCount() : 0;
+                if (!count) return;
+
+                const maxOffU = maxOffsetMeters / mpu; // a unidades del visor
+                const segs = [];
+
+                for (let f = 0; f < count && segs.length < 20000; f += 1) {
+                    frags.getWorldBounds(f, box);
+                    box.getCenter(c); box.getSize(half); half.multiplyScalar(0.5);
+                    // rechazo rápido: la caja no cruza el plano, o queda lejos del eje
+                    const dC = (c.x - P0.x) * dir.x + (c.y - P0.y) * dir.y;
+                    const dExt = Math.abs(half.x * dir.x) + Math.abs(half.y * dir.y);
+                    if (Math.abs(dC) > dExt) continue;
+                    const oC = (c.x - P0.x) * perp.x + (c.y - P0.y) * perp.y;
+                    const oExt = Math.abs(half.x * perp.x) + Math.abs(half.y * perp.y);
+                    if (Math.abs(oC) - oExt > maxOffU) continue;
+
+                    const proxy = frags.getVizmesh(f);
+                    if (!proxy?.geometry) continue;
+                    frags.getWorldMatrix(f, mtx);
+
+                    enumTri(proxy.geometry, (vA, vB, vC) => {
+                        w[0].copy(vA).applyMatrix4(mtx);
+                        w[1].copy(vB).applyMatrix4(mtx);
+                        w[2].copy(vC).applyMatrix4(mtx);
+                        const d0 = (w[0].x - P0.x) * dir.x + (w[0].y - P0.y) * dir.y;
+                        const d1 = (w[1].x - P0.x) * dir.x + (w[1].y - P0.y) * dir.y;
+                        const d2 = (w[2].x - P0.x) * dir.x + (w[2].y - P0.y) * dir.y;
+                        const ds = [d0, d1, d2];
+                        const pts = [];
+                        for (let e = 0; e < 3; e += 1) {
+                            const a = w[e]; const b = w[(e + 1) % 3];
+                            const da = ds[e]; const db = ds[(e + 1) % 3];
+                            if ((da <= 0 && db > 0) || (da > 0 && db <= 0)) {
+                                const t = da / (da - db);
+                                const qx = a.x + t * (b.x - a.x);
+                                const qy = a.y + t * (b.y - a.y);
+                                const qz = a.z + t * (b.z - a.z);
+                                const off = ((qx - P0.x) * perp.x + (qy - P0.y) * perp.y) * mpu;
+                                const cota = (qz + go.z) * mpu;
+                                pts.push([off, cota]);
+                            }
+                        }
+                        if (pts.length === 2 && Math.abs(pts[0][0]) <= maxOffsetMeters && Math.abs(pts[1][0]) <= maxOffsetMeters) {
+                            segs.push([pts[0][0], pts[0][1], pts[1][0], pts[1][1]]);
+                        }
+                    });
+                }
+
+                if (segs.length) {
+                    out.push({ name: model.getData()?.loadOptions?.modelNameOverride || model.getDocumentNode?.()?.getModelName?.() || `Modelo ${model.id}`, segs });
+                }
+            } catch (e) {
+                console.warn('[LOB4D] slice modelo:', e);
+            }
+        });
+
+        return out;
+    }
+
     getStationCursorHalfLength(model) {
         const THREE = window.THREE;
         const box = model?.getBoundingBox?.();
