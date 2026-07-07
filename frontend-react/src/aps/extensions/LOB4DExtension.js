@@ -239,7 +239,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
     // segmentos de intersección en coordenadas de sección REALES:
     // [offset(m, izq−/der+), cota(m)]. Es REFERENCIA VISUAL (malla teselada);
     // los números oficiales siguen viniendo del JSON del extractor.
-    sliceModelsAtStation(station, maxOffsetMeters = 30) {
+    sliceModelsAtStation(station, maxOffsetMeters = 30, minSolidDimMeters = 0.06) {
         const THREE = window.THREE;
         const refModel = this.getModelForCoordinates();
         if (!THREE || !refModel || !this.activeAlignment) return [];
@@ -248,11 +248,24 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         const P0 = this.civilToViewerPoint(civilPoint, refModel);
         if (!P0) return [];
 
-        let dir = this.getDirectionAtStation(station) || new THREE.Vector3(1, 0, 0);
-        dir = new THREE.Vector3(dir.x, dir.y, 0);
+        // Tangente LOCAL exacta (diferencia finita ±0.5m sobre el eje). La de
+        // muestras (nearest-sample) desvía el plano en CURVAS → el corte salía
+        // desfasado en algunos tramos.
+        let dir = null;
+        try {
+            const pA = this.civilToViewerPoint(this.pointAtStation(this.activeAlignment, Number(station) - 0.5), refModel);
+            const pB = this.civilToViewerPoint(this.pointAtStation(this.activeAlignment, Number(station) + 0.5), refModel);
+            if (pA && pB) dir = new THREE.Vector3(pB.x - pA.x, pB.y - pA.y, 0);
+        } catch (e) { /* cae a la tangente por muestras */ }
+        if (!dir || dir.lengthSq() < 1e-10) {
+            const d = this.getDirectionAtStation(station) || new THREE.Vector3(1, 0, 0);
+            dir = new THREE.Vector3(d.x, d.y, 0);
+        }
         if (dir.lengthSq() < 1e-10) dir.set(1, 0, 0);
         dir.normalize();
         const perp = new THREE.Vector3(-dir.y, dir.x, 0);
+        // Silueta principal: fuera aceros/refuerzos por nombre
+        const steelRe = /acero|rebar|refuerzo|reinf|varilla|estribo|dowel|malla|armadur/i;
 
         const enumTri = window.Autodesk?.Viewing?.Private?.VertexEnumerator?.enumMeshTriangles;
         if (!enumTri) return [];
@@ -275,11 +288,18 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
                 if (!count) return;
 
                 const maxOffU = maxOffsetMeters / mpu; // a unidades del visor
+                const minDimU = minSolidDimMeters / mpu; // silueta: fuera elementos delgados (aceros)
+                const it = model.getData()?.instanceTree;
+                const frag2db = frags.fragments?.fragId2dbId;
                 const segs = [];
 
                 for (let f = 0; f < count && segs.length < 20000; f += 1) {
                     frags.getWorldBounds(f, box);
-                    box.getCenter(c); box.getSize(half); half.multiplyScalar(0.5);
+                    box.getCenter(c); box.getSize(half);
+                    // SILUETA PRINCIPAL: descarta barras/estribos/mallas — su
+                    // dimensión mínima (diámetro/espesor) es de centímetros.
+                    if (Math.min(half.x, half.y, half.z) < minDimU) continue;
+                    half.multiplyScalar(0.5);
                     // rechazo rápido: la caja no cruza el plano, o queda lejos del eje
                     const dC = (c.x - P0.x) * dir.x + (c.y - P0.y) * dir.y;
                     const dExt = Math.abs(half.x * dir.x) + Math.abs(half.y * dir.y);
@@ -287,6 +307,15 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
                     const oC = (c.x - P0.x) * perp.x + (c.y - P0.y) * perp.y;
                     const oExt = Math.abs(half.x * perp.x) + Math.abs(half.y * perp.y);
                     if (Math.abs(oC) - oExt > maxOffU) continue;
+
+                    // Refuerzo por NOMBRE (por si un acero viene agrupado en un
+                    // fragmento grande): acero/rebar/estribo/malla… no es silueta.
+                    if (it && frag2db) {
+                        try {
+                            const nodeName = it.getNodeName(frag2db[f]) || '';
+                            if (steelRe.test(nodeName)) continue;
+                        } catch (e) { /* sin nombre: se dibuja */ }
+                    }
 
                     const proxy = frags.getVizmesh(f);
                     if (!proxy?.geometry) continue;
