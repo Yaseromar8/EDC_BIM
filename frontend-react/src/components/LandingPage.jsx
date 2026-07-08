@@ -43,6 +43,9 @@ const LandingPage = ({ onSelectProject }) => {
     const [newFrenteName, setNewFrenteName] = useState('');
     const [newFrenteDesc, setNewFrenteDesc] = useState('');
     const [newFrenteIcon, setNewFrenteIcon] = useState('⚠️');
+    const [newFrenteType, setNewFrenteType] = useState('');
+    // Tipos de componente de obra lineal (agrupan el navegador de frentes)
+    const FRENTE_TYPES = ['Aportante', 'Canal', 'Disipador', 'Estructura', 'Vial', 'Otro'];
     const [savingFrente, setSavingFrente] = useState(false);
     const [frenteError, setFrenteError] = useState('');
 
@@ -64,7 +67,8 @@ const LandingPage = ({ onSelectProject }) => {
                     base_project_id: selectedBaseProject.id,
                     name: newFrenteName.trim(),
                     description: newFrenteDesc.trim(),
-                    icon: newFrenteIcon || '📌'
+                    icon: newFrenteIcon || '📌',
+                    front_type: newFrenteType
                 })
             });
             const data = await res.json().catch(() => ({}));
@@ -72,10 +76,11 @@ const LandingPage = ({ onSelectProject }) => {
             else {
                 setCustomFrentes(prev => [...prev, {
                     frontId: data.frontId, name: newFrenteName.trim(),
-                    description: newFrenteDesc.trim(), icon: newFrenteIcon || '📌'
+                    description: newFrenteDesc.trim(), icon: newFrenteIcon || '📌',
+                    frontType: newFrenteType, civil: null
                 }]);
                 setShowNewFrente(false);
-                setNewFrenteName(''); setNewFrenteDesc('');
+                setNewFrenteName(''); setNewFrenteDesc(''); setNewFrenteType('');
             }
         } catch (e) {
             setFrenteError('Error de conexión.');
@@ -190,6 +195,19 @@ const LandingPage = ({ onSelectProject }) => {
     const DOCS_URL = import.meta.env.VITE_DOCS_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5174' : 'https://visor-ecd-docs.onrender.com');
 
     if (selectedBaseProject) {
+        // Navegador agrupado por TIPO de componente (Aportantes/Canales/...),
+        // con "General" (sin tipo) al final. Escala igual con 3 o 30 frentes.
+        const frenteGroups = (() => {
+            const g = new Map();
+            customFrentes.forEach((f) => {
+                const t = (f.frontType || '').trim() || 'General';
+                if (!g.has(t)) g.set(t, []);
+                g.get(t).push(f);
+            });
+            return [...g.entries()].sort((a, b) =>
+                (a[0] === 'General') - (b[0] === 'General') || a[0].localeCompare(b[0]));
+        })();
+
         return (
             <div className="acc-home-wrapper frente-selection">
                 <div className="frente-container">
@@ -217,12 +235,32 @@ const LandingPage = ({ onSelectProject }) => {
                                 Este proyecto aún no tiene frentes. Crea el primero para empezar.
                             </div>
                         )}
-                        {customFrentes.map(f => (
+                        {frenteGroups.map(([type, list]) => (
+                            <React.Fragment key={type}>
+                                {(frenteGroups.length > 1 || type !== 'General') && (
+                                    <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+                                        <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: 1.2, color: '#7e9bbd', textTransform: 'uppercase' }}>
+                                            {type} ({list.length})
+                                        </span>
+                                        <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+                                    </div>
+                                )}
+                                {list.map(f => (
                             <div key={f.frontId} className="frente-card" style={{ position: 'relative' }} onClick={() => handleFrontSelect(f.frontId, f.name)}>
                                 <div className="frente-card-icon">{f.icon || '📌'}</div>
                                 <div className="frente-card-content">
                                     <h3>{f.name}</h3>
                                     <p>{f.description || 'Frente de trabajo personalizado.'}</p>
+                                    {/* Estado Civil del frente: extraído o pendiente */}
+                                    {f.civil && (f.civil.ejes > 0 || f.civil.estaciones > 0) ? (
+                                        <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, color: '#4ade80', fontFamily: 'IBM Plex Mono, monospace' }}>
+                                            ✓ Civil · {f.civil.ejes} {f.civil.ejes === 1 ? 'eje' : 'ejes'} · {f.civil.estaciones} est
+                                        </span>
+                                    ) : (
+                                        <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, color: '#7c8694' }}>
+                                            ⏳ sin extracción Civil
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="frente-card-arrow">→</div>
                                 <button
@@ -241,6 +279,8 @@ const LandingPage = ({ onSelectProject }) => {
                                     style={{ position: 'absolute', top: 8, right: 10, width: 22, height: 22, borderRadius: 5, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(0,0,0,0.25)', color: '#8a919c', cursor: 'pointer', fontSize: 12, lineHeight: '18px', padding: 0 }}
                                 >✕</button>
                             </div>
+                                ))}
+                            </React.Fragment>
                         ))}
 
                         {/* Crear frente nuevo */}
@@ -263,6 +303,15 @@ const LandingPage = ({ onSelectProject }) => {
                                         style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8, color: '#fff', padding: '8px 12px', fontSize: 14 }}
                                     />
                                 </div>
+                                {/* Tipo de componente: agrupa el navegador (Aportantes/Canales/...) */}
+                                <select
+                                    value={newFrenteType}
+                                    onChange={e => setNewFrenteType(e.target.value)}
+                                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8, color: newFrenteType ? '#fff' : '#8a919c', padding: '8px 12px', fontSize: 13 }}
+                                >
+                                    <option value="" style={{ color: '#111' }}>Tipo de componente (opcional)</option>
+                                    {FRENTE_TYPES.map(t => <option key={t} value={t} style={{ color: '#111' }}>{t}</option>)}
+                                </select>
                                 <input
                                     value={newFrenteDesc}
                                     onChange={e => setNewFrenteDesc(e.target.value)}

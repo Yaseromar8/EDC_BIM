@@ -872,12 +872,47 @@ def project_frentes():
                 return jsonify({'error': 'Falta base'}), 400
             with get_db_connection() as conn:
                 cur = conn.cursor()
+                cur.execute("ALTER TABLE project_frentes ADD COLUMN IF NOT EXISTS front_type TEXT")
+                conn.commit()
                 cur.execute("""
-                    SELECT front_id, name, description, icon FROM project_frentes
+                    SELECT front_id, name, description, icon, front_type FROM project_frentes
                     WHERE base_project_id = %s ORDER BY id""", (base,))
+                rows = cur.fetchall()
+
+                # Estado Civil por frente (scope = base_frontId): nº de ejes y de
+                # estaciones extraídas — para el badge ✓ extraído / ⏳ pendiente.
+                scopes = [f"{base}_{r[0]}" for r in rows]
+                status = {}
+                if scopes:
+                    try:
+                        cur.execute("""
+                            SELECT scope_urn,
+                                   COALESCE(SUM(CASE WHEN jsonb_typeof(data)='array'
+                                                     THEN jsonb_array_length(data) ELSE 0 END), 0)
+                            FROM civil_alignments WHERE scope_urn = ANY(%s) GROUP BY scope_urn
+                        """, (scopes,))
+                        for s, ejes in cur.fetchall():
+                            status[s] = {'ejes': int(ejes or 0), 'estaciones': 0}
+                        cur.execute("""
+                            SELECT scope_urn,
+                                   COALESCE(SUM(CASE
+                                       WHEN jsonb_typeof(data)='array' THEN jsonb_array_length(data)
+                                       WHEN jsonb_typeof(data->'stations')='array' THEN jsonb_array_length(data->'stations')
+                                       ELSE 0 END), 0)
+                            FROM civil_sections WHERE scope_urn = ANY(%s) GROUP BY scope_urn
+                        """, (scopes,))
+                        for s, est in cur.fetchall():
+                            status.setdefault(s, {'ejes': 0})['estaciones'] = int(est or 0)
+                    except Exception:
+                        pass  # tablas civil aún no existen: todo en pendiente
+
                 return jsonify({'frentes': [
-                    {'frontId': r[0], 'name': r[1], 'description': r[2] or '', 'icon': r[3] or '📌'}
-                    for r in cur.fetchall()
+                    {
+                        'frontId': r[0], 'name': r[1], 'description': r[2] or '',
+                        'icon': r[3] or '📌', 'frontType': (r[4] or '').strip(),
+                        'civil': status.get(f"{base}_{r[0]}")
+                    }
+                    for r in rows
                 ]}), 200
 
         data = request.get_json() or {}
@@ -896,13 +931,15 @@ def project_frentes():
 
         with get_db_connection() as conn:
             cur = conn.cursor()
+            cur.execute("ALTER TABLE project_frentes ADD COLUMN IF NOT EXISTS front_type TEXT")
             cur.execute("""
-                INSERT INTO project_frentes (base_project_id, front_id, name, description, icon)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO project_frentes (base_project_id, front_id, name, description, icon, front_type)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (base_project_id, front_id) DO NOTHING
                 RETURNING front_id""",
                 (base, slug, name, (data.get('description') or '').strip(),
-                 (data.get('icon') or '📌').strip()[:8]))
+                 (data.get('icon') or '📌').strip()[:8],
+                 (data.get('front_type') or '').strip()[:40] or None))
             row = cur.fetchone()
             conn.commit()
         if not row:
