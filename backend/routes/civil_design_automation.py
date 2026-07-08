@@ -408,8 +408,10 @@ def extract_sections_test():
             _clean = [str(a).strip() for a in alignment_ids if str(a or '').strip()]
             if _clean:
                 import json as _pj
+                import base64 as _b64
+                _payload = _pj.dumps({"alignmentIds": _clean})
                 workitem_payload["arguments"]["Params"] = {
-                    "url": "data:application/json," + _pj.dumps({"alignmentIds": _clean})
+                    "url": "data:application/json;base64," + _b64.b64encode(_payload.encode('utf-8')).decode('ascii')
                 }
 
         # Ejecutando el WorkItem real en Autodesk Design Automation
@@ -757,6 +759,18 @@ def get_workitem_status(workitem_id):
                         f.write(report_url if report_url else 'none')
                 except Exception as e:
                     pass
+                # Al fallar: bajar el reporte y devolver la cola (ahí está el
+                # error real del motor) — sin esto se depura a ciegas.
+                if 'failed' in str(status_data.get('status', '')) and report_url:
+                    try:
+                        rep = requests.get(report_url, timeout=20)
+                        if rep.ok:
+                            txt = rep.text
+                            status_data['report_tail'] = txt[-3000:]
+                            with open('da_report_fail.txt', 'w', encoding='utf-8', errors='replace') as f:
+                                f.write(txt)
+                    except Exception:
+                        pass
                 
                 upload_key = UPLOAD_KEYS.pop(workitem_id, None)
                 if upload_key:
