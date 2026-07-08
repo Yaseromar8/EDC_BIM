@@ -686,8 +686,10 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
 
     // v4: CT/CC de la LÁMINA (textos de banda del cadista, extraídos tal cual).
     // Si vienen, son el dato oficial; los calculados quedan como "(diseño)".
-    const bandCT = Number.isFinite(Number(station?.bandCT)) ? Number(station.bandCT) : null;
-    const bandCC = Number.isFinite(Number(station?.bandCC)) ? Number(station.bandCC) : null;
+    // 0.00 = banda sin superficie asignada en esa vista (placeholder) → se ignora.
+    const cleanBand = (v) => (Number.isFinite(Number(v)) && Math.abs(Number(v)) > 0.005) ? Number(v) : null;
+    const bandCT = cleanBand(station?.bandCT);
+    const bandCC = cleanBand(station?.bandCC);
     const fromBand = bandCT != null || bandCC != null;
     const labelCT = bandCT != null ? bandCT : ctcc.ct;
     const labelCC = bandCC != null ? bandCC : ctcc.cc;

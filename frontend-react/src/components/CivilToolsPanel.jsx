@@ -496,11 +496,15 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                 const seenUrns = new Set(combined.map(m => m.urn));
 
                 dbItems.forEach(item => {
+                    // fila fantasma: extracciones viejas guardadas con urn = scope
+                    // del frente (fallback) — si hay filas reales, no listarla.
+                    if (item.urn === civilScopeUrn && dbItems.length > 1) return;
                     if (!seenUrns.has(item.urn)) {
                         const docMatch = docs.find(doc => doc.urn === item.urn);
+                        const fecha = String(item.updated_at || '').slice(0, 10);
                         combined.push({
                             urn: item.urn,
-                            name: docMatch ? docMatch.name : `Carga en la nube (${item.urn.substring(0, 10)}...)`
+                            name: docMatch ? docMatch.name : `Carga en la nube${fecha ? ` · ${fecha}` : ''} (${item.urn.substring(0, 10)}…)`
                         });
                         seenUrns.add(item.urn);
                     }
@@ -1325,6 +1329,13 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                                 >
                                                     <RoadIconSmall muted />
                                                     <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{alignment.alignmentId}</span>
+                                                    {/* señales de curación: nº de secciones + tipo del eje */}
+                                                    {(alignment.sampleLines?.length || 0) > 0 && (
+                                                        <span style={{ color: '#4ade80', fontSize: 10, flexShrink: 0 }}>{alignment.sampleLines.length} sec</span>
+                                                    )}
+                                                    {alignment.alignmentType && alignment.alignmentType !== 'Centerline' && (
+                                                        <span style={{ color: '#f59e0b', fontSize: 10, flexShrink: 0 }}>{alignment.alignmentType}</span>
+                                                    )}
                                                     {primaryProfile && (
                                                         <span style={{ color: '#8ab4f8', fontSize: 10 }}>{getProfileRole(primaryProfile) || 'Perfil'}</span>
                                                     )}
