@@ -948,10 +948,12 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
             const res = await apiFetch(`${BACKEND_URL}/api/civil/extract-sections-test`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    urn: realUrn, 
+                body: JSON.stringify({
+                    urn: realUrn,
                     project_id: realProjectId,
-                    scope_urn: civilScopeUrn 
+                    scope_urn: civilScopeUrn,
+                    // curación: solo los ejes marcados como reales (vacío = todos)
+                    alignment_ids: (activeAlignmentIds && activeAlignmentIds.length) ? activeAlignmentIds : undefined
                 })
             });
             const data = await res.json();
@@ -1617,6 +1619,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
             {showSectionViewer && sectionJSON && (
                 <SectionViewer
                     sectionsData={sectionJSON}
+                    alignmentId={selectedAlignmentId}
                     onClose={() => {
                         setShowSectionViewer(false);
                         getExtension().then((ext) => ext?.clearSectionCutPlane?.());

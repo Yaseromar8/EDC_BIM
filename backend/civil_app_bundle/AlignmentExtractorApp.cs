@@ -52,6 +52,10 @@ namespace AlignmentExtractorApp
     {
         public string alignmentId { get; set; }
         public string objectId { get; set; }
+        // v4: tipo del eje (Centerline/Offset/Miscellaneous/...) — señal para el
+        // default de curación: los de diseño suelen ser Centerline; los restos
+        // que el cadista no borró suelen ser Offset/Miscellaneous.
+        public string alignmentType { get; set; }
         public double startStation { get; set; }
         public double endStation { get; set; }
         public double length { get; set; }
@@ -303,6 +307,7 @@ namespace AlignmentExtractorApp
                 length = Math.Abs(alignment.EndingStation - alignment.StartingStation),
                 subEntities = new List<SubEntityData>()
             };
+            try { alignData.alignmentType = alignment.AlignmentType.ToString(); } catch { }
 
             foreach (AlignmentEntity entity in alignment.Entities)
             {

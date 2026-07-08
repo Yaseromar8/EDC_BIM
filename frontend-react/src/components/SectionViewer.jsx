@@ -218,9 +218,18 @@ function computeVolumes(stations) {
     return materials;
 }
 
-const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
-    const stations = useMemo(() => normalizeStations(sectionsData), [sectionsData]);
+const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignmentId }) => {
+    // Multi-eje: mostrar SOLO las estaciones del alineamiento activo (un DWG
+    // puede traer varios ejes de distintos frentes). Sin eje activo o si el
+    // nombre no matchea (data vieja), se muestran todas.
+    const allStations = useMemo(() => normalizeStations(sectionsData), [sectionsData]);
+    const stations = useMemo(() => {
+        if (!alignmentId) return allStations;
+        const f = allStations.filter((st) => (st.alignmentId || '') === alignmentId);
+        return f.length ? f : allStations;
+    }, [allStations, alignmentId]);
     const [currentIndex, setCurrentIndex] = useState(0);
+    useEffect(() => { setCurrentIndex(0); }, [alignmentId]);
     const [hidden, setHidden] = useState(() => new Set());
     const initializedHidden = useRef(false);
     const userTouchedRef = useRef(new Set());
@@ -675,6 +684,14 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
         };
     }, [shapes, hidden]);
 
+    // v4: CT/CC de la LÁMINA (textos de banda del cadista, extraídos tal cual).
+    // Si vienen, son el dato oficial; los calculados quedan como "(diseño)".
+    const bandCT = Number.isFinite(Number(station?.bandCT)) ? Number(station.bandCT) : null;
+    const bandCC = Number.isFinite(Number(station?.bandCC)) ? Number(station.bandCC) : null;
+    const fromBand = bandCT != null || bandCC != null;
+    const labelCT = bandCT != null ? bandCT : ctcc.ct;
+    const labelCC = bandCC != null ? bandCC : ctcc.cc;
+
     const toggle = (key) => {
         userTouchedRef.current.add(key);
         setHidden((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
@@ -863,19 +880,19 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
                         ))}
                         </g>
 
-                        {/* CT/CC estilo lámina: ancladas al marco de la Section View */}
-                        {(ctcc.ct != null || ctcc.cc != null) && (() => {
+                        {/* CT/CC estilo lámina (los de BANDA del cadista si existen) */}
+                        {(labelCT != null || labelCC != null) && (() => {
                             const yBase = frame ? (-frame.b * aspect + fontSize * 2.0) : (v.y + v.h - fontSize * 3.4);
                             return (
                                 <g style={{ pointerEvents: 'none' }}>
-                                    {ctcc.ct != null && (
+                                    {labelCT != null && (
                                         <text x={0} y={yBase} fill={T.label} fontSize={fontSize * 1.05} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
-                                            CT={ctcc.ct.toFixed(2)}
+                                            CT={labelCT.toFixed(2)}
                                         </text>
                                     )}
-                                    {ctcc.cc != null && (
+                                    {labelCC != null && (
                                         <text x={0} y={yBase + fontSize * 1.4} fill={T.label} fontSize={fontSize * 1.05} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
-                                            CC={ctcc.cc.toFixed(2)}
+                                            CC={labelCC.toFixed(2)}
                                         </text>
                                     )}
                                 </g>
@@ -958,9 +975,15 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
                             <span style={{ opacity: 0.65 }}>  Cota </span>{probe ? `${probe.elev.toFixed(2)}m` : '—'}
                         </div>
                         {probe?.snapped && <div style={{ color: T.snap }}>⊙ {probe.kind}</div>}
-                        {(ctcc.ct != null || ctcc.cc != null) && (
+                        {(labelCT != null || labelCC != null) && (
                             <div style={{ borderTop: `1px solid ${light ? '#dde1e7' : '#262c35'}`, marginTop: 3, paddingTop: 3 }}>
-                                {ctcc.ct != null ? `CT ${ctcc.ct.toFixed(2)}` : ''}{ctcc.ct != null && ctcc.cc != null ? ' · ' : ''}{ctcc.cc != null ? `CC ${ctcc.cc.toFixed(2)}` : ''}
+                                {labelCT != null ? `CT ${labelCT.toFixed(2)}` : ''}{labelCT != null && labelCC != null ? ' · ' : ''}{labelCC != null ? `CC ${labelCC.toFixed(2)}` : ''}
+                                <span style={{ opacity: 0.55 }}> {fromBand ? '(lámina)' : '(diseño)'}</span>
+                            </div>
+                        )}
+                        {fromBand && ctcc.cc != null && (
+                            <div style={{ opacity: 0.6, fontSize: 10 }}>
+                                diseño: {ctcc.ct != null ? `CT ${ctcc.ct.toFixed(2)} · ` : ''}CC {ctcc.cc.toFixed(2)}
                             </div>
                         )}
                     </div>

@@ -40,6 +40,14 @@ namespace AlignmentExtractorApp
         public double? viewOffsetRight { get; set; }
         public double? viewElevMin { get; set; }
         public double? viewElevMax { get; set; }
+        // v4: la LÁMINA tal cual — textos impresos junto a la vista (bandas del
+        // cadista: CT=, CC=, etc.). bandCT/bandCC parseados de esos textos; el
+        // visor los muestra idénticos a la lámina, sea cual sea la config.
+        public List<string> bandTexts { get; set; }
+        public double? bandCT { get; set; }
+        public double? bandCC { get; set; }
+        // v4: cuadro de metrados (QTO) de la vista, celda por celda.
+        public List<List<string>> qtoTable { get; set; }
         public List<SectionShapeV2> sections { get; set; } = new List<SectionShapeV2>();
     }
 
@@ -200,9 +208,17 @@ namespace AlignmentExtractorApp
                 var secOverridesMap = new Dictionary<ObjectId, dynamic>();
                 var overridesBySampleLine = new Dictionary<ObjectId, List<dynamic>>();
                 var frameBySampleLine = new Dictionary<ObjectId, double?[]>();
+                // v4: ubicación de cada vista (para asociarle textos de banda y
+                // cuadros QTO por cercanía) + lo recolectado en el dibujo.
+                var locBySampleLine = new Dictionary<ObjectId, double[]>();
+                var rawTexts = new List<object[]>();   // [x, y, texto]
+                var rawQtos = new List<object[]>();    // [x, y, List<List<string>> filas]
+                var textsBySL = new Dictionary<ObjectId, List<string>>();
+                var qtoBySL = new Dictionary<ObjectId, List<List<string>>>();
                 try {
                     var bt = trans.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
                     bool ovDumped = false;
+                    bool qtoDumped = false;
                     foreach (ObjectId btrId in bt) {
                         BlockTableRecord btr = null;
                         try { btr = trans.GetObject(btrId, OpenMode.ForRead) as BlockTableRecord; } catch { }
@@ -210,6 +226,51 @@ namespace AlignmentExtractorApp
                         foreach (ObjectId entId in btr) {
                             string cls;
                             try { cls = entId.ObjectClass.Name; } catch { continue; }
+
+                            // v4: textos sueltos (las bandas del cadista imprimen CT=/CC= como texto)
+                            if (cls == "AcDbText" || cls == "AcDbMText") {
+                                try {
+                                    var tobj = trans.GetObject(entId, OpenMode.ForRead);
+                                    if (tobj is DBText dt && !string.IsNullOrWhiteSpace(dt.TextString))
+                                        rawTexts.Add(new object[] { dt.Position.X, dt.Position.Y, dt.TextString.Trim() });
+                                    else if (tobj is MText mt && !string.IsNullOrWhiteSpace(mt.Text))
+                                        rawTexts.Add(new object[] { mt.Location.X, mt.Location.Y, mt.Text.Trim() });
+                                } catch { }
+                                continue;
+                            }
+
+                            // v4: cuadros de metrados (QTO) — leerlos celda por celda
+                            if (cls.IndexOf("QuantityTakeoffTable", StringComparison.OrdinalIgnoreCase) >= 0) {
+                                try {
+                                    var tobj = trans.GetObject(entId, OpenMode.ForRead);
+                                    var tbl = tobj as Autodesk.AutoCAD.DatabaseServices.Table;
+                                    if (tbl != null) {
+                                        var rows = new List<List<string>>();
+                                        int nr = 0; int nc = 0;
+                                        try { nr = tbl.Rows.Count; nc = tbl.Columns.Count; } catch { }
+                                        for (int r = 0; r < nr && r < 80; r++) {
+                                            var row = new List<string>();
+                                            for (int c = 0; c < nc && c < 16; c++) {
+                                                string cell = "";
+                                                try { cell = tbl.Cells[r, c].TextString; } catch { }
+                                                row.Add(cell ?? "");
+                                            }
+                                            rows.Add(row);
+                                        }
+                                        if (rows.Count > 0)
+                                            rawQtos.Add(new object[] { tbl.Position.X, tbl.Position.Y, rows });
+                                    } else if (!qtoDumped) {
+                                        qtoDumped = true;
+                                        var pn = new List<string>();
+                                        foreach (var p in tobj.GetType().GetProperties()) pn.Add(p.Name);
+                                        result.warnings.Add($"DIAG QTO ({cls}) no es Table; props: {string.Join(",", pn)}");
+                                    }
+                                } catch (Exception qe) {
+                                    if (!qtoDumped) { qtoDumped = true; result.warnings.Add("DIAG QTO error: " + qe.Message); }
+                                }
+                                continue;
+                            }
+
                             if (cls != "AeccDbGraphCrossSection" && cls != "AeccDbGraphSectionView" && cls != "AeccDbSectionView") continue;
                             dynamic sv = null;
                             try { sv = trans.GetObject(entId, OpenMode.ForRead); } catch { }
@@ -225,6 +286,10 @@ namespace AlignmentExtractorApp
                                     Clean(TryNum(sv, "ElevationMin")),
                                     Clean(TryNum(sv, "ElevationMax"))
                                 };
+                                try {
+                                    var loc = sv.Location;
+                                    locBySampleLine[slKey] = new double[] { (double)loc.X, (double)loc.Y };
+                                } catch { }
                             }
 
                             // (b) filas de la Section View: Draw real por sección
@@ -252,6 +317,42 @@ namespace AlignmentExtractorApp
                         }
                     }
                     result.warnings.Add($"DIAG v3: vistas con marco={frameBySampleLine.Count}, overrides mapeados por id={secOverridesMap.Count}, por vista={overridesBySampleLine.Count}");
+
+                    // v4: asociar textos/QTO a la vista MÁS CERCANA (las láminas van
+                    // en grilla; el corte es 0.75× del espaciado mínimo entre vistas).
+                    var locList = new List<KeyValuePair<ObjectId, double[]>>(locBySampleLine);
+                    double minSpacing = double.MaxValue;
+                    for (int a = 0; a < locList.Count; a++)
+                        for (int b = a + 1; b < locList.Count; b++) {
+                            double dx = locList[a].Value[0] - locList[b].Value[0];
+                            double dy = locList[a].Value[1] - locList[b].Value[1];
+                            double dd = Math.Sqrt(dx * dx + dy * dy);
+                            if (dd > 1e-6 && dd < minSpacing) minSpacing = dd;
+                        }
+                    double cutoff = locList.Count <= 1 ? double.MaxValue : minSpacing * 0.75;
+
+                    ObjectId NearestSL(double x, double y, out double dist) {
+                        ObjectId best = ObjectId.Null; dist = double.MaxValue;
+                        foreach (var kv in locList) {
+                            double dx = kv.Value[0] - x; double dy = kv.Value[1] - y;
+                            double dd = Math.Sqrt(dx * dx + dy * dy);
+                            if (dd < dist) { dist = dd; best = kv.Key; }
+                        }
+                        return best;
+                    }
+
+                    foreach (var t in rawTexts) {
+                        var sl = NearestSL((double)t[0], (double)t[1], out var dT);
+                        if (sl.IsNull || dT > cutoff) continue;
+                        if (!textsBySL.TryGetValue(sl, out var lst)) { lst = new List<string>(); textsBySL[sl] = lst; }
+                        if (lst.Count < 40) lst.Add((string)t[2]);
+                    }
+                    foreach (var q in rawQtos) {
+                        var sl = NearestSL((double)q[0], (double)q[1], out var dQ);
+                        if (sl.IsNull || dQ > cutoff * 2) continue; // los cuadros van algo más lejos de la vista
+                        if (!qtoBySL.ContainsKey(sl)) qtoBySL[sl] = (List<List<string>>)q[2];
+                    }
+                    result.warnings.Add($"DIAG v4: textos={rawTexts.Count} → {textsBySL.Count} vistas · QTO={rawQtos.Count} → {qtoBySL.Count} vistas");
                 } catch (Exception e) {
                     result.warnings.Add("Error escaneando SectionViews: " + e.Message);
                 }
@@ -261,10 +362,32 @@ namespace AlignmentExtractorApp
                 ObjectIdCollection alignIds = civilDoc.GetAlignmentIds();
                 if (alignIds.Count == 0) result.warnings.Add("El DWG no tiene alineamientos.");
 
+                // v4: CURACIÓN — si llega params.json ({"alignmentIds":[...]}), solo
+                // se extraen las secciones de esos ejes (lo que el usuario marcó
+                // como real). Sin params = comportamiento de siempre (todo).
+                HashSet<string> onlyAligns = null;
+                try {
+                    if (File.Exists("params.json")) {
+                        using (var pdoc = System.Text.Json.JsonDocument.Parse(File.ReadAllText("params.json"))) {
+                            if (pdoc.RootElement.TryGetProperty("alignmentIds", out var arr)
+                                && arr.ValueKind == System.Text.Json.JsonValueKind.Array) {
+                                onlyAligns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                                foreach (var it in arr.EnumerateArray()) {
+                                    var s = it.GetString();
+                                    if (!string.IsNullOrWhiteSpace(s)) onlyAligns.Add(s.Trim());
+                                }
+                                if (onlyAligns.Count == 0) onlyAligns = null;
+                            }
+                        }
+                        result.warnings.Add($"v4: filtro de ejes activo ({(onlyAligns == null ? 0 : onlyAligns.Count)})");
+                    }
+                } catch (Exception pe) { result.warnings.Add("params.json ilegible: " + pe.Message); }
+
                 foreach (ObjectId alignId in alignIds)
                 {
                     Alignment alignment = trans.GetObject(alignId, OpenMode.ForRead) as Alignment;
                     if (alignment == null) continue;
+                    if (onlyAligns != null && !onlyAligns.Contains(alignment.Name)) continue;
 
                     ObjectIdCollection slgIds = alignment.GetSampleLineGroupIds();
                     if (slgIds.Count == 0)
@@ -296,6 +419,25 @@ namespace AlignmentExtractorApp
                                 secData.viewElevMin = frame[2];
                                 secData.viewElevMax = frame[3];
                             }
+
+                            // v4: textos de banda de la LÁMINA (CT=/CC= del cadista, tal cual)
+                            if (textsBySL.TryGetValue(slId, out var bandTexts) && bandTexts.Count > 0) {
+                                secData.bandTexts = bandTexts;
+                                foreach (var btx in bandTexts) {
+                                    if (secData.bandCT == null) {
+                                        var m = System.Text.RegularExpressions.Regex.Match(btx, @"(?<![A-Za-z])C\.?T\.?\s*[=:]\s*(-?\d+(?:[.,]\d+)?)");
+                                        if (m.Success && double.TryParse(m.Groups[1].Value.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var vct))
+                                            secData.bandCT = vct;
+                                    }
+                                    if (secData.bandCC == null) {
+                                        var m = System.Text.RegularExpressions.Regex.Match(btx, @"(?<![A-Za-z])C\.?C\.?\s*[=:]\s*(-?\d+(?:[.,]\d+)?)");
+                                        if (m.Success && double.TryParse(m.Groups[1].Value.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var vcc))
+                                            secData.bandCC = vcc;
+                                    }
+                                }
+                            }
+                            // v4: cuadro de metrados de esta vista
+                            if (qtoBySL.TryGetValue(slId, out var qtoRows)) secData.qtoTable = qtoRows;
                             List<dynamic> slOverrides = null;
                             overridesBySampleLine.TryGetValue(slId, out slOverrides);
 

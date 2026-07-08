@@ -400,7 +400,18 @@ def extract_sections_test():
                 "Result": result_arg
             }
         }
-        
+
+        # v4: CURACIÓN — extraer solo los ejes que el usuario marcó como reales.
+        # Va embebido como data URL (params.json); sin subir nada extra a OSS.
+        alignment_ids = data.get('alignment_ids') or data.get('alignmentIds')
+        if isinstance(alignment_ids, list):
+            _clean = [str(a).strip() for a in alignment_ids if str(a or '').strip()]
+            if _clean:
+                import json as _pj
+                workitem_payload["arguments"]["Params"] = {
+                    "url": "data:application/json," + _pj.dumps({"alignmentIds": _clean})
+                }
+
         # Ejecutando el WorkItem real en Autodesk Design Automation
         da_url = f"{APS_BASE_URL}/da/us-east/v3/workitems"
         resp = requests.post(da_url, headers=headers, json=workitem_payload)
