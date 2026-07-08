@@ -199,9 +199,14 @@ namespace AlignmentExtractorApp
             Document doc = Application.DocumentManager.MdiActiveDocument;
             Database db = doc.Database;
             var result = new SectionResultV2 { generatedAt = DateTime.UtcNow.ToString("o") };
+            Action<string> ping = (msg) => {
+                try { doc.Editor.WriteMessage($"\n[SEC] {msg}\n"); } catch { }
+            };
+            ping("Run started");
 
             using (Transaction trans = db.TransactionManager.StartTransaction())
             {
+                ping("tx started");
                 // ── SectionViews (AeccDbGraphCrossSection): leer la config REAL del
                 // cadista — (a) marco de la vista (Offset/Elevation min-max) y
                 // (b) GraphOverrides = filas del tab "Sections" (Draw / estilo).
@@ -219,11 +224,32 @@ namespace AlignmentExtractorApp
                     var bt = trans.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
                     bool ovDumped = false;
                     bool qtoDumped = false;
-                    foreach (ObjectId btrId in bt) {
+                    // v4 defensivo: solo ModelSpace + Paper layouts (donde vive Civil).
+                    // Escanear TODOS los BTR (incluidos bloques anónimos de láminas)
+                    // colgó el motor a >60s en DWGs con muchas Section Views.
+                    var scanBtrs = new List<ObjectId>();
+                    scanBtrs.Add(SymbolUtilityServices.GetBlockModelSpaceId(db));
+                    try {
+                        var layoutDict = trans.GetObject(db.LayoutDictionaryId, OpenMode.ForRead) as DBDictionary;
+                        if (layoutDict != null) {
+                            foreach (DBDictionaryEntry ent in layoutDict) {
+                                try {
+                                    var layout = trans.GetObject(ent.Value, OpenMode.ForRead) as Layout;
+                                    if (layout != null && layout.BlockTableRecordId != SymbolUtilityServices.GetBlockModelSpaceId(db))
+                                        scanBtrs.Add(layout.BlockTableRecordId);
+                                } catch { }
+                            }
+                        }
+                    } catch { }
+                    int scanCap = 200000; // tope duro anti-cuelgue
+                    int scanned = 0;
+                    ping($"scanning {scanBtrs.Count} BTRs");
+                    foreach (ObjectId btrId in scanBtrs) {
                         BlockTableRecord btr = null;
                         try { btr = trans.GetObject(btrId, OpenMode.ForRead) as BlockTableRecord; } catch { }
                         if (btr == null) continue;
                         foreach (ObjectId entId in btr) {
+                            if (++scanned > scanCap) break;
                             string cls;
                             try { cls = entId.ObjectClass.Name; } catch { continue; }
 
@@ -316,6 +342,7 @@ namespace AlignmentExtractorApp
                             }
                         }
                     }
+                    ping($"scan end: {scanned} ents, {frameBySampleLine.Count} vistas, {rawTexts.Count} textos, {rawQtos.Count} QTO");
                     result.warnings.Add($"DIAG v3: vistas con marco={frameBySampleLine.Count}, overrides mapeados por id={secOverridesMap.Count}, por vista={overridesBySampleLine.Count}");
 
                     // v4: asociar textos/QTO a la vista MÁS CERCANA (las láminas van
@@ -358,8 +385,10 @@ namespace AlignmentExtractorApp
                 }
 
                 var sectionTypesDumped = new HashSet<string>();
+                ping("civilDoc access");
                 var civilDoc = Autodesk.Civil.ApplicationServices.CivilApplication.ActiveDocument;
                 ObjectIdCollection alignIds = civilDoc.GetAlignmentIds();
+                ping($"{alignIds.Count} alignments");
                 if (alignIds.Count == 0) result.warnings.Add("El DWG no tiene alineamientos.");
 
                 // v4: CURACIÓN — si llega params.json ({"alignmentIds":[...]}), solo
@@ -383,13 +412,17 @@ namespace AlignmentExtractorApp
                     }
                 } catch (Exception pe) { result.warnings.Add("params.json ilegible: " + pe.Message); }
 
+                int alignIdx = 0;
                 foreach (ObjectId alignId in alignIds)
                 {
+                    alignIdx++;
                     Alignment alignment = trans.GetObject(alignId, OpenMode.ForRead) as Alignment;
                     if (alignment == null) continue;
                     if (onlyAligns != null && !onlyAligns.Contains(alignment.Name)) continue;
+                    ping($"[{alignIdx}/{alignIds.Count}] {alignment.Name} start");
 
                     ObjectIdCollection slgIds = alignment.GetSampleLineGroupIds();
+                    ping($"  {slgIds.Count} SLGs");
                     if (slgIds.Count == 0)
                         result.warnings.Add($"Alineamiento '{alignment.Name}': sin Sample Line Groups (no hay secciones que extraer).");
 
@@ -399,8 +432,13 @@ namespace AlignmentExtractorApp
                         if (slg == null) continue;
 
                         ObjectIdCollection slIds = slg.GetSampleLineIds();
+                        int slIdx = 0;
+                        // heartbeat cada N sample lines para no dejar mudo al motor
+                        int pingEvery = 5;
                         foreach (ObjectId slId in slIds)
                         {
+                            slIdx++;
+                            if (slIdx % pingEvery == 0) ping($"  SL {slIdx}/{slIds.Count}");
                             SampleLine sl = trans.GetObject(slId, OpenMode.ForRead) as SampleLine;
                             if (sl == null) continue;
 

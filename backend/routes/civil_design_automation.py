@@ -413,6 +413,8 @@ def extract_sections_test():
                 workitem_payload["arguments"]["Params"] = {
                     "url": "data:application/json;base64," + _b64.b64encode(_payload.encode('utf-8')).decode('ascii')
                 }
+                with open('da_debug_sections.txt', 'a') as f:
+                    f.write(f"CURACION alignmentIds={_clean}\n")
 
         # Ejecutando el WorkItem real en Autodesk Design Automation
         da_url = f"{APS_BASE_URL}/da/us-east/v3/workitems"
@@ -430,6 +432,8 @@ def extract_sections_test():
             UPLOAD_KEYS[workitem_id] = upload_key
         RESULT_OBJECTS[workitem_id] = result_object_name
         
+        with open('da_debug_sections.txt', 'a') as f:
+            f.write(f"WORKITEM_ID {workitem_id}\n")
         return jsonify({
             "status": "In Progress",
             "message": "WorkItem de Secciones enviado a la nube de Civil 3D exitosamente.",
@@ -759,14 +763,17 @@ def get_workitem_status(workitem_id):
                         f.write(report_url if report_url else 'none')
                 except Exception as e:
                     pass
-                # Al fallar: bajar el reporte y devolver la cola (ahí está el
-                # error real del motor) — sin esto se depura a ciegas.
-                if 'failed' in str(status_data.get('status', '')) and report_url:
+                # En cualquier estado terminal distinto de 'success': bajar el
+                # reporte (guardado por workitem para no perderlo entre runs).
+                st_lo = str(status_data.get('status', '')).lower()
+                if st_lo != 'success' and report_url:
                     try:
                         rep = requests.get(report_url, timeout=20)
                         if rep.ok:
                             txt = rep.text
                             status_data['report_tail'] = txt[-3000:]
+                            with open(f'da_report_{workitem_id}.txt', 'w', encoding='utf-8', errors='replace') as f:
+                                f.write(txt)
                             with open('da_report_fail.txt', 'w', encoding='utf-8', errors='replace') as f:
                                 f.write(txt)
                     except Exception:
