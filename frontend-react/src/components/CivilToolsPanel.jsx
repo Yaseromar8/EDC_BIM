@@ -1248,8 +1248,16 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
             const q = `urn=${encodeURIComponent(target)}&scope_urn=${encodeURIComponent(civilScopeUrn)}`;
             await apiFetch(`${BACKEND_URL}/api/civil/alignments?${q}`, { method: 'DELETE' });
             await apiFetch(`${BACKEND_URL}/api/civil/sections?${q}`, { method: 'DELETE' });
+            // barrer también la fila FANTASMA (extracciones viejas guardadas con
+            // urn = scope del frente): es un duplicado de la misma data y si
+            // queda, reaparece en el selector con el mismo nombre.
+            if (target !== civilScopeUrn) {
+                const qg = `urn=${encodeURIComponent(civilScopeUrn)}&scope_urn=${encodeURIComponent(civilScopeUrn)}`;
+                await apiFetch(`${BACKEND_URL}/api/civil/alignments?${qg}`, { method: 'DELETE' });
+                await apiFetch(`${BACKEND_URL}/api/civil/sections?${qg}`, { method: 'DELETE' });
+            }
         } catch (e) { console.warn('[CivilTools] limpieza:', e); }
-        const remaining = civilDbItems.filter(i => i.urn !== target);
+        const remaining = civilDbItems.filter(i => i.urn !== target && i.urn !== civilScopeUrn);
         setCivilDbItems(remaining);
         // sacar la entrada del selector y soltar la selección (que caiga al
         // primer archivo disponible) — listo para cargar el actualizado
