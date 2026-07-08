@@ -237,6 +237,19 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
     const [mdlSlice, setMdlSlice] = useState([]);       // corte del modelo 3D del visor en esta estación
     const [showModel, setShowModel] = useState(true);   // toggle capa "Modelo 3D"
     const [light, setLight] = useState(false);          // modo "Plano": fondo blanco como lámina impresa
+    const [cvSize, setCvSize] = useState({ w: 0, h: 0 }); // tamaño del lienzo en px (para reglas de pantalla)
+    const wrapRef = useRef(null);
+
+    useEffect(() => {
+        const el = wrapRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return undefined;
+        const ro = new ResizeObserver((entries) => {
+            const r = entries[0]?.contentRect;
+            if (r) setCvSize({ w: r.width, h: r.height });
+        });
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [mode]);
     const dragRef = useRef(null);
     const svgRef = useRef(null);
     const lastSyncRef = useRef(null);
@@ -642,19 +655,24 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
     };
 
     const ctcc = useMemo(() => {
-        const excav = shapes.filter((s) => s.closed && !hidden.has(s.cls.key)
-            && (s.pat === 'hatchCut' || /corte|excav/i.test(`${s.cls.label} ${s.rawName || ''}`)));
-        const els = [];
-        excav.forEach((s) => els.push(...shapeElevsAt(s, 0)));
-        if (els.length >= 2) return { ct: Math.max(...els), cc: Math.min(...els) };
-        // Sin excavación cruzando el eje: cae al cuerpo cerrado visible (techo/fondo)
-        const all = [];
+        // CT: techo de la EXCAVACIÓN en el eje (= terreno).
+        // CC: fondo REAL = el punto más profundo de TODOS los cuerpos que cruzan
+        // el eje — la cama de roca/solado queda BAJO el hatch de corte, y el
+        // fondo de excavación de Civil es el fondo de esa cama (p.ej. 3.64,
+        // no el 3.68 donde termina el corte).
+        const excavEls = [];
+        const allEls = [];
         shapes.forEach((s) => {
             if (!s.closed || hidden.has(s.cls.key)) return;
-            all.push(...shapeElevsAt(s, 0));
+            const els = shapeElevsAt(s, 0);
+            allEls.push(...els);
+            if (s.pat === 'hatchCut' || /corte|excav/i.test(`${s.cls.label} ${s.rawName || ''}`)) excavEls.push(...els);
         });
-        if (all.length >= 2) return { ct: Math.max(...all), cc: Math.min(...all) };
-        return { ct: null, cc: null };
+        if (!allEls.length) return { ct: null, cc: null };
+        return {
+            ct: excavEls.length ? Math.max(...excavEls) : Math.max(...allEls),
+            cc: Math.min(...allEls)
+        };
     }, [shapes, hidden]);
 
     const toggle = (key) => {
@@ -701,9 +719,15 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
         const r = (n >> 16) & 255; const g = (n >> 8) & 255; const b = n & 255;
         return (r > 225 && g > 225 && b > 225) ? '#1a1a1a' : c;
     };
-    // Bandas de regla fijas (offsets abajo, cotas a los lados)
-    const bandH = fontSize * 2.1;
-    const bandW = fontSize * 4.0;
+    // Reglas de PANTALLA (px reales, nunca tapan el dibujo al alejar)
+    const RB = { h: 22, w: 36 }; // alto banda inferior / ancho bandas laterales
+    const worldToScreen = (wx, wy) => {
+        const cw = cvSize.w || 1; const ch = cvSize.h || 1;
+        const scale = Math.max(v.w / cw, v.h / ch);
+        const offX = (cw - v.w / scale) / 2;
+        const offY = (ch - v.h / scale) / 2;
+        return [offX + (wx - v.x) / scale, offY + (wy - v.y) / scale];
+    };
 
     return createPortal(
         <div style={dockStyle}>
@@ -743,7 +767,7 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
 
             {/* Dibujo o volúmenes */}
             {mode === 'seccion' ? (
-                <div style={{ flex: 1, minHeight: 0, position: 'relative', background: T.canvas }}>
+                <div ref={wrapRef} style={{ flex: 1, minHeight: 0, position: 'relative', background: T.canvas }}>
                     <svg
                         ref={svgRef}
                         style={{ width: '100%', height: '100%', cursor: dragRef.current ? 'grabbing' : 'grab', touchAction: 'none', display: 'block' }}
@@ -839,64 +863,30 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
                         ))}
                         </g>
 
-                        {/* ── Reglas FIJAS (offsets abajo · cotas a ambos lados) ── */}
-                        <g style={{ pointerEvents: 'none' }}>
-                            <rect x={v.x} y={v.y + v.h - bandH} width={v.w} height={bandH} fill={T.band} />
-                            <rect x={v.x} y={v.y} width={bandW} height={v.h} fill={T.band} />
-                            <rect x={v.x + v.w - bandW} y={v.y} width={bandW} height={v.h} fill={T.band} />
-                            <line x1={v.x} y1={v.y + v.h - bandH} x2={v.x + v.w} y2={v.y + v.h - bandH} stroke={T.frame} strokeWidth={px} />
-                            <line x1={v.x + bandW} y1={v.y} x2={v.x + bandW} y2={v.y + v.h} stroke={T.frame} strokeWidth={px} />
-                            <line x1={v.x + v.w - bandW} y1={v.y} x2={v.x + v.w - bandW} y2={v.y + v.h} stroke={T.frame} strokeWidth={px} />
-                            {gridX.map((gx) => (
-                                <g key={`rx${gx}`}>
-                                    <line x1={gx} y1={v.y + v.h - bandH} x2={gx} y2={v.y + v.h - bandH + px * 5} stroke={T.bandText} strokeWidth={px} />
-                                    <text x={gx} y={v.y + v.h - bandH * 0.32} fill={T.bandText} fontSize={fontSize} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
-                                        {Math.abs(gx) < 1e-9 ? '0' : `${gx.toFixed(gx % 1 ? 1 : 0)}`}
-                                    </text>
+                        {/* CT/CC estilo lámina: ancladas al marco de la Section View */}
+                        {(ctcc.ct != null || ctcc.cc != null) && (() => {
+                            const yBase = frame ? (-frame.b * aspect + fontSize * 2.0) : (v.y + v.h - fontSize * 3.4);
+                            return (
+                                <g style={{ pointerEvents: 'none' }}>
+                                    {ctcc.ct != null && (
+                                        <text x={0} y={yBase} fill={T.label} fontSize={fontSize * 1.05} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
+                                            CT={ctcc.ct.toFixed(2)}
+                                        </text>
+                                    )}
+                                    {ctcc.cc != null && (
+                                        <text x={0} y={yBase + fontSize * 1.4} fill={T.label} fontSize={fontSize * 1.05} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
+                                            CC={ctcc.cc.toFixed(2)}
+                                        </text>
+                                    )}
                                 </g>
-                            ))}
-                            {gridY.map((gy) => (
-                                <g key={`ry${gy}`}>
-                                    <text x={v.x + bandW - px * 6} y={gy - px * 3} fill={T.bandText} fontSize={fontSize} fontFamily="IBM Plex Mono, monospace" textAnchor="end">
-                                        {(-gy / aspect).toFixed(0)}
-                                    </text>
-                                    <text x={v.x + v.w - bandW + px * 6} y={gy - px * 3} fill={T.bandText} fontSize={fontSize} fontFamily="IBM Plex Mono, monospace">
-                                        {(-gy / aspect).toFixed(0)}
-                                    </text>
-                                </g>
-                            ))}
-                            <text x={v.x + bandW - px * 6} y={v.y + fontSize * 1.4} fill={T.bandText} fontSize={fontSize * 0.9} fontFamily="IBM Plex Mono, monospace" textAnchor="end">m</text>
-                            <text x={v.x + v.w / 2} y={v.y + v.h - bandH * 0.32 + fontSize} fill={T.bandText} fontSize={fontSize * 0.85} fontFamily="IBM Plex Mono, monospace" textAnchor="middle" opacity={0.0}>offset</text>
-                        </g>
+                            );
+                        })()}
 
-                        {/* CT/CC estilo lámina: bajo el eje ℄, dos líneas como Civil */}
-                        {(ctcc.ct != null || ctcc.cc != null) && (
-                            <g style={{ pointerEvents: 'none' }}>
-                                {ctcc.ct != null && (
-                                    <text x={0} y={v.y + v.h - bandH - fontSize * 2.6} fill={T.label} fontSize={fontSize * 1.05} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
-                                        CT={ctcc.ct.toFixed(2)}
-                                    </text>
-                                )}
-                                {ctcc.cc != null && (
-                                    <text x={0} y={v.y + v.h - bandH - fontSize * 1.2} fill={T.label} fontSize={fontSize * 1.05} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
-                                        CC={ctcc.cc.toFixed(2)}
-                                    </text>
-                                )}
-                            </g>
-                        )}
-
-                        {/* Cursor consultable: cruz hasta las reglas + imán (el valor vive en la cabina) */}
+                        {/* Cursor consultable: cruz + imán (valores en reglas de pantalla y cabina) */}
                         {probe && (
                             <g style={{ pointerEvents: 'none' }}>
                                 <line x1={probe.off} y1={v.y} x2={probe.off} y2={v.y + v.h} stroke={T.probe} strokeWidth={px * 0.8} strokeDasharray={`${px * 4} ${px * 4}`} opacity={0.6} />
                                 <line x1={v.x} y1={-probe.elev * aspect} x2={v.x + v.w} y2={-probe.elev * aspect} stroke={T.probe} strokeWidth={px * 0.8} strokeDasharray={`${px * 4} ${px * 4}`} opacity={0.6} />
-                                {/* valores marcados SOBRE las reglas, como instrumento */}
-                                <text x={probe.off} y={v.y + v.h - bandH * 0.32} fill={T.probe} fontSize={fontSize} fontWeight="700" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
-                                    {probe.off.toFixed(2)}
-                                </text>
-                                <text x={v.x + bandW - px * 6} y={-probe.elev * aspect - px * 3} fill={T.probe} fontSize={fontSize} fontWeight="700" fontFamily="IBM Plex Mono, monospace" textAnchor="end">
-                                    {probe.elev.toFixed(2)}
-                                </text>
                                 {probe.snapped && (
                                     <>
                                         <circle cx={probe.off} cy={-probe.elev * aspect} r={px * 5} fill="none" stroke={T.snap} strokeWidth={px * 1.6} />
@@ -906,6 +896,59 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice }) => {
                             </g>
                         )}
                     </svg>
+
+                    {/* ── Reglas de PANTALLA: franjas fijas en px, nunca tapan el dibujo ── */}
+                    {cvSize.w > 0 && (
+                        <svg width={cvSize.w} height={cvSize.h} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                            <rect x={0} y={cvSize.h - RB.h} width={cvSize.w} height={RB.h} fill={T.band} opacity={0.94} />
+                            <rect x={0} y={0} width={RB.w} height={cvSize.h - RB.h} fill={T.band} opacity={0.94} />
+                            <rect x={cvSize.w - RB.w} y={0} width={RB.w} height={cvSize.h - RB.h} fill={T.band} opacity={0.94} />
+                            <line x1={0} y1={cvSize.h - RB.h} x2={cvSize.w} y2={cvSize.h - RB.h} stroke={T.frame} strokeWidth={1} />
+                            <line x1={RB.w} y1={0} x2={RB.w} y2={cvSize.h - RB.h} stroke={T.frame} strokeWidth={1} />
+                            <line x1={cvSize.w - RB.w} y1={0} x2={cvSize.w - RB.w} y2={cvSize.h - RB.h} stroke={T.frame} strokeWidth={1} />
+                            {gridX.map((gx) => {
+                                const [sx] = worldToScreen(gx, 0);
+                                if (sx < RB.w + 8 || sx > cvSize.w - RB.w - 8) return null;
+                                return (
+                                    <g key={`sx${gx}`}>
+                                        <line x1={sx} y1={cvSize.h - RB.h} x2={sx} y2={cvSize.h - RB.h + 5} stroke={T.bandText} strokeWidth={1} />
+                                        <text x={sx} y={cvSize.h - 6} fill={T.bandText} fontSize={10.5} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
+                                            {Math.abs(gx) < 1e-9 ? '0' : gx.toFixed(gx % 1 ? 1 : 0)}
+                                        </text>
+                                    </g>
+                                );
+                            })}
+                            {gridY.map((gy) => {
+                                const [, sy] = worldToScreen(0, gy);
+                                if (sy < 12 || sy > cvSize.h - RB.h - 6) return null;
+                                return (
+                                    <g key={`sy${gy}`}>
+                                        <text x={RB.w - 5} y={sy - 3} fill={T.bandText} fontSize={10.5} fontFamily="IBM Plex Mono, monospace" textAnchor="end">{(-gy / aspect).toFixed(0)}</text>
+                                        <text x={cvSize.w - RB.w + 5} y={sy - 3} fill={T.bandText} fontSize={10.5} fontFamily="IBM Plex Mono, monospace">{(-gy / aspect).toFixed(0)}</text>
+                                    </g>
+                                );
+                            })}
+                            <text x={RB.w - 5} y={13} fill={T.bandText} fontSize={9.5} fontFamily="IBM Plex Mono, monospace" textAnchor="end">m</text>
+                            {/* valores del cursor marcados SOBRE las reglas */}
+                            {probe && (() => {
+                                const [sx, sy] = worldToScreen(probe.off, -probe.elev * aspect);
+                                return (
+                                    <g>
+                                        {sx > RB.w && sx < cvSize.w - RB.w && (
+                                            <text x={sx} y={cvSize.h - 6} fill={T.probe} fontSize={10.5} fontWeight="700" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" stroke={T.band} strokeWidth={3} paintOrder="stroke">
+                                                {probe.off.toFixed(2)}
+                                            </text>
+                                        )}
+                                        {sy > 12 && sy < cvSize.h - RB.h && (
+                                            <text x={RB.w - 5} y={sy - 3} fill={T.probe} fontSize={10.5} fontWeight="700" fontFamily="IBM Plex Mono, monospace" textAnchor="end" stroke={T.band} strokeWidth={3} paintOrder="stroke">
+                                                {probe.elev.toFixed(2)}
+                                            </text>
+                                        )}
+                                    </g>
+                                );
+                            })()}
+                        </svg>
+                    )}
 
                     {/* Cabina de datos: todo lo necesario, fijo y quieto */}
                     <div style={{ position: 'absolute', left: 10, bottom: 10, background: light ? 'rgba(255,255,255,0.92)' : 'rgba(18,20,24,0.92)', border: `1px solid ${light ? '#c9ced6' : '#2e3540'}`, borderRadius: 6, padding: '7px 10px', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, lineHeight: 1.6, color: light ? '#26303c' : '#c6ccd4', pointerEvents: 'none', minWidth: 148 }}>
