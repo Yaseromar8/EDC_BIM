@@ -1251,6 +1251,10 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
         } catch (e) { console.warn('[CivilTools] limpieza:', e); }
         const remaining = civilDbItems.filter(i => i.urn !== target);
         setCivilDbItems(remaining);
+        // sacar la entrada del selector y soltar la selección (que caiga al
+        // primer archivo disponible) — listo para cargar el actualizado
+        setAvailableCivilFiles(prev => prev.filter(f => f.urn !== target));
+        setSelectedDwgUrn('');
         setAlignmentData([]);
         setSectionJSON(null);
         setSectionIndex(0);
@@ -1265,6 +1269,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
         persistCache({
             alignmentData: [],
             civilOriginalUrn: '',
+            selectedDwgUrn: '',
             extractProgress: 0,
             extractMessage: '🗑 Datos limpiados. Extrae de nuevo cuando quieras.',
             civilDbItems: remaining
