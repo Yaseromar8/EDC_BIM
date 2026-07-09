@@ -465,6 +465,56 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
         return [...map.values()];
     }, [shapes]);
 
+    // ─────────────────────────────────────────────────────────────────────
+    // v5 AUDITOR: comparación por material — dibujo vs oficial de Civil.
+    // Agrupa por material los MaterialSection del cadista (área oficial Civil)
+    // y los hatch dibujados (área shoelace). Semáforo por divergencia %.
+    // ─────────────────────────────────────────────────────────────────────
+    const auditor = useMemo(() => {
+        if (!station) return [];
+        const norm = (s) => String(s || '')
+            .toLowerCase()
+            .replace(/^_+/, '')
+            .replace(/\s*\(copy\)\s*/g, '')
+            .replace(/^hatch\s+/, '')
+            .replace(/\s+/g, ' ').trim();
+        const groups = new Map(); // key -> { name, dibujo, oficial, color }
+        // 1) Oficial: MaterialSection.area (fuente Civil)
+        (station.sections || []).forEach((sec) => {
+            if (sec.sourceType !== 'MaterialSection') return;
+            const raw = String(sec.name || '').replace(/^SECCIONES[^-]*-\s*SL-\d+\s*-\s*/i, '');
+            const mat = /material list.*?-\s*([^(]+?)(?:\s*\(|$)/i.exec(raw)?.[1]
+                     || /-\s*([^-(]+?)(?:\s*\(|$)/.exec(raw)?.[1]
+                     || sec.materialName || raw;
+            const key = norm(mat);
+            if (!key) return;
+            const g = groups.get(key) || { name: mat.trim(), dibujo: 0, oficial: 0, color: null };
+            const a = Number(sec.area);
+            if (Number.isFinite(a)) g.oficial += a;
+            groups.set(key, g);
+        });
+        // 2) Dibujo: hatches cerrados (shapes with pat)
+        shapes.forEach((s) => {
+            if (!s.closed || !s.pat || hidden.has(s.cls.key)) return;
+            const key = norm(s.cls.label);
+            if (!key) return;
+            const g = groups.get(key) || { name: s.cls.label, dibujo: 0, oficial: 0, color: s.cls.color };
+            const loops = s.loops || [s.pts];
+            g.dibujo += loops.reduce((t, l) => t + shoelace(l), 0);
+            if (!g.color) g.color = s.cls.color;
+            groups.set(key, g);
+        });
+        return [...groups.values()]
+            .filter((g) => g.dibujo > 0 || g.oficial > 0)
+            .map((g) => {
+                const diff = g.dibujo - g.oficial;
+                const base = Math.max(Math.abs(g.oficial), Math.abs(g.dibujo));
+                const pct = base > 0 ? Math.abs(diff) / base : 0;
+                return { ...g, diff, pct };
+            })
+            .sort((a, b) => (b.oficial || b.dibujo) - (a.oficial || a.dibujo));
+    }, [station, shapes, hidden]);
+
     useEffect(() => {
         if (!initializedHidden.current && legend.length > 0) {
             const initial = new Set();
@@ -1007,6 +1057,69 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                         </div>
                     )}
                 </div>
+            ) : mode === 'auditor' ? (
+                // ─── AUDITOR: comparación Dibujo vs Oficial de Civil ───
+                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#191b1e', overflow: 'auto' }}>
+                    <div style={{ padding: '14px 18px 6px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: '#e6e8ec', marginBottom: 3 }}>
+                            🔎 Auditor de cantidades — PK {formatStation(station.station)}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#8a919c', lineHeight: 1.55 }}>
+                            <span style={{ color: '#8ecbff' }}>Dibujo</span> = área del hatch (shoelace del contorno). <span style={{ color: '#4ade80' }}>Oficial</span> = MaterialSection.area del cadista (Civil). <span style={{ color: '#fbbf24' }}>Δ</span> = divergencia %.
+                        </div>
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'IBM Plex Mono, monospace', fontSize: 12 }}>
+                        <thead>
+                            <tr style={{ background: '#1a1a1a', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
+                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 700, color: '#8a919c' }}>Material</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#8ecbff' }}>Dibujo (m²)</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#4ade80' }}>Oficial Civil (m²)</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#fbbf24' }}>Δ (m²)</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#fbbf24' }}>Δ %</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#8a919c' }}>OK</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {auditor.map((g, i) => {
+                                const noOfficial = g.oficial === 0;
+                                const noDrawn = g.dibujo === 0;
+                                const green = g.pct <= 0.005;
+                                const yellow = !green && g.pct <= 0.02;
+                                const semColor = noOfficial || noDrawn ? '#8a919c' : green ? '#4ade80' : yellow ? '#fbbf24' : '#ef4444';
+                                const semIcon = noOfficial || noDrawn ? '—' : green ? '●' : yellow ? '●' : '●';
+                                return (
+                                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                        <td style={{ padding: '9px 12px', color: '#d7dbe2' }}>
+                                            {g.color && <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: g.color, marginRight: 8, verticalAlign: 'middle' }} />}
+                                            {g.name}
+                                        </td>
+                                        <td style={{ padding: '9px 12px', textAlign: 'right', color: g.dibujo > 0 ? '#c6ccd4' : '#4a4f57' }}>
+                                            {g.dibujo > 0 ? g.dibujo.toFixed(3) : '—'}
+                                        </td>
+                                        <td style={{ padding: '9px 12px', textAlign: 'right', color: g.oficial > 0 ? '#c6ccd4' : '#4a4f57' }}>
+                                            {g.oficial > 0 ? g.oficial.toFixed(3) : '—'}
+                                        </td>
+                                        <td style={{ padding: '9px 12px', textAlign: 'right', color: noOfficial || noDrawn ? '#4a4f57' : semColor }}>
+                                            {noOfficial || noDrawn ? '—' : (g.diff >= 0 ? '+' : '') + g.diff.toFixed(3)}
+                                        </td>
+                                        <td style={{ padding: '9px 12px', textAlign: 'right', color: noOfficial || noDrawn ? '#4a4f57' : semColor }}>
+                                            {noOfficial || noDrawn ? '—' : (g.pct * 100).toFixed(2) + '%'}
+                                        </td>
+                                        <td style={{ padding: '9px 12px', textAlign: 'center', color: semColor, fontSize: 14 }}>
+                                            {semIcon}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                    <div style={{ padding: '10px 18px', fontSize: 11, color: '#7c8694', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: 16 }}>
+                        <span><span style={{ color: '#4ade80' }}>●</span> ≤ 0.5%</span>
+                        <span><span style={{ color: '#fbbf24' }}>●</span> ≤ 2%</span>
+                        <span><span style={{ color: '#ef4444' }}>●</span> &gt; 2%</span>
+                        <span>—: solo una fuente disponible</span>
+                    </div>
+                </div>
             ) : (
                 <div style={{ flex: 1, minHeight: 0, display: 'flex', background: '#191b1e' }}>
                     <div style={{ width: 190, flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.06)', background: '#1a1a1a', padding: 10, overflowY: 'auto' }}>
@@ -1098,6 +1211,11 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                     <button onClick={() => setMode('seccion')} style={{ ...btn(mode === 'seccion'), padding: '3px 10px', fontSize: 11 }}>Sección</button>
                     {volumes.length > 0 && (
                         <button onClick={() => setMode('volumenes')} style={{ ...btn(mode === 'volumenes'), padding: '3px 10px', fontSize: 11 }}>Volúmenes</button>
+                    )}
+                    {auditor.length > 0 && (
+                        <button onClick={() => setMode('auditor')} title="Comparar cantidades: dibujo vs oficial de Civil" style={{ ...btn(mode === 'auditor'), padding: '3px 10px', fontSize: 11 }}>
+                            🔎 Auditor
+                        </button>
                     )}
                     {mdlSlice.length > 0 && (
                         <button
