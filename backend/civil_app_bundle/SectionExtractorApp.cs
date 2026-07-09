@@ -48,7 +48,24 @@ namespace AlignmentExtractorApp
         public double? bandCC { get; set; }
         // v4: cuadro de metrados (QTO) de la vista, celda por celda.
         public List<List<string>> qtoTable { get; set; }
+        // v5 AUDITOR: filas del Material List del CORRIDOR (fuente oficial de
+        // cantidades del cadista). Se construyen navegando Corridor.MaterialLists.
+        // Se pueblan por sample line si el corredor las expone; si no, quedan
+        // implícitas en los MaterialSection dentro de sections[] (que ya traen
+        // area, leftOffset, rightOffset).
+        public List<CorridorMaterialV5> corridorMaterials { get; set; }
         public List<SectionShapeV2> sections { get; set; } = new List<SectionShapeV2>();
+    }
+
+    // v5: fila del Material List del Corridor por SL — cantidades oficiales de Civil
+    public class CorridorMaterialV5
+    {
+        public string corridorName { get; set; }
+        public string materialListName { get; set; }
+        public string materialName { get; set; }
+        public double? area { get; set; }
+        public double? volume { get; set; }
+        public double? cumulativeVolume { get; set; }
     }
 
     public class SectionShapeV2
@@ -216,6 +233,8 @@ namespace AlignmentExtractorApp
                 // v4: ubicación de cada vista (para asociarle textos de banda y
                 // cuadros QTO por cercanía) + lo recolectado en el dibujo.
                 var locBySampleLine = new Dictionary<ObjectId, double[]>();
+                bool svLocDumped = false;
+                bool svLocErrDumped = false;
                 var rawTexts = new List<object[]>();   // [x, y, texto]
                 var rawQtos = new List<object[]>();    // [x, y, List<List<string>> filas]
                 var textsBySL = new Dictionary<ObjectId, List<string>>();
@@ -265,32 +284,37 @@ namespace AlignmentExtractorApp
                                 continue;
                             }
 
-                            // v4: cuadros de metrados (QTO) — leerlos celda por celda
+                            // v5: cuadros de metrados (QTO) — clase Civil, no AcDbTable.
+                            // Descubierta por diagnóstico: AeccDbSectionViewQuantityTakeoffTable.
                             if (cls.IndexOf("QuantityTakeoffTable", StringComparison.OrdinalIgnoreCase) >= 0) {
                                 try {
-                                    var tobj = trans.GetObject(entId, OpenMode.ForRead);
-                                    var tbl = tobj as Autodesk.AutoCAD.DatabaseServices.Table;
-                                    if (tbl != null) {
-                                        var rows = new List<List<string>>();
-                                        int nr = 0; int nc = 0;
-                                        try { nr = tbl.Rows.Count; nc = tbl.Columns.Count; } catch { }
-                                        for (int r = 0; r < nr && r < 80; r++) {
-                                            var row = new List<string>();
-                                            for (int c = 0; c < nc && c < 16; c++) {
-                                                string cell = "";
-                                                try { cell = tbl.Cells[r, c].TextString; } catch { }
-                                                row.Add(cell ?? "");
-                                            }
-                                            rows.Add(row);
-                                        }
-                                        if (rows.Count > 0)
-                                            rawQtos.Add(new object[] { tbl.Position.X, tbl.Position.Y, rows });
-                                    } else if (!qtoDumped) {
+                                    dynamic qobj = trans.GetObject(entId, OpenMode.ForRead);
+                                    if (!qtoDumped) {
                                         qtoDumped = true;
                                         var pn = new List<string>();
-                                        foreach (var p in tobj.GetType().GetProperties()) pn.Add(p.Name);
-                                        result.warnings.Add($"DIAG QTO ({cls}) no es Table; props: {string.Join(",", pn)}");
+                                        foreach (var p in ((object)qobj).GetType().GetProperties()) pn.Add(p.Name);
+                                        var mn = new List<string>();
+                                        foreach (var m in ((object)qobj).GetType().GetMethods()) {
+                                            var n = m.Name;
+                                            if (n.IndexOf("Row", StringComparison.OrdinalIgnoreCase) >= 0
+                                                || n.IndexOf("Cell", StringComparison.OrdinalIgnoreCase) >= 0
+                                                || n.IndexOf("Text", StringComparison.OrdinalIgnoreCase) >= 0
+                                                || n.IndexOf("Volume", StringComparison.OrdinalIgnoreCase) >= 0
+                                                || n.IndexOf("Material", StringComparison.OrdinalIgnoreCase) >= 0
+                                                || n.IndexOf("Value", StringComparison.OrdinalIgnoreCase) >= 0
+                                                || n.IndexOf("Get", StringComparison.OrdinalIgnoreCase) == 0) mn.Add(n);
+                                        }
+                                        result.warnings.Add($"DIAG QTO ({cls}) props: {string.Join(",", pn)}");
+                                        result.warnings.Add($"DIAG QTO ({cls}) methods: {string.Join(",", mn)}");
                                     }
+                                    // Posición: por Location o por Position según la clase real
+                                    double qx = 0, qy = 0;
+                                    try { var loc = qobj.Location; qx = (double)loc.X; qy = (double)loc.Y; }
+                                    catch { try { var loc = qobj.Position; qx = (double)loc.X; qy = (double)loc.Y; } catch { } }
+                                    // Guardar como marcador (la lectura de celdas la ajustamos con lo que diga el DIAG)
+                                    var rows = new List<List<string>>();
+                                    rows.Add(new List<string> { "(QTO Civil detectado — descubriendo API por DIAG)" });
+                                    rawQtos.Add(new object[] { qx, qy, rows });
                                 } catch (Exception qe) {
                                     if (!qtoDumped) { qtoDumped = true; result.warnings.Add("DIAG QTO error: " + qe.Message); }
                                 }
@@ -312,10 +336,30 @@ namespace AlignmentExtractorApp
                                     Clean(TryNum(sv, "ElevationMin")),
                                     Clean(TryNum(sv, "ElevationMax"))
                                 };
+                                // Location (Point3d en el SDK). Extraer con TryNum
+                                // porque a veces Location viene como struct sin cast directo.
+                                double? lx = null, ly = null;
                                 try {
                                     var loc = sv.Location;
-                                    locBySampleLine[slKey] = new double[] { (double)loc.X, (double)loc.Y };
-                                } catch { }
+                                    lx = Clean(TryNum(loc, "X"));
+                                    ly = Clean(TryNum(loc, "Y"));
+                                    if (lx == null) {
+                                        try { lx = Convert.ToDouble(loc.X); ly = Convert.ToDouble(loc.Y); } catch { }
+                                    }
+                                    if (lx == null && !svLocDumped) {
+                                        svLocDumped = true;
+                                        var pn = new List<string>();
+                                        foreach (var p in ((object)loc).GetType().GetProperties()) pn.Add(p.Name);
+                                        result.warnings.Add($"DIAG sv.Location props: {string.Join(",", pn)}");
+                                    }
+                                } catch (Exception locEx) {
+                                    if (!svLocErrDumped) {
+                                        svLocErrDumped = true;
+                                        result.warnings.Add($"DIAG sv.Location error: {locEx.GetType().Name} {locEx.Message}");
+                                    }
+                                }
+                                if (lx.HasValue && ly.HasValue)
+                                    locBySampleLine[slKey] = new double[] { lx.Value, ly.Value };
                             }
 
                             // (b) filas de la Section View: Draw real por sección
@@ -632,6 +676,76 @@ namespace AlignmentExtractorApp
 
                                 secData.sections.Add(shape);
                             }
+
+                            // v5 AUDITOR: Material Lists del Corridor → cantidades OFICIALES
+                            // (Civil las calcula y las imprime en el cuadro QTO — este es
+                            // el mismo dato que ve el auditor en el plano).
+                            try
+                            {
+                                if (civilDoc.CorridorCollection != null)
+                                {
+                                    foreach (ObjectId corridorId in civilDoc.CorridorCollection)
+                                    {
+                                        if (!sampledSources.Contains(corridorId)) continue;
+                                        Corridor corr = trans.GetObject(corridorId, OpenMode.ForRead) as Corridor;
+                                        if (corr == null) continue;
+                                        try {
+                                            dynamic dc = corr;
+                                            dynamic mLists = null;
+                                            try { mLists = dc.GetMaterialLists(); }
+                                            catch { try { mLists = dc.MaterialLists; } catch { } }
+                                            if (mLists == null) continue;
+                                            if (sectionTypesDumped.Add("MLDUMP")) {
+                                                var mnames = new List<string>();
+                                                foreach (var m in ((object)mLists).GetType().GetMethods()) mnames.Add(m.Name);
+                                                result.warnings.Add($"DIAG MaterialLists methods: {string.Join(",", mnames)}");
+                                            }
+                                            foreach (var ml in mLists) {
+                                                if (sectionTypesDumped.Add("MLPROPS")) {
+                                                    var pn = new List<string>();
+                                                    foreach (var p in ((object)ml).GetType().GetProperties()) pn.Add(p.Name);
+                                                    var mn = new List<string>();
+                                                    foreach (var m in ((object)ml).GetType().GetMethods()) mn.Add(m.Name);
+                                                    result.warnings.Add($"DIAG MaterialList props: {string.Join(",", pn)}");
+                                                    result.warnings.Add($"DIAG MaterialList methods: {string.Join(",", mn)}");
+                                                }
+                                                string mlName = null;
+                                                try { mlName = (string)((dynamic)ml).Name; } catch { }
+                                                dynamic materials = null;
+                                                try { materials = ((dynamic)ml).GetMaterialSectionData(sl.Station); } catch { }
+                                                if (materials == null) { try { materials = ((dynamic)ml).Materials; } catch { } }
+                                                if (materials == null) continue;
+                                                if (sectionTypesDumped.Add("MATPROPSDATA")) {
+                                                    try {
+                                                        foreach (var mm in materials) {
+                                                            var pn = new List<string>();
+                                                            foreach (var p in ((object)mm).GetType().GetProperties()) pn.Add(p.Name);
+                                                            result.warnings.Add($"DIAG Material item props: {string.Join(",", pn)}");
+                                                            break;
+                                                        }
+                                                    } catch { }
+                                                }
+                                                foreach (var mm in materials) {
+                                                    try {
+                                                        var row = new CorridorMaterialV5 {
+                                                            corridorName = corr.Name,
+                                                            materialListName = mlName,
+                                                            materialName = TryGet(mm, "Name") as string ?? TryGet(mm, "MaterialName") as string,
+                                                            area = Clean(TryNum(mm, "Area", "SectionArea", "CutArea", "FillArea")),
+                                                            volume = Clean(TryNum(mm, "Volume", "IncrementalVolume", "IncVolume")),
+                                                            cumulativeVolume = Clean(TryNum(mm, "CumulativeVolume", "CumVolume", "TotalVolume"))
+                                                        };
+                                                        if (secData.corridorMaterials == null) secData.corridorMaterials = new List<CorridorMaterialV5>();
+                                                        secData.corridorMaterials.Add(row);
+                                                    } catch { }
+                                                }
+                                            }
+                                        } catch (Exception meX) {
+                                            result.warnings.Add($"CorridorMaterials '{corr.Name}' @PK {sl.Station:F2}: {meX.Message}");
+                                        }
+                                    }
+                                }
+                            } catch { }
 
                             // ── 2) Shapes del corredor: coordenadas ABSOLUTAS vía XYZ ──
                             try
