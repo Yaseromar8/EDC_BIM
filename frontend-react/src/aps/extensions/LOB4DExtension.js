@@ -263,7 +263,9 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         }
         if (dir.lengthSq() < 1e-10) dir.set(1, 0, 0);
         dir.normalize();
-        const perp = new THREE.Vector3(-dir.y, dir.x, 0);
+        // Civil 3D: mirando en sentido de avance, DERECHA = offset positivo.
+        // Rotación 90° CW del vector de dirección → coincide con esa convención.
+        const perp = new THREE.Vector3(dir.y, -dir.x, 0);
         // Silueta principal: fuera aceros/refuerzos por nombre
         const steelRe = /acero|rebar|refuerzo|reinf|varilla|estribo|dowel|malla|armadur/i;
 
@@ -1363,61 +1365,53 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
 
     collectStationAnnotations(alignmentData) {
         const map = new Map();
-        const points = this.getActiveProfilePoints(alignmentData);
-        if (points.length >= 2) {
-            const min = points[0].station;
-            const max = points[points.length - 1].station;
-            const add = (value, label, priority) => {
-                if (value == null || Number.isNaN(Number(value))) return;
-                if (value < min - 1e-4 || value > max + 1e-4) return;
-                const key = Number(value).toFixed(2);
-                if (!map.has(key) || map.get(key).priority < priority) {
-                    map.set(key, { station: value, label, priority });
-                }
-            };
+        let min = Infinity;
+        let max = -Infinity;
 
-            add(min, `Inicio ${this.formatStation(min)}`, 4);
-            add(max, `Fin ${this.formatStation(max)}`, 4);
-
-            const interval = alignmentData?.stationIncrement || this.chooseStationInterval(max - min);
-            const firstRounded = Math.ceil(min / interval) * interval;
-            for (let station = firstRounded; station <= max + 1e-4; station += interval) {
-                add(station, this.formatStation(station), 2);
-            }
-        }
-        
+        // 1. Obtener min/max de la geometría horizontal
         const subEntities = alignmentData?.subEntities || [];
-        let min = Infinity, max = -Infinity;
         for (const segment of subEntities) {
             if (Number.isFinite(Number(segment.startStation))) min = Math.min(min, Number(segment.startStation));
             if (Number.isFinite(Number(segment.endStation))) max = Math.max(max, Number(segment.endStation));
         }
 
-        if (min === Infinity || max === -Infinity) {
-            return Array.from(map.values()).sort((a, b) => a.station - b.station).slice(0, 1500);
+        // 2. Extender con el rango del perfil vertical (si existe)
+        const points = this.getActiveProfilePoints(alignmentData);
+        if (points.length >= 2) {
+            min = Math.min(min, points[0].station);
+            max = Math.max(max, points[points.length - 1].station);
         }
 
-        const length = max - min;
+        if (min === Infinity || max === -Infinity) {
+            return [];
+        }
+
         const add = (value, label, priority) => {
             if (value == null || Number.isNaN(Number(value))) return;
-            if (value < min - 1e-4 || value > max + 1e-4) return;
-            const key = Number(value).toFixed(2);
+            // Tolerancia de 1mm para evitar problemas de flotantes
+            if (value < min - 1e-3 || value > max + 1e-3) return;
+            // Usamos round a 2 decimales EXACTOS para evitar llaves duplicadas
+            const key = Math.round(value * 100).toString();
             if (!map.has(key) || map.get(key).priority < priority) {
                 map.set(key, { station: value, label, priority });
             }
         };
 
+        // Extremos (prioridad máxima)
         add(min, `Inicio ${this.formatStation(min)}`, 4);
         add(max, `Fin ${this.formatStation(max)}`, 4);
 
+        // Geometría horizontal (prioridad alta)
         for (const segment of subEntities) {
             add(segment.startStation, this.getSegmentStationLabel(segment, segment.startStation), 3);
             add(segment.endStation, this.getSegmentStationLabel(segment, segment.endStation), 3);
         }
 
+        // Intervalos regulares (prioridad normal)
+        const length = max - min;
         const interval = alignmentData?.stationIncrement || this.chooseStationInterval(length);
         const firstRounded = Math.ceil(min / interval) * interval;
-        for (let station = firstRounded; station <= max + 1e-4; station += interval) {
+        for (let station = firstRounded; station <= max + 1e-3; station += interval) {
             add(station, this.formatStation(station), 2);
         }
 
