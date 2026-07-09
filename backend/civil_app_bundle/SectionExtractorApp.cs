@@ -284,37 +284,49 @@ namespace AlignmentExtractorApp
                                 continue;
                             }
 
-                            // v5: cuadros de metrados (QTO) — clase Civil, no AcDbTable.
-                            // Descubierta por diagnóstico: AeccDbSectionViewQuantityTakeoffTable.
+                            // v5: cuadros de metrados (QTO) — clase Civil.
+                            // Descubierto por DIAG anterior: GetSelectedMaterials() +
+                            // MaterialListGuid. Asociar por Location (Extents3d) igual
+                            // que las vistas de sección.
                             if (cls.IndexOf("QuantityTakeoffTable", StringComparison.OrdinalIgnoreCase) >= 0) {
                                 try {
                                     dynamic qobj = trans.GetObject(entId, OpenMode.ForRead);
-                                    if (!qtoDumped) {
-                                        qtoDumped = true;
-                                        var pn = new List<string>();
-                                        foreach (var p in ((object)qobj).GetType().GetProperties()) pn.Add(p.Name);
-                                        var mn = new List<string>();
-                                        foreach (var m in ((object)qobj).GetType().GetMethods()) {
-                                            var n = m.Name;
-                                            if (n.IndexOf("Row", StringComparison.OrdinalIgnoreCase) >= 0
-                                                || n.IndexOf("Cell", StringComparison.OrdinalIgnoreCase) >= 0
-                                                || n.IndexOf("Text", StringComparison.OrdinalIgnoreCase) >= 0
-                                                || n.IndexOf("Volume", StringComparison.OrdinalIgnoreCase) >= 0
-                                                || n.IndexOf("Material", StringComparison.OrdinalIgnoreCase) >= 0
-                                                || n.IndexOf("Value", StringComparison.OrdinalIgnoreCase) >= 0
-                                                || n.IndexOf("Get", StringComparison.OrdinalIgnoreCase) == 0) mn.Add(n);
-                                        }
-                                        result.warnings.Add($"DIAG QTO ({cls}) props: {string.Join(",", pn)}");
-                                        result.warnings.Add($"DIAG QTO ({cls}) methods: {string.Join(",", mn)}");
-                                    }
-                                    // Posición: por Location o por Position según la clase real
+                                    // Location por Extents3d (mismo camino que las vistas)
                                     double qx = 0, qy = 0;
-                                    try { var loc = qobj.Location; qx = (double)loc.X; qy = (double)loc.Y; }
-                                    catch { try { var loc = qobj.Position; qx = (double)loc.X; qy = (double)loc.Y; } catch { } }
-                                    // Guardar como marcador (la lectura de celdas la ajustamos con lo que diga el DIAG)
+                                    bool hasLoc = false;
+                                    try {
+                                        Extents3d ext = ((Autodesk.AutoCAD.DatabaseServices.Entity)qobj).GeometricExtents;
+                                        qx = (ext.MinPoint.X + ext.MaxPoint.X) * 0.5;
+                                        qy = (ext.MinPoint.Y + ext.MaxPoint.Y) * 0.5;
+                                        hasLoc = true;
+                                    } catch { }
+                                    // MaterialListGuid = identidad del ML asociado
+                                    string mlGuid = null;
+                                    try { mlGuid = qobj.MaterialListGuid.ToString(); } catch { }
+                                    // Materiales SELECCIONADOS en este cuadro (fuente OFICIAL)
                                     var rows = new List<List<string>>();
-                                    rows.Add(new List<string> { "(QTO Civil detectado — descubriendo API por DIAG)" });
-                                    rawQtos.Add(new object[] { qx, qy, rows });
+                                    rows.Add(new List<string> { "material", "guid" });
+                                    try {
+                                        dynamic sel = qobj.GetSelectedMaterials();
+                                        if (sel != null) {
+                                            foreach (dynamic sm in sel) {
+                                                string sname = null; string sguid = null;
+                                                try { sname = sm.Name as string ?? sm.MaterialName as string; } catch { }
+                                                try { sguid = sm.Guid.ToString(); } catch { try { sguid = sm.MaterialGuid.ToString(); } catch { } }
+                                                rows.Add(new List<string> { sname ?? "", sguid ?? "" });
+                                                if (!qtoDumped) {
+                                                    qtoDumped = true;
+                                                    var pn = new List<string>();
+                                                    foreach (var p in ((object)sm).GetType().GetProperties()) pn.Add(p.Name);
+                                                    result.warnings.Add($"DIAG QTOitem props: {string.Join(",", pn)}");
+                                                }
+                                            }
+                                        }
+                                    } catch (Exception qe) {
+                                        if (!qtoDumped) { qtoDumped = true; result.warnings.Add("DIAG QTO GetSelectedMaterials error: " + qe.Message); }
+                                    }
+                                    if (mlGuid != null) rows.Insert(0, new List<string> { "MaterialListGuid", mlGuid });
+                                    if (hasLoc) rawQtos.Add(new object[] { qx, qy, rows });
                                 } catch (Exception qe) {
                                     if (!qtoDumped) { qtoDumped = true; result.warnings.Add("DIAG QTO error: " + qe.Message); }
                                 }
@@ -336,26 +348,20 @@ namespace AlignmentExtractorApp
                                     Clean(TryNum(sv, "ElevationMin")),
                                     Clean(TryNum(sv, "ElevationMax"))
                                 };
-                                // Location (Point3d en el SDK). Extraer con TryNum
-                                // porque a veces Location viene como struct sin cast directo.
+                                // v5: Location del SectionView. La API expone
+                                // Location como Point3d (struct) — el cast dinámico
+                                // falla silenciosamente y devuelve 0. Usamos
+                                // GeometricExtents que sí retorna un Extents3d con
+                                // Min/Max directamente accesibles como double.
                                 double? lx = null, ly = null;
                                 try {
-                                    var loc = sv.Location;
-                                    lx = Clean(TryNum(loc, "X"));
-                                    ly = Clean(TryNum(loc, "Y"));
-                                    if (lx == null) {
-                                        try { lx = Convert.ToDouble(loc.X); ly = Convert.ToDouble(loc.Y); } catch { }
-                                    }
-                                    if (lx == null && !svLocDumped) {
-                                        svLocDumped = true;
-                                        var pn = new List<string>();
-                                        foreach (var p in ((object)loc).GetType().GetProperties()) pn.Add(p.Name);
-                                        result.warnings.Add($"DIAG sv.Location props: {string.Join(",", pn)}");
-                                    }
+                                    Extents3d ext = ((Autodesk.AutoCAD.DatabaseServices.Entity)sv).GeometricExtents;
+                                    lx = (ext.MinPoint.X + ext.MaxPoint.X) * 0.5;
+                                    ly = (ext.MinPoint.Y + ext.MaxPoint.Y) * 0.5;
                                 } catch (Exception locEx) {
                                     if (!svLocErrDumped) {
                                         svLocErrDumped = true;
-                                        result.warnings.Add($"DIAG sv.Location error: {locEx.GetType().Name} {locEx.Message}");
+                                        result.warnings.Add($"DIAG GeometricExtents error: {locEx.GetType().Name} {locEx.Message}");
                                     }
                                 }
                                 if (lx.HasValue && ly.HasValue)
@@ -680,15 +686,28 @@ namespace AlignmentExtractorApp
                             // v5 AUDITOR: Material Lists del Corridor → cantidades OFICIALES
                             // (Civil las calcula y las imprime en el cuadro QTO — este es
                             // el mismo dato que ve el auditor en el plano).
+                            // Recorremos TODOS los corridors del documento (sin filtrar por
+                            // sampledSources: la SL puede sampleaer una superficie, no el
+                            // corridor directo, pero el ML sigue asociado al alineamiento).
                             try
                             {
                                 if (civilDoc.CorridorCollection != null)
                                 {
                                     foreach (ObjectId corridorId in civilDoc.CorridorCollection)
                                     {
-                                        if (!sampledSources.Contains(corridorId)) continue;
                                         Corridor corr = trans.GetObject(corridorId, OpenMode.ForRead) as Corridor;
                                         if (corr == null) continue;
+                                        // Solo material lists del CORRIDOR que corresponde
+                                        // a este alineamiento (matching por baseline).
+                                        bool alignMatch = false;
+                                        try {
+                                            foreach (var bl in ((dynamic)corr).Baselines) {
+                                                try {
+                                                    if ((ObjectId)bl.AlignmentId == alignId) { alignMatch = true; break; }
+                                                } catch { }
+                                            }
+                                        } catch { }
+                                        if (!alignMatch) continue;
                                         try {
                                             dynamic dc = corr;
                                             dynamic mLists = null;
