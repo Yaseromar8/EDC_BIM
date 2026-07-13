@@ -32,6 +32,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         this._onStationCursorPointerUp = this.onStationCursorPointerUp.bind(this);
         this.onStationCameraChange = this.onStationCameraChange.bind(this);
         this.directThemedDbIds = new Map();
+        this.persistentLinksLoaded = false;
 
         this.vertexShader = `
             attribute float aInstancePKOffset;
@@ -101,12 +102,116 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
 
         this.handleClear4D = () => {
             this.clear4DTheming();
+            this.clearExcavationCut();
+        };
+
+        // ── Modo prueba por parámetro (p.ej. Vaciado_Nro → FASE 01..07) ──
+        this.handleParamScan = async (e) => {
+            const idx = await this.buildParamPhaseIndex(e.detail?.propName);
+            window.dispatchEvent(new CustomEvent('lob-param-scanned', {
+                detail: idx ? { propName: idx.propName, phases: idx.phases, total: idx.total } : null
+            }));
+        };
+        this.handleParamStep = (e) => {
+            this.paramMode = true;
+            this.simulateParamPhase(Number(e.detail?.phaseIndex || 0));
+        };
+        this.handleParamClear = () => {
+            this.paramMode = false;
+            this.clearParamSimulation();
+        };
+
+        // Resaltar por estado 4D: aísla los elementos del estado clickeado (null = limpiar)
+        this.handleIsolateState = (e) => {
+            const state = e.detail?.state || null;
+            if (!state) this.clearStateIsolation();
+            else this.isolateByState(state);
+        };
+
+        // LOB → 3D: aísla y VUELA a los elementos de una partida (codes exactos)
+        // o de una rama del EDT (prefix, ej. '06.02.'). El puente visual que
+        // TILOS no tiene: del diagrama tiempo-distancia al modelo real.
+        this.handleFocusElements = async (e) => {
+            const { codes, prefix } = e.detail || {};
+            if (!this.getThemingModels().length) return;
+            await this.ensurePropertyIndex();
+            const wantPrefix = String(prefix || '').trim();
+            const wanted = new Set((codes || []).map((c) => String(c).trim()).filter(Boolean));
+            const targets = [];
+            for (const [code, items] of Object.entries(this.partidaCodeToDbIds || {})) {
+                if (wanted.has(code) || (wantPrefix && code.startsWith(wantPrefix))) targets.push(...items);
+            }
+            if (!targets.length) {
+                console.warn('[LOB4D] Ver en 3D: sin elementos con CodigoDePartida para', e.detail);
+                return;
+            }
+            const perModel = new Map();
+            targets.forEach(({ dbId, model }) => {
+                const m = model || this.viewer.model;
+                if (!perModel.has(m)) perModel.set(m, []);
+                perModel.get(m).push(dbId);
+            });
+            this.getThemingModels().forEach((m) => {
+                const ids = perModel.get(m);
+                try { this.viewer.isolate(ids && ids.length ? ids : [-999], m); } catch (err) { /* noop */ }
+            });
+            // volar a la caja unión de los elementos
+            const THREE = window.THREE;
+            if (THREE) {
+                const acc = new THREE.Box3(); acc.makeEmpty();
+                const tmp = new THREE.Box3();
+                perModel.forEach((ids, m) => {
+                    const frags = m.getFragmentList?.();
+                    const tree = m.getInstanceTree?.();
+                    if (!frags || !tree) return;
+                    ids.forEach((dbId) => {
+                        tree.enumNodeFragments(dbId, (f) => { frags.getWorldBounds(f, tmp); acc.union(tmp); }, true);
+                    });
+                });
+                if (!acc.isEmpty()) {
+                    try { this.viewer.navigation.fitBounds(false, acc, false); } catch (err) { /* noop */ }
+                }
+            }
+            this.scopeActive = true; // reutiliza el clear de alcance para restaurar
+            this.viewer.impl.invalidate(true, true, true);
+            console.log(`[LOB4D] Ver en 3D: ${targets.length} elementos aislados (${wantPrefix || [...wanted].join(',')})`);
+        };
+
+        // Derivar PROGRESIVAS desde el eje: proyecta cada elemento (centro de su
+        // caja) al alineamiento activo → PK por elemento → rango por partida.
+        this.handleDeriveStations = async () => {
+            const result = await this.computeElementStations();
+            window.dispatchEvent(new CustomEvent('lob-stations-derived', { detail: result }));
+        };
+
+        // Frente/alcance por rama del EDT: aísla los elementos de la rama dada
+        // (planeamiento mapeado primero, CodigoDePartida como respaldo).
+        this.handleScopeChange = async (e) => {
+            const { codes, activityIds, mappedActivityIds } = e.detail || {};
+            if (!this.getThemingModels().length) return;
+            await this.ensurePropertyIndex();
+            if (!codes || !codes.length) this.clearScopeIsolation();
+            else this.isolateScope(codes, activityIds, mappedActivityIds);
         };
 
         window.addEventListener('lob-play', this.handlePlayEvent);
         window.addEventListener('lob-seek', this.handleSeekEvent);
         window.addEventListener('lob-time-update', this.handleTimeUpdate);
         window.addEventListener('lob-clear', this.handleClear4D);
+        window.addEventListener('lob-param-scan', this.handleParamScan);
+        window.addEventListener('lob-param-step', this.handleParamStep);
+        window.addEventListener('lob-param-clear', this.handleParamClear);
+        window.addEventListener('lob-isolate-state', this.handleIsolateState);
+        window.addEventListener('lob-scope-change', this.handleScopeChange);
+        window.addEventListener('lob-derive-stations', this.handleDeriveStations);
+        window.addEventListener('lob-focus-elements', this.handleFocusElements);
+
+        // Toggle de rótulos flotantes por SubZona (desde la UI del visor)
+        this.handleZoneLabels = (e) => {
+            const on = e?.detail?.visible;
+            this.setZoneLabelsVisible(on !== false);
+        };
+        window.addEventListener('lob-zone-labels', this.handleZoneLabels);
 
 
         // Contenedor DOM para las etiquetas de progresivas (fiable, se proyecta con la cámara)
@@ -122,6 +227,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
     unload() {
         console.log('[LOB4D] Extension Unloaded');
         this.stopAnimation();
+        this.clearExcavationCut();
         this.restoreMaterials();
         this.clearAlignmentOverlay();
         this.disableLiveHover();
@@ -140,6 +246,17 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         window.removeEventListener('lob-seek', this.handleSeekEvent);
         window.removeEventListener('lob-time-update', this.handleTimeUpdate);
         window.removeEventListener('lob-clear', this.handleClear4D);
+        window.removeEventListener('lob-param-scan', this.handleParamScan);
+        window.removeEventListener('lob-param-step', this.handleParamStep);
+        window.removeEventListener('lob-param-clear', this.handleParamClear);
+        window.removeEventListener('lob-isolate-state', this.handleIsolateState);
+        window.removeEventListener('lob-scope-change', this.handleScopeChange);
+        window.removeEventListener('lob-derive-stations', this.handleDeriveStations);
+        window.removeEventListener('lob-focus-elements', this.handleFocusElements);
+        window.removeEventListener('lob-zone-labels', this.handleZoneLabels);
+        this.clearZoneLabels();
+        if (this._zoneLabelGroup) { this._zoneLabelGroup.remove(); this._zoneLabelGroup = null; }
+        this.clearParamSimulation();
         this.viewer.clearThemingColors();
         this.spatialIndex = null;
         this.alignmentLines = [];
@@ -165,8 +282,11 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             if (this._hoverRaf) return; // ya hay uno pendiente este frame
             this._hoverRaf = requestAnimationFrame(() => {
                 this._hoverRaf = null;
-                const station = this.stationFromCursor(ev.clientX, ev.clientY);
-                if (station != null) this.setStation(station);
+                const sample = this.sampleFromCursor(ev.clientX, ev.clientY);
+                if (sample != null) {
+                    if (sample.alignment) this.activeAlignment = sample.alignment;
+                    this.setStation(sample.station);
+                }
             });
         };
         canvas.addEventListener('mousemove', this._onCanvasMove);
@@ -184,9 +304,9 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         }
     }
 
-    // Proyecta las muestras del eje a pantalla y devuelve la estación de la más
-    // cercana al cursor, solo si está dentro del umbral (px). Si no, null.
-    stationFromCursor(clientX, clientY) {
+    // Proyecta las muestras del eje a pantalla y devuelve la MUESTRA más
+    // cercana al cursor ({station, alignment}), solo si está dentro del umbral.
+    sampleFromCursor(clientX, clientY) {
         const THREE = window.THREE;
         const canvas = this.viewer?.impl?.canvas || this.viewer?.canvas;
         const camera = this.viewer?.impl?.camera;
@@ -207,7 +327,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         }
 
         const threshold = this.liveHoverThresholdPx;
-        if (best && bestDist <= threshold * threshold) return best.station;
+        if (best && bestDist <= threshold * threshold) return best;
         return null;
     }
 
@@ -439,9 +559,10 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
 
     onStationCursorPointerMove(event) {
         if (!this._isStationCursorDragging || !this.activeAlignment) return;
-        const station = this.stationFromCursor(event.clientX, event.clientY);
-        if (station == null) return;
-        this.setStation(station);
+        const sample = this.sampleFromCursor(event.clientX, event.clientY);
+        if (sample == null) return;
+        if (sample.alignment) this.activeAlignment = sample.alignment;
+        this.setStation(sample.station);
     }
 
     onStationCursorPointerUp() {
@@ -449,12 +570,14 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
     }
 
     buildAlignmentSamples(alignmentData, model) {
+        // cada muestra recuerda SU alineamiento: con 2+ ejes activos, el hover y
+        // el clic en etiquetas deben operar sobre el eje correcto, no el último.
         const profilePoints = this.getActiveProfilePoints(alignmentData);
         if (profilePoints.length >= 2) {
             return profilePoints
                 .map(point => {
                     const viewerPoint = this.civilToViewerPoint(point, model);
-                    return viewerPoint ? { point: viewerPoint, station: point.station } : null;
+                    return viewerPoint ? { point: viewerPoint, station: point.station, alignment: alignmentData } : null;
                 })
                 .filter(Boolean);
         }
@@ -465,7 +588,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             for (const station of this.getSegmentSampleStations(alignmentData, segment)) {
                 const civilPoint = this.pointAtStation(alignmentData, station);
                 const viewerPoint = this.civilToViewerPoint(civilPoint, model);
-                if (viewerPoint) samples.push({ point: viewerPoint, station });
+                if (viewerPoint) samples.push({ point: viewerPoint, station, alignment: alignmentData });
             }
         }
         return samples;
@@ -622,6 +745,22 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             .replace(/[^a-z0-9]/g, '');
     }
 
+    // Llave de CRONOGRAMA: código de planeamiento = actividad/paño real del P6.
+    // Es la única que da fechas correctas por elemento (04_29_DSI_CodigoPlaneamiento).
+    isPlanningPropertyName(displayName) {
+        const name = this.normalize4DPropName(displayName);
+        const keys = [
+            'codigoplaneamiento',
+            'planningcode',
+            'activityid',
+            'idactividad',
+            'codigoactividad',
+            'scheduleid',
+            'taskid',
+        ];
+        return keys.some((key) => name.includes(key));
+    }
+
     isActivityPropertyName(displayName) {
         const name = this.normalize4DPropName(displayName);
         const keys = [
@@ -705,9 +844,71 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         this.viewer.impl.invalidate(true, true, true);
     }
 
+    async setElementLinks(links = []) {
+        this.clear4DTheming();
+        this.activityToDbIds = {};
+        this.propertyIndexBuilt = false;
+        this.persistentLinksLoaded = true;
+
+        const models = this.getThemingModels();
+        if (!models.length) return;
+
+        const mappings = await Promise.all(models.map((model) => new Promise((resolve) => {
+            const done = (mapping) => resolve({ model, mapping: mapping || {} });
+            try {
+                model.getExternalIdMapping(done, () => done({}));
+            } catch {
+                done({});
+            }
+        })));
+        const byUrn = new Map();
+        mappings.forEach(({ model, mapping }) => {
+            const urn = this.normalizeUrnKey(model?.getData?.()?.urn);
+            if (urn) byUrn.set(urn, { model, mapping });
+        });
+
+        const seen = new Set();
+        const add = (key, dbId, model) => {
+            const cleanKey = this.normalize4DKey(key);
+            if (!cleanKey || !Number.isInteger(dbId) || dbId <= 0) return;
+            const unique = `${cleanKey}:${this.modelKey(model)}:${dbId}`;
+            if (seen.has(unique)) return;
+            seen.add(unique);
+            if (!this.activityToDbIds[cleanKey]) this.activityToDbIds[cleanKey] = [];
+            this.activityToDbIds[cleanKey].push({ dbId, model, state: 'normal' });
+        };
+
+        (links || []).forEach((link) => {
+            const sourceUrn = this.normalizeUrnKey(link.source_urn || link.sourceUrn);
+            let target = byUrn.get(sourceUrn);
+            if (!target) {
+                target = mappings.find(({ mapping }) => mapping[link.external_id || link.externalId] != null);
+            }
+            if (!target) return;
+            const externalId = String(link.external_id || link.externalId || '');
+            const dbId = Number(target.mapping[externalId]);
+            add(link.codigo || link.code, dbId, target.model);
+            add(link.activity_id || link.activityId, dbId, target.model);
+        });
+
+        this.propertyIndexBuilt = true;
+        const keys = Object.keys(this.activityToDbIds);
+        window.dispatchEvent(new CustomEvent('lob-activities-found', {
+            detail: { ids: keys, source: 'postgres', links: links.length, mappedKeys: keys.length }
+        }));
+        this.viewer.impl.invalidate(true, true, true);
+    }
+
     buildPropertyIndex() {
         return new Promise((resolve) => {
+            if (this.persistentLinksLoaded) {
+                this.propertyIndexBuilt = true;
+                resolve();
+                return;
+            }
             this.activityToDbIds = {}; // "PQ08_1090" -> [{dbId: 12, state: 'normal'}, ...]
+            this.partidaCodeToDbIds = {}; // "05.02.03.08" -> [{dbId, model}] (alcance por rama EDT)
+            this.elementScopeInfo = new Map(); // "modelId:dbId" -> {dbId, model, planning:Set, partidas:Set}
 
             console.log('[LOB4DExtension] Building property index...');
 
@@ -720,7 +921,9 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
                 if (pending > 0) return;
                 this.propertyIndexBuilt = true;
                 const foundIds = Object.keys(this.activityToDbIds);
-                console.log(`[LOB4DExtension] Property index built. Found ${foundIds.length} unique Activity IDs.`);
+                const totalDb = Object.values(this.activityToDbIds).reduce((n, arr) => n + arr.length, 0);
+                console.log(`[4D-DIAG] Índice construido: ${foundIds.length} llaves, ${totalDb} elementos. Muestra:`, foundIds.slice(0, 12));
+                window.__lob4dDiag = { indexKeys: foundIds.length, indexElems: totalDb, sample: foundIds.slice(0, 12) };
                 window.dispatchEvent(new CustomEvent('lob-activities-found', { detail: { ids: foundIds } }));
                 resolve();
             };
@@ -747,17 +950,43 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
                 // Sin propFilter para capturar el parametro aunque venga con prefijos/categorias internas.
                 model.getBulkProperties(leafDbIds, undefined, (results) => {
                     for (const res of results) {
-                        const activityIds = new Set();
+                        const planningIds = new Set();
+                        const partidaIds = new Set();
                         for (const prop of res.properties || []) {
-                            if (!this.isActivityPropertyName(prop.displayName)) continue;
+                            const isPlan = this.isPlanningPropertyName(prop.displayName);
+                            const isPart = !isPlan && this.isActivityPropertyName(prop.displayName);
+                            if (!isPlan && !isPart) continue;
                             const value = this.normalize4DKey(prop.displayValue);
                             if (value && value.length <= 120) {
                                 value.split(/[;,|]/).forEach((part) => {
                                     const clean = this.normalize4DKey(part);
-                                    if (clean) activityIds.add(clean);
+                                    if (clean) (isPlan ? planningIds : partidaIds).add(clean);
                                 });
                             }
                         }
+                        // Índice por CodigoDePartida (siempre): alimenta el alcance por
+                        // rama del EDT (aislar frente 05.06, etc.), NO el coloreo.
+                        // Solo valores con forma de código EDT (fuera basura tipo
+                        // '["", ""]' o 'NO METRAR' que vienen en algunos parámetros).
+                        const codeLike = (v) => /^\d{1,3}(\.\d{1,3})+$/.test(v);
+                        const partidaCodes = [...partidaIds].filter(codeLike);
+                        for (const code of partidaCodes) {
+                            if (!this.partidaCodeToDbIds[code]) this.partidaCodeToDbIds[code] = [];
+                            this.partidaCodeToDbIds[code].push({ dbId: res.dbId, model });
+                        }
+                        if (planningIds.size || partidaCodes.length) {
+                            this.elementScopeInfo.set(`${model.id}:${res.dbId}`, {
+                                dbId: res.dbId,
+                                model,
+                                planning: new Set(planningIds),
+                                partidas: new Set(partidaCodes),
+                            });
+                        }
+                        // Prioridad: si el elemento tiene código de PLANEAMIENTO (actividad/
+                        // paño real del P6), se colorea SOLO por ese → fechas correctas. El
+                        // ITEM (CodigoDePartida) se colapsa a un paño arbitrario y desfasa,
+                        // así que solo se usa como respaldo si no hay planeamiento.
+                        const activityIds = planningIds.size ? planningIds : partidaIds;
                         for (const activityId of activityIds) {
                             if (!this.activityToDbIds[activityId]) {
                                 this.activityToDbIds[activityId] = [];
@@ -774,24 +1003,36 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         });
     }
 
+    // Guard anti-carrera: el scan es lento (miles de elementos). Sin esto,
+    // en Play se dispara varias veces en paralelo, cada una hace
+    // activityToDbIds={} a medio construir → índice parcial → parpadeo
+    // y "algunos se pintan, otros no". Todas comparten la MISMA promesa.
+    async ensurePropertyIndex() {
+        if (this.propertyIndexBuilt) return;
+        if (!this._indexBuilding) this._indexBuilding = this.buildPropertyIndex();
+        await this._indexBuilding;
+        this._indexBuilding = null;
+    }
+
     async simulate4D(date, activeTasks, payload = {}) {
+        if (this.paramMode) return; // el modo prueba por parámetro tiene el control del coloreado
         if (!this.getThemingModels().length) return;
         
-        if (!this.propertyIndexBuilt) {
-            await this.buildPropertyIndex();
-        }
+        await this.ensurePropertyIndex();
         if (!this.activityToDbIds) return;
         
         const THREE = window.THREE;
         const colorDone = new THREE.Vector4(0.12, 0.62, 0.32, 0.72);
         const colorExecuting = new THREE.Vector4(0.95, 0.62, 0.10, 1);
         const colorProgrammed = new THREE.Vector4(0.18, 0.44, 0.86, 0.38);
+        const colorPending = new THREE.Vector4(0.28, 0.31, 0.36, 0.32);
         
         let needsUpdate = false;
         
         const activeIds = new Set((activeTasks || []).flatMap((task) => this.getTaskKeys(task)));
         const completedIds = new Set((payload.completedTasks || []).flatMap((task) => this.getTaskKeys(task)));
         const plannedIds = new Set((payload.plannedTasks || []).flatMap((task) => this.getTaskKeys(task)));
+        const pendingIds = new Set((payload.pendingTasks || []).flatMap((task) => this.getTaskKeys(task)));
         const directStates = new Map();
 
         const addDirect = (tasks, state) => {
@@ -803,9 +1044,30 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         addDirect(payload.completedTasks, 'done');
         addDirect(payload.plannedTasks, 'planned');
         addDirect(activeTasks, 'executing');
-        
+
+        // ── DIAGNÓSTICO: ¿cruzan las llaves del índice con las de las tareas? ──
+        const _idxKeys = Object.keys(this.activityToDbIds);
+        let _matched = 0;
+        for (const k of _idxKeys) {
+            if (activeIds.has(k) || completedIds.has(k) || plannedIds.has(k) || pendingIds.has(k)) _matched += 1;
+        }
+        const _diag = {
+            fecha: date,
+            indiceLlaves: _idxKeys.length,
+            indiceMuestra: _idxKeys.slice(0, 3),
+            tareasActivas: activeIds.size,
+            tareasHechas: completedIds.size,
+            tareasFuturas: plannedIds.size,
+            tareasMuestra: [...activeIds].slice(0, 3),
+            llavesQueCRUZAN: _matched,
+        };
+        window.__lob4dDiag = { ...(window.__lob4dDiag || {}), ..._diag };
+        console.log('[4D-DIAG] simulate4D:', _diag);
+        window.dispatchEvent(new CustomEvent('LOB4D_DIAG', { detail: _diag }));
+
         for (const [activityId, items] of Object.entries(this.activityToDbIds)) {
             let newState = 'normal';
+            if (pendingIds.has(activityId)) newState = 'pending';
             if (completedIds.has(activityId)) newState = 'done';
             if (plannedIds.has(activityId)) newState = 'planned';
             if (activeIds.has(activityId)) newState = 'executing';
@@ -818,6 +1080,8 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
                         this.viewer.setThemingColor(item.dbId, colorDone, item.model || this.viewer.model, true);
                     } else if (newState === 'planned') {
                         this.viewer.setThemingColor(item.dbId, colorProgrammed, item.model || this.viewer.model, true);
+                    } else if (newState === 'pending') {
+                        this.viewer.setThemingColor(item.dbId, colorPending, item.model || this.viewer.model, true);
                     } else {
                         this.viewer.setThemingColor(item.dbId, null, item.model || this.viewer.model, true);
                     }
@@ -852,6 +1116,8 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         if (needsUpdate) {
             this.viewer.impl.invalidate(true, true, true);
         }
+
+        this.updateExcavationSimulation(payload);
     }
 
     ensureOverlay() {
@@ -1128,10 +1394,12 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         el.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
+            if (item.alignment) this.activeAlignment = item.alignment; // multi-eje: activa SU eje
             this.activateStationCursor(item.station);
         });
         el.addEventListener('pointerdown', (event) => {
             if (event.button !== 0) return;
+            if (item.alignment) this.activeAlignment = item.alignment;
             this.activateStationCursor(item.station);
             this.startStationCursorDrag(event);
         });
@@ -1277,7 +1545,178 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             this._stationLabelRaf = null;
             this.updateStationDomLabels();
             this.updatePkDomLabel();
+            this.updateZoneLabels();
         });
+    }
+
+    // ── Rótulos flotantes por SubZona (estilo Tandem) ───────────────────────
+    // Detecta el parámetro DSI_SYP_SubZona del inventario, calcula el centro
+    // 3D de cada subzona (unión de bounding boxes de sus elementos) y ancla un
+    // rótulo flotante ahí. Independiente de las progresivas.
+    detectZoneKey(inv) {
+        // Unir claves de una muestra amplia (la primera fila puede ser del terreno,
+        // que no trae el parámetro de subzona).
+        const keys = new Set();
+        const sample = Array.isArray(inv) ? inv.slice(0, 400) : [inv];
+        for (const row of sample) {
+            if (row) for (const k of Object.keys(row)) keys.add(k);
+        }
+        const arr = Array.from(keys);
+        return arr.find(k => /sub[\s_]*zona/i.test(k))
+            || arr.find(k => /_SYP_.*zona/i.test(k))
+            || arr.find(k => /\bzona\b/i.test(k))
+            || null;
+    }
+
+    zoneMapForModel(model) {
+        const raw = model?.getData?.()?.urn;
+        if (!raw) return null;
+        const safe = String(raw).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const std = String(raw).replace(/-/g, '+').replace(/_/g, '/');
+        const R = window.rosettaToDbId || {};
+        return R[raw] || R[safe] || R[std] || null;
+    }
+
+    ensureZoneGroup() {
+        if (this._zoneLabelGroup) return;
+        const g = document.createElement('div');
+        g.className = 'lob-zone-label-group';
+        g.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:91;overflow:hidden;';
+        this.viewer.container.appendChild(g);
+        this._zoneLabelGroup = g;
+        if (!this._zoneLabelElements) this._zoneLabelElements = [];
+    }
+
+    createZoneLabel(text, worldPos) {
+        const el = document.createElement('div');
+        el.className = 'lob-zone-label';
+        el.style.cssText = 'position:absolute;color:#eafff3;background:linear-gradient(180deg,#12a15b,#0b7c46);padding:4px 11px;border-radius:14px;border:1px solid rgba(255,255,255,0.4);font:700 12px Inter,Arial,sans-serif;white-space:nowrap;box-shadow:0 2px 9px rgba(0,0,0,0.4);transform:translate(-50%,-150%);letter-spacing:0.3px;will-change:left,top,display;';
+        el.textContent = text;
+        this._zoneLabelGroup.appendChild(el);
+        this._zoneLabelElements.push({ el, worldPos: worldPos.clone ? worldPos.clone() : worldPos });
+    }
+
+    reportZoneResult(count, reason, extra = {}) {
+        window.dispatchEvent(new CustomEvent('lob-zone-labels-result', { detail: { count, reason, ...extra } }));
+        return count;
+    }
+
+    buildSubZoneLabels() {
+        const THREE = window.THREE;
+        const inv = window.postgresInventory;
+        if (!THREE || !Array.isArray(inv) || !inv.length) {
+            console.warn('[LOB4D] SubZonas: sin postgresInventory cargado.');
+            return this.reportZoneResult(0, 'sin-inventario');
+        }
+        const zoneKey = this.detectZoneKey(inv);
+        if (!zoneKey) {
+            console.warn('[LOB4D] SubZonas: no se detectó parámetro (SubZona/Zona) en el inventario.');
+            return this.reportZoneResult(0, 'sin-parametro');
+        }
+
+        this.clearZoneLabels();
+        this.ensureZoneGroup();
+
+        const models = this.viewer.impl?.modelQueue?.().getModels?.()
+            || [this.viewer.model].filter(Boolean);
+
+        // extId → zona (una vez)
+        const extZone = new Map();
+        for (const row of inv) {
+            let v = row[zoneKey];
+            if (Array.isArray(v)) v = v.filter(Boolean).join(', ');
+            v = (v === null || v === undefined) ? '' : String(v).trim();
+            if (v) extZone.set(row.dbId, v);
+        }
+        if (!extZone.size) {
+            console.warn(`[LOB4D] SubZonas: el parámetro ${zoneKey} existe pero está vacío en todos los elementos.`);
+            return this.reportZoneResult(0, 'parametro-vacio', { key: zoneKey });
+        }
+
+        // Acumular centroide + cota superior por zona
+        const agg = new Map();
+        const tmp = new THREE.Box3();
+        for (const model of models) {
+            const map = this.zoneMapForModel(model);
+            if (!map) continue;
+            const tree = model.getInstanceTree?.();
+            const fragList = model.getFragmentList?.();
+            if (!tree || !fragList) continue;
+
+            extZone.forEach((zone, extId) => {
+                const dbId = map[extId];
+                if (dbId === undefined || dbId === null) return;
+                const box = new THREE.Box3();
+                let has = false;
+                tree.enumNodeFragments(dbId, (fragId) => {
+                    fragList.getWorldBounds(fragId, tmp);
+                    if (tmp && !tmp.isEmpty()) { box.union(tmp); has = true; }
+                }, true);
+                if (!has) return;
+                const center = box.getCenter(new THREE.Vector3());
+                let a = agg.get(zone);
+                if (!a) { a = { sum: new THREE.Vector3(), n: 0, top: -Infinity }; agg.set(zone, a); }
+                a.sum.add(center);
+                a.n += 1;
+                if (box.max.z > a.top) a.top = box.max.z;
+            });
+        }
+
+        let created = 0;
+        agg.forEach((a, zone) => {
+            if (!a.n) return;
+            const c = a.sum.clone().multiplyScalar(1 / a.n);
+            c.z = a.top + 2; // elevar el rótulo sobre el elemento más alto de la zona
+            this.createZoneLabel(zone, c);
+            created += 1;
+        });
+
+        this._zoneLabelsVisible = true;
+        this.updateZoneLabels();
+        console.log(`[LOB4D] SubZonas rotuladas: ${created} zonas (parámetro "${zoneKey}"). extIds con zona: ${extZone.size}`);
+        if (!created) {
+            // El parámetro tiene valores pero ningún elemento cruzó con geometría
+            // del visor (mapeo rosetta o bounding boxes vacíos).
+            return this.reportZoneResult(0, 'sin-geometria', { key: zoneKey, extWithZone: extZone.size });
+        }
+        return this.reportZoneResult(created, 'ok', { key: zoneKey, zones: created });
+    }
+
+    updateZoneLabels() {
+        if (!this._zoneLabelGroup || !this._zoneLabelElements) return;
+        const visible = this._zoneLabelsVisible !== false && this._zoneLabelElements.length > 0;
+        this._zoneLabelGroup.style.display = visible ? 'block' : 'none';
+        if (!visible) return;
+
+        const W = this.viewer.container.clientWidth;
+        const H = this.viewer.container.clientHeight;
+        for (const label of this._zoneLabelElements) {
+            const s = this.viewer.worldToClient(label.worldPos);
+            const inFront = s.z == null || (s.z >= 0 && s.z <= 1);
+            if (!inFront || s.x < -200 || s.y < -100 || s.x > W + 200 || s.y > H + 100) {
+                label.el.style.display = 'none';
+                continue;
+            }
+            label.el.style.display = 'block';
+            label.el.style.left = `${s.x}px`;
+            label.el.style.top = `${s.y}px`;
+        }
+    }
+
+    clearZoneLabels() {
+        if (this._zoneLabelElements) {
+            for (const l of this._zoneLabelElements) { try { l.el.remove(); } catch { /* noop */ } }
+        }
+        this._zoneLabelElements = [];
+    }
+
+    setZoneLabelsVisible(v) {
+        this._zoneLabelsVisible = v;
+        if (v && (!this._zoneLabelElements || !this._zoneLabelElements.length)) {
+            this.buildSubZoneLabels();
+        } else {
+            this.updateZoneLabels();
+        }
     }
 
     createTextSprite(text, options = {}) {
@@ -1446,7 +1885,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             this.stationAnnotations.push({ marker });
 
             const labelPos = viewerPoint.clone().add(new THREE.Vector3(0, 0, item.priority >= 3 ? metrics.labelLift : metrics.labelLift * 0.85));
-            this.createStationDomLabel(item, labelPos);
+            this.createStationDomLabel({ ...item, alignment: alignmentData }, labelPos);
         }
 
         this.updateStationDomLabels();
@@ -2128,10 +2567,14 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
     // (nuestro set propio no pisa el de la herramienta de sección del toolbar);
     // fallback al API clásico viewer.setCutPlanes.
     _applyCutPlanes(planes) {
+        return this._applyCutPlaneSet('LOB4D_SECTION', planes);
+    }
+
+    _applyCutPlaneSet(name, planes) {
         const impl = this.viewer?.impl;
         try {
             if (impl && typeof impl.setCutPlaneSet === 'function') {
-                impl.setCutPlaneSet('LOB4D_SECTION', planes && planes.length ? planes : undefined);
+                impl.setCutPlaneSet(name, planes && planes.length ? planes : undefined);
                 impl.invalidate(true, true, true);
                 return true;
             }
@@ -2178,6 +2621,502 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         this.sectionCutActive = false;
     }
 
+    // ── Simulación 4D de EXCAVACIONES/RELLENOS ──────────────────────────────
+    // Los sólidos de movimiento de tierras (marcados con ⛏ en el picker del 4D)
+    // se recortan con un plano perpendicular al eje en la progresiva que dicta
+    // el cronograma: al avanzar la fecha, el corte avanza y el sólido "crece"
+    // siguiendo la línea de balance. El resto de modelos queda exento del corte
+    // vía setDoNotCut (terreno/estructuras se ven completos siempre).
+
+    normalizeUrnKey(urn) {
+        return String(urn || '').replace(/^urn:/i, '');
+    }
+
+    getExcavationModels(excavationUrns) {
+        const wanted = new Set((excavationUrns || []).map((urn) => this.normalizeUrnKey(urn)).filter(Boolean));
+        if (!wanted.size) return [];
+        const models = this.viewer.getAllModels?.() || [];
+        return models.filter((model) => wanted.has(this.normalizeUrnKey(model.getData?.()?.urn)));
+    }
+
+    // % de avance del frente de movimiento de tierras a la fecha simulada:
+    // promedio ponderado por costo (metrado×pu) del plannedPct de las partidas
+    // de excavación/relleno/corte. Sin partidas de tierras → avance global.
+    computeEarthworksPct(taskRows, fallbackPct) {
+        const earthRe = /excav|relleno|corte\b|mov(?:imiento)?[\s._-]*de[\s._-]*tierra|earthwork/i;
+        let weightSum = 0;
+        let acc = 0;
+        (taskRows || []).forEach((row) => {
+            if (!earthRe.test(String(row.descripcion || ''))) return;
+            const pct = Number(row.simulationPct ?? row.realPct ?? row.percent ?? row.plannedPct ?? (row.status === 'done' ? 100 : 0));
+            if (!Number.isFinite(pct)) return;
+            const weight = (Number(row.metrado) || 0) * (Number(row.pu) || 0) || Number(row.metrado) || 1;
+            weightSum += weight;
+            acc += weight * pct;
+        });
+        if (weightSum > 0) return acc / weightSum;
+        const fallback = Number(fallbackPct);
+        return Number.isFinite(fallback) ? fallback : 0;
+    }
+
+    getAlignmentStationDomain(alignmentData) {
+        let min = Number(alignmentData?.startStation);
+        let max = Number(alignmentData?.endStation);
+        if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
+            min = Infinity;
+            max = -Infinity;
+            (alignmentData?.subEntities || []).forEach((segment) => {
+                const s = Number(segment.startStation);
+                const e = Number(segment.endStation);
+                if (Number.isFinite(s)) { min = Math.min(min, s); max = Math.max(max, s); }
+                if (Number.isFinite(e)) { min = Math.min(min, e); max = Math.max(max, e); }
+            });
+            const points = this.getActiveProfilePoints(alignmentData);
+            if (points.length >= 2) {
+                min = Math.min(min, points[0].station);
+                max = Math.max(max, points[points.length - 1].station);
+            }
+        }
+        return Number.isFinite(min) && Number.isFinite(max) && max > min ? { min, max } : null;
+    }
+
+    updateExcavationSimulation(payload = {}) {
+        const THREE = window.THREE;
+        const excavModels = this.getExcavationModels(payload.excavationUrns);
+        if (!THREE || !excavModels.length) {
+            this.clearExcavationCut();
+            return;
+        }
+        if (!this.activeAlignment) {
+            if (!this._excavNoAxisWarned) {
+                console.warn('[LOB4D] Excavación 4D: no hay eje activo (selecciona un alineamiento en Civil).');
+                this._excavNoAxisWarned = true;
+            }
+            this.clearExcavationCut();
+            return;
+        }
+
+        const domain = this.getAlignmentStationDomain(this.activeAlignment);
+        if (!domain) {
+            this.clearExcavationCut();
+            return;
+        }
+
+        const pct = this.computeEarthworksPct(payload.taskRows, payload.progress);
+        if (pct >= 99.95) {
+            // Frente terminado: el sólido se muestra completo, sin corte.
+            this.clearExcavationCut();
+            return;
+        }
+
+        const ratio = Math.max(0, Math.min(1, pct / 100));
+        const station = domain.min + (domain.max - domain.min) * ratio;
+
+        const refModel = this.getModelForCoordinates();
+        const p1 = this.civilToViewerPoint(this.pointAtStation(this.activeAlignment, station), refModel);
+        const pFwd = this.civilToViewerPoint(this.pointAtStation(this.activeAlignment, Math.min(domain.max, station + 1)), refModel);
+        const pBack = this.civilToViewerPoint(this.pointAtStation(this.activeAlignment, Math.max(domain.min, station - 1)), refModel);
+        if (!p1 || (!pFwd && !pBack)) return;
+
+        const normal = new THREE.Vector3();
+        if (pFwd && pBack) normal.subVectors(pFwd, pBack);
+        else if (pFwd) normal.subVectors(pFwd, p1);
+        else normal.subVectors(p1, pBack);
+        normal.z = 0; // corte vertical, perpendicular al eje en planta
+        if (normal.lengthSq() < 1e-9) return;
+        normal.normalize();
+        const d = -normal.dot(p1);
+
+        // Solo los sólidos de tierras se cortan; el resto queda exento.
+        const excavSet = new Set(excavModels);
+        (this.viewer.getAllModels?.() || []).forEach((model) => {
+            try { model.setDoNotCut?.(!excavSet.has(model)); } catch (e) { /* LMV viejo sin setDoNotCut */ }
+        });
+
+        this._applyCutPlaneSet('LOB4D_EXCAV', [new THREE.Vector4(normal.x, normal.y, normal.z, d)]);
+        this.excavationCutActive = true;
+        this.excavationFrontStation = station;
+        window.dispatchEvent(new CustomEvent('LOB4D_EXCAV_FRONT_CHANGED', {
+            detail: { station, pct, label: this.formatStation(station) }
+        }));
+    }
+
+    clearExcavationCut() {
+        if (!this.excavationCutActive) return;
+        this._applyCutPlaneSet('LOB4D_EXCAV', null);
+        (this.viewer.getAllModels?.() || []).forEach((model) => {
+            try { model.setDoNotCut?.(false); } catch (e) { /* noop */ }
+        });
+        this.excavationCutActive = false;
+        this.excavationFrontStation = null;
+        window.dispatchEvent(new CustomEvent('LOB4D_EXCAV_FRONT_CHANGED', { detail: null }));
+        this.viewer.impl.invalidate(true, true, true);
+    }
+
+    // ── MODO PRUEBA POR PARÁMETRO ───────────────────────────────────────────
+    // Anima el 4D usando un parámetro custom del visor (p.ej. "Vaciado_Nro" con
+    // valores FASE 01..FASE 07), independiente de P6. Escanea el parámetro,
+    // descubre las fases ordenadas y colorea por fase relativo a un cursor:
+    // fase < actual = ejecutado, = actual = en ejecución, > actual = programado.
+    // Sirve para VER cómo anima el 4D con un dataset controlado.
+
+    // Escanea el parámetro y arma el índice de fases. Los parámetros CUSTOM de la
+    // app (Vaciado_Nro, Status…) viven en PostgreSQL (window.postgresInventory),
+    // NO en el derivado APS — así que se leen del inventario y se mapean por
+    // external_id → dbId del visor. Si no está ahí, cae a propiedades APS.
+    async buildParamPhaseIndex(propName) {
+        const target = this.normalize4DPropName(propName);
+        const models = this.getThemingModels();
+        if (!target || !models.length) { this.phaseIndex = null; return null; }
+
+        // 1) Valores por external_id desde el inventario de la app.
+        const inv = Array.isArray(window.postgresInventory) ? window.postgresInventory : [];
+        const extIdToValue = new Map();
+        let matchedKey = null;
+        for (const row of inv) {
+            if (!row) continue;
+            if (!matchedKey) {
+                matchedKey = Object.keys(row).find((k) => this.normalize4DPropName(k) === target) || null;
+            }
+            if (!matchedKey) continue;
+            const value = String(row[matchedKey] ?? '').trim();
+            const extId = String(row.dbId ?? row.external_id ?? '').trim();
+            if (value && extId) extIdToValue.set(extId, value);
+        }
+
+        // Sin datos en inventario → intentar como propiedad APS (fallback).
+        if (!extIdToValue.size) {
+            return this.buildParamPhaseIndexFromProps(propName);
+        }
+
+        // 2) external_id → dbId del visor, por modelo.
+        const byPhaseRaw = new Map(); // valorFase -> [{ dbId, model }]
+        for (const model of models) {
+            const mapping = await new Promise((res) => {
+                try { model.getExternalIdMapping((m) => res(m || {}), () => res({})); }
+                catch (e) { res({}); }
+            });
+            for (const [extId, value] of extIdToValue) {
+                const dbId = mapping[extId];
+                if (dbId == null) continue;
+                if (!byPhaseRaw.has(value)) byPhaseRaw.set(value, []);
+                byPhaseRaw.get(value).push({ dbId, model });
+            }
+        }
+
+        return this._finalizePhaseIndex(propName, byPhaseRaw, 'inventario');
+    }
+
+    // Fallback: leer el parámetro como propiedad del derivado APS.
+    buildParamPhaseIndexFromProps(propName) {
+        return new Promise((resolve) => {
+            const target = this.normalize4DPropName(propName);
+            const models = this.getThemingModels();
+            const byPhaseRaw = new Map();
+            let pending = models.length;
+            const finish = () => {
+                pending -= 1;
+                if (pending > 0) return;
+                resolve(this._finalizePhaseIndex(propName, byPhaseRaw, 'APS'));
+            };
+            models.forEach((model) => {
+                const tree = model?.getInstanceTree?.();
+                if (!tree) return finish();
+                const leafDbIds = [];
+                tree.enumNodeChildren(tree.getRootId(), (dbId) => {
+                    let hasFrag = false;
+                    tree.enumNodeFragments(dbId, () => { hasFrag = true; });
+                    if (hasFrag) leafDbIds.push(dbId);
+                }, true);
+                if (!leafDbIds.length) return finish();
+                model.getBulkProperties(leafDbIds, undefined, (results) => {
+                    for (const res of results) {
+                        for (const prop of res.properties || []) {
+                            if (this.normalize4DPropName(prop.displayName) !== target) continue;
+                            const value = String(prop.displayValue ?? '').trim();
+                            if (!value) continue;
+                            if (!byPhaseRaw.has(value)) byPhaseRaw.set(value, []);
+                            byPhaseRaw.get(value).push({ dbId: res.dbId, model });
+                            break;
+                        }
+                    }
+                    finish();
+                }, () => finish());
+            });
+        });
+    }
+
+    // ── Resaltar por estado 4D: aísla los elementos del estado dado ──────────
+    isolateByState(state) {
+        if (!this.activityToDbIds) return;
+        const perModel = new Map();
+        const push = (dbId, model) => {
+            const m = model || this.viewer.model;
+            if (!perModel.has(m)) perModel.set(m, new Set());
+            perModel.get(m).add(dbId);
+        };
+        for (const items of Object.values(this.activityToDbIds)) {
+            for (const it of items) if (it.state === state) push(it.dbId, it.model);
+        }
+        const models = this.getThemingModels();
+        models.forEach((m) => {
+            const ids = perModel.get(m);
+            try {
+                // Con coincidencias → aislar esas; sin ninguna → ocultar todo el modelo
+                this.viewer.isolate(ids && ids.size ? [...ids] : [-999], m);
+            } catch (e) { /* noop */ }
+        });
+        this.isolatedState = state;
+        this.viewer.impl.invalidate(true, true, true);
+    }
+
+    clearStateIsolation() {
+        const models = this.getThemingModels();
+        models.forEach((m) => { try { this.viewer.isolate([], m); } catch (e) { /* noop */ } });
+        this.isolatedState = null;
+        this.viewer.impl.invalidate(true, true, true);
+    }
+
+    // ── Alcance por rama del EDT ─────────────────────────────────────────────
+    // Pertenencia de un elemento a la rama, en orden de confianza:
+    // 1) Su CodigoPlaneamiento, SI está mapeado a partidas en Duraciones →
+    //    pertenece a la rama de ESAS partidas (activityIds del alcance). Esto
+    //    corrige elementos con CodigoDePartida cruzado de otro canal (hay 844
+    //    con 05.03.x + 05.04.x a la vez por error de etiquetado).
+    // 2) Sin planeamiento mapeado → por prefijo de su CodigoDePartida.
+    isolateScope(codes, activityIds, mappedActivityIds) {
+        const prefixes = (codes || []).map((c) => String(c).trim()).filter(Boolean);
+        if (!prefixes.length || !this.elementScopeInfo) return;
+
+        const allowed = new Set((activityIds || []).map((k) => this.normalize4DKey(k)).filter(Boolean));
+        const mapped = new Set((mappedActivityIds || []).map((k) => this.normalize4DKey(k)).filter(Boolean));
+
+        const perModel = new Map();
+        let total = 0;
+        for (const info of this.elementScopeInfo.values()) {
+            let inScope = false;
+            const knownPlans = [...info.planning].filter((p) => mapped.has(p));
+            if (knownPlans.length) {
+                inScope = knownPlans.some((p) => allowed.has(p));
+            } else {
+                inScope = [...info.partidas].some((c) => prefixes.some((pre) => c.startsWith(pre)));
+            }
+            if (!inScope) continue;
+            const m = info.model || this.viewer.model;
+            if (!perModel.has(m)) perModel.set(m, []);
+            perModel.get(m).push(info.dbId);
+            total += 1;
+        }
+
+        if (!total) {
+            console.warn('[LOB4D] Alcance sin elementos bajo', prefixes);
+            this.clearScopeIsolation();
+            return;
+        }
+
+        this.getThemingModels().forEach((m) => {
+            const ids = perModel.get(m);
+            try { this.viewer.isolate(ids && ids.length ? ids : [-999], m); } catch (e) { /* noop */ }
+        });
+        this.scopeActive = true;
+        console.log(`[LOB4D] Alcance EDT ${prefixes.join(',')}: ${total} elementos aislados`);
+        this.viewer.impl.invalidate(true, true, true);
+    }
+
+    clearScopeIsolation() {
+        if (!this.scopeActive) return;
+        this.getThemingModels().forEach((m) => { try { this.viewer.isolate([], m); } catch (e) { /* noop */ } });
+        this.scopeActive = false;
+        this.viewer.impl.invalidate(true, true, true);
+    }
+
+    // ── PROGRESIVAS DESDE EL EJE ─────────────────────────────────────────────
+    // El visor conoce la posición 3D de cada elemento Y el eje con estaciones
+    // (alineamiento de Civil): proyectando el centro del elemento al eje se
+    // obtiene su PK — sin llenar DSI_Progresiva a mano. El resultado por
+    // partida (rango min..max) se persiste al backend (lob_locations).
+
+    _nearestStationWithDist(point) {
+        let best = null;
+        let bestD = Infinity;
+        for (const sample of this.alignmentSamples) {
+            const d = sample.point.distanceToSquared(point);
+            if (d < bestD) { bestD = d; best = sample; }
+        }
+        return best ? { station: Number(best.station), dist: Math.sqrt(bestD) } : null;
+    }
+
+    async computeElementStations(maxDistMeters = 150) {
+        const THREE = window.THREE;
+        if (!THREE) return { ok: false, reason: 'THREE no disponible' };
+        if (!this.activeAlignment || !this.alignmentSamples?.length) {
+            return { ok: false, reason: 'no hay eje activo (selecciona un alineamiento en Civil y reabre el 4D)' };
+        }
+        await this.ensurePropertyIndex();
+        if (!this.elementScopeInfo?.size) {
+            return { ok: false, reason: 'sin elementos con CodigoDePartida en los modelos cargados' };
+        }
+
+        const box = new THREE.Box3();
+        const acc = new THREE.Box3();
+        const center = new THREE.Vector3();
+        const ranges = new Map(); // codigo -> {min, max, n}
+        this.elementStations = new Map(); // "modelId:dbId" -> PK (m)
+        let elements = 0;
+
+        for (const [key, info] of this.elementScopeInfo) {
+            if (!info.partidas.size) continue;
+            const model = info.model || this.viewer.model;
+            const frags = model.getFragmentList?.();
+            const tree = model.getInstanceTree?.();
+            if (!frags || !tree) continue;
+
+            acc.makeEmpty();
+            tree.enumNodeFragments(info.dbId, (fragId) => {
+                frags.getWorldBounds(fragId, box);
+                acc.union(box);
+            }, true);
+            if (acc.isEmpty()) continue;
+            acc.getCenter(center);
+
+            const near = this._nearestStationWithDist(center);
+            if (!near) continue;
+            const mpu = (model.getUnitScale && model.getUnitScale()) || 1; // metros por unidad
+            if (near.dist * mpu > maxDistMeters) continue; // lejos del eje → PK sin sentido
+
+            this.elementStations.set(key, near.station);
+            elements += 1;
+            for (const code of info.partidas) {
+                const r = ranges.get(code) || { min: near.station, max: near.station, n: 0 };
+                r.min = Math.min(r.min, near.station);
+                r.max = Math.max(r.max, near.station);
+                r.n += 1;
+                ranges.set(code, r);
+            }
+        }
+
+        const out = [...ranges.entries()]
+            .filter(([, r]) => r.max > r.min)
+            .map(([codigo, r]) => ({ codigo, station_start: r.min, station_end: r.max, elems: r.n }));
+
+        console.log(`[LOB4D] Progresivas desde el eje: ${elements} elementos con PK → ${out.length} partidas con rango`);
+        return {
+            ok: true,
+            alignmentId: this.activeAlignment.alignmentId || this.activeAlignment.name || null,
+            elements,
+            ranges: out,
+        };
+    }
+
+    _finalizePhaseIndex(propName, byPhaseRaw, source) {
+        const phases = [...byPhaseRaw.keys()]
+            .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+        const byPhase = new Map();
+        let total = 0;
+        phases.forEach((p) => { byPhase.set(p, byPhaseRaw.get(p)); total += byPhaseRaw.get(p).length; });
+        this.phaseIndex = { propName, phases, byPhase, total };
+        console.log(`[LOB4D] Param "${propName}" (${source}): ${phases.length} fases, ${total} elementos`, phases);
+        return this.phaseIndex;
+    }
+
+    // Material translúcido compartido para el estado "ejecutado" (transparencia
+    // REAL: el theming solo tiñe, no hace ver a través → hay que cambiar material).
+    _ensureDoneMaterial() {
+        if (this._doneMaterial) return this._doneMaterial;
+        const THREE = window.THREE;
+        const mat = new THREE.MeshPhongMaterial({
+            color: new THREE.Color(0x2fbf55),
+            transparent: true,
+            opacity: 0.28,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
+        mat.packedNormals = true; // requerido por el render de LMV
+        this.viewer.impl.matman().addMaterial('lob-phase-done', mat, true);
+        this._doneMaterial = mat;
+        return mat;
+    }
+
+    _forEachFragment(dbId, model, cb) {
+        const it = model.getInstanceTree?.();
+        const frags = model.getFragmentList?.();
+        if (!it || !frags) return;
+        it.enumNodeFragments(dbId, (fragId) => cb(fragId, frags), true);
+    }
+
+    _setElementTransparent(dbId, model) {
+        const mat = this._ensureDoneMaterial();
+        if (!this._matBackup) this._matBackup = new Map();
+        this._forEachFragment(dbId, model, (fragId, frags) => {
+            const key = `${model.id}:${fragId}`;
+            if (!this._matBackup.has(key)) {
+                this._matBackup.set(key, { model, fragId, material: frags.getMaterial(fragId) });
+            }
+            frags.setMaterial(fragId, mat);
+        });
+    }
+
+    _restoreElementMaterial(dbId, model) {
+        if (!this._matBackup) return;
+        this._forEachFragment(dbId, model, (fragId, frags) => {
+            const key = `${model.id}:${fragId}`;
+            const bak = this._matBackup.get(key);
+            if (bak) { frags.setMaterial(fragId, bak.material); this._matBackup.delete(key); }
+        });
+    }
+
+
+    // Phasing sin parpadeo: los sólidos están SIEMPRE presentes (nunca se ocultan).
+    // Estado por elemento — futuro: natural · ejecutando: naranja sólido (theming)
+    // · ejecutado: verde TRANSLÚCIDO (material real). Solo se tocan los elementos
+    // cuyo estado cambió respecto al paso anterior → transición fluida.
+    simulateParamPhase(currentIndex) {
+        if (!this.phaseIndex) return;
+        const THREE = window.THREE;
+        const { phases, byPhase } = this.phaseIndex;
+        const orange = new THREE.Vector4(0.98, 0.45, 0.10, 1.0);
+        if (!this._phaseElemState) this._phaseElemState = new Map();
+
+        phases.forEach((phase, i) => {
+            const state = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'future';
+            (byPhase.get(phase) || []).forEach(({ dbId, model }) => {
+                const key = `${model.id}:${dbId}`;
+                if (this._phaseElemState.get(key) === state) return; // sin cambio → no tocar
+
+                // reset del estado anterior
+                this.viewer.setThemingColor(dbId, null, model, true);
+                this._restoreElementMaterial(dbId, model);
+
+                if (state === 'current') {
+                    this.viewer.setThemingColor(dbId, orange, model, true);
+                } else if (state === 'done') {
+                    this._setElementTransparent(dbId, model);
+                }
+                // future → natural (ya reseteado)
+                this._phaseElemState.set(key, state);
+            });
+        });
+
+        this.viewer.impl.invalidate(true, true, true);
+        const label = phases[currentIndex] || '';
+        window.dispatchEvent(new CustomEvent('LOB4D_PARAM_PHASE_CHANGED', {
+            detail: { index: currentIndex, label, count: byPhase.get(label)?.length || 0 }
+        }));
+    }
+
+    clearParamSimulation() {
+        if (!this.viewer) return;
+        if (this.phaseIndex) {
+            const { phases, byPhase } = this.phaseIndex;
+            phases.forEach((p) => (byPhase.get(p) || []).forEach(({ dbId, model }) => {
+                this.viewer.setThemingColor(dbId, null, model, true);
+                this._restoreElementMaterial(dbId, model);
+            }));
+        }
+        this._phaseElemState = new Map();
+        this.viewer.impl.invalidate(true, true, true);
+    }
+
     simulatePK(alignmentData, pk) {
         if (!this.viewer || !alignmentData || !alignmentData.subEntities) return;
 
@@ -2221,7 +3160,9 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         // Emitir contexto geométrico para la UI de rastreo
         const context = this.getStationContext(alignmentData, pk);
         if (context) {
-            window.dispatchEvent(new CustomEvent('LOB4D_PK_CONTEXT_CHANGED', { detail: context }));
+            window.dispatchEvent(new CustomEvent('LOB4D_PK_CONTEXT_CHANGED', {
+                detail: { ...context, alignmentId: alignmentData?.alignmentId || alignmentData?.name || null }
+            }));
         }
     }
 }

@@ -27,6 +27,8 @@ import TandemFilterPanel from './components/TandemFilterPanel';
 import PdfReader from './components/PdfReader';
 import CompareView from './components/CompareView';
 import LOB4DPanel from './components/LOB4DPanel';
+import ProfilePanel from './components/ProfilePanel';
+import ViewerLabelsBar from './components/ViewerLabelsBar';
 
 
 import { uploadFile } from './services/uploadService';
@@ -1468,6 +1470,58 @@ function App() {
   }, [filterProperties]);
 
 
+
+  // 📌 EJE BASE PERSISTENTE: si el usuario fijó un eje en el panel Civil, se
+  // dibuja AUTOMÁTICAMENTE al abrir el visor (progresivas incluidas), sin
+  // abrir el panel. Espera a que el viewer + LOB4DExtension existan y baja el
+  // JSON de alineamientos del backend (la extracción vive en Postgres).
+  useEffect(() => {
+    if (!selectedProject || !models.length) return undefined;
+    const scope = selectedProject.id || 'global';
+    let cancelled = false;
+    let pin = null;
+    try {
+      const raw = localStorage.getItem(`civil_base_axis::${scope}`);
+      pin = raw ? JSON.parse(raw) : null;
+    } catch { pin = null; }
+    if (!pin?.fileUrn) return undefined;
+
+    let tries = 0;
+    const attempt = async () => {
+      if (cancelled) return;
+      tries += 1;
+      const viewer = window.NOP_VIEWER;
+      const ext = viewer?.getExtension?.('LOB4DExtension');
+      const hasModel = viewer?.model || viewer?.getVisibleModels?.()?.length;
+      if (!ext || !hasModel) {
+        if (tries < 40) window.setTimeout(attempt, 900); // hasta ~36s de arranque
+        return;
+      }
+      try {
+        const params = new URLSearchParams({ scope_urn: scope });
+        const res = await apiFetch(`${BACKEND_URL}/api/civil/alignments?${params.toString()}`);
+        const d = await res.json();
+        const items = d.items || (d.found && d.data ? [{ urn: d.urn || scope, data: d.data }] : []);
+        const item = items.find((it) => it.urn === pin.fileUrn) || null;
+        const data = item?.data;
+        if (!Array.isArray(data) || !data.length) {
+          console.warn('[App] Eje base fijado pero sin extracción en BD para', pin.fileUrn);
+          return;
+        }
+        if (cancelled) return;
+        ext.setStationAnnotationsVisible?.(pin.showStations !== false);
+        ext.bakeAlignment(data, pin.alignmentIds || 'ALL');
+        // compartir con 4D LOB / secciones (misma semilla que usa el panel Civil)
+        window.__lobCivilAlignments = data;
+        console.log(`[App] 📌 Eje base auto-dibujado: ${Array.isArray(pin.alignmentIds) ? pin.alignmentIds.join(', ') : 'todos'}`);
+      } catch (err) {
+        console.warn('[App] Eje base: fallo al auto-cargar', err);
+      }
+    };
+    attempt();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject, models.length]);
 
   // Twin Config: Load models from backend on mount (and when project changes)
   useEffect(() => {
@@ -3410,6 +3464,7 @@ function App() {
           <LOB4DPanel
             models={models}
             activeViewableGuids={activeViewableGuids}
+            project={selectedProject}
             onClose={() => setLob4dTabOpen(false)}
           />
         )}
@@ -3628,6 +3683,9 @@ function App() {
                   </ErrorBoundary>
                 )}
 
+                {/* 📈 Perfil longitudinal interactivo (sincronizado con la PK 3D) */}
+                {!compareMode && <ProfilePanel />}
+
                 {/* PIN RELOCATE BANNER */}
                 {relocatingPin && (
                   <div style={{
@@ -3748,6 +3806,10 @@ function App() {
                 })()}
 
               </div>
+
+              {/* Barra inferior de capas (full-width, estilo Tandem): el visor
+                  de arriba (flex:1) se achica solo para acomodarla. */}
+              {!compareMode && activePanel !== 'build' && <ViewerLabelsBar />}
 
 
 

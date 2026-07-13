@@ -81,13 +81,14 @@ const Icons = {
 };
 
 // Tool Button Component
-const ToolBtn = ({ icon, onClick, active }) => (
-    <button 
+const ToolBtn = ({ icon, onClick, active, title }) => (
+    <button
         onClick={onClick}
+        title={title}
         style={{
-            background: 'transparent',
+            background: active ? '#32363e' : 'transparent',
             border: 'none',
-            color: active ? '#fff' : '#888',
+            color: active ? '#7e9bbd' : '#888',
             cursor: 'pointer',
             padding: '4px 6px',
             display: 'flex',
@@ -97,9 +98,9 @@ const ToolBtn = ({ icon, onClick, active }) => (
             transition: 'color 0.15s, background 0.15s'
         }}
         onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = '#32363e'; }}
-        onMouseLeave={(e) => { 
-            e.currentTarget.style.color = active ? '#fff' : '#888'; 
-            e.currentTarget.style.background = 'transparent'; 
+        onMouseLeave={(e) => {
+            e.currentTarget.style.color = active ? '#7e9bbd' : '#888';
+            e.currentTarget.style.background = active ? '#32363e' : 'transparent';
         }}
     >
         {icon}
@@ -192,7 +193,14 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
     const [bulkField, setBulkField] = useState('Status'); // Default column for bulk edit ('__new__' = crear campo propio)
     const [bulkNewField, setBulkNewField] = useState(''); // Nombre del parámetro NUEVO (campo propio)
     const [bulkValue, setBulkValue] = useState('');
-    
+
+    // ── Agrupación por parámetro (estilo Tandem "Group rows") ──────────────
+    const [groupByKey, setGroupByKey] = useState(null); // null = sin agrupar
+    const [groupMenuOpen, setGroupMenuOpen] = useState(false);
+    const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
+    const groupInitRef = useRef(false); // auto-activar SubZona una sola vez
+    const displayListRef = useRef([]); // para el scroll de "follow selection"
+
     const parseNumericCell = (val) => {
         if (typeof val === 'number') return val;
         if (typeof val === 'string') {
@@ -263,9 +271,12 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                 // Hacemos brillar la fila basándonos en nuestra UUID de base de datos
                 setHighlightedDbId(targetExtId);
                 
-                // Efecto Tandem: Scrollear automáticamente hacia el dato en la grilla virtual
+                // Efecto Tandem: Scrollear automáticamente hacia el dato en la grilla virtual.
+                // Con agrupación activa el índice visual incluye las cabeceras de grupo,
+                // por eso buscamos en displayList (no en flattenedData).
                 if (followSelection) {
-                    const idx = flattenedData.findIndex(r => r.dbId === targetExtId);
+                    const list = displayListRef.current;
+                    const idx = list.findIndex(it => it.type === 'data' && it.row.dbId === targetExtId);
                     if (idx >= 0 && containerRef.current) {
                         const targetTop = idx * ROW_HEIGHT;
                         containerRef.current.scrollTop = targetTop - (containerHeight / 2) + ROW_HEIGHT;
@@ -753,18 +764,70 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         }
     }, []);
 
+    // Auto-detectar el parámetro de SubZona del cadista (00_05_DSI_SYP_SubZona).
+    // Prioriza "SubZona"; si no, cualquier parámetro DSI_SYP de zona.
+    const detectedGroupKey = useMemo(() => {
+        const keys = allPropertyKeys || [];
+        return keys.find(k => /sub[\s_]*zona/i.test(k))
+            || keys.find(k => /_SYP_.*zona/i.test(k))
+            || keys.find(k => /\bzona\b/i.test(k))
+            || null;
+    }, [allPropertyKeys]);
+
+    // Al cargar propiedades por primera vez y detectar SubZona, agrupar por ella.
+    useEffect(() => {
+        if (!groupInitRef.current && detectedGroupKey) {
+            groupInitRef.current = true;
+            setGroupByKey(detectedGroupKey);
+        }
+    }, [detectedGroupKey]);
+
+    const GROUP_NONE = '(Sin valor)';
+    const groupValueOf = useCallback((row, key) => {
+        let v = row[key];
+        if (Array.isArray(v)) v = v.filter(Boolean).join(', ');
+        v = (v === null || v === undefined) ? '' : String(v).trim();
+        return v === '' ? GROUP_NONE : v;
+    }, []);
+
+    // Lista de render: intercala cabeceras de grupo entre las filas (colapsables).
+    const displayList = useMemo(() => {
+        if (!groupByKey) return flattenedData.map(row => ({ type: 'data', row }));
+        const groups = new Map();
+        for (const row of flattenedData) {
+            const v = groupValueOf(row, groupByKey);
+            if (!groups.has(v)) groups.set(v, []);
+            groups.get(v).push(row);
+        }
+        const names = Array.from(groups.keys()).sort((a, b) => {
+            if (a === GROUP_NONE) return 1;
+            if (b === GROUP_NONE) return -1;
+            return a.localeCompare(b, undefined, { numeric: true });
+        });
+        const list = [];
+        for (const name of names) {
+            const rows = groups.get(name);
+            list.push({ type: 'group', value: name, count: rows.length });
+            if (!collapsedGroups.has(name)) {
+                for (const row of rows) list.push({ type: 'data', row });
+            }
+        }
+        return list;
+    }, [flattenedData, groupByKey, collapsedGroups, groupValueOf]);
+    displayListRef.current = displayList;
+
     const visibleRows = useMemo(() => {
-        if (flattenedData.length === 0 || containerHeight === 0) return [];
+        if (displayList.length === 0 || containerHeight === 0) return [];
         const startIdx = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
-        const endIdx = Math.min(flattenedData.length, Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + OVERSCAN);
-        
+        const endIdx = Math.min(displayList.length, Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + OVERSCAN);
+
         const rows = [];
         for (let i = startIdx; i < endIdx; i++) {
-            rows.push({ index: i, row: flattenedData[i], top: i * ROW_HEIGHT });
+            rows.push({ index: i, item: displayList[i], top: i * ROW_HEIGHT });
         }
         return rows;
-    }, [flattenedData, scrollTop, containerHeight]);
-    const totalHeight = flattenedData.length * ROW_HEIGHT;
+    }, [displayList, scrollTop, containerHeight]);
+    const totalHeight = displayList.length * ROW_HEIGHT;
 
     // Compute total content width for horizontal scroll sync
     const totalContentWidth = useMemo(() => {
@@ -903,7 +966,46 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                     <ToolBtn icon={<Icons.Filter />} />
                     <ToolBtn icon={<Icons.Columns />} onClick={() => setColumnConfigOpen(true)} />
-                    <ToolBtn icon={<Icons.Group />} />
+                    <div style={{ position: 'relative' }}>
+                        <ToolBtn
+                            icon={<Icons.Group />}
+                            onClick={() => setGroupMenuOpen(o => !o)}
+                            active={!!groupByKey}
+                            title={groupByKey ? `Agrupado por ${groupByKey}` : 'Agrupar filas'}
+                        />
+                        {groupMenuOpen && (
+                            <>
+                                <div style={{ position: 'fixed', inset: 0, zIndex: 60 }} onClick={() => setGroupMenuOpen(false)} />
+                                <div style={{
+                                    position: 'absolute', top: '30px', left: 0, zIndex: 61, minWidth: '240px', maxHeight: '340px', overflowY: 'auto',
+                                    background: '#1c1d22', border: '1px solid #333', borderRadius: '6px', boxShadow: '0 8px 24px rgba(0,0,0,.5)', padding: '6px'
+                                }}>
+                                    <div style={{ fontSize: '10.5px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '.5px', padding: '4px 8px' }}>Agrupar por</div>
+                                    <div
+                                        onClick={() => { setGroupByKey(null); setGroupMenuOpen(false); }}
+                                        style={{ padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12.5px', color: !groupByKey ? '#7e9bbd' : '#d1d5db', background: !groupByKey ? 'rgba(126,155,189,.12)' : 'transparent' }}
+                                    >Sin agrupar</div>
+                                    {detectedGroupKey && (
+                                        <div
+                                            onClick={() => { setGroupByKey(detectedGroupKey); setCollapsedGroups(new Set()); setGroupMenuOpen(false); }}
+                                            style={{ padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px', color: groupByKey === detectedGroupKey ? '#7e9bbd' : '#d1d5db', background: groupByKey === detectedGroupKey ? 'rgba(126,155,189,.12)' : 'transparent' }}
+                                        >
+                                            <span style={{ fontSize: '9px', fontWeight: 700, background: '#2d8fa5', color: '#fff', padding: '1px 5px', borderRadius: '3px' }}>AUTO</span>
+                                            {detectedGroupKey}
+                                        </div>
+                                    )}
+                                    <div style={{ height: '1px', background: '#2f333c', margin: '4px 0' }} />
+                                    {(allPropertyKeys || []).filter(k => k !== detectedGroupKey && k !== 'Name').map(k => (
+                                        <div
+                                            key={k}
+                                            onClick={() => { setGroupByKey(k); setCollapsedGroups(new Set()); setGroupMenuOpen(false); }}
+                                            style={{ padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12.5px', color: groupByKey === k ? '#7e9bbd' : '#d1d5db', background: groupByKey === k ? 'rgba(126,155,189,.12)' : 'transparent', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                        >{k}</div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
                 
                 <div style={{ width: '1px', height: '16px', background: '#444' }} />
@@ -1262,17 +1364,38 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                         </div>
                     ) : flattenedData.length > 0 ? (
                         <div style={{ height: `${totalHeight}px`, position: 'relative' }}>
-                            {visibleRows.map(({ index, row, top }) => (
-                                <InventoryRow 
-                                    key={row.dbId || index}
-                                    row={row}
+                            {visibleRows.map(({ index, item, top }) => item.type === 'group' ? (
+                                <div
+                                    key={`grp-${item.value}`}
+                                    onClick={() => setCollapsedGroups(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(item.value)) next.delete(item.value); else next.add(item.value);
+                                        return next;
+                                    })}
+                                    style={{
+                                        position: 'absolute', top: `${top}px`, left: 0, height: `${ROW_HEIGHT}px`,
+                                        width: `${totalContentWidth}px`, display: 'flex', alignItems: 'center', gap: '8px',
+                                        padding: '0 12px', boxSizing: 'border-box', cursor: 'pointer',
+                                        background: '#22252c', borderBottom: '1px solid #2f333c', borderTop: '1px solid #2f333c',
+                                        color: '#cfd6e0', fontSize: '12px', fontWeight: 700, zIndex: 1
+                                    }}
+                                    title={`${groupByKey}: ${item.value}`}
+                                >
+                                    <span style={{ display: 'inline-block', transform: collapsedGroups.has(item.value) ? 'rotate(-90deg)' : 'none', transition: 'transform .1s', color: '#7e9bbd' }}>▾</span>
+                                    <span style={{ color: '#7e9bbd' }}>{item.value}</span>
+                                    <span style={{ color: '#6b7280', fontWeight: 500 }}>· {item.count}</span>
+                                </div>
+                            ) : (
+                                <InventoryRow
+                                    key={item.row.dbId || index}
+                                    row={item.row}
                                     columns={columns}
                                     index={index}
                                     onRowClick={handleRowClick}
-                                    isHighlighted={highlightedDbId === row.dbId}
+                                    isHighlighted={highlightedDbId === item.row.dbId}
                                     top={top}
                                     onCellEdit={handleCellEdit}
-                                    isChecked={checkedIds.has(row.dbId)}
+                                    isChecked={checkedIds.has(item.row.dbId)}
                                     onToggleCheck={(dbId) => setCheckedIds(prev => { const next = new Set(prev); if (next.has(dbId)) next.delete(dbId); else next.add(dbId); return next; })}
                                 />
                             ))}

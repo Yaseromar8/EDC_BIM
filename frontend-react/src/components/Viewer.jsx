@@ -522,8 +522,22 @@ const Viewer = ({
                             viewer.prefs.set('ambientShadows', true);
                             viewer.prefs.set('antialiasing', true);
                         }
+                        // SAO más profundo: radio amplio (escena civil grande) +
+                        // intensidad alta → el contacto entre elementos se lee
+                        // (estilo Tandem). Default LMV es tímido (5 / ~0.4).
+                        if (viewer.impl && typeof viewer.impl.setAOOptions === 'function') {
+                            viewer.impl.setAOOptions(12, 1.0);
+                        }
+                        // BORDES estilo Tandem: aristas oscuras en la geometría —
+                        // es LO que hace que Tandem se vea "sólido" y definido.
+                        if (typeof viewer.setDisplayEdges === 'function') {
+                            viewer.setDisplayEdges(true);
+                        }
                         if (typeof viewer.setGroundShadow === 'function') {
                             viewer.setGroundShadow(true);
+                        }
+                        if (typeof viewer.setGroundShadowAlpha === 'function') {
+                            viewer.setGroundShadowAlpha(0.85);
                         }
                         if (typeof viewer.setGroundReflection === 'function') {
                             viewer.setGroundReflection(false);
@@ -535,6 +549,46 @@ const Viewer = ({
                 };
                 window.__applyViewerVisualQuality = applyViewerVisualQuality;
                 applyViewerVisualQuality();
+
+                // Calibración visual EN VIVO (consola F12), sin recompilar:
+                //   __vq.ao(12, 1)     → radio/intensidad de oclusión ambiental
+                //   __vq.light(0..15)  → preset de iluminación/entorno
+                //   __vq.edges(true)   → bordes de aristas on/off
+                window.__vq = {
+                    ao: (radius, intensity) => { try { viewer.impl.setAOOptions(radius, intensity); viewer.impl.invalidate(true, true, true); } catch (e) { console.warn(e); } },
+                    light: (n) => { try { viewer.setLightPreset(n); } catch (e) { console.warn(e); } },
+                    edges: (on) => { try { viewer.setDisplayEdges(!!on); viewer.impl.invalidate(true, true, true); } catch (e) { console.warn(e); } },
+                };
+
+                // ── ÓRBITA ALREDEDOR DEL CURSOR (estilo Tandem/Fusion) ────────
+                // Al presionar el mouse, el punto del modelo BAJO el cursor pasa a
+                // ser el pivote de órbita: giras alrededor de donde estás mirando,
+                // no del centro del proyecto. Si apuntas al vacío, se conserva el
+                // último pivote (no hay saltos). No interfiere con la selección.
+                try {
+                    const canvasEl = viewer.canvas || viewer.impl?.canvas;
+                    if (canvasEl) {
+                        const onPivotDown = (event) => {
+                            if (event.button !== 0 && event.button !== 1) return; // izq (orbit) o rueda (pan)
+                            if (!viewer.model || viewer.model.is2d?.()) return;
+                            const rect = canvasEl.getBoundingClientRect();
+                            const hit = viewer.impl.hitTest(
+                                event.clientX - rect.left,
+                                event.clientY - rect.top,
+                                true
+                            );
+                            if (hit && hit.intersectPoint) {
+                                viewer.navigation.setPivotPoint(hit.intersectPoint);
+                                viewer.navigation.setPivotSetFlag(true);
+                            }
+                        };
+                        // captura para correr ANTES que la herramienta de órbita
+                        canvasEl.addEventListener('mousedown', onPivotDown, true);
+                        viewer.__pivotUnderCursor = () => canvasEl.removeEventListener('mousedown', onPivotDown, true);
+                    }
+                } catch (e) {
+                    console.warn('[Viewer] Pivote bajo cursor no disponible:', e);
+                }
 
                 // ── FORZAR COMPORTAMIENTO NATIVO DE CLIC ──────────────────────
                 // Forzamos explícitamente que el clic simple seleccione y deseleccione,
@@ -761,6 +815,7 @@ const Viewer = ({
                 
                 // Stop ghost enforcement rAF
                 if (window.__ghostCleanup) { window.__ghostCleanup(); }
+                try { v.__pivotUnderCursor?.(); } catch (e) { /* noop */ }
 
                 try {
                     v.finish();
@@ -770,6 +825,7 @@ const Viewer = ({
                 if (window.NOP_VIEWER === v) {
                     window.NOP_VIEWER = null;
                 }
+                window.__viewerLiveModels = {};
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -852,7 +908,9 @@ const Viewer = ({
     // Recalcular Filtros nativamente desde el API de APS (con debounce para evitar double-fire)
     useEffect(() => {
         const handleRecalculateFilters = (event) => {
-            // Debounce: cancela ejecución previa si llega otra dentro de 50ms
+            // Coalescer ráfagas del mismo tick (evita double-fire) pero instantáneo:
+            // el cálculo ahora usa índice cacheado (FacetIndex), no re-escanea el
+            // inventario en cada clic → ya no necesita 50ms de espera.
             if (recalcDebounceRef.current) clearTimeout(recalcDebounceRef.current);
             recalcDebounceRef.current = setTimeout(async () => {
             const detail = event.detail;
@@ -1004,7 +1062,7 @@ const Viewer = ({
                     });
                 }
                 }
-            }, 50); // debounce 50ms
+            }, 8); // coalesce del mismo tick (instantáneo, cálculo cacheado)
         };
 
         window.addEventListener('recalculate-filters', handleRecalculateFilters);
@@ -1105,7 +1163,10 @@ const Viewer = ({
                 '#7e9bbd', '#F97316', '#10B981', '#F43F5E', '#A855F7', '#5f7fa3', '#EAB308',
                 '#EF4444', '#8B5CF6', '#EC4899', '#6366F1', '#14B8A6', '#84CC16', '#F59E0B'
             ];
-            const THEME_COLOR_ALPHA = 0.82;
+            // 0.6: el tinte domina pero DEJA PASAR el sombreado (AO/luz) — con
+            // 0.82 el terreno quedaba plano al colorear (el theming de LMV mezcla
+            // el color DESPUÉS de la iluminación: alfa alto = relieve borrado).
+            const THEME_COLOR_ALPHA = 0.6;
 
             // Merge custom per-value color overrides (from color picker or global store)
             const customOverrides = customColors || window._customValueColors || {};
@@ -1882,6 +1943,20 @@ const Viewer = ({
                                 baseOffsetRef.current = modelData.globalOffset;
                                 console.log('[Viewer] Established Base Global Offset:', baseOffsetRef.current);
                             }
+
+                            // REGISTRO VIVO: fuente autoritativa de "qué está cargado y con qué
+                            // vista" para visores embebidos (4D LOB, AR…). El URN y el GUID de la
+                            // vista efectivamente cargada los conoce SOLO este loader; re-derivarlos
+                            // desde el Model con getData() es frágil. Se limpia al descargar/desmontar.
+                            window.__viewerLiveModels = window.__viewerLiveModels || {};
+                            window.__viewerLiveModels[model.urn] = {
+                                urn: String(model.urn).replace(/^urn:/i, ''),
+                                name: model.label || model.name || null,
+                                // GUID del nodo de GEOMETRÍA que realmente se renderizó
+                                // (ya escalado/fallback). NO el targetGuid lógico: para DWG
+                                // ese apunta a una vista 2D/lógica que no renderiza en el 4D.
+                                viewGuid: (viewableToLoad && viewableToLoad.guid && viewableToLoad.guid()) || targetGuid || null,
+                            };
                         }
 
                         // Matrix Alignment Check
@@ -2367,7 +2442,9 @@ const Viewer = ({
 
             // 3. Apply Colors to matching items PER MODEL (GPU Batching ASYNC CHUNKING)
             const applyColorsAsynchronously = async () => {
-                const FILTER_COLOR_ALPHA = 0.82;
+                // 0.6 (antes 0.82): conserva el relieve del terreno al colorear —
+                // el theming reemplaza el color YA ILUMINADO; alfa alto lo aplana.
+                const FILTER_COLOR_ALPHA = 0.6;
                 for (let index = 0; index < (detail.groups || []).length; index++) {
                     const group = detail.groups[index];
                     let color;
@@ -2832,6 +2909,7 @@ const Viewer = ({
 
                 delete loadedModelsRef.current[urn];
                 delete loadedViewGuidsRef.current[urn];
+                if (window.__viewerLiveModels) delete window.__viewerLiveModels[urn];
 
                 // Clean Rosetta maps for the removed model
                 if (window.rosettaToDbId) delete window.rosettaToDbId[urn];

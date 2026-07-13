@@ -382,116 +382,130 @@ export function extractSchemaNative(model) {
     });
 }
 
+// ── FacetIndex: índice normalizado en memoria (fluidez tipo Tandem) ─────────
+// El costo real del filtrado NO es la lógica facetada, es re-normalizar el
+// inventario completo (String.replace de URNs, aplanar arrays, resolver rosetta)
+// en CADA clic. Eso lo hacemos UNA sola vez y lo cacheamos: cada toggle solo
+// recorre filas ya normalizadas y hace intersecciones. Misma semántica exacta.
+const _safeUrn = (u) => String(u ?? '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const _normVal = (raw) => Array.isArray(raw)
+    ? raw.map(x => String(x ?? '').trim()).filter(Boolean).join(', ')
+    : String(raw ?? '').trim();
+
+let _facetCache = { allData: null, rosetta: null, prepared: null };
+
+function _buildFacetIndex(allData, rosettaToExtIdReversed) {
+    // FALLBACK GLOBAL: extId -> {dbId, urn} para IFC de Civil cuyo source_urn
+    // difiere del URN del viewer.
+    const globalExtIdLookup = {};
+    if (rosettaToExtIdReversed) {
+        for (const loadedUrn in rosettaToExtIdReversed) {
+            const mapping = rosettaToExtIdReversed[loadedUrn];
+            for (const extId in mapping) {
+                if (!globalExtIdLookup[extId]) globalExtIdLookup[extId] = { dbId: mapping[extId], urn: loadedUrn };
+            }
+        }
+    }
+
+    // colUrnsWithValue: por columna, en qué modelos (safeUrn) el parámetro EXISTE.
+    // Sirve para distinguir '(Unassigned)' (vacío real) de '(No aplica)' (el modelo
+    // ni usa el parámetro). Se computa sobre TODAS las filas (idéntico a antes).
+    const colUrnsWithValue = {};
+    // preparedRows: solo filas que resuelven en rosetta (las que producían buckets).
+    const rows = [];
+    for (let i = 0; i < allData.length; i++) {
+        const row = allData[i];
+        const extId = row.dbId;
+        const rawUrn = row.source_urn || row.model_urn;
+        const safeUrn = _safeUrn(rawUrn);
+
+        // Normalizar columnas una vez + registrar scope por columna
+        const norm = {};
+        for (const k in row) {
+            if (k === 'dbId' || k === 'source_urn' || k === 'model_urn') continue;
+            const v = _normVal(row[k]);
+            if (v) {
+                norm[k] = v;
+                (colUrnsWithValue[k] || (colUrnsWithValue[k] = new Set())).add(safeUrn);
+            }
+        }
+
+        // Resolver dbId del viewer (rosetta directa o fallback global)
+        const urnDict = rosettaToExtIdReversed[rawUrn] || rosettaToExtIdReversed[safeUrn];
+        let viewerDbId;
+        let effectiveModelUrn = safeUrn;
+        if (urnDict && urnDict[extId] !== undefined) {
+            viewerDbId = urnDict[extId];
+        } else if (globalExtIdLookup[extId]) {
+            viewerDbId = globalExtIdLookup[extId].dbId;
+            effectiveModelUrn = globalExtIdLookup[extId].urn;
+        } else {
+            continue; // no existe en ningún modelo cargado → no participa
+        }
+
+        rows.push({
+            viewerDbId,
+            effectiveModelUrn,
+            rawUrn,
+            safeUrn,
+            sourceVal: String(rawUrn).trim(),
+            norm,
+        });
+    }
+    return { rows, colUrnsWithValue };
+}
+
 export function calculateBucketsFromPostgres(allData, filterProperties, filterSelections, rosettaToExtIdReversed, hiddenModelUrns = []) {
     // allData is array of objects: { dbId: 'UUID', model_urn: 'URN', <PropName>: 'Value', ... }
     // rosettaToExtIdReversed: URN -> ExternalId -> dbId
     // hiddenModelUrns: array of URNs que el usuario ocultó en Sources (formato React/raw)
-    
+
+    // Índice cacheado: se reconstruye SOLO si cambió el inventario o la rosetta.
+    // Los toggles de Sources/valores NO lo invalidan (el hidden se aplica abajo).
+    if (_facetCache.allData !== allData || _facetCache.rosetta !== rosettaToExtIdReversed || !_facetCache.prepared) {
+        _facetCache = { allData, rosetta: rosettaToExtIdReversed, prepared: _buildFacetIndex(allData, rosettaToExtIdReversed) };
+    }
+    const { rows: preparedRows, colUrnsWithValue } = _facetCache.prepared;
+
     // Pre-compute safe versions of hidden URNs for fast lookup
     const hiddenSet = new Set();
     (hiddenModelUrns || []).forEach(u => {
         hiddenSet.add(u);
-        hiddenSet.add(String(u).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
+        hiddenSet.add(_safeUrn(u));
     });
-    
-    // We only care about models that are currently active in rosettaToExtIdReversed
-    const activeUrns = Object.keys(rosettaToExtIdReversed || {});
-    
-    // FALLBACK GLOBAL: Pre-construir lookup extId -> {dbId, urn} para todos los URNs.
-    // Necesario para IFC de Civil 3D cuyo source_urn en postgres puede diferir del URN del viewer.
-    const globalExtIdLookup = {};
-    if (rosettaToExtIdReversed) {
-        Object.entries(rosettaToExtIdReversed).forEach(([loadedUrn, mapping]) => {
-            Object.entries(mapping).forEach(([extId, dbId]) => {
-                if (!globalExtIdLookup[extId]) {
-                    globalExtIdLookup[extId] = { dbId, urn: loadedUrn };
-                }
-            });
-        });
-    }
-    
+
     // Preparar buckets vacíos para las propiedades solicitadas (filterProperties)
     const bucketMaps = {};
+    const totalMaps = {}; // val -> count IGNORANDO selecciones (el "(total)" de Tandem)
     filterProperties.forEach(propId => {
         bucketMaps[propId] = {}; // val -> { count, dbIds: [{id, modelUrn}] }
+        totalMaps[propId] = {};
     });
 
     const hasAnySelection = Object.keys(filterSelections).some(k => filterSelections[k] && filterSelections[k].length > 0);
     const globalValidDbIds = [];
 
-    // ── Semántica de "(Unassigned)" para AUDITORÍA ───────────────────────────
-    // 1) Solo lo VACÍO de verdad cuenta como sin valor. Cualquier cosa tecleada
-    //    (un '-', una letra, un signo por error) es un valor y se muestra como
-    //    su propio bucket — así la auditoría detecta datos mal llenados.
-    //    Los ARREGLOS multi-slot se aplanan uniendo solo las casillas con
-    //    contenido (["",""] → vacío; ["PQ08_1",""] → "PQ08_1"; ["-",""] → "-").
-    const normVal = (raw) => {
-        if (Array.isArray(raw)) {
-            return raw.map(x => String(x ?? '').trim()).filter(Boolean).join(', ');
-        }
-        return String(raw ?? '').trim();
-    };
-
-    // 2) "(Unassigned)" se ACOTA a los modelos donde el parámetro EXISTE:
-    //    un elemento de un modelo que ni siquiera usa ese parámetro no es
-    //    "sin asignar" — simplemente no aplica, y no debe engordar el bucket
-    //    (antes: todos los elementos de los demás modelos del frente caían ahí
-    //    → "(Unassigned)" ≈ todo el modelo).
-    const propScope = Array.from(new Set([...filterProperties, ...Object.keys(filterSelections || {})]))
-        .filter(p => p !== 'Standard::Sources');
-    const propUrnsWithValue = {};
-    propScope.forEach(propId => { propUrnsWithValue[propId] = new Set(); });
-    allData.forEach(row => {
-        const u = row.source_urn || row.model_urn;
-        const su = String(u).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-        for (const propId of propScope) {
-            const pn = propId.split('::')[1] || propId;
-            if (normVal(row[pn])) propUrnsWithValue[propId].add(su);
-        }
-    });
-
-    // Valor efectivo de una fila para una propiedad (AUDITORÍA COMPLETA:
-    // ningún elemento vinculado del frente desaparece — la suma de buckets
-    // es el total de elementos):
+    // Valor efectivo de una fila para una propiedad (AUDITORÍA COMPLETA):
     //   valor real (incluye typos)  → su propio bucket
     //   '(Unassigned)'              → vacío real, en modelos que SÍ usan el parámetro
     //   '(No aplica)'               → el modelo vinculado no trae ese parámetro
-    const getRowValue = (row, propId, safeUrn) => {
-        if (propId === 'Standard::Sources') {
-            return String(row.source_urn || row.model_urn).trim();
-        }
+    const getRowValue = (r, propId) => {
+        if (propId === 'Standard::Sources') return r.sourceVal;
         const pn = propId.split('::')[1] || propId;
-        const v = normVal(row[pn]);
+        const v = r.norm[pn];
         if (v) return v;
-        return propUrnsWithValue[propId]?.has(safeUrn) ? '(Unassigned)' : '(No aplica)';
+        return colUrnsWithValue[pn]?.has(r.safeUrn) ? '(Unassigned)' : '(No aplica)';
     };
 
-    // Nivel 1: Filtrar sólo data activa en el visor (rosetta) y filtrado global
-    allData.forEach(row => {
-        const extId = row.dbId; // Recordatorio: en mappedData, pospusimos UUID a dbId
-        const urn = row.source_urn || row.model_urn;
-        const safeUrn = String(urn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-        
+    // Nivel 1: recorrer filas YA normalizadas (sin re-parsear en cada clic)
+    for (let i = 0; i < preparedRows.length; i++) {
+        const r = preparedRows[i];
+
         // Excluir elementos de modelos ocultos por Sources
-        if (hiddenSet.has(urn) || hiddenSet.has(safeUrn)) {
-            return;
-        }
-        
-        // Evitar fantasmas:
-        // Si el elemento no existe en la piedra Rosetta activa de la UI, ignorar
-        const urnDict = rosettaToExtIdReversed[urn] || rosettaToExtIdReversed[safeUrn];
-        let viewerDbId;
-        let effectiveModelUrn = safeUrn;
-        
-        if (urnDict && urnDict[extId] !== undefined) {
-            viewerDbId = urnDict[extId];
-        } else if (globalExtIdLookup[extId]) {
-            // FALLBACK: extId encontrado en otro URN (IFC con versión/encoding diferente)
-            viewerDbId = globalExtIdLookup[extId].dbId;
-            effectiveModelUrn = globalExtIdLookup[extId].urn;
-        } else {
-            return; // No existe en ningún modelo cargado
-        }
+        if (hiddenSet.has(r.rawUrn) || hiddenSet.has(r.safeUrn)) continue;
+
+        const viewerDbId = r.viewerDbId;
+        const effectiveModelUrn = r.effectiveModelUrn;
 
         // Validar si pasa TODOS los filtros activos
         let passesAllFilters = true;
@@ -499,11 +513,7 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
             for (let selPropId in filterSelections) {
                 const sVals = filterSelections[selPropId];
                 if (!sVals || sVals.length === 0) continue;
-
-                // null = el parámetro no aplica a este modelo → no puede
-                // matchear ninguna selección (ni siquiera '(Unassigned)').
-                const rowVal = getRowValue(row, selPropId, safeUrn);
-                if (rowVal === null || !sVals.includes(rowVal)) {
+                if (!sVals.includes(getRowValue(r, selPropId))) {
                     passesAllFilters = false;
                     break;
                 }
@@ -515,11 +525,13 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
         }
 
         // Construir buckets (Nivel Facetado - OR para sí mismo)
-        for(let propId of filterProperties) {
-            // null = parámetro no aplica a este modelo → la fila no participa
-            // en los buckets de esta propiedad (tampoco en '(Unassigned)').
-            const val = getRowValue(row, propId, safeUrn);
-            if (val === null || !val) continue;
+        for (let propId of filterProperties) {
+            const val = getRowValue(r, propId);
+            if (!val) continue;
+
+            // "(total)": universo del valor entre los Sources visibles, sin importar
+            // las selecciones activas (el segundo número de Tandem: 445 (2891)).
+            totalMaps[propId][val] = (totalMaps[propId][val] || 0) + 1;
 
             let passesFacet = true;
             if (hasAnySelection) {
@@ -527,9 +539,7 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
                     if (selPropId === propId) continue; // Faceted OR
                     const sVals = filterSelections[selPropId];
                     if (!sVals || sVals.length === 0) continue;
-
-                    const rowVal = getRowValue(row, selPropId, safeUrn);
-                    if (rowVal === null || !sVals.includes(rowVal)) {
+                    if (!sVals.includes(getRowValue(r, selPropId))) {
                         passesFacet = false;
                         break;
                     }
@@ -537,23 +547,25 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
             }
 
             if (passesFacet) {
-                if(!bucketMaps[propId][val]) {
+                if (!bucketMaps[propId][val]) {
                     bucketMaps[propId][val] = { count: 0, dbIds: [] };
                 }
                 bucketMaps[propId][val].count++;
                 bucketMaps[propId][val].dbIds.push({ id: viewerDbId, modelUrn: effectiveModelUrn });
             }
         }
-    });
+    }
 
     const result = {};
     filterProperties.forEach(propId => {
         const map = bucketMaps[propId];
+        const totMap = totalMaps[propId] || {};
         const values = [];
         for (let val in map) {
             values.push({
                  value: val,
                  count: map[val].count,
+                 totalCount: totMap[val] || map[val].count,
                  dbIds: map[val].dbIds
             });
         }

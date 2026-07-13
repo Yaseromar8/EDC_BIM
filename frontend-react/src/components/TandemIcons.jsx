@@ -36,3 +36,19 @@ export const ClusterIconTandem = () => (
         <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
     </svg>
 );
+
+// Perfil longitudinal: ejes + una línea de terreno (para la barra de capas)
+export const ProfileIcon = () => (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 4v16h18" />
+        <path d="M3 15l4-5 3 3 4-7 4 6 3-4" />
+    </svg>
+);
+
+// SubZona / rótulo espacial: pin-etiqueta (coherente con los pines del visor)
+export const ZoneTagIcon = () => (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20.6 11.5l-7.9-7.9a1.9 1.9 0 0 0-1.4-.6H5a2 2 0 0 0-2 2v6.3c0 .5.2 1 .6 1.4l7.9 7.9a1.9 1.9 0 0 0 2.7 0l6.4-6.4a1.9 1.9 0 0 0 0-2.7z" />
+        <circle cx="8" cy="8" r="1.3" />
+    </svg>
+);

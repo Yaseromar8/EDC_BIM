@@ -148,7 +148,12 @@ const FilterCategory = React.memo(({
                                 <span className="tandem-item-text" title={String(item.value)}>{String(item.value)}</span>
                             </label>
                             <div className="tandem-item-right">
-                                <span className="tandem-count-badge">{item.count}</span>
+                                <span className="tandem-count-badge">
+                                    {item.count}
+                                    {typeof item.totalCount === 'number' && item.totalCount !== item.count && (
+                                        <span className="tandem-count-total"> ({item.totalCount})</span>
+                                    )}
+                                </span>
                                 <div 
                                     className="tandem-color-box" 
                                     style={{ ...colorStyle, cursor: isColorActive ? 'pointer' : 'default', transition: 'all 0.2s' }}
@@ -372,6 +377,7 @@ const TandemFilterPanel = ({
           .tandem-item-text { margin-left: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #f0f0f0; font-weight: 500; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
           .tandem-item-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
           .tandem-count-badge { color: #ccc; font-size: 11px; min-width: 20px; text-align: right; margin-right: 8px; }
+          .tandem-count-total { color: #777; font-size: 10px; }
           .tandem-color-box { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(255,255,255,0.15); cursor: pointer; }
           .tandem-color-box.default { background: #333; }
         `}
