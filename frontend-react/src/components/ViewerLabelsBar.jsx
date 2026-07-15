@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ProfileIcon, ZoneTagIcon } from './TandemIcons';
+import { ProfileIcon, ZoneTagIcon, ExcavationIcon } from './TandemIcons';
 
 // Barra inferior compacta (estilo Tandem "Ab / Labels") para marcar/desmarcar
 // capas del visor SIN distorsionar el layout: flota sobre el canvas, no ocupa
@@ -14,6 +14,7 @@ const REASON_TEXT = {
 export default function ViewerLabelsBar() {
     const [profileOn, setProfileOn] = useState(false);
     const [zonesOn, setZonesOn] = useState(false);
+    const [excavOn, setExcavOn] = useState(false);
     const [toast, setToast] = useState(null);
     const toastTimer = useRef(null);
 
@@ -41,9 +42,25 @@ export default function ViewerLabelsBar() {
         return () => window.removeEventListener('lob-zone-labels-result', onResult);
     }, []);
 
+    // Aviso del resultado de excavación fantasma (si no encontró el DWG de sólidos)
+    useEffect(() => {
+        const onExcav = (e) => {
+            const d = e?.detail || {};
+            if (!d.matched) {
+                setExcavOn(false);
+                const vistos = Array.isArray(d.names) ? d.names.filter(Boolean).join(' · ') : '';
+                setToast({ ok: false, text: `No identifiqué el DWG de sólidos. Modelos vistos: ${vistos || '—'}` });
+                if (toastTimer.current) clearTimeout(toastTimer.current);
+                toastTimer.current = setTimeout(() => setToast(null), 8000);
+            }
+        };
+        window.addEventListener('lob-ghost-excavation-result', onExcav);
+        return () => window.removeEventListener('lob-ghost-excavation-result', onExcav);
+    }, []);
+
     // Apagar al recargar modelo
     useEffect(() => {
-        const off = () => { setZonesOn(false); setProfileOn(false); };
+        const off = () => { setZonesOn(false); setProfileOn(false); setExcavOn(false); };
         window.addEventListener('lob-clear', off);
         return () => window.removeEventListener('lob-clear', off);
     }, []);
@@ -57,6 +74,11 @@ export default function ViewerLabelsBar() {
         const next = !zonesOn;
         setZonesOn(next);
         window.dispatchEvent(new CustomEvent('lob-zone-labels', { detail: { visible: next } }));
+    };
+    const toggleExcav = () => {
+        const next = !excavOn;
+        setExcavOn(next);
+        window.dispatchEvent(new CustomEvent('lob-ghost-excavation', { detail: { visible: next } }));
     };
 
     const Chip = ({ on, onClick, label, icon, color }) => (
@@ -95,14 +117,15 @@ export default function ViewerLabelsBar() {
         }}>
             <span style={{ color: '#6b7686', fontSize: 10.5, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase' }}>Capas</span>
             <Chip on={profileOn} onClick={toggleProfile} label="Perfil" icon={<ProfileIcon />} color="#3aa0ff" />
-            <Chip on={zonesOn} onClick={toggleZones} label="SubZonas" icon={<ZoneTagIcon />} color="#12a15b" />
+            <Chip on={zonesOn} onClick={toggleZones} label="SubZonas" icon={<ZoneTagIcon />} color="#2d8fa5" />
+            <Chip on={excavOn} onClick={toggleExcav} label="Excavación" icon={<ExcavationIcon />} color="#c08a4a" />
 
             {toast && (
                 <div style={{
                     position: 'absolute', left: '50%', bottom: 48, transform: 'translateX(-50%)',
-                    background: toast.ok ? 'rgba(16,157,88,0.96)' : 'rgba(40,45,54,0.98)',
-                    border: `1px solid ${toast.ok ? '#1bbd70' : '#3a4442'}`,
-                    color: toast.ok ? '#eafff3' : '#e6b8b8',
+                    background: toast.ok ? 'rgba(45,143,165,0.96)' : 'rgba(40,45,54,0.98)',
+                    border: `1px solid ${toast.ok ? '#43b3cc' : '#3a4442'}`,
+                    color: toast.ok ? '#eafcff' : '#e6b8b8',
                     borderRadius: 7, padding: '6px 12px', fontSize: 11.5, fontWeight: 600, maxWidth: 460, textAlign: 'center',
                     boxShadow: '0 4px 16px rgba(0,0,0,.4)', whiteSpace: 'normal', zIndex: 50,
                 }}>

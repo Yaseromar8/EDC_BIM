@@ -305,6 +305,13 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
     const [searchOpen, setSearchOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [stationLabelsVisible, setStationLabelsVisible] = useState(initialCache.stationLabelsVisible ?? true);
+    // 📌 Eje base persistente: si está fijado, el visor lo dibuja SOLO al abrir
+    // (aunque cierres/actualices), sin abrir este panel. Guardado por frente.
+    const baseAxisKey = `civil_base_axis::${activeModelUrn || 'global'}`;
+    const [baseAxisPin, setBaseAxisPin] = useState(() => {
+        try { const raw = localStorage.getItem(baseAxisKey); return raw ? JSON.parse(raw) : null; }
+        catch { return null; }
+    });
     
     const [pollingInterval, setPollingInterval] = useState(null);
     const [sectionJSON, setSectionJSON] = useState(null);
@@ -1433,6 +1440,58 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                         }}
                     >
                         🗑
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const fileUrn = civilOriginalUrn || selectedDwgUrn || activeModelUrn;
+                            const already = baseAxisPin && baseAxisPin.fileUrn === fileUrn;
+                            const scope = activeModelUrn || 'global';
+                            if (already) {
+                                try { localStorage.removeItem(baseAxisKey); } catch { /* noop */ }
+                                setBaseAxisPin(null);
+                                // COMPARTIDO: desfijar también en el servidor (para todos)
+                                apiFetch(`${BACKEND_URL}/api/civil/base-axis?scope=${encodeURIComponent(scope)}`, {
+                                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ pin: null }),
+                                }).catch(() => { /* sin red: localStorage sigue valiendo local */ });
+                                setExtractMessage('Eje base desfijado (para todos los usuarios).');
+                                return;
+                            }
+                            const pin = {
+                                fileUrn,
+                                alignmentIds: activeAlignmentIds.length
+                                    ? activeAlignmentIds
+                                    : (selectedAlignmentId ? [selectedAlignmentId] : 'ALL'),
+                                showStations: stationLabelsVisible,
+                                savedAt: new Date().toISOString(),
+                            };
+                            try { localStorage.setItem(baseAxisKey, JSON.stringify(pin)); } catch { /* noop */ }
+                            setBaseAxisPin(pin);
+                            // COMPARTIDO: persistir en Postgres → todos los usuarios lo ven al abrir
+                            apiFetch(`${BACKEND_URL}/api/civil/base-axis?scope=${encodeURIComponent(scope)}`, {
+                                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ pin }),
+                            }).catch(() => { /* sin red: localStorage sigue valiendo local */ });
+                            setExtractMessage(`📌 Eje base fijado para TODOS los usuarios (${Array.isArray(pin.alignmentIds) ? pin.alignmentIds.length : 'todos'} ejes): se dibujará automáticamente al abrir el visor.`);
+                        }}
+                        title={baseAxisPin
+                            ? 'Eje base FIJADO: se dibuja automáticamente al abrir el visor (clic para desfijar)'
+                            : 'Fijar el/los ejes activos como BASE: se dibujarán automáticamente en cada carga del visor, sin abrir este panel'}
+                        style={{
+                            height: 34,
+                            border: `1px solid ${baseAxisPin ? '#f59e0b' : '#4a5568'}`,
+                            background: baseAxisPin ? 'rgba(245,158,11,0.18)' : 'transparent',
+                            color: baseAxisPin ? '#fbbf24' : '#9aa4b2',
+                            borderRadius: 4,
+                            padding: '0 9px',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        📌
                     </button>
 
                     {searchOpen && (

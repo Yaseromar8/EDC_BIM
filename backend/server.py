@@ -759,6 +759,8 @@ from routes.element_docs import element_docs_bp, ensure_element_docs_table
 app.register_blueprint(element_docs_bp)
 from routes.lob4d import lob4d_bp, ensure_lob4d_tables
 app.register_blueprint(lob4d_bp)
+from routes.lob4d_linear import lob4d_linear_bp
+app.register_blueprint(lob4d_linear_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
@@ -885,12 +887,7 @@ def get_inventory():
         model_urn = request.args.get('model_urn')
         project_id = request.args.get('project_id')  # Pilar Identidad: filtrar por obra completa (dual-read)
         
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Aumentamos el timeout para esta query pesada (JSONB ~1779 filas)
-            cursor.execute("SET statement_timeout = '120000'")  # 120 segundos
-            
+        if True:  # (bloque preservado; la conexión se abre EAGER más abajo)
             # Construir la query base y los parámetros
             params = []
             
@@ -957,39 +954,152 @@ def get_inventory():
                     query += ' WHERE ia.model_urn = %s'
                     params.append(model_urn)
             
-            # Streaming Generator for Flask
+            # Streaming con apertura EAGER: la conexión y el execute() ocurren
+            # ANTES de responder. Si el pool/BD falla, el except del route
+            # devuelve un 500 con el error real. (Antes: el generador abría la
+            # conexión ya enviado el 200 → cualquier fallo = cuerpo VACÍO
+            # silencioso → "Unexpected end of JSON input" en el frontend.)
             from flask import Response
-            
+            from contextlib import ExitStack
+
+            stack = ExitStack()
+            try:
+                stream_conn = stack.enter_context(get_db_connection())
+                stream_cursor = stream_conn.cursor()
+                stream_cursor.execute("SET statement_timeout = '120000'")  # payload JSONB pesado
+                stream_cursor.execute(query, tuple(params))
+            except Exception:
+                stack.close()
+                raise
+
             def generate():
-                from db import get_db_connection
-                # Necesitamos nuestra propia conexión porque el yield es perezoso
-                with get_db_connection() as stream_conn:
-                    with stream_conn.cursor() as stream_cursor:
-                        stream_cursor.execute("SET statement_timeout = '120000'")
-                        stream_cursor.execute(query, tuple(params))
-                        
-                        yield '[\n'
-                        first = True
-                        while True:
-                            # fetchmany(100) para balancear I/O y memoria (aprox 1MB a la vez)
-                            rows = stream_cursor.fetchmany(100)
-                            if not rows:
-                                break
-                            
-                            for row in rows:
-                                if not first:
-                                    yield ',\n'
-                                yield row[0]
-                                first = False
-                                
-                        yield '\n]'
-            
+                try:
+                    yield '[\n'
+                    first = True
+                    while True:
+                        # fetchmany(100) para balancear I/O y memoria (aprox 1MB a la vez)
+                        rows = stream_cursor.fetchmany(100)
+                        if not rows:
+                            break
+
+                        for row in rows:
+                            if not first:
+                                yield ',\n'
+                            yield row[0]
+                            first = False
+
+                    yield '\n]'
+                finally:
+                    # Devuelve la conexión al pool también si el cliente corta
+                    stack.close()
+
+            # GZIP streaming: el inventario creció a ~73MB de JSON crudo; sin
+            # comprimir tarda ~90s por internet. Con gzip baja a ~6-8MB (~10x).
+            # El navegador lo descomprime solo (Content-Encoding).
+            accept_enc = (request.headers.get('Accept-Encoding') or '').lower()
+            if 'gzip' in accept_enc:
+                import zlib
+                def gzipped():
+                    comp = zlib.compressobj(6, zlib.DEFLATED, 31)  # wbits=31 → formato gzip
+                    for chunk in generate():
+                        data = comp.compress(chunk.encode('utf-8'))
+                        if data:
+                            yield data
+                    tail = comp.flush()
+                    if tail:
+                        yield tail
+                resp = Response(gzipped(), mimetype='application/json')
+                resp.headers['Content-Encoding'] = 'gzip'
+                resp.headers['Vary'] = 'Accept-Encoding'
+                return resp, 200
+
             return Response(generate(), mimetype='application/json'), 200
             
     except Exception as e:
         import traceback
         traceback.print_exc()
         print(f"[API] Error Fatal en /api/inventory: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/civil/base-axis', methods=['GET', 'PUT'])
+def civil_base_axis():
+    """
+    Eje base 📌 COMPARTIDO: el pin (qué DWG/alineamientos se auto-dibujan al
+    abrir) vivía en localStorage → solo lo veía quien lo fijó. Ahora persiste
+    en Postgres por frente (scope) y TODOS los usuarios lo ven.
+    """
+    try:
+        from db import get_db_connection
+        import json as _json
+        scope = request.args.get('scope', 'global')
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('''CREATE TABLE IF NOT EXISTS civil_base_axis (
+                scope TEXT PRIMARY KEY,
+                pin JSONB,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )''')
+            if request.method == 'GET':
+                cur.execute('SELECT pin FROM civil_base_axis WHERE scope = %s', (scope,))
+                row = cur.fetchone()
+                conn.commit()
+                return jsonify({'pin': row[0] if row else None}), 200
+            data = request.json or {}
+            pin = data.get('pin')
+            if pin is None:
+                cur.execute('DELETE FROM civil_base_axis WHERE scope = %s', (scope,))
+            else:
+                cur.execute('''INSERT INTO civil_base_axis (scope, pin, updated_at)
+                    VALUES (%s, %s::jsonb, NOW())
+                    ON CONFLICT (scope) DO UPDATE SET pin = EXCLUDED.pin, updated_at = NOW()''',
+                    (scope, _json.dumps(pin)))
+            conn.commit()
+            return jsonify({'status': 'ok'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/inventory/version', methods=['GET'])
+def get_inventory_version():
+    """
+    Huella de versión del inventario (respuesta de ~100 bytes). El frontend la
+    compara con su caché local (IndexedDB): si coincide, NO descarga los ~7MB.
+    Cambia cuando: se re-extrae un modelo (last_updated) o el usuario edita
+    datos (asset_user_data.updated_at).
+    """
+    try:
+        from db import get_db_connection
+        model_urn = request.args.get('model_urn')
+        project_id = request.args.get('project_id')
+
+        where = ''
+        params = []
+        if project_id:
+            where = ' WHERE ia.project_id = %s'
+            params.append(project_id)
+        elif model_urn and model_urn != 'global':
+            if '_' in model_urn:
+                frente = model_urn.split('_', 1)[1].upper()
+                where = ' WHERE UPPER(ia.model_urn) = %s OR UPPER(ia.model_urn) = %s OR UPPER(ia.model_urn) LIKE %s'
+                params.extend([model_urn.upper(), frente, f'%{frente}%'])
+            else:
+                where = ' WHERE ia.model_urn = %s'
+                params.append(model_urn)
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f'SELECT COUNT(*), MAX(ia.last_updated) FROM inventory_assets ia{where}', tuple(params))
+            count, last_upd = cursor.fetchone()
+            # Ediciones de usuario (global: barato y sobre-invalidar es seguro)
+            cursor.execute('SELECT MAX(updated_at) FROM asset_user_data')
+            user_upd = cursor.fetchone()[0]
+        return jsonify({
+            'count': count or 0,
+            'last_updated': str(last_upd) if last_upd else '',
+            'user_updated': str(user_upd) if user_upd else '',
+        }), 200
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 

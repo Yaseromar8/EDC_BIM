@@ -125,7 +125,13 @@ const FilterCategory = React.memo(({
                     const customColor = customValueColors[customColorKey];
                     let colorStyle = {};
                     if (isColorActive) {
-                        if (customColor) {
+                        if (customColor === 'none') {
+                            // excluido del coloreo: puntito "tachado"
+                            colorStyle = {
+                                background: 'repeating-linear-gradient(45deg,#3a3d42 0 3px,#1e2126 3px 6px)',
+                                border: '1px solid #5a5f66',
+                            };
+                        } else if (customColor) {
                             colorStyle = { backgroundColor: customColor, border: `1px solid ${customColor}`, boxShadow: `0 0 6px ${customColor}55` };
                         } else {
                             const originalIndex = bucket.values.findIndex(v => v.value === item.value);
@@ -186,6 +192,21 @@ const FilterCategory = React.memo(({
                                 >×</button>
                             </div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                {/* ✕ No pintar: excluye este valor del coloreo (queda con su material natural) */}
+                                <div
+                                    onClick={() => {
+                                        handleCustomColorChange(prop.id, colorPickerTarget.value, 'none');
+                                        setColorPickerTarget(null);
+                                    }}
+                                    title="No pintar este valor (excluir del coloreo)"
+                                    style={{
+                                        width: '18px', height: '18px', borderRadius: '3px', cursor: 'pointer',
+                                        border: customValueColors[`${prop.id}::${colorPickerTarget.value}`] === 'none' ? '2px solid #fff' : '1px solid rgba(255,255,255,0.3)',
+                                        background: 'repeating-linear-gradient(45deg,#3a3d42 0 3px,#1e2126 3px 6px)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        color: '#f87171', fontWeight: 900, fontSize: '11px', lineHeight: 1,
+                                    }}
+                                >✕</div>
                                 {PRESET_COLORS.map(c => {
                                     const isSelected = customValueColors[`${prop.id}::${colorPickerTarget.value}`] === c;
                                     return (

@@ -34,6 +34,7 @@ import ViewerLabelsBar from './components/ViewerLabelsBar';
 import { uploadFile } from './services/uploadService';
 import { processPendingUploads, getPendingThumbnails } from './services/uploadQueue';
 import { apiFetch } from './utils/apiFetch';
+import { getCachedInventory, setCachedInventory } from './utils/inventoryCache';
 
 import { App as CapacitorApp } from '@capacitor/app';
 import { BackgroundTask } from '@capawesome/capacitor-background-task';
@@ -572,6 +573,20 @@ function App() {
     }
     setUser(userData);
   }, []);
+
+  // ── PERMISOS por módulo (prueba de producción) ────────────────────────────
+  // Civil, 4D LOB y BIM 5D: solo admin. Los demás usuarios ven el botón opaco
+  // y al clickear reciben un aviso. (Gate simple de UI; el backend ya exige
+  // sesión para los datos.)
+  const isAdminUser = user?.role === 'admin';
+  const [permToast, setPermToast] = useState(null);
+  const permToastTimer = useRef(null);
+  const denyAccess = useCallback((moduleName) => {
+    setPermToast(`🔒 No tienes permisos para ${moduleName}. Solicítalo al administrador.`);
+    if (permToastTimer.current) clearTimeout(permToastTimer.current);
+    permToastTimer.current = setTimeout(() => setPermToast(null), 3200);
+  }, []);
+  const restrictedRailStyle = isAdminUser ? undefined : { opacity: 0.35, cursor: 'not-allowed' };
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('visor_user');
@@ -1480,16 +1495,36 @@ function App() {
     const scope = selectedProject.id || 'global';
     let cancelled = false;
     let pin = null;
-    try {
-      const raw = localStorage.getItem(`civil_base_axis::${scope}`);
-      pin = raw ? JSON.parse(raw) : null;
-    } catch { pin = null; }
-    if (!pin?.fileUrn) return undefined;
+
+    // COMPARTIDO: el pin ahora vive en Postgres (lo ven TODOS los usuarios).
+    // localStorage queda como respaldo local/offline.
+    const resolvePin = async () => {
+      try {
+        const res = await apiFetch(`${BACKEND_URL}/api/civil/base-axis?scope=${encodeURIComponent(scope)}`);
+        if (res.ok) {
+          const d = await res.json();
+          if (d?.pin?.fileUrn) {
+            try { localStorage.setItem(`civil_base_axis::${scope}`, JSON.stringify(d.pin)); } catch { /* noop */ }
+            return d.pin;
+          }
+          if (d && 'pin' in d && d.pin === null) return null; // desfijado explícitamente
+        }
+      } catch { /* backend caído → respaldo local */ }
+      try {
+        const raw = localStorage.getItem(`civil_base_axis::${scope}`);
+        return raw ? JSON.parse(raw) : null;
+      } catch { return null; }
+    };
 
     let tries = 0;
     const attempt = async () => {
       if (cancelled) return;
       tries += 1;
+      if (pin === null) {
+        pin = await resolvePin();
+        if (cancelled) return;
+        if (!pin?.fileUrn) return; // sin pin: nada que auto-dibujar
+      }
       const viewer = window.NOP_VIEWER;
       const ext = viewer?.getExtension?.('LOB4DExtension');
       const hasModel = viewer?.model || viewer?.getVisibleModels?.()?.length;
@@ -1546,6 +1581,14 @@ function App() {
             label: m.name
           }));
 
+          // Mapa fiable urn → nombre de archivo (el visor principal no llena
+          // __viewerLiveModels con el label; esto sí, y lo usa LOB4DExtension
+          // p. ej. para reconocer el DWG de sólidos de excavación).
+          window.__modelLabelByUrn = {};
+          mapped.forEach(m => {
+            if (m.urn) window.__modelLabelByUrn[String(m.urn).replace(/^urn:/i, '')] = m.label || m.name || '';
+          });
+
           // CRITICAL: Hydrate activeViewableGuids BEFORE setModels
           // de modo que cuando el Viewer reaccione al cambio de `models`,
           // ya tenga los GUIDs de las vistas configuradas por el usuario.
@@ -1567,12 +1610,83 @@ function App() {
 
     // INYECCIÓN CDE PROFESIONAL: Descargar inventario completo de la base de datos PostgreSQL
     // Una vez descargado, evitará usar las consultas asfixiantes (O(N^2)) del visor LMV local.
-    apiFetch(`${BACKEND_URL}/api/inventory?model_urn=${encodeURIComponent(selectedProject.id)}`)
-      .then(res => {
-        if (!res.ok) throw new Error('Falló el fetch a /api/inventory');
-        return res.json();
-      })
-      .then(dbData => {
+    // RESILIENTE: la respuesta puede llegar VACÍA (backend frío/timeout en payloads grandes),
+    // lo que rompía JSON.parse ("Unexpected end of JSON input"). Leemos texto, validamos, y
+    // reintentamos con backoff antes de rendirnos.
+    const fetchInventoryResilient = async (attempt = 0) => {
+      const res = await apiFetch(`${BACKEND_URL}/api/inventory?model_urn=${encodeURIComponent(selectedProject.id)}`);
+      if (!res.ok) {
+        // Leer el cuerpo del error ({'error': ...} del backend) para saber la
+        // CAUSA real, y reintentar: los 500 vienen intermitentes (conexión del
+        // pool que tropieza); el siguiente intento suele pasar.
+        let serverMsg = '';
+        try { serverMsg = (await res.text()).slice(0, 300); } catch { /* noop */ }
+        if (attempt < 2) {
+          const wait = 1000 * (attempt + 1);
+          console.warn(`[Piedra Rosetta] /api/inventory HTTP ${res.status} (${serverMsg}). Reintentando en ${wait}ms…`);
+          await new Promise(r => setTimeout(r, wait));
+          return fetchInventoryResilient(attempt + 1);
+        }
+        throw new Error(`Falló /api/inventory (HTTP ${res.status}) → ${serverMsg}`);
+      }
+      const text = await res.text();
+      if (!text || !text.trim()) {
+        // Cuerpo vacío: reintentar hasta 2 veces (el backend puede estar despertando)
+        if (attempt < 2) {
+          const wait = 800 * (attempt + 1);
+          console.warn(`[Piedra Rosetta] /api/inventory devolvió vacío. Reintentando en ${wait}ms (intento ${attempt + 1}/2)…`);
+          await new Promise(r => setTimeout(r, wait));
+          return fetchInventoryResilient(attempt + 1);
+        }
+        throw new Error('El backend devolvió el inventario VACÍO tras 3 intentos (revisar /api/inventory / Cloud SQL).');
+      }
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        throw new Error(`Inventario con JSON inválido (${text.length} bytes, posible respuesta truncada).`);
+      }
+    };
+
+    // Promesa GLOBAL del preload: InventoryDataGrid la espera en vez de bajar
+    // su PROPIA copia en paralelo. GUARD anti-duplicado: React (StrictMode dev)
+    // monta los efectos DOS veces → sin esto se lanzaban 2 descargas de 73MB
+    // simultáneas (se partían el ancho de banda y una moría con 500).
+    if (window.__inventoryPreloadKey === selectedProject.id && window.__inventoryPreloadPromise) {
+      console.log('[Piedra Rosetta] Preload ya en curso para este proyecto — reutilizando (sin descarga duplicada).');
+      return;
+    }
+    window.__inventoryPreloadKey = selectedProject.id;
+    window.__inventoryPreloadPromise = (async () => {
+      // ── CACHÉ LOCAL (IndexedDB, patrón Tandem/ACC) ────────────────────────
+      // 1) Pedir la HUELLA de versión (~100 bytes). 2) Si coincide con la del
+      // caché local → usarlo (0 descarga, apertura ~1s). 3) Si no → descarga
+      // completa (gzip) y se guarda para la próxima.
+      let verKey = null;
+      try {
+        const vres = await apiFetch(`${BACKEND_URL}/api/inventory/version?model_urn=${encodeURIComponent(selectedProject.id)}`);
+        if (vres.ok) {
+          const v = await vres.json();
+          verKey = `${v.count}|${v.last_updated}|${v.user_updated}`;
+        }
+      } catch { /* sin versión → descarga normal */ }
+
+      if (verKey) {
+        const cached = await getCachedInventory(selectedProject.id);
+        if (cached && cached.verKey === verKey && Array.isArray(cached.mappedData) && cached.mappedData.length) {
+          window.postgresInventory = cached.mappedData;
+          console.log(`[Piedra Rosetta] ⚡ Inventario desde caché LOCAL (${cached.mappedData.length} activos, 0 bytes descargados)`);
+          window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema: cached.schemaList || [] } }));
+          return;
+        }
+        if (cached) console.log('[Piedra Rosetta] Caché local desactualizado (hubo re-extracción/edición) — descargando fresco…');
+      }
+
+      const dbData = await fetchInventoryResilient();
+      return { dbData, verKey };
+    })()
+      .then(payload => {
+        if (!payload) return; // servido desde caché
+        const { dbData, verKey } = payload;
         const schemaMap = {};
 
         // Flatten as in InventoryDataGrid
@@ -1661,6 +1775,12 @@ function App() {
 
         const schemaList = Object.values(schemaMap).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
         window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema: schemaList } }));
+
+        // Guardar en caché local para que la PRÓXIMA apertura sea instantánea
+        // (se invalida sola cuando cambia la huella de versión del servidor).
+        if (verKey) {
+          setCachedInventory(selectedProject.id, { verKey, mappedData, schemaList, savedAt: Date.now() });
+        }
       })
       .catch(err => console.error("[Piedra Rosetta] Error pre-cargando inventario PostgreSQL:", err));
 
@@ -3378,7 +3498,9 @@ function App() {
             <button
               type="button"
               className={`rail-button ${lob4dTabOpen ? 'active' : ''}`}
+              style={restrictedRailStyle}
               onClick={() => {
+                if (!isAdminUser) return denyAccess('4D LOB');
                 const nextOpen = !lob4dTabOpen;
                 setLob4dTabOpen(nextOpen);
                 if (nextOpen) {
@@ -3389,7 +3511,7 @@ function App() {
                   setPanelVisible(false);
                 }
               }}
-              title="4D LOB"
+              title={isAdminUser ? '4D LOB' : '4D LOB (requiere permisos)'}
             >
               <FourDIcon />
               <span className="rail-label" style={{ fontWeight: 700 }}>4D LOB</span>
@@ -3398,8 +3520,12 @@ function App() {
             <button
               type="button"
               className={`rail-button ${activePanel === 'civil' && panelVisible ? 'active' : ''}`}
-              onClick={() => togglePanel('civil')}
-              title="Herramientas de civil"
+              style={restrictedRailStyle}
+              onClick={() => {
+                if (!isAdminUser) return denyAccess('Civil');
+                togglePanel('civil');
+              }}
+              title={isAdminUser ? 'Herramientas de civil' : 'Civil (requiere permisos)'}
             >
               <CivilRoadIcon />
               <span className="rail-label" style={{ fontWeight: 700 }}>Civil</span>
@@ -3432,8 +3558,12 @@ function App() {
                 type="button"
                 data-test-id="nav-item-budget"
                 className={`rail-button ${budgetTabOpen ? 'active' : ''}`}
-                onClick={() => setBudgetTabOpen(prev => !prev)}
-                title="BIM 5D - Presupuesto"
+                style={restrictedRailStyle}
+                onClick={() => {
+                  if (!isAdminUser) return denyAccess('BIM 5D');
+                  setBudgetTabOpen(prev => !prev);
+                }}
+                title={isAdminUser ? 'BIM 5D - Presupuesto' : 'BIM 5D (requiere permisos)'}
               >
                 <BudgetIcon />
                 <span className="rail-label" style={{ fontWeight: 700 }}>BIM 5D</span>
@@ -3685,6 +3815,18 @@ function App() {
 
                 {/* 📈 Perfil longitudinal interactivo (sincronizado con la PK 3D) */}
                 {!compareMode && <ProfilePanel />}
+
+                {/* 🔒 Aviso de módulo sin permisos */}
+                {permToast && (
+                  <div style={{
+                    position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)',
+                    background: 'rgba(30,33,40,0.97)', border: '1px solid #4a4f58', color: '#e8d8b0',
+                    padding: '9px 18px', borderRadius: '9px', fontSize: '13px', fontWeight: 600,
+                    zIndex: 1200, boxShadow: '0 4px 20px rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)',
+                  }}>
+                    {permToast}
+                  </div>
+                )}
 
                 {/* PIN RELOCATE BANNER */}
                 {relocatingPin && (

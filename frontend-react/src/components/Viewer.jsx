@@ -90,6 +90,7 @@ const Viewer = ({
     const loadingUrnsRef = useRef(new Set()); // URNs con carga EN CURSO (anti-duplicado por carrera)
     const loadedViewGuidsRef = useRef({}); // Tracks the GUID of the currently loaded view per model URN
     const baseOffsetRef = useRef(null);
+    const loadQueueRef = useRef(Promise.resolve()); // cola única de cargas de modelos
     const basePlacementRef = useRef(null);
     const spriteViewRef = useRef(null);
     const spriteStylesRef = useRef(null);
@@ -542,6 +543,26 @@ const Viewer = ({
                         if (typeof viewer.setGroundReflection === 'function') {
                             viewer.setGroundReflection(false);
                         }
+                        // ── ANTI-PARPADEO equilibrado ────────────────────────
+                        // Progresivo ON con PRESUPUESTO DE FRAME alto → la
+                        // primera pasada dibuja casi todo (parpadeo mínimo)
+                        // sin sacrificar fluidez.
+                        // OJO: optimizeNavigation queda OFF a propósito — ese
+                        // modo OCULTA los objetos TRANSPARENTES al navegar
+                        // (los sólidos rojos de excavación desaparecían al
+                        // acercarse y solo volvían al cambiar de herramienta).
+                        if (typeof viewer.setProgressiveRendering === 'function') {
+                            viewer.setProgressiveRendering(true);
+                        }
+                        if (viewer.impl && 'targetFrameBudget' in viewer.impl) {
+                            viewer.impl.targetFrameBudget = 100; // ms por pasada (default ~16-30)
+                        }
+                        if (viewer.prefs && typeof viewer.prefs.set === 'function') {
+                            viewer.prefs.set('optimizeNavigation', false);
+                        }
+                        if (typeof viewer.setOptimizeNavigation === 'function') {
+                            viewer.setOptimizeNavigation(false);
+                        }
                         viewer.impl?.invalidate?.(true, true, true);
                     } catch (e) {
                         console.warn('[Viewer] No se pudo reforzar calidad visual:', e);
@@ -558,6 +579,9 @@ const Viewer = ({
                     ao: (radius, intensity) => { try { viewer.impl.setAOOptions(radius, intensity); viewer.impl.invalidate(true, true, true); } catch (e) { console.warn(e); } },
                     light: (n) => { try { viewer.setLightPreset(n); } catch (e) { console.warn(e); } },
                     edges: (on) => { try { viewer.setDisplayEdges(!!on); viewer.impl.invalidate(true, true, true); } catch (e) { console.warn(e); } },
+                    // __vq.progressive(true|false) → render progresivo (true = más
+                    // fluido en escenas gigantes pero parpadea; false = estable Tandem)
+                    progressive: (on) => { try { viewer.setProgressiveRendering(!!on); viewer.prefs?.set?.('progressiveRendering', !!on); viewer.impl.invalidate(true, true, true); } catch (e) { console.warn(e); } },
                 };
 
                 // ── ÓRBITA ALREDEDOR DEL CURSOR (estilo Tandem/Fusion) ────────
@@ -796,6 +820,22 @@ const Viewer = ({
 
                 viewerRef.current = viewer;
                 window.NOP_VIEWER = viewer;
+
+                // El contenedor cambia de tamaño DESPUÉS de iniciar (barra de
+                // Capas inferior, paneles). Sin esto el canvas conserva el
+                // tamaño viejo → picking/órbita "descuadrados" y franjas.
+                try {
+                    let resizeRaf = null;
+                    const ro = new ResizeObserver(() => {
+                        if (resizeRaf) cancelAnimationFrame(resizeRaf);
+                        resizeRaf = requestAnimationFrame(() => {
+                            try { viewer.resize(); } catch { /* noop */ }
+                        });
+                    });
+                    ro.observe(containerRef.current);
+                    viewer.__containerResizeObserver = ro;
+                } catch { /* ResizeObserver no disponible */ }
+
                 setViewerReady(true);
             });
         };
@@ -816,6 +856,7 @@ const Viewer = ({
                 // Stop ghost enforcement rAF
                 if (window.__ghostCleanup) { window.__ghostCleanup(); }
                 try { v.__pivotUnderCursor?.(); } catch (e) { /* noop */ }
+                try { v.__containerResizeObserver?.disconnect(); } catch (e) { /* noop */ }
 
                 try {
                     v.finish();
@@ -1062,7 +1103,8 @@ const Viewer = ({
                     });
                 }
                 }
-            }, 8); // coalesce del mismo tick (instantáneo, cálculo cacheado)
+            }, 50); // coalesce del storm de carga (rosetta-ready x modelo); el
+                    // cálculo ya es instantáneo por el FacetIndex cacheado.
         };
 
         window.addEventListener('recalculate-filters', handleRecalculateFilters);
@@ -1197,7 +1239,9 @@ const Viewer = ({
                     if (originalIndex !== -1 && entry) {
                         // Check for custom per-value color override first, fall back to PALETTE
                         const overrideKey = `${propId}::${val}`;
-                        const hexColor = customOverrides[overrideKey] || PALETTE[originalIndex % PALETTE.length];
+                        const override = customOverrides[overrideKey];
+                        if (override === 'none') return; // usuario EXCLUYÓ este valor del coloreo (✕ en el picker)
+                        const hexColor = override || PALETTE[originalIndex % PALETTE.length];
                         
                         // Parse hex to Vector4 (Shader readable)
                         const rgb = parseInt(hexColor.replace('#', ''), 16);
@@ -1767,7 +1811,7 @@ const Viewer = ({
     };
 
     // Define loadModelSequentially at component scope so it can be used by both effects
-    const loadModelSequentially = async (model) => {
+    const loadModelInner = async (model) => {
         const viewer = viewerRef.current;
         if (!viewer) return;
         // Guard anti-duplicado: descarta si ya está cargado O si hay una carga EN CURSO
@@ -1888,6 +1932,17 @@ const Viewer = ({
                             modelNameOverride: model.label || 'model.rvt',
                             memoryLimit: 512
                         };
+
+                        // El DWG de sólidos de excavación se carga SIN consolidación:
+                        // LMV no permite des-consolidar en caliente ("Unconsolidate is
+                        // not supported with incremental consolidation"), y el material
+                        // fantasma (rojo translúcido) no aplica a fragmentos consolidados.
+                        // Son ~15 fragmentos → cero impacto en rendimiento.
+                        const excavPattern = window.__excavModelPattern || /solid|excav|corte/i;
+                        if (excavPattern.test(model.label || '')) {
+                            loadOptions.useConsolidation = false;
+                            console.log(`[Viewer] "${model.label}": consolidación OFF (sólidos de excavación, material dinámico).`);
+                        }
 
                         if (baseOffsetRef.current) {
                             loadOptions.globalOffset = baseOffsetRef.current;
@@ -2011,6 +2066,17 @@ const Viewer = ({
         } finally {
             loadingUrnsRef.current.delete(model.urn);
         }
+    };
+
+    // COLA GLOBAL DE CARGA: varios efectos pueden pedir cargas "secuenciales"
+    // a la vez (montaje inicial + cambio de props) → dos cadenas CONCURRENTES.
+    // Si un modelo arrancaba antes de que el primero estableciera el
+    // baseOffset, cargaba con SU propio offset → modelo descolocado hasta el
+    // siguiente refresh. Encadenar TODO en una sola cola lo hace determinista.
+    const loadModelSequentially = (model) => {
+        const next = loadQueueRef.current.then(() => loadModelInner(model));
+        loadQueueRef.current = next.catch(() => { /* la cola sigue ante errores */ });
+        return next;
     };
 
     // Cursor Management for Placement Mode

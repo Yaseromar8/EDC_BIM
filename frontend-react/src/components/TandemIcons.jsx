@@ -45,6 +45,15 @@ export const ProfileIcon = () => (
     </svg>
 );
 
+// Excavación fantasma: pala/corte de terreno (para la barra de capas)
+export const ExcavationIcon = () => (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 20h18" />
+        <path d="M4 20l3-8h6l3 8" />
+        <path d="M13 12l3-4 4 2-3 4" />
+    </svg>
+);
+
 // SubZona / rótulo espacial: pin-etiqueta (coherente con los pines del visor)
 export const ZoneTagIcon = () => (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

@@ -415,6 +415,15 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
             setIsLoading(true);
             try {
                 let result;
+                // Si el preload de App está en curso, ESPERARLO en vez de bajar
+                // una SEGUNDA copia del inventario en paralelo (73MB duplicados
+                // era la mitad de la lentitud). El preload resuelve y deja
+                // window.postgresInventory listo.
+                if ((!window.postgresInventory || !window.postgresInventory.length) && window.__inventoryPreloadPromise) {
+                    console.log('[Inventory] ⏳ Esperando preload compartido (sin descarga duplicada)…');
+                    try { await window.__inventoryPreloadPromise; } catch { /* cae al fetch propio */ }
+                    if (!isMounted) return;
+                }
                 if (window.postgresInventory && window.postgresInventory.length > 0) {
                     console.log(`[Inventory] 📦 Using offline window.postgresInventory — ${window.postgresInventory.length} items`);
                     

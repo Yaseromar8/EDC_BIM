@@ -213,6 +213,10 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         };
         window.addEventListener('lob-zone-labels', this.handleZoneLabels);
 
+        // Toggle de excavación fantasma (DWG de sólidos → "ya no existe")
+        this.handleGhostExcav = (e) => this.ghostExcavation(e?.detail?.visible !== false);
+        window.addEventListener('lob-ghost-excavation', this.handleGhostExcav);
+
 
         // Contenedor DOM para las etiquetas de progresivas (fiable, se proyecta con la cámara)
         this._stationLabelGroup = document.createElement('div');
@@ -254,6 +258,8 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         window.removeEventListener('lob-derive-stations', this.handleDeriveStations);
         window.removeEventListener('lob-focus-elements', this.handleFocusElements);
         window.removeEventListener('lob-zone-labels', this.handleZoneLabels);
+        window.removeEventListener('lob-ghost-excavation', this.handleGhostExcav);
+        if (this._excavGhostOn) this.ghostExcavation(false);
         this.clearZoneLabels();
         if (this._zoneLabelGroup) { this._zoneLabelGroup.remove(); this._zoneLabelGroup = null; }
         this.clearParamSimulation();
@@ -534,7 +540,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         this.stationCursorLine.frustumCulled = false;
         this.stationCursorLine.renderOrder = 10005;
         this.viewer.impl.addOverlay(this.overlayName, this.stationCursorLine);
-        this.viewer.impl.invalidate(true, true, true);
+        this.viewer.impl.invalidate(false, false, true); // overlay-only: sin reiniciar el render de escena
     }
 
     activateStationCursor(station) {
@@ -660,7 +666,13 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             this.simulatePK(this.activeAlignment, station);
         }
 
-        this.viewer.impl.invalidate(true, true, true);
+        // ANTI-PARPADEO: esto corre en CADA pixel del arrastre de la progresiva.
+        // El cursor/marcador son OVERLAYS → basta invalidar overlays (barato).
+        // Invalidar la escena completa reiniciaba el render progresivo → los
+        // modelos pesados (aceros) parpadeaban. Escena solo si el shader de
+        // corte de excavación está aplicado (usa uCurrentStation).
+        const cutActive = !!(this.shaderMaterial && this.fragmentsBackup && this.fragmentsBackup.size > 0);
+        this.viewer.impl.invalidate(cutActive, false, true);
     }
 
     async loadAlignment(url) {
@@ -1582,18 +1594,55 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         const g = document.createElement('div');
         g.className = 'lob-zone-label-group';
         g.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:91;overflow:hidden;';
+        // SVG para las líneas guía (leader lines) hacia el punto real de cada zona
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'lob-zone-leaders');
+        svg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;';
+        g.appendChild(svg);
         this.viewer.container.appendChild(g);
         this._zoneLabelGroup = g;
+        this._zoneLeaderSvg = svg;
         if (!this._zoneLabelElements) this._zoneLabelElements = [];
     }
 
-    createZoneLabel(text, worldPos) {
+    // Color de marca (teal de la interfaz), NO verde. Coherente con el acento
+    // activo del panel de filtros (.tandem-cb-box.checked.active #2d8fa5).
+    createZoneLabel(text, worldPos, zone) {
+        const active = this._activeZone === zone;
+        // Línea guía (SVG)
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('stroke', 'rgba(126,155,189,0.75)');
+        line.setAttribute('stroke-width', '1');
+        line.setAttribute('stroke-dasharray', '3 2');
+        this._zoneLeaderSvg.appendChild(line);
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        dot.setAttribute('r', '2.6');
+        dot.setAttribute('fill', '#7e9bbd');
+        this._zoneLeaderSvg.appendChild(dot);
+
+        // Píldora
         const el = document.createElement('div');
         el.className = 'lob-zone-label';
-        el.style.cssText = 'position:absolute;color:#eafff3;background:linear-gradient(180deg,#12a15b,#0b7c46);padding:4px 11px;border-radius:14px;border:1px solid rgba(255,255,255,0.4);font:700 12px Inter,Arial,sans-serif;white-space:nowrap;box-shadow:0 2px 9px rgba(0,0,0,0.4);transform:translate(-50%,-150%);letter-spacing:0.3px;will-change:left,top,display;';
+        el.style.cssText = this.zoneLabelStyle(active);
         el.textContent = text;
+        el.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.handleZoneClick(zone);
+        });
         this._zoneLabelGroup.appendChild(el);
-        this._zoneLabelElements.push({ el, worldPos: worldPos.clone ? worldPos.clone() : worldPos });
+
+        this._zoneLabelElements.push({
+            el, line, dot, zone,
+            worldPos: worldPos.clone ? worldPos.clone() : worldPos,
+        });
+    }
+
+    zoneLabelStyle(active) {
+        const bg = active ? 'linear-gradient(180deg,#2d8fa5,#1f6f82)' : 'linear-gradient(180deg,#1c2733,#141c26)';
+        const border = active ? '#43b3cc' : 'rgba(126,155,189,0.55)';
+        const color = active ? '#eafcff' : '#cfe0f2';
+        return `position:absolute;color:${color};background:${bg};padding:4px 11px;border-radius:13px;border:1px solid ${border};font:700 12px Inter,Arial,sans-serif;white-space:nowrap;box-shadow:0 2px 9px rgba(0,0,0,0.4);transform:translate(-50%,-50%);letter-spacing:0.3px;cursor:pointer;pointer-events:auto;will-change:left,top,display;`;
     }
 
     reportZoneResult(count, reason, extra = {}) {
@@ -1633,7 +1682,8 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             return this.reportZoneResult(0, 'parametro-vacio', { key: zoneKey });
         }
 
-        // Acumular centroide + cota superior por zona
+        // Acumular por zona: centroide, cota superior, caja global y los dbIds
+        // por modelo (para poder AISLAR al hacer click, estilo Tandem).
         const agg = new Map();
         const tmp = new THREE.Box3();
         for (const model of models) {
@@ -1655,19 +1705,25 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
                 if (!has) return;
                 const center = box.getCenter(new THREE.Vector3());
                 let a = agg.get(zone);
-                if (!a) { a = { sum: new THREE.Vector3(), n: 0, top: -Infinity }; agg.set(zone, a); }
+                if (!a) { a = { sum: new THREE.Vector3(), n: 0, top: -Infinity, bbox: new THREE.Box3(), byModel: new Map() }; agg.set(zone, a); }
                 a.sum.add(center);
                 a.n += 1;
                 if (box.max.z > a.top) a.top = box.max.z;
+                a.bbox.union(box);
+                let ids = a.byModel.get(model);
+                if (!ids) { ids = []; a.byModel.set(model, ids); }
+                ids.push(dbId);
             });
         }
 
+        this._zoneMembers = new Map();
         let created = 0;
         agg.forEach((a, zone) => {
             if (!a.n) return;
             const c = a.sum.clone().multiplyScalar(1 / a.n);
             c.z = a.top + 2; // elevar el rótulo sobre el elemento más alto de la zona
-            this.createZoneLabel(zone, c);
+            this._zoneMembers.set(zone, { byModel: a.byModel, bbox: a.bbox });
+            this.createZoneLabel(zone, c, zone);
             created += 1;
         });
 
@@ -1690,22 +1746,39 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
 
         const W = this.viewer.container.clientWidth;
         const H = this.viewer.container.clientHeight;
+        const OFFSET = 34; // px que la píldora sube sobre su punto de anclaje
         for (const label of this._zoneLabelElements) {
             const s = this.viewer.worldToClient(label.worldPos);
             const inFront = s.z == null || (s.z >= 0 && s.z <= 1);
-            if (!inFront || s.x < -200 || s.y < -100 || s.x > W + 200 || s.y > H + 100) {
+            const off = !inFront || s.x < -200 || s.y < -100 || s.x > W + 200 || s.y > H + 100;
+            if (off) {
                 label.el.style.display = 'none';
+                label.line.style.display = 'none';
+                label.dot.style.display = 'none';
                 continue;
             }
+            const lx = s.x;
+            const ly = s.y - OFFSET; // píldora un poco arriba del anclaje
             label.el.style.display = 'block';
-            label.el.style.left = `${s.x}px`;
-            label.el.style.top = `${s.y}px`;
+            label.el.style.left = `${lx}px`;
+            label.el.style.top = `${ly}px`;
+            // línea guía: del anclaje real (dot) hasta la base de la píldora
+            label.dot.style.display = 'block';
+            label.dot.setAttribute('cx', s.x);
+            label.dot.setAttribute('cy', s.y);
+            label.line.style.display = 'block';
+            label.line.setAttribute('x1', s.x);
+            label.line.setAttribute('y1', s.y);
+            label.line.setAttribute('x2', lx);
+            label.line.setAttribute('y2', ly + 9);
         }
     }
 
     clearZoneLabels() {
         if (this._zoneLabelElements) {
-            for (const l of this._zoneLabelElements) { try { l.el.remove(); } catch { /* noop */ } }
+            for (const l of this._zoneLabelElements) {
+                try { l.el.remove(); l.line.remove(); l.dot.remove(); } catch { /* noop */ }
+            }
         }
         this._zoneLabelElements = [];
     }
@@ -1715,8 +1788,53 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         if (v && (!this._zoneLabelElements || !this._zoneLabelElements.length)) {
             this.buildSubZoneLabels();
         } else {
+            if (!v && this._activeZone) this.clearZoneIsolation(); // apagar libera el aislamiento
             this.updateZoneLabels();
         }
+    }
+
+    // Click en un rótulo de SubZona → aísla esa zona y encuadra (como Tandem).
+    // Volver a clickear la misma zona la libera.
+    handleZoneClick(zone) {
+        if (this._activeZone === zone) { this.clearZoneIsolation(); return; }
+        const info = this._zoneMembers?.get(zone);
+        if (!info) return;
+        this._activeZone = zone;
+
+        try { this.viewer.setGhosting?.(true); } catch { /* noop */ }
+        const models = this.viewer.impl?.modelQueue?.().getModels?.() || [this.viewer.model].filter(Boolean);
+        window._filterIsolationInProgress = true; // no dispares MASTER RESET del filtro
+        models.forEach((m) => {
+            const ids = info.byModel.get(m);
+            if (ids && ids.length) this.viewer.impl.visibilityManager.isolate(ids, m);
+            else this.viewer.impl.visibilityManager.isolate([-1], m); // fantasma
+        });
+        // Encuadre a la caja de la zona
+        try {
+            if (info.bbox && !info.bbox.isEmpty()) this.viewer.navigation.fitBounds(false, info.bbox);
+        } catch { /* noop */ }
+        this.viewer.impl.invalidate(true, true, true);
+        setTimeout(() => { window._filterIsolationInProgress = false; }, 300);
+
+        this.refreshZoneLabelStyles();
+    }
+
+    clearZoneIsolation() {
+        this._activeZone = null;
+        const models = this.viewer.impl?.modelQueue?.().getModels?.() || [this.viewer.model].filter(Boolean);
+        window._filterIsolationInProgress = true;
+        models.forEach((m) => { try { this.viewer.impl.visibilityManager.isolate([], m); } catch { /* noop */ } });
+        this.viewer.impl.invalidate(true, true, true);
+        setTimeout(() => { window._filterIsolationInProgress = false; }, 300);
+        this.refreshZoneLabelStyles();
+    }
+
+    refreshZoneLabelStyles() {
+        if (!this._zoneLabelElements) return;
+        for (const l of this._zoneLabelElements) {
+            l.el.style.cssText = this.zoneLabelStyle(this._activeZone === l.zone);
+        }
+        this.updateZoneLabels(); // re-posicionar (cssText borra left/top)
     }
 
     createTextSprite(text, options = {}) {
@@ -3065,6 +3183,135 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         });
     }
 
+    // ── Excavación fantasma ("ya no existe") ────────────────────────────────
+    // Rojo terroso TRANSLÚCIDO: se lee como "volumen excavado/corte" (código de
+    // color de movimiento de tierras) sin tapar lo construido. NO es theming,
+    // es transparencia real. Ajustable en vivo:
+    //   window.__excavGhostStyle = { color: 0xa93226, opacity: 0.24 }
+    _ensureExcavMaterial() {
+        if (this._excavMaterial) return this._excavMaterial;
+        const THREE = window.THREE;
+        const cfg = window.__excavGhostStyle || {};
+        // OJO con el lavado óptico: translúcido = color×opacidad + fondo×(1-op).
+        // Sobre la topo de corte BLANCA, un rojo al 30% se ve rosa pálido casi
+        // invisible. Rojo PROFUNDO + opacidad 0.45 gana sobre fondo claro y
+        // sigue dejando ver lo construido a través.
+        const mat = new THREE.MeshPhongMaterial({
+            color: new THREE.Color(cfg.color ?? 0x8e2418),        // rojo profundo
+            emissive: new THREE.Color(cfg.emissive ?? 0x511009),  // presencia en sombra
+            specular: new THREE.Color(0x000000),
+            transparent: true,
+            opacity: cfg.opacity ?? 0.45,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+        });
+        mat.packedNormals = true;
+        this.viewer.impl.matman().addMaterial('lob-excav-ghost', mat, true);
+        this._excavMaterial = mat;
+        return mat;
+    }
+
+    // Re-crear el material con otro estilo (para calibrar en vivo)
+    restyleExcavation(style) {
+        window.__excavGhostStyle = { ...(window.__excavGhostStyle || {}), ...(style || {}) };
+        const wasOn = this._excavGhostOn;
+        if (wasOn) this.ghostExcavation(false);
+        this._excavMaterial = null; // forzar re-creación con el nuevo estilo
+        if (wasOn) this.ghostExcavation(true);
+    }
+
+    // Nombre del modelo desde varias fuentes (para DWG el registro puede no traerlo)
+    getModelName(model) {
+        const norm = (u) => String(u || '').replace(/^urn:/i, '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const data = model?.getData?.() || {};
+        const nRaw = norm(data.urn);
+        // 0) mapa fiable urn→nombre que expone App (el más confiable en el visor principal)
+        const byUrn = window.__modelLabelByUrn || {};
+        for (const k in byUrn) {
+            if (norm(k) === nRaw) return byUrn[k];
+        }
+        // 1) registro live del visor (lo llena el loader del 4D)
+        const reg = window.__viewerLiveModels || {};
+        for (const k in reg) {
+            if (norm(k) === nRaw || norm(reg[k].urn) === nRaw) {
+                if (reg[k].name) return reg[k].name;
+            }
+        }
+        // 2) fuentes internas del propio Model / documento
+        const candidates = [
+            data.loadOptions?.modelNameOverride,
+            data.loadOptions?.bubbleNode?.name?.(),
+            model.getDocumentNode?.()?.name?.(),
+            model.myData?.loadOptions?.modelNameOverride,
+            data.name,
+            data.urn,
+        ];
+        return candidates.find(Boolean) || '';
+    }
+
+    // ¿Es este modelo el DWG de sólidos de excavación? (por nombre de archivo)
+    isExcavationModel(model) {
+        const name = this.getModelName(model);
+        const pattern = window.__excavModelPattern || /solid|excav|corte/i;
+        return !!name && pattern.test(name);
+    }
+
+    ghostExcavation(on) {
+        this._excavGhostOn = !!on;
+        const models = this.viewer.impl?.modelQueue?.().getModels?.() || [this.viewer.model].filter(Boolean);
+        if (!this._excavBackup) this._excavBackup = new Map();
+
+        // Diagnóstico: qué modelos ve, con nombre, URN y nº de fragmentos, y si matchea
+        const allNames = models.map(m => this.getModelName(m));
+        models.forEach(m => {
+            const nm = this.getModelName(m);
+            const urnTail = String(m.getData?.()?.urn || '').slice(-14);
+            const nf = m.getFragmentList?.()?.getCount?.() ?? '?';
+            console.log(`[LOB4D] Excavación · modelo "${nm}" (…${urnTail}) frags=${nf} → ${this.isExcavationModel(m) ? 'SE PINTA' : 'no'}`);
+        });
+
+        if (on) {
+            const mat = this._ensureExcavMaterial();
+            let count = 0; let matched = 0;
+            for (const model of models) {
+                if (!this.isExcavationModel(model)) continue;
+                matched += 1;
+
+                // LMV CONSOLIDA fragmentos en buffers combinados (HLOD) para
+                // rendir; los consolidados IGNORAN setMaterial → solo algunos
+                // sólidos se pintaban. Des-consolidar de forma robusta:
+                try { model.unconsolidate?.(); } catch { /* noop */ }
+                try { this.viewer.impl.unconsolidateModel?.(model); } catch { /* noop */ }
+                try { model.getConsolidation?.()?.dispose?.(); } catch { /* noop */ }
+                try { if (model.getData?.()?.loadOptions) model.getData().loadOptions.useConsolidation = false; } catch { /* noop */ }
+
+                const frags = model.getFragmentList?.();
+                if (!frags) continue;
+                const total = frags.getCount ? frags.getCount() : (frags.fragments?.length || 0);
+                for (let i = 0; i < total; i++) {
+                    const key = `${model.id}:${i}`;
+                    if (!this._excavBackup.has(key)) {
+                        this._excavBackup.set(key, { model, fragId: i, material: frags.getMaterial(i) });
+                    }
+                    frags.setMaterial(i, mat);
+                    frags.setMaterialId?.(i, mat.id); // algunas versiones requieren el id
+                    count += 1;
+                }
+            }
+            // Forzar re-render completo de escena + consolidación
+            try { this.viewer.impl.invalidate(true, true, true); } catch { /* noop */ }
+            try { this.viewer.impl.sceneUpdated?.(true); } catch { /* noop */ }
+            console.log(`[LOB4D] Excavación fantasma: ${count} fragmentos en ${matched} modelo(s).`);
+            window.dispatchEvent(new CustomEvent('lob-ghost-excavation-result', { detail: { matched, count, names: allNames } }));
+        } else {
+            this._excavBackup.forEach(({ model, fragId, material }) => {
+                try { model.getFragmentList()?.setMaterial(fragId, material); } catch { /* noop */ }
+            });
+            this._excavBackup.clear();
+            this.viewer.impl.invalidate(true, true, true);
+        }
+    }
+
 
     // Phasing sin parpadeo: los sólidos están SIEMPRE presentes (nunca se ocultan).
     // Estado por elemento — futuro: natural · ejecutando: naranja sólido (theming)
@@ -3152,7 +3399,9 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
 
             this.viewer.impl.addOverlay(this.overlayName, this.pkMarker);
             this.setPkDomLabel(this.formatStation(pk), foundPt.clone().add(new THREE.Vector3(0, 0, metrics.labelLift * 1.1)));
-            this.viewer.impl.invalidate(true, true, true);
+            // overlay-only: corre en cada pixel del arrastre — invalidar escena
+            // completa reiniciaba el render progresivo (parpadeo de modelos)
+            this.viewer.impl.invalidate(false, false, true);
         } else {
             console.warn(`[LOB4D] PK ${pk} is outside extracted alignment geometry.`);
         }

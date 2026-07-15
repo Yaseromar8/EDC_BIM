@@ -392,7 +392,22 @@ const _normVal = (raw) => Array.isArray(raw)
     ? raw.map(x => String(x ?? '').trim()).filter(Boolean).join(', ')
     : String(raw ?? '').trim();
 
-let _facetCache = { allData: null, rosetta: null, prepared: null };
+let _facetCache = { allData: null, rosetta: null, rosettaFp: '', prepared: null };
+
+// Huella de la rosetta: window.rosettaToDbId se MUTA en el mismo objeto cuando
+// cada modelo termina de indexar (el pesado llega al final). Comparar solo la
+// referencia dejaba el índice SIN los elementos de los modelos tardíos
+// (p. ej. ENCOFRADO: sin categoría y sin coloreo hasta refrescar la página).
+const _rosettaFingerprint = (r) => {
+    if (!r) return '';
+    const parts = [];
+    for (const urn in r) {
+        let n = 0;
+        for (const _k in r[urn]) n++;
+        parts.push(urn.slice(-10) + ':' + n);
+    }
+    return parts.sort().join('|');
+};
 
 function _buildFacetIndex(allData, rosettaToExtIdReversed) {
     // FALLBACK GLOBAL: extId -> {dbId, urn} para IFC de Civil cuyo source_urn
@@ -460,10 +475,18 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
     // rosettaToExtIdReversed: URN -> ExternalId -> dbId
     // hiddenModelUrns: array of URNs que el usuario ocultó en Sources (formato React/raw)
 
-    // Índice cacheado: se reconstruye SOLO si cambió el inventario o la rosetta.
-    // Los toggles de Sources/valores NO lo invalidan (el hidden se aplica abajo).
-    if (_facetCache.allData !== allData || _facetCache.rosetta !== rosettaToExtIdReversed || !_facetCache.prepared) {
-        _facetCache = { allData, rosetta: rosettaToExtIdReversed, prepared: _buildFacetIndex(allData, rosettaToExtIdReversed) };
+    // Índice cacheado: se reconstruye si cambió el inventario o la rosetta
+    // (por referencia O por CONTENIDO — la rosetta se muta al indexar cada
+    // modelo). Los toggles de Sources/valores NO lo invalidan.
+    const rosettaFp = _rosettaFingerprint(rosettaToExtIdReversed);
+    if (_facetCache.allData !== allData || _facetCache.rosetta !== rosettaToExtIdReversed
+        || _facetCache.rosettaFp !== rosettaFp || !_facetCache.prepared) {
+        _facetCache = {
+            allData,
+            rosetta: rosettaToExtIdReversed,
+            rosettaFp,
+            prepared: _buildFacetIndex(allData, rosettaToExtIdReversed),
+        };
     }
     const { rows: preparedRows, colUrnsWithValue } = _facetCache.prepared;
 
