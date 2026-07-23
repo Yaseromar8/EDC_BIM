@@ -30,7 +30,9 @@ export function attachArToViewer(viewer, opts = {}) {
   // (p.ej. modelo en metros -> 1; en mm -> 1000). Mutable para ajustarlo EN VIVO
   // desde el celular (botón "1:1" / slider) sin recompilar el APK.
   let unitsPerMeter = Number.isFinite(opts.unitsPerMeter) ? opts.unitsPerMeter : 1000;
-  const modelOrigin = opts.modelOrigin || { x: 0, y: 0, z: 0 };
+  // Mutable: el anclaje por GPS lo reescribe con las coords del visor que
+  // corresponden a tu posición real (viewer = UTM/mpu − globalOffset).
+  let modelOrigin = opts.modelOrigin || { x: 0, y: 0, z: 0 };
   let yawDegrees = Number(opts.yawDegrees) || 0;
   // "Alinear con mi dirección": mientras aligning=true, el giro del modelo sigue
   // el giro físico del celular (agarrar el modelo y girarlo con tu cuerpo).
@@ -181,6 +183,21 @@ export function attachArToViewer(viewer, opts = {}) {
   };
   detach.stopAlign = () => { aligning = false; };
   detach.getYawDegrees = () => yawDegrees;
+
+  // ── Anclaje por GPS ────────────────────────────────────────────────────────
+  // Reescribe el punto del visor que se coloca en el anclaje físico. Para GPS,
+  // es el punto del visor que corresponde a TU posición real (calculado en
+  // geoAnchor.geoToViewer). Reusa el mismo apply() ya probado.
+  detach.setModelOrigin = (o) => {
+    if (o && Number.isFinite(o.x) && Number.isFinite(o.y)) {
+      modelOrigin = { x: o.x, y: o.y, z: Number.isFinite(o.z) ? o.z : modelOrigin.z };
+    }
+    if (latest) { try { apply(); } catch (e) { lastErr = String((e && e.message) || e); } }
+  };
+  detach.getModelOrigin = () => ({ ...modelOrigin });
+  // Rumbo actual de la cámara en el mundo ARCore: lo usa geoAnchor para sembrar
+  // el yaw a partir del rumbo verdadero de la brújula.
+  detach.getArHeading = () => headingDeg();
 
   return detach;
 }

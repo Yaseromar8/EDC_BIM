@@ -177,11 +177,15 @@ def trigger_translation(urn, token, filename=''):
             }
         }
     else:
+        # SVF2: formato con INSTANCIACIÓN de geometría (clave para acero/rebar)
+        # y streaming por visibilidad — el mismo que usa Tandem/ACC. El visor
+        # ahora inicializa con api streamingV2, así que todo derivado nuevo
+        # debe ser svf2 (svf clásico ya no se carga).
         payload = {
             'input': {'urn': urn},
             'output': {
                 'formats': [
-                    {'type': 'svf', 'views': ['2d', '3d']}
+                    {'type': 'svf2', 'views': ['2d', '3d']}
                 ]
             }
         }

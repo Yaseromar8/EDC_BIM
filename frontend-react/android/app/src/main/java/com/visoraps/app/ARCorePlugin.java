@@ -1,10 +1,20 @@
 package com.visoraps.app;
 
 import android.Manifest;
+import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.hardware.GeomagneticField;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
+import android.os.Bundle;
 import android.view.ViewGroup;
 import android.webkit.WebView;
 
@@ -36,14 +46,22 @@ import javax.microedition.khronos.opengles.GL10;
 /**
  * Capacitor plugin that renders the ARCore camera behind the transparent
  * WebView and streams camera matrices to the Autodesk Viewer.
+ *
+ * Además del SLAM (pose de cámara), emite 'onGeoPose' con GPS + rumbo verdadero
+ * para el anclaje GEOESPACIAL: colocar el modelo sobre el terreno real según la
+ * posición del operario (obra lineal, ±3-5 m para "referenciarse").
  */
 @CapacitorPlugin(
     name = "ARCore",
-    permissions = { @Permission(strings = { Manifest.permission.CAMERA }, alias = "camera") }
+    permissions = {
+        @Permission(strings = { Manifest.permission.CAMERA }, alias = "camera"),
+        @Permission(strings = { Manifest.permission.ACCESS_FINE_LOCATION }, alias = "location")
+    }
 )
 public class ARCorePlugin extends Plugin {
 
     private static final long POSE_INTERVAL_NS = 33_333_333L; // 30 Hz to reduce JS bridge load.
+    private static final long GEO_EMIT_INTERVAL_MS = 200L;    // 5 Hz para GPS/rumbo.
 
     private Session session;
     private GLSurfaceView glView;
@@ -53,11 +71,27 @@ public class ARCorePlugin extends Plugin {
     private final float[] viewMatrix = new float[16];
     private final List<Anchor> anchors = new ArrayList<>();
     private volatile PluginCall pendingAnchorCall = null;
+    private volatile PluginCall pendingCameraAnchorCall = null;
     private volatile int viewportWidth = 0;
     private volatile int viewportHeight = 0;
     private Drawable originalWebViewBackground = null;
     private long lastPoseEmitNs = 0L;
     private TrackingState lastState = null;
+
+    // ── GPS + brújula ────────────────────────────────────────────────────────
+    private LocationManager locationManager;
+    private SensorManager sensorManager;
+    private Sensor rotationSensor;
+    private final float[] rotationMatrix = new float[9];
+    private final float[] remappedMatrix = new float[9];
+    private final float[] orientationAngles = new float[3];
+    private volatile boolean hasFix = false;
+    private volatile double lastLat = 0, lastLon = 0, lastAlt = 0;
+    private volatile float lastAccuracy = 0f;
+    private volatile float declination = 0f;      // magnético → verdadero
+    private volatile boolean hasHeading = false;
+    private volatile float trueHeadingDeg = 0f;
+    private long lastGeoEmitMs = 0L;
 
     @PluginMethod
     public void start(final PluginCall call) {
@@ -69,16 +103,28 @@ public class ARCorePlugin extends Plugin {
             requestPermissionForAlias("camera", call, "cameraPermsCallback");
             return;
         }
+        // Ubicación: se pide también, pero es OPCIONAL — el AR arranca aunque el
+        // usuario la niegue (solo que no habrá orientación por GPS).
+        if (getPermissionState("location") != com.getcapacitor.PermissionState.GRANTED) {
+            requestPermissionForAlias("location", call, "locationPermsCallback");
+            return;
+        }
         startInternal(call);
     }
 
     @com.getcapacitor.annotation.PermissionCallback
     private void cameraPermsCallback(PluginCall call) {
         if (getPermissionState("camera") == com.getcapacitor.PermissionState.GRANTED) {
-            startInternal(call);
+            start(call); // re-entra: ahora evalúa el permiso de ubicación.
         } else {
             call.reject("Permiso de camara denegado");
         }
+    }
+
+    @com.getcapacitor.annotation.PermissionCallback
+    private void locationPermsCallback(PluginCall call) {
+        // Se haya concedido o no, el AR arranca. Sin ubicación no hay GPS, nada más.
+        startInternal(call);
     }
 
     private void startInternal(final PluginCall call) {
@@ -130,12 +176,121 @@ public class ARCorePlugin extends Plugin {
                 session.resume();
                 running = true;
                 glView.onResume();
+                startGeoSensors();
                 call.resolve();
             } catch (Exception error) {
                 cleanupSession();
                 call.reject("No se pudo iniciar ARCore: " + error.getMessage(), error);
             }
         });
+    }
+
+    // ── GPS + rumbo ──────────────────────────────────────────────────────────
+    private void startGeoSensors() {
+        // Ubicación (best-effort: si no hay permiso, se omite sin romper el AR).
+        try {
+            if (getPermissionState("location") == com.getcapacitor.PermissionState.GRANTED) {
+                locationManager = (LocationManager) getContext().getSystemService(Context.LOCATION_SERVICE);
+                if (locationManager != null) {
+                    // Semilla inmediata con la última posición conocida.
+                    // catch amplio: si falta un provider, getLastKnownLocation lanza
+                    // IllegalArgumentException — no debe abortar el registro de updates.
+                    try {
+                        Location known = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                        if (known == null) known = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+                        if (known != null) onNewLocation(known);
+                    } catch (Exception ignored) { }
+                    try {
+                        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, locationListener);
+                    } catch (Exception ignored) { }
+                    try {
+                        locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000L, 0f, locationListener);
+                    } catch (Exception ignored) { }
+                }
+            }
+        } catch (Exception ignored) { }
+
+        // Rumbo: vector de rotación (fusiona giroscopio + magnetómetro + acelerómetro).
+        try {
+            sensorManager = (SensorManager) getContext().getSystemService(Context.SENSOR_SERVICE);
+            if (sensorManager != null) {
+                rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
+                if (rotationSensor != null) {
+                    sensorManager.registerListener(sensorListener, rotationSensor, SensorManager.SENSOR_DELAY_UI);
+                }
+            }
+        } catch (Exception ignored) { }
+    }
+
+    private void stopGeoSensors() {
+        try {
+            if (locationManager != null) locationManager.removeUpdates(locationListener);
+        } catch (Exception ignored) { }
+        try {
+            if (sensorManager != null) sensorManager.unregisterListener(sensorListener);
+        } catch (Exception ignored) { }
+        locationManager = null;
+        sensorManager = null;
+        rotationSensor = null;
+        hasFix = false;
+        hasHeading = false;
+    }
+
+    private void onNewLocation(Location loc) {
+        if (loc == null) return;
+        lastLat = loc.getLatitude();
+        lastLon = loc.getLongitude();
+        lastAlt = loc.hasAltitude() ? loc.getAltitude() : 0;
+        lastAccuracy = loc.hasAccuracy() ? loc.getAccuracy() : 0f;
+        hasFix = true;
+        // Declinación magnética para convertir el rumbo a NORTE VERDADERO.
+        try {
+            GeomagneticField gmf = new GeomagneticField(
+                    (float) lastLat, (float) lastLon, (float) lastAlt, System.currentTimeMillis());
+            declination = gmf.getDeclination();
+        } catch (Exception ignored) { }
+        emitGeoPose(true);
+    }
+
+    private final LocationListener locationListener = new LocationListener() {
+        @Override public void onLocationChanged(Location location) { onNewLocation(location); }
+        @Override public void onStatusChanged(String provider, int status, Bundle extras) { }
+        @Override public void onProviderEnabled(String provider) { }
+        @Override public void onProviderDisabled(String provider) { }
+    };
+
+    private final SensorEventListener sensorListener = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            if (event.sensor.getType() != Sensor.TYPE_ROTATION_VECTOR) return;
+            SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
+            // Celular en vertical con la cámara apuntando al horizonte (uso AR):
+            // remapear para que el azimut sea el rumbo de la CÁMARA, no del techo.
+            SensorManager.remapCoordinateSystem(
+                    rotationMatrix, SensorManager.AXIS_X, SensorManager.AXIS_Z, remappedMatrix);
+            SensorManager.getOrientation(remappedMatrix, orientationAngles);
+            float magneticDeg = (float) Math.toDegrees(orientationAngles[0]);
+            trueHeadingDeg = ((magneticDeg + declination) % 360f + 360f) % 360f;
+            hasHeading = true;
+            emitGeoPose(false);
+        }
+
+        @Override public void onAccuracyChanged(Sensor sensor, int accuracy) { }
+    };
+
+    private void emitGeoPose(boolean immediate) {
+        if (!hasFix) return; // sin posición no sirve emitir.
+        long now = System.currentTimeMillis();
+        if (!immediate && now - lastGeoEmitMs < GEO_EMIT_INTERVAL_MS) return;
+        lastGeoEmitMs = now;
+        JSObject payload = new JSObject();
+        payload.put("lat", lastLat);
+        payload.put("lon", lastLon);
+        payload.put("alt", lastAlt);
+        payload.put("accuracy", lastAccuracy);
+        payload.put("heading", trueHeadingDeg);
+        payload.put("hasHeading", hasHeading);
+        notifyListeners("onGeoPose", payload);
     }
 
     @PluginMethod
@@ -157,6 +312,23 @@ public class ARCorePlugin extends Plugin {
             return;
         }
         pendingAnchorCall = call;
+    }
+
+    /**
+     * Ancla en la POSE ACTUAL de la cámara (sin hit-test). Robusto en terreno
+     * abierto del canal, donde la detección de plano falla sobre tierra/pasto.
+     */
+    @PluginMethod
+    public void createAnchorAtCamera(PluginCall call) {
+        if (!running || session == null) {
+            call.reject("Sesion AR no activa");
+            return;
+        }
+        if (pendingCameraAnchorCall != null) {
+            call.reject("Ya hay una solicitud de anchor en curso");
+            return;
+        }
+        pendingCameraAnchorCall = call;
     }
 
     private final GLSurfaceView.Renderer renderer = new GLSurfaceView.Renderer() {
@@ -194,6 +366,7 @@ public class ARCorePlugin extends Plugin {
                 if (trackingState != TrackingState.TRACKING) return;
 
                 resolvePendingAnchor(frame);
+                resolvePendingCameraAnchor(camera);
 
                 long timestamp = frame.getTimestamp();
                 if (timestamp - lastPoseEmitNs >= POSE_INTERVAL_NS) {
@@ -210,6 +383,11 @@ public class ARCorePlugin extends Plugin {
                 pendingAnchorCall = null;
                 if (anchorCall != null) {
                     anchorCall.reject("Error creando el anchor: " + error.getMessage());
+                }
+                PluginCall camCall = pendingCameraAnchorCall;
+                pendingCameraAnchorCall = null;
+                if (camCall != null) {
+                    camCall.reject("Error creando el anchor: " + error.getMessage());
                 }
             }
         }
@@ -228,16 +406,41 @@ public class ARCorePlugin extends Plugin {
             return;
         }
 
+        replaceAnchors(anchor);
+        anchorCall.resolve(anchorResult(anchor));
+    }
+
+    private void resolvePendingCameraAnchor(Camera camera) {
+        PluginCall camCall = pendingCameraAnchorCall;
+        if (camCall == null) return;
+        pendingCameraAnchorCall = null;
+
+        try {
+            // Pose de la cámara, pero alineada al mundo (sin heredar su rotación):
+            // el modelo se orienta luego por GPS/brújula, no por cómo sostienes el celular.
+            Pose camPose = camera.getPose();
+            Pose worldAligned = new Pose(camPose.getTranslation(), new float[] { 0f, 0f, 0f, 1f });
+            Anchor anchor = session.createAnchor(worldAligned);
+            replaceAnchors(anchor);
+            camCall.resolve(anchorResult(anchor));
+        } catch (Exception error) {
+            camCall.reject("No se pudo anclar en la camara: " + error.getMessage());
+        }
+    }
+
+    private void replaceAnchors(Anchor anchor) {
         for (Anchor oldAnchor : anchors) oldAnchor.detach();
         anchors.clear();
         anchors.add(anchor);
+    }
 
+    private JSObject anchorResult(Anchor anchor) {
         float[] matrix = new float[16];
         anchor.getPose().toMatrix(matrix, 0);
         JSObject result = new JSObject();
         result.put("anchorId", "0");
         result.put("matrix", floatsToJsonArray(matrix));
-        anchorCall.resolve(result);
+        return result;
     }
 
     private Anchor createAnchorFromCenterHit(Frame frame) {
@@ -283,10 +486,16 @@ public class ARCorePlugin extends Plugin {
 
     private void cleanupSession() {
         running = false;
+        stopGeoSensors();
         PluginCall anchorCall = pendingAnchorCall;
         pendingAnchorCall = null;
         if (anchorCall != null) {
             anchorCall.reject("La sesion AR termino antes de crear el anchor");
+        }
+        PluginCall camCall = pendingCameraAnchorCall;
+        pendingCameraAnchorCall = null;
+        if (camCall != null) {
+            camCall.reject("La sesion AR termino antes de crear el anchor");
         }
 
         try {

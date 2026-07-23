@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>ECD Link</Name>
+    <Assembly>D:\VISOR_APS_TL\revit-link-addin\bin\Debug\ECDLink.dll</Assembly>
+    <AddInId>7E3C1A52-9D4B-4B0E-A9F1-3C5D82E10230</AddInId>
+    <FullClassName>ECDLink.ECDLinkApp</FullClassName>
+    <VendorId>ECD</VendorId>
+    <VendorDescription>ECD-VISIION — Live Link Web/Revit</VendorDescription>
+  </AddIn>
+</RevitAddIns>

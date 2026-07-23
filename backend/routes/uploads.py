@@ -87,7 +87,7 @@ def init_upload():
         return jsonify({"success": False, "error": name_check['message'], "code": name_check['code']}), 422
 
     # 2. Extension validation
-    from file_validator import BLOCKED_EXTENSIONS, ALLOWED_TYPES
+    from file_validator import BLOCKED_EXTENSIONS, ALLOWED_TYPES, ABSOLUTE_MAX_MB
     ext = os.path.splitext(safe_name.lower())[1]
     if ext in BLOCKED_EXTENSIONS:
         return jsonify({
@@ -106,16 +106,21 @@ def init_upload():
         # Fallback: check by declared MIME
         allowed_config = ALLOWED_TYPES.get(mime_type)
     
+    # Techo por tipo, con failsafe absoluto. Si la extensión es desconocida (y no
+    # está bloqueada), se aplica el techo absoluto igual — antes NO se validaba
+    # el tamaño y un archivo raro podía subir sin tope y comerse la cuota.
     if allowed_config:
-        max_bytes = allowed_config.get('max_mb', 1000) * 1024 * 1024
-        if size_bytes > max_bytes:
-            max_mb = allowed_config['max_mb']
-            size_mb = round(size_bytes / (1024 * 1024), 1)
-            return jsonify({
-                "success": False,
-                "error": f"Archivo demasiado grande: {size_mb} MB. Límite para {ext}: {max_mb} MB.",
-                "code": "FILE_TOO_LARGE"
-            }), 422
+        max_mb = min(allowed_config.get('max_mb', ABSOLUTE_MAX_MB), ABSOLUTE_MAX_MB)
+    else:
+        max_mb = ABSOLUTE_MAX_MB
+    max_bytes = max_mb * 1024 * 1024
+    if size_bytes > max_bytes:
+        size_mb = round(size_bytes / (1024 * 1024), 1)
+        return jsonify({
+            "success": False,
+            "error": f"Archivo demasiado grande: {size_mb} MB. Límite para {ext or 'este tipo'}: {max_mb} MB.",
+            "code": "FILE_TOO_LARGE"
+        }), 422
 
     # 4. Storage quota validation
     from folder_validators import validate_storage_quota

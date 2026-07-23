@@ -4,9 +4,11 @@ services:
     env: python
     region: oregon
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: gunicorn --chdir backend --bind 0.0.0.0:$PORT --workers 4 --threads 2 --timeout 300 server:app
+    startCommand: cd backend && alembic upgrade head && gunicorn --bind 0.0.0.0:$PORT --workers 4 --threads 2 --timeout 300 server:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.10.12
       - key: MAPS_PREPARATION_SECONDS
         value: 5
+      - key: LOB_REQUIRE_SOURCE_ARCHIVE
+        value: true

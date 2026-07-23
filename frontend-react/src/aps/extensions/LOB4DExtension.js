@@ -217,6 +217,15 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         this.handleGhostExcav = (e) => this.ghostExcavation(e?.detail?.visible !== false);
         window.addEventListener('lob-ghost-excavation', this.handleGhostExcav);
 
+        // Heatmap de avance por PK: pinta tramos de alineamientos por estado
+        // (Ejecutado / En ejecución). Config: { on, ranges: { [alignmentId]: [{from,to,state}] } }
+        this.handlePkHeatmap = (e) => this.applyPkHeatmap(e?.detail || null);
+        window.addEventListener('lob-pk-heatmap', this.handlePkHeatmap);
+
+        // Panel de ejecución por SubZona al pasar el mouse (toggle desde la barra)
+        this.handleZoneHover = (e) => this.setZoneHoverEnabled(e?.detail?.visible !== false);
+        window.addEventListener('lob-zone-hover', this.handleZoneHover);
+
 
         // Contenedor DOM para las etiquetas de progresivas (fiable, se proyecta con la cámara)
         this._stationLabelGroup = document.createElement('div');
@@ -259,6 +268,10 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         window.removeEventListener('lob-focus-elements', this.handleFocusElements);
         window.removeEventListener('lob-zone-labels', this.handleZoneLabels);
         window.removeEventListener('lob-ghost-excavation', this.handleGhostExcav);
+        window.removeEventListener('lob-pk-heatmap', this.handlePkHeatmap);
+        window.removeEventListener('lob-zone-hover', this.handleZoneHover);
+        this.setZoneHoverEnabled(false);
+        this.clearPkHeatmap();
         if (this._excavGhostOn) this.ghostExcavation(false);
         this.clearZoneLabels();
         if (this._zoneLabelGroup) { this._zoneLabelGroup.remove(); this._zoneLabelGroup = null; }
@@ -1791,6 +1804,388 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             if (!v && this._activeZone) this.clearZoneIsolation(); // apagar libera el aislamiento
             this.updateZoneLabels();
         }
+    }
+
+    // ── PANEL DE EJECUCIÓN POR SUBZONA (hover) ──────────────────────────────
+    // Al pasar el mouse por CUALQUIER elemento, se resuelve su SubZona y se
+    // informa del GRUPO COMPLETO (pueden ser 20, 200 o 2000 elementos), nunca
+    // de la pieza suelta. Todo sale de postgresInventory (ya en memoria) →
+    // sin llamadas al servidor.
+    // Huella para invalidar el índice: cambia si cambia el inventario, el
+    // mapeo rosetta (modelo que terminó de indexar) o el campo de agrupación.
+    _zoneHoverFingerprint(groupField) {
+        const inv = window.postgresInventory;
+        const R = window.rosettaToDbId || {};
+        let mapped = 0;
+        for (const urn in R) { for (const _k in R[urn]) mapped++; }
+        return `${inv?.length || 0}|${mapped}|${groupField || 'auto'}`;
+    }
+
+    buildZoneHoverIndex(groupField) {
+        const inv = window.postgresInventory;
+        if (!Array.isArray(inv) || !inv.length) return null;
+        const zoneKey = groupField || this.detectZoneKey(inv);
+        if (!zoneKey) return null;
+
+        // Esquema: detectar columnas por nombre (el prefijo numérico varía)
+        const cols = new Set();
+        inv.slice(0, 400).forEach(r => { if (r) Object.keys(r).forEach(k => cols.add(k)); });
+        const find = (re) => Array.from(cols).find(k => re.test(k)) || null;
+        const kEjec = find(/ejecutad/i);
+        const kZona = find(/_SYP_Zona$/i) || find(/_SYP_Zona/i);
+        const kPaquete = find(/paquete/i);
+        const kPartida = find(/NombreDePartida1?$/i) || find(/NombreDePartida/i);
+
+        // Mapas rosetta POR MODELO, resueltos UNA vez (antes se recorrían todos
+        // los modelos en cada hover → O(elementos × modelos) por movimiento).
+        const models = this.viewer.impl?.modelQueue?.().getModels?.() || [];
+        const modelMaps = models
+            .map(m => ({ model: m, map: this.zoneMapForModel(m) }))
+            .filter(x => !!x.map);
+
+        const norm = (v) => Array.isArray(v) ? v.filter(Boolean).join(', ') : String(v ?? '').trim();
+        const groups = new Map();       // zona -> stats
+        const extToZone = new Map();    // extId -> zona
+        const membersByZone = new Map(); // zona -> [{model, dbId}]  ← PRE-RESUELTO
+
+        for (const row of inv) {
+            const zone = norm(row[zoneKey]);
+            if (!zone) continue;
+            extToZone.set(row.dbId, zone);
+
+            let g = groups.get(zone);
+            if (!g) {
+                g = { zone, total: 0, done: 0, zona: kZona ? norm(row[kZona]) : '', paquete: kPaquete ? norm(row[kPaquete]) : '', partidas: new Map() };
+                groups.set(zone, g);
+                membersByZone.set(zone, []);
+            }
+            g.total += 1;
+
+            const ejecRaw = kEjec ? norm(row[kEjec]).toLowerCase() : '';
+            const isDone = ejecRaw === '1' || ejecRaw === 'si' || ejecRaw === 'sí' || ejecRaw === 'true' || ejecRaw === 'x';
+            if (isDone) g.done += 1;
+
+            if (kPartida) {
+                const p = norm(row[kPartida]);
+                if (p) {
+                    let pi = g.partidas.get(p);
+                    if (!pi) { pi = { total: 0, done: 0 }; g.partidas.set(p, pi); }
+                    pi.total += 1;
+                    if (isDone) pi.done += 1;
+                }
+            }
+
+            // Resolver dbId del visor AQUÍ (una sola vez por elemento)
+            for (const { model, map } of modelMaps) {
+                const dbId = map[row.dbId];
+                if (dbId != null) { membersByZone.get(zone).push({ model, dbId }); break; }
+            }
+        }
+
+        console.log(`[LOB4D] Hover: ${groups.size} grupos por "${zoneKey}" · avance="${kEjec || '—'}" · ${extToZone.size} elementos indexados.`);
+        return { zoneKey, kEjec, groups, extToZone, membersByZone, schema: { kEjec, kZona, kPaquete, kPartida } };
+    }
+
+    setZoneHoverEnabled(on) {
+        this._zoneHoverOn = !!on;
+        const canvas = this.viewer?.impl?.canvas || this.viewer?.canvas;
+
+        if (!on) {
+            if (this._onZoneHoverMove && canvas) canvas.removeEventListener('mousemove', this._onZoneHoverMove);
+            this._onZoneHoverMove = null;
+            this._zoneHoverIndex = null;
+            this._zoneHoverCurrent = null;
+            this.clearZoneHoverHighlight();
+            window.dispatchEvent(new CustomEvent('lob-zone-hover-data', { detail: null }));
+            return;
+        }
+
+        // Índice CACHEADO: no se reconstruye al apagar/encender; solo si cambió
+        // el inventario, la rosetta (modelo tardío) o el campo de agrupación.
+        const field = window.__zoneHoverField || null;
+        const fp = this._zoneHoverFingerprint(field);
+        if (this._zoneHoverIndex && this._zoneHoverFp === fp) {
+            console.log('[LOB4D] Hover: índice reutilizado (sin recalcular).');
+        } else {
+            this._zoneHoverIndex = this.buildZoneHoverIndex(field);
+            this._zoneHoverFp = fp;
+        }
+        if (!this._zoneHoverIndex) {
+            window.dispatchEvent(new CustomEvent('lob-zone-hover-error', {
+                detail: { reason: window.postgresInventory?.length ? 'sin-parametro' : 'sin-inventario' }
+            }));
+            this._zoneHoverOn = false;
+            return;
+        }
+        if (!canvas) return;
+
+        this._onZoneHoverMove = (ev) => {
+            if (this._zoneHoverRaf) return;         // 1 lectura por frame
+            this._zoneHoverRaf = requestAnimationFrame(() => {
+                this._zoneHoverRaf = null;
+                this.resolveZoneUnderCursor(ev.clientX, ev.clientY);
+            });
+        };
+        canvas.addEventListener('mousemove', this._onZoneHoverMove);
+    }
+
+    resolveZoneUnderCursor(clientX, clientY) {
+        const idx = this._zoneHoverIndex;
+        const viewer = this.viewer;
+        if (!idx || !viewer) return;
+        const canvas = viewer.impl?.canvas || viewer.canvas;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+
+        let zone = null;
+        try {
+            const hit = viewer.impl.hitTest(clientX - rect.left, clientY - rect.top, true);
+            if (hit && hit.dbId != null && hit.model) {
+                // dbId (viewer) → externalId (postgres) vía rosetta inversa
+                const raw = hit.model.getData()?.urn;
+                const safe = String(raw || '').replace(/^urn:/i, '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                const R = window.rosettaToExtId || {};
+                const dict = R[raw] || R[safe] || Object.entries(R).find(([k]) =>
+                    String(k).replace(/^urn:/i, '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') === safe)?.[1];
+                const extId = dict && dict[hit.dbId];
+                if (extId) zone = idx.extToZone.get(extId) || null;
+            }
+        } catch { /* hitTest puede fallar en bordes: se trata como "sin zona" */ }
+
+        if (zone === this._zoneHoverCurrent) return; // mismo grupo → no recalcular ni parpadear
+        this._zoneHoverCurrent = zone;
+
+        if (!zone) {
+            this.clearZoneHoverHighlight();
+            window.dispatchEvent(new CustomEvent('lob-zone-hover-data', { detail: null }));
+            return;
+        }
+
+        const g = idx.groups.get(zone);
+        if (!g) return;
+        const partidas = Array.from(g.partidas.entries())
+            .map(([name, v]) => ({ name, total: v.total, done: v.done }))
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 6); // desglose por PARTIDA (pocas líneas), no por elemento
+
+        this.highlightZoneGroup(zone);
+        window.dispatchEvent(new CustomEvent('lob-zone-hover-data', {
+            detail: {
+                zone: g.zone, zona: g.zona, paquete: g.paquete,
+                total: g.total, done: g.done,
+                pct: g.total ? Math.round((g.done / g.total) * 100) : 0,
+                hasEjecutado: !!idx.kEjec,
+                partidas,
+            }
+        }));
+    }
+
+    // Cambiar el color del resaltado en caliente (para calibrar sin recompilar):
+    //   NOP_VIEWER.getExtension('LOB4DExtension').setZoneHoverColor('#00d9ff')
+    setZoneHoverColor(hex) {
+        window.__zoneHoverColor = hex;
+        const zone = this._zoneHoverCurrent;
+        if (zone) { this.clearZoneHoverHighlight(); this.highlightZoneGroup(zone); }
+        console.log(`[LOB4D] Color de resaltado = ${hex}`);
+    }
+
+    // Tinte suave del grupo completo: se ve HASTA DÓNDE llega la SubZona.
+    // O(tamaño del grupo) gracias a membersByZone pre-resuelto (antes era
+    // O(elementos × modelos) EN CADA hover → no escalaba).
+    highlightZoneGroup(zone) {
+        const idx = this._zoneHoverIndex;
+        if (!idx) return;
+        this.clearZoneHoverHighlight();
+
+        const members = idx.membersByZone?.get(zone);
+        if (!members?.length) return;
+
+        // Techo de seguridad: pintar decenas de miles de elementos congelaría
+        // el frame. Sobre el tope, el panel sigue informando pero sin tinte.
+        const CAP = window.__zoneHoverHighlightCap ?? 6000;
+        if (members.length > CAP) {
+            console.warn(`[LOB4D] Hover: grupo "${zone}" con ${members.length} elementos supera el tope de resaltado (${CAP}); solo panel.`);
+            return;
+        }
+
+        const THREE = window.THREE;
+        // ÁMBAR/DORADO: hay que esquivar TODO lo que ya existe en escena —
+        // azul (selección del visor), verde/naranja (estados del heatmap),
+        // rojo (excavación), teal (SubZonas) y MORADO (color nativo de las
+        // tuberías del modelo). Cambiable en vivo: ext.setZoneHoverColor('#00d9ff').
+        const hex = window.__zoneHoverColor || '#fbbf24';
+        const n = parseInt(String(hex).replace('#', ''), 16);
+        const color = new THREE.Vector4(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255, 0.55);
+        for (const { model, dbId } of members) {
+            this.viewer.setThemingColor(dbId, color, model, true);
+        }
+        this._zoneHoverTinted = members;
+        this.viewer.impl.invalidate(false, false, true);
+    }
+
+    clearZoneHoverHighlight() {
+        if (!this._zoneHoverTinted?.length) return;
+        for (const { dbId, model } of this._zoneHoverTinted) {
+            try { this.viewer.setThemingColor(dbId, null, model, true); } catch { /* noop */ }
+        }
+        this._zoneHoverTinted = [];
+        try { this.viewer.impl.invalidate(false, false, true); } catch { /* noop */ }
+    }
+
+    // ── HEATMAP DE AVANCE POR PK ────────────────────────────────────────────
+    // Pinta tramos [from,to] de cada alineamiento con el color de su estado,
+    // como tubos overlay SOBRE el eje (siempre visibles). La matemática de la
+    // geometría viene del JSON de extracción (pointAtStation) — regla de casa.
+    static PK_HEAT_COLORS = {
+        ejecutado: 0x10b981,     // verde
+        en_ejecucion: 0xf97316,  // naranja
+    };
+
+    clearPkHeatmap() {
+        if (this._heatmapMeshes?.length) {
+            for (const obj of this._heatmapMeshes) {
+                try { this.viewer.impl.removeOverlay(this.overlayName, obj); } catch { /* noop */ }
+                try {
+                    obj.traverse?.((child) => { child.geometry?.dispose?.(); });
+                    obj.geometry?.dispose?.();
+                    (obj.children?.[0]?.material || obj.material)?.dispose?.();
+                } catch { /* noop */ }
+            }
+            try { this.viewer.impl.invalidate(false, false, true); } catch { /* noop */ }
+        }
+        this._heatmapMeshes = [];
+        if (this._heatmapRetryTimer) { clearTimeout(this._heatmapRetryTimer); this._heatmapRetryTimer = null; }
+    }
+
+    // Localiza la data de un alineamiento por id: primero los activos (baked),
+    // luego el catálogo global de extracciones compartido por App/Civil.
+    findAlignmentData(alignmentId) {
+        const match = (a) => a && ((a.alignmentId || a.name) === alignmentId);
+        const active = (this.activeAlignments || []).find(match);
+        if (active) return active;
+        const globals = Array.isArray(window.__lobCivilAlignments) ? window.__lobCivilAlignments : [];
+        return globals.find(match) || null;
+    }
+
+    applyPkHeatmap(config, attempt = 0) {
+        this.clearPkHeatmap();
+        this._pkHeatmapConfig = config;
+        if (!config || config.on === false || !config.ranges) return;
+
+        const THREE = window.THREE;
+        const model = this.getModelForCoordinates();
+        if (!THREE || !model) {
+            // La vista puede restaurarse ANTES de que carguen los modelos:
+            // reintentar hasta ~36s (igual que el auto-dibujo del eje base).
+            if (attempt < 40) {
+                this._heatmapRetryTimer = setTimeout(() => this.applyPkHeatmap(config, attempt + 1), 900);
+            }
+            return;
+        }
+
+        this.ensureOverlay();
+        // HEAT MAP = FRANJA (cinta) de ancho real en METROS siguiendo el camino
+        // del eje — no un tubo. Se construye como triangle-strip: en cada muestra
+        // del eje se desplaza ±ancho/2 en la perpendicular HORIZONTAL.
+        const widthMeters = Number(config.width) > 0 ? Number(config.width) : 5;
+        let painted = 0;
+
+        for (const [alignmentId, ranges] of Object.entries(config.ranges)) {
+            if (!Array.isArray(ranges) || !ranges.length) continue;
+            const data = this.findAlignmentData(alignmentId);
+            if (!data) { console.warn(`[LOB4D] Heatmap: alineamiento "${alignmentId}" sin extracción cargada.`); continue; }
+
+            // Muestras {point, station} con la conversión civil→viewer PROBADA
+            const samples = this.buildAlignmentSamples(data, model);
+            if (!samples || samples.length < 2) {
+                console.warn(`[LOB4D] Heatmap: "${alignmentId}" sin geometría muestreable.`);
+                continue;
+            }
+
+            // Escala unidades-viewer por metro, derivada del PROPIO eje
+            // (distancia entre muestras / delta de estación): así "5 m" son 5 m
+            // reales sin importar la escala del modelo.
+            let upm = 1;
+            for (let i = 1; i < samples.length; i++) {
+                const dSt = Math.abs(Number(samples[i].station) - Number(samples[0].station));
+                if (dSt > 0.5) { upm = samples[i].point.distanceTo(samples[0].point) / dSt; break; }
+            }
+            const halfW = Math.max(0.01, (widthMeters / 2) * upm);
+
+            for (const r of ranges) {
+                const s0 = Math.min(Number(r.from), Number(r.to));
+                const s1 = Math.max(Number(r.from), Number(r.to));
+                if (!Number.isFinite(s0) || !Number.isFinite(s1) || s1 - s0 < 0.05) continue;
+
+                let pts = samples
+                    .filter(s => Number(s.station) >= s0 - 1e-6 && Number(s.station) <= s1 + 1e-6)
+                    .map(s => s.point);
+                if (pts.length < 2) {
+                    console.warn(`[LOB4D] Heatmap: tramo ${s0}-${s1} de "${alignmentId}" sin puntos (¿fuera del rango del eje?).`);
+                    continue;
+                }
+                // Límite del strip (índices Uint16): más que suficiente resolución
+                if (pts.length > 4000) {
+                    const dec = Math.ceil(pts.length / 4000);
+                    pts = pts.filter((_, i) => i % dec === 0 || i === pts.length - 1);
+                }
+
+                // Vértices izquierda/derecha con perpendicular horizontal suavizada
+                const n = pts.length;
+                const positions = new Float32Array(n * 2 * 3);
+                const tmpPrev = new THREE.Vector3();
+                const tmpNext = new THREE.Vector3();
+                const dir = new THREE.Vector3();
+                for (let i = 0; i < n; i++) {
+                    if (i > 0) tmpPrev.subVectors(pts[i], pts[i - 1]); else tmpPrev.set(0, 0, 0);
+                    if (i < n - 1) tmpNext.subVectors(pts[i + 1], pts[i]); else tmpNext.set(0, 0, 0);
+                    dir.addVectors(tmpPrev, tmpNext);
+                    dir.z = 0; // franja HORIZONTAL (planta), como un mapa de calor
+                    if (dir.lengthSq() < 1e-12) dir.set(1, 0, 0);
+                    dir.normalize();
+                    const px = -dir.y * halfW;
+                    const py = dir.x * halfW;
+                    const base = i * 6;
+                    positions[base + 0] = pts[i].x + px;
+                    positions[base + 1] = pts[i].y + py;
+                    positions[base + 2] = pts[i].z;
+                    positions[base + 3] = pts[i].x - px;
+                    positions[base + 4] = pts[i].y - py;
+                    positions[base + 5] = pts[i].z;
+                }
+                const indices = new Uint16Array((n - 1) * 6);
+                for (let i = 0, k = 0; i < n - 1; i++) {
+                    const a = i * 2; const b = a + 1; const c = a + 2; const d = a + 3;
+                    indices[k++] = a; indices[k++] = b; indices[k++] = c;
+                    indices[k++] = b; indices[k++] = d; indices[k++] = c;
+                }
+
+                const geom = new THREE.BufferGeometry();
+                const posAttr = new THREE.BufferAttribute(positions, 3);
+                const idxAttr = new THREE.BufferAttribute(indices, 1);
+                if (geom.setAttribute) geom.setAttribute('position', posAttr); else geom.addAttribute('position', posAttr);
+                if (geom.setIndex) geom.setIndex(idxAttr); else geom.addAttribute('index', idxAttr);
+
+                const colorHex = LOB4DExtension.PK_HEAT_COLORS[r.state] ?? 0x9ca3af;
+                const mat = new THREE.MeshBasicMaterial({
+                    color: colorHex,
+                    transparent: true,
+                    opacity: 0.5,       // translúcido: se ve el terreno debajo (look heat map)
+                    depthTest: false,   // legible aunque el terreno lo tape
+                    depthWrite: false,
+                    side: THREE.DoubleSide,
+                });
+                const mesh = new THREE.Mesh(geom, mat);
+                mesh.frustumCulled = false;
+                mesh.renderOrder = 9995; // bajo el eje/etiquetas, sobre el modelo
+                this.viewer.impl.addOverlay(this.overlayName, mesh);
+                this._heatmapMeshes.push(mesh);
+                painted += 1;
+            }
+        }
+
+        this.viewer.impl.invalidate(false, false, true);
+        console.log(`[LOB4D] Heatmap PK: ${painted} franja(s) de ${widthMeters}m pintada(s).`);
     }
 
     // Click en un rótulo de SubZona → aísla esa zona y encuadra (como Tandem).

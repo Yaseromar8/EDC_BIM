@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createAnchor, onTracking, startSession, stopSession } from '../native/arcore';
+import {
+  createAnchor, createAnchorAtCamera, getLastGeoPose,
+  onGeoPose, onTracking, startSession, stopSession,
+} from '../native/arcore';
 import { attachArToViewer } from '../native/arViewerBridge';
+import { geoToViewer, seedYawFromHeading } from '../native/geoAnchor';
 import './ARTransparent.css';
 
 export default function NativeARView({ onExit }) {
@@ -12,6 +16,9 @@ export default function NativeARView({ onExit }) {
   const [aligning, setAligning] = useState(false);
   const [hud, setHud] = useState({ src: '?', poseEvents: 0, applied: 0, upm: 1000, yaw: 0, aligning: false, err: '' });
   const oneToOneRef = useRef(1000); // unidades/metro para escala 1:1 real (según unidades del modelo)
+  const [geo, setGeo] = useState(null); // última pose GPS { lat, lon, accuracy, heading, hasHeading }
+  const georefRef = useRef({ globalOffset: { x: 0, y: 0, z: 0 }, metersPerUnit: 0.001 });
+  const geoCleanupRef = useRef(null);
   const detachRef = useRef(null);
   const trackingCleanupRef = useRef(null);
   const modelOriginRef = useRef(null);
@@ -41,6 +48,19 @@ export default function NativeARView({ onExit }) {
           if (mpu && mpu > 0) oneToOneRef.current = 1 / mpu;
         } catch { /* usa el default 1000 */ }
 
+        // Georreferencia del modelo para el anclaje por GPS: globalOffset (lo que
+        // APS resta a las coords reales) + metros por unidad. Con esto, geoToViewer
+        // convierte tu lat/lon a un punto exacto del visor.
+        try {
+          const go = viewer.model.getData?.()?.globalOffset
+            || viewer.model.getGlobalOffset?.() || { x: 0, y: 0, z: 0 };
+          const mpu = (viewer.model.getUnitScale && viewer.model.getUnitScale()) || 0.001;
+          georefRef.current = {
+            globalOffset: { x: go.x || 0, y: go.y || 0, z: go.z || 0 },
+            metersPerUnit: mpu > 0 ? mpu : 0.001,
+          };
+        } catch { /* usa el default */ }
+
         previousStylesRef.current = {
           body: document.body.style.background,
           html: document.documentElement.style.background,
@@ -67,6 +87,8 @@ export default function NativeARView({ onExit }) {
 
         // Subscribe before start: ARCore only emits when the tracking state changes.
         trackingCleanupRef.current = onTracking((next) => setTracking(next.state));
+        // GPS + rumbo: se guarda la última pose para orientar al instante.
+        geoCleanupRef.current = onGeoPose((g) => setGeo(g));
 
         await startSession();
         if (cancelled) {
@@ -89,6 +111,7 @@ export default function NativeARView({ onExit }) {
       cancelled = true;
       try { detachRef.current?.(); } catch { /* Cleanup is best effort. */ }
       try { trackingCleanupRef.current?.(); } catch { /* Cleanup is best effort. */ }
+      try { geoCleanupRef.current?.(); } catch { /* Cleanup is best effort. */ }
       stopSession();
 
       document.body.classList.remove('ar-active');
@@ -126,6 +149,42 @@ export default function NativeARView({ onExit }) {
       setStatus('Anclado sobre la superficie. Ajusta el giro hasta alinear el modelo con la obra.');
     } catch (error) {
       setStatus('No se pudo anclar: ' + (error?.message || error));
+    }
+  };
+
+  // ── Orientación por GPS (el modo "referenciarse en campo") ──────────────────
+  // Coloca el modelo sobre el terreno real según TU posición GPS, sin anclar ni
+  // alinear a mano. La posición la naila el GPS; el norte lo siembra la brújula
+  // (afinable con el dial, porque el magnetómetro tiene error).
+  const handleGpsOrient = async () => {
+    const gp = getLastGeoPose();
+    if (!gp) {
+      setStatus('Esperando senal GPS… sal a cielo abierto y espera unos segundos.');
+      return;
+    }
+    if (!detachRef.current) { setStatus('El AR aun no esta listo.'); return; }
+    try {
+      setStatus('Orientando por GPS…');
+      // 1) Punto del visor que corresponde a tu posicion real (UTM 17S → visor).
+      const p = geoToViewer(gp.lat, gp.lon, georefRef.current);
+      const z = modelOriginRef.current?.z ?? 0;
+      // 2) Ancla en la pose actual de la camara (robusto en terreno abierto).
+      const res = await createAnchorAtCamera();
+      if (res?.matrix) detachRef.current.setAnchorMatrix(res.matrix);
+      // 3) Coloca tu posicion real como origen del modelo.
+      detachRef.current.setModelOrigin({ x: p.x, y: p.y, z });
+      // 4) Siembra el norte con la brujula (afinable con el dial).
+      if (gp.hasHeading) {
+        const arH = detachRef.current.getArHeading?.() || 0;
+        const yaw = seedYawFromHeading(gp.heading, arH);
+        detachRef.current.setYawDegrees?.(yaw);
+        setYawDegrees(((Math.round(yaw) % 360) + 360) % 360);
+      }
+      setAnchored(true);
+      const acc = gp.accuracy ? `±${Math.round(gp.accuracy)} m` : '';
+      setStatus(`Orientado por GPS ${acc}. Si el norte no calza, ajustalo con el dial o "Alinear".`);
+    } catch (error) {
+      setStatus('No se pudo orientar por GPS: ' + (error?.message || error));
     }
   };
 
@@ -193,18 +252,33 @@ export default function NativeARView({ onExit }) {
         <div>aplicados: {hud.applied} {hud.applied === 0 && hud.poseEvents > 0 ? '⚠ apply FALLA' : ''}</div>
         <div>THREE: {hud.src} · track: {tracking}</div>
         <div>upm: {hud.upm} · giro: {hud.yaw}°{hud.aligning ? ' ·ALIN' : ''}</div>
+        <div>GPS: {geo ? `${geo.lat?.toFixed(6)}, ${geo.lon?.toFixed(6)} ±${Math.round(geo.accuracy || 0)}m` : 'sin senal'}{geo?.hasHeading ? ` · N ${Math.round(geo.heading)}°` : ''}</div>
         {hud.err ? <div style={{ color: '#ff6b6b', maxWidth: 260, wordBreak: 'break-word' }}>err: {hud.err}</div> : null}
       </div>
 
       <div className="native-ar-reticle" aria-hidden="true" />
 
       <div className="native-ar-controls">
+        {/* ACCIÓN PRINCIPAL: orientarse por GPS (modo campo, obra lineal). */}
+        <button
+          className="native-ar-primary"
+          onClick={handleGpsOrient}
+          disabled={tracking !== 'tracking' || !geo}
+          style={{ background: geo ? '#0e7490' : '#475569' }}
+        >
+          {geo
+            ? `📍 Orientarme por GPS (±${Math.round(geo.accuracy || 0)} m)`
+            : '📍 Buscando GPS…'}
+        </button>
+
+        {/* Alternativa manual (anclar sobre superficie + alinear a ojo). */}
         <button
           className="native-ar-primary"
           onClick={handleAnchor}
           disabled={tracking !== 'tracking'}
+          style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.4)' }}
         >
-          {anchored ? 'Re-anclar aqui' : 'Anclar aqui'}
+          {anchored ? 'Re-anclar a mano' : 'Anclar a mano'}
         </button>
 
         {/* Escala: maqueta <-> 1:1 real. Se ajusta en vivo desde el celular. */}

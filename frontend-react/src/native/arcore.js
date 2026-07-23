@@ -49,4 +49,30 @@ export function onTracking(handler) {
   return () => { sub.then(s => s.remove()).catch(() => {}); };
 }
 
+// ── GPS + brújula (AR geoespacial) ──────────────────────────────────────────
+// El plugin nativo emite 'onGeoPose' con la posición y el rumbo del celular:
+//   { lat, lon, alt, accuracy (m), heading (grados norte verdadero), hasHeading }
+// Guardamos SIEMPRE la última pose para poder anclar al instante cuando el
+// operario toca "Orientarme por GPS", sin esperar el siguiente tick del GPS.
+let _lastGeoPose = null;
+
+export function onGeoPose(handler) {
+  const sub = ARCore.addListener('onGeoPose', (data) => {
+    _lastGeoPose = data;
+    handler(data);
+  });
+  return () => { sub.then(s => s.remove()).catch(() => {}); };
+}
+
+// Última pose GPS conocida (o null si aún no llega ninguna).
+export function getLastGeoPose() {
+  return _lastGeoPose;
+}
+
+// Ancla en la POSE ACTUAL de la cámara (sin hit-test de superficie). Robusto en
+// terreno abierto —tierra/pasto del canal— donde la detección de plano falla.
+export async function createAnchorAtCamera(opts = {}) {
+  return ARCore.createAnchorAtCamera(opts);
+}
+
 export default ARCore;

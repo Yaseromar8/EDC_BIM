@@ -617,7 +617,8 @@ def trigger_translation_server(urn, token):
     }
     payload = {
         'input': {'urn': urn},
-        'output': {'formats': [{'type': 'svf', 'views': ['2d', '3d']}]}
+        # svf2: instanciación de geometría + streaming (formato del visor)
+        'output': {'formats': [{'type': 'svf2', 'views': ['2d', '3d']}]}
     }
     try:
         resp = requests.post(url, headers=headers, json=payload)
@@ -723,8 +724,10 @@ from routes.partidas import partidas_bp
 from routes.photo_diag import photo_diag_bp
 from routes.presupuesto import presupuesto_bp
 from routes.compare import compare_bp
+from routes.link import link_bp
 
 app.register_blueprint(digital_twin_bp)
+app.register_blueprint(link_bp)
 app.register_blueprint(civil_da_bp)
 app.register_blueprint(audit_bp)
 app.register_blueprint(diag_bp)

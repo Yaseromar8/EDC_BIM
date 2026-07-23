@@ -1,6 +1,8 @@
+import { apiFetch } from '../utils/apiFetch';
+import { confirmAction } from '../utils/confirm';
+import toast from 'react-hot-toast';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
-import { getAuthHeaders } from '../utils/helpers';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -66,8 +68,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
   const fetchPartidas = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/partidas/${encodeURIComponent(modelUrn)}`, {
-        headers: getAuthHeaders()
+      const res = await apiFetch(`${API}/api/partidas/${encodeURIComponent(modelUrn)}`, {
       });
       const data = await res.json();
       if (data.results) {
@@ -82,9 +83,8 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
 
   const createPartida = async () => {
     try {
-      const res = await fetch(`${API}/api/partidas`, {
+      const res = await apiFetch(`${API}/api/partidas`, {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify({
           model_urn: modelUrn,
           created_by: user?.name || 'Usuario',
@@ -119,7 +119,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
 
         // Asumimos que la fila 0 o 1 tiene los encabezados. Buscaremos las columnas clave.
         if (data.length < 2) {
-          alert('El archivo Excel está vacío o no tiene el formato correcto.');
+          toast('El archivo Excel está vacío o no tiene el formato correcto.');
           setLoading(false);
           return;
         }
@@ -188,15 +188,14 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
         }
 
         if (newPartidas.length === 0) {
-          alert('No se encontraron datos válidos para importar.');
+          toast.error('No se encontraron datos válidos para importar.');
           setLoading(false);
           return;
         }
 
         // Send to backend
-        const res = await fetch(`${API}/api/partidas/batch`, {
+        const res = await apiFetch(`${API}/api/partidas/batch`, {
           method: 'POST',
-          headers: getAuthHeaders(),
           body: JSON.stringify({
             model_urn: modelUrn,
             created_by: user?.name || 'Usuario',
@@ -205,14 +204,14 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
         });
 
         if (res.ok) {
-          alert(`¡Importación exitosa! Se cargaron ${newPartidas.length} partidas.`);
+          toast(`¡Importación exitosa! Se cargaron ${newPartidas.length} partidas.`);
           fetchPartidas(); // recargar
         } else {
-          alert('Hubo un error al guardar las partidas en el servidor.');
+          toast.error('Hubo un error al guardar las partidas en el servidor.');
         }
       } catch (err) {
         console.error(err);
-        alert('Error leyendo el archivo Excel.');
+        toast.error('Error leyendo el archivo Excel.');
       } finally {
         setLoading(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -268,9 +267,8 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
 
     try {
       await Promise.all(updates.map(u => 
-        fetch(`${API}/api/partidas/${u.id}`, {
+        apiFetch(`${API}/api/partidas/${u.id}`, {
           method: 'PATCH',
-          headers: getAuthHeaders(),
           body: JSON.stringify({ [colKey]: u[colKey] })
         })
       ));
@@ -280,16 +278,15 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
   };
 
   const deleteAllPartidas = async () => {
-    if (!window.confirm('¿Estás seguro de eliminar todo el presupuesto importado? Esta acción no se puede deshacer.')) return;
+    if (!await confirmAction({ title: 'Eliminar todo el presupuesto', message: 'Se borrarán TODAS las partidas importadas de este proyecto. Esta acción no se puede deshacer.', confirmText: 'Eliminar todo', danger: true })) return;
     try {
-      const res = await fetch(`${API}/api/partidas/all/${encodeURIComponent(modelUrn)}`, {
+      const res = await apiFetch(`${API}/api/partidas/all/${encodeURIComponent(modelUrn)}`, {
         method: 'DELETE',
-        headers: getAuthHeaders()
       });
       if (res.ok) {
         setPartidas([]);
       } else {
-        alert('Error al limpiar el presupuesto.');
+        toast.error('Error al limpiar el presupuesto.');
       }
     } catch (err) {
       console.error('Error delete all Partidas:', err);
@@ -303,9 +300,8 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
       payload.precio = parseFloat(payload.precio) || 0;
       payload.incidencia = parseFloat(payload.incidencia) || 0;
 
-      const res = await fetch(`${API}/api/partidas/${partidaId}`, {
+      const res = await apiFetch(`${API}/api/partidas/${partidaId}`, {
         method: 'PATCH',
-        headers: getAuthHeaders(),
         body: JSON.stringify(payload)
       });
       if (res.ok) {
@@ -318,11 +314,10 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
   };
 
   const deletePartida = async (partidaId) => {
-    if (!window.confirm('¿Seguro que deseas eliminar esta partida?')) return;
+    if (!await confirmAction({ title: 'Eliminar partida', message: 'Se eliminará esta partida del presupuesto.', confirmText: 'Eliminar', danger: true })) return;
     try {
-      const res = await fetch(`${API}/api/partidas/${partidaId}`, {
+      const res = await apiFetch(`${API}/api/partidas/${partidaId}`, {
         method: 'DELETE',
-        headers: getAuthHeaders()
       });
       if (res.ok) {
         setPartidas(prev => prev.filter(p => p.id !== partidaId));

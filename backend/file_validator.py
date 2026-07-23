@@ -27,9 +27,9 @@ ALLOWED_TYPES = {
     'application/vnd.openxmlformats-officedocument.presentationml.presentation':
                                               {'max_mb': 200, 'extensions': ['.pptx']},
 
-    # Formatos CAD / BIM
-    'application/octet-stream':               {'max_mb': 500, 'extensions': ['.dwg', '.dxf', '.rvt', '.rfa', '.ifc', '.nwd', '.nwc']},
-    'model/ifc':                              {'max_mb': 500, 'extensions': ['.ifc']},
+    # Formatos CAD / BIM — modelos federados (RVT/NWD/IFC) llegan a 1-2 GB.
+    'application/octet-stream':               {'max_mb': 2048, 'extensions': ['.dwg', '.dxf', '.rvt', '.rfa', '.ifc', '.nwd', '.nwc']},
+    'model/ifc':                              {'max_mb': 2048, 'extensions': ['.ifc']},
 
     # Imagenes de terreno (fotos de campo)
     'image/jpeg':                             {'max_mb': 30,  'extensions': ['.jpg', '.jpeg']},
@@ -38,19 +38,19 @@ ALLOWED_TYPES = {
     'image/gif':                              {'max_mb': 10,  'extensions': ['.gif']},
     'image/tiff':                             {'max_mb': 100, 'extensions': ['.tif', '.tiff']},
 
-    # Video de inspeccion
-    'video/mp4':                              {'max_mb': 500, 'extensions': ['.mp4']},
-    'video/quicktime':                        {'max_mb': 500, 'extensions': ['.mov']},
-    'video/webm':                             {'max_mb': 500, 'extensions': ['.webm']},
-    'video/ogg':                              {'max_mb': 500, 'extensions': ['.ogg']},
+    # Video de inspeccion (dron / recorridos largos)
+    'video/mp4':                              {'max_mb': 2048, 'extensions': ['.mp4']},
+    'video/quicktime':                        {'max_mb': 2048, 'extensions': ['.mov']},
+    'video/webm':                             {'max_mb': 2048, 'extensions': ['.webm']},
+    'video/ogg':                              {'max_mb': 2048, 'extensions': ['.ogg']},
 
     # Texto plano / codigo
     'text/plain':                             {'max_mb': 5,   'extensions': ['.txt', '.csv', '.log']},
     'text/csv':                               {'max_mb': 50,  'extensions': ['.csv']},
 
     # Comprimidos (para importar modelos)
-    'application/zip':                        {'max_mb': 500, 'extensions': ['.zip']},
-    'application/x-zip-compressed':          {'max_mb': 500, 'extensions': ['.zip']},
+    'application/zip':                        {'max_mb': 2048, 'extensions': ['.zip']},
+    'application/x-zip-compressed':          {'max_mb': 2048, 'extensions': ['.zip']},
 }
 
 # Extensiones absolutamente prohibidas (seguridad)
@@ -60,7 +60,7 @@ BLOCKED_EXTENSIONS = {
 }
 
 # Limite global absoluto (failsafe)
-ABSOLUTE_MAX_MB = 1000
+ABSOLUTE_MAX_MB = 2048
 
 
 class FileValidationError(Exception):

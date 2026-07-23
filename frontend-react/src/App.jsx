@@ -17,6 +17,9 @@ import ARView from './components/ARView';
 import NativeARView from './components/NativeARView';
 import { isNativeAR } from './native/arcore';
 import PhotoAlbumModal from './components/PhotoAlbumModal';
+import SheetViewerPanel from './components/SheetViewerPanel';
+import LinkRevitBadge from './components/LinkRevitBadge';
+import SectionCutTool from './components/SectionCutTool';
 import ProgressDetailPanel from './components/ProgressDetailPanel';
 import DocumentManager from './components/DocumentManager';
 import DocPinPanel from './components/DocPinPanel';
@@ -602,6 +605,36 @@ function App() {
     return () => window.removeEventListener('auth-expired', onAuthExpired);
   }, [handleLogout]);
 
+  // ── ESTABILIDAD: observabilidad global de errores ──────────────────────────
+  // Promesas sin catch quedaban como "Uncaught (in promise)" ANÓNIMOS (sin
+  // causa) y los errores de listeners morían en silencio. Aquí les damos
+  // nombre y quedan en un buffer (window.__stabilityLog) para diagnóstico.
+  const [webglLost, setWebglLost] = useState(false);
+  useEffect(() => {
+    window.__stabilityLog = window.__stabilityLog || [];
+    const push = (kind, detail) => {
+      window.__stabilityLog.push({ kind, detail: String(detail).slice(0, 400), at: new Date().toISOString() });
+      if (window.__stabilityLog.length > 100) window.__stabilityLog.shift();
+    };
+    const onRejection = (ev) => {
+      push('unhandledrejection', ev.reason?.stack || ev.reason);
+      console.error('[Estabilidad] Promesa sin catch:', ev.reason);
+    };
+    const onError = (ev) => push('window.onerror', ev.message);
+    const onGlLost = () => setWebglLost(true);
+    const onGlRestored = () => setWebglLost(false);
+    window.addEventListener('unhandledrejection', onRejection);
+    window.addEventListener('error', onError);
+    window.addEventListener('viewer-webgl-lost', onGlLost);
+    window.addEventListener('viewer-webgl-restored', onGlRestored);
+    return () => {
+      window.removeEventListener('unhandledrejection', onRejection);
+      window.removeEventListener('error', onError);
+      window.removeEventListener('viewer-webgl-lost', onGlLost);
+      window.removeEventListener('viewer-webgl-restored', onGlRestored);
+    };
+  }, []);
+
   // ── CAPACITOR BACKGROUND SYNC ──
   useEffect(() => {
     if (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform()) {
@@ -764,6 +797,17 @@ function App() {
   const [filterProperties, setFilterProperties] = useState(['Standard::Sources', 'Standard::Revit Category']);
 
   const [filterSelections, setFilterSelections] = useState({});
+
+  // "Mostrar todo" ejecutado DESDE el visor (menú contextual/Esc): el panel de
+  // filtros debe reflejarlo. Sin esto, la escena mostraba todo pero el panel
+  // seguía diciendo "1 of 8" — dos verdades distintas en pantalla.
+  useEffect(() => {
+    const onShowAll = () => {
+      setFilterSelections(prev => (prev && Object.keys(prev).length ? {} : prev));
+    };
+    window.addEventListener('viewer-show-all', onShowAll);
+    return () => window.removeEventListener('viewer-show-all', onShowAll);
+  }, []);
   const [expandedFilters, setExpandedFilters] = useState({});
   const [facetSearch, setFacetSearch] = useState({}); // { [facetId]: { open: bool, query: string } }
 
@@ -886,10 +930,39 @@ function App() {
   const [docPinPanelOpen, setDocPinPanelOpen] = useState(false);
   const [selectedDocPin, setSelectedDocPin] = useState(null);
 
+  // AISLAMIENTO ENTRE FRENTES: al cambiar de frente se cierra TODO panel/overlay
+  // que muestre datos del frente anterior. Sin esto, el álbum de una ZONA, el
+  // comparador o un modal quedaban abiertos encima del frente nuevo — parecía
+  // información cruzada entre frentes (era estado de UI sin limpiar, no datos).
+  useEffect(() => {
+    // Seguimiento (fotos / avance / docs por pin)
+    setPhotoAlbumOpen(false);
+    setSelectedAlbumPin(null);
+    setProgressPanelOpen(false);
+    setSelectedProgressPin(null);
+    setDocPinPanelOpen(false);
+    setSelectedDocPin(null);
+    setSelectedElement(null);
+    // Modos de pantalla completa (comparan/superponen modelos DEL frente)
+    setCompareMode(false);
+    setArModeActive(false);
+    setNativeArActive(false);
+    // Modales (importar hereda además el guard del relink)
+    setImportModalOpen(false);
+    setRelinkTargetModel(null);
+    setDocumentsModalOpen(false);
+    setFilterConfiguratorOpen(false);
+    // Lámina 2D abierta (pertenece a un modelo del frente anterior)
+    setActiveLmvSheet(null);
+  }, [selectedProject?.id]);
+
 
 
   const [sheets, setSheets] = useState([]); // To store 2D sheets
   const [activeSheet, setActiveSheet] = useState(null);
+  // Lámina LMV de Revit abierta en el panel dividido (distinta de activeSheet,
+  // que es para PDFs/documentos por URL)
+  const [activeLmvSheet, setActiveLmvSheet] = useState(null);
   const [docPlacementMode, setDocPlacementMode] = useState(false);
   const [docs, setDocs] = useState([]); // Array of attached docs (legacy?) (Keeping for safety)
   const [docPins, setDocPins] = useState([]); // Array of { id, x, y, z, docs: [] }
@@ -1237,10 +1310,20 @@ function App() {
           if (sharedViewData.filterState.filterColors) setFilterColors(sharedViewData.filterState.filterColors);
           if (sharedViewData.filterState.filterProperties) setFilterProperties(sharedViewData.filterState.filterProperties);
           if (sharedViewData.filterState.hiddenModelUrns) setHiddenModelUrns(sharedViewData.filterState.hiddenModelUrns);
+          // Colores por valor + exclusiones "no pintar" de la vista compartida
+          if (sharedViewData.filterState.customValueColors) {
+            window._customValueColors = sharedViewData.filterState.customValueColors;
+            window.dispatchEvent(new CustomEvent('custom-colors-restored', { detail: window._customValueColors }));
+          }
+          // Heatmap de avance por PK de la vista compartida
+          if (sharedViewData.filterState.pkHeatmap) {
+            window.__pkHeatmap = sharedViewData.filterState.pkHeatmap;
+            window.dispatchEvent(new CustomEvent('lob-pk-heatmap', { detail: window.__pkHeatmap }));
+          }
         }
 
         window.dispatchEvent(new CustomEvent('viewer-restore-state', { detail: sharedViewData.viewerState }));
-        
+
         // ANTI-WIPE (Race Condition Resolution): APS restoreState destruye los shaders custom de WebGPU.
         // Forzamos una re-inyección de la paleta semántica 1.5s después de que se posiciona la cámara nativa.
         if (sharedViewData.filterState && sharedViewData.filterState.filterColors) {
@@ -1253,7 +1336,8 @@ function App() {
                     propId,
                     values: selectedValues.length > 0 ? selectedValues : null,
                     active: true,
-                    paletteName: 'Classic Tandem'
+                    paletteName: 'Classic Tandem',
+                    customColors: sharedViewData.filterState.customValueColors || window._customValueColors || {}
                   }
                 }));
               }
@@ -1291,7 +1375,13 @@ function App() {
         filterSelections,
         filterColors,
         filterProperties,
-        hiddenModelUrns
+        hiddenModelUrns,
+        // Colores POR VALOR (picker) y exclusiones "no pintar" (✕): viven en
+        // window._customValueColors (solo memoria) — sin guardarlos aquí, la
+        // vista restauraba la paleta por defecto y perdía tu configuración.
+        customValueColors: window._customValueColors || {},
+        // Heatmap de avance por PK (tramos por alineamiento + estado)
+        pkHeatmap: window.__pkHeatmap || null
       };
 
       const configState = {
@@ -1356,6 +1446,21 @@ function App() {
       const fs = view.filterState || {};
       console.log('[App] Anti-wipe: Re-inyectando filtros tras restoreState...');
 
+      // Restaurar colores por valor + exclusiones "no pintar" ANTES del theming
+      // (el handler los lee de window._customValueColors) y avisar al panel de
+      // Filtros para que sus puntitos reflejen la configuración restaurada.
+      if (fs.customValueColors) {
+        window._customValueColors = fs.customValueColors;
+        window.dispatchEvent(new CustomEvent('custom-colors-restored', { detail: fs.customValueColors }));
+      }
+
+      // Restaurar Heatmap de avance por PK (la extensión reintenta sola si los
+      // modelos aún no terminan de cargar).
+      if (fs.pkHeatmap) {
+        window.__pkHeatmap = fs.pkHeatmap;
+        window.dispatchEvent(new CustomEvent('lob-pk-heatmap', { detail: fs.pkHeatmap }));
+      }
+
       // Re-dispatch recalculate-filters para que Viewer.jsx re-aplique isolation
       window.dispatchEvent(new CustomEvent('recalculate-filters', {
         detail: {
@@ -1374,7 +1479,8 @@ function App() {
                 propId,
                 values: selectedValues.length > 0 ? selectedValues : null,
                 active: true,
-                paletteName: 'Classic Tandem'
+                paletteName: 'Classic Tandem',
+                customColors: fs.customValueColors || window._customValueColors || {}
               }
             }));
           }
@@ -2461,6 +2567,9 @@ function App() {
   // onProgress(percent, message) mantiene informado al modal en cada fase.
   const handleLocalUpload = useCallback(async (file, label, onProgress) => {
     if (!selectedProject) throw new Error("No hay proyecto seleccionado.");
+    // La subida local SIEMPRE agrega (no implementa relink). Desarmar el target
+    // para que un pick posterior en el mismo modal no dispare un relink fantasma.
+    setRelinkTargetModel(null);
     const report = (p, msg) => { try { onProgress?.(p, msg); } catch (e) { /* noop */ } };
 
     // Fase 1: subir (el % de red se mapea a 0–60)
@@ -2523,6 +2632,13 @@ function App() {
         body: JSON.stringify({ urn, project: selectedProject.id })
       });
       // Don't use the response to update state — local optimistic update already handled it
+
+      // COHERENCIA INVENTORY/FILTER: el backend ya purgó inventory_assets del
+      // modelo eliminado. Sin este refresh, sus elementos seguían apareciendo
+      // en Inventario y Filtros hasta recargar la página.
+      window.__inventoryCache = null;
+      window.postgresInventory = null;
+      window.dispatchEvent(new CustomEvent('inventory-needs-refresh'));
     } catch (e) {
       console.error("Error removing model:", e);
       // On error, reload from server to restore correct state
@@ -3641,6 +3757,8 @@ function App() {
             extractionJobs={extractionJobs}
             availableUpdates={availableUpdates}
             updateCheckStatus={updateCheckStatus}
+            sheets={sheets}
+            onOpenSheet={setActiveLmvSheet}
             setImportModalOpen={setImportModalOpen}
             documents={documents}
             sprites={sprites}
@@ -3816,6 +3934,32 @@ function App() {
                 {/* 📈 Perfil longitudinal interactivo (sincronizado con la PK 3D) */}
                 {!compareMode && <ProfilePanel />}
 
+                {/* 📐 Lámina 2D de Revit en panel dividido */}
+                {!compareMode && activeLmvSheet && (
+                  <SheetViewerPanel sheet={activeLmvSheet} onClose={() => setActiveLmvSheet(null)} />
+                )}
+
+                {/* 🔗 Live Link Web ↔ Revit: vive como chip en la barra inferior (rightSlot) */}
+
+                {/* ⚠️ GPU reset: canvas negro → ofrecer recarga en vez de app "muerta" */}
+                {webglLost && (
+                  <div style={{
+                    position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)',
+                    background: 'rgba(127,29,29,0.97)', border: '1px solid #b91c1c', color: '#fee2e2',
+                    padding: '10px 18px', borderRadius: '9px', fontSize: '13px', fontWeight: 600,
+                    zIndex: 1300, display: 'flex', alignItems: 'center', gap: '12px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+                  }}>
+                    <span>⚠️ La tarjeta gráfica se reinició y el visor perdió el lienzo.</span>
+                    <button
+                      onClick={() => window.location.reload()}
+                      style={{ background: '#fff', border: 'none', color: '#7f1d1d', padding: '5px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 800 }}
+                    >
+                      Recargar visor
+                    </button>
+                  </div>
+                )}
+
                 {/* 🔒 Aviso de módulo sin permisos */}
                 {permToast && (
                   <div style={{
@@ -3951,7 +4095,28 @@ function App() {
 
               {/* Barra inferior de capas (full-width, estilo Tandem): el visor
                   de arriba (flex:1) se achica solo para acomodarla. */}
-              {!compareMode && activePanel !== 'build' && <ViewerLabelsBar />}
+              {!compareMode && activePanel !== 'build' && (
+                <ViewerLabelsBar rightSlot={<>
+                  <SectionCutTool />
+                  <LinkRevitBadge variant="inline" project={selectedProject?.id} backendUrl={BACKEND_URL} />
+                  {!isSharedMode && !arModeActive && !nativeArActive && selectedProject && models && models.length > 0 && (
+                    <button
+                      onClick={() => { if (isNativeAR()) setNativeArActive(true); else setArModeActive(true); }}
+                      title={isNativeAR() ? 'Realidad Aumentada (ARCore)' : 'Realidad Aumentada (navegador)'}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', height: 26,
+                        background: '#7e9bbd', color: '#fff', border: 'none', borderRadius: 15,
+                        fontWeight: 700, fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2l8.66 5v10L12 22l-8.66-5V7L12 2z" /><path d="M12 22V12M3.34 7L12 12l8.66-5" />
+                      </svg>
+                      AR
+                    </button>
+                  )}
+                </>} />
+              )}
 
 
 
@@ -4296,11 +4461,18 @@ function App() {
 
         <ImportModelModal
           open={importModalOpen}
-          onClose={() => setImportModalOpen(false)}
+          onClose={() => {
+            setImportModalOpen(false);
+            // CRÍTICO: desarmar el modo Relink al cerrar sin elegir. Si quedaba
+            // armado, el SIGUIENTE "Importar" reemplazaba un modelo en silencio
+            // (handleLinkDocs ve relinkTargetModel y hace relink, no add).
+            setRelinkTargetModel(null);
+          }}
           onLinkDocs={handleLinkDocs}
           onUploadLocal={handleLocalUpload}
           onExtractCivilData={handleExtractCivilData}
           selectedProject={selectedProject}
+          relinkTarget={relinkTargetModel}
         />
 
         {/* Views Popover */}
@@ -4358,32 +4530,7 @@ function App() {
           <NativeARView onExit={() => setNativeArActive(false)} />
         )}
 
-        {/* Botón flotante AR: visible cuando hay un proyecto/modelo abierto */}
-        {!isSharedMode && !compareMode && !arModeActive && !nativeArActive && selectedProject && models && models.length > 0 && (
-          <button
-            onClick={() => { if (isNativeAR()) setNativeArActive(true); else setArModeActive(true); }}
-            title={isNativeAR() ? 'Realidad Aumentada (ARCore)' : 'Realidad Aumentada (navegador)'}
-            style={{
-              // fixed = relativo a la PANTALLA, no al contenedor padre (que en tablet
-              // puede estar recortado/no llenar la vista). Así aparece en cualquier device.
-              position: 'fixed',
-              bottom: budgetTabOpen
-                ? `calc(env(safe-area-inset-bottom, 0px) + ${budgetPanelHeight + 16}px)`
-                : 'calc(env(safe-area-inset-bottom, 0px) + 84px)',
-              right: 'calc(env(safe-area-inset-right, 0px) + 16px)',
-              zIndex: 8000,
-              display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
-              background: '#7e9bbd', color: '#fff', border: 'none', borderRadius: 24,
-              fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
-              transition: 'bottom 0.25s ease'
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2l8.66 5v10L12 22l-8.66-5V7L12 2z" /><path d="M12 22V12M3.34 7L12 12l8.66-5" />
-            </svg>
-            AR
-          </button>
-        )}
+        {/* Botón AR: vive como chip en la barra inferior (rightSlot de ViewerLabelsBar) */}
 
         {/* GESTOR DOCUMENTAL GCS */}
         <DocumentManager

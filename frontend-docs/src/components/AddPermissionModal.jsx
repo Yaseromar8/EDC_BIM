@@ -2,20 +2,18 @@ import React, { useState, useRef, useEffect } from 'react';
 import { apiFetch } from '../utils/apiFetch';
 import '../index.css';
 
-export const ACCPillBars = ({ level }) => {
-  const isView = level === 'view_only';
-  const isViewDown = level === 'view_download';
-  const isCreate = level === 'create';
-  const isCreateUp = level === 'create_upload';
-  const isEdit = level === 'edit';
-  const isAdmin = level === 'admin';
+// Rango de barras por nivel REAL del backend (folder_permissions.PERMISSION_LEVELS).
+// Antes comparaba con 'view_only'/'create'/'create_upload' —nombres que ya no
+// existen— así que las barras se pintaban mal para viewer/view_markup.
+const PILL_RANK = { none: 0, viewer: 1, view_download: 2, view_markup: 3, edit: 3, admin: 4 };
 
+export const ACCPillBars = ({ level }) => {
+  const rank = PILL_RANK[level] ?? 0;
   return (
     <div className="acc-pill-bars">
-      <div className={`acc-pill-bar ${isView ? 'outline' : 'active'}`}></div>
-      <div className={`acc-pill-bar ${isView || isViewDown ? '' : 'active'} ${isCreate ? 'outline' : ''}`}></div>
-      <div className={`acc-pill-bar ${isEdit || isAdmin ? 'active' : ''}`}></div>
-      <div className={`acc-pill-bar ${isAdmin ? 'active' : ''}`}></div>
+      {[1, 2, 3, 4].map(i => (
+        <div key={i} className={`acc-pill-bar ${rank >= i ? 'active' : 'outline'}`}></div>
+      ))}
     </div>
   );
 };

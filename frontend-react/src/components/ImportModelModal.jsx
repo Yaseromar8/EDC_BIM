@@ -56,7 +56,7 @@ const CIVIL_MODES = {
   DATA_ONLY: 'data-only'
 };
 
-const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractCivilData, selectedProject }) => {
+const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractCivilData, selectedProject, relinkTarget = null }) => {
   const [activeTab, setActiveTab] = useState('UPLOAD');
 
   // Docs State
@@ -323,6 +323,15 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
       const shouldLoadViewer = !isCivilCad || civilMode !== CIVIL_MODES.DATA_ONLY;
 
       try {
+        if (shouldLoadViewer && !shouldExtractCivil) {
+          // CIERRE INMEDIATO: vincular + recargar inventario tarda segundos y el
+          // modal ya no muestra nada útil en ese lapso (el progreso real se ve en
+          // el panel MODELOS). Antes se quedaba abierto "colgado" hasta terminar.
+          const linkPromise = onLinkDocs?.(processedDocs, true, selectedViewGuid);
+          onClose();
+          if (linkPromise?.catch) linkPromise.catch(e => console.error('[ImportModelModal] link error:', e));
+          return;
+        }
         if (shouldLoadViewer) {
           await onLinkDocs?.(processedDocs, true, selectedViewGuid);
         }
@@ -417,7 +426,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
 
         {/* HEADER */}
         <div className="import-header">
-          <h3>IMPORT MODEL</h3>
+          <h3>{relinkTarget ? 'RELINK MODEL' : 'IMPORT MODEL'}</h3>
           {!isProcessing && (
             <button className="import-close-btn" onClick={() => {
               if (extractionDone) cancelProcess(); // purga huérfanos si extrajo y no importó
@@ -425,6 +434,21 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
             }}><CloseIcon /></button>
           )}
         </div>
+
+        {/* MODO RELINK: avisar SIEMPRE qué modelo será reemplazado. Sin esto, el
+            modal se veía idéntico a un import normal y el reemplazo sorprendía. */}
+        {relinkTarget && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px',
+            background: 'rgba(194,168,120,0.12)', borderBottom: '1px solid rgba(194,168,120,0.35)',
+            color: '#c2a878', fontSize: 12, fontWeight: 600,
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Reemplazando: <strong>{relinkTarget.label || relinkTarget.name}</strong> — el modelo que elijas tomará su lugar
+            </span>
+          </div>
+        )}
 
         {/* TABS */}
         <div className="import-tab-bar">
@@ -721,7 +745,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
             <button className="import-btn-primary"
               disabled={selectedDocs.length === 0}
               onClick={handleStartExtraction}>
-              Import
+              {selectedDocs.length > 0 ? `Import (${selectedDocs.length})` : 'Import'}
             </button>
           ) : extractionDone ? (
             /* FILE UPLOAD after extraction: final import with selected view */

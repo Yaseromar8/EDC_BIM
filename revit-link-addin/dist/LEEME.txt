@@ -1,0 +1,34 @@
+ECD LINK — Vínculo en vivo entre la plataforma ECD-VISIION y Revit 2023
+========================================================================
+
+QUÉ HACE
+  Con el vínculo activo, lo que se selecciona o aísla en el visor web
+  se replica en este Revit en ~1 segundo (selección, aislamiento y zoom).
+  Cada Revit aplica solo los elementos de SU modelo: varios modeladores
+  pueden estar vinculados al mismo frente a la vez.
+
+REQUISITOS
+  - Revit 2023
+  - Acceso de red al servidor de la plataforma
+
+INSTALAR
+  1. Si este paquete llegó en un ZIP descargado de internet:
+     clic derecho al ZIP → Propiedades → marcar "Desbloquear" → Aceptar,
+     y recién ahí extraerlo. (Si no, Revit puede negarse a cargar la DLL.)
+  2. Doble clic a INSTALAR.bat  (no requiere permisos de administrador)
+  3. Abrir Revit 2023 → aceptar "Cargar siempre" para ECD Link
+
+USAR
+  1. Abrir el modelo del frente en Revit (ideal: pararse en la vista {3D})
+  2. Pestaña ECD → "Vincular con ECD"
+  3. Frente: el código del frente (el mismo de la web — lo da el administrador)
+  4. En la web: activar el chip "Revit" de la barra inferior
+     → cuando diga "Revit ✓" en verde, ya están vinculados
+  5. Para desactivar: volver a pulsar el botón en Revit
+
+DESINSTALAR
+  Doble clic a DESINSTALAR.bat y reiniciar Revit.
+
+SOPORTE
+  La configuración queda en %AppData%\ECDLink\config.json
+  (servidor, frente y token se pueden editar ahí o desde el diálogo).

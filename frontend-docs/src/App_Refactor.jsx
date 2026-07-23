@@ -19,7 +19,7 @@
  *   │   └── MatrixTable, DocumentViewer (existentes)
  *   └── SharedViewer (existente)
  */
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { Toaster } from 'react-hot-toast';
 
 // ── Auth Hook ──
@@ -31,7 +31,11 @@ import FilesPage from './pages/FilesPage';
 
 // ── Existing Components ──
 import LoginScreen from './LoginScreen';
-import SharedViewer from './components/SharedViewer';
+import ErrorBoundary from './components/ErrorBoundary';
+
+// Ruta pública /share/: se usa en una fracción de las sesiones y arrastra el
+// visor de documentos (react-pdf). Diferida → sale del bundle inicial.
+const SharedViewer = lazy(() => import('./components/SharedViewer'));
 
 // ─────────────────────────────────────
 // MAIN APP ROUTER
@@ -39,12 +43,9 @@ import SharedViewer from './components/SharedViewer';
 export default function App() {
   const path = window.location.pathname;
 
-  // ── Share Route ──
-  if (path.startsWith('/share/')) {
-    const shareId = path.split('/share/')[1];
-    return <SharedViewer shareId={shareId} />;
-  }
-
+  // REGLAS DE HOOKS: todos los hooks van ANTES de cualquier return condicional.
+  // Antes, useUser()/useState se llamaban después del early-return de /share/,
+  // lo que deja el orden de hooks dependiendo de la ruta (bug latente).
   // ── Auth ──
   const { user, saveUser, logout } = useUser();
 
@@ -53,6 +54,16 @@ export default function App() {
     const saved = localStorage.getItem('selected_project');
     return saved ? JSON.parse(saved) : null;
   });
+
+  // ── Share Route (pública: no requiere sesión) ──
+  if (path.startsWith('/share/')) {
+    const shareId = path.split('/share/')[1];
+    return (
+      <Suspense fallback={<div style={{ padding: 48, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>}>
+        <SharedViewer shareId={shareId} />
+      </Suspense>
+    );
+  }
 
   const handleSelectProject = (p) => {
     if (p) localStorage.setItem('selected_project', JSON.stringify(p));
@@ -67,20 +78,26 @@ export default function App() {
 
   if (!selectedProject) {
     return (
-      <SecureProjectsPage 
-        user={user} 
-        onSelectProject={handleSelectProject} 
-        onLogout={logout} 
-      />
+      <ErrorBoundary scope="proyectos" title="No se pudo mostrar la lista de proyectos">
+        <SecureProjectsPage
+          user={user}
+          onSelectProject={handleSelectProject}
+          onLogout={logout}
+        />
+      </ErrorBoundary>
     );
   }
 
+  // Cada ruta va envuelta: un fallo de render muestra un aviso con salida,
+  // en vez de dejar la PANTALLA EN BLANCO sin explicación.
   return (
-    <FilesPage 
-      project={selectedProject} 
-      user={user} 
-      onBack={() => handleSelectProject(null)} 
-      onLogout={logout} 
-    />
+    <ErrorBoundary scope="documentos" title="No se pudo mostrar el explorador de documentos">
+      <FilesPage
+        project={selectedProject}
+        user={user}
+        onBack={() => handleSelectProject(null)}
+        onLogout={logout}
+      />
+    </ErrorBoundary>
   );
 }

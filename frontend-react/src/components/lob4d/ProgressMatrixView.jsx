@@ -22,15 +22,24 @@ const statusAtPeriod = (partida, avance, period) => {
     return 'pending';
 };
 
-export default function ProgressMatrixView({ lobData, activeFrente, simulationState }) {
+export default function ProgressMatrixView({
+    lobData,
+    activeFrente,
+    simulationState,
+    selectedCode,
+    onPartidaSelect,
+}) {
     const maxPeriod = getMaxPeriod(lobData);
     const periods = Array.from({ length: maxPeriod }, (_, index) => index + 1);
     const rows = useMemo(() => {
-        return getFilteredPartidas(lobData, activeFrente)
+        const sorted = getFilteredPartidas(lobData, activeFrente)
             .filter((partida) => partida.activity_id || lobData?.avance?.[partida.codigo])
-            .sort((a, b) => (a.orden || 0) - (b.orden || 0) || String(a.codigo).localeCompare(String(b.codigo), undefined, { numeric: true }))
-            .slice(0, 32);
-    }, [lobData, activeFrente]);
+            .sort((a, b) => (a.orden || 0) - (b.orden || 0) || String(a.codigo).localeCompare(String(b.codigo), undefined, { numeric: true }));
+        const firstRows = sorted.slice(0, 32);
+        if (!selectedCode || firstRows.some((partida) => partida.codigo === selectedCode)) return firstRows;
+        const selected = sorted.find((partida) => partida.codigo === selectedCode);
+        return selected ? [selected, ...firstRows.slice(0, 31)] : firstRows;
+    }, [lobData, activeFrente, selectedCode]);
 
     return (
         <div className="lob4d-workspace-view">
@@ -57,7 +66,11 @@ export default function ProgressMatrixView({ lobData, activeFrente, simulationSt
                         </div>
 
                         {rows.map((partida) => (
-                            <div key={partida.codigo} className="lob4d-matrix-row">
+                            <div
+                                key={partida.codigo}
+                                className={`lob4d-matrix-row${selectedCode === partida.codigo ? ' selected' : ''}`}
+                                onClick={() => onPartidaSelect?.(selectedCode === partida.codigo ? null : partida.codigo)}
+                            >
                                 <div className="lob4d-matrix-cell label" title={partida.descripcion}>
                                     <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                         <span className="lob4d-mono" style={{ color: '#8ecbff', marginRight: 8 }}>{partida.codigo}</span>

@@ -16,10 +16,37 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 // ----------------------------------------------------------------------
 // Sub-componente para renderizar Miniaturas en el Sidebar
 // ----------------------------------------------------------------------
+// Techo de resolución del canvas (~16 MP). Sin esto, un plano A0 a 8× con
+// devicePixelRatio 2 pedía cientos de megapíxeles: el navegador se arrodilla.
+const MAX_CANVAS_PIXELS = 16_000_000;
+
+// Buscar sin tildes ni mayúsculas: "excavacion" encuentra "EXCAVACIÓN".
+const normalizeText = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+const THUMB_W = 140;          // ancho fijo de miniatura
+const THUMB_PLACEHOLDER_H = 181; // alto aprox. A4 → reserva espacio y evita saltos de scroll
+
 function Thumbnail({ pdf, pageNum, isActive, onClick }) {
   const canvasRef = useRef(null);
+  const hostRef = useRef(null);
+  // RENDIMIENTO: antes TODAS las miniaturas se dibujaban al montar (un PDF de
+  // 200 páginas = 200 renders simultáneos → congelaba el visor). Ahora cada una
+  // se dibuja SOLO cuando está por entrar en pantalla, y una única vez.
+  const [visible, setVisible] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    const el = hostRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') { setVisible(true); return undefined; }
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setVisible(true); io.disconnect(); }
+    }, { rootMargin: '400px 0px' }); // pre-carga un poco antes de que se vea
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return undefined;
     let renderTask = null;
     let cancelled = false;
 
@@ -27,26 +54,28 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
       try {
         const page = await pdf.getPage(pageNum);
         if (cancelled) return;
-        
+
         const viewport0 = page.getViewport({ scale: 1 });
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        // Fijar ancho a 140px, calcular alto
-        const scale = 140 / viewport0.width;
+        const scale = THUMB_W / viewport0.width;
         const viewport = page.getViewport({ scale });
-        
-        const dpr = window.devicePixelRatio || 1;
-        canvas.width = viewport.width * dpr;
-        canvas.height = viewport.height * dpr;
+
+        // Las miniaturas NO necesitan devicePixelRatio completo: a 140px de
+        // ancho, 1x se ve igual y cuesta la cuarta parte de píxeles.
+        const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+        canvas.width = Math.round(viewport.width * dpr);
+        canvas.height = Math.round(viewport.height * dpr);
         canvas.style.width = `${viewport.width}px`;
         canvas.style.height = `${viewport.height}px`;
 
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d'); // sin alpha:false → nada de miniaturas negras
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         renderTask = page.render({ canvasContext: ctx, viewport });
         await renderTask.promise;
+        if (!cancelled) setReady(true);
       } catch (err) {
         if (err?.name !== 'RenderingCancelledException' && err?.name !== 'RenderingCancelled') {
           console.error('Thumbnail render error:', err);
@@ -59,10 +88,11 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
       cancelled = true;
       if (renderTask) renderTask.cancel();
     };
-  }, [pdf, pageNum]);
+  }, [visible, pdf, pageNum]);
 
   return (
-    <div 
+    <div
+      ref={hostRef}
       data-thumb-page={pageNum}
       onClick={onClick}
       style={{
@@ -75,7 +105,11 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
     >
       <div style={{
         boxShadow: isActive ? '0 0 0 2px #5f7fa3' : '0 2px 5px rgba(0,0,0,0.2)',
-        background: '#fff', padding: 2, borderRadius: 2
+        background: '#fff', padding: 2, borderRadius: 2,
+        // Reserva el espacio antes de dibujar: la lista no "salta" al hacer scroll.
+        minHeight: ready ? undefined : THUMB_PLACEHOLDER_H,
+        width: THUMB_W + 4,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         <canvas ref={canvasRef} />
       </div>
@@ -98,6 +132,18 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   const sidebarRef = useRef(null);
   const pdfDocRef = useRef(null);
   const renderTaskRef = useRef(null);
+  const baseVpRef = useRef({});          // cache "pagina:rotacion" → viewport a escala 1
+  const renderDebounceRef = useRef(null); // coalesce de renders durante el zoom
+  // Texto por página SOLO EN MEMORIA: se lee del PDF al vuelo y se descarta al
+  // cerrar el documento. No se extrae ni se guarda nada en el servidor.
+  const textCacheRef = useRef(new Map());
+
+  // ── Búsqueda dentro del documento ──
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [matches, setMatches] = useState([]);      // [{ page, itemIndex }]
+  const [matchIdx, setMatchIdx] = useState(0);
+  const [searching, setSearching] = useState(false);
 
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -106,6 +152,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   
   // UI States
   const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState(0); // % de descarga del documento
   const [error, setError] = useState(null);
   const [showSidebar, setShowSidebar] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -130,13 +177,23 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
 
     setLoading(true);
     setError(null);
+    setProgress(0);
     setCurrentPage(1);
     setScale(1.0);
     setRotation(0);
+    baseVpRef.current = {}; // el cache de viewports es por documento
+    textCacheRef.current = new Map(); // el texto leído se descarta al cambiar de PDF
+    setMatches([]); setMatchIdx(0); setSearchQuery(''); setSearchOpen(false);
 
     const loadPDF = async () => {
       try {
+        // Descarga en streaming continuo (comportamiento por defecto de PDF.js).
+        // NO activar `disableAutoFetch`: para PDFs normales dispara decenas de
+        // peticiones por rangos y sale MÁS LENTO que bajar el archivo de corrido.
         const loadingTask = pdfjsLib.getDocument({ url, withCredentials: false });
+        loadingTask.onProgress = ({ loaded, total }) => {
+          if (!cancelled && total) setProgress(Math.min(99, Math.round((loaded / total) * 100)));
+        };
         const pdf = await loadingTask.promise;
         if (cancelled) return;
         pdfDocRef.current = pdf;
@@ -155,7 +212,28 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     return () => { cancelled = true; };
   }, [url]);
 
-  // Render current page
+  // ZOOM INSTANTÁNEO: al cambiar la escala se ajusta el tamaño CSS de una vez
+  // (el navegador reescala el bitmap actual → respuesta inmediata) y la
+  // rasterización nítida llega ~110 ms después, ya sin la rueda girando.
+  const applyPreviewSize = useCallback(async () => {
+    const pdf = pdfDocRef.current, canvas = canvasRef.current;
+    if (!pdf || !canvas) return;
+    const key = `${currentPage}:${rotation}`;
+    let base = baseVpRef.current[key];
+    if (!base) {
+      try {
+        const page = await pdf.getPage(currentPage);
+        const vp1 = page.getViewport({ scale: 1, rotation });
+        base = { width: vp1.width, height: vp1.height };
+        baseVpRef.current[key] = base;
+      } catch { return; }
+    }
+    if (!canvasRef.current) return;
+    canvasRef.current.style.width = `${base.width * (scale || 1)}px`;
+    canvasRef.current.style.height = `${base.height * (scale || 1)}px`;
+  }, [currentPage, rotation, scale]);
+
+  // Render nítido de la página actual
   const renderPage = useCallback(async () => {
     const pdf = pdfDocRef.current;
     const canvas = canvasRef.current;
@@ -170,13 +248,20 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
 
       const effectiveScale = scale || 1.0;
       const viewport = page.getViewport({ scale: effectiveScale, rotation });
-      const dpr = window.devicePixelRatio || 1;
 
-      canvas.width = viewport.width * dpr;
-      canvas.height = viewport.height * dpr;
+      // TOPE DE PÍXELES: sin esto, un plano grande a 8× con dpr 2 pedía un
+      // canvas de cientos de megapíxeles → memoria disparada y render lentísimo.
+      let dpr = window.devicePixelRatio || 1;
+      const wanted = viewport.width * viewport.height * dpr * dpr;
+      if (wanted > MAX_CANVAS_PIXELS) dpr = Math.max(1, dpr * Math.sqrt(MAX_CANVAS_PIXELS / wanted));
+
+      canvas.width = Math.round(viewport.width * dpr);
+      canvas.height = Math.round(viewport.height * dpr);
       canvas.style.width = `${viewport.width}px`;
       canvas.style.height = `${viewport.height}px`;
 
+      // OJO: NO usar { alpha:false } — deja el canvas NEGRO opaco hasta que
+      // termina de dibujar, tapando el fondo blanco (se veía una hoja negra).
       const ctx = canvas.getContext('2d');
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
@@ -192,12 +277,25 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     }
   }, [currentPage, scale, rotation]);
 
-  // Ejecutar render principal
+  // Render principal. El debounce se aplica SOLO al zoom (para no rasterizar 15
+  // veces en un gesto de rueda). Abrir el documento o cambiar de página rinde
+  // AL INSTANTE — meter el retardo ahí era lo que se sentía lento.
+  const lastSigRef = useRef('');
   useEffect(() => {
-    if (!loading && pdfDocRef.current) {
-      renderPage();
+    if (loading || !pdfDocRef.current) return undefined;
+    const sig = `${currentPage}:${rotation}`;
+    const soloCambioElZoom = sig === lastSigRef.current;
+    lastSigRef.current = sig;
+
+    applyPreviewSize();
+    clearTimeout(renderDebounceRef.current);
+    if (soloCambioElZoom) {
+      renderDebounceRef.current = setTimeout(renderPage, 110);
+    } else {
+      renderPage(); // primera carga / cambio de página → sin esperar
     }
-  }, [loading, renderPage]);
+    return () => clearTimeout(renderDebounceRef.current);
+  }, [loading, currentPage, rotation, applyPreviewSize, renderPage]);
 
   // Auto-scroll sidebar thumbnail into view when page changes
   useEffect(() => {
@@ -213,6 +311,69 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     const clamped = Math.max(1, Math.min(p, numPages));
     setCurrentPage(clamped);
   };
+
+  // ── BÚSQUEDA DENTRO DEL DOCUMENTO ─────────────────────────────────────────
+  // Lee el texto que el PDF YA trae, al vuelo y en memoria. No extrae, no sube
+  // ni guarda nada: al cerrar el documento se descarta.
+  const getPageText = useCallback(async (pageNum) => {
+    const cached = textCacheRef.current.get(pageNum);
+    if (cached) return cached;
+    const page = await pdfDocRef.current.getPage(pageNum);
+    const tc = await page.getTextContent();
+    textCacheRef.current.set(pageNum, tc.items);
+    return tc.items;
+  }, []);
+
+  const runSearch = useCallback(async (q) => {
+    const needle = normalizeText(q);
+    if (needle.length < 2 || !pdfDocRef.current) { setMatches([]); setMatchIdx(0); return; }
+    setSearching(true);
+    const found = [];
+    for (let p = 1; p <= numPages; p++) {
+      try {
+        const items = await getPageText(p);
+        items.forEach((it, i) => {
+          if (it.str && normalizeText(it.str).includes(needle)) found.push({ page: p, itemIndex: i });
+        });
+      } catch { /* página ilegible: seguir con las demás */ }
+    }
+    setMatches(found);
+    setMatchIdx(0);
+    setSearching(false);
+    if (found.length) setCurrentPage(found[0].page);
+  }, [numPages, getPageText]);
+
+  const gotoMatch = useCallback((delta) => {
+    if (!matches.length) return;
+    const next = (matchIdx + delta + matches.length) % matches.length;
+    setMatchIdx(next);
+    setCurrentPage(matches[next].page);
+  }, [matches, matchIdx]);
+
+  // Rectángulos a resaltar en la página visible (se recalculan con el zoom).
+  const highlights = React.useMemo(() => {
+    if (!vpInfo || !matches.length) return [];
+    const items = textCacheRef.current.get(currentPage);
+    if (!items) return [];
+    return matches
+      .map((m, i) => ({ ...m, globalIdx: i }))
+      .filter(m => m.page === currentPage)
+      .map(m => {
+        const it = items[m.itemIndex];
+        if (!it) return null;
+        const tx = pdfjsLib.Util.transform(vpInfo.vp.transform, it.transform);
+        const h = Math.hypot(tx[2], tx[3]) || 10;
+        return {
+          key: m.globalIdx,
+          active: m.globalIdx === matchIdx,
+          left: tx[4],
+          top: tx[5] - h,
+          width: Math.max(4, (it.width || 0) * (vpInfo.vp.scale || 1)),
+          height: h,
+        };
+      })
+      .filter(Boolean);
+  }, [matches, matchIdx, currentPage, vpInfo]);
 
   const zoomIn = () => setScale(prev => Math.min((prev || 1.0) * 1.2, 8.0));
   const zoomOut = () => setScale(prev => Math.max((prev || 1.0) / 1.2, 0.2));
@@ -261,7 +422,20 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       document.exitFullscreen();
     }
   };
-  const printDocument = () => window.open(url, '_blank').print();
+  // Imprimir vía iframe oculto: `window.open(url).print()` disparaba print()
+  // ANTES de que el PDF terminara de cargar (hoja en blanco o nada). Si el
+  // origen bloquea el acceso al iframe (URL firmada de GCS), abre pestaña.
+  const printDocument = () => {
+    const iframe = document.createElement('iframe');
+    Object.assign(iframe.style, { position: 'fixed', right: 0, bottom: 0, width: 0, height: 0, border: 0 });
+    iframe.src = url;
+    iframe.onload = () => {
+      try { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
+      catch { window.open(url, '_blank', 'noopener'); }
+    };
+    document.body.appendChild(iframe);
+    setTimeout(() => { try { document.body.removeChild(iframe); } catch { /* ya removido */ } }, 60000);
+  };
 
   // Fullscreen Listener
   useEffect(() => {
@@ -273,7 +447,15 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Ctrl+F / Cmd+F abre la búsqueda del documento (no la del navegador).
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setSearchOpen(true);
+        setTimeout(() => document.getElementById('pdf-search-input')?.focus(), 0);
+        return;
+      }
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target?.tagName)) return;
+      if (e.key === 'Escape' && searchOpen) { setSearchOpen(false); return; }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         e.preventDefault(); goToPage(currentPage - 1);
       } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
@@ -286,7 +468,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentPage, numPages]);
+  }, [currentPage, numPages, searchOpen]);
 
   // Scroll handling: Zoom en Canvas / Cambiar Página en Fondo Gris
   useEffect(() => {
@@ -353,7 +535,14 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     return (
       <div style={styles.center}>
         <div style={styles.spinner} />
-        <div style={{ fontSize: 14, color: '#666', marginTop: 16 }}>Cargando documento PDF...</div>
+        <div style={{ fontSize: 14, color: '#666', marginTop: 16 }}>
+          {progress > 0 && progress < 100 ? `Cargando documento… ${progress}%` : 'Cargando documento PDF…'}
+        </div>
+        {progress > 0 && progress < 100 && (
+          <div style={{ width: 200, height: 4, background: '#e0e0e0', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+            <div style={{ width: `${progress}%`, height: '100%', background: '#5f7fa3', transition: 'width .2s' }} />
+          </div>
+        )}
       </div>
     );
   }
@@ -377,11 +566,40 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       {/* ▀▀▀ ACC Dark Toolbar ▀▀▀ */}
       <div style={styles.toolbar}>
         
-        {/* Izquierda: Menú */}
+        {/* Izquierda: Menú + Búsqueda */}
         <div style={styles.toolbarGroupLeft}>
           <button onClick={() => setShowSidebar(!showSidebar)} style={{...styles.toolBtnDark, background: showSidebar ? '#444' : 'transparent'}} title="Alternar panel de miniaturas">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
           </button>
+
+          <button onClick={() => { setSearchOpen(o => !o); setTimeout(() => document.getElementById('pdf-search-input')?.focus(), 0); }}
+            style={{ ...styles.toolBtnDark, background: searchOpen ? '#444' : 'transparent' }} title="Buscar en el documento (Ctrl+F)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </button>
+
+          {searchOpen && (
+            <div style={styles.searchBox}>
+              <input
+                id="pdf-search-input"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { e.preventDefault(); matches.length ? gotoMatch(e.shiftKey ? -1 : 1) : runSearch(searchQuery); }
+                  if (e.key === 'Escape') setSearchOpen(false);
+                }}
+                placeholder="Buscar en el documento…"
+                style={styles.searchInput}
+              />
+              <span style={{ fontSize: 11, color: '#999', minWidth: 68, textAlign: 'center' }}>
+                {searching ? 'Buscando…'
+                  : matches.length ? `${matchIdx + 1} de ${matches.length}`
+                  : searchQuery.trim().length >= 2 ? 'Sin resultados' : ''}
+              </span>
+              <button onClick={() => runSearch(searchQuery)} style={styles.searchBtn} title="Buscar">Ir</button>
+              <button onClick={() => gotoMatch(-1)} disabled={!matches.length} style={styles.searchBtn} title="Anterior (Shift+Enter)">‹</button>
+              <button onClick={() => gotoMatch(1)} disabled={!matches.length} style={styles.searchBtn} title="Siguiente (Enter)">›</button>
+            </div>
+          )}
         </div>
 
         {/* Centro: Herramientas Principales */}
@@ -523,6 +741,17 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
           <div style={{ padding: 48, boxSizing: 'border-box', minWidth: '100%', width: 'fit-content', margin: '0 auto', display: 'flex', justifyContent: 'center' }}>
             <div ref={wrapRef} style={{ position: 'relative' }}>
               <canvas ref={canvasRef} style={styles.canvas} />
+
+              {/* Resaltado de coincidencias — no intercepta clics (las herramientas siguen funcionando) */}
+              {highlights.map(h => (
+                <div key={h.key} style={{
+                  position: 'absolute', pointerEvents: 'none',
+                  left: h.left, top: h.top, width: h.width, height: h.height,
+                  background: h.active ? 'rgba(255,145,0,0.55)' : 'rgba(255,235,59,0.38)',
+                  outline: h.active ? '1px solid #ff6d00' : 'none',
+                  borderRadius: 2,
+                }} />
+              ))}
               {nodeId && vpInfo && (
                 <PdfToolsOverlay
                   vpInfo={vpInfo} page={currentPage} nodeId={nodeId}
@@ -551,6 +780,10 @@ const styles = {
   
   toolBtnDark: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, border: 'none', background: 'transparent', borderRadius: 4, cursor: 'pointer', color: '#ddd', transition: 'background 0.2s, color 0.2s' },
   separatorDark: { width: 1, height: 24, background: '#444', margin: '0 8px' },
+
+  searchBox: { display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6, background: '#111', border: '1px solid #444', borderRadius: 4, padding: '2px 4px' },
+  searchInput: { width: 190, background: 'transparent', border: 'none', outline: 'none', color: '#fff', fontSize: 12, padding: '5px 6px', fontFamily: 'inherit' },
+  searchBtn: { background: 'transparent', border: 'none', color: '#ddd', cursor: 'pointer', fontSize: 14, padding: '2px 7px', borderRadius: 3 },
   
   pageInfoDark: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#bbb' },
   pageInputDark: { width: 40, textAlign: 'center', border: '1px solid #444', borderRadius: 4, padding: '4px 4px', fontSize: 13, outline: 'none', background: '#111', color: '#fff', fontFamily: 'inherit' },

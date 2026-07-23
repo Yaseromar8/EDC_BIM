@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/apiFetch';
 import React, { useState, useEffect, useRef } from 'react';
 
 export default function SidebarTree({ currentPath, onNavigate, project, isAdmin, API, refreshTrigger }) {
@@ -10,7 +11,7 @@ export default function SidebarTree({ currentPath, onNavigate, project, isAdmin,
     const listRoot = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${API}/api/docs/list?path=&model_urn=${encodeURIComponent(project?.model_urn || project?.id || 'global')}`);
+        const res = await apiFetch(`${API}/api/docs/list?path=&model_urn=${encodeURIComponent(project?.model_urn || project?.id || 'global')}`);
         if (res.ok) {
           const response = await res.json();
           const data = response.data || {};
@@ -80,7 +81,7 @@ function FolderNode({ folder, level, onNavigate, currentPath, project, isAdmin, 
   const loadChildren = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/docs/list?path=${encodeURIComponent(folder.fullName)}&model_urn=${encodeURIComponent(project?.model_urn || project?.id || 'global')}`);
+      const res = await apiFetch(`${API}/api/docs/list?path=${encodeURIComponent(folder.fullName)}&model_urn=${encodeURIComponent(project?.model_urn || project?.id || 'global')}`);
       if (res.ok) {
         const response = await res.json();
         const data = response.data || {};

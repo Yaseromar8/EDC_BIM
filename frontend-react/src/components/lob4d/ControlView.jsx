@@ -103,7 +103,7 @@ export default function ControlView({ lobData, activeFrente }) {
                 <div>
                     <div className="lob4d-view-title">Control de Obra — programado vs real</div>
                     <div className="lob4d-view-copy">
-                        Programación P6 ⨯ valorizaciones, ponderado por costo. {activeFrente || 'Todos los frentes'} ·{' '}
+                        Programación P6 ⨯ valorizaciones, ponderado por costo. {(Array.isArray(activeFrente) ? activeFrente.join(' + ') : activeFrente) || 'Todos los frentes'} ·{' '}
                         {control.partidasConFechas}/{control.partidasTotal} partidas con fechas
                         {control.sinVinculo > 0 ? ` · ${control.sinVinculo} sin vínculo P6` : ''}
                     </div>

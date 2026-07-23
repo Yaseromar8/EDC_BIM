@@ -226,6 +226,22 @@ def _request_project_id():
     return resolve_project_id(frente) if frente else None
 
 
+# Endpoints que operan sobre datos de UNA obra concreta (por eso deben poder
+# resolver el proyecto). Si uno de estos no resuelve el proyecto, es un HUECO
+# de autorizacion que hay que cerrar antes de activar ENFORCE. Los que NO estan
+# aqui (login, token, lista de usuarios, salud) son globales por diseno.
+_PROJECT_SCOPED_PREFIXES = (
+    '/api/docs', '/api/inventory', '/api/civil', '/api/lob4d', '/api/4d-lob',
+    '/api/rfis', '/api/redlines', '/api/partidas', '/api/presupuesto',
+    '/api/pins', '/api/project-pins', '/api/views', '/api/tracking',
+    '/api/attrs', '/api/transmittals', '/api/reviews', '/api/sets',
+)
+
+
+def _is_project_scoped(path):
+    return any(path.startswith(p) for p in _PROJECT_SCOPED_PREFIXES)
+
+
 def init_auth_middleware(app):
     """Register the authentication middleware on a Flask app."""
     
@@ -281,14 +297,24 @@ def init_auth_middleware(app):
         # Store authenticated user in Flask's g context
         g.current_user = user
 
-        # ── Autorizacion por proyecto (log-only por defecto) ──
+        # ── Autorizacion por proyecto ──
+        # Rollout seguro: en log-only NO bloquea, pero registra EXACTAMENTE lo
+        # que pasaria bajo ENFORCE (a quien y donde). Asi, antes de activar
+        # ENFORCE_PROJECT_AUTHZ=true en produccion, se leen los logs para no
+        # trabar a un usuario real por sorpresa.
         try:
             if user.get('role') != 'admin':
                 pid = _request_project_id()
                 if pid and not _user_in_project(user.get('id'), pid):
                     if ENFORCE_PROJECT_AUTHZ:
+                        logger.warning(f"[authz BLOQUEADO] user={user.get('id')} obra={pid} {request.method} {path}")
                         return jsonify({'error': 'Sin acceso a este proyecto', 'code': 'PROJECT_FORBIDDEN'}), 403
-                    logger.info(f"[log-only] user={user.get('id')} SIN acceso a obra={pid} ({request.method} {path})")
+                    logger.info(f"[authz log-only] BLOQUEARIA: user={user.get('id')} obra={pid} {request.method} {path}")
+                elif not pid and _is_project_scoped(path):
+                    # HUECO: endpoint que SI maneja datos de una obra pero no se
+                    # pudo deducir cual → bajo ENFORCE hoy se COLARIA. Se avisa
+                    # para cerrarlo (agregar el identificador de obra a la ruta).
+                    logger.warning(f"[authz HUECO] proyecto indeterminable en endpoint con datos de obra: {request.method} {path} (user={user.get('id')})")
         except Exception as e:
             logger.error(f"authz error (fail-open): {e}")  # nunca bloquear por bug del authz
 

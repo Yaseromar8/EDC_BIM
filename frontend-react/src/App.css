@@ -1700,11 +1700,10 @@ div[class*="bim360-visual-style-group"] * {
   /* Prevent fading animations */
 }
 
-/* Hide ViewCube on desktop/laptops as requested */
-@media (min-width: 1024px) {
-  .adsk-viewing-viewer .viewcube {
-    display: none !important;
-  }
+/* ViewCube VISIBLE (como Tandem). Antes se ocultaba en desktop con
+   display:none, por eso no aparecía el cubo aunque la extensión cargara. */
+.adsk-viewing-viewer .viewcube {
+  display: block !important;
 }
 
 .group-status-answered {

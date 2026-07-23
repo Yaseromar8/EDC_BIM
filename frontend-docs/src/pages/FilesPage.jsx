@@ -7,7 +7,7 @@
  * - Componentes de UI (Fase 2)
  * - Layout JSX del explorador
  */
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 
 // ── Fase 1: Hooks ──
@@ -17,33 +17,48 @@ import { useColumnResize, useSidebarResize, useVersionPanelResize } from '../hoo
 import { API, getInitials, getAuthHeaders, formatSize, formatDate } from '../utils/helpers';
 import { renderFileIconSop } from '../utils/fileIcons';
 import { apiFetch } from '../utils/apiFetch';
+import { confirmAction } from '../utils/confirm';
 
-// ── Fase 2: Modales y Paneles ──
+// ── Ligeros (siempre presentes en el flujo de Archivos) → carga inmediata ──
 import DeleteModal from '../components/modals/DeleteModal';
 import NewFolderModal from '../components/modals/NewFolderModal';
 import ShareModal from '../components/modals/ShareModal';
 import MoveModal from '../components/modals/MoveModal';
 import UploadModal from '../components/modals/UploadModal';
-import RfiModule from '../components/RfiModule';
-import RedLineModule from '../components/RedLineModule';
 import VersionPanel from '../components/panels/VersionPanel';
 import DeletedTable from '../components/panels/DeletedTable';
-import GatewayPanel from '../components/panels/GatewayPanel';
-import QuarantineTable from '../components/panels/QuarantineTable';
 import ContextMenu from '../components/ContextMenu';
-import PartidasModule from '../components/PartidasModule';
-import { ReviewModal, ReviewsView } from '../components/ReviewsModule';
-import { TransmittalModal, TransmittalsView } from '../components/TransmittalsModule';
-import { AttributesAdmin, AttributesPanel } from '../components/AttributesModule';
-import { AddToSetModal, SetsView } from '../components/SetsModule';
-import SharesManager from '../components/SharesManager';
-import MultimediaModule from '../components/MultimediaModule';
-
-// ── Fase 3: Componentes de Layout ──
 import FolderNode from '../components/FolderNode';
 import MatrixTable from '../MatrixTable';
-import DocumentViewer from '../components/DocumentViewer';
 import FolderPermissionsPanel from '../components/FolderPermissionsPanel';
+// ESTÁTICO A PROPÓSITO: abrir un PDF es la acción más frecuente del día. Si se
+// carga diferido, al hacer clic hay que bajar PRIMERO los chunks del visor y
+// recién ahí el archivo → se siente lento. Va precargado con la app.
+import DocumentViewer from '../components/DocumentViewer';
+
+// ── Pesados / de uso puntual → CARGA DIFERIDA (code-split) ────────────────────
+// Cada uno se descarga solo cuando el usuario entra a ese módulo, en vez de
+// inflar el bundle inicial. Antes: 1 chunk de ~1.6 MB con TODO.
+const RedLineModule = lazy(() => import('../components/RedLineModule'));
+const MultimediaModule = lazy(() => import('../components/MultimediaModule'));
+const GatewayPanel = lazy(() => import('../components/panels/GatewayPanel'));
+const QuarantineTable = lazy(() => import('../components/panels/QuarantineTable'));
+const SharesManager = lazy(() => import('../components/SharesManager'));
+const ReviewsView = lazy(() => import('../components/ReviewsModule').then(m => ({ default: m.ReviewsView })));
+const ReviewModal = lazy(() => import('../components/ReviewsModule').then(m => ({ default: m.ReviewModal })));
+const TransmittalsView = lazy(() => import('../components/TransmittalsModule').then(m => ({ default: m.TransmittalsView })));
+const TransmittalModal = lazy(() => import('../components/TransmittalsModule').then(m => ({ default: m.TransmittalModal })));
+const SetsView = lazy(() => import('../components/SetsModule').then(m => ({ default: m.SetsView })));
+const AddToSetModal = lazy(() => import('../components/SetsModule').then(m => ({ default: m.AddToSetModal })));
+const AttributesAdmin = lazy(() => import('../components/AttributesModule').then(m => ({ default: m.AttributesAdmin })));
+const AttributesPanel = lazy(() => import('../components/AttributesModule').then(m => ({ default: m.AttributesPanel })));
+
+// Fallback uniforme mientras carga un chunk diferido.
+const ChunkFallback = () => (
+  <div style={{ padding: 40, textAlign: 'center', flex: 1 }}>
+    <div className="adsk-spinner" style={{ margin: '0 auto' }} />
+  </div>
+);
 
 export default function FilesPage({ project, user, onBack, onLogout }) {
   // ═══════════════════════════════════════
@@ -167,10 +182,9 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
             <ul style={{ listStyle: 'none', padding: '8px 0', margin: 0 }}>
               {[
                 { label: 'Archivos', mode: 'files', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5,5l2,2H20v12h-16V5H12.5 M13.17,3h-10.34A1.83,1.83,0,0,0,1,4.83v14.34A1.83,1.83,0,0,0,2.83,21h18.34A1.83,1.83,0,0,0,23,19.17V6.83A1.83,1.83,0,0,0,21.17,5H14.83Z"/></svg>, onClick: () => { fe.setSidebarView('files'); fe.switchMode(false); } },
-                { label: 'RFI', mode: 'rfis', icon: <svg width="22" height="22" viewBox="0 0 24 24"><text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontWeight="bold" fontSize="13" fontFamily="sans-serif">RFI</text></svg>, onClick: () => fe.setSidebarView('rfis') },
                 { label: 'Red Line', mode: 'redlines', icon: <svg width="22" height="22" viewBox="0 0 24 24"><text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontWeight="bold" fontSize="14" fontFamily="sans-serif">RL</text></svg>, onClick: () => fe.setSidebarView('redlines') },
                 { label: 'Informes', mode: 'reports', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg>, onClick: () => fe.setSidebarView('reports') },
-                { label: 'Miembros', mode: 'members', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>, onClick: () => { fe.setSidebarView('members'); fe.setMembersLoading(true); apiFetch(`${API}/api/users`).then(r => r.json()).then(d => fe.setMembersList(d.users || d || [])).catch(() => fe.setMembersList([])).finally(() => fe.setMembersLoading(false)); } },
+                { label: 'Miembros', mode: 'members', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>, onClick: () => { fe.setSidebarView('members'); fe.setMembersLoading(true); apiFetch(`${API}/api/users`).then(r => r.json()).then(d => fe.setMembersList(d.users || d || [])).catch(() => { fe.setMembersList([]); toast.error('No se pudieron cargar los miembros.'); }).finally(() => fe.setMembersLoading(false)); } },
                 { label: 'Configuración', mode: 'settings', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>, onClick: () => fe.setSidebarView('settings') },
                 { label: 'Revisiones', mode: 'reviews', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>, onClick: () => fe.setSidebarView('reviews') },
                 { label: 'Transmittals', mode: 'transmittals', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>, onClick: () => fe.setSidebarView('transmittals') },
@@ -191,13 +205,6 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                   </button>
                 </li>
               ))}
-              <li
-                onClick={() => fe.setSidebarView('partidas')}
-                style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 16px', borderRadius: '0 20px 20px 0', cursor: 'pointer', marginBottom: 4, background: fe.sidebarView === 'partidas' ? '#eef2f7' : 'transparent', color: fe.sidebarView === 'partidas' ? '#5f7fa3' : '#5f6368', fontWeight: fe.sidebarView === 'partidas' ? 600 : 500, transition: 'all 0.2s ease', position: 'relative' }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
-                <span style={{ fontSize: 13, whiteSpace: 'nowrap' }}>Metrados</span>
-              </li>
               <li style={{ marginBottom: 2 }}>
                 <button onClick={() => fe.switchMode(true)}
                   style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '8px 12px',
@@ -219,6 +226,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
 
         {/* CONTENT AREA */}
         <div className="acc-docs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <Suspense fallback={<ChunkFallback />}>
 
         {/* QUARANTINE VIEW */}
         {fe.sidebarView === 'quarantine' && !fe.isTrashMode && (
@@ -245,19 +253,9 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
           <SetsView projectPrefix={projectPrefix} isAdmin={isAdmin} />
         )}
 
-        {/* RFIs VIEW */}
-        {fe.sidebarView === 'rfis' && (
-          <RfiModule project={project} API={API} user={user} isAdmin={isAdmin} />
-        )}
-
         {/* RED LINES VIEW */}
         {fe.sidebarView === 'redlines' && (
           <RedLineModule project={project} API={API} user={user} isAdmin={isAdmin} />
-        )}
-
-        {/* PARTIDAS VIEW */}
-        {fe.sidebarView === 'partidas' && (
-          <PartidasModule project={project} API={API} user={user} isAdmin={isAdmin} />
         )}
 
         {/* MULTIMEDIA VIEW */}
@@ -359,7 +357,13 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                  {isAdmin && fe.selectedDeletedIds.length > 0 && (
                    <button onClick={async () => {
                        const count = fe.selectedDeletedIds.length;
-                       if (!window.confirm('Eliminar PERMANENTEMENTE ' + count + ' elemento(s)?')) return;
+                       const ok = await confirmAction({
+                         title: 'Eliminar permanentemente',
+                         message: `Se eliminarán ${count} elemento(s) de forma irreversible. Esta acción no se puede deshacer.`,
+                         confirmText: 'Eliminar',
+                         danger: true,
+                       });
+                       if (!ok) return;
                        let deleted = 0;
                        for (const id of fe.selectedDeletedIds) {
                          try {
@@ -406,8 +410,15 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
             {/* DATA PANEL */}
             <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <div className="acc-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#fff', borderBottom: '1px solid #eee', flexShrink: 0 }}>
-                {isAdmin && (
+                {isAdmin && !fe.isTrashMode && (
                   <button onClick={() => fe.setShowUploadModal(true)} style={{ padding: '6px 16px', background: '#5f7fa3', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Cargar archivos</button>
+                )}
+                {isAdmin && !fe.isTrashMode && (
+                  <button onClick={() => { fe.setNewFolderParentPath(''); fe.setShowNewFolder(true); }} title="Crear carpeta en la ubicación actual"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#fff', color: '#5f7fa3', border: '1px solid #5f7fa3', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+                    Nueva carpeta
+                  </button>
                 )}
 
                 {!fe.isTrashMode && fe.selected.size > 0 && (() => {
@@ -573,8 +584,36 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                     <MatrixTable folders={fe.filteredFolders} files={fe.filteredFiles} selected={fe.selected}
                       columnWidths={columnWidths} totalTableWidth={totalTableWidth} toggle={fe.toggle} navigate={fe.navigate}
                       setActiveFile={fe.setActiveFile}
-                      onUpdateDescription={async (item, newDesc) => { if (item.type === 'folder') fe.setFolders(prev => prev.map(f => f.id === item.id ? { ...f, description: newDesc } : f)); else fe.setFiles(prev => prev.map(f => f.id === item.id ? { ...f, description: newDesc } : f)); try { const res = await apiFetch(`${API}/api/docs/description`, { method: 'POST', body: JSON.stringify({ node_id: item.id, description: newDesc, model_urn: projectPrefix }) }); if (res.ok) fe.triggerRefresh(fe.currentPath); else fe.triggerRefresh(fe.currentPath); } catch (e) { fe.triggerRefresh(fe.currentPath); } }}
-                      onRename={async (item, newName) => { fe.setProcessingIds(prev => ({ ...prev, [item.id]: true })); if (item.type === 'folder') fe.setFolders(prev => prev.map(f => f.id === item.id ? { ...f, name: newName } : f)); else fe.setFiles(prev => prev.map(f => f.id === item.id ? { ...f, name: newName } : f)); try { const res = await apiFetch(`${API}/api/docs/rename`, { method: 'POST', body: JSON.stringify({ node_id: item.id, new_name: newName, model_urn: projectPrefix }) }); if (res.ok) { if (fe.cacheMethods && item.type === 'folder') fe.cacheMethods.invalidateNode(fe.currentNodeId); fe.setRefreshSignal(s => s + 1); } else fe.triggerRefresh(fe.currentPath); } catch (e) { fe.triggerRefresh(fe.currentPath); } finally { fe.setProcessingIds(prev => { const n = {...prev}; delete n[item.id]; return n; }); } }}
+                      onUpdateDescription={async (item, newDesc) => { if (item.type === 'folder') fe.setFolders(prev => prev.map(f => f.id === item.id ? { ...f, description: newDesc } : f)); else fe.setFiles(prev => prev.map(f => f.id === item.id ? { ...f, description: newDesc } : f)); try { const res = await apiFetch(`${API}/api/docs/description`, { method: 'POST', body: JSON.stringify({ node_id: item.id, description: newDesc, model_urn: projectPrefix }) }); if (res.ok) fe.triggerRefresh(fe.currentPath); else { toast.error('No se pudo guardar la descripción.'); fe.triggerRefresh(fe.currentPath); } } catch (e) { toast.error('Error de conexión al guardar la descripción.'); fe.triggerRefresh(fe.currentPath); } }}
+                      onRename={async (item, newName) => {
+                        // COHERENCIA TABLA ↔ ÁRBOL: al renombrar una carpeta desde la
+                        // tabla hay que actualizar TAMBIÉN el caché del árbol (mismo
+                        // camino optimista que usa FolderNode), si no el panel
+                        // izquierdo seguía mostrando el nombre viejo hasta refrescar.
+                        const isFolder = item.type === 'folder';
+                        const oldName = item.name;
+                        fe.setProcessingIds(prev => ({ ...prev, [item.id]: true }));
+                        if (isFolder) fe.setFolders(prev => prev.map(f => f.id === item.id ? { ...f, name: newName } : f));
+                        else fe.setFiles(prev => prev.map(f => f.id === item.id ? { ...f, name: newName } : f));
+                        if (isFolder && fe.cacheMethods) fe.cacheMethods.optimisticRename(fe.currentNodeId, item.id, newName);
+                        try {
+                          const res = await apiFetch(`${API}/api/docs/rename`, { method: 'POST', body: JSON.stringify({ node_id: item.id, new_name: newName, model_urn: projectPrefix }) });
+                          if (res.ok) {
+                            if (isFolder && fe.cacheMethods) fe.cacheMethods.commitRename(fe.currentNodeId, item.id);
+                            fe.setRefreshSignal(s => s + 1);
+                          } else {
+                            if (isFolder && fe.cacheMethods) fe.cacheMethods.rollbackRename(fe.currentNodeId, item.id, oldName);
+                            toast.error('No se pudo renombrar (nombre inválido o duplicado).');
+                            fe.triggerRefresh(fe.currentPath);
+                          }
+                        } catch (e) {
+                          if (isFolder && fe.cacheMethods) fe.cacheMethods.rollbackRename(fe.currentNodeId, item.id, oldName);
+                          toast.error('No se pudo renombrar: error de conexión.');
+                          fe.triggerRefresh(fe.currentPath);
+                        } finally {
+                          fe.setProcessingIds(prev => { const n = {...prev}; delete n[item.id]; return n; });
+                        }
+                      }}
                       formatSize={formatSize} formatDate={formatDate} getInitials={getInitials} user={user} isAdmin={isAdmin}
                       isTrashMode={fe.isTrashMode} onShowVersions={vh.onShowVersions}
                       onRowMenu={(item, e) => { fe.setRightClickedId(item.id); fe.setActiveRowMenu({ item, x: e.clientX, y: e.clientY, source: 'table' }); }}
@@ -593,12 +632,16 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
             </section>
           </div>
         </>)}
+        </Suspense>
         </div>
       </main>
 
       {/* ═══════════════════════════════════════ */}
       {/* MODALS & OVERLAYS (Fase 2 Components)  */}
       {/* ═══════════════════════════════════════ */}
+      {/* fallback null: los overlays aparecen al terminar de cargar, sin
+          parpadear un spinner a pantalla completa sobre el explorador. */}
+      <Suspense fallback={null}>
 
       <VersionPanel isOpen={vh.tableShowVersions} versionTarget={vh.versionTarget} versionHistory={vh.versionHistory}
         loadingVersions={vh.loadingVersions} versionPanelWidth={versionPanelWidth} startVersionResize={startVersionResize}
@@ -671,20 +714,27 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
         shareLinkCopied={fe.shareLinkCopied} setShareLinkCopied={fe.setShareLinkCopied}
         onClose={() => fe.setShowShareModal(false)} />
 
-      <ReviewModal isOpen={reviewModalItems !== null} items={reviewModalItems || []}
-        projectPrefix={projectPrefix} user={user}
-        onClose={() => setReviewModalItems(null)}
-        onCreated={() => { fe.setSelected(new Set()); fe.setSidebarView('reviews'); }} />
+      {/* Render CONDICIONAL: así el chunk del modal se descarga recién al abrirlo. */}
+      {reviewModalItems !== null && (
+        <ReviewModal isOpen items={reviewModalItems}
+          projectPrefix={projectPrefix} user={user}
+          onClose={() => setReviewModalItems(null)}
+          onCreated={() => { fe.setSelected(new Set()); fe.setSidebarView('reviews'); }} />
+      )}
 
-      <TransmittalModal isOpen={transmittalItems !== null} items={transmittalItems || []}
-        projectPrefix={projectPrefix} user={user}
-        onClose={() => setTransmittalItems(null)}
-        onCreated={() => { fe.setSelected(new Set()); fe.setSidebarView('transmittals'); }} />
+      {transmittalItems !== null && (
+        <TransmittalModal isOpen items={transmittalItems}
+          projectPrefix={projectPrefix} user={user}
+          onClose={() => setTransmittalItems(null)}
+          onCreated={() => { fe.setSelected(new Set()); fe.setSidebarView('transmittals'); }} />
+      )}
 
-      <AddToSetModal isOpen={setModalItems !== null} items={setModalItems || []}
-        projectPrefix={projectPrefix}
-        onClose={() => setSetModalItems(null)}
-        onAdded={() => fe.setSelected(new Set())} />
+      {setModalItems !== null && (
+        <AddToSetModal isOpen items={setModalItems}
+          projectPrefix={projectPrefix}
+          onClose={() => setSetModalItems(null)}
+          onAdded={() => fe.setSelected(new Set())} />
+      )}
 
       {/* GATEWAY 3D OVERLAY (FRENTES) */}
       {showGateway && (
@@ -693,6 +743,8 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
           onClose={() => setShowGateway(false)}
         />
       )}
+
+      </Suspense>
     </div>
   );
 }
@@ -718,7 +770,7 @@ function ActivityView({ projectPrefix }) {
     apiFetch(`${API}/api/activity?model_urn=${encodeURIComponent(projectPrefix)}&limit=150`)
       .then(r => r.json())
       .then(d => setItems(d.success ? d.data : []))
-      .catch(() => setItems([]));
+      .catch(() => { setItems([]); toast.error('No se pudo cargar la actividad del proyecto.'); });
   }, [projectPrefix]);
 
   return (

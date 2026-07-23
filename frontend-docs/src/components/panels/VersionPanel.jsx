@@ -47,7 +47,7 @@ export default function VersionPanel({
           </div>
           
           <div className="panel-version-table-container" style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', background: '#fff' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
               <thead>
                 <tr style={{ background: '#f5f5f5', borderBottom: '1px solid #dcdcdc', height: 36 }}>
                   <th style={{ width: 40, padding: '0 12px', position: 'sticky', left: 0, top: 0, background: '#f5f5f5', zIndex: 20, borderBottom: '1px solid #dcdcdc', whiteSpace: 'nowrap' }}>
@@ -62,19 +62,15 @@ export default function VersionPanel({
                   </th>
                   <th style={{ width: 80, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', position: 'sticky', left: 40, top: 0, background: '#f5f5f5', zIndex: 20, borderBottom: '1px solid #dcdcdc', whiteSpace: 'nowrap' }}>Versión</th>
                   <th style={{ minWidth: 300, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Nombre</th>
-                  <th style={{ width: 100, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Indicadores</th>
-                  <th style={{ width: 100, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Marcas de rev.</th>
                   <th style={{ width: 100, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Tamaño</th>
-                  <th style={{ width: 150, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Última actualización</th>
-                  <th style={{ width: 220, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Actualizado por</th>
+                  <th style={{ width: 150, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Fecha de versión</th>
                   <th style={{ width: 220, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Versión añadida por</th>
-                  <th style={{ width: 150, padding: '0 12px', fontSize: 13, color: '#666', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>Estado de revisión</th>
                   <th style={{ width: 40, padding: '0 12px' }}></th>
                 </tr>
               </thead>
               <tbody>
                 {loadingVersions ? (
-                  <tr><td colSpan="11" style={{ textAlign: 'center', padding: 40 }}><div className="adsk-spinner" /></td></tr>
+                  <tr><td colSpan="7" style={{ textAlign: 'center', padding: 40 }}><div className="adsk-spinner" /></td></tr>
                 ) : versionHistory.map((v, i) => {
                   const isSelected = selectedVersions.has(v.id);
                   return (
@@ -98,31 +94,22 @@ export default function VersionPanel({
                           {renderFileIconSop(versionTarget.name, 22)}
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <span style={{ fontSize: 13, fontWeight: 500, color: '#3c3c3c' }}>{versionTarget.name}</span>
-                            <span style={{ fontSize: 11, color: '#999' }}>Cargado por <span style={{ textTransform: 'uppercase' }}>{v.updated_by || 'ADMIN'}</span></span>
+                            {v.updated_by && <span style={{ fontSize: 11, color: '#999' }}>Cargado por <span style={{ textTransform: 'uppercase' }}>{v.updated_by}</span></span>}
                           </div>
                         </div>
                       </td>
-                      <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>--</td>
-                      <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>--</td>
                       <td style={{ padding: '16px 12px', fontSize: 13, color: '#3c3c3c', whiteSpace: 'nowrap' }}>{formatSize(v.size || 0)}</td>
                       <td style={{ padding: '16px 12px', fontSize: 13, color: '#3c3c3c', whiteSpace: 'nowrap' }}>{formatDate(v.updated)}</td>
                       <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                           <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 10, flexShrink: 0 }}>{getInitials(v.updated_by || 'ADMIN')}</div>
-                           <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                             <span style={{ fontSize: 13, color: '#3c3c3c', textOverflow: 'ellipsis', overflow: 'hidden' }}>{v.updated_by || 'ADMIN'}</span>
-                           </div>
-                        </div>
+                        {v.updated_by ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                             <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 10, flexShrink: 0 }}>{getInitials(v.updated_by)}</div>
+                             <span style={{ fontSize: 13, color: '#3c3c3c', textOverflow: 'ellipsis', overflow: 'hidden' }}>{v.updated_by}</span>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 13, color: '#a8a8a8' }}>—</span>
+                        )}
                       </td>
-                      <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                           <div className="user-avatar-acc" style={{ width: 24, height: 24, fontSize: 10, flexShrink: 0 }}>{getInitials(v.updated_by || 'ADMIN')}</div>
-                           <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                             <span style={{ fontSize: 13, color: '#3c3c3c', textOverflow: 'ellipsis', overflow: 'hidden' }}>{v.updated_by || 'ADMIN'}</span>
-                           </div>
-                        </div>
-                      </td>
-                      <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>--</td>
                       <td style={{ padding: '16px 12px', whiteSpace: 'nowrap' }}>
                         <button 
                           className="row-menu-btn" 

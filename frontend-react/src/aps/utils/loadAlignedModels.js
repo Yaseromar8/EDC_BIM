@@ -26,7 +26,17 @@ export function loadAlignedUrn(viewer, urn, opts = {}, viewGuid = null) {
             const root = doc.getRoot();
             let node = null;
             if (viewGuid) {
-                try { node = root.search({ guid: viewGuid })[0] || null; } catch (e) { /* noop */ }
+                try { node = root.findByGuid?.(viewGuid) || root.search({ guid: viewGuid })[0] || null; } catch (e) { /* noop */ }
+                // loadDocumentNode SOLO acepta nodos type=geometry. Si el GUID apunta a
+                // un nodo lógico (2D/resource), escalar al geometry padre — como el visor
+                // principal — para que DWG/RVT rendericen la MISMA vista, no la default.
+                if (node && node.data && node.data.type !== 'geometry') {
+                    let parent = node;
+                    while (parent && parent.data && parent.data.type !== 'geometry' && parent.parent) {
+                        parent = parent.parent;
+                    }
+                    node = (parent && parent.data && parent.data.type === 'geometry') ? parent : null;
+                }
             }
             const primary = node || root.getDefaultGeometry();
 

@@ -74,7 +74,8 @@ const ARView = ({ models, initialCamera, onExit }) => {
         };
 
         const options = {
-            env: 'AutodeskProduction',
+            env: 'AutodeskProduction2',
+            api: 'streamingV2', // SVF2: mismo formato que el visor principal
             getAccessToken: getAccessToken
         };
 

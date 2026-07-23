@@ -119,7 +119,8 @@ const getActiveViewName = (modelUrn, modelViews, activeViewableGuids, defaultVie
 const SourceFilesPanel = ({
     models, hiddenModels = [], onImport, onRemove, onToggleVisibility,
     modelViews, activeViewableGuids, onLoadView, onUpdate, onUpdateAll, updateAllBusy = false, onRelink,
-    extractionJobs = {}, availableUpdates = {}, updateCheckStatus = {}
+    extractionJobs = {}, availableUpdates = {}, updateCheckStatus = {},
+    sheets = [], onOpenSheet
 }) => {
     const [expandedModels, setExpandedModels] = useState({});
     const [activeMenu, setActiveMenu] = useState(null);
@@ -311,6 +312,31 @@ const SourceFilesPanel = ({
                                             <span className="detail-text">updated {getTimeAgo(model.lastModifiedTime)}</span>
                                         </div>
                                     )}
+
+                                    {/* LÁMINAS 2D del modelo (hojas de Revit cosechadas de la traducción) */}
+                                    {(() => {
+                                        const modelSheets = (sheets || []).filter(s => norm(s.modelUrn) === norm(model.urn));
+                                        if (!modelSheets.length) return null;
+                                        return (
+                                            <div style={{ marginTop: 6 }}>
+                                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: '#8b93a0', padding: '4px 0 2px 26px' }}>
+                                                    LÁMINAS ({modelSheets.length})
+                                                </div>
+                                                {modelSheets.map(s => (
+                                                    <div key={s.id} className="sfp-detail-row" title={`Abrir lámina: ${s.name}`}
+                                                        onClick={(e) => { e.stopPropagation(); onOpenSheet && onOpenSheet(s); }}
+                                                        style={{ cursor: 'pointer' }}>
+                                                        <div className="detail-icon-wrap">
+                                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7e9bbd" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" />
+                                                            </svg>
+                                                        </div>
+                                                        <span className="detail-text" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             )}
                         </div>

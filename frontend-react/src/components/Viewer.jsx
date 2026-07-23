@@ -91,6 +91,11 @@ const Viewer = ({
     const loadedViewGuidsRef = useRef({}); // Tracks the GUID of the currently loaded view per model URN
     const baseOffsetRef = useRef(null);
     const loadQueueRef = useRef(Promise.resolve()); // cola única de cargas de modelos
+    const swapGenRef = useRef(0); // generación del intercambio de modelos (aborta corridas obsoletas)
+    // Matrices de emplazamiento aplicadas con setModelTransform: LMV las PIERDE
+    // en el ciclo hideModel→showModel, así que se guardan para re-aplicarlas.
+    const modelTransformsRef = useRef({});
+    const pushPinListenerRef = useRef(null); // último handler PushPin registrado (anti-fuga)
     const basePlacementRef = useRef(null);
     const spriteViewRef = useRef(null);
     const spriteStylesRef = useRef(null);
@@ -448,7 +453,13 @@ const Viewer = ({
             isInitializingRef.current = true;
 
             const options = {
-                env: 'AutodeskProduction',
+                // SVF2 (streamingV2) = el formato de Tandem/ACC: INSTANCIA la
+                // geometría repetida (5,799 barras de acero ≈ 1 geometría re-usada)
+                // y streamea por visibilidad. Con SVF1 cada barra era malla
+                // completa → millones de triángulos, paginación y lentitud.
+                // Los modelos ACC (wipprod) ya traen derivado SVF2 de fábrica.
+                env: 'AutodeskProduction2',
+                api: 'streamingV2',
                 getAccessToken: (onSuccess) => {
                     if (accessToken) {
                         onSuccess(accessToken, 3600);
@@ -493,6 +504,9 @@ const Viewer = ({
                     },
                     extensions: [
                         'BaseExtension',
+                        // ViewCube: NO se cargaba explícitamente → por eso no
+                        // aparecía el cubo de orientación (Tandem sí lo tiene).
+                        'Autodesk.ViewCubeUi',
                         'Autodesk.BIM360.Extension.PushPin',
                         'Autodesk.PDF',
                         'Autodesk.AEC.LevelsExtension',
@@ -527,7 +541,7 @@ const Viewer = ({
                         // intensidad alta → el contacto entre elementos se lee
                         // (estilo Tandem). Default LMV es tímido (5 / ~0.4).
                         if (viewer.impl && typeof viewer.impl.setAOOptions === 'function') {
-                            viewer.impl.setAOOptions(12, 1.0);
+                            viewer.impl.setAOOptions(window.__vqAoRadius ?? 12, window.__vqAoIntensity ?? 1.0);
                         }
                         // BORDES estilo Tandem: aristas oscuras en la geometría —
                         // es LO que hace que Tandem se vea "sólido" y definido.
@@ -571,13 +585,33 @@ const Viewer = ({
                 window.__applyViewerVisualQuality = applyViewerVisualQuality;
                 applyViewerVisualQuality();
 
+                // ── FONDO estilo Tandem ─────────────────────────────────────
+                // El canvas es alpha:true → se veía el degradado AZULADO de la
+                // página detrás del modelo. Tandem usa un GRIS MUY CLARO plano.
+                // Solo se toca el fondo: la iluminación queda como estaba.
+                try {
+                    if (typeof viewer.setBackgroundColor === 'function') {
+                        const bg = window.__vqBg || [243, 244, 246];
+                        viewer.setBackgroundColor(bg[0], bg[1], bg[2], bg[0], bg[1], bg[2]);
+                    }
+                    // El ViewCube puede venir oculto según la versión del visor
+                    if (typeof viewer.displayViewCube === 'function') {
+                        viewer.displayViewCube(true);
+                    }
+                } catch (e) {
+                    console.warn('[Viewer] No se pudo fijar el fondo:', e);
+                }
+
                 // Calibración visual EN VIVO (consola F12), sin recompilar:
                 //   __vq.ao(12, 1)     → radio/intensidad de oclusión ambiental
                 //   __vq.light(0..15)  → preset de iluminación/entorno
                 //   __vq.edges(true)   → bordes de aristas on/off
                 window.__vq = {
-                    ao: (radius, intensity) => { try { viewer.impl.setAOOptions(radius, intensity); viewer.impl.invalidate(true, true, true); } catch (e) { console.warn(e); } },
+                    ao: (radius, intensity) => { try { window.__vqAoRadius = radius; window.__vqAoIntensity = intensity; viewer.impl.setAOOptions(radius, intensity); viewer.impl.invalidate(true, true, true); } catch (e) { console.warn(e); } },
                     light: (n) => { try { viewer.setLightPreset(n); } catch (e) { console.warn(e); } },
+                    // __vq.bg(r,g,b) → fondo plano (más alto = más claro)
+                    bg: (r, g, b) => { try { window.__vqBg = [r, g, b]; viewer.setBackgroundColor(r, g, b, r, g, b); } catch (e) { console.warn(e); } },
+                    cube: (on) => { try { viewer.displayViewCube(on !== false); } catch (e) { console.warn(e); } },
                     edges: (on) => { try { viewer.setDisplayEdges(!!on); viewer.impl.invalidate(true, true, true); } catch (e) { console.warn(e); } },
                     // __vq.progressive(true|false) → render progresivo (true = más
                     // fluido en escenas gigantes pero parpadea; false = estable Tandem)
@@ -595,6 +629,12 @@ const Viewer = ({
                         const onPivotDown = (event) => {
                             if (event.button !== 0 && event.button !== 1) return; // izq (orbit) o rueda (pan)
                             if (!viewer.model || viewer.model.is2d?.()) return;
+                            // NO interferir con herramientas que necesitan el clic para
+                            // COLOCAR puntos (medir, sección, marcado, pins). Antes este
+                            // hitTest+pivote le robaba el pickeo a "Medir" → seleccionaba
+                            // el elemento en vez de medir.
+                            const activeTool = viewer.toolController?.getActiveToolName?.() || '';
+                            if (/measure|section|markup|pushpin|dimension|pin/i.test(activeTool)) return;
                             const rect = canvasEl.getBoundingClientRect();
                             const hit = viewer.impl.hitTest(
                                 event.clientX - rect.left,
@@ -835,6 +875,50 @@ const Viewer = ({
                     ro.observe(containerRef.current);
                     viewer.__containerResizeObserver = ro;
                 } catch { /* ResizeObserver no disponible */ }
+
+                // NOTA: se probó "calidad/resolución adaptativa al movimiento"
+                // (bajar SAO/bordes/píxeles al orbitar). REVERTIDO: en LMV el
+                // cambio de framebuffer y el toggle de pipeline generan MÁS
+                // parpadeo del que ahorran, y descolocan el HUD (ViewCube).
+                // La fluidez real vino de: memoria 2GB (sin pop-in), overlays
+                // en el arrastre de PK y el render progresivo calibrado.
+
+                // PÉRDIDA DE CONTEXTO WebGL (GPU reset por driver/suspensión/VRAM):
+                // sin manejar, el canvas queda NEGRO para siempre y el usuario
+                // cree que la app murió. Avisamos a la UI para ofrecer recarga
+                // y re-render automático si el contexto vuelve (estilo Tandem).
+                try {
+                    const glCanvas = viewer.canvas || viewer.impl?.canvas;
+                    if (glCanvas) {
+                        glCanvas.addEventListener('webglcontextlost', (ev) => {
+                            ev.preventDefault();
+                            console.error('[Viewer] ⚠️ Contexto WebGL PERDIDO (reset de GPU).');
+                            window.dispatchEvent(new CustomEvent('viewer-webgl-lost'));
+                        }, false);
+                        glCanvas.addEventListener('webglcontextrestored', () => {
+                            console.warn('[Viewer] Contexto WebGL restaurado — re-render completo.');
+                            try { viewer.impl.invalidate(true, true, true); } catch { /* noop */ }
+                            window.dispatchEvent(new CustomEvent('viewer-webgl-restored'));
+                        }, false);
+                    }
+                } catch { /* noop */ }
+
+                // COHERENCIA FILTRO ↔ VISOR: "Mostrar todo" (menú contextual de LMV)
+                // limpia la escena, pero el panel Filters quedaba con la selección
+                // marcada (p. ej. "Structural Rebar 1 of 8") — mentía. Avisar a la
+                // App para que resetee las selecciones y ambos queden alineados.
+                try {
+                    if (Autodesk.Viewing.SHOW_ALL_EVENT) {
+                        viewer.addEventListener(Autodesk.Viewing.SHOW_ALL_EVENT, () => {
+                            window.dispatchEvent(new CustomEvent('viewer-show-all'));
+                        });
+                    }
+                } catch { /* noop */ }
+
+                // Referencia ESTABLE al visor principal. window.NOP_VIEWER apunta al
+                // ÚLTIMO GuiViewer3D creado (láminas, comparador…) — no es confiable
+                // para quien necesita el 3D principal (Live Link, AR).
+                window.__mainViewer = viewer;
 
                 setViewerReady(true);
             });
@@ -1219,6 +1303,8 @@ const Viewer = ({
                 console.log(`[PUENTE] ⏱️ ${performance.now().toFixed(2)}ms - Ejecutando: viewer.clearThemingColors()`);
                 modelsQueue.forEach(m => viewer.clearThemingColors(m));
                 window.__applyViewerVisualQuality?.();
+                // Live Link: colores apagados → Revit también despinta
+                window.dispatchEvent(new CustomEvent('viewer-colors-applied', { detail: { groups: [] } }));
                 return;
             }
 
@@ -1257,7 +1343,7 @@ const Viewer = ({
                                 if (!urnSet || !urnSet.has(item.id)) return; // No pintar si está ghosteado o no hay filtro válido para este modelo
                             }
                             if(!colorMapByUrn[item.modelUrn]) colorMapByUrn[item.modelUrn] = [];
-                            colorMapByUrn[item.modelUrn].push({ id: item.id, colorVector });
+                            colorMapByUrn[item.modelUrn].push({ id: item.id, colorVector, hex: hexColor });
                         });
                     }
                 });
@@ -1267,13 +1353,15 @@ const Viewer = ({
                 console.log(`[GPU] 🚀 Compilando ColorMap de FacetsManager para ${Object.keys(colorMapByUrn).length} modelos federados...`);
                 
                 const processGPUBuffer = async () => {
+                    // Live Link: acumular color→(modelo→ids) para replicar en Revit
+                    const linkByColor = new Map();
                     // Iterar por cada modelo
                     for (const m of modelsQueue) {
                         viewer.clearThemingColors(m); // Liberamos memoria de video base
                         const viewerUrn = m.getData?.()?.urn;
                         const reactUrn = Object.keys(loadedModelsRef.current).find(k => loadedModelsRef.current[k] === m) || viewerUrn;
                         const instructions = colorMapByUrn[viewerUrn] || colorMapByUrn[reactUrn] || [];
-                        
+
                         if (instructions.length > 0) {
                             // Procesamiento por Lotes (Chunking: 5,000 elementos) para evitar 'Page Unresponsive'
                             const CHUNK_SIZE = 5000;
@@ -1281,6 +1369,12 @@ const Viewer = ({
                                 const chunk = instructions.slice(i, i + CHUNK_SIZE);
                                 chunk.forEach(inst => {
                                     viewer.setThemingColor(inst.id, inst.colorVector, m, false);
+                                    if (inst.hex) {
+                                        if (!linkByColor.has(inst.hex)) linkByColor.set(inst.hex, new Map());
+                                        const modelMap = linkByColor.get(inst.hex);
+                                        if (!modelMap.has(m)) modelMap.set(m, []);
+                                        modelMap.get(m).push(inst.id);
+                                    }
                                 });
                                 // Liberar el Hilo Principal del Navegador brevemente
                                 await new Promise(resolve => setTimeout(resolve, 0));
@@ -1293,6 +1387,13 @@ const Viewer = ({
                     viewer.impl.invalidate(true, true, true);
                     window.__applyViewerVisualQuality?.();
                     console.log(`[GPU] ⚡ Tema visual re-renderizado asíncronamente en ${(performance.now() - startGPU).toFixed(2)}ms`);
+
+                    // Live Link: publicar el estado de colores (Revit lo replica)
+                    const linkColorGroups = Array.from(linkByColor.entries()).map(([hex, modelMap]) => ({
+                        color: hex,
+                        entries: Array.from(modelMap.entries()).map(([mm, ids]) => ({ model: mm, dbIds: ids })),
+                    }));
+                    window.dispatchEvent(new CustomEvent('viewer-colors-applied', { detail: { groups: linkColorGroups } }));
                 };
 
                 processGPUBuffer();
@@ -1540,6 +1641,24 @@ const Viewer = ({
             }
         };
 
+        // ¿Hay una herramienta INTERACTIVA activa que necesita los clics para
+        // colocar puntos? (Medir, Sección, Marcado, Pins). Este marquee tiene
+        // prioridad 1000 y consumía TODOS los clics → Medir nunca los recibía.
+        // Con este guard, el marquee CEDE el clic a esas herramientas.
+        const interactiveToolActive = () => {
+            try {
+                for (const n of ['Autodesk.Measure', 'Autodesk.Section']) {
+                    const ext = viewer.getExtension(n);
+                    if (ext && (ext.isActive?.() || ext.activeStatus)) return true;
+                }
+                const mk = viewer.getExtension('Autodesk.Viewing.MarkupsCore');
+                if (mk && (mk.duringEditMode || mk.duringViewMode)) return true;
+                const tn = viewer.toolController?.getActiveToolName?.() || '';
+                if (/measure|section|markup|dimension|pin|pushpin/i.test(tn)) return true;
+            } catch (e) { /* ante duda, no bloquear */ }
+            return false;
+        };
+
         const tool = {
             getNames: () => ['CompleteBoxSelectTool'],
             getPriority: () => 1000, // alta: intercepta antes que orbitar/marquee nativo
@@ -1549,6 +1668,7 @@ const Viewer = ({
             deactivate: () => { dragging = false; removeOverlay(); },
             update: () => false,
             handleButtonDown: (event, button) => {
+                if (interactiveToolActive()) return false; // ceder a Medir/Sección/etc.
                 if (button === 0 && event.shiftKey) {
                     dragging = true;
                     start = { cx: event.canvasX, cy: event.canvasY };
@@ -1560,6 +1680,7 @@ const Viewer = ({
                 return false;
             },
             handleSingleClick: (event, button) => {
+                if (interactiveToolActive()) return false; // Medir/Sección se quedan con el clic
                 if (button === 0) {
                     // El raycast natively ignora elementos ocultos/ghosted según la config
                     const hit = viewer.impl.hitTest(event.canvasX, event.canvasY, false);
@@ -1930,7 +2051,11 @@ const Viewer = ({
                             applyScaling: 'mm',
                             applyRefPoint: true,
                             modelNameOverride: model.label || 'model.rvt',
-                            memoryLimit: 512
+                            // 512MB quedó CHICO con los aceros (265k fragmentos): al
+                            // excederse, LMV PAGINA geometría durante la navegación →
+                            // objetos que aparecen/desaparecen (el "parpadeo de
+                            // modelos"). 2GB mantiene la escena residente.
+                            memoryLimit: 2048
                         };
 
                         // El DWG de sólidos de excavación se carga SIN consolidación:
@@ -2022,6 +2147,8 @@ const Viewer = ({
 
                             if (!isIdentity) {
                                 loadedModel.setModelTransform(matrix);
+                                // Guardar para re-aplicar tras showModel (LMV la pierde al ocultar/mostrar)
+                                modelTransformsRef.current[model.urn] = matrix;
                             }
                         }
 
@@ -2437,6 +2564,11 @@ const Viewer = ({
             // We use 'isFiltering' flag if available, otherwise fallback to checking dbIds length (legacy behavior)
             const isFiltering = detail.isFiltering !== undefined ? detail.isFiltering : (detail.dbIds && detail.dbIds.length > 0);
 
+            // Live Link: al limpiar filtros, Revit también borra sus colores
+            if (!isFiltering) {
+                window.dispatchEvent(new CustomEvent('viewer-colors-applied', { detail: { groups: [] } }));
+            }
+
             if (!isFiltering) {
                 viewer.setGhosting(true);
                 // viewer.showAll(); 
@@ -2511,6 +2643,9 @@ const Viewer = ({
                 // 0.6 (antes 0.82): conserva el relieve del terreno al colorear —
                 // el theming reemplaza el color YA ILUMINADO; alfa alto lo aplana.
                 const FILTER_COLOR_ALPHA = 0.6;
+                // Live Link: acumular los grupos de color aplicados para publicarlos
+                // a Revit (mismo pintado, allá vía OverrideGraphicSettings).
+                const linkColorGroups = [];
                 for (let index = 0; index < (detail.groups || []).length; index++) {
                     const group = detail.groups[index];
                     let color;
@@ -2543,6 +2678,13 @@ const Viewer = ({
                         }
                     });
 
+                    if (itemsByModel.size > 0) {
+                        linkColorGroups.push({
+                            color: '#' + color.getHexString(),
+                            entries: Array.from(itemsByModel.entries()).map(([m, mids]) => ({ model: m, dbIds: mids })),
+                        });
+                    }
+
                     // Procesamiento en Lotes por Modelo
                     for (const [model, ids] of itemsByModel.entries()) {
                         const CHUNK_SIZE = 5000;
@@ -2564,6 +2706,9 @@ const Viewer = ({
                 viewer.impl.invalidate(true, true, true);
                 viewer.impl.sceneUpdated(true);
                 window.__applyViewerVisualQuality?.();
+
+                // Live Link: publicar el estado de colores (Revit los replica)
+                window.dispatchEvent(new CustomEvent('viewer-colors-applied', { detail: { groups: linkColorGroups } }));
             };
 
             applyColorsAsynchronously();
@@ -2955,55 +3100,69 @@ const Viewer = ({
             basePlacementRef.current = null;
         }
 
-        Object.entries(loaded).forEach(([urn, model]) => {
-            if (!targetUrns.some(t => normalizeUrn(t) === normalizeUrn(urn))) {
-                console.log('[Viewer] Unloading removed model:', urn);
-                
-                // If this is the primary (first-loaded) model, unloadModel alone 
-                // won't clear its geometry. We need unloadCurrentModel for full cleanup.
-                if (viewer.model === model) {
-                    try {
-                        viewer.impl.unloadCurrentModel();
-                        console.log('[Viewer] Primary model unloaded via impl.unloadCurrentModel()');
-                    } catch (e) {
-                        console.warn('[Viewer] unloadCurrentModel fallback:', e);
-                        viewer.unloadModel(model);
-                    }
-                } else {
+        const toRemove = Object.entries(loaded)
+            .filter(([urn]) => !targetUrns.some(t => normalizeUrn(t) === normalizeUrn(urn)));
+
+        const unloadOne = (urn, model) => {
+            console.log('[Viewer] Unloading removed model:', urn);
+
+            // If this is the primary (first-loaded) model, unloadModel alone
+            // won't clear its geometry. We need unloadCurrentModel for full cleanup.
+            if (viewer.model === model) {
+                try {
+                    viewer.impl.unloadCurrentModel();
+                    console.log('[Viewer] Primary model unloaded via impl.unloadCurrentModel()');
+                } catch (e) {
+                    console.warn('[Viewer] unloadCurrentModel fallback:', e);
                     viewer.unloadModel(model);
                 }
-
-                delete loadedModelsRef.current[urn];
-                delete loadedViewGuidsRef.current[urn];
-                if (window.__viewerLiveModels) delete window.__viewerLiveModels[urn];
-
-                // Clean Rosetta maps for the removed model
-                if (window.rosettaToDbId) delete window.rosettaToDbId[urn];
-                if (window.rosettaToExtId) delete window.rosettaToExtId[urn];
-
-                // Remove sheets for this model
-                if (sheetsMapRef.current[urn]) {
-                    delete sheetsMapRef.current[urn];
-                    const allSheets = Object.values(sheetsMapRef.current).flat();
-                    onSheetsLoaded?.(allSheets);
-                }
+            } else {
+                viewer.unloadModel(model);
             }
-        });
 
-        // Helper to load a single model document
-        // Returns a Promise that resolves when the model is fully added to the viewer
-        // Helper to load a single model document
-        // (Function now defined at component scope to be shared)
+            delete loadedModelsRef.current[urn];
+            delete loadedViewGuidsRef.current[urn];
+            delete modelTransformsRef.current[urn];
+            if (window.__viewerLiveModels) delete window.__viewerLiveModels[urn];
 
+            // Clean Rosetta maps for the removed model
+            if (window.rosettaToDbId) delete window.rosettaToDbId[urn];
+            if (window.rosettaToExtId) delete window.rosettaToExtId[urn];
 
-        // Load models sequentially to ensure race conditions don't mess up the globalOffset
-        const loadAll = async () => {
+            // Remove sheets for this model
+            if (sheetsMapRef.current[urn]) {
+                delete sheetsMapRef.current[urn];
+                const allSheets = Object.values(sheetsMapRef.current).flat();
+                onSheetsLoaded?.(allSheets);
+            }
+        };
+
+        // INTERCAMBIO PAUSADO (fix "pantalla negra" del update masivo):
+        // antes se descargaban TODOS los modelos viejos de golpe, síncrono, mientras
+        // arrancaban las cargas nuevas. Con 2+ modelos SVF2 el pico de VRAM reseteaba
+        // el driver → contexto WebGL perdido → canvas negro + banner de recarga.
+        // Ahora: (1) se esperan las cargas en vuelo, (2) se descarga de a UNO con un
+        // respiro entre cada uno, (3) recién ahí se cargan los nuevos en secuencia.
+        const gen = ++swapGenRef.current;
+        const swapAll = async () => {
+            try { await loadQueueRef.current; } catch { /* la cola sigue ante errores */ }
+            if (swapGenRef.current !== gen) return; // llegó un cambio de modelos más nuevo
+
+            for (const [urn, model] of toRemove) {
+                if (swapGenRef.current !== gen) return;
+                try { unloadOne(urn, model); } catch (e) { console.warn('[Viewer] unload error:', e); }
+                // Respiro para que el driver libere VRAM antes del siguiente unload/load
+                await new Promise(r => setTimeout(r, 120));
+            }
+
+            // Load models sequentially to ensure race conditions don't mess up the globalOffset
             for (const model of models) {
+                if (swapGenRef.current !== gen) return;
                 await loadModelSequentially(model);
             }
         };
 
-        loadAll();
+        swapAll();
     }, [models, viewerReady]);
 
     // Handle Model Visibility
@@ -3015,6 +3174,23 @@ const Viewer = ({
         console.log('[Viewer] Updating visibility. Hidden URNs:', hiddenModelUrns);
         const allLoaded = Object.keys(loadedModelsRef.current);
         console.log('[Viewer] Loaded Models URNs:', allLoaded);
+
+        // CÁMARA QUIRÚRGICA: si la escena quedó vacía (se ocultó el último modelo),
+        // LMV trata el próximo showModel como "primer modelo" y RESETEA la cámara a
+        // la vista por defecto (encuadre total → "aparece en otro lugar"). La
+        // geometría/georreferenciación NO se mueve — es solo el encuadre. Se captura
+        // la cámara ANTES del toggle y se restaura DESPUÉS. No toca offsets ni matrices.
+        const nav = viewer.navigation;
+        const savedCam = (() => {
+            try {
+                return {
+                    pos: nav.getPosition().clone(),
+                    target: nav.getTarget().clone(),
+                    up: nav.getCameraUpVector().clone(),
+                };
+            } catch { return null; }
+        })();
+        let shownAny = false;
 
         // Pre-normalize hidden list once for O(1) lookups
         const hiddenNormSet = new Set(hiddenModelUrns.map(u => normalizeUrn(u)));
@@ -3030,11 +3206,37 @@ const Viewer = ({
                     viewer.hideModel(model.id);
                 } else {
                     viewer.showModel(model.id);
+                    shownAny = true;
+                    // LMV pierde el setModelTransform dinámico en el ciclo hide→show.
+                    // Re-aplicar EXACTAMENTE la matriz guardada (la misma instancia
+                    // aplicada al cargar — no se recalcula nada de georreferenciación).
+                    const savedMatrix = modelTransformsRef.current[urn];
+                    if (savedMatrix && model.setModelTransform) {
+                        try {
+                            model.setModelTransform(savedMatrix);
+                        } catch (te) { console.warn('[Viewer] No se pudo re-aplicar transform:', te); }
+                    }
                 }
             } catch (e) {
                 console.error(`[Viewer] Error toggling visibility for ${urn}:`, e);
             }
         });
+
+        // Restaurar la cámara del usuario tras mostrar (LMV puede re-encuadrar en
+        // el frame siguiente, por eso el doble intento: rAF + colchón de 120 ms).
+        if (shownAny && savedCam) {
+            const restore = () => {
+                try {
+                    nav.setView(savedCam.pos, savedCam.target);
+                    nav.setCameraUpVector(savedCam.up);
+                    viewer.impl.invalidate(true, true, true);
+                } catch { /* el visor pudo desmontarse */ }
+            };
+            requestAnimationFrame(restore);
+            setTimeout(restore, 120);
+        } else if (shownAny) {
+            viewer.impl.invalidate(true, true, true);
+        }
     }, [hiddenModelUrns, viewerReady]);
 
     useEffect(() => {
@@ -3253,31 +3455,42 @@ const Viewer = ({
             // Filter unique and defined
             const uniqueEvents = [...new Set(eventsToListen.filter(Boolean))];
 
-            console.log('[Viewer] Listening for PushPin events on Viewer:', uniqueEvents);
-
-            // 1. Listen on Viewer (Global)
-            uniqueEvents.forEach(evt => {
-                viewer.removeEventListener(evt, handlePinSelect);
-                viewer.addEventListener(evt, handlePinSelect);
-            });
-
-            // 2. Listen on PushPinManager (Specific - often required for newer versions)
-            if (extension.pushPinManager) {
-                console.log('[Viewer] Also listening on PushPinManager');
-                uniqueEvents.forEach(evt => {
-                    // Manager might use different method signatures or only support specific events
-                    // But typically it mimics EventDispatcher
-                    if (extension.pushPinManager.addEventListener) {
-                        extension.pushPinManager.removeEventListener(evt, handlePinSelect);
-                        extension.pushPinManager.addEventListener(evt, handlePinSelect);
-                    }
+            // FUGA CORREGIDA: este efecto corre en cada cambio de pins/modelos y
+            // ANTES quitaba el handler NUEVO (nunca registrado) → los viejos se
+            // ACUMULABAN (decenas de listeners tras una sesión: memoria + eventos
+            // duplicados). Ahora removemos el ÚLTIMO registrado y limpiamos al
+            // desmontar/re-ejecutar.
+            const prev = pushPinListenerRef.current;
+            if (prev) {
+                prev.events.forEach(evt => {
+                    try { viewer.removeEventListener(evt, prev.handler); } catch { /* noop */ }
+                    try { prev.manager?.removeEventListener?.(evt, prev.handler); } catch { /* noop */ }
                 });
             }
+
+            // 1. Listen on Viewer (Global)
+            uniqueEvents.forEach(evt => viewer.addEventListener(evt, handlePinSelect));
+
+            // 2. Listen on PushPinManager (Specific - often required for newer versions)
+            if (extension.pushPinManager?.addEventListener) {
+                uniqueEvents.forEach(evt => extension.pushPinManager.addEventListener(evt, handlePinSelect));
+            }
+            pushPinListenerRef.current = { events: uniqueEvents, handler: handlePinSelect, manager: extension.pushPinManager || null };
 
         }).catch(err => {
             console.error('[Viewer] Failed to load PushPin extension:', err);
         });
 
+        return () => {
+            const reg = pushPinListenerRef.current;
+            if (reg) {
+                reg.events.forEach(evt => {
+                    try { viewer.removeEventListener(evt, reg.handler); } catch { /* noop */ }
+                    try { reg.manager?.removeEventListener?.(evt, reg.handler); } catch { /* noop */ }
+                });
+                pushPinListenerRef.current = null;
+            }
+        };
     }, [buildPins, showBuildPins, viewerReady, onBuildPinSelect, hiddenModelUrns]);
 
     // MANUAL HIT TEST (Bypass Extension Logic)

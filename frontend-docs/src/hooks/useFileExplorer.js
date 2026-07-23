@@ -278,6 +278,9 @@ export function useFileExplorer(project, user) {
         setShowNewFolder(false);
         setFolderName('');
         setNewFolderParentPath('');
+        // COHERENCIA ÁRBOL: invalidar el caché del nodo padre para que la
+        // carpeta nueva aparezca en el panel izquierdo sin esperar 30s (STALE_TIME).
+        if (cacheMethods) cacheMethods.invalidateNode(currentNodeId || '__root__');
         setRefreshSignal(s => s + 1);
         triggerRefresh();
       } else {
@@ -347,6 +350,15 @@ export function useFileExplorer(project, user) {
       idsToMove.forEach(id => delete n[id]);
       return n;
     });
+    // COHERENCIA TABLA ↔ ÁRBOL: al desplazar cambian DOS ramas (origen y
+    // destino). Sin invalidar ambas, el árbol seguía mostrando el elemento en
+    // su sitio viejo (y no aparecía en el nuevo) hasta recargar la página.
+    if (cacheMethods) {
+      const origen = currentNodeId || '__root__';
+      cacheMethods.invalidateNode(origen);
+      if (moveState.destId) cacheMethods.invalidateNode(moveState.destId);
+      else cacheMethods.invalidateNode('__root__');
+    }
     setMoveState({ step: 0, items: [], itemIds: [], destPath: '', destId: null });
     setSelected(new Set());
     setRefreshSignal(s => s + 1);

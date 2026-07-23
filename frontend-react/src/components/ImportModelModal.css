@@ -22,8 +22,9 @@
 
 /* ── Modal Panel ── */
 .import-modal-panel {
-  width: 540px;
-  max-width: 92vw;
+  /* 680px: los nombres CAD (500125-CSSP001-…) no caben en 540 y envolvían en 3 líneas */
+  width: 680px;
+  max-width: 94vw;
   max-height: 88vh;
   display: flex;
   flex-direction: column;
@@ -456,7 +457,8 @@
 }
 
 .import-tree-container {
-  height: 240px;
+  /* Antes 240px fijos: en árboles profundos solo se veían 4-5 filas */
+  height: min(46vh, 430px);
   overflow-y: auto;
   margin-bottom: 14px;
   padding-left: 4px;

@@ -54,6 +54,24 @@ export const ExcavationIcon = () => (
     </svg>
 );
 
+// Heatmap de avance por PK: tramos de barra con intensidades
+export const HeatmapIcon = () => (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 12h5" />
+        <path d="M8 12h6" strokeWidth="3.4" />
+        <path d="M14 12h7" strokeWidth="2.2" strokeDasharray="3 2" />
+        <path d="M3 19h18M3 5h18" opacity="0.35" />
+    </svg>
+);
+
+// Info de ejecución al pasar el mouse: cursor + tarjeta de datos
+export const HoverInfoIcon = () => (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 3l7.5 17 2.5-7 7-2.5z" />
+        <path d="M14 14h7v6h-7z" opacity="0.55" />
+    </svg>
+);
+
 // SubZona / rótulo espacial: pin-etiqueta (coherente con los pines del visor)
 export const ZoneTagIcon = () => (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

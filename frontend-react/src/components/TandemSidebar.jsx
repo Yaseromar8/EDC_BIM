@@ -50,6 +50,8 @@ const TandemSidebar = ({
     extractionJobs,
     availableUpdates,
     updateCheckStatus,
+    sheets,
+    onOpenSheet,
 
     // DocumentPanel props
     documents,
@@ -206,6 +208,8 @@ const TandemSidebar = ({
                     extractionJobs={extractionJobs}
                     availableUpdates={availableUpdates}
                     updateCheckStatus={updateCheckStatus}
+                    sheets={sheets}
+                    onOpenSheet={onOpenSheet}
                 />
             )}
 

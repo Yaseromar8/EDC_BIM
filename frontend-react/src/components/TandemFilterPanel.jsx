@@ -318,6 +318,14 @@ const TandemFilterPanel = ({
     // CUSTOM COLOR PER VALUE
     const [customValueColors, setCustomValueColors] = useState(() => window._customValueColors || {});
 
+    // Al cargar una VISTA guardada/compartida, App restaura window._customValueColors
+    // (colores por valor + exclusiones "no pintar") — sincronizamos los puntitos.
+    useEffect(() => {
+        const onRestored = (e) => setCustomValueColors({ ...(e.detail || window._customValueColors || {}) });
+        window.addEventListener('custom-colors-restored', onRestored);
+        return () => window.removeEventListener('custom-colors-restored', onRestored);
+    }, []);
+
     const handleCustomColorChange = useCallback((propId, value, color) => {
         const key = `${propId}::${value}`;
         setCustomValueColors(prev => {

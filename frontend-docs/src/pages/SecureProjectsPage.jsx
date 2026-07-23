@@ -5,6 +5,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../utils/apiFetch';
+import { confirmAction } from '../utils/confirm';
 import { API, VISOR_URL, formatDate, getInitials } from '../utils/helpers';
 
 // ─── USERS TAB ───
@@ -47,7 +48,7 @@ function UsersTab() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('¿Seguro que deseas eliminar este usuario?')) return;
+    if (!await confirmAction({ title: 'Eliminar usuario', message: 'El usuario perderá el acceso a la plataforma.', confirmText: 'Eliminar', danger: true })) return;
     await apiFetch(`${API}/api/users/${id}`, { method: 'DELETE' });
     fetchUsers();
   };
@@ -147,8 +148,8 @@ function TagsTab() {
     await apiFetch(`${API}/api/job_titles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newJobTitle }) });
     setNewJobTitle(''); fetchTags();
   };
-  const handleDeleteComp = async (id) => { if (!window.confirm('¿Borrar empresa?')) return; await apiFetch(`${API}/api/companies/${id}`, { method: 'DELETE' }); fetchTags(); };
-  const handleDeleteJob = async (id) => { if (!window.confirm('¿Borrar cargo?')) return; await apiFetch(`${API}/api/job_titles/${id}`, { method: 'DELETE' }); fetchTags(); };
+  const handleDeleteComp = async (id) => { if (!await confirmAction({ title: 'Borrar empresa', message: 'Se eliminará esta empresa del catálogo.', confirmText: 'Borrar', danger: true })) return; await apiFetch(`${API}/api/companies/${id}`, { method: 'DELETE' }); fetchTags(); };
+  const handleDeleteJob = async (id) => { if (!await confirmAction({ title: 'Borrar cargo', message: 'Se eliminará este cargo del catálogo.', confirmText: 'Borrar', danger: true })) return; await apiFetch(`${API}/api/job_titles/${id}`, { method: 'DELETE' }); fetchTags(); };
 
   return (
     <div style={{ display: 'flex', gap: 32 }}>

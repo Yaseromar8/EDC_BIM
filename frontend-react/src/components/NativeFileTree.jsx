@@ -38,6 +38,16 @@ const useFetch = (url) => {
     return { data, error, loading };
 };
 
+// Truncado AL MEDIO: en nombres CAD (500125-CSSP001-780-XX-DR-HD-011264@011268-
+// ENCOFRADOS.rvt) lo que distingue un archivo de otro está AL FINAL. Un ellipsis
+// normal cortaría justo la parte útil y dejaría solo el prefijo idéntico.
+const middleTruncate = (name, max = 52) => {
+    const s = String(name || '');
+    if (s.length <= max) return s;
+    const tail = 22; // conserva sufijo distintivo + extensión
+    return s.slice(0, max - tail - 1) + '…' + s.slice(-tail);
+};
+
 const TreeNode = ({ node, selectedFiles, onFileSelect, hubId, projectId: contextProjectId }) => {
     const cacheKey = node.id || (node.links?.self?.href);
     const [isOpen, setIsOpen] = useState(() => {
@@ -141,17 +151,21 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId, projectId: context
 
     return (
         <li style={{ listStyle: 'none' }}>
-            <div className={`tree-node-row ${isOpen ? 'is-open' : ''}`} style={{ padding: '6px 4px', borderRadius: '4px', display: 'flex', alignItems: 'center', transition: 'background 0.2s' }}>
-                <span onClick={handleToggle} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+            {/* Toda la FILA es clickeable: carpetas expanden, archivos se seleccionan.
+                Antes solo el checkbox de 16px seleccionaba — puntería de francotirador. */}
+            <div className={`tree-node-row ${isOpen ? 'is-open' : ''} ${isChecked ? 'is-checked' : ''}`}
+                onClick={isFolder ? handleToggle : handleCheck}
+                title={node.attributes.displayName || node.attributes.name}
+                style={{ padding: '6px 4px', borderRadius: '4px', display: 'flex', alignItems: 'center', transition: 'background 0.2s', cursor: 'pointer', background: isChecked ? 'rgba(126,155,189,0.12)' : undefined }}>
+                <span style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
                     {isFolder ? (
-                        <i className={`fas fa-caret-${isOpen ? 'down' : 'right'}`} style={{ width: '16px', fontSize: '12px', opacity: 0.5 }}></i>
+                        <i className={`fas fa-caret-${isOpen ? 'down' : 'right'}`} style={{ width: '16px', fontSize: '12px', opacity: 0.5, flexShrink: 0 }}></i>
                     ) : (
-                        <span style={{ width: '16px' }}></span>
+                        <span style={{ width: '4px', flexShrink: 0 }}></span>
                     )}
 
                     {!isFolder && (
                         <div
-                            onClick={handleCheck}
                             style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -162,7 +176,6 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId, projectId: context
                                 border: `1.5px solid ${isChecked ? '#7e9bbd' : '#555'}`,
                                 background: isChecked ? '#7e9bbd' : 'transparent',
                                 marginRight: '8px',
-                                cursor: 'pointer',
                                 flexShrink: 0,
                             }}
                         >
@@ -175,13 +188,15 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId, projectId: context
                     )}
 
                     <i className={getIcon()} style={{ marginRight: '8px', flexShrink: 0, color: isFolder ? '#FFC107' : (isChecked ? '#7e9bbd' : '#aaa'), fontSize: '14px' }}></i>
-                    <span title={node.attributes.displayName || node.attributes.name} style={{ fontSize: '13px', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.25, opacity: isFolder ? 0.9 : 0.8 }}>
-                        {node.attributes.displayName || node.attributes.name}
+                    {/* Una sola línea + truncado al medio: se conserva el sufijo que
+                        distingue el archivo (…-ENCOFRADOS.rvt). Nombre completo en tooltip. */}
+                    <span style={{ fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'clip', lineHeight: 1.3, opacity: isFolder ? 0.9 : 0.85, minWidth: 0 }}>
+                        {middleTruncate(node.attributes.displayName || node.attributes.name)}
                     </span>
                 </span>
             </div>
             {isOpen && (
-                <ul style={{ paddingLeft: '18px', borderLeft: '1px solid rgba(255,255,255,0.05)', marginLeft: '8px' }}>
+                <ul style={{ paddingLeft: '10px', borderLeft: '1px solid rgba(255,255,255,0.05)', marginLeft: '7px' }}>
                     {loading && <li style={{ padding: '4px 0', fontSize: '11px', color: '#666' }}><i className="fas fa-spinner fa-spin"></i> Cargando...</li>}
                     {!loading && children && children.length === 0 && (
                         <li style={{ padding: '4px 8px', fontSize: '11px', color: '#555' }}>Vacio</li>

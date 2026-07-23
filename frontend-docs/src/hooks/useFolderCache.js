@@ -12,16 +12,32 @@ import { apiFetch } from '../utils/apiFetch';
 import toast from 'react-hot-toast';
 
 const STALE_TIME = 30_000; // 30 seconds before silent revalidation
+// TECHO DE MEMORIA: el caché solo crecía (Map sin límite). En una sesión larga
+// navegando cientos de carpetas se inflaba sin liberar nunca. Con LRU se
+// conservan las últimas N carpetas visitadas —que son las que el usuario
+// revisita— y las viejas se descartan.
+const MAX_CACHED_NODES = 150;
 
 export function useFolderCache(apiBase, projectPrefix) {
   // Map<nodeId, { folders: [], timestamp: number }>
+  // Nota: Map conserva el ORDEN DE INSERCIÓN → sirve como LRU barato.
   const cacheRef = useRef(new Map());
   // Force re-renders when cache changes
   const [cacheVersion, setCacheVersion] = useState(0);
   const bumpCache = useCallback(() => setCacheVersion(v => v + 1), []);
-  
+
   // Track in-flight fetches to deduplicate
   const inflightRef = useRef(new Map());
+
+  // Descarta las entradas más antiguas cuando se pasa del techo.
+  const evictIfNeeded = useCallback(() => {
+    const cache = cacheRef.current;
+    while (cache.size > MAX_CACHED_NODES) {
+      const oldestKey = cache.keys().next().value;
+      if (oldestKey === undefined) break;
+      cache.delete(oldestKey);
+    }
+  }, []);
 
   // ── READ: Get cached children for a node ──
   const getChildren = useCallback((nodeId) => {
@@ -63,11 +79,14 @@ export function useFolderCache(apiBase, projectPrefix) {
           a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
         );
         
+        // Re-insertar marca la entrada como la MÁS RECIENTE en el orden del Map
+        cacheRef.current.delete(key);
         cacheRef.current.set(key, {
           folders: sortedFolders,
           files: sortedFiles,
           timestamp: Date.now()
         });
+        evictIfNeeded();
       }
     } catch (e) {
       console.error('[FolderCache] Fetch error:', e);
@@ -75,7 +94,7 @@ export function useFolderCache(apiBase, projectPrefix) {
       inflightRef.current.delete(key);
       bumpCache();
     }
-  }, [apiBase, projectPrefix, bumpCache]);
+  }, [apiBase, projectPrefix, bumpCache, evictIfNeeded]);
 
   // ── EXPAND: SWR pattern — cache-first, revalidate in background ──
   const expandNode = useCallback(async (nodeId, folderFullName) => {

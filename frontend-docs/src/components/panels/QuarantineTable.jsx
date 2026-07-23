@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { formatSize, formatDate } from '../../utils/helpers';
 import { renderFileIconSop } from '../../utils/fileIcons';
 import { apiFetch } from '../../utils/apiFetch';
+import { confirmAction } from '../../utils/confirm';
 
 export default function QuarantineTable({ projectPrefix, API, isAdmin, user }) {
   const [files, setFiles] = useState([]);
@@ -145,10 +146,14 @@ export default function QuarantineTable({ projectPrefix, API, isAdmin, user }) {
                           Rehabilitar
                         </button>
                         <button 
-                          onClick={() => {
-                            if (window.confirm(`¿Seguro que deseas destruir permanentemente "${f.name}"? Esta acción es irreversible.`)) {
-                              handleAction(f.id, 'delete');
-                            }
+                          onClick={async () => {
+                            const ok = await confirmAction({
+                              title: 'Destruir permanentemente',
+                              message: `"${f.name}" se eliminará de forma irreversible. Esta acción no se puede deshacer.`,
+                              confirmText: 'Destruir',
+                              danger: true,
+                            });
+                            if (ok) handleAction(f.id, 'delete');
                           }}
                           title="Destruir Permanente"
                           style={{ background: '#ffebee', color: '#c62828', border: '1px solid #ffcdd2', borderRadius: 4, padding: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}

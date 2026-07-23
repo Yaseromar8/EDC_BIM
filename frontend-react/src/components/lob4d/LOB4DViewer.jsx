@@ -15,11 +15,17 @@ export default function LOB4DViewer({
     selectedUrns = [],
     activeViewableGuids = {},
     simulationState,
+    excavationUrns = [],
+    elementLinks = null,
+    paramSimActive = false,
     onStatus,
 }) {
     const hostRef = useRef(null);
     const viewerRef = useRef(null);
     const loadKeyRef = useRef('');
+    const extensionRef = useRef(null);
+    const elementLinksRef = useRef(elementLinks);
+    elementLinksRef.current = elementLinks;
 
     const configs = useMemo(() => {
         return (models || [])
@@ -72,7 +78,7 @@ export default function LOB4DViewer({
                 }
 
                 host.innerHTML = '';
-                const Ctor = Av.Viewer3D || Av.GuiViewer3D;
+                const Ctor = Av.GuiViewer3D || Av.Viewer3D;
                 const viewer = new Ctor(host, {
                     disabledExtensions: { measure: false, section: false },
                     canvasConfig: {
@@ -82,6 +88,15 @@ export default function LOB4DViewer({
                     },
                 });
                 viewer.start();
+
+                // Igual que el visor principal: click simple SELECCIONA (sin esto, el
+                // visor headless exige doble-click). Deselecciona al hacer clic al vacío.
+                try {
+                    if (viewer.setClickConfig) {
+                        viewer.setClickConfig('click', 'onObject', ['selectOnly']);
+                        viewer.setClickConfig('click', 'offObject', ['deselectAll']);
+                    }
+                } catch (e) { /* API opcional según versión LMV */ }
                 viewerRef.current = viewer;
                 loadKeyRef.current = key;
 
@@ -90,12 +105,50 @@ export default function LOB4DViewer({
                 if (cancelled) return;
 
                 try { viewer.fitToView(); } catch { /* noop */ }
+
+                // Reaplicar tras cargar geometría/extensiones: algunas resetean el
+                // click config, dejando la selección exigiendo doble-click.
+                try {
+                    if (viewer.setClickConfig) {
+                        viewer.setClickConfig('click', 'onObject', ['selectOnly']);
+                        viewer.setClickConfig('click', 'offObject', ['deselectAll']);
+                    }
+                    viewer.setSelectionMode?.(window.Autodesk.Viewing.SelectionMode.LEAF_OBJECT);
+                } catch (e) { /* noop */ }
+
+                // Órbita alrededor del cursor (igual que el visor principal):
+                // el punto bajo el mouse se vuelve pivote al presionar.
+                try {
+                    const canvasEl = viewer.canvas || viewer.impl?.canvas;
+                    if (canvasEl) {
+                        const onPivotDown = (event) => {
+                            if (event.button !== 0 && event.button !== 1) return;
+                            const rect = canvasEl.getBoundingClientRect();
+                            const hit = viewer.impl.hitTest(event.clientX - rect.left, event.clientY - rect.top, true);
+                            if (hit && hit.intersectPoint) {
+                                viewer.navigation.setPivotPoint(hit.intersectPoint);
+                                viewer.navigation.setPivotSetFlag(true);
+                            }
+                        };
+                        canvasEl.addEventListener('mousedown', onPivotDown, true);
+                    }
+                } catch (e) { /* noop */ }
+
                 try {
                     const ext = await viewer.loadExtension('LOB4DExtension');
+                    extensionRef.current = ext || null;
+                    // NOTA: NO usamos setElementLinks (vínculos del backend por ITEM,
+                    // que dan actividad arbitraria). El coloreo lo hace buildPropertyIndex
+                    // en vivo, priorizando CodigoPlaneamiento (actividad/paño real).
                     const { alignmentData, selectedAlignmentId, showStations } = getCivilOverlaySeed();
                     if (ext && alignmentData?.length && selectedAlignmentId) {
                         ext.setStationAnnotationsVisible?.(showStations);
                         ext.bakeAlignment(alignmentData, selectedAlignmentId);
+                    }
+                    // Re-aplicar el alcance de frente vigente (el despacho original
+                    // pudo ocurrir antes de que este visor existiera).
+                    if (window.__lobScope?.codes?.length) {
+                        window.dispatchEvent(new CustomEvent('lob-scope-change', { detail: window.__lobScope }));
                     }
                 } catch (e) {
                     console.warn('[LOB4DViewer] Extension 4D no disponible:', e);
@@ -123,24 +176,34 @@ export default function LOB4DViewer({
         };
     }, [configs, onStatus]);
 
+
     useEffect(() => {
         if (!simulationState) return;
+        if (paramSimActive) return; // el modo prueba por parámetro controla el coloreado
+        // Para el COLOREO se fusionan las tareas por partida con las tareas por
+        // ACTIVIDAD del P6 (así colorean también los elementos cuya actividad no
+        // tiene partida-puente). Los conteos del resumen no se tocan (van aparte).
+        const merge = (a, b) => [...(a || []), ...(b || [])];
         window.dispatchEvent(new CustomEvent('lob-time-update', {
             detail: {
                 date: simulationState.dateISO,
-                tasks: simulationState.activeTasks,
-                completedTasks: simulationState.completedTasks,
-                plannedTasks: simulationState.plannedTasks,
+                tasks: merge(simulationState.activeTasks, simulationState.activityExecuting),
+                completedTasks: merge(simulationState.completedTasks, simulationState.activityDone),
+                plannedTasks: merge(simulationState.plannedTasks, simulationState.activityPlanned),
+                pendingTasks: simulationState.pendingTasks,
                 progress: simulationState.progress,
+                taskRows: simulationState.taskRows,
+                excavationUrns,
             },
         }));
-    }, [simulationState]);
+    }, [simulationState, excavationUrns, paramSimActive]);
 
     useEffect(() => () => {
         try { window.dispatchEvent(new CustomEvent('lob-clear')); } catch { /* noop */ }
         if (viewerRef.current) {
             try { viewerRef.current.finish(); } catch { /* noop */ }
             viewerRef.current = null;
+            extensionRef.current = null;
         }
     }, []);
 

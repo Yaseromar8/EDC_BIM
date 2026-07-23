@@ -6,6 +6,7 @@
 import React, { useRef } from 'react';
 import { renderFileIconSop } from '../../utils/fileIcons';
 import { formatSizeDetailed } from '../../utils/helpers';
+import { confirmAction } from '../../utils/confirm';
 
 export default function UploadModal({
   isOpen,
@@ -73,7 +74,18 @@ export default function UploadModal({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button className="file-viewer-close" style={{ background: 'none' }} onClick={() => setSopMinimized(true)}>-</button>
-            <button className="file-viewer-close" style={{ background: 'none' }} onClick={() => { if (!chunkedUpload.hasActiveUploads) onClose(); else if (window.confirm('Cancelar cargas en curso?')) { chunkedUpload.cancelAll(); onClose(); } }}>X</button>
+            <button className="file-viewer-close" style={{ background: 'none' }} title="Cerrar"
+              onClick={async () => {
+                if (!chunkedUpload.hasActiveUploads) { onClose(); return; }
+                const ok = await confirmAction({
+                  title: 'Cancelar cargas en curso',
+                  message: 'Hay archivos subiendo. Si cierras ahora, esas cargas se cancelarán.',
+                  confirmText: 'Cancelar cargas',
+                  cancelText: 'Seguir subiendo',
+                  danger: true,
+                });
+                if (ok) { chunkedUpload.cancelAll(); onClose(); }
+              }}>✕</button>
           </div>
         </div>
         <div className="acc-upload-body" style={{ maxHeight: 600, overflowY: 'auto' }}>
@@ -135,9 +147,9 @@ export default function UploadModal({
                   <div style={{ fontSize: 12, color: '#999', display: 'flex', alignItems: 'center', gap: 12 }}>
                     <span style={{ minWidth: 60, textAlign: 'right' }}>{formatSize(item.sizeBytes || 0)}</span>
                     {item.status === 'completed' ? (
-                      <span style={{ color: '#5f7fa3', fontWeight: 600, cursor: 'pointer' }}>Ver</span>
+                      <span style={{ color: '#33691e', fontSize: 16 }} title="Subido">✓</span>
                     ) : item.status !== 'cancelled' ? (
-                      <span onClick={() => chunkedUpload.cancelUpload(item.id)} style={{ cursor: 'pointer', fontSize: 16 }}>X</span>
+                      <span onClick={() => chunkedUpload.cancelUpload(item.id)} style={{ cursor: 'pointer', fontSize: 16 }} title="Cancelar">✕</span>
                     ) : null}
                   </div>
                 </div>

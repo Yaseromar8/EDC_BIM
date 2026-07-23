@@ -88,7 +88,21 @@ export default function FolderNode({
   useEffect(() => { function handleClickOutside(event) { if (menuRef.current && !menuRef.current.contains(event.target)) setShowMenu(false); } document.addEventListener('mousedown', handleClickOutside); return () => document.removeEventListener('mousedown', handleClickOutside); }, []);
   useEffect(() => { if (defaultExpanded && !children && cacheMethods) { cacheMethods.expandNode(nodeId, folderFullName); } }, [defaultExpanded, children, cacheMethods, nodeId, folderFullName]);
   useEffect(() => { if (collapseSignal > 0 && level > 0) { setExpanded(false); } }, [collapseSignal, level]);
-  useEffect(() => { if (folderFullName && currentPath.startsWith(folderFullName) && currentPath !== folderFullName) { if (!expanded) setExpanded(true); if (!children && cacheMethods) cacheMethods.expandNode(nodeId, folderFullName); } }, [currentPath, folderFullName, expanded, children, cacheMethods, nodeId]);
+  // Revelar el camino hasta la carpeta actual SOLO al navegar.
+  // Antes este efecto tenía `expanded` en sus dependencias: al colapsar a mano
+  // se re-ejecutaba y volvía a abrir la carpeta, así que era IMPOSIBLE cerrar un
+  // padre de la carpeta en la que estabas. Ahora se dispara una vez por ruta,
+  // y a partir de ahí manda el usuario.
+  const lastRevealRef = useRef(null);
+  useEffect(() => {
+    if (!folderFullName) return;
+    const esAncestroDeLaRutaActual = currentPath.startsWith(folderFullName) && currentPath !== folderFullName;
+    if (!esAncestroDeLaRutaActual) return;
+    if (lastRevealRef.current === currentPath) return; // ya se reveló para esta ruta
+    lastRevealRef.current = currentPath;
+    setExpanded(true);
+    if (!children && cacheMethods) cacheMethods.expandNode(nodeId, folderFullName);
+  }, [currentPath, folderFullName, children, cacheMethods, nodeId]);
 
   const handleToggle = (e) => {
     e.stopPropagation();

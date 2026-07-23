@@ -36,14 +36,14 @@ function clearSession() {
 }
 
 export async function apiFetch(url, options = {}) {
-  const { isUpload, onUnauthorized, ...fetchOptions } = options;
-  
+  const { isUpload, onUnauthorized, timeoutMs, ...fetchOptions } = options;
+
   const headers = {};
-  
+
   if (!isUpload) {
     headers['Content-Type'] = 'application/json';
   }
-  
+
   const isPublicAuth = AUTH_ENDPOINTS.some(ep => url.includes(ep));
   if (!isPublicAuth) {
     const token = getToken();
@@ -51,10 +51,25 @@ export async function apiFetch(url, options = {}) {
       headers['Authorization'] = `Bearer ${token}`;
     }
   }
-  
+
   fetchOptions.headers = { ...headers, ...(fetchOptions.headers || {}) };
-  
-  const response = await fetch(url, fetchOptions);
+
+  // TIMEOUT por defecto (estabilidad): un backend colgado dejaba spinners
+  // infinitos — el fetch sin límite espera para siempre. 120s cubre de sobra
+  // el peor request real (~20s de inventario). Sobrescribible: timeoutMs.
+  let timeoutId = null;
+  if (!fetchOptions.signal) {
+    const controller = new AbortController();
+    fetchOptions.signal = controller.signal;
+    timeoutId = setTimeout(() => controller.abort(new DOMException('apiFetch timeout', 'TimeoutError')), timeoutMs ?? 120000);
+  }
+
+  let response;
+  try {
+    response = await fetch(url, fetchOptions);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
   
   if (response.status === 401) {
     if (!isPublicAuth) {

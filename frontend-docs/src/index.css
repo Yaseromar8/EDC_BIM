@@ -3399,11 +3399,16 @@ th {
   background: #fafafa;
 }
 
+.permissions-title {
+  min-width: 0; /* permite que el nombre largo se recorte en vez de desbordar */
+}
+
 .permissions-title h3 {
   margin: 0 0 4px 0;
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
+  min-width: 0;
 }
 
 .permissions-title p {
@@ -3426,17 +3431,40 @@ th {
   color: var(--text-primary);
 }
 
+/* Toolbar de permisos: buscador ARRIBA (ocupa todo el ancho, sin apretarse)
+   y las acciones debajo alineadas a la izquierda. Antes los 3 controles
+   competían en una sola fila y el buscador quedaba estrujado. */
 .permissions-toolbar {
-  padding: 16px 24px;
+  padding: 14px 24px 16px;
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
   border-bottom: 1px solid var(--border);
   background: #fff;
 }
 
 .permissions-toolbar .search-box {
-  flex: 1;
+  order: -1;         /* buscador primero */
+  width: 100%;
   position: relative;
+}
+
+.permissions-toolbar .btn-primary,
+.permissions-toolbar .btn-secondary {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.permissions-toolbar .btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .permissions-toolbar .search-box input {
@@ -3457,8 +3485,8 @@ th {
   left: 10px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 14px;
   color: var(--text-muted);
+  pointer-events: none; /* el clic siempre llega al input, no al icono */
 }
 
 .permissions-content {
