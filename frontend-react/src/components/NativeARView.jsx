@@ -73,6 +73,11 @@ export default function NativeARView({ onExit }) {
   const [hud, setHud] = useState({ src: '?', poseEvents: 0, applied: 0, upm: 1000, yaw: 0, aligning: false, err: '' });
   // Espejo del HUD para leerlo desde temporizadores sin arrastrar valores viejos.
   const hudRef = useRef({ poseEvents: 0, applied: 0 });
+  // Diagnostico de TRANSPARENCIA: que pasos se aplicaron y, sobre todo, si el
+  // contexto WebGL se creo con canal alfa. Sin alfa en el contexto, ninguna
+  // llamada de limpieza puede hacer transparente el lienzo: se compone opaco
+  // siempre, y por eso el area del visor sale negra aunque la camara este ahi.
+  const [transp, setTransp] = useState({ pasos: '', alpha: null });
   const oneToOneRef = useRef(1000); // unidades/metro para escala 1:1 real (según unidades del modelo)
   const [geo, setGeo] = useState(null); // última pose GPS { lat, lon, accuracy, heading, hasHeading }
   const georefRef = useRef({ globalOffset: { x: 0, y: 0, z: 0 }, metersPerUnit: 0.001 });
@@ -156,7 +161,16 @@ export default function NativeARView({ onExit }) {
             if (cv) cv.style.background = 'transparent';
           } catch { /* noop */ }
           viewer.container.style.background = 'transparent';
-          console.log('[AR] transparencia aplicada:', aplicado.join(', ') || 'NADA');
+          // ¿El lienzo puede ser transparente siquiera? Lo decide el contexto.
+          let glAlpha = null;
+          try {
+            const gl = (viewer.impl.glrenderer?.() || {}).getContext?.()
+              || viewer.impl.canvas?.getContext?.('webgl2')
+              || viewer.impl.canvas?.getContext?.('webgl');
+            glAlpha = gl?.getContextAttributes?.().alpha ?? null;
+          } catch { /* noop */ }
+          setTransp({ pasos: aplicado.join(',') || 'NADA', alpha: glAlpha });
+          console.log('[AR] transparencia aplicada:', aplicado.join(', ') || 'NADA', '| gl.alpha =', glAlpha);
           viewer.impl.invalidate(true, true, true);
         } catch (e) {
           console.warn('[NativeAR] No se pudo transparentar el renderer:', e);
@@ -386,7 +400,11 @@ export default function NativeARView({ onExit }) {
 
   return (
     <div className="native-ar-overlay">
-      <div className="native-ar-status">
+      <div
+        className="native-ar-status"
+        onClick={() => setAlgoVaMal((v) => !v)}
+        title="Tocar para ver el diagnóstico técnico"
+      >
         <span className={tracking === 'tracking' ? 'tracking-ok' : 'tracking-wait'}>
           {tracking === 'tracking' ? 'Tracking OK' : 'Reconociendo...'}
         </span>
@@ -399,6 +417,10 @@ export default function NativeARView({ onExit }) {
         <div>aplicados: {hud.applied} {hud.applied === 0 && hud.poseEvents > 0 ? '⚠ apply FALLA' : ''}</div>
         <div>THREE: {hud.src} · track: {tracking}</div>
         <div>planos: {reticle.planes} · mira: {reticle.found ? (reticle.type || 'si') : 'no'}</div>
+        <div style={{ color: transp.alpha === false ? '#ff6b6b' : '#3ee87a' }}>
+          gl.alpha: {String(transp.alpha)} {transp.alpha === false ? '❌ lienzo OPACO' : ''}
+        </div>
+        <div style={{ maxWidth: 260, wordBreak: 'break-word' }}>transp: {transp.pasos || '—'}</div>
         <div>upm: {hud.upm} · giro: {hud.yaw}°{hud.aligning ? ' ·ALIN' : ''}</div>
         <div>GPS: {geo ? `${geo.lat?.toFixed(6)}, ${geo.lon?.toFixed(6)} ±${Math.round(geo.accuracy || 0)}m` : 'sin senal'}{geo?.hasHeading ? ` · N ${Math.round(geo.heading)}°` : ''}</div>
         {hud.err ? <div style={{ color: '#ff6b6b', maxWidth: 260, wordBreak: 'break-word' }}>err: {hud.err}</div> : null}
