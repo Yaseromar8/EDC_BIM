@@ -519,7 +519,20 @@ const Viewer = ({
                     disabledExtensions: {
                         measure: false,
                         section: false
-                    }
+                    },
+                    // CANAL ALFA en el lienzo del visor. Sin esto el contexto
+                    // WebGL se crea opaco y NINGUNA llamada de limpieza puede
+                    // volverlo transparente: en AR el area del visor salia
+                    // NEGRA tapando la camara, por mucho que apagaramos fondos.
+                    //
+                    // Comprobado en el codigo de LMV: initialize() pasa
+                    // webglInitParams a createRenderer, y ademas hace
+                    //   removeAlphaInOutput = (webglInitParams?.alpha !== true)
+                    // o sea que con alpha:true deja de borrar el alfa de salida.
+                    //
+                    // En uso normal no cambia nada: el visor sigue pintando su
+                    // propio fondo. Solo habilita que el AR pueda apagarlo.
+                    webglInitParams: { alpha: true }
                 };
 
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);

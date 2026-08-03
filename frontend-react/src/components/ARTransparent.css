@@ -9,10 +9,22 @@ body.ar-active .app-viewer {
     background-image: none !important;
 }
 
+/* PANTALLA LIMPIA EN AR (patron Augin/Dalux): en obra, mirando por la tablet,
+   la barra superior, el raíl de herramientas, Capas/Corte/Revit y el resto del
+   cromo del visor 3D no pintan nada — solo tapan el terreno. Se ocultan TODOS;
+   los únicos controles que quedan son los del propio AR. */
 body.ar-active .top-bar,
 body.ar-active .app-left-rail,
-body.ar-active .desktop-rail-toggle {
-    visibility: hidden !important;
+body.ar-active .desktop-rail-toggle,
+body.ar-active .adsk-viewing-viewer .adsk-toolbar,
+body.ar-active .adsk-viewing-viewer .viewcubeWrapper,
+body.ar-active .adsk-viewing-viewer .adsk-control-group,
+body.ar-active .viewer-bottom-bar,
+body.ar-active .viewer-labels-bar,
+body.ar-active .layers-button,
+body.ar-active .section-cut-tool,
+body.ar-active .link-revit-badge {
+    display: none !important;
 }
 
 body.ar-active .adsk-viewing-viewer,
