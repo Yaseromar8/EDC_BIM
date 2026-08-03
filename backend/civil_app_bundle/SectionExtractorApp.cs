@@ -68,6 +68,42 @@ namespace AlignmentExtractorApp
         public double? cumulativeVolume { get; set; }
     }
 
+    // ── v6 SONDEO QTO: la RECETA que el cadista configuró en Compute Materials ──
+    // Cada material del Material List del Sample Line Group se define comparando
+    // SUPERFICIES (encima/debajo) y/o shapes de corredor. Esto es la fuente para
+    // saber qué materiales pueden reconstruirse como sólido continuo entre
+    // topografías (misma configuración del cadista, evaluada fuera de las SL).
+    public class QtoRecipeItemV6
+    {
+        public string kind { get; set; }       // "surface" | "corridor" | "shape" | "structure"
+        public string name { get; set; }       // nombre de la superficie / corredor
+        public string condition { get; set; }  // "Above" | "Below" (solo superficies)
+    }
+
+    public class QtoRecipeV6
+    {
+        public string alignmentId { get; set; }
+        public string sampleLineGroup { get; set; }
+        public string materialListName { get; set; }
+        public string materialListGuid { get; set; }
+        public string materialName { get; set; }
+        public string quantityType { get; set; } // Cut / Fill / CutAndRefill / Structures…
+        public string shapeStyle { get; set; }
+        public List<QtoRecipeItemV6> items { get; set; } = new List<QtoRecipeItemV6>();
+    }
+
+    // v6: inventario de superficies TIN del DWG (topografías disponibles)
+    public class SurfaceInfoV6
+    {
+        public string name { get; set; }
+        public string type { get; set; }          // TinSurface / TinVolumeSurface / GridSurface
+        public string description { get; set; }
+        public long? triangles { get; set; }
+        public long? points { get; set; }
+        public double?[] extents { get; set; }    // [minX, minY, maxX, maxY] mundo
+        public double?[] elevRange { get; set; }  // [minZ, maxZ]
+    }
+
     public class SectionShapeV2
     {
         public string name { get; set; }
@@ -95,10 +131,58 @@ namespace AlignmentExtractorApp
         public string generatedAt { get; set; }
         public List<string> warnings { get; set; } = new List<string>();
         public List<SectionDataV2> stations { get; set; } = new List<SectionDataV2>();
+        // v6 SONDEO: recetas QTO del cadista + inventario de topografías.
+        // Aditivos al contrato (los consumidores viejos los ignoran).
+        public List<QtoRecipeV6> qtoRecipes { get; set; }
+        public List<SurfaceInfoV6> surfaces { get; set; }
+    }
+
+    // ── v7 FASE 2: triángulos crudos de las topografías que usan las recetas
+    // QTO — el backend evalúa la receta del cadista en CONTINUO y construye el
+    // sólido por material. Salida propia (surfaces_result.json) para no
+    // engordar la extracción de secciones.
+    public class SurfaceMeshV7
+    {
+        public string name { get; set; }
+        public int triCount { get; set; }
+        public List<double> vertices { get; set; } = new List<double>();  // x,y,z absolutos
+        public List<int> indices { get; set; } = new List<int>();
+    }
+
+    public class SurfacesResultV7
+    {
+        public int schemaVersion { get; set; } = 1;
+        public string generatedAt { get; set; }
+        public double[] clip { get; set; }
+        public List<string> warnings { get; set; } = new List<string>();
+        public List<SurfaceMeshV7> surfaces { get; set; } = new List<SurfaceMeshV7>();
     }
 
     public class SectionCommands
     {
+        [Autodesk.AutoCAD.Runtime.CommandMethod("ExtractSurfacesJSON")]
+        public static void ExtractSurfacesJSON()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            try
+            {
+                doc.Editor.WriteMessage("\nExtracting Civil 3D Surfaces (v7)...\n");
+                SurfaceRunner.Run();
+                doc.Editor.WriteMessage("\nSurface extraction completed.\n");
+            }
+            catch (Exception ex)
+            {
+                doc.Editor.WriteMessage($"\nFATAL: {ex.GetType().Name} - {ex.Message}\n");
+                try
+                {
+                    var res = new SurfacesResultV7 { generatedAt = DateTime.UtcNow.ToString("o") };
+                    res.warnings.Add($"FATAL: {ex.GetType().Name} - {ex.Message}");
+                    File.WriteAllText("surfaces_result.json", SectionRunner.SerializeSafe(res));
+                }
+                catch { }
+            }
+        }
+
         [Autodesk.AutoCAD.Runtime.CommandMethod("ExtractSectionsJSON")]
         public static void ExtractSectionsJSON()
         {
@@ -121,6 +205,130 @@ namespace AlignmentExtractorApp
                 }
                 catch { }
             }
+        }
+    }
+
+    public static class SurfaceRunner
+    {
+        public static void Run()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            Database db = doc.Database;
+            var result = new SurfacesResultV7 { generatedAt = DateTime.UtcNow.ToString("o") };
+            Action<string> ping = (msg) => { try { doc.Editor.WriteMessage($"\n[SURF] {msg}\n"); } catch { } };
+
+            // params.json: {"surfaceNames":[...], "clip":[minX,minY,maxX,maxY]}
+            var wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            double[] clip = null;
+            try
+            {
+                if (File.Exists("params.json"))
+                {
+                    using (var pdoc = System.Text.Json.JsonDocument.Parse(File.ReadAllText("params.json")))
+                    {
+                        if (pdoc.RootElement.TryGetProperty("surfaceNames", out var arr) && arr.ValueKind == System.Text.Json.JsonValueKind.Array)
+                            foreach (var it in arr.EnumerateArray())
+                            {
+                                var s = it.GetString();
+                                if (!string.IsNullOrWhiteSpace(s)) wanted.Add(s.Trim());
+                            }
+                        if (pdoc.RootElement.TryGetProperty("clip", out var cl) && cl.ValueKind == System.Text.Json.JsonValueKind.Array && cl.GetArrayLength() == 4)
+                        {
+                            clip = new double[4];
+                            int ci = 0;
+                            foreach (var it in cl.EnumerateArray()) clip[ci++] = it.GetDouble();
+                        }
+                    }
+                }
+            }
+            catch (Exception pe) { result.warnings.Add("params.json ilegible: " + pe.Message); }
+            result.clip = clip;
+            if (wanted.Count == 0) result.warnings.Add("sin surfaceNames en params.json: no se exporta nada");
+            ping($"pedidas={wanted.Count} clip={(clip == null ? "no" : "si")}");
+
+            using (Transaction trans = db.TransactionManager.StartTransaction())
+            {
+                var civilDoc = Autodesk.Civil.ApplicationServices.CivilApplication.ActiveDocument;
+                bool triDumped = false;
+                foreach (ObjectId sid in civilDoc.GetSurfaceIds())
+                {
+                    if (wanted.Count == 0) break;
+                    string name = null;
+                    object so = null;
+                    try
+                    {
+                        so = trans.GetObject(sid, OpenMode.ForRead);
+                        name = so.GetType().GetProperty("Name")?.GetValue(so) as string;
+                    }
+                    catch { continue; }
+                    if (name == null || !wanted.Contains(name)) continue;
+
+                    var mesh = new SurfaceMeshV7 { name = name };
+                    var vmap = new Dictionary<(long, long, long), int>();
+                    Func<double, double, double, int> addV = (x, y, z) =>
+                    {
+                        var key = ((long)Math.Round(x * 1000), (long)Math.Round(y * 1000), (long)Math.Round(z * 1000));
+                        if (vmap.TryGetValue(key, out int idx)) return idx;
+                        idx = mesh.vertices.Count / 3;
+                        mesh.vertices.Add(Math.Round(x, 3));
+                        mesh.vertices.Add(Math.Round(y, 3));
+                        mesh.vertices.Add(Math.Round(z, 3));
+                        vmap[key] = idx;
+                        return idx;
+                    };
+                    try
+                    {
+                        dynamic dsurf = so;
+                        object tris = null;
+                        try { tris = dsurf.Triangles; } catch { }
+                        if (tris == null) { try { tris = dsurf.GetTriangles(false); } catch { } }
+                        if (tris == null)
+                        {
+                            result.warnings.Add($"'{name}': sin acceso a triángulos");
+                            continue;
+                        }
+                        foreach (var t in (System.Collections.IEnumerable)tris)
+                        {
+                            try
+                            {
+                                dynamic dt = t;
+                                dynamic p1 = dt.Vertex1.Location;
+                                dynamic p2 = dt.Vertex2.Location;
+                                dynamic p3 = dt.Vertex3.Location;
+                                double x1 = p1.X, y1 = p1.Y, z1 = p1.Z;
+                                double x2 = p2.X, y2 = p2.Y, z2 = p2.Z;
+                                double x3 = p3.X, y3 = p3.Y, z3 = p3.Z;
+                                if (clip != null)
+                                {
+                                    double mnx = Math.Min(x1, Math.Min(x2, x3)), mxx = Math.Max(x1, Math.Max(x2, x3));
+                                    double mny = Math.Min(y1, Math.Min(y2, y3)), mxy = Math.Max(y1, Math.Max(y2, y3));
+                                    if (mxx < clip[0] || mnx > clip[2] || mxy < clip[1] || mny > clip[3]) continue;
+                                }
+                                mesh.indices.Add(addV(x1, y1, z1));
+                                mesh.indices.Add(addV(x2, y2, z2));
+                                mesh.indices.Add(addV(x3, y3, z3));
+                                mesh.triCount++;
+                            }
+                            catch (Exception te)
+                            {
+                                if (!triDumped)
+                                {
+                                    triDumped = true;
+                                    var pn = new List<string>();
+                                    try { foreach (var p in t.GetType().GetProperties()) pn.Add(p.Name); } catch { }
+                                    result.warnings.Add($"DIAG triangle ({t.GetType().Name}): {string.Join(",", pn)} err={te.Message}");
+                                }
+                            }
+                        }
+                        result.surfaces.Add(mesh);
+                        ping($"'{name}': {mesh.triCount} tris, {mesh.vertices.Count / 3} vtx");
+                    }
+                    catch (Exception se) { result.warnings.Add($"'{name}': {se.Message}"); }
+                }
+                trans.Commit();
+            }
+            File.WriteAllText("surfaces_result.json", SectionRunner.SerializeSafe(result));
+            ping("surfaces_result.json escrito");
         }
     }
 
@@ -149,6 +357,159 @@ namespace AlignmentExtractorApp
                 }
             }
             return null;
+        }
+
+        // v8.2: asigna un valor de ENUM por reflexión (el tipo exacto del enum
+        // varía entre versiones del SDK; se busca el nombre que contenga la pista)
+        private static void SetEnumProp(object target, string propName, string hint)
+        {
+            if (target == null) return;
+            var pi = target.GetType().GetProperty(propName);
+            if (pi == null || !pi.CanWrite || !pi.PropertyType.IsEnum) return;
+            foreach (var n in Enum.GetNames(pi.PropertyType))
+            {
+                if (n.ToLowerInvariant().Contains(hint))
+                {
+                    pi.SetValue(target, Enum.Parse(pi.PropertyType, n));
+                    return;
+                }
+            }
+        }
+
+        // ── v8.2 PRE-PASS DENSIFICAR: crear sample lines en memoria y hacer que
+        // CIVIL les compute los materiales de la receta del cadista. Corre en
+        // su propia transacción con Commit (solo memoria de la sesión: el DWG
+        // nunca se guarda; el Result del workitem es únicamente el JSON).
+        private static void DensifyPrePass(Database db, SectionResultV2 result)
+        {
+            double step = 0;
+            HashSet<string> onlyA = null;
+            try
+            {
+                if (!File.Exists("params.json")) return;
+                using (var pd = System.Text.Json.JsonDocument.Parse(File.ReadAllText("params.json")))
+                {
+                    if (pd.RootElement.TryGetProperty("densifyStep", out var dsv)) step = dsv.GetDouble();
+                    if (pd.RootElement.TryGetProperty("alignmentIds", out var arr) && arr.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        onlyA = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var it in arr.EnumerateArray())
+                        {
+                            var s = it.GetString();
+                            if (!string.IsNullOrWhiteSpace(s)) onlyA.Add(s.Trim());
+                        }
+                        if (onlyA.Count == 0) onlyA = null;
+                    }
+                }
+            }
+            catch { return; }
+            if (step <= 0.4) return;
+            var dumped = new HashSet<string>();
+            using (Transaction tD = db.TransactionManager.StartTransaction())
+            {
+                var civilDoc = Autodesk.Civil.ApplicationServices.CivilApplication.ActiveDocument;
+                foreach (ObjectId alignId in civilDoc.GetAlignmentIds())
+                {
+                    Alignment al = tD.GetObject(alignId, OpenMode.ForRead) as Alignment;
+                    if (al == null) continue;
+                    if (onlyA != null && !onlyA.Contains(al.Name)) continue;
+                    foreach (ObjectId slgId in al.GetSampleLineGroupIds())
+                    {
+                        SampleLineGroup slg = null;
+                        try { slg = tD.GetObject(slgId, OpenMode.ForWrite) as SampleLineGroup; }
+                        catch { try { slg = tD.GetObject(slgId, OpenMode.ForRead) as SampleLineGroup; } catch { } }
+                        if (slg == null) continue;
+                        var existing = new List<double>();
+                        foreach (ObjectId exId in slg.GetSampleLineIds())
+                        {
+                            var exSl = tD.GetObject(exId, OpenMode.ForRead) as SampleLine;
+                            if (exSl != null) existing.Add(exSl.Station);
+                        }
+                        if (existing.Count < 2) continue;
+                        existing.Sort();
+                        // fuentes de material → muestreo dinámico
+                        try
+                        {
+                            dynamic mss = ((dynamic)slg).GetMaterialSectionSources();
+                            int touched = 0;
+                            foreach (var srcx in (System.Collections.IEnumerable)mss)
+                            {
+                                try { ((dynamic)srcx).IsSampled = true; } catch (Exception e1) { if (dumped.Add("IS")) result.warnings.Add("v8.2 IsSampled: " + e1.Message); }
+                                try { SetEnumProp(srcx, "UpdateMode", "dynam"); } catch (Exception e2) { if (dumped.Add("UM")) result.warnings.Add("v8.2 src.UpdateMode: " + e2.Message); }
+                                touched++;
+                            }
+                            result.warnings.Add($"v8.2 fuentes de material tocadas: {touched}");
+                        }
+                        catch (Exception se) { result.warnings.Add("v8.2 fuentes: " + se.Message); }
+                        int created = 0, failed = 0;
+                        string firstErr = null;
+                        double s0 = existing[0], s1 = existing[existing.Count - 1];
+                        for (double s = Math.Ceiling(s0 / step) * step; s < s1; s += step)
+                        {
+                            bool near = false;
+                            foreach (var ex in existing)
+                                if (Math.Abs(ex - s) < step * 0.45) { near = true; break; }
+                            if (near) continue;
+                            try
+                            {
+                                SampleLine.Create($"ECD_DENS_{s:F0}", slgId, s);
+                                created++;
+                            }
+                            catch (Exception ce)
+                            {
+                                failed++;
+                                if (firstErr == null) firstErr = ce.Message;
+                            }
+                        }
+                        result.warnings.Add($"v8.2 prepass SLG '{slg.Name}': +{created} SL, {failed} fallos{(firstErr != null ? " (" + firstErr + ")" : "")}");
+                        // secciones de las SL nuevas → modo dinámico (despierta el cálculo)
+                        int wrote = 0;
+                        try
+                        {
+                            foreach (ObjectId exId in slg.GetSampleLineIds())
+                            {
+                                var exSl = tD.GetObject(exId, OpenMode.ForRead) as SampleLine;
+                                if (exSl == null || !exSl.Name.StartsWith("ECD_DENS")) continue;
+                                foreach (ObjectId secId in exSl.GetSectionIds())
+                                {
+                                    Autodesk.Civil.DatabaseServices.Section sec = null;
+                                    try { sec = tD.GetObject(secId, OpenMode.ForWrite) as Autodesk.Civil.DatabaseServices.Section; }
+                                    catch { continue; }
+                                    if (sec == null) continue;
+                                    if (dumped.Add("SECMETH"))
+                                    {
+                                        var mn = new List<string>();
+                                        foreach (var mi in sec.GetType().GetMethods())
+                                            if (!mi.Name.StartsWith("get_") && !mi.Name.StartsWith("set_")) mn.Add(mi.Name);
+                                        result.warnings.Add($"DIAG v8.2 {sec.GetType().Name} methods: {string.Join(",", mn)}");
+                                    }
+                                    try { SetEnumProp(sec, "UpdateMode", "dynam"); wrote++; }
+                                    catch (Exception e3) { if (dumped.Add("SUM")) result.warnings.Add("v8.2 sec.UpdateMode: " + e3.Message); }
+                                }
+                            }
+                        }
+                        catch { }
+                        result.warnings.Add($"v8.2 secciones a dinámico: {wrote}");
+                        // recomputar QTO con el motor de Civil por cada mapping
+                        try
+                        {
+                            var names2 = ((dynamic)slg).GetQTOMappingNames();
+                            foreach (var nm in (System.Collections.IEnumerable)names2)
+                            {
+                                try
+                                {
+                                    var mg = ((dynamic)slg).GetMappingGuid(nm.ToString());
+                                    ((dynamic)slg).GetTotalVolumeResultDataForMaterialList(mg);
+                                }
+                                catch { }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                tD.Commit();
+            }
+            result.warnings.Add("v8.2 prepass: COMMIT en memoria hecho");
         }
 
         // Área (m²) de un hatch con posibles VARIOS loops concatenados (los
@@ -220,6 +581,13 @@ namespace AlignmentExtractorApp
                 try { doc.Editor.WriteMessage($"\n[SEC] {msg}\n"); } catch { }
             };
             ping("Run started");
+
+            // v8.2: el densificado va ANTES y en transacción PROPIA con COMMIT en
+            // memoria (el DWG jamás se guarda): anidado en la transacción de
+            // lectura, el abort final descartaba el muestreo y las secciones de
+            // material de las SL nuevas quedaban vacías.
+            try { DensifyPrePass(db, result); }
+            catch (Exception dpx) { result.warnings.Add("v8.2 prepass: " + dpx.Message); }
 
             using (Transaction trans = db.TransactionManager.StartTransaction())
             {
@@ -437,6 +805,68 @@ namespace AlignmentExtractorApp
                 var sectionTypesDumped = new HashSet<string>();
                 ping("civilDoc access");
                 var civilDoc = Autodesk.Civil.ApplicationServices.CivilApplication.ActiveDocument;
+
+                // ── v6: INVENTARIO DE TOPOGRAFÍAS (una vez por documento) ──
+                // Qué superficies TIN existen, su cobertura y densidad — para
+                // decidir con datos qué materiales pueden volverse sólido continuo.
+                try
+                {
+                    ObjectIdCollection surfIds = civilDoc.GetSurfaceIds();
+                    result.surfaces = new List<SurfaceInfoV6>();
+                    foreach (ObjectId sid in surfIds)
+                    {
+                        try
+                        {
+                            var so = trans.GetObject(sid, OpenMode.ForRead);
+                            var info = new SurfaceInfoV6
+                            {
+                                name = TryGet(so, "Name") as string,
+                                type = so.GetType().Name,
+                                description = TryGet(so, "Description") as string,
+                            };
+                            try
+                            {
+                                var ent = so as Autodesk.AutoCAD.DatabaseServices.Entity;
+                                if (ent != null)
+                                {
+                                    var ext = ent.GeometricExtents;
+                                    info.extents = new double?[] {
+                                        Clean(ext.MinPoint.X), Clean(ext.MinPoint.Y),
+                                        Clean(ext.MaxPoint.X), Clean(ext.MaxPoint.Y) };
+                                    info.elevRange = new double?[] { Clean(ext.MinPoint.Z), Clean(ext.MaxPoint.Z) };
+                                }
+                            }
+                            catch { }
+                            // conteos por propiedades (varias rutas según el tipo)
+                            try
+                            {
+                                dynamic ds = so;
+                                object props = null;
+                                try { props = ds.GetTinProperties(); } catch { }
+                                if (props == null) { try { props = ds.GetGeneralProperties(); } catch { } }
+                                if (props != null)
+                                {
+                                    var t = TryNum(props, "NumberOfTriangles", "TrianglesCount");
+                                    var pcount = TryNum(props, "NumberOfPoints", "PointsCount", "NumberOfVertices");
+                                    if (t.HasValue) info.triangles = Convert.ToInt64(t.Value);
+                                    if (pcount.HasValue) info.points = Convert.ToInt64(pcount.Value);
+                                    if (sectionTypesDumped.Add("SURFPROPS"))
+                                    {
+                                        var pn = new List<string>();
+                                        foreach (var p in props.GetType().GetProperties()) pn.Add(p.Name);
+                                        result.warnings.Add($"DIAG SurfaceProps({info.type}): {string.Join(",", pn)}");
+                                    }
+                                }
+                            }
+                            catch { }
+                            result.surfaces.Add(info);
+                        }
+                        catch (Exception sx) { result.warnings.Add("Surface item: " + sx.Message); }
+                    }
+                    ping($"v6: {result.surfaces.Count} superficies");
+                }
+                catch (Exception ex) { result.warnings.Add("v6 inventario superficies: " + ex.Message); }
+
                 ObjectIdCollection alignIds = civilDoc.GetAlignmentIds();
                 ping($"{alignIds.Count} alignments");
                 if (alignIds.Count == 0) result.warnings.Add("El DWG no tiene alineamientos.");
@@ -480,6 +910,190 @@ namespace AlignmentExtractorApp
                     {
                         SampleLineGroup slg = trans.GetObject(slgId, OpenMode.ForRead) as SampleLineGroup;
                         if (slg == null) continue;
+
+                        // v8.2: verificación del PRE-PASS de densificado (si corrió)
+                        if (sectionTypesDumped.Add("V8VERIF"))
+                        {
+                            try
+                            {
+                                foreach (ObjectId exId in slg.GetSampleLineIds())
+                                {
+                                    var exSl = trans.GetObject(exId, OpenMode.ForRead) as SampleLine;
+                                    if (exSl == null || !exSl.Name.StartsWith("ECD_DENS")) continue;
+                                    int nsec = 0, nptsv = 0;
+                                    foreach (ObjectId secId2 in exSl.GetSectionIds())
+                                    {
+                                        var sec2 = trans.GetObject(secId2, OpenMode.ForRead) as Autodesk.Civil.DatabaseServices.Section;
+                                        if (sec2 == null || sec2.GetType().Name != "MaterialSection") continue;
+                                        nsec++;
+                                        try { nptsv += (int)((dynamic)sec2).SectionPoints.Count; } catch { }
+                                    }
+                                    result.warnings.Add($"v8.2 verif '{exSl.Name}': {nsec} matSections, {nptsv} pts");
+                                    break;
+                                }
+                            }
+                            catch { }
+                        }
+
+                        // ── v6: RECETAS QTO del cadista (una vez por SLG) ──
+                        // MaterialLists del grupo = lo que él mapeó en Compute
+                        // Materials: material → superficies (Above/Below) y/o
+                        // corredor. Defensivo con DIAG (la forma exacta del SDK
+                        // varía por versión; un solo viaje debe traerlo todo).
+                        try
+                        {
+                            dynamic dslg = slg;
+                            object mlists = null;
+                            try { mlists = dslg.MaterialLists; } catch { }
+                            if (mlists == null) { try { mlists = dslg.GetMaterialLists(); } catch { } }
+                            if (mlists == null)
+                            {
+                                result.warnings.Add($"v6 SLG '{slg.Name}': MaterialLists no expuesto");
+                            }
+                            else
+                            {
+                                if (result.qtoRecipes == null) result.qtoRecipes = new List<QtoRecipeV6>();
+                                // v6.1: firmas EXACTAS de los métodos QTO del SLG (una vez)
+                                if (sectionTypesDumped.Add("V6SLGSIG"))
+                                {
+                                    foreach (var mname in new[] { "GetQTOMappingNames", "GetMappingGuid", "GetMaterialNamesInMapping", "GetMaterialGuid", "GetMaterialComponents", "GetMaterialLocations", "GetTotalVolumeResultDataForMaterialList" })
+                                    {
+                                        try
+                                        {
+                                            foreach (var mi in slg.GetType().GetMethods())
+                                            {
+                                                if (mi.Name != mname) continue;
+                                                var ps = new List<string>();
+                                                foreach (var pp in mi.GetParameters()) ps.Add(pp.ParameterType.Name + " " + pp.Name);
+                                                result.warnings.Add($"DIAG v6 SLG.{mname}({string.Join(", ", ps)}) -> {mi.ReturnType.Name}");
+                                            }
+                                        }
+                                        catch { }
+                                    }
+                                    try
+                                    {
+                                        var names = ((dynamic)slg).GetQTOMappingNames();
+                                        var ln = new List<string>();
+                                        foreach (var n in (System.Collections.IEnumerable)names) ln.Add(n.ToString());
+                                        result.warnings.Add("v6 QTOMappingNames: " + string.Join(" | ", ln));
+                                    }
+                                    catch (Exception qe) { result.warnings.Add("v6 GetQTOMappingNames: " + qe.Message); }
+                                }
+                                foreach (var ml in (System.Collections.IEnumerable)mlists)
+                                {
+                                    string mlName = TryGet(ml, "Name") as string;
+                                    string mlGuid = null;
+                                    try { mlGuid = ((object)((dynamic)ml).Guid).ToString(); } catch { }
+                                    object mats = ml; // MaterialList ES la colección de materiales
+                                    System.Collections.IEnumerable matSeq = null;
+                                    try { matSeq = (System.Collections.IEnumerable)mats; } catch { }
+                                    if (matSeq == null) { try { matSeq = (System.Collections.IEnumerable)((dynamic)ml).Materials; } catch { } }
+                                    if (matSeq == null)
+                                    {
+                                        result.warnings.Add($"v6 ML '{mlName}': materiales no enumerables");
+                                        continue;
+                                    }
+                                    foreach (var mat in matSeq)
+                                    {
+                                        var rec = new QtoRecipeV6
+                                        {
+                                            alignmentId = alignment.Name,
+                                            sampleLineGroup = slg.Name,
+                                            materialListName = mlName,
+                                            materialListGuid = mlGuid,
+                                            materialName = TryGet(mat, "Name") as string,
+                                        };
+                                        try { rec.quantityType = ((object)((dynamic)mat).QuantityType).ToString(); } catch { }
+                                        if (rec.quantityType == null) { try { rec.quantityType = ((object)((dynamic)mat).MaterialQuantityType).ToString(); } catch { } }
+                                        try { rec.shapeStyle = ResolveName(trans, (ObjectId)((dynamic)mat).ShapeStyleId); } catch { }
+                                        if (sectionTypesDumped.Add("V6MATPROPS"))
+                                        {
+                                            var pn = new List<string>();
+                                            foreach (var p in mat.GetType().GetProperties()) pn.Add(p.Name);
+                                            result.warnings.Add($"DIAG v6 Material props: {string.Join(",", pn)}");
+                                        }
+                                        // v6.1: QTOMaterial ES una colección (Item/Count) de items
+                                        // de criterio — enumerarla directo (SurfaceItems no existe).
+                                        Action<object> addItem = (qit) =>
+                                        {
+                                            if (qit == null) return;
+                                            if (sectionTypesDumped.Add("V6QITEM"))
+                                            {
+                                                var pn = new List<string>();
+                                                foreach (var p in qit.GetType().GetProperties()) pn.Add(p.Name + ":" + p.PropertyType.Name);
+                                                result.warnings.Add($"DIAG v6 QTOMaterialItem ({qit.GetType().Name}): {string.Join(",", pn)}");
+                                            }
+                                            var it = new QtoRecipeItemV6();
+                                            try { var v = TryGet(qit, "ItemType") ?? TryGet(qit, "Type") ?? TryGet(qit, "DataType"); it.kind = v == null ? null : v.ToString(); } catch { }
+                                            try { it.name = ResolveName(trans, (ObjectId)((dynamic)qit).SurfaceId); } catch { }
+                                            if (it.name == null) { try { it.name = ResolveName(trans, (ObjectId)((dynamic)qit).CorridorId); } catch { } }
+                                            if (it.name == null) { try { it.name = ResolveName(trans, (ObjectId)((dynamic)qit).ObjectId); } catch { } }
+                                            if (it.name == null) { try { it.name = TryGet(qit, "Name") as string; } catch { } }
+                                            try { var c = TryGet(qit, "Condition") ?? TryGet(qit, "MaterialCondition") ?? TryGet(qit, "SurfaceCondition"); it.condition = c == null ? null : c.ToString(); } catch { }
+                                            rec.items.Add(it);
+                                        };
+                                        int itemCount = -1;
+                                        try { itemCount = (int)((dynamic)mat).Count; } catch { }
+                                        for (int qi = 0; qi < itemCount; qi++)
+                                        {
+                                            try { addItem((object)((dynamic)mat)[qi]); }
+                                            catch (Exception ei) { if (sectionTypesDumped.Add("V6IDX")) result.warnings.Add("v6 indexer QTOMaterial: " + ei.Message); }
+                                        }
+                                        if (rec.items.Count == 0)
+                                        {
+                                            try { foreach (var qit in (System.Collections.IEnumerable)mat) addItem(qit); }
+                                            catch (Exception ee) { if (sectionTypesDumped.Add("V6ENUM")) result.warnings.Add("v6 enum QTOMaterial: " + ee.Message); }
+                                        }
+                                        // Subcriteria (si el material anida criterios)
+                                        try
+                                        {
+                                            object sub = ((dynamic)mat).Subcriteria;
+                                            if (sub != null && sectionTypesDumped.Add("V6SUB"))
+                                            {
+                                                var pn = new List<string>();
+                                                foreach (var p in sub.GetType().GetProperties()) pn.Add(p.Name + ":" + p.PropertyType.Name);
+                                                result.warnings.Add($"DIAG v6 Subcriteria ({sub.GetType().Name}): {string.Join(",", pn)}");
+                                            }
+                                        }
+                                        catch { }
+                                        // v6.1: componentes de la receta vía métodos del SLG (guids a mano)
+                                        try
+                                        {
+                                            object comp = null;
+                                            string via = null;
+                                            try { comp = ((dynamic)slg).GetMaterialComponents((System.Guid)((dynamic)mat).Guid); via = "(matGuid)"; } catch { }
+                                            if (comp == null) { try { comp = ((dynamic)slg).GetMaterialComponents((System.Guid)((dynamic)mat).MaterialListGuid, (System.Guid)((dynamic)mat).Guid); via = "(mlGuid, matGuid)"; } catch { } }
+                                            if (comp != null)
+                                            {
+                                                result.warnings.Add($"v6 GetMaterialComponents{via} OK para '{rec.materialName}' tipo={comp.GetType().Name}");
+                                                try
+                                                {
+                                                    foreach (var c in (System.Collections.IEnumerable)comp)
+                                                    {
+                                                        if (sectionTypesDumped.Add("V6COMP"))
+                                                        {
+                                                            var pn = new List<string>();
+                                                            foreach (var p in c.GetType().GetProperties()) pn.Add(p.Name + ":" + p.PropertyType.Name);
+                                                            result.warnings.Add($"DIAG v6 MaterialComponent ({c.GetType().Name}): {string.Join(",", pn)}");
+                                                        }
+                                                        var it = new QtoRecipeItemV6 { kind = "component" };
+                                                        try { it.name = TryGet(c, "Name") as string; } catch { }
+                                                        if (it.name == null) { try { it.name = ResolveName(trans, (ObjectId)((dynamic)c).SurfaceId); } catch { } }
+                                                        try { var cc = TryGet(c, "Condition") ?? TryGet(c, "ConditionType") ?? TryGet(c, "MaterialCondition"); it.condition = cc == null ? null : cc.ToString(); } catch { }
+                                                        rec.items.Add(it);
+                                                    }
+                                                }
+                                                catch (Exception ce) { result.warnings.Add("v6 enum components: " + ce.Message); }
+                                            }
+                                        }
+                                        catch (Exception cx) { if (sectionTypesDumped.Add("V6COMPERR")) result.warnings.Add("v6 GetMaterialComponents: " + cx.Message); }
+                                        result.qtoRecipes.Add(rec);
+                                    }
+                                }
+                                ping($"v6: recetas QTO SLG '{slg.Name}' = {(result.qtoRecipes == null ? 0 : result.qtoRecipes.Count)}");
+                            }
+                        }
+                        catch (Exception ex) { result.warnings.Add($"v6 recetas QTO SLG '{slg.Name}': {ex.Message}"); }
 
                         ObjectIdCollection slIds = slg.GetSampleLineIds();
                         int slIdx = 0;
@@ -631,6 +1245,30 @@ namespace AlignmentExtractorApp
                                 try { shape.sourceName = ResolveName(trans, section.SourceId); } catch { }
                                 shape.materialName = TryGet(section, "MaterialName") as string;
                                 shape.layer = TryGet(section, "Layer") as string;
+
+                                // v6: SourceName es propiedad DIRECTA de la sección (DIAG lo
+                                // confirmó); ResolveName(SourceId) devolvía null. Para
+                                // MaterialSection es la identidad LIMPIA del material QTO del
+                                // cadista — sin prefijo de sample line ni id — y alimenta el
+                                // contrato canónico del backend (role/kind/materialKey).
+                                if (string.IsNullOrEmpty(shape.sourceName)) {
+                                    try { shape.sourceName = TryGet(section, "SourceName") as string; } catch { }
+                                }
+                                if (string.IsNullOrEmpty(shape.materialName)
+                                    && section is MaterialSection
+                                    && !string.IsNullOrEmpty(shape.sourceName)) {
+                                    shape.materialName = shape.sourceName;
+                                }
+                                // v6 DIAG (una vez): métodos del SampleLineGroup — para
+                                // descubrir la API de listas de material (quantityType futuro)
+                                if (sectionTypesDumped.Add("SLGM")) {
+                                    try {
+                                        var mn = new HashSet<string>();
+                                        foreach (var m in slg.GetType().GetMethods())
+                                            if (!m.Name.StartsWith("get_") && !m.Name.StartsWith("set_")) mn.Add(m.Name);
+                                        result.warnings.Add($"DIAG SLG metodos: {string.Join(",", mn)}");
+                                    } catch { }
+                                }
 
                                 // Área si Civil la expone (Material List la tiene calculada)
                                 shape.area = Clean(TryNum(section, "Area"));

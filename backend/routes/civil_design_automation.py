@@ -516,6 +516,9 @@ def ensure_civil_alignments_table():
             # ACC project (b.xxx): necesario para re-extraer archivos vinculados
             # de Docs (urn wipprod) sin depender del contexto del navegador.
             cur.execute("ALTER TABLE civil_alignments ADD COLUMN IF NOT EXISTS acc_project_id TEXT")
+            # Nombre legible del archivo fuente: sin él, el panel Civil solo
+            # puede mostrar "Carga en la nube · fecha (urn…)" — confuso.
+            cur.execute("ALTER TABLE civil_alignments ADD COLUMN IF NOT EXISTS display_name TEXT")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_civil_alignments_model ON civil_alignments(model_urn)")
             # Secciones transversales: mismo patrón (permanente hasta re-extraer)
             cur.execute("""
@@ -528,11 +531,82 @@ def ensure_civil_alignments_table():
                 )""")
             _ensure_scoped_civil_table(cur, 'civil_sections')
             cur.execute("ALTER TABLE civil_sections ADD COLUMN IF NOT EXISTS acc_project_id TEXT")
+            cur.execute("ALTER TABLE civil_sections ADD COLUMN IF NOT EXISTS display_name TEXT")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_civil_sections_model ON civil_sections(model_urn)")
             conn.commit()
             print("[civil] Tablas civil_alignments y civil_sections listas.")
     except Exception as e:
         print(f"[civil] ensure_civil_alignments_table: {e}")
+
+
+import re as _re
+
+# Patrones CENTRALIZADOS de tipo de material (única fuente; si un DWG nuevo
+# trae otra nomenclatura se ajusta AQUÍ y todos los consumidores lo heredan)
+_KIND_CUT = _re.compile(r'desmonte|corte|excav|cut', _re.I)
+_KIND_FILL = _re.compile(r'terrapl|relleno|fill', _re.I)
+
+
+def _canon_material_key(label):
+    """Identidad ESTABLE de una lista de material (quita prefijo de sample
+    line y el id único final). Misma lógica que usa el holograma."""
+    s = str(label or '').strip()
+    s = _re.sub(r'\(\d+\)\s*$', '', s)
+    m = _re.search(r'material list.*$', s, _re.I)
+    if m:
+        s = m.group(0)
+    else:
+        s = _re.sub(r'^secciones\s*-\s*', '', s, flags=_re.I)
+        s = _re.sub(r'^sl[-\s]?\d+\s*-\s*', '', s, flags=_re.I)
+    return _re.sub(r'\s+', ' ', s).strip().lower()
+
+
+def _canonicalize_sections(data):
+    """CONTRATO CANÓNICO por shape (idempotente, no toca campos crudos):
+      role: 'corridor' | 'material' | 'line' | 'shape'
+      kind: 'cut' | 'fill' | None      (solo role=material)
+      materialKey: identidad estable   (solo role=material)
+    Clasifica por PROPIEDADES INTRÍNSECAS (tipo del SDK, cerrado, área) y solo
+    al final por nombre — así los DWG nuevos no requieren tocar consumidores.
+    """
+    if not isinstance(data, dict) or not isinstance(data.get('stations'), list):
+        return data
+    for st in data['stations']:
+        for sec in st.get('sections') or []:
+            if not isinstance(sec, dict) or sec.get('role'):
+                continue  # ya canónico
+            src_type = str(sec.get('sourceType') or '')
+            style = str(sec.get('styleName') or '')
+            label = str(sec.get('materialName') or sec.get('sourceName') or sec.get('name') or '')
+            try:
+                area = float(sec.get('area') or 0)
+            except (TypeError, ValueError):
+                area = 0.0
+            is_closed = bool(sec.get('closed'))
+
+            # Visibilidad del CADISTA (contrato): draw=false u estilo _Invisible
+            # = no está en su lámina → los consumidores visuales lo omiten
+            # (el QTO/cuadro sí puede usarlo: es dato, no dibujo).
+            sec['hidden'] = bool(sec.get('draw') is False or 'invisible' in style.lower())
+
+            if src_type == 'CorridorShape':
+                sec['role'] = 'corridor'
+                continue
+            is_material = (
+                src_type == 'MaterialSection'
+                or style.lower().startswith('_hatch')
+                or 'material list' in label.lower()
+            )
+            if is_material:
+                sec['role'] = 'material'
+                sec['materialKey'] = _canon_material_key(label)
+                cut = bool(_KIND_CUT.search(label) or _KIND_CUT.search(style))
+                fill = bool(_KIND_FILL.search(label) or _KIND_FILL.search(style))
+                sec['kind'] = 'cut' if (cut and not fill) else ('fill' if fill else None)
+                continue
+            sec['role'] = 'shape' if (is_closed or area > 0) else 'line'
+    data['schemaContract'] = 1
+    return data
 
 
 @civil_da_bp.route('/api/civil/sections', methods=['GET', 'POST', 'DELETE'])
@@ -549,17 +623,31 @@ def civil_sections():
                 return jsonify({'error': 'Falta urn'}), 400
             if not urn:
                 # Listado por frente (el panel Civil pide solo ?scope_urn= y toma
-                # items[0]; el más reciente primero).
+                # items[0]; el más reciente primero). Con ?meta=1 NO baja la data
+                # (JSONB pesado): solo urn/fecha/nombre — para chips de estado.
+                meta_only = request.args.get('meta') in ('1', 'true')
                 with get_db_connection() as conn:
                     cur = conn.cursor()
+                    if meta_only:
+                        cur.execute("""
+                            SELECT urn, updated_at::text, scope_urn, display_name
+                            FROM civil_sections
+                            WHERE scope_urn = %s
+                            ORDER BY updated_at DESC
+                        """, (scope_urn,))
+                        return jsonify({'items': [
+                            {'urn': r[0], 'updated_at': r[1], 'scope_urn': r[2], 'display_name': r[3]}
+                            for r in cur.fetchall()
+                        ]}), 200
                     cur.execute("""
-                        SELECT urn, data, updated_at::text, scope_urn
+                        SELECT urn, data, updated_at::text, scope_urn, display_name
                         FROM civil_sections
                         WHERE scope_urn = %s
                         ORDER BY updated_at DESC
                     """, (scope_urn,))
                     return jsonify({'items': [
-                        {'urn': r[0], 'data': r[1], 'updated_at': r[2], 'scope_urn': r[3]} for r in cur.fetchall()
+                        {'urn': r[0], 'data': r[1], 'updated_at': r[2], 'scope_urn': r[3], 'display_name': r[4]}
+                        for r in cur.fetchall()
                     ]}), 200
             with get_db_connection() as conn:
                 cur = conn.cursor()
@@ -607,17 +695,24 @@ def civil_sections():
         scope_urn = _civil_scope_from_payload(payload)
         if not urn or data is None:
             return jsonify({'error': 'Faltan urn o data'}), 400
+        # Contrato canónico: clasificar cada shape UNA vez al guardar
+        try:
+            data = _canonicalize_sections(data)
+        except Exception as ce:
+            print(f"[civil] canonicalize_sections fallo (se guarda crudo): {ce}")
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
-                INSERT INTO civil_sections (scope_urn, urn, model_urn, data, acc_project_id, updated_at)
-                VALUES (%s, %s, %s, %s::jsonb, %s, NOW())
+                INSERT INTO civil_sections (scope_urn, urn, model_urn, data, acc_project_id, display_name, updated_at)
+                VALUES (%s, %s, %s, %s::jsonb, %s, %s, NOW())
                 ON CONFLICT (scope_urn, urn) DO UPDATE SET
                     model_urn = EXCLUDED.model_urn,
                     data = EXCLUDED.data,
                     acc_project_id = COALESCE(EXCLUDED.acc_project_id, civil_sections.acc_project_id),
+                    display_name = COALESCE(EXCLUDED.display_name, civil_sections.display_name),
                     updated_at = NOW()""",
-                (scope_urn, urn, payload.get('model_urn'), _json.dumps(data), payload.get('acc_project_id')))
+                (scope_urn, urn, payload.get('model_urn'), _json.dumps(data),
+                 payload.get('acc_project_id'), payload.get('display_name')))
             conn.commit()
         return jsonify({'status': 'ok', 'scope_urn': scope_urn}), 200
     except Exception as e:
@@ -661,11 +756,12 @@ def civil_alignments():
                     # Listado por frente: el panel Civil pide solo ?scope_urn= para
                     # poblar el selector multi-archivo (varias topos/DWG por frente).
                     key = scope_urn or model_urn
-                    cur.execute("""SELECT urn, data, updated_at::text, scope_urn FROM civil_alignments
+                    cur.execute("""SELECT urn, data, updated_at::text, scope_urn, display_name FROM civil_alignments
                                    WHERE scope_urn = %s OR model_urn = %s
                                    ORDER BY updated_at DESC""", (key, model_urn or key))
                     return jsonify({'items': [
-                        {'urn': r[0], 'data': r[1], 'updated_at': r[2], 'scope_urn': r[3]} for r in cur.fetchall()
+                        {'urn': r[0], 'data': r[1], 'updated_at': r[2], 'scope_urn': r[3], 'display_name': r[4]}
+                        for r in cur.fetchall()
                     ]}), 200
             return jsonify({'error': 'Falta urn o model_urn'}), 400
 
@@ -695,14 +791,16 @@ def civil_alignments():
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
-                INSERT INTO civil_alignments (scope_urn, urn, model_urn, data, acc_project_id, updated_at)
-                VALUES (%s, %s, %s, %s::jsonb, %s, NOW())
+                INSERT INTO civil_alignments (scope_urn, urn, model_urn, data, acc_project_id, display_name, updated_at)
+                VALUES (%s, %s, %s, %s::jsonb, %s, %s, NOW())
                 ON CONFLICT (scope_urn, urn) DO UPDATE SET
                     model_urn = EXCLUDED.model_urn,
                     data = EXCLUDED.data,
                     acc_project_id = COALESCE(EXCLUDED.acc_project_id, civil_alignments.acc_project_id),
+                    display_name = COALESCE(EXCLUDED.display_name, civil_alignments.display_name),
                     updated_at = NOW()""",
-                (scope_urn, urn, payload.get('model_urn'), _json.dumps(data), payload.get('acc_project_id')))
+                (scope_urn, urn, payload.get('model_urn'), _json.dumps(data),
+                 payload.get('acc_project_id'), payload.get('display_name')))
             conn.commit()
         return jsonify({'status': 'ok', 'scope_urn': scope_urn}), 200
     except Exception as e:

@@ -1,17 +1,24 @@
-// SectionCutTool — corte guiado por la CARA del elemento (obra lineal-friendly).
+// SectionCutTool — corte PREDECIBLE para obra lineal.
 //
-// Por qué por la cara y no por ejes globales: el proyecto es lineal y
-// georreferenciado → el modelo está ROTADO respecto al mundo (sigue el
-// alineamiento). Cortar en X/Y/Z globales daría planos diagonales inútiles.
-// En cambio, la cara que clickeas YA está alineada con la obra (el canal se
-// modeló sobre el eje), así que de ella derivo una base ortonormal {n,u,v} y
-// ofrezco los 3 cortes ortogonales con sentido de obra + planta horizontal.
+// Regla de diseño: siempre se corta respecto al EJE de la obra y al elemento
+// que tocas, nunca respecto a ejes globales (el modelo está georreferenciado y
+// rotado: X/Y/Z del mundo dan planos diagonales inútiles).
 //
-// Usa el motor de sección REAL de LMV (Autodesk.Section → setSectionPlane):
-// no es geometría nueva, es el corte auténtico posicionado por ti.
+// Tres cortes con significado FIJO — el mismo botón hace lo mismo toques la
+// cara que toques:
+//   · Transversal  → plano ⊥ al eje (la sección del canal)
+//   · Longitudinal → plano que sigue el eje (desarrollo y pendiente)
+//   · Planta       → horizontal siguiendo el elemento (si la cara está
+//                    inclinada, el corte acompaña su pendiente)
+// Más "Invertir lado" y "Quitar". Sin cara tocada no se corta: así nunca
+// aparece un plano en un sitio que no elegiste.
+//
+// Usa el motor de sección REAL de LMV (Autodesk.Section → setSectionPlane).
 import React, { useEffect, useRef, useState } from 'react';
 
-// Normal de la cara clickeada, en coordenadas de MUNDO.
+const PICK_OVERLAY = 'ecd-cut-pick';
+
+// Punto + normal de la cara clickeada, en coordenadas de MUNDO.
 const getFaceHit = (viewer, clientX, clientY) => {
   const THREE = window.THREE;
   try {
@@ -31,24 +38,122 @@ const getFaceHit = (viewer, clientX, clientY) => {
   } catch { return null; }
 };
 
-// Base ortonormal a partir de la normal de la cara.
-const buildBasis = (normal) => {
+// Marca visual de la cara tocada: disco orientado por la normal. Confirma
+// DÓNDE se va a apoyar el plano antes de cortar.
+const showPickMarker = (viewer, point, normal) => {
   const THREE = window.THREE;
-  const n = normal.clone().normalize();
-  // "arriba" del mundo; si la cara es casi horizontal, usa otro eje de apoyo.
-  let up = new THREE.Vector3(0, 0, 1);
-  if (Math.abs(n.dot(up)) > 0.95) up = new THREE.Vector3(1, 0, 0);
-  const u = new THREE.Vector3().crossVectors(up, n).normalize();
-  const v = new THREE.Vector3().crossVectors(n, u).normalize();
-  return { n, u, v };
+  try {
+    clearPickMarker(viewer);
+    if (!viewer.impl.overlayScenes || !viewer.impl.overlayScenes[PICK_OVERLAY]) {
+      viewer.impl.createOverlayScene(PICK_OVERLAY);
+    }
+    let span = 100;
+    try {
+      const bb = viewer.model.getBoundingBox();
+      span = Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z) || 100;
+    } catch { /* tamaño por defecto */ }
+    const r = Math.max(span * 0.004, 0.08);
+    const mesh = new THREE.Mesh(
+      new THREE.CircleGeometry(r, 28),
+      new THREE.MeshBasicMaterial({
+        color: 0x7c3aed, transparent: true, opacity: 0.42,
+        side: THREE.DoubleSide, depthTest: false, depthWrite: false,
+      }),
+    );
+    mesh.position.copy(point);
+    if (normal) {
+      // CircleGeometry vive en XY (normal +Z): mirar hacia la normal la orienta
+      try { mesh.lookAt(point.clone().add(normal)); } catch { /* queda plano */ }
+    }
+    viewer.impl.addOverlay(PICK_OVERLAY, mesh);
+    viewer.impl.invalidate(false, false, true);
+  } catch { /* sin overlay: la herramienta sigue funcionando */ }
+};
+
+const clearPickMarker = (viewer) => {
+  try {
+    if (viewer?.impl?.overlayScenes && viewer.impl.overlayScenes[PICK_OVERLAY]) {
+      viewer.impl.clearOverlay(PICK_OVERLAY);
+      viewer.impl.invalidate(false, false, true);
+    }
+  } catch { /* noop */ }
+};
+
+// Marco del EJE en el punto tocado (tangente horizontal + PK). Si el eje aún
+// no está cargado, se deriva del propio elemento.
+const axisFrameAt = (viewer, point) => {
+  try {
+    const ext = viewer.getExtension && viewer.getExtension('LOB4DExtension');
+    const fr = ext?.axisFrameAtPoint?.(point);
+    if (fr && fr.tangent) return fr;
+  } catch { /* sin eje: fallback por cara */ }
+  return null;
+};
+
+// ── Iconos: cubo isométrico con el PLANO de sección en su orientación real ───
+const ISO_CUBE = "M12 3 L20 7.5 L20 15.5 L12 20 L4 15.5 L4 7.5 Z";
+const ISO_EDGES = "M4 7.5 L12 12 L20 7.5 M12 12 L12 20";
+const ISO_PLANES = {
+  top: "M12 3 L20 7.5 L12 12 L4 7.5 Z",       // planta
+  left: "M4 7.5 L12 12 L12 20 L4 15.5 Z",     // transversal
+  right: "M20 7.5 L12 12 L12 20 L20 15.5 Z",  // longitudinal
+};
+const IsoCutIcon = ({ plane, edge, planeColor }) => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" strokeLinejoin="round">
+    <path d={ISO_CUBE} stroke={edge} strokeWidth="1.3" />
+    <path d={ISO_EDGES} stroke={edge} strokeWidth="1.1" />
+    <path d={ISO_PLANES[plane]} fill={planeColor} fillOpacity="0.7" stroke={planeColor} strokeWidth="1.2" />
+  </svg>
+);
+
+const CUTS = [
+  { key: 'transversal', label: 'Transversal', plane: 'left', tip: 'Transversal — plano perpendicular al eje (sección del canal)' },
+  { key: 'longitudinal', label: 'Longitudinal', plane: 'right', tip: 'Longitudinal — plano que sigue el eje (desarrollo y pendiente)' },
+  { key: 'planta', label: 'Planta', plane: 'top', tip: 'Planta — horizontal siguiendo la inclinación del elemento' },
+];
+
+// Normal del plano de corte para cada modo. Determinista: mismo botón, mismo
+// significado, sin depender de la cara tocada (cuando hay eje cargado).
+const normalFor = (key, hit) => {
+  const THREE = window.THREE;
+  const Z = new THREE.Vector3(0, 0, 1);
+  const n = hit.normal ? hit.normal.clone().normalize() : null;
+
+  if (key === 'planta') {
+    // "respetando el elemento": una losa/solera inclinada corta con SU pendiente
+    if (n && Math.abs(n.dot(Z)) > 0.6) return n.clone();
+    return Z.clone();
+  }
+
+  // dirección "a lo largo" de la obra
+  let along = null;
+  if (hit.axis && hit.axis.tangent) {
+    along = hit.axis.tangent.clone();
+  } else if (n) {
+    // sin eje: la horizontal contenida en la cara marca el desarrollo del muro
+    const horiz = new THREE.Vector3().crossVectors(Z, n);
+    if (horiz.lengthSq() > 1e-6) along = horiz.normalize();
+  }
+  if (!along) along = new THREE.Vector3(1, 0, 0);
+
+  if (key === 'transversal') return along;                                  // ⊥ al eje
+  return new THREE.Vector3().crossVectors(along, Z).normalize();            // ∥ al eje
+};
+
+const fmtPk = (s) => {
+  if (!Number.isFinite(s)) return null;
+  const km = Math.floor(s / 1000);
+  return `${km}+${String((s - km * 1000).toFixed(2)).padStart(6, '0')}`;
 };
 
 export default function SectionCutTool() {
   const [mode, setMode] = useState(false);
-  const [hit, setHit] = useState(null);          // { point, basis }
-  const [applied, setApplied] = useState(null);   // { dir: 'n'|'u'|'v'|'z', flipped }
+  const [hit, setHit] = useState(null);          // { point, normal, axis }
+  const [applied, setApplied] = useState(null);  // { key, flipped }
   const modeRef = useRef(false);
+  const appliedRef = useRef(null);
   useEffect(() => { modeRef.current = mode; }, [mode]);
+  useEffect(() => { appliedRef.current = applied; }, [applied]);
 
   // Captura de cara por clic (sin romper el orbitar: solo cuenta si no arrastraste).
   useEffect(() => {
@@ -66,12 +171,13 @@ export default function SectionCutTool() {
       if (moved > 5) return; // fue un arrastre (orbitar), no un pick
       const h = getFaceHit(viewer, e.clientX, e.clientY);
       if (!h) return;
-      if (h.normal) {
-        setHit({ point: h.point, basis: buildBasis(h.normal), hasFace: true });
-      } else {
-        // DWG/línea sin cara: al menos permite planta por el punto tocado
-        setHit({ point: h.point, basis: null, hasFace: false });
-      }
+      const next = { point: h.point, normal: h.normal || null, axis: axisFrameAt(viewer, h.point) };
+      setHit(next);
+      showPickMarker(viewer, h.point, h.normal);
+      // si ya había un corte, se RECOLOCA al punto nuevo con la misma
+      // orientación (mover el corte = tocar otra cara, sin re-elegir modo)
+      const cur = appliedRef.current;
+      if (cur) applyPlane(cur.key, cur.flipped, next);
     };
     canvas.addEventListener('pointerdown', onDown);
     canvas.addEventListener('pointerup', onUp);
@@ -79,99 +185,135 @@ export default function SectionCutTool() {
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointerup', onUp);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
-  const applyCut = async (dir, flipped = false) => {
+  const applyPlane = async (key, flipped, h) => {
     const viewer = window.__mainViewer || window.NOP_VIEWER;
-    if (!viewer || !hit) return;
-    const THREE = window.THREE;
-    let normal;
-    if (dir === 'z') normal = new THREE.Vector3(0, 0, 1);
-    else if (hit.basis) normal = hit.basis[dir].clone();
-    else normal = new THREE.Vector3(0, 0, 1);
+    const target = h || hit;
+    if (!viewer || !target) return;
+    const normal = normalFor(key, target);
     if (flipped) normal.multiplyScalar(-1);
-
     try {
       const ext = viewer.getExtension('Autodesk.Section') || await viewer.loadExtension('Autodesk.Section');
-      ext.setSectionPlane(normal, hit.point, false);
-      setApplied({ dir, flipped });
+      ext.setSectionPlane(normal, target.point, false);
     } catch (e) {
       console.warn('[Corte] No se pudo aplicar el plano de sección:', e);
     }
   };
 
+  const chooseCut = (key) => {
+    if (!hit) return;
+    const flipped = applied?.key === key ? applied.flipped : false;
+    setApplied({ key, flipped });
+    applyPlane(key, flipped);
+  };
+
+  const invert = () => {
+    if (!applied) return;
+    const next = { ...applied, flipped: !applied.flipped };
+    setApplied(next);
+    applyPlane(next.key, next.flipped);
+  };
+
   const clearCut = () => {
     const viewer = window.__mainViewer || window.NOP_VIEWER;
     try { viewer?.getExtension('Autodesk.Section')?.deactivate?.(); } catch { /* sin extensión */ }
+    clearPickMarker(viewer);
     setApplied(null);
     setHit(null);
   };
 
-  const exitMode = () => { setMode(false); setHit(null); };
+  const exitMode = () => {
+    const viewer = window.__mainViewer || window.NOP_VIEWER;
+    clearPickMarker(viewer);
+    setMode(false);
+    setHit(null);
+  };
 
-  // Iconos simples (línea), estilo nativo. n=paralelo cara, u/v=perpendiculares, z=planta.
-  const DIRS = [
-    { key: 'n', tip: 'Paralelo a la cara', icon: <><rect x="4" y="4" width="16" height="16" rx="1" /><path d="M4 9h16" /></> },
-    { key: 'u', tip: 'Perpendicular A (transversal/longitudinal)', icon: <><rect x="4" y="4" width="16" height="16" rx="1" /><path d="M10 4v16" /></> },
-    { key: 'v', tip: 'Perpendicular B', icon: <><rect x="4" y="4" width="16" height="16" rx="1" /><path d="M4 4l16 16" /></> },
-    { key: 'z', tip: 'Planta (horizontal)', icon: <><path d="M3 8l9-4 9 4-9 4-9-4z" /><path d="M3 8v0M21 8v0" /></> },
-  ];
-
-  const iconBtn = (bg, border, children, onClick, title) => (
-    <button onClick={onClick} title={title}
+  const iconBtn = (bg, border, children, onClick, title, disabled = false) => (
+    <button onClick={onClick} title={title} disabled={disabled}
       style={{
         width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: bg, border: `1px solid ${border}`, borderRadius: 7, cursor: 'pointer', padding: 0,
+        background: bg, border: `1px solid ${border}`, borderRadius: 7,
+        cursor: disabled ? 'default' : 'pointer', padding: 0,
       }}>{children}</button>
   );
+
+  const activeCut = applied && CUTS.find(c => c.key === applied.key);
+  const pk = hit?.axis ? fmtPk(hit.axis.station) : null;
 
   return (
     <>
       <button
         onClick={() => (mode ? exitMode() : setMode(true))}
-        title={mode ? 'Salir del modo corte' : 'Corte por cara: actívalo y toca una cara del modelo'}
+        title={mode ? 'Salir del modo corte' : 'Corte: actívalo y toca una cara del elemento'}
         style={{
           display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', height: 26,
           background: mode ? '#7c3aed' : 'transparent',
-          color: mode ? '#fff' : '#8d98a8',
-          border: `1px solid ${mode ? 'rgba(255,255,255,0.25)' : '#3a4351'}`,
-          borderRadius: 15, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+          color: mode ? '#fff' : '#d8d8d8',
+          border: `1px solid ${mode ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.22)'}`,
+          borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
         }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 8h16" strokeDasharray="3 3" /><path d="M12 3v18" /><path d="M8 6l4 2 4-2" />
+        {/* Cubo con el PLANO de corte rebanándolo: mismo lenguaje visual que
+            los tres modos de la tira, y se entiende sin leer el texto (el
+            icono anterior parecía una cruz "†" y no decía nada). */}
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" strokeLinejoin="round" strokeLinecap="round">
+          <path d={ISO_CUBE} stroke="currentColor" strokeWidth="1.5" opacity="0.9" />
+          <path d={ISO_EDGES} stroke="currentColor" strokeWidth="1.1" opacity="0.55" />
+          <path d={ISO_PLANES.left} fill="currentColor" fillOpacity="0.85" stroke="currentColor" strokeWidth="1.2" />
         </svg>
         Corte{applied && <span style={{ fontSize: 10, opacity: 0.9 }}> ✓</span>}
       </button>
 
-      {/* Tira vertical de iconos (estilo nativo). Sin texto: todo por tooltip. */}
       {mode && (
         <div style={{
           position: 'fixed', bottom: 96, right: 16, zIndex: 1250,
           display: 'flex', flexDirection: 'column', gap: 4, padding: 4,
           background: 'rgba(30,33,39,0.96)', border: '1px solid #3a3f47', borderRadius: 9,
-          boxShadow: '0 6px 20px rgba(0,0,0,.45)',
+          boxShadow: '0 6px 20px rgba(0,0,0,.45)', alignItems: 'stretch', width: 42,
         }}>
-          {DIRS.map(d => {
-            const enabled = hit && (hit.hasFace || d.key === 'z');
-            const active = applied?.dir === d.key;
-            return iconBtn(
-              active ? '#3b9eff' : 'transparent',
-              active ? '#3b9eff' : 'transparent',
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                stroke={enabled ? (active ? '#fff' : '#cdd3dc') : '#555b63'}
-                strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{d.icon}</svg>,
-              () => enabled && applyCut(d.key, active ? !applied.flipped : false),
-              d.tip + (active ? ' — clic: invertir lado' : ''),
+          {/* Estado: qué corte está puesto y dónde se apoya */}
+          <div style={{
+            fontSize: 8.5, lineHeight: 1.25, textAlign: 'center', padding: '2px 1px 3px',
+            color: activeCut ? '#c9b7ff' : '#7d8896', borderBottom: '1px solid #3a3f47', marginBottom: 1,
+          }}>
+            {!hit ? 'toca una cara'
+              : activeCut ? <>{activeCut.label}{applied.flipped ? ' ⇄' : ''}{pk ? <><br />{pk}</> : null}</>
+                : <>listo{pk ? <><br />{pk}</> : null}</>}
+          </div>
+
+          {CUTS.map(c => {
+            const enabled = !!hit;
+            const active = applied?.key === c.key;
+            const edge = enabled ? (active ? '#ffffff' : '#7f8896') : '#464c54';
+            const planeColor = enabled ? (active ? '#ffffff' : '#5fa8ff') : '#4b5159';
+            return (
+              <div key={c.key} style={{ display: 'flex', justifyContent: 'center' }}>
+                {iconBtn(
+                  active ? '#2563eb' : 'transparent',
+                  active ? '#2563eb' : 'transparent',
+                  <IsoCutIcon plane={c.plane} edge={edge} planeColor={planeColor} />,
+                  () => chooseCut(c.key),
+                  enabled ? c.tip : 'Primero toca una cara del elemento',
+                  !enabled,
+                )}
+              </div>
             );
           })}
+
           <div style={{ height: 1, background: '#3a3f47', margin: '2px 4px' }} />
-          {iconBtn('transparent', 'transparent',
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={applied ? '#cdd3dc' : '#555b63'} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3l4 4-4 4" /><path d="M7 21l-4-4 4-4" /><path d="M21 7H8a4 4 0 0 0-4 4M3 17h13a4 4 0 0 0 4-4" /></svg>,
-            () => applied && applyCut(applied.dir, !applied.flipped), 'Invertir lado')}
-          {iconBtn('transparent', 'transparent',
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#e0888a" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>,
-            clearCut, 'Quitar corte')}
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            {iconBtn('transparent', 'transparent',
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={applied ? '#cdd3dc' : '#555b63'} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3l4 4-4 4" /><path d="M7 21l-4-4 4-4" /><path d="M21 7H8a4 4 0 0 0-4 4M3 17h13a4 4 0 0 0 4-4" /></svg>,
+              invert, applied ? 'Invertir el lado visible' : 'Aplica un corte primero', !applied)}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            {iconBtn('transparent', 'transparent',
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#e0888a" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>,
+              clearCut, 'Quitar corte')}
+          </div>
         </div>
       )}
     </>

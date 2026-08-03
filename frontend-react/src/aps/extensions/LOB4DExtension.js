@@ -1593,6 +1593,41 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             || null;
     }
 
+    // Campo de AGRUPACIÓN para la capa Ejecución: ÚNICAMENTE el LOCALIZADOR
+    // (01_02_DSI_Localizador, valores tipo BP-10), por decisión del usuario.
+    // Sin cadena de respaldo. Otro parámetro solo si él lo elige en el ⚙.
+    detectHoverKey(inv) {
+        const keys = new Set();
+        const sample = Array.isArray(inv) ? inv.slice(0, 400) : [inv];
+        for (const row of sample) {
+            if (row) for (const k of Object.keys(row)) keys.add(k);
+        }
+        // SOLO Localizador: coincidencia EXACTA del nombre primero, y sin
+        // cadena de respaldo. Si el inventario no lo trae, la capa avisa
+        // "sin parámetro" en vez de agrupar por otra cosa y dar un avance
+        // que no es el que se pidió.
+        const arr = Array.from(keys);
+        return arr.find(k => k.toLowerCase() === '01_02_dsi_localizador')
+            || arr.find(k => /(^|_)localizador$/i.test(k))
+            || null;
+    }
+
+    // Campo de AVANCE (sí/no por elemento). Determinista y por prioridad: sin
+    // esto se tomaba "el primero que contuviera 'ejecutad'", que en el
+    // inventario real podía ser "VAL_Sin Ejecutar" (¡significado INVERTIDO!)
+    // o "VAL_Paños ejecutados" (numérico) → porcentajes sin sentido.
+    detectExecKey(cols) {
+        const arr = Array.from(cols);
+        const banned = /^VAL_|sin[\s_]*ejecut|paños|panos|mes[\s_]*ejecut|fecha/i;
+        const cand = arr.filter(k => /ejecutad/i.test(k) && !banned.test(k));
+        return cand.find(k => /acumulad/i.test(k))          // avance acumulado
+            || cand.find(k => /_SYP_Ejecutado$/i.test(k))   // marca de la SubZona
+            || cand.find(k => /actual/i.test(k))            // avance del periodo
+            || cand.find(k => /^EJECUTADO$/i.test(k))
+            || cand[0]
+            || null;
+    }
+
     zoneMapForModel(model) {
         const raw = model?.getData?.()?.urn;
         if (!raw) return null;
@@ -1818,23 +1853,27 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         const R = window.rosettaToDbId || {};
         let mapped = 0;
         for (const urn in R) { for (const _k in R[urn]) mapped++; }
-        return `${inv?.length || 0}|${mapped}|${groupField || 'auto'}`;
+        // el campo de AVANCE también entra: cambiarlo debe reconstruir el índice
+        let resolved = null;
+        try { resolved = this.detectHoverKey(inv); } catch { /* sin inventario */ }
+        return `${inv?.length || 0}|${mapped}|${resolved || 'none'}|${window.__zoneHoverExecField || 'auto'}`;
     }
 
     buildZoneHoverIndex(groupField) {
         const inv = window.postgresInventory;
         if (!Array.isArray(inv) || !inv.length) return null;
-        const zoneKey = groupField || this.detectZoneKey(inv);
+        // El agrupador es FIJO (01_02_DSI_Localizador): ningún ajuste guardado
+        // puede cambiarlo — así la capa nunca agrupa por otro parámetro.
+        const zoneKey = this.detectHoverKey(inv);
         if (!zoneKey) return null;
 
         // Esquema: detectar columnas por nombre (el prefijo numérico varía)
         const cols = new Set();
         inv.slice(0, 400).forEach(r => { if (r) Object.keys(r).forEach(k => cols.add(k)); });
         const find = (re) => Array.from(cols).find(k => re.test(k)) || null;
-        const kEjec = find(/ejecutad/i);
-        const kZona = find(/_SYP_Zona$/i) || find(/_SYP_Zona/i);
-        const kPaquete = find(/paquete/i);
-        const kPartida = find(/NombreDePartida1?$/i) || find(/NombreDePartida/i);
+        const kEjec = window.__zoneHoverExecField || this.detectExecKey(cols);
+        // visible en consola: con qué parámetros se calculó el avance
+        console.log(`[LOB4D] Ejecución → agrupa por "${zoneKey}" · avance por "${kEjec || '(ninguno)'}"`);
 
         // Mapas rosetta POR MODELO, resueltos UNA vez (antes se recorrían todos
         // los modelos en cada hover → O(elementos × modelos) por movimiento).
@@ -1842,6 +1881,16 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         const modelMaps = models
             .map(m => ({ model: m, map: this.zoneMapForModel(m) }))
             .filter(x => !!x.map);
+        // Índice de modelos por URN normalizado: cada fila del inventario se
+        // resuelve contra SU PROPIO modelo. Sin esto, los IDs externos que se
+        // repiten entre modelos (versiones del mismo Revit conviviendo en el
+        // frente) hacían que un elemento leyera la fila de otro modelo — de
+        // ahí que un buzón de drenaje mostrara el localizador de otro archivo.
+        const _nu = (u) => String(u || '').replace(/^urn:/i, '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const mapByUrn = new Map();
+        for (const mm of modelMaps) {
+            try { mapByUrn.set(_nu(mm.model.getData()?.urn), mm); } catch { /* modelo sin urn */ }
+        }
 
         const norm = (v) => Array.isArray(v) ? v.filter(Boolean).join(', ') : String(v ?? '').trim();
         const groups = new Map();       // zona -> stats
@@ -1851,11 +1900,12 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         for (const row of inv) {
             const zone = norm(row[zoneKey]);
             if (!zone) continue;
-            extToZone.set(row.dbId, zone);
+            const srcKey = _nu(row.source_urn || row.model_urn);
+            extToZone.set(srcKey + '|' + row.dbId, zone);
 
             let g = groups.get(zone);
             if (!g) {
-                g = { zone, total: 0, done: 0, zona: kZona ? norm(row[kZona]) : '', paquete: kPaquete ? norm(row[kPaquete]) : '', partidas: new Map() };
+                g = { zone, total: 0, done: 0 };
                 groups.set(zone, g);
                 membersByZone.set(zone, []);
             }
@@ -1865,25 +1915,22 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             const isDone = ejecRaw === '1' || ejecRaw === 'si' || ejecRaw === 'sí' || ejecRaw === 'true' || ejecRaw === 'x';
             if (isDone) g.done += 1;
 
-            if (kPartida) {
-                const p = norm(row[kPartida]);
-                if (p) {
-                    let pi = g.partidas.get(p);
-                    if (!pi) { pi = { total: 0, done: 0 }; g.partidas.set(p, pi); }
-                    pi.total += 1;
-                    if (isDone) pi.done += 1;
+            // Resolver dbId del visor AQUÍ (una sola vez por elemento), en
+            // el modelo al que la fila REALMENTE pertenece
+            const own = mapByUrn.get(srcKey);
+            if (own) {
+                const dbId = own.map[row.dbId];
+                if (dbId != null) membersByZone.get(zone).push({ model: own.model, dbId });
+            } else {
+                for (const { model, map } of modelMaps) {
+                    const dbId = map[row.dbId];
+                    if (dbId != null) { membersByZone.get(zone).push({ model, dbId }); break; }
                 }
-            }
-
-            // Resolver dbId del visor AQUÍ (una sola vez por elemento)
-            for (const { model, map } of modelMaps) {
-                const dbId = map[row.dbId];
-                if (dbId != null) { membersByZone.get(zone).push({ model, dbId }); break; }
             }
         }
 
         console.log(`[LOB4D] Hover: ${groups.size} grupos por "${zoneKey}" · avance="${kEjec || '—'}" · ${extToZone.size} elementos indexados.`);
-        return { zoneKey, kEjec, groups, extToZone, membersByZone, schema: { kEjec, kZona, kPaquete, kPartida } };
+        return { zoneKey, kEjec, groups, extToZone, membersByZone, schema: { kEjec } };
     }
 
     setZoneHoverEnabled(on) {
@@ -1902,7 +1949,8 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
 
         // Índice CACHEADO: no se reconstruye al apagar/encender; solo si cambió
         // el inventario, la rosetta (modelo tardío) o el campo de agrupación.
-        const field = window.__zoneHoverField || null;
+        window.__zoneHoverField = null;   // sin override de agrupación
+        const field = null;
         const fp = this._zoneHoverFingerprint(field);
         if (this._zoneHoverIndex && this._zoneHoverFp === fp) {
             console.log('[LOB4D] Hover: índice reutilizado (sin recalcular).');
@@ -1948,7 +1996,12 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
                 const dict = R[raw] || R[safe] || Object.entries(R).find(([k]) =>
                     String(k).replace(/^urn:/i, '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') === safe)?.[1];
                 const extId = dict && dict[hit.dbId];
-                if (extId) zone = idx.extToZone.get(extId) || null;
+                if (extId) {
+                    const nu = (u) => String(u || '').replace(/^urn:/i, '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                    zone = idx.extToZone.get(nu(raw) + '|' + extId)
+                        || idx.extToZone.get(safe + '|' + extId)
+                        || null;
+                }
             }
         } catch { /* hitTest puede fallar en bordes: se trata como "sin zona" */ }
 
@@ -1963,19 +2016,16 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
 
         const g = idx.groups.get(zone);
         if (!g) return;
-        const partidas = Array.from(g.partidas.entries())
-            .map(([name, v]) => ({ name, total: v.total, done: v.done }))
-            .sort((a, b) => b.total - a.total)
-            .slice(0, 6); // desglose por PARTIDA (pocas líneas), no por elemento
 
         this.highlightZoneGroup(zone);
         window.dispatchEvent(new CustomEvent('lob-zone-hover-data', {
             detail: {
-                zone: g.zone, zona: g.zona, paquete: g.paquete,
+                zone: g.zone,
                 total: g.total, done: g.done,
                 pct: g.total ? Math.round((g.done / g.total) * 100) : 0,
                 hasEjecutado: !!idx.kEjec,
-                partidas,
+                // trazabilidad: con qué parámetros se calculó lo que se ve
+                groupField: idx.zoneKey, execField: idx.kEjec,
             }
         }));
     }
@@ -3109,15 +3159,33 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         const model = this.getModelForCoordinates();
         const p1 = this.civilToViewerPoint(this.pointAtStation(alignmentData, pk), model);
         const step = 1.0;
-        const pkAhead = Math.min((alignmentData.endStation ?? pk + step), pk + step);
-        const p2 = this.civilToViewerPoint(this.pointAtStation(alignmentData, pkAhead), model)
-            || this.civilToViewerPoint(this.pointAtStation(alignmentData, pk - step), model);
-        if (!p1 || !p2) {
+        // Tangente robusta: hacia adelante; en el EXTREMO del eje (pk+1 cae
+        // fuera o coincide) se toma hacia atrás y se invierte — antes el corte
+        // fallaba silenciosamente en la última progresiva.
+        let p2 = this.civilToViewerPoint(this.pointAtStation(alignmentData, pk + step), model);
+        let invert = false;
+        if (!p1) {
             console.warn('[LOB4D] corte: progresiva fuera del eje extraído', pk);
             return false;
         }
+        if (!p2 || p2.distanceToSquared(p1) < 1e-9) {
+            p2 = this.civilToViewerPoint(this.pointAtStation(alignmentData, pk - step), model);
+            invert = true;
+        }
+        if (!p2) {
+            console.warn('[LOB4D] corte: sin tangente en PK', pk);
+            return false;
+        }
+
+        // El 4D de excavaciones deja modelos EXENTOS de corte (setDoNotCut);
+        // si esa exención sobrevive, este plano no corta NADA. Un corte manual
+        // del usuario siempre manda: se limpia la exención antes de aplicar.
+        (this.viewer.getAllModels?.() || []).forEach((m) => {
+            try { m.setDoNotCut?.(false); } catch (e) { /* LMV viejo */ }
+        });
 
         const normal = new THREE.Vector3().subVectors(p2, p1);
+        if (invert) normal.negate();
         normal.z = 0; // corte vertical (perpendicular al eje en planta)
         if (normal.lengthSq() < 1e-9) return false;
         normal.normalize();
@@ -3448,6 +3516,31 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
     // (alineamiento de Civil): proyectando el centro del elemento al eje se
     // obtiene su PK — sin llenar DSI_Progresiva a mano. El resultado por
     // partida (rango min..max) se persiste al backend (lob_locations).
+
+    // Marco del EJE en el punto 3D dado: tangente horizontal + PK. Lo usa la
+    // herramienta de Corte para que "transversal/longitudinal" signifiquen
+    // SIEMPRE lo mismo (respecto al eje de la obra), sin depender de qué cara
+    // se tocó. Devuelve null si aún no hay eje muestreado.
+    axisFrameAtPoint(point) {
+        const THREE = window.THREE;
+        const S = this.alignmentSamples;
+        if (!THREE || !Array.isArray(S) || S.length < 2 || !point) return null;
+        let bi = -1;
+        let bd = Infinity;
+        for (let i = 0; i < S.length; i++) {
+            const d = S[i].point.distanceToSquared(point);
+            if (d < bd) { bd = d; bi = i; }
+        }
+        if (bi < 0) return null;
+        const a = S[Math.max(0, bi - 1)];
+        const b = S[Math.min(S.length - 1, bi + 1)];
+        const t = new THREE.Vector3().subVectors(b.point, a.point);
+        t.z = 0;                       // tangente en planta: el corte es vertical
+        if (t.lengthSq() < 1e-9) return null;
+        t.normalize();
+        const mpu = (this.viewer?.model?.getUnitScale && this.viewer.model.getUnitScale()) || 1;
+        return { tangent: t, station: Number(S[bi].station), dist: Math.sqrt(bd) * mpu };
+    }
 
     _nearestStationWithDist(point) {
         let best = null;

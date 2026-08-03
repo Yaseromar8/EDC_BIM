@@ -1921,7 +1921,10 @@ th {
   color: var(--text-primary);
 }
 
-.modal-box input,
+/* :not(checkbox/radio) — antes esta regla estiraba TAMBIÉN las casillas a ancho
+   completo con padding, y el checkbox se comía la fila: en "Accesos" tapaba el
+   nombre y correo del usuario (se veía una barra oscura con un ✓). */
+.modal-box input:not([type="checkbox"]):not([type="radio"]),
 .modal-box select {
   width: 100%;
   padding: 9px 12px;
@@ -1934,6 +1937,16 @@ th {
   box-sizing: border-box;
   transition: border-color 0.15s;
   font-family: inherit;
+}
+
+.modal-box input[type="checkbox"],
+.modal-box input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin: 0;
+  accent-color: var(--accent, #5f7fa3);
+  cursor: pointer;
 }
 
 .modal-box input:focus,

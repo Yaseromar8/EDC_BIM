@@ -9,7 +9,21 @@ export const API = Capacitor.isNativePlatform()
   ? 'https://visor-ecd-backend.onrender.com'
   : (import.meta.env.VITE_BACKEND_URL || '');
 
-export const VISOR_URL = import.meta.env.VITE_VISOR_URL || 'http://localhost:5173';
+// URL del Visor (la ficha "Visor 3D" del Hub navega allí llevando el ticket
+// SSO). El respaldo depende del host: en localhost apunta al dev server; en
+// cualquier otro sitio, al despliegue. Antes el respaldo era SIEMPRE
+// localhost:5173, así que una build de producción sin VITE_VISOR_URL mandaba
+// al usuario a su propia máquina. Define VITE_VISOR_URL para fijarla.
+export const VISOR_URL = import.meta.env.VITE_VISOR_URL
+  || (typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    ? 'http://localhost:5173'
+    : 'https://visor-ecd-frontend.onrender.com');
+
+// ATAJOS INTERNOS Docs -> Visor 3D (boton "Frentes 3D" y overlay de frentes).
+// Apagados a proposito: se salta al visor desde DENTRO del explorador, sin
+// pasar por el Hub. El Hub SI ofrece el Visor 3D con normalidad — esta puerta
+// es otra cosa. Poner en true para reactivarlos.
+export const DOCS_VISOR_SHORTCUT = false;
 
 export function formatSize(bytes) {
   if (!bytes) return '—';

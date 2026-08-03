@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
+import { installPivotUnderPointer } from '../../utils/pivotUnderPointer';
 import { loadAlignedModels } from '../../aps/utils/loadAlignedModels';
 import { cleanUrn, modelLabelOf } from './lob4dUtils';
 
@@ -116,22 +117,10 @@ export default function LOB4DViewer({
                     viewer.setSelectionMode?.(window.Autodesk.Viewing.SelectionMode.LEAF_OBJECT);
                 } catch (e) { /* noop */ }
 
-                // Órbita alrededor del cursor (igual que el visor principal):
-                // el punto bajo el mouse se vuelve pivote al presionar.
+                // Órbita alrededor de lo que apuntas (igual que el visor
+                // principal): mouse en escritorio, dedo en tablet.
                 try {
-                    const canvasEl = viewer.canvas || viewer.impl?.canvas;
-                    if (canvasEl) {
-                        const onPivotDown = (event) => {
-                            if (event.button !== 0 && event.button !== 1) return;
-                            const rect = canvasEl.getBoundingClientRect();
-                            const hit = viewer.impl.hitTest(event.clientX - rect.left, event.clientY - rect.top, true);
-                            if (hit && hit.intersectPoint) {
-                                viewer.navigation.setPivotPoint(hit.intersectPoint);
-                                viewer.navigation.setPivotSetFlag(true);
-                            }
-                        };
-                        canvasEl.addEventListener('mousedown', onPivotDown, true);
-                    }
+                    viewer.__pivotUnderCursor = installPivotUnderPointer(viewer);
                 } catch (e) { /* noop */ }
 
                 try {
@@ -201,6 +190,7 @@ export default function LOB4DViewer({
     useEffect(() => () => {
         try { window.dispatchEvent(new CustomEvent('lob-clear')); } catch { /* noop */ }
         if (viewerRef.current) {
+            try { viewerRef.current.__pivotUnderCursor?.(); } catch { /* noop */ }
             try { viewerRef.current.finish(); } catch { /* noop */ }
             viewerRef.current = null;
             extensionRef.current = null;

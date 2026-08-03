@@ -61,6 +61,23 @@ def _ensure_tables():
                 PRIMARY KEY (project, agent)
             )
         """)
+        # Canal INVERSO Revit→web: Revit reporta su estado (selección actual,
+        # tablas de planificación/metrados) y la web lo sondea. Una fila por
+        # (frente, tipo); 'version' se incrementa en cada actualización para que
+        # la web detecte cambios sin re-aplicar lo mismo.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS link_reports (
+                project TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                payload JSONB,
+                version BIGINT NOT NULL DEFAULT 1,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (project, kind)
+            )
+        """)
+        # Auto-detección de frente: guardamos QUÉ usuario tiene presencia web en
+        # cada frente para que el plugin de Revit descubra solo el frente abierto.
+        cur.execute("ALTER TABLE link_presence ADD COLUMN IF NOT EXISTS user_id TEXT")
         conn.commit()
     _TABLES_READY = True
 
@@ -71,8 +88,9 @@ def publish_command():
     data = request.get_json() or {}
     project = data.get('project')
     action = data.get('action')
-    if not project or action not in ('isolate', 'select', 'clear', 'colorize', 'clearcolors', 'hide'):
-        return jsonify({"success": False, "error": "project y action (isolate|select|clear|colorize|clearcolors|hide) requeridos"}), 400
+    _ALLOWED = ('isolate', 'select', 'clear', 'colorize', 'clearcolors', 'hide', 'export-schedules')
+    if not project or action not in _ALLOWED:
+        return jsonify({"success": False, "error": "project y action (" + "|".join(_ALLOWED) + ") requeridos"}), 400
 
     denied = _check_project_access(project)
     if denied:
@@ -164,4 +182,153 @@ def link_status():
         "success": True,
         "revit_connected": agents.get('revit', 9999) < 10,
         "web_connected": agents.get('web', 9999) < 10,
+    }), 200
+
+
+# ── Auto-detección de frente (el plugin descubre el frente abierto en el web) ─
+
+def _current_user_id():
+    try:
+        u = getattr(g, 'current_user', None)
+        return u.get('id') if u else None
+    except Exception:
+        return None
+
+
+@link_bp.route('/api/link/web-presence', methods=['POST'])
+def web_presence():
+    """El visor late su frente activo para que Revit lo auto-detecte. Se llama
+    mientras haya un frente abierto en el web, aunque el vínculo no esté activo."""
+    data = request.get_json(silent=True) or {}
+    project = data.get('project')
+    if not project:
+        return jsonify({"success": False, "error": "project requerido"}), 400
+    denied = _check_project_access(project)
+    if denied:
+        return denied
+    _ensure_tables()
+    from db import get_db_connection
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO link_presence (project, agent, user_id, last_seen) VALUES (%s, 'web', %s, NOW())
+            ON CONFLICT (project, agent) DO UPDATE SET last_seen = NOW(), user_id = EXCLUDED.user_id
+        """, (project, _current_user_id()))
+        conn.commit()
+    return jsonify({"success": True}), 200
+
+
+@link_bp.route('/api/link/active-frentes', methods=['GET'])
+def active_frentes():
+    """Frentes donde este usuario tiene el visor abierto (heartbeat < 15 s). El
+    plugin llama esto para engancharse solo al frente abierto, sin escribirlo."""
+    _ensure_tables()
+    uid = _current_user_id()
+    from db import get_db_connection
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        if uid:
+            cur.execute("""
+                SELECT project FROM link_presence
+                WHERE agent = 'web' AND last_seen > NOW() - INTERVAL '15 seconds'
+                  AND (user_id = %s OR user_id IS NULL)
+                ORDER BY last_seen DESC
+            """, (uid,))
+        else:
+            cur.execute("""
+                SELECT project FROM link_presence
+                WHERE agent = 'web' AND last_seen > NOW() - INTERVAL '15 seconds'
+                ORDER BY last_seen DESC
+            """)
+        rows = cur.fetchall()
+    frentes = [r[0] for r in rows]
+    return jsonify({"success": True, "frentes": frentes, "active": frentes[0] if frentes else None}), 200
+
+
+# ── Canal INVERSO Revit → web ────────────────────────────────────────────────
+
+@link_bp.route('/api/link/report', methods=['POST'])
+def publish_report():
+    """El plugin de Revit reporta su estado hacia la web.
+
+    kind='selection'  → payload {externalIds:[UniqueId,...]}  (selección inversa)
+    kind='schedules'  → payload {schedules:[{name,columns,rows}]}  (metrados)
+    """
+    data = request.get_json(silent=True) or {}
+    project = data.get('project')
+    kind = data.get('kind')
+    if not project or kind not in ('selection', 'schedules'):
+        return jsonify({"success": False, "error": "project y kind (selection|schedules) requeridos"}), 400
+
+    denied = _check_project_access(project)
+    if denied:
+        return denied
+
+    payload = data.get('payload')
+    if not isinstance(payload, dict):
+        payload = {}
+
+    _ensure_tables()
+    from db import get_db_connection
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO link_reports (project, kind, payload, version, updated_at)
+            VALUES (%s, %s, %s, 1, NOW())
+            ON CONFLICT (project, kind)
+            DO UPDATE SET payload = EXCLUDED.payload,
+                          version = link_reports.version + 1,
+                          updated_at = NOW()
+            RETURNING version
+        """, (project, kind, json.dumps(payload)))
+        version = cur.fetchone()[0]
+        # Reportar es actividad de Revit: mantiene vivo el heartbeat.
+        cur.execute("""
+            INSERT INTO link_presence (project, agent, last_seen) VALUES (%s, 'revit', NOW())
+            ON CONFLICT (project, agent) DO UPDATE SET last_seen = NOW()
+        """, (project,))
+        conn.commit()
+    return jsonify({"success": True, "version": version}), 200
+
+
+@link_bp.route('/api/link/report', methods=['GET'])
+def read_report():
+    """La web lee el último estado reportado por Revit para este frente.
+
+    Si se pasa ?since_version=N y no hay novedad, devuelve changed=False (payload
+    omitido) para que el polling de la selección sea barato.
+    """
+    project = request.args.get('project')
+    kind = request.args.get('kind')
+    if not project or kind not in ('selection', 'schedules'):
+        return jsonify({"success": False, "error": "project y kind (selection|schedules) requeridos"}), 400
+
+    try:
+        since_version = int(request.args.get('since_version', '0'))
+    except ValueError:
+        since_version = 0
+
+    _ensure_tables()
+    from db import get_db_connection
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT payload, version, EXTRACT(EPOCH FROM updated_at) FROM link_reports WHERE project = %s AND kind = %s",
+            (project, kind)
+        )
+        row = cur.fetchone()
+
+    if not row:
+        return jsonify({"success": True, "version": 0, "changed": False, "payload": None}), 200
+
+    payload, version, updated_epoch = row
+    if not isinstance(payload, dict):
+        payload = json.loads(payload or '{}')
+    changed = version > since_version
+    return jsonify({
+        "success": True,
+        "version": version,
+        "changed": changed,
+        "updated_at": updated_epoch,
+        "payload": payload if changed else None,
     }), 200

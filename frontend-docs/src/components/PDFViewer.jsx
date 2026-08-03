@@ -6,6 +6,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import PdfToolsOverlay, { COLORS } from './PdfToolsOverlay';
+import './PDFViewer.css';
 
 // Configurar el worker de PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -32,12 +33,12 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
   // RENDIMIENTO: antes TODAS las miniaturas se dibujaban al montar (un PDF de
   // 200 páginas = 200 renders simultáneos → congelaba el visor). Ahora cada una
   // se dibuja SOLO cuando está por entrar en pantalla, y una única vez.
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined');
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const el = hostRef.current;
-    if (!el || typeof IntersectionObserver === 'undefined') { setVisible(true); return undefined; }
+    if (!el || typeof IntersectionObserver === 'undefined') return undefined;
     const io = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) { setVisible(true); io.disconnect(); }
     }, { rootMargin: '400px 0px' }); // pre-carga un poco antes de que se vea
@@ -94,7 +95,17 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
     <div
       ref={hostRef}
       data-thumb-page={pageNum}
+      role="button"
+      tabIndex={0}
+      aria-current={isActive ? 'page' : undefined}
+      aria-label={`Ir a la página ${pageNum}`}
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick();
+        }
+      }}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         padding: '12px 0', cursor: 'pointer',
@@ -131,7 +142,9 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   const containerRef = useRef(null);
   const sidebarRef = useRef(null);
   const pdfDocRef = useRef(null);
+  const loadingTaskRef = useRef(null);
   const renderTaskRef = useRef(null);
+  const renderSequenceRef = useRef(0);
   const baseVpRef = useRef({});          // cache "pagina:rotacion" → viewport a escala 1
   const renderDebounceRef = useRef(null); // coalesce de renders durante el zoom
   // Texto por página SOLO EN MEMORIA: se lee del PDF al vuelo y se descarta al
@@ -147,8 +160,10 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
 
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageDraft, setPageDraft] = useState('1');
   const [scale, setScale] = useState(1.0); // 100% por defecto
   const [rotation, setRotation] = useState(0);
+  const [fitMode, setFitMode] = useState('page'); // page | width | custom
   
   // UI States
   const [loading, setLoading] = useState(true);
@@ -156,6 +171,9 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   const [error, setError] = useState(null);
   const [showSidebar, setShowSidebar] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [pageRendering, setPageRendering] = useState(false);
+  const [renderError, setRenderError] = useState('');
+  const [retryNonce, setRetryNonce] = useState(0);
   
   // Pan States
   const [isDragging, setIsDragging] = useState(false);
@@ -179,6 +197,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     setError(null);
     setProgress(0);
     setCurrentPage(1);
+    setPageDraft('1');
     setScale(1.0);
     setRotation(0);
     baseVpRef.current = {}; // el cache de viewports es por documento
@@ -191,6 +210,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
         // NO activar `disableAutoFetch`: para PDFs normales dispara decenas de
         // peticiones por rangos y sale MÁS LENTO que bajar el archivo de corrido.
         const loadingTask = pdfjsLib.getDocument({ url, withCredentials: false });
+        loadingTaskRef.current = loadingTask;
         loadingTask.onProgress = ({ loaded, total }) => {
           if (!cancelled && total) setProgress(Math.min(99, Math.round((loaded / total) * 100)));
         };
@@ -199,7 +219,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
         pdfDocRef.current = pdf;
         setNumPages(pdf.numPages);
         setLoading(false);
-        if(pdf.numPages > 1) setShowSidebar(true);
+        setShowSidebar(pdf.numPages > 1);
       } catch (err) {
         if (cancelled) return;
         console.error('[PDFViewer] Error loading PDF:', err);
@@ -209,8 +229,18 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     };
 
     loadPDF();
-    return () => { cancelled = true; };
-  }, [url]);
+    return () => {
+      cancelled = true;
+      clearTimeout(renderDebounceRef.current);
+      renderSequenceRef.current += 1;
+      try { renderTaskRef.current?.cancel(); } catch { /* render ya finalizado */ }
+      try { loadingTaskRef.current?.destroy(); } catch { /* tarea ya finalizada */ }
+      try { pdfDocRef.current?.destroy(); } catch { /* documento ya liberado */ }
+      renderTaskRef.current = null;
+      loadingTaskRef.current = null;
+      pdfDocRef.current = null;
+    };
+  }, [url, retryNonce]);
 
   // ZOOM INSTANTÁNEO: al cambiar la escala se ajusta el tamaño CSS de una vez
   // (el navegador reescala el bitmap actual → respuesta inmediata) y la
@@ -240,9 +270,13 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     if (!pdf || !canvas) return;
 
     if (renderTaskRef.current) {
-      try { renderTaskRef.current.cancel(); } catch (_) {}
+      try { renderTaskRef.current.cancel(); } catch { /* el render ya terminó */ }
     }
 
+    const renderSequence = ++renderSequenceRef.current;
+    setVpInfo(null);
+    setPageRendering(true);
+    setRenderError('');
     try {
       const page = await pdf.getPage(currentPage);
 
@@ -253,7 +287,9 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       // canvas de cientos de megapíxeles → memoria disparada y render lentísimo.
       let dpr = window.devicePixelRatio || 1;
       const wanted = viewport.width * viewport.height * dpr * dpr;
-      if (wanted > MAX_CANVAS_PIXELS) dpr = Math.max(1, dpr * Math.sqrt(MAX_CANVAS_PIXELS / wanted));
+      if (wanted > MAX_CANVAS_PIXELS) {
+        dpr = Math.max(0.1, dpr * Math.sqrt(MAX_CANVAS_PIXELS / wanted));
+      }
 
       canvas.width = Math.round(viewport.width * dpr);
       canvas.height = Math.round(viewport.height * dpr);
@@ -268,12 +304,16 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       const renderContext = { canvasContext: ctx, viewport };
       renderTaskRef.current = page.render(renderContext);
       await renderTaskRef.current.promise;
+      if (renderSequence !== renderSequenceRef.current) return;
       // El overlay necesita el viewport vigente para transformar coordenadas PDF<->pantalla
       setVpInfo({ vp: viewport, w: viewport.width, h: viewport.height });
     } catch (err) {
-      if (err?.name !== 'RenderingCancelledException' && err?.name !== 'RenderingCancelled') {
+      if (renderSequence === renderSequenceRef.current && err?.name !== 'RenderingCancelledException' && err?.name !== 'RenderingCancelled') {
         console.error('[PDFViewer] Render error:', err);
+        setRenderError('No se pudo representar esta página.');
       }
+    } finally {
+      if (renderSequence === renderSequenceRef.current) setPageRendering(false);
     }
   }, [currentPage, scale, rotation]);
 
@@ -307,10 +347,13 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   }, [currentPage, showSidebar]);
 
   // --- Controles de Navegación ---
-  const goToPage = (p) => {
+  const goToPage = useCallback((p) => {
     const clamped = Math.max(1, Math.min(p, numPages));
     setCurrentPage(clamped);
-  };
+    setPageDraft(String(clamped));
+  }, [numPages]);
+
+  useEffect(() => setPageDraft(String(currentPage)), [currentPage]);
 
   // ── BÚSQUEDA DENTRO DEL DOCUMENTO ─────────────────────────────────────────
   // Lee el texto que el PDF YA trae, al vuelo y en memoria. No extrae, no sube
@@ -375,16 +418,17 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       .filter(Boolean);
   }, [matches, matchIdx, currentPage, vpInfo]);
 
-  const zoomIn = () => setScale(prev => Math.min((prev || 1.0) * 1.2, 8.0));
-  const zoomOut = () => setScale(prev => Math.max((prev || 1.0) / 1.2, 0.2));
+  const zoomIn = useCallback(() => { setFitMode('custom'); setScale(prev => Math.min((prev || 1.0) * 1.2, 8.0)); }, []);
+  const zoomOut = useCallback(() => { setFitMode('custom'); setScale(prev => Math.max((prev || 1.0) / 1.2, 0.2)); }, []);
 
   // Zoom anclado al cursor: el punto bajo el mouse se mantiene en su sitio
-  const zoomAt = (dir, clientX, clientY) => {
+  const zoomAt = useCallback((dir, clientX, clientY) => {
     const cont = containerRef.current;
     if (!cont) { dir > 0 ? zoomIn() : zoomOut(); return; }
     const rect = cont.getBoundingClientRect();
     const mx = clientX - rect.left + cont.scrollLeft;
     const my = clientY - rect.top + cont.scrollTop;
+    setFitMode('custom');
     setScale(prev => {
       const next = dir > 0 ? Math.min(prev * 1.2, 8.0) : Math.max(prev / 1.2, 0.2);
       const ratio = next / prev;
@@ -394,7 +438,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       });
       return next;
     });
-  };
+  }, [zoomIn, zoomOut]);
 
   // Ajustar a página / ancho según el tamaño real del contenedor
   const fitTo = useCallback(async (mode) => {
@@ -405,8 +449,9 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       const vp1 = page.getViewport({ scale: 1, rotation });
       const sW = (cont.clientWidth - 64) / vp1.width;
       const sH = (cont.clientHeight - 64) / vp1.height;
+      setFitMode(mode);
       setScale(Math.max(0.2, mode === 'width' ? sW : Math.min(sW, sH)));
-    } catch (_) {}
+    } catch { /* el documento puede estar cerrándose */ }
   }, [currentPage, rotation]);
 
   // Al abrir un documento, ajustarlo a la vista (no 100% arbitrario)
@@ -414,6 +459,19 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     if (!loading && pdfDocRef.current) fitTo('page');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
+
+  // Mantiene "ajustar a página/ancho" al redimensionar la ventana o el panel.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || fitMode === 'custom' || typeof ResizeObserver === 'undefined') return undefined;
+    let timer;
+    const ro = new ResizeObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fitTo(fitMode), 120);
+    });
+    ro.observe(el);
+    return () => { clearTimeout(timer); ro.disconnect(); };
+  }, [fitMode, fitTo]);
   const rotateRight = () => setRotation(r => (r + 90) % 360);
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -447,6 +505,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
+      if (!viewerRef.current?.contains(document.activeElement) && document.activeElement !== document.body) return;
       // Ctrl+F / Cmd+F abre la búsqueda del documento (no la del navegador).
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault();
@@ -454,21 +513,29 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
         setTimeout(() => document.getElementById('pdf-search-input')?.focus(), 0);
         return;
       }
-      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target?.tagName)) return;
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target?.tagName) || e.target?.isContentEditable) return;
       if (e.key === 'Escape' && searchOpen) { setSearchOpen(false); return; }
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
         e.preventDefault(); goToPage(currentPage - 1);
-      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown') {
         e.preventDefault(); goToPage(currentPage + 1);
+      } else if (e.key === 'Home') {
+        e.preventDefault(); goToPage(1);
+      } else if (e.key === 'End') {
+        e.preventDefault(); goToPage(numPages);
       } else if (e.key === '+' || e.key === '=') {
         e.preventDefault(); zoomIn();
       } else if (e.key === '-') {
         e.preventDefault(); zoomOut();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+        e.preventDefault(); fitTo('page');
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '1') {
+        e.preventDefault(); setFitMode('custom'); setScale(1);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentPage, numPages, searchOpen]);
+  }, [currentPage, numPages, searchOpen, fitTo, goToPage, zoomIn, zoomOut]);
 
   // Scroll handling: Zoom en Canvas / Cambiar Página en Fondo Gris
   useEffect(() => {
@@ -480,6 +547,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     let lastPageChange = 0;
 
     const handleWheel = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || !wrapRef.current?.contains(e.target)) return;
       // Bloquear scroll vertical nativo (importante para que el zoom y cambio de pág funcionen sin que brinque la pantalla)
       e.preventDefault(); 
       
@@ -502,7 +570,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [loading, error, numPages]);
+  }, [loading, error, numPages, zoomAt]);
 
   // --- Click & Drag Panning Logic ---
   const handleMouseDown = (e) => {
@@ -533,7 +601,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   // --- Render ---
   if (loading) {
     return (
-      <div style={styles.center}>
+      <div style={styles.center} role="status" aria-live="polite">
         <div style={styles.spinner} />
         <div style={{ fontSize: 14, color: '#666', marginTop: 16 }}>
           {progress > 0 && progress < 100 ? `Cargando documento… ${progress}%` : 'Cargando documento PDF…'}
@@ -549,30 +617,43 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
 
   if (error) {
     return (
-      <div style={styles.center}>
+      <div style={styles.center} role="alert">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="#d32f2f">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
         </svg>
         <div style={{ fontSize: 14, color: '#666', marginTop: 12 }}>No se pudo cargar el PDF</div>
-        <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>{error}</div>
-        <a href={url} target="_blank" rel="noopener noreferrer" style={styles.downloadBtn}>Descargar archivo</a>
+        <details className="pdf-error-details">
+          <summary>Ver detalle técnico</summary>
+          <div>{error}</div>
+        </details>
+        <div className="pdf-error-actions">
+          <button type="button" onClick={() => setRetryNonce(n => n + 1)} style={styles.downloadBtn}>Reintentar</button>
+          <a href={url} target="_blank" rel="noopener noreferrer" style={styles.downloadBtn}>Descargar archivo</a>
+        </div>
       </div>
     );
   }
 
   return (
-    <div ref={viewerRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#888', overflow: 'hidden' }}>
+    <div
+      ref={viewerRef}
+      className="pdf-viewer"
+      tabIndex={-1}
+      aria-busy={pageRendering}
+      style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#888', overflow: 'hidden' }}
+    >
       
       {/* ▀▀▀ ACC Dark Toolbar ▀▀▀ */}
-      <div style={styles.toolbar}>
+      <div className="pdf-toolbar" style={styles.toolbar} role="toolbar" aria-label="Controles del documento PDF">
         
         {/* Izquierda: Menú + Búsqueda */}
-        <div style={styles.toolbarGroupLeft}>
-          <button onClick={() => setShowSidebar(!showSidebar)} style={{...styles.toolBtnDark, background: showSidebar ? '#444' : 'transparent'}} title="Alternar panel de miniaturas">
+        <div className="pdf-toolbar__group pdf-toolbar__left" style={styles.toolbarGroupLeft}>
+          <button aria-label="Alternar panel de miniaturas" aria-pressed={showSidebar} onClick={() => setShowSidebar(!showSidebar)} style={{...styles.toolBtnDark, background: showSidebar ? '#444' : 'transparent'}} title="Alternar panel de miniaturas">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
           </button>
 
           <button onClick={() => { setSearchOpen(o => !o); setTimeout(() => document.getElementById('pdf-search-input')?.focus(), 0); }}
+            aria-label="Buscar en el documento" aria-pressed={searchOpen}
             style={{ ...styles.toolBtnDark, background: searchOpen ? '#444' : 'transparent' }} title="Buscar en el documento (Ctrl+F)">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           </button>
@@ -600,10 +681,11 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
               <button onClick={() => gotoMatch(1)} disabled={!matches.length} style={styles.searchBtn} title="Siguiente (Enter)">›</button>
             </div>
           )}
+          {!searchOpen && <span className="pdf-file-title" title={fileName}>{fileName}</span>}
         </div>
 
         {/* Centro: Herramientas Principales */}
-        <div style={styles.toolbarGroupCenter}>
+        <div className="pdf-toolbar__group pdf-toolbar__center" style={styles.toolbarGroupCenter}>
 
           <button onClick={zoomOut} style={styles.toolBtnDark} title="Reducir zoom">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13H5v-2h14v2z"/></svg>
@@ -628,15 +710,29 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
 
           <div style={styles.pageInfoDark}>
             <span>Página</span>
-            <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1} style={styles.pageNavBtnDark}>
+            <button aria-label="Página anterior" onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1} style={styles.pageNavBtnDark}>
                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
             </button>
             <input 
-              type="number" value={currentPage} 
-              onChange={(e) => goToPage(parseInt(e.target.value) || 1)} 
+              aria-label="Número de página"
+              inputMode="numeric"
+              type="number" value={pageDraft}
+              onChange={(e) => setPageDraft(e.target.value)}
+              onBlur={() => goToPage(Number(pageDraft) || currentPage)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  goToPage(Number(pageDraft) || currentPage);
+                  e.currentTarget.blur();
+                }
+                if (e.key === 'Escape') {
+                  setPageDraft(String(currentPage));
+                  e.currentTarget.blur();
+                }
+              }}
               style={styles.pageInputDark} min={1} max={numPages} 
             />
-            <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= numPages} style={styles.pageNavBtnDark}>
+            <button aria-label="Página siguiente" onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= numPages} style={styles.pageNavBtnDark}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
             </button>
             <span>de {numPages}</span>
@@ -645,7 +741,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
         </div>
 
         {/* Derecha: Opciones Extra */}
-        <div style={styles.toolbarGroupRight}>
+        <div className="pdf-toolbar__group pdf-toolbar__right" style={styles.toolbarGroupRight}>
           <button onClick={rotateRight} style={styles.toolBtnDark} title="Rotar 90 grados">
              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15.55 5.55L11 1v3C7.06 4 4 7.06 4 11s3.06 7 7 7c1.53 0 2.95-.49 4.1-1.32l-1.5-1.5C12.82 15.69 11.95 16 11 16c-2.76 0-5-2.24-5-5s2.24-5 5-5v3l4.55-4.55zM13 11c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2z"/></svg>
           </button>
@@ -675,7 +771,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
 
       {/* ▀▀▀ Barra de herramientas de ingeniería ▀▀▀ */}
       {nodeId && (
-        <div style={styles.toolsBar}>
+        <div className="pdf-tools-bar" style={styles.toolsBar} role="toolbar" aria-label="Herramientas de ingeniería">
           {[
             { id: 'pan', title: 'Navegar (pan y zoom)', icon: <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/> },
             { id: 'calibrate', title: 'Calibrar escala: clic en 2 puntos de una distancia conocida', icon: <><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/><path d="M7 17L17 7M10 14l1 1M13 11l1 1"/></> },
@@ -699,7 +795,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
             <button key={c} onClick={() => setMarkupColor(c)} title="Color"
               style={{ width: 18, height: 18, borderRadius: '50%', background: c, cursor: 'pointer', border: markupColor === c ? '2px solid #fff' : '2px solid transparent', padding: 0 }} />
           ))}
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: '#888', paddingRight: 8 }}>
+          <span className="pdf-tools-hint" style={{ marginLeft: 'auto', fontSize: 11, color: '#888', paddingRight: 8 }}>
             {tool === 'pan' ? 'Elige una herramienta para medir o anotar' : 'Esc cancela · doble clic termina líneas/áreas'}
           </span>
         </div>
@@ -710,7 +806,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
         
         {/* Sidebar Miniaturas */}
         {showSidebar && (
-          <div ref={sidebarRef} style={styles.sidebar}>
+          <div ref={sidebarRef} className="pdf-sidebar" style={styles.sidebar} aria-label="Miniaturas de páginas">
             {Array.from({ length: numPages }, (_, i) => i + 1).map(pageNum => (
               <Thumbnail 
                 key={pageNum}
@@ -726,6 +822,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
         {/* Canvas de Documento */}
         <div 
           ref={containerRef} 
+          className="pdf-canvas-container"
           style={{
             ...styles.canvasContainer,
             cursor: isDragging ? 'grabbing' : 'grab' // Aplica a toda el área
@@ -735,6 +832,17 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
+          {pageRendering && (
+            <div className="pdf-render-status" role="status" aria-live="polite">
+              Actualizando página {currentPage}…
+            </div>
+          )}
+          {renderError && (
+            <div className="pdf-render-error" role="alert">
+              <span>{renderError}</span>
+              <button type="button" onClick={renderPage}>Reintentar</button>
+            </div>
+          )}
           {/* minWidth 100% + width fit-content: centra cuando el plano es mas
               chico que la pantalla, pero crece y deja hacer scroll a TODOS los
               lados cuando el zoom lo hace mas grande (sin recortar los bordes). */}

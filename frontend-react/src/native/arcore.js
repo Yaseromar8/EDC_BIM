@@ -75,4 +75,28 @@ export async function createAnchorAtCamera(opts = {}) {
   return ARCore.createAnchorAtCamera(opts);
 }
 
+// onReticle: hit-test del punto de mira, 10 veces por segundo.
+//   { found: bool, matrix?: number[16] (pose del piso), type?: 'plane'|'point',
+//     planes: número de superficies de PISO reconocidas y dibujadas }
+// Con esto la web dibuja el anillo sobre la superficie detectada — el usuario
+// ve DÓNDE va a caer el modelo antes de anclar — y sabe si ARCore ya reconoció
+// terreno suficiente como para colocar el modelo sin que nadie toque nada.
+export function onReticle(handler) {
+  const sub = ARCore.addListener('onReticle', handler);
+  return () => { sub.then(s => s.remove()).catch(() => {}); };
+}
+
+// setAimPoint: punto de pantalla (px) al que apunta el retículo y donde
+// anclará createAnchor. Negativo = centro de la pantalla.
+export async function setAimPoint(x = -1, y = -1) {
+  try { return await ARCore.setAimPoint({ x, y }); } catch { return null; }
+}
+
+// setPlanesVisible: enciende/apaga la MALLA DE ESCANEO — la rejilla cian que el
+// plugin dibuja sobre las superficies que ARCore va reconociendo. Se apaga al
+// colocar el modelo: ya cumplió su función y solo ensuciaría la vista de obra.
+export async function setPlanesVisible(visible) {
+  try { return await ARCore.setPlanesVisible({ visible: !!visible }); } catch { return null; }
+}
+
 export default ARCore;

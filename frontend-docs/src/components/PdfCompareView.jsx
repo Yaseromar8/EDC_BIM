@@ -16,13 +16,16 @@ async function signedUrl(gcsUrn, projectPrefix) {
 
 // Renderiza una página de un PDF a un canvas offscreen a la escala dada
 async function renderToCanvas(pdf, pageNum, scale) {
-  const page = await pdf.getPage(Math.min(pageNum, pdf.numPages));
+  if (pageNum > pdf.numPages) {
+    return { canvas: null, missing: true };
+  }
+  const page = await pdf.getPage(pageNum);
   const viewport = page.getViewport({ scale });
   const canvas = document.createElement('canvas');
   canvas.width = viewport.width;
   canvas.height = viewport.height;
   await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-  return canvas;
+  return { canvas, missing: false };
 }
 
 export default function PdfCompareView({ fileName, versionA, versionB, projectPrefix, onClose }) {
@@ -40,8 +43,11 @@ export default function PdfCompareView({ fileName, versionA, versionB, projectPr
   // Cargar ambas versiones
   useEffect(() => {
     let cancel = false;
-    setLoading(true); setError(null);
     (async () => {
+      await Promise.resolve();
+      if (cancel) return;
+      setLoading(true);
+      setError(null);
       try {
         const [urlA, urlB] = await Promise.all([
           signedUrl(versionA.gcs_urn, projectPrefix),
@@ -65,20 +71,28 @@ export default function PdfCompareView({ fileName, versionA, versionB, projectPr
   // Render overlay rojo/azul
   const drawOverlay = useCallback(async () => {
     if (!pdfA || !pdfB || mode !== 'overlay') return;
-    const [cA, cB] = await Promise.all([renderToCanvas(pdfA, page, scale), renderToCanvas(pdfB, page, scale)]);
-    const w = Math.max(cA.width, cB.width), h = Math.max(cA.height, cB.height);
+    const [resultA, resultB] = await Promise.all([renderToCanvas(pdfA, page, scale), renderToCanvas(pdfB, page, scale)]);
+    const cA = resultA.canvas;
+    const cB = resultB.canvas;
+    const available = cA || cB;
+    if (!available) return;
+    const widthA = cA?.width || available.width;
+    const heightA = cA?.height || available.height;
+    const widthB = cB?.width || available.width;
+    const heightB = cB?.height || available.height;
+    const w = Math.max(widthA, widthB), h = Math.max(heightA, heightB);
     const out = overlayRef.current;
     if (!out) return;
     out.width = w; out.height = h;
     const ctx = out.getContext('2d');
-    const ia = cA.getContext('2d').getImageData(0, 0, cA.width, cA.height);
-    const ib = cB.getContext('2d').getImageData(0, 0, cB.width, cB.height);
+    const ia = cA?.getContext('2d').getImageData(0, 0, cA.width, cA.height);
+    const ib = cB?.getContext('2d').getImageData(0, 0, cB.width, cB.height);
     const res = ctx.createImageData(w, h);
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const oi = (y * w + x) * 4;
-        const ai = (y < cA.height && x < cA.width) ? (y * cA.width + x) * 4 : -1;
-        const bi = (y < cB.height && x < cB.width) ? (y * cB.width + x) * 4 : -1;
+        const ai = cA && y < cA.height && x < cA.width ? (y * cA.width + x) * 4 : -1;
+        const bi = cB && y < cB.height && x < cB.width ? (y * cB.width + x) * 4 : -1;
         // Tinta = 1 - luminancia (papel blanco = 0 tinta)
         const inkA = ai >= 0 ? 1 - (0.299 * ia.data[ai] + 0.587 * ia.data[ai + 1] + 0.114 * ia.data[ai + 2]) / 255 : 0;
         const inkB = bi >= 0 ? 1 - (0.299 * ib.data[bi] + 0.587 * ib.data[bi + 1] + 0.114 * ib.data[bi + 2]) / 255 : 0;
@@ -95,12 +109,25 @@ export default function PdfCompareView({ fileName, versionA, versionB, projectPr
   // Render lado a lado
   const drawSide = useCallback(async () => {
     if (!pdfA || !pdfB || mode !== 'side') return;
-    const [cA, cB] = await Promise.all([renderToCanvas(pdfA, page, scale), renderToCanvas(pdfB, page, scale)]);
-    [[sideARef, cA], [sideBRef, cB]].forEach(([ref, c]) => {
+    const [resultA, resultB] = await Promise.all([renderToCanvas(pdfA, page, scale), renderToCanvas(pdfB, page, scale)]);
+    const available = resultA.canvas || resultB.canvas;
+    if (!available) return;
+    [[sideARef, resultA], [sideBRef, resultB]].forEach(([ref, result]) => {
       const out = ref.current;
       if (!out) return;
-      out.width = c.width; out.height = c.height;
-      out.getContext('2d').drawImage(c, 0, 0);
+      const c = result.canvas;
+      out.width = c?.width || available.width;
+      out.height = c?.height || available.height;
+      const ctx = out.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, out.width, out.height);
+      if (c) ctx.drawImage(c, 0, 0);
+      if (result.missing) {
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Esta versión no contiene esta página', out.width / 2, out.height / 2);
+      }
     });
   }, [pdfA, pdfB, page, scale, mode]);
 

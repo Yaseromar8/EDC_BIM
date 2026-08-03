@@ -5,7 +5,8 @@
   "backgroundColor": "#00000000",
   "server": {
     "androidScheme": "https",
-    "cleartext": true
+    "cleartext": true,
+    "url": "http://192.168.10.75:5173"
   },
   "plugins": {
     "CapacitorHttp": {

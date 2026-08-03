@@ -14,7 +14,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { useFileExplorer } from '../hooks/useFileExplorer';
 import { useVersionHistory } from '../hooks/useVersionHistory';
 import { useColumnResize, useSidebarResize, useVersionPanelResize } from '../hooks/useColumnResize';
-import { API, getInitials, getAuthHeaders, formatSize, formatDate } from '../utils/helpers';
+import { API, getInitials, getAuthHeaders, formatSize, formatDate, DOCS_VISOR_SHORTCUT } from '../utils/helpers';
 import { renderFileIconSop } from '../utils/fileIcons';
 import { apiFetch } from '../utils/apiFetch';
 import { confirmAction } from '../utils/confirm';
@@ -60,7 +60,39 @@ const ChunkFallback = () => (
   </div>
 );
 
-export default function FilesPage({ project, user, onBack, onLogout }) {
+// Menú de perfil: una sola familia de iconos (trazo de 1.6 px, 16 px, sin
+// relleno, heredando el color del texto). Nada de emojis — cada plataforma los
+// dibuja distinto y rompen la línea del resto de la interfaz.
+const MENU_ICONS = {
+  swap: <><polyline points="16 3 20 7 16 11" /><path d="M4 13v-2a4 4 0 0 1 4-4h12" /><polyline points="8 21 4 17 8 13" /><path d="M20 11v2a4 4 0 0 1-4 4H4" /></>,
+  home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5.5 9.5V19a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V9.5" /><path d="M9.5 21v-6h5v6" /></>,
+  exit: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>,
+};
+
+function MenuItem({ icon, label, onClick, danger = false, divider = false }) {
+  const color = danger ? '#e53935' : '#333';
+  const hoverBg = danger ? '#fff5f5' : '#f5f5f5';
+  return (
+    <button
+      onClick={onClick}
+      onMouseOver={e => { e.currentTarget.style.background = hoverBg; }}
+      onMouseOut={e => { e.currentTarget.style.background = 'none'; }}
+      style={{
+        width: '100%', padding: '10px 16px', border: 'none', background: 'none',
+        textAlign: 'left', fontSize: 13, cursor: 'pointer', color,
+        display: 'flex', alignItems: 'center', gap: 10,
+        borderTop: divider ? '1px solid #eee' : 'none',
+      }}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.75 }}>
+        {MENU_ICONS[icon]}
+      </svg>
+      {label}
+    </button>
+  );
+}
+
+export default function FilesPage({ project, user, onBack, onLogout, onBackToHub }) {
   // ═══════════════════════════════════════
   // HOOK ASSEMBLY (Zero logic — only wiring)
   // ═══════════════════════════════════════
@@ -131,6 +163,8 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
             </svg>
             <span style={{ fontSize: 15, letterSpacing: '0.3px', color: '#2b333d' }}>ECD<span style={{ color: '#5f7fa3', fontWeight: 600 }}>-VISIION</span></span>
           </div>
+          {/* Atajo al Visor 3D sin pasar por el Hub: apagado por DOCS_VISOR_SHORTCUT. */}
+          {DOCS_VISOR_SHORTCUT && <>
           <div className="separator-line" style={{ width: 1, height: 20, background: '#eee', margin: '0 8px' }} />
           <button 
             className="gateway-trigger-btn"
@@ -147,6 +181,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
             Frentes 3D
           </button>
+          </>}
           <div className="separator-line" style={{ width: 1, height: 20, background: '#eee', margin: '0 8px' }} />
           <div className="project-selector" style={{ fontSize: 14, fontWeight: 600, color: '#333', textTransform: 'uppercase' }}>
             <span>{project.name}</span>
@@ -162,12 +197,13 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
                    <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>{user.email}</div>
                    <div style={{ fontSize: 10, color: '#5f7fa3', marginTop: 4, textTransform: 'uppercase', fontWeight: 600 }}>{user.role || 'user'}</div>
                  </div>
-                 <button onClick={() => { fe.setProfileMenuOpen(false); onBack(); }} style={{ width: '100%', padding: '10px 16px', border: 'none', background: 'none', textAlign: 'left', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: '#333' }} onMouseOver={e => e.currentTarget.style.background='#f5f5f5'} onMouseOut={e => e.currentTarget.style.background='none'}>
-                   <span style={{ fontSize: 16 }}>🔄</span> Cambiar proyecto
-                 </button>
-                 <button onClick={() => { fe.setProfileMenuOpen(false); if (onLogout) onLogout(); }} style={{ width: '100%', padding: '10px 16px', border: 'none', background: 'none', textAlign: 'left', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: '#e53935', borderTop: '1px solid #eee' }} onMouseOver={e => e.currentTarget.style.background='#fff5f5'} onMouseOut={e => e.currentTarget.style.background='none'}>
-                   <span style={{ fontSize: 16 }}>🚪</span> Cerrar sesión
-                 </button>
+                 <MenuItem icon="swap" label="Cambiar proyecto" onClick={() => { fe.setProfileMenuOpen(false); onBack(); }} />
+                 {/* Salida al Hub sin cerrar sesión: desde dentro de un proyecto
+                     no había ninguna. */}
+                 {onBackToHub && (
+                   <MenuItem icon="home" label="Ir al inicio" onClick={() => { fe.setProfileMenuOpen(false); onBackToHub(); }} />
+                 )}
+                 <MenuItem icon="exit" label="Cerrar sesión" danger divider onClick={() => { fe.setProfileMenuOpen(false); if (onLogout) onLogout(); }} />
                </div>
              )}
           </div>
@@ -696,14 +732,8 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
       <UploadModal isOpen={fe.showUploadModal} sopMinimized={fe.sopMinimized} setSopMinimized={fe.setSopMinimized}
         currentPath={fe.currentPath} chunkedUpload={fe.chunkedUpload} fileRef={fe.fileRef}
         dragOver={fe.dragOver} onDragOver={fe.onDragOver} onDragLeave={fe.onDragLeave} onDrop={fe.onDrop}
-        onUpload={fe.handleSopUpload} onListo={fe.handleSopListo} onClose={() => fe.setShowUploadModal(false)} />
-
-      {fe.showSopToast && (
-        <div className="acc-success-toast">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-          {fe.chunkedUpload.completedCount === 1 ? 'Un archivo se ha cargado correctamente.' : `${fe.chunkedUpload.completedCount} archivos cargados.`}
-        </div>
-      )}
+        onUpload={fe.handleSopUpload} onListo={fe.handleSopListo} onOpenUploaded={fe.openUploadedFile}
+        onClose={() => fe.setShowUploadModal(false)} />
 
       <ShareModal isOpen={fe.showShareModal} shareTarget={fe.shareTarget} user={user} projectPrefix={projectPrefix}
         searchShareUser={fe.searchShareUser} setSearchShareUser={fe.setSearchShareUser}
@@ -737,7 +767,7 @@ export default function FilesPage({ project, user, onBack, onLogout }) {
       )}
 
       {/* GATEWAY 3D OVERLAY (FRENTES) */}
-      {showGateway && (
+      {showGateway && DOCS_VISOR_SHORTCUT && (
         <GatewayPanel
           project={project}
           onClose={() => setShowGateway(false)}

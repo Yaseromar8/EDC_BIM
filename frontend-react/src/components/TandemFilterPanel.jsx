@@ -259,6 +259,56 @@ const FilterCategory = React.memo(({
     );
 });
 
+// GANCHO GLOBAL anti-parpadeo: varios flujos del visor hacen
+// clearThemingColors masivo (reset de filtros, fin de aislamiento). Llamándolo
+// INMEDIATAMENTE después de ese borrado, los tintes de fuente se restauran en
+// el MISMO frame — sin ventana visible sin color. Lee el mapa persistido
+// window.__ecdSourceAssigned (urn normalizado → color efectivo).
+window.__ecdReapplySourceTints = (viewer, onlyModel) => {
+    // Reentrada: cuando NOSOTROS pintamos, el clear interno no debe repintar
+    if (window.__ecdTintApplying) return;
+    try {
+        const assigned = window.__ecdSourceAssigned || {};
+        const THREE = window.THREE;
+        if (!viewer || !THREE || !Object.keys(assigned).length) return;
+        const norm = (u) => String(u || '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const list = onlyModel ? [onlyModel] : (viewer.getAllModels ? viewer.getAllModels() : []);
+        window.__ecdTintApplying = true;
+        list.forEach(lmv => {
+            try {
+                const hex = assigned[norm(lmv.getData()?.urn)];
+                if (!hex) return;
+                const it = lmv.getInstanceTree && lmv.getInstanceTree();
+                if (!it) return;
+                const c = new THREE.Color(hex);
+                const v = new THREE.Vector4(c.r, c.g, c.b, 0.85);
+                // Pintar a nivel de MODELO: viewer.setThemingColor invalida el
+                // render en CADA llamada y con varios modelos eso reinicia el
+                // sombreado ambiental una y otra vez (el "fondo parpadea").
+                if (typeof lmv.setThemingColor === 'function') lmv.setThemingColor(it.getRootId(), v, true);
+                else viewer.setThemingColor(it.getRootId(), v, lmv, true);
+            } catch { /* noop */ }
+        });
+        // UNA sola invalidación ligera para todo el lote (sin clear ni AO)
+        try { viewer.impl && viewer.impl.invalidate(false, true, false); } catch { /* noop */ }
+    } catch { /* noop */ } finally {
+        window.__ecdTintApplying = false;
+    }
+};
+
+// Paleta estable de tintes por fuente (estilo Tandem): el modelo i-ésimo de la
+// lista siempre recibe el mismo color — el punto del panel y el 3D coinciden.
+const SOURCE_TINT_PALETTE = ['#4fc3f7', '#ab7df6', '#ffb300', '#66bb6a', '#ef5350', '#26c6da', '#ff7043', '#d4e157'];
+// Presets del picker de fuentes (mismos del picker de propiedades)
+const SOURCE_PRESET_COLORS = [
+    '#10B981', '#059669', '#34D399',
+    '#7e9bbd', '#5f7fa3', '#6366F1',
+    '#F97316', '#EAB308', '#F59E0B',
+    '#EF4444', '#F43F5E', '#EC4899',
+    '#A855F7', '#8B5CF6', '#14B8A6',
+    '#84CC16', '#22D3EE', '#FB923C',
+];
+
 const TandemFilterPanel = ({
     models,
     hiddenModelUrns,
@@ -286,6 +336,118 @@ const TandemFilterPanel = ({
     const normUrn = (u) => String(u || '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const isUrnHidden = (urn) => hiddenModelUrns.some(u => normUrn(u) === normUrn(urn));
     const visibleCount = models.filter(m => !isUrnHidden(m.urn)).length;
+
+    // ── Coloreo por FUENTE (paridad Tandem, MISMO patrón que "color by
+    // property"): la paleta del header lo activa/desactiva para TODOS los
+    // modelos; el punto de cada fila abre el picker (presets, color custom o
+    // "no pintar"). El tinte es setThemingColor del LMV — capa aditiva y
+    // reversible: no toca materiales, visibilidad, filtros ni overlays.
+    // Estado a nivel de window para sobrevivir a cerrar/abrir el panel.
+    const [sourcesColorOn, setSourcesColorOn] = useState(() => !!window.__ecdSourceColorOn);
+    const [sourceCustomColors, setSourceCustomColors] = useState(() => ({ ...(window.__ecdSourceCustomColors || {}) }));
+    const [sourcePickerUrn, setSourcePickerUrn] = useState(null);
+    const sourceTintOf = (urn) => {
+        const k = normUrn(urn);
+        const custom = sourceCustomColors[k];
+        if (custom) return custom; // puede ser 'none' (excluido del coloreo)
+        const idx = models.findIndex(m => normUrn(m.urn) === k);
+        return SOURCE_TINT_PALETTE[(idx < 0 ? 0 : idx) % SOURCE_TINT_PALETTE.length];
+    };
+    // Tinte del modelo con EXACTAMENTE el mismo mecanismo que el "color by
+    // property" (Vector4 alpha 0.6, THEME_COLOR_ALPHA de Viewer.jsx): 60%
+    // color + 40% del material sombreado — conserva relieve y contraste, y
+    // el usuario ve UN solo lenguaje visual en todo el panel.
+    const _applySourceTint = (urn, color) => {
+        const viewer = window.__mainViewer || window.NOP_VIEWER;
+        const THREE = window.THREE;
+        if (!viewer || !THREE) return;
+        const target = normUrn(urn);
+        let lmv = null;
+        try {
+            lmv = (viewer.getAllModels ? viewer.getAllModels() : []).find(m => {
+                try { return normUrn(m.getData()?.urn) === target; } catch { return false; }
+            }) || null;
+        } catch { /* noop */ }
+        if (!lmv) return;
+        try {
+            // el mapa se actualiza ANTES del clear: el choke-point del visor
+            // re-aplica dentro del propio clearThemingColors leyendo este mapa
+            const assigned = (window.__ecdSourceAssigned = window.__ecdSourceAssigned || {});
+            if (color && color !== 'none') {
+                assigned[target] = color;
+            } else {
+                delete assigned[target];
+            }
+            window.__ecdTintApplying = true;   // el clear no debe repintar aquí
+            viewer.clearThemingColors(lmv);
+            if (color && color !== 'none') {
+                const it = lmv.getInstanceTree && lmv.getInstanceTree();
+                if (it) {
+                    const c = new THREE.Color(color);
+                    // 0.85: en fuentes conviven materiales de colores fuertes
+                    // (bordes naranjas, remates amarillos) — con 0.6 el color
+                    // original contaminaba el tinte y "las sombras salían de
+                    // otro color". 0.85 impone el matiz de la fuente y deja
+                    // 15% del sombreado original para el relieve.
+                    const v = new THREE.Vector4(c.r, c.g, c.b, 0.85);
+                    if (typeof lmv.setThemingColor === 'function') lmv.setThemingColor(it.getRootId(), v, true);
+                    else viewer.setThemingColor(it.getRootId(), v, lmv, true);
+                }
+            }
+            // invalidación LIGERA: (true,true,…) fuerza clear+AO y hace
+            // "parpadear el fondo" en cada clic de visibilidad
+            if (viewer.impl) viewer.impl.invalidate(false, true, false);
+        } catch { /* noop */ } finally {
+            window.__ecdTintApplying = false;
+        }
+    };
+    // Cambio de FRENTE (App limpia los globales): sincronizar el panel — la
+    // config de colores de un frente jamás se arrastra al siguiente.
+    useEffect(() => {
+        const onReset = () => {
+            setSourcesColorOn(false);
+            setSourceCustomColors({});
+            setSourcePickerUrn(null);
+        };
+        window.addEventListener('ecd-source-tints-reset', onReset);
+        return () => window.removeEventListener('ecd-source-tints-reset', onReset);
+    }, []);
+    // La restauración de tintes vive en UN solo lugar: el choke-point sobre
+    // clearThemingColors (Viewer.jsx) — restaura dentro de la misma llamada
+    // de borrado. Aquí NO hay timers ni listeners de respaldo: cada
+    // re-aplicación extra reiniciaba el render progresivo (AO/sombras) y el
+    // fondo pestañeaba varias veces por gesto. Un modelo que se RECARGA al
+    // re-mostrarse pasa por clearThemingColors en su init → cubierto.
+    // Solo un caso queda fuera: modelo cargado por primera vez con el coloreo
+    // ya activo — una pasada única al cambiar la lista de modelos lo cubre.
+    const _modelsKey = models.map(m => normUrn(m.urn)).join('|');
+    useEffect(() => {
+        if (!sourcesColorOn) return undefined;
+        const t = setTimeout(() => {
+            models.forEach(m => {
+                if (!isUrnHidden(m.urn)) _applySourceTint(m.urn, sourceTintOf(m.urn));
+            });
+        }, 600);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [_modelsKey, sourcesColorOn]);
+    const toggleSourcesColor = () => {
+        const next = !sourcesColorOn;
+        setSourcesColorOn(next);
+        window.__ecdSourceColorOn = next;
+        setSourcePickerUrn(null);
+        models.forEach(m => _applySourceTint(m.urn, next ? sourceTintOf(m.urn) : null));
+    };
+    const setSourceColor = (urn, color) => {
+        const k = normUrn(urn);
+        setSourceCustomColors(prev => {
+            const next = { ...prev, [k]: color };
+            window.__ecdSourceCustomColors = next;
+            return next;
+        });
+        _applySourceTint(urn, color);
+        setSourcePickerUrn(null);
+    };
 
     const [heatmapConfig, setHeatmapConfig] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -449,6 +611,13 @@ const TandemFilterPanel = ({
                         </div>
                         <div className="tandem-actions" style={{ gap: '4px', alignItems: 'center' }}>
                             <button className={`tandem-action-btn ${facetSearch['sources']?.open ? 'active' : ''}`} title="Search" onClick={() => setFacetSearch(prev => ({ ...prev, sources: { open: !prev.sources?.open, query: '' } }))}><SearchIconTandem /></button>
+                            <button
+                                className={`tandem-action-btn ${sourcesColorOn ? 'active' : ''}`}
+                                title="Color by source"
+                                onClick={(e) => { e.stopPropagation(); toggleSourcesColor(); }}
+                            >
+                                <PaletteIconTandem />
+                            </button>
                         </div>
                         <button className="tandem-action-btn" onClick={() => setExpandedFilters(prev => ({ ...prev, 'sources': !prev['sources'] }))}>
                             {expandedFilters['sources'] !== false ? (
@@ -478,34 +647,107 @@ const TandemFilterPanel = ({
                                 const sq = (facetSearch['sources']?.query || '').toLowerCase();
                                 return !sq || model.label.toLowerCase().includes(sq);
                             })
-                            .map(model => (
-                                <li key={model.urn} className="tandem-item">
-                                    <label className="tandem-item-label">
-                                        <span className="tandem-cb-container" onClick={e => { e.preventDefault(); handleToggleModelVisibility(model.urn); }}>
-                                            <div className="tandem-cb-wrap">
-                                                <div className={`tandem-cb-box ${!isUrnHidden(model.urn) ? 'checked' : ''} ${hiddenModelUrns.length > 0 ? 'active' : ''}`}>
-                                                    <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" className="tandem-cb-icon">
-                                                        <path fill="none" stroke={!isUrnHidden(model.urn) ? '#fff' : 'transparent'} d="M6,11.3 L10.3,16 L18,6.2" />
-                                                    </svg>
-                                                </div>
+                            .map(model => {
+                                const effColor = sourceTintOf(model.urn);
+                                const isNone = effColor === 'none';
+                                const dotStyle = !sourcesColorOn ? {} : (isNone
+                                    ? { background: 'repeating-linear-gradient(45deg,#3a3d42 0 3px,#1e2126 3px 6px)', border: '1px solid #5a5f66' }
+                                    : { backgroundColor: effColor, border: `1px solid ${effColor}`, boxShadow: `0 0 6px ${effColor}55` });
+                                return (
+                                    <React.Fragment key={model.urn}>
+                                        <li className="tandem-item">
+                                            <label className="tandem-item-label">
+                                                <span className="tandem-cb-container" onClick={e => { e.preventDefault(); handleToggleModelVisibility(model.urn); }}>
+                                                    <div className="tandem-cb-wrap">
+                                                        <div className={`tandem-cb-box ${!isUrnHidden(model.urn) ? 'checked' : ''} ${hiddenModelUrns.length > 0 ? 'active' : ''}`}>
+                                                            <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" className="tandem-cb-icon">
+                                                                <path fill="none" stroke={!isUrnHidden(model.urn) ? '#fff' : 'transparent'} d="M6,11.3 L10.3,16 L18,6.2" />
+                                                            </svg>
+                                                        </div>
+                                                    </div>
+                                                </span>
+                                                <span className="tandem-item-text" title={model.label}>{model.label.replace(' (Gemelo)', '')}</span>
+                                                {model.source === 'GEMELO' && (
+                                                    <span style={{
+                                                        fontSize: '9px', fontWeight: 'bold', background: '#e67e22', color: '#fff',
+                                                        padding: '2px 4px', borderRadius: '4px', marginLeft: '6px', whiteSpace: 'nowrap'
+                                                    }}>
+                                                        GEMELO
+                                                    </span>
+                                                )}
+                                            </label>
+                                            <div className="tandem-item-right">
+                                                <span className="tandem-count-badge">1</span>
+                                                <div
+                                                    className={`tandem-color-box ${sourcesColorOn ? '' : 'default'}`}
+                                                    style={{ ...dotStyle, cursor: sourcesColorOn ? 'pointer' : 'default', transition: 'all 0.2s' }}
+                                                    title={sourcesColorOn ? 'Click to change color' : ''}
+                                                    onClick={(e) => {
+                                                        if (!sourcesColorOn) return;
+                                                        e.stopPropagation();
+                                                        setSourcePickerUrn(prev => (prev === model.urn ? null : model.urn));
+                                                    }}
+                                                ></div>
                                             </div>
-                                        </span>
-                                        <span className="tandem-item-text" title={model.label}>{model.label.replace(' (Gemelo)', '')}</span>
-                                        {model.source === 'GEMELO' && (
-                                            <span style={{
-                                                fontSize: '9px', fontWeight: 'bold', background: '#e67e22', color: '#fff',
-                                                padding: '2px 4px', borderRadius: '4px', marginLeft: '6px', whiteSpace: 'nowrap'
-                                            }}>
-                                                GEMELO
-                                            </span>
+                                        </li>
+                                        {sourcesColorOn && sourcePickerUrn === model.urn && (
+                                            <li style={{ padding: '8px 16px 8px 36px', background: '#1a1c22', borderTop: '1px solid #333', borderBottom: '1px solid #333' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <span style={{ fontSize: '11px', color: '#aaa', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            Color: {model.label.replace(' (Gemelo)', '')}
+                                                        </span>
+                                                        <button
+                                                            onClick={() => setSourcePickerUrn(null)}
+                                                            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px', padding: '0 4px' }}
+                                                        >×</button>
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                                        <div
+                                                            onClick={() => setSourceColor(model.urn, 'none')}
+                                                            title="No pintar este modelo (excluir del coloreo)"
+                                                            style={{
+                                                                width: '18px', height: '18px', borderRadius: '3px', cursor: 'pointer',
+                                                                border: isNone ? '2px solid #fff' : '1px solid rgba(255,255,255,0.3)',
+                                                                background: 'repeating-linear-gradient(45deg,#3a3d42 0 3px,#1e2126 3px 6px)',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                color: '#f87171', fontWeight: 900, fontSize: '11px', lineHeight: 1,
+                                                            }}
+                                                        >✕</div>
+                                                        {SOURCE_PRESET_COLORS.map(c => (
+                                                            <div
+                                                                key={c}
+                                                                onClick={() => setSourceColor(model.urn, c)}
+                                                                style={{
+                                                                    width: '18px', height: '18px', borderRadius: '3px',
+                                                                    backgroundColor: c, cursor: 'pointer',
+                                                                    border: effColor === c ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
+                                                                    boxShadow: effColor === c ? `0 0 8px ${c}` : 'none',
+                                                                    transition: 'all 0.15s'
+                                                                }}
+                                                                title={c}
+                                                            />
+                                                        ))}
+                                                        <label style={{
+                                                            width: '18px', height: '18px', borderRadius: '3px',
+                                                            background: 'linear-gradient(135deg, #ff0000, #00ff00, #0000ff)',
+                                                            cursor: 'pointer', border: '1px solid rgba(255,255,255,0.3)',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            overflow: 'hidden', position: 'relative'
+                                                        }} title="Custom color...">
+                                                            <input
+                                                                type="color"
+                                                                style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }}
+                                                                onChange={(e) => setSourceColor(model.urn, e.target.value)}
+                                                            />
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </li>
                                         )}
-                                    </label>
-                                    <div className="tandem-item-right">
-                                        <span className="tandem-count-badge">1</span>
-                                        <div className="tandem-color-box default"></div>
-                                    </div>
-                                </li>
-                            ))}
+                                    </React.Fragment>
+                                );
+                            })}
                     </ul>
                 </div>
 

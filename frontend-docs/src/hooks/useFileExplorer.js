@@ -51,7 +51,6 @@ export function useFileExplorer(project, user) {
 
   // ── Upload State ──
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [showSopToast, setShowSopToast] = useState(false);
   const [sopMinimized, setSopMinimized] = useState(false);
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -98,13 +97,8 @@ export function useFileExplorer(project, user) {
   // ── Chunked Upload Engine ──
   const { methods: cacheMethods, cacheVersion } = useFolderCache(API, projectPrefix);
   const chunkedUpload = useChunkedUpload(API, projectPrefix, user, {
-    onUploadComplete: (item, res) => {
-      if (res.version && res.version > 1) {
-        toast.success(`Versión ${res.version} de ${item.filename} guardada exitosamente`);
-      } else {
-        toast.success(`${item.filename} guardado exitosamente`);
-      }
-      cacheMethods.invalidateNode(item.folderPath || '__root__');
+    onUploadComplete: () => {
+      cacheMethods.invalidateAll();
     }
   });
 
@@ -132,21 +126,7 @@ export function useFileExplorer(project, user) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [activeRowMenu]);
 
-  // Watch chunked upload completions
-  const prevCompletedRef = useRef(0);
-  useEffect(() => {
-    if (chunkedUpload.completedCount > prevCompletedRef.current) {
-      triggerRefresh(currentPath);
-    }
-    prevCompletedRef.current = chunkedUpload.completedCount;
-  }, [chunkedUpload.completedCount]);
-
   // Check pending uploads on mount - Removido por UX (El banner asume estado fantasma)
-
-  // Fetch contents when path/nodeId/trashMode changes
-  useEffect(() => {
-    fetchContents(currentPath, isTrashMode, false, isTrashMode ? null : currentNodeId);
-  }, [currentPath, isTrashMode, currentNodeId]);
 
   // Refs para evitar que fetchContents se re-cree en cada cambio de nodeId/rootId
   const projectRootIdRef = useRef(projectRootId);
@@ -225,11 +205,27 @@ export function useFileExplorer(project, user) {
     finally { if (!silent && seq === fetchSeqRef.current) setLoading(false); }
   }, [projectPrefix, cacheMethods]);
 
+  useEffect(() => {
+    fetchContents(currentPath, isTrashMode, false, isTrashMode ? null : currentNodeId);
+  }, [currentPath, isTrashMode, currentNodeId, fetchContents]);
+
   const triggerRefresh = useCallback((path = currentPath, specificNodeId = undefined) => {
     const idToUse = specificNodeId !== undefined ? specificNodeId : currentNodeId;
     fetchContents(path, isTrashMode, true, isTrashMode ? null : idToUse);
     setRefreshSignal(prev => prev + 1);
   }, [currentPath, isTrashMode, currentNodeId, fetchContents]);
+
+  // Agrupa finalizaciones simultáneas para evitar una consulta por archivo.
+  const prevCompletedRef = useRef(0);
+  const uploadRefreshTimerRef = useRef(null);
+  useEffect(() => {
+    if (chunkedUpload.completedCount > prevCompletedRef.current) {
+      clearTimeout(uploadRefreshTimerRef.current);
+      uploadRefreshTimerRef.current = setTimeout(() => triggerRefresh(currentPath), 250);
+    }
+    prevCompletedRef.current = chunkedUpload.completedCount;
+    return () => clearTimeout(uploadRefreshTimerRef.current);
+  }, [chunkedUpload.completedCount, currentPath, triggerRefresh]);
 
   const navigate = useCallback((path, id = null) => {
     const normalizedPath = path.replace(/\/$/, '');
@@ -323,11 +319,17 @@ export function useFileExplorer(project, user) {
   const handleExecuteMove = async () => {
     if (!isAdmin || !moveState.destPath || !moveState.itemIds?.length) return;
     const idsToMove = [...moveState.itemIds];
+    if (moveState.destId && idsToMove.some(id => String(id) === String(moveState.destId))) {
+      toast.error('No puedes mover un elemento dentro de sí mismo.');
+      return;
+    }
     setProcessingIds(prev => {
       const n = { ...prev };
       idsToMove.forEach(id => n[id] = true);
       return n;
     });
+    let moved = 0;
+    const failures = [];
     for (const nodeId of idsToMove) {
       try {
         const res = await apiFetch(`${API}/api/docs/move`, {
@@ -336,13 +338,13 @@ export function useFileExplorer(project, user) {
         });
         if (!res.ok) {
           const errData = await res.json();
-          toast.error(errData.error || "Error al desplazar");
-          break;
+          failures.push(errData.error || 'Error al desplazar');
+          continue;
         }
+        moved += 1;
       } catch (e) {
         console.error(e);
-        toast.error("Error de red al desplazar");
-        break;
+        failures.push('Error de red al desplazar');
       }
     }
     setProcessingIds(prev => {
@@ -363,6 +365,11 @@ export function useFileExplorer(project, user) {
     setSelected(new Set());
     setRefreshSignal(s => s + 1);
     triggerRefresh();
+    if (failures.length) {
+      toast.error(`${moved} de ${idsToMove.length} elemento(s) movido(s). ${failures[0]}`);
+    } else {
+      toast.success(`${moved} elemento(s) movido(s) correctamente.`);
+    }
   };
 
   const handleExecuteBatchDelete = async () => {
@@ -449,9 +456,24 @@ export function useFileExplorer(project, user) {
   const handleSopListo = () => {
     setShowUploadModal(false);
     chunkedUpload.clearCompleted();
-    triggerRefresh();
-    setShowSopToast(true);
-    setTimeout(() => setShowSopToast(false), 3000);
+  };
+
+  const openUploadedFile = (item) => {
+    if (!item?.nodeId) return;
+    const folder = item.folderPath ? `${item.folderPath.replace(/\/+$/, '')}/` : '';
+    if (chunkedUpload.hasActiveUploads) {
+      setSopMinimized(true);
+    } else {
+      setShowUploadModal(false);
+    }
+    setActiveFile({
+      id: item.nodeId,
+      name: item.filename,
+      type: 'file',
+      fullName: `${folder}${item.filename}`,
+      version: item.version,
+      gcs_urn: item.gcsUrn,
+    });
   };
 
   // ── Drag & Drop ──
@@ -509,11 +531,10 @@ export function useFileExplorer(project, user) {
     
     // Upload
     showUploadModal, setShowUploadModal,
-    showSopToast, setShowSopToast,
     sopMinimized, setSopMinimized,
     showUploadMenu, setShowUploadMenu,
     dragOver, pendingBanner, setPendingBanner,
-    chunkedUpload, handleSopUpload, handleSopListo,
+    chunkedUpload, handleSopUpload, handleSopListo, openUploadedFile,
     onDragOver, onDragLeave, onDrop,
     
     // Context Menu

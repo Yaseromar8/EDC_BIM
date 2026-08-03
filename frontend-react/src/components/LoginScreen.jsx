@@ -5,8 +5,12 @@ import { Capacitor } from '@capacitor/core';
 const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location.hostname.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) ? `http://${window.location.hostname}:3000` : 'https://visor-ecd-backend.onrender.com')));
 
 // ── VIDEO — Cambiar esta línea para usar tu propio video ─────────────────────
-const HERO_VIDEO_URL = "https://s3.amazonaws.com/webflow-prod-assets/68dfb2221c50b9fb5b595fd7/695e368381db0cb279407245_Home%20page%20-%20hero%20video_15mb.mp4";
-// Para video local: cópialo a public/ y pon "/mi_video.mp4"
+// Obra real (dron, SEM 30): CANAL JESUS MARIA 0:00–0:10 · MAX_1346 2:25–2:35
+// · CANAL JESUS MARIA 3:50–4:05 —
+// del original 5.5K, reencodados a 1600×900 sin audio (~4 MB) y servidos
+// desde public/ — sin depender de un CDN ajeno como el video de stock previo.
+const HERO_VIDEO_URL = "/login-obra.mp4";
+// Para otro video local: cópialo a public/ y pon "/mi_video.mp4"
 
 // ── Translations ─────────────────────────────────────────────────────────────
 const translations = {

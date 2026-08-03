@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../utils/apiFetch';
 import { confirmAction } from '../utils/confirm';
-import { API, VISOR_URL, formatDate, getInitials } from '../utils/helpers';
+import { API, formatDate, getInitials } from '../utils/helpers';
 
 // ─── USERS TAB ───
 function UsersTab() {
@@ -56,7 +56,7 @@ function UsersTab() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-        <button className="btn btn-create" onClick={() => setShowCreate(true)}>+ Añadir usuario</button>
+        <button className="btn btn-create" onClick={() => setShowCreate(true)}>+ Invitar usuario</button>
       </div>
       {loading ? <div className="loading"><div className="spinner" /><span>Cargando...</span></div> :
         <table className="data-table" style={{ background: '#fff', borderRadius: 6, overflow: 'hidden' }}>
@@ -85,8 +85,15 @@ function UsersTab() {
                 </td>
                 <td>{formatDate(u.created_at)}</td>
                 <td>
-                  {u.email !== 'omarsanchezh8@gmail.com' && (
-                    <button className="btn-icon" onClick={(e) => { e.stopPropagation(); handleDelete(u.id); }} title="Eliminar">🗑️</button>
+                  {/* Protección por ROL, no por correo hardcodeado: cualquier admin
+                      queda protegido (antes solo un email concreto, y si ese usuario
+                      cambiaba de correo el sistema quedaba sin candado). */}
+                  {u.role !== 'admin' && (
+                    <button className="btn-icon" onClick={(e) => { e.stopPropagation(); handleDelete(u.id); }} title="Retirar acceso">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
                   )}
                 </td>
               </tr>
@@ -97,10 +104,14 @@ function UsersTab() {
       {showCreate && (
         <div className="modal-overlay" onClick={() => setShowCreate(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
-            <h3>Adicionar Usuario (Invitación)</h3>
+            <h3>Invitar usuario</h3>
             <p style={{ fontSize: 13, color: '#555', marginBottom: 12, lineHeight: 1.4 }}>
-              Introduce el correo del usuario y su nivel de acceso. Los datos como Nombre, Empresa o Cargo los completará él mismo la primera vez que ingrese o al "Crear una cuenta" usando este correo.
+              Indica el correo y su nivel de acceso. La persona completará su nombre, empresa y cargo al crear su cuenta con ese mismo correo. Después asígnale proyectos desde <b>Accesos</b>.
             </p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#fff8e6', border: '1px solid #f0d9a0', borderRadius: 5, padding: '9px 11px', marginBottom: 12, fontSize: 12.5, color: '#7a5c14', lineHeight: 1.45 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+              <span><b>El sistema no envía correos.</b> Avísale tú por WhatsApp o teléfono y pídele que entre a esta misma dirección web y cree su cuenta usando <b>exactamente</b> este correo.</span>
+            </div>
             {error && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <input type="email" autoFocus placeholder="Correo electrónico del usuario" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCreate()} />
@@ -111,7 +122,7 @@ function UsersTab() {
             </div>
             <div className="modal-actions">
               <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={handleCreate}>Añadir Correo</button>
+              <button className="btn btn-primary" onClick={handleCreate}>Invitar</button>
             </div>
           </div>
         </div>
@@ -152,29 +163,31 @@ function TagsTab() {
   const handleDeleteJob = async (id) => { if (!await confirmAction({ title: 'Borrar cargo', message: 'Se eliminará este cargo del catálogo.', confirmText: 'Borrar', danger: true })) return; await apiFetch(`${API}/api/job_titles/${id}`, { method: 'DELETE' }); fetchTags(); };
 
   return (
-    <div style={{ display: 'flex', gap: 32 }}>
-      <div style={{ flex: 1, background: '#fff', borderRadius: 6, padding: 24, border: '1px solid #ddd' }}>
-        <h3 style={{ marginBottom: 16 }}>Empresas</h3>
+    // maxWidth: sin tope, cada tarjeta ocupaba media pantalla en monitores anchos
+    // (filas estiradas, había que alejar el zoom). wrap: en tablet se apilan.
+    <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', maxWidth: 1040 }}>
+      <div style={{ flex: '1 1 380px', minWidth: 300, background: '#fff', borderRadius: 6, padding: 18, border: '1px solid #ddd' }}>
+        <h3 style={{ marginBottom: 14, fontSize: 15 }}>Empresas</h3>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <input className="adsk-input" placeholder="Nueva Empresa" value={newCompany} onChange={e => setNewCompany(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddCompany()} />
           <button className="btn btn-primary" onClick={handleAddCompany}>Añadir</button>
         </div>
-        <table className="data-table"><tbody>{companies.map(c => (<tr key={c.id}><td>{c.name}</td><td style={{ width: 50 }}><button className="btn-icon" onClick={() => handleDeleteComp(c.id)}>🗑️</button></td></tr>))}</tbody></table>
+        <table className="data-table"><tbody>{companies.map(c => (<tr key={c.id}><td>{c.name}</td><td style={{ width: 50 }}><button className="btn-icon" title="Borrar empresa" onClick={() => handleDeleteComp(c.id)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg></button></td></tr>))}</tbody></table>
       </div>
-      <div style={{ flex: 1, background: '#fff', borderRadius: 6, padding: 24, border: '1px solid #ddd' }}>
-        <h3 style={{ marginBottom: 16 }}>Cargos</h3>
+      <div style={{ flex: '1 1 380px', minWidth: 300, background: '#fff', borderRadius: 6, padding: 18, border: '1px solid #ddd' }}>
+        <h3 style={{ marginBottom: 14, fontSize: 15 }}>Cargos</h3>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <input className="adsk-input" placeholder="Nuevo Cargo" value={newJobTitle} onChange={e => setNewJobTitle(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddJobTitle()} />
           <button className="btn btn-primary" onClick={handleAddJobTitle}>Añadir</button>
         </div>
-        <table className="data-table"><tbody>{jobTitles.map(j => (<tr key={j.id}><td>{j.name}</td><td style={{ width: 50 }}><button className="btn-icon" onClick={() => handleDeleteJob(j.id)}>🗑️</button></td></tr>))}</tbody></table>
+        <table className="data-table"><tbody>{jobTitles.map(j => (<tr key={j.id}><td>{j.name}</td><td style={{ width: 50 }}><button className="btn-icon" title="Borrar cargo" onClick={() => handleDeleteJob(j.id)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg></button></td></tr>))}</tbody></table>
       </div>
     </div>
   );
 }
 
 // ─── SECURE PROJECTS PAGE ───
-export default function SecureProjectsPage({ user, onSelectProject, onLogout }) {
+export default function SecureProjectsPage({ user, onSelectProject, onLogout, onBackToHub }) {
   const [activeTab, setActiveTab] = useState('projects');
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -264,7 +277,14 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout }) 
     <div className="app-shell">
       <header className="top-header">
         <div className="header-left">
-          <span className="header-logo" style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          {/* El logo regresa al Hub (única puerta entre productos — sin puentes
+              directos al visor desde dentro de Docs). */}
+          <span
+            className="header-logo"
+            onClick={onBackToHub}
+            title="Volver al inicio (elegir producto)"
+            style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: onBackToHub ? 'pointer' : 'default' }}
+          >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-label="ECD-VISIION">
               <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="#fff"/>
               <path d="M7 8.5l5 8 5-8" stroke="#2b333d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -273,7 +293,6 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout }) 
           </span>
         </div>
         <div className="header-right">
-          <a href={VISOR_URL} className="header-nav-item">🏗️ Visor 3D</a>
           <div className="header-user" onClick={onLogout} title="Cerrar sesión">
             <span style={{ fontSize: 13, marginRight: 8, opacity: 0.8 }}>{user.name.split(' ')[0]}</span>
             <div className="header-avatar">{getInitials(user.name)}</div>
@@ -338,7 +357,7 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout }) 
                           </td>
                         )}
                         <td style={{ fontSize: 12 }}>{formatDate(p.created_at)}</td>
-                        {isAdmin && (<td><button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: 11 }} onClick={(e) => openAccess(p, e)}>👥 Accesos</button></td>)}
+                        {isAdmin && (<td><button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 5 }} title="Elegir qué usuarios acceden a este proyecto" onClick={(e) => openAccess(p, e)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>Accesos</button></td>)}
                       </tr>
                     ))}
                   </tbody>

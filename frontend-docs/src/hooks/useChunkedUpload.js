@@ -10,10 +10,36 @@
  */
 import { useState, useCallback, useRef } from 'react';
 import { apiFetch } from '../utils/apiFetch';
+import { rememberRecentPdf } from '../utils/recentPdfCache';
 
 const MAX_CONCURRENT = 3;
 const MAX_RETRIES = 3;
 const BASE_RETRY_DELAY = 2000; // 2s, then 4s, then 8s
+
+function putChunkWithProgress({ sessionUri, chunk, contentRange, contentType, onRequest, onProgress }) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', sessionUri);
+    xhr.timeout = 120_000;
+    xhr.setRequestHeader('Content-Range', contentRange);
+    xhr.setRequestHeader('Content-Type', contentType);
+
+    xhr.upload.onprogress = event => {
+      if (event.lengthComputable) onProgress(event.loaded);
+    };
+    xhr.onload = () => resolve({
+      status: xhr.status,
+      text: xhr.responseText || '',
+      range: xhr.getResponseHeader('Range'),
+    });
+    xhr.onerror = () => reject(new Error('No se pudo conectar con el almacenamiento'));
+    xhr.ontimeout = () => reject(new Error('La transferencia tardó demasiado'));
+    xhr.onabort = () => reject(new DOMException('Carga cancelada', 'AbortError'));
+
+    onRequest(xhr);
+    xhr.send(chunk);
+  });
+}
 
 /**
  * Upload states:
@@ -30,6 +56,11 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
   const [uploads, setUploads] = useState([]); // Array of upload items
   const activeCountRef = useRef(0);
   const queueRef = useRef([]);
+  const cancelledIdsRef = useRef(new Set());
+  const executeUploadRef = useRef(null);
+  const sendChunksRef = useRef(null);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
   const abortControllersRef = useRef(new Map()); // uploadId → AbortController
 
   // ── Update a single upload item by its id ──
@@ -56,7 +87,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
       const next = queueRef.current.shift();
       if (next) {
         activeCountRef.current++;
-        executeUpload(next).finally(() => {
+        executeUploadRef.current(next).finally(() => {
           activeCountRef.current--;
           processQueue();
         });
@@ -70,7 +101,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
 
     try {
       // ── STEP 1: INIT — Request resumable session ──
-      updateUpload(id, { status: 'init', statusText: 'Validando...' });
+      updateUpload(id, { status: 'init', statusText: 'Preparando la carga segura…' });
 
       const initRes = await apiFetch(`${api}/api/uploads/init`, {
         method: 'POST',
@@ -86,6 +117,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
       });
 
       const initData = await initRes.json();
+      if (cancelledIdsRef.current.has(id)) throw new DOMException('Carga cancelada', 'AbortError');
       if (!initRes.ok || !initData.success) {
         updateUpload(id, {
           status: 'error',
@@ -106,10 +138,11 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
       });
 
       // ── STEP 2: CHUNK LOOP — Send chunks to GCS ──
-      await sendChunks(id, file, sessionUri, chunkSize, uploadId, 0);
+      await sendChunksRef.current(id, file, sessionUri, chunkSize, uploadId, 0);
+      if (cancelledIdsRef.current.has(id)) throw new DOMException('Carga cancelada', 'AbortError');
 
       // ── STEP 3: CONFIRM — Register in DB ──
-      updateUpload(id, { status: 'confirming', statusText: 'Confirmando...' });
+      updateUpload(id, { status: 'confirming', progress: 100, statusText: 'Guardando en Documentos…' });
 
       const confirmRes = await apiFetch(`${api}/api/uploads/complete`, {
         method: 'POST',
@@ -118,6 +151,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
       });
 
       const confirmData = await confirmRes.json();
+      if (cancelledIdsRef.current.has(id)) throw new DOMException('Carga cancelada', 'AbortError');
       if (!confirmRes.ok || !confirmData.success) {
         throw new Error(confirmData.error || 'Error al confirmar');
       }
@@ -126,12 +160,29 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
       updateUpload(id, {
         status: 'completed',
         progress: 100,
-        statusText: `Completado el ${now.toLocaleDateString()} a las ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        statusText: `Archivo listo · ${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+        nodeId: confirmData.node_id,
+        version: confirmData.version,
+        gcsUrn: confirmData.gcsUrn,
+        filename: confirmData.filename || filename,
+      });
+
+      rememberRecentPdf({
+        nodeId: confirmData.node_id,
+        version: confirmData.version,
+        gcsUrn: confirmData.gcsUrn,
+        file,
       });
 
       // 🔥 Callback for UI Reaction & Cache Invalidation
-      if (options.onUploadComplete) {
-        options.onUploadComplete({ ...item, version: confirmData.version, nodeId: confirmData.node_id }, confirmData);
+      if (optionsRef.current.onUploadComplete) {
+        optionsRef.current.onUploadComplete({
+          ...item,
+          filename: confirmData.filename || filename,
+          version: confirmData.version,
+          nodeId: confirmData.node_id,
+          gcsUrn: confirmData.gcsUrn,
+        }, confirmData);
       }
 
     } catch (err) {
@@ -151,24 +202,33 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
   const sendChunks = useCallback(async (itemId, file, sessionUri, chunkSize, uploadId, startOffset) => {
     let offset = startOffset;
     let retryCount = 0;
+    let lastReportedProgress = Math.floor((startOffset / file.size) * 100);
 
     while (offset < file.size) {
+      if (cancelledIdsRef.current.has(itemId)) throw new DOMException('Carga cancelada', 'AbortError');
       const end = Math.min(offset + chunkSize, file.size);
       const chunk = file.slice(offset, end);
       const isLast = end === file.size;
 
       try {
-        const controller = new AbortController();
-        abortControllersRef.current.set(itemId, controller);
-
-        const response = await fetch(sessionUri, {
-          method: 'PUT',
-          headers: {
-            'Content-Range': `bytes ${offset}-${end - 1}/${file.size}`,
-            'Content-Type': file.type || 'application/octet-stream'
+        const chunkStart = offset;
+        const response = await putChunkWithProgress({
+          sessionUri,
+          chunk,
+          contentRange: `bytes ${chunkStart}-${end - 1}/${file.size}`,
+          contentType: file.type || 'application/octet-stream',
+          onRequest: xhr => abortControllersRef.current.set(itemId, xhr),
+          onProgress: loaded => {
+            const bytesSent = Math.min(file.size, chunkStart + loaded);
+            const progress = Math.floor((bytesSent / file.size) * 100);
+            if (progress === lastReportedProgress) return;
+            lastReportedProgress = progress;
+            updateUpload(itemId, {
+              progress,
+              bytesUploaded: bytesSent,
+              statusText: `Subiendo… ${progress}%`,
+            });
           },
-          body: chunk,
-          signal: controller.signal
         });
 
         if (response.status === 308 || response.status === 200 || response.status === 201) {
@@ -185,13 +245,11 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
 
           // Periodically update backend with progress (every 5 chunks ≈ 40MB)
           if ((offset / chunkSize) % 5 === 0 || isLast) {
-            try {
-              await apiFetch(`${api}/api/uploads/progress`, {
+            apiFetch(`${api}/api/uploads/progress`, {
                 method: 'POST',
                 headers: getHeaders(),
                 body: JSON.stringify({ uploadId, bytesUploaded: offset })
-              });
-            } catch (_) { /* non-critical */ }
+              }).catch(() => { /* seguimiento no crítico */ });
           }
 
           if (response.status === 200 || response.status === 201) {
@@ -202,8 +260,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
           throw new Error(`GCS error: ${response.status}`);
         } else {
           // Client error (4xx) — don't retry
-          const text = await response.text();
-          throw new Error(`Upload rejected (${response.status}): ${text}`);
+          throw new Error(`Upload rejected (${response.status}): ${response.text}`);
         }
 
       } catch (err) {
@@ -223,6 +280,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
         });
 
         await new Promise(r => setTimeout(r, delay));
+        if (cancelledIdsRef.current.has(itemId)) throw new DOMException('Carga cancelada', 'AbortError');
         
         updateUpload(itemId, {
           status: 'uploading',
@@ -252,7 +310,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
           } else if (statusRes.status === 200 || statusRes.status === 201) {
             break; // Already complete
           }
-        } catch (_) {
+        } catch {
           // Status check failed, retry from current offset
         }
       }
@@ -260,6 +318,9 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
 
     abortControllersRef.current.delete(itemId);
   }, [api, getHeaders, updateUpload]);
+
+  executeUploadRef.current = executeUpload;
+  sendChunksRef.current = sendChunks;
 
   // ═══════════════════════════════════════════════════════════
   // PUBLIC API
@@ -296,6 +357,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
 
   /** Cancel a specific upload */
   const cancelUpload = useCallback(async (itemId) => {
+    cancelledIdsRef.current.add(itemId);
     // Abort the in-flight fetch
     const controller = abortControllersRef.current.get(itemId);
     if (controller) controller.abort();
@@ -315,7 +377,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
           method: 'DELETE',
           headers: getHeaders()
         });
-      } catch (_) { /* best effort */ }
+      } catch { /* best effort */ }
     }
   }, [api, getHeaders, updateUpload, uploads]);
 
@@ -323,7 +385,7 @@ export function useChunkedUpload(api, projectPrefix, user, options = {}) {
   const cancelAll = useCallback(() => {
     queueRef.current = [];
     uploads.forEach(u => {
-      if (u.status !== 'completed' && u.status !== 'error') {
+      if (['queued', 'init', 'uploading', 'paused'].includes(u.status)) {
         cancelUpload(u.id);
       }
     });

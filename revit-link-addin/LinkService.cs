@@ -18,6 +18,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using Autodesk.Revit.UI.Events;
 
 namespace ECDLink
 {
@@ -26,6 +27,43 @@ namespace ECDLink
     {
         [DataMember(Name = "color", IsRequired = false)] public string Color { get; set; }
         [DataMember(Name = "externalIds", IsRequired = false)] public string[] ExternalIds { get; set; }
+    }
+
+    // ── Canal INVERSO Revit → web ────────────────────────────────────────────
+    [DataContract]
+    public class SelPayloadDto
+    {
+        [DataMember(Name = "externalIds")] public string[] ExternalIds { get; set; }
+    }
+
+    [DataContract]
+    public class SelReportDto
+    {
+        [DataMember(Name = "project")] public string Project { get; set; }
+        [DataMember(Name = "kind")] public string Kind { get; set; }
+        [DataMember(Name = "payload")] public SelPayloadDto Payload { get; set; }
+    }
+
+    [DataContract]
+    public class ScheduleDto
+    {
+        [DataMember(Name = "name")] public string Name { get; set; }
+        [DataMember(Name = "columns")] public string[] Columns { get; set; }
+        [DataMember(Name = "rows")] public string[][] Rows { get; set; }
+    }
+
+    [DataContract]
+    public class SchedPayloadDto
+    {
+        [DataMember(Name = "schedules")] public ScheduleDto[] Schedules { get; set; }
+    }
+
+    [DataContract]
+    public class SchedReportDto
+    {
+        [DataMember(Name = "project")] public string Project { get; set; }
+        [DataMember(Name = "kind")] public string Kind { get; set; }
+        [DataMember(Name = "payload")] public SchedPayloadDto Payload { get; set; }
     }
 
     [DataContract]
@@ -46,15 +84,30 @@ namespace ECDLink
         [DataMember(Name = "last_id")] public long LastId { get; set; }
     }
 
+    [DataContract]
+    public class ActiveFrentesDto
+    {
+        [DataMember(Name = "success")] public bool Success { get; set; }
+        [DataMember(Name = "active", IsRequired = false)] public string Active { get; set; }
+        [DataMember(Name = "frentes", IsRequired = false)] public string[] Frentes { get; set; }
+    }
+
     public static class LinkService
     {
-        private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
         private static readonly ConcurrentQueue<LinkCommandDto> Pending = new ConcurrentQueue<LinkCommandDto>();
+        // Reportes Revit→web pendientes de subir (JSON ya serializado, listo para POST).
+        private static readonly ConcurrentQueue<string> Reports = new ConcurrentQueue<string>();
 
         private static ExternalEvent _externalEvent;
         private static ApplyCommandsHandler _handler;
         private static CancellationTokenSource _cts;
         private static long _sinceId;
+
+        // Selección inversa: se muestrea en el evento Idling (Revit 2023 no tiene
+        // SelectionChanged). Deduplicamos por clave para no spamear el canal.
+        private static DateTime _lastIdleCheck = DateTime.MinValue;
+        private static string _lastSelKey = null;
 
         public static bool Running { get; private set; }
         public static string BackendUrl { get; private set; }
@@ -69,6 +122,7 @@ namespace ECDLink
             Project = project.Trim();
             Token = (token ?? "").Trim();
             _sinceId = 0;
+            _lastSelKey = null;   // re-reporta la selección al re-vincular
             LastError = null;
 
             if (_handler == null)
@@ -87,6 +141,26 @@ namespace ECDLink
             Running = false;
             try { _cts?.Cancel(); } catch { }
             _cts = null;
+        }
+
+        // Auto-detección: pregunta al backend qué frente tiene ABIERTO el usuario
+        // en el visor web ahora mismo. Llamada bloqueante corta (para el diálogo).
+        public static string DetectActiveFrente(string backendUrl, string token)
+        {
+            try
+            {
+                var url = (backendUrl ?? "").TrimEnd('/') + "/api/link/active-frentes";
+                using (var req = new HttpRequestMessage(HttpMethod.Get, url))
+                {
+                    if (!string.IsNullOrEmpty(token))
+                        req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + token.Trim());
+                    var res = Http.SendAsync(req).GetAwaiter().GetResult();
+                    if (!res.IsSuccessStatusCode) return null;
+                    var body = res.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+                    return Deserialize<ActiveFrentesDto>(body)?.Active;
+                }
+            }
+            catch { return null; }
         }
 
         private static async Task PollLoop(CancellationToken ct)
@@ -117,10 +191,31 @@ namespace ECDLink
                                 LastError = null;
                             }
                         }
+                        else if ((int)res.StatusCode == 401)
+                        {
+                            LastError = "Token caducado o inválido — re-vincula (botón ECD) con un token fresco.";
+                        }
                         else
                         {
                             LastError = "HTTP " + (int)res.StatusCode;
                         }
+                    }
+
+                    // Subir reportes Revit→web pendientes (selección inversa / metrados).
+                    while (Reports.TryDequeue(out var reportBody))
+                    {
+                        try
+                        {
+                            using (var preq = new HttpRequestMessage(HttpMethod.Post, $"{BackendUrl}/api/link/report"))
+                            {
+                                if (!string.IsNullOrEmpty(Token))
+                                    preq.Headers.TryAddWithoutValidation("Authorization", "Bearer " + Token);
+                                preq.Content = new StringContent(reportBody, Encoding.UTF8, "application/json");
+                                await Http.SendAsync(preq, ct).ConfigureAwait(false);
+                            }
+                        }
+                        catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+                        catch (Exception ex) { LastError = "report: " + ex.Message; }
                     }
                 }
                 // OJO: un TIMEOUT de HttpClient también lanza TaskCanceledException.
@@ -147,6 +242,107 @@ namespace ECDLink
                 }
             }
             catch { return null; }
+        }
+
+        private static string Serialize<T>(T obj)
+        {
+            using (var ms = new MemoryStream())
+            {
+                var ser = new DataContractJsonSerializer(typeof(T));
+                ser.WriteObject(ms, obj);
+                return Encoding.UTF8.GetString(ms.ToArray());
+            }
+        }
+
+        // ── Selección inversa: muestreo en Idling (hilo de Revit, seguro) ────────
+        // Suscrito desde ECDLinkApp.OnStartup. Cuando el usuario selecciona en
+        // Revit, se encola un reporte que el poll loop sube a la web.
+        public static void HandleIdling(object sender, IdlingEventArgs e)
+        {
+            if (!Running) return;
+            var now = DateTime.UtcNow;
+            if ((now - _lastIdleCheck).TotalMilliseconds < 600) return; // no saturar
+            _lastIdleCheck = now;
+            try
+            {
+                var uidoc = (sender as UIApplication)?.ActiveUIDocument;
+                if (uidoc == null) return;
+                var doc = uidoc.Document;
+                var uids = new List<string>();
+                foreach (var id in uidoc.Selection.GetElementIds())
+                {
+                    try { var el = doc.GetElement(id); if (el != null) uids.Add(el.UniqueId); }
+                    catch { }
+                }
+                var key = string.Join(",", uids);
+                if (key == _lastSelKey) return;   // sin cambios → no reportar
+                _lastSelKey = key;
+                var report = new SelReportDto
+                {
+                    Project = Project,
+                    Kind = "selection",
+                    Payload = new SelPayloadDto { ExternalIds = uids.ToArray() },
+                };
+                Reports.Enqueue(Serialize(report));
+            }
+            catch { /* el Idling de Revit JAMÁS debe romperse por nosotros */ }
+        }
+
+        // ── Metrados: leer las Tablas de planificación TAL CUAL las configuró el
+        // modelador (columnas visibles, celdas ya calculadas por Revit). ─────────
+        private static string BuildSchedulesReport(Document doc)
+        {
+            var list = new List<ScheduleDto>();
+            var collector = new FilteredElementCollector(doc).OfClass(typeof(ViewSchedule));
+            foreach (ViewSchedule vs in collector)
+            {
+                try
+                {
+                    if (vs.IsTemplate) continue;
+                    if (vs.IsTitleblockRevisionSchedule) continue; // ruido: revisiones de rótulo
+                    var def = vs.Definition;
+                    if (def == null) continue;
+
+                    // Encabezados de columna respetando lo que puso el modelador.
+                    var cols = new List<string>();
+                    int fieldCount = def.GetFieldCount();
+                    for (int i = 0; i < fieldCount; i++)
+                    {
+                        ScheduleField f;
+                        try { f = def.GetField(i); } catch { continue; }
+                        if (f.IsHidden) continue;
+                        var h = f.ColumnHeading;
+                        if (string.IsNullOrEmpty(h)) { try { h = f.GetName(); } catch { } }
+                        cols.Add(h ?? "");
+                    }
+
+                    // Filas: leer el cuerpo tal cual se ve (datos, agrupaciones, totales).
+                    var rows = new List<string[]>();
+                    var body = vs.GetTableData().GetSectionData(SectionType.Body);
+                    int nRows = body.NumberOfRows, nCols = body.NumberOfColumns;
+                    for (int r = 0; r < nRows; r++)
+                    {
+                        var row = new string[nCols];
+                        for (int c = 0; c < nCols; c++)
+                        {
+                            try { row[c] = vs.GetCellText(SectionType.Body, r, c); }
+                            catch { row[c] = ""; }
+                        }
+                        rows.Add(row);
+                    }
+
+                    if (rows.Count == 0 && cols.Count == 0) continue; // tabla vacía sin config
+                    list.Add(new ScheduleDto { Name = vs.Name, Columns = cols.ToArray(), Rows = rows.ToArray() });
+                }
+                catch { /* saltar tabla problemática, seguir con las demás */ }
+            }
+            var report = new SchedReportDto
+            {
+                Project = Project,
+                Kind = "schedules",
+                Payload = new SchedPayloadDto { Schedules = list.ToArray() },
+            };
+            return Serialize(report);
         }
 
         // ── Aplicación de comandos DENTRO del contexto de Revit ──────────────
@@ -227,6 +423,13 @@ namespace ECDLink
 
                     case "clearcolors":
                         ClearColors(uidoc, doc);
+                        break;
+
+                    case "export-schedules":
+                        // Leer las tablas del modelo (hilo de Revit) y encolar el
+                        // reporte; el poll loop lo sube a la web.
+                        try { Reports.Enqueue(BuildSchedulesReport(doc)); }
+                        catch (Exception ex) { LastError = "schedules: " + ex.Message; }
                         break;
                 }
             }

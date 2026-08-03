@@ -32,11 +32,36 @@ namespace ECDLink
                 ToolTip = "Vincula este Revit con la plataforma ECD: lo que se seleccione o aísle en la web se replica aquí en ~1 segundo.",
             };
             panel.AddItem(btn);
+
+            // Selección inversa Revit→web: muestreamos la selección en Idling
+            // (Revit 2023 no expone SelectionChanged). El handler no hace nada si
+            // el vínculo está inactivo.
+            app.Idling += LinkService.HandleIdling;
+
+            // AUTO-CONEXIÓN: si ya se vinculó antes (config guardada con frente y
+            // servidor), reconectar solo al abrir Revit — sin pulsar "Vincular".
+            // El token de sesión dura 7 días; si caducó, el chip web queda
+            // "Esperando Revit" y basta re-vincular una vez para renovarlo.
+            try
+            {
+                var cfg = LinkConfig.LoadOrDefaults();
+                if (!string.IsNullOrWhiteSpace(cfg.BackendUrl))
+                {
+                    // Preferir el frente ABIERTO en el visor web ahora mismo; si no
+                    // hay web abierta, caer al último frente guardado.
+                    var detected = LinkService.DetectActiveFrente(cfg.BackendUrl, cfg.Token);
+                    var frente = !string.IsNullOrEmpty(detected) ? detected : cfg.Project;
+                    if (!string.IsNullOrWhiteSpace(frente))
+                        LinkService.Start(cfg.BackendUrl, frente, cfg.Token);
+                }
+            }
+            catch { /* nunca impedir que Revit arranque */ }
             return Result.Succeeded;
         }
 
         public Result OnShutdown(UIControlledApplication app)
         {
+            try { app.Idling -= LinkService.HandleIdling; } catch { }
             LinkService.Stop();
             return Result.Succeeded;
         }
@@ -55,6 +80,25 @@ namespace ECDLink
             }
 
             var cfg = LinkConfig.LoadOrDefaults();
+
+            // Auto-detección: preguntar al backend qué frente tiene ABIERTO el
+            // usuario en el visor web ahora mismo (como Vyssuals: reconoce la web).
+            var detected = LinkService.DetectActiveFrente(cfg.BackendUrl, cfg.Token);
+            if (!string.IsNullOrEmpty(detected)) cfg.Project = detected;
+
+            // Si detectamos el frente Y ya hay token guardado → conectar DIRECTO,
+            // sin diálogo. Un clic y listo.
+            if (!string.IsNullOrEmpty(detected) && !string.IsNullOrWhiteSpace(cfg.Token))
+            {
+                cfg.Save();
+                LinkService.Start(cfg.BackendUrl, cfg.Project, cfg.Token);
+                TaskDialog.Show("ECD Link",
+                    $"Vínculo ACTIVO — detecté el frente abierto en el visor: \"{cfg.Project}\".\n\n" +
+                    "Vuelve a pulsar el botón para desactivar.");
+                return Result.Succeeded;
+            }
+
+            // Si no se pudo detectar (o falta token), mostrar el diálogo pre-llenado.
             using (var dlg = new LinkConfigForm(cfg))
             {
                 if (dlg.ShowDialog() != DialogResult.OK) return Result.Cancelled;

@@ -55,6 +55,15 @@ export const ExcavationIcon = () => (
 );
 
 // Heatmap de avance por PK: tramos de barra con intensidades
+// Holograma de mov. de tierras: sección trapezoidal lofteada (aros de malla)
+export const EarthworksGhostIcon = () => (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 8h20" opacity="0.4" />
+        <path d="M5 8l2.5 9h4L14 8" />
+        <path d="M12 8l2.5 9h4L21 8" strokeDasharray="2.5 2" opacity="0.75" />
+    </svg>
+);
+
 export const HeatmapIcon = () => (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 12h5" />

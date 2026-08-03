@@ -1,6 +1,8 @@
 // frontend-docs/src/components/DocumentViewer.jsx
 import React, { useState, useEffect } from 'react';
 import PDFViewer from './PDFViewer';
+import { apiFetch } from '../utils/apiFetch';
+import { getRecentPdfUrl } from '../utils/recentPdfCache';
 
 // Utility formatters
 function formatDate(iso) {
@@ -30,6 +32,10 @@ export default function DocumentViewer({
 
   const [officeUrl, setOfficeUrl] = useState('');
   const [loadingOffice, setLoadingOffice] = useState(false);
+  const [securePreviewUrl, setSecurePreviewUrl] = useState('');
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [previewError, setPreviewError] = useState('');
+  const [previewRetry, setPreviewRetry] = useState(0);
 
   useEffect(() => {
     if (!file) return;
@@ -38,20 +44,18 @@ export default function DocumentViewer({
     if (['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext))) {
       // Si es enlace compartido, ya tenemos la URL firmada
       if (isShared && file.url) {
-        setOfficeUrl(file.url);
+        queueMicrotask(() => setOfficeUrl(file.url));
         return;
       }
       
       // Lógica interna (plataforma)
-      setLoadingOffice(true);
+      queueMicrotask(() => setLoadingOffice(true));
       const urn = viewedVersionInfo?.gcs_urn || file.gcs_urn;
-      const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
-      const tokenQuery = token ? `&session_token=${token}` : '';
       const url = urn 
-        ? `${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}${tokenQuery}`
-        : `${API}/api/docs/signed-url?path=${encodeURIComponent(file.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}${tokenQuery}`;
+        ? `${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`
+        : `${API}/api/docs/signed-url?path=${encodeURIComponent(file.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}`;
 
-      fetch(url)
+      apiFetch(url)
         .then(r => r.json())
         .then(data => {
           if (data.success) setOfficeUrl(data.url);
@@ -60,10 +64,70 @@ export default function DocumentViewer({
         .catch(err => console.error("Fetch Office URL error:", err))
         .finally(() => setLoadingOffice(false));
     } else {
-      setOfficeUrl('');
-      setLoadingOffice(false);
+      queueMicrotask(() => {
+        setOfficeUrl('');
+        setLoadingOffice(false);
+      });
     }
   }, [file, viewedVersionInfo, projectPrefix, isShared, API]);
+
+  useEffect(() => {
+    if (!file) return undefined;
+    const lowerName = file.name.toLowerCase();
+    const isOffice = ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext));
+    const isPdf = lowerName.endsWith('.pdf') || lowerName.endsWith('.pdfx');
+    if (isShared || isOffice) {
+      queueMicrotask(() => {
+        setSecurePreviewUrl(isShared ? (file.url || '') : '');
+        setLoadingPreview(false);
+        setPreviewError('');
+      });
+      return undefined;
+    }
+
+    const recentPdfUrl = isPdf && !viewedVersionInfo
+      ? getRecentPdfUrl({
+          nodeId: file.id,
+          version: file.version || 1,
+          gcsUrn: file.gcs_urn,
+        })
+      : null;
+    if (recentPdfUrl) {
+      queueMicrotask(() => {
+        setSecurePreviewUrl(recentPdfUrl);
+        setLoadingPreview(false);
+        setPreviewError('');
+      });
+      return undefined;
+    }
+
+    let cancelled = false;
+    const urn = viewedVersionInfo?.gcs_urn || file.gcs_urn;
+    const url = urn
+      ? `${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`
+      : `${API}/api/docs/signed-url?path=${encodeURIComponent(file.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}`;
+
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoadingPreview(true);
+      setPreviewError('');
+      setSecurePreviewUrl('');
+    });
+    apiFetch(url)
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok || !data.success || !data.url) throw new Error(data.error || 'No se pudo autorizar la vista previa');
+        if (!cancelled) setSecurePreviewUrl(data.url);
+      })
+      .catch(err => {
+        if (!cancelled) setPreviewError(err.message || 'No se pudo abrir el archivo');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPreview(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [file, viewedVersionInfo, projectPrefix, isShared, API, previewRetry]);
 
   if (!file) return null;
 
@@ -175,15 +239,29 @@ export default function DocumentViewer({
       
       <div className="file-viewer-content" style={{ flex: 1, position: 'relative', background: '#f5f5f5', display: 'flex', justifyContent: 'center' }}>
         {(() => {
-          const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
-          const tokenQuery = token ? `&session_token=${token}` : '';
-          const fileUrl = isShared && file.url ? file.url : (
-            viewedVersionInfo && viewedVersionInfo.gcs_urn 
-            ? `${API}/api/docs/view?urn=${encodeURIComponent(viewedVersionInfo.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}${tokenQuery}` 
-            : `${API}/api/docs/view?path=${encodeURIComponent(file.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}${tokenQuery}`
-          );
-          
+          const fileUrl = isShared && file.url ? file.url : securePreviewUrl;
           const lowerName = file.name.toLowerCase();
+
+          if (!isShared && !['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext)) && loadingPreview) {
+            return (
+              <div role="status" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
+                <div className="spinner-acc" style={{ width: 40, height: 40, border: '3px solid #e5e7eb', borderTop: '3px solid #5f7fa3', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' }} />
+                <div style={{ fontSize: 14, color: '#666' }}>Preparando vista segura…</div>
+              </div>
+            );
+          }
+
+          if (!isShared && previewError) {
+            return (
+              <div role="alert" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, color: '#5f6368' }}>
+                <div>No se pudo abrir la vista previa.</div>
+                <div style={{ fontSize: 12, color: '#8a9099' }}>{previewError}</div>
+                <button type="button" onClick={() => setPreviewRetry(value => value + 1)} style={{ padding: '8px 16px', background: '#5f7fa3', color: '#fff', border: 0, borderRadius: 4, cursor: 'pointer' }}>
+                  Reintentar
+                </button>
+              </div>
+            );
+          }
           
           // 1. VIDEOS
           if (lowerName.endsWith('.mp4') || lowerName.endsWith('.webm') || lowerName.endsWith('.ogg')) {

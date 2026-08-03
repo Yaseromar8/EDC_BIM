@@ -503,6 +503,18 @@ body,
   height: 100%;
 }
 
+/* Barra inferior de capas: el rail izquierdo (64px, overlay) tapaba su inicio —
+   se despeja con padding. En móvil el rail se va abajo y no hace falta. */
+.viewer-labels-bar {
+  padding: 0 14px 0 78px !important;
+}
+
+@media (max-width: 1024px) and (orientation: portrait) {
+  .viewer-labels-bar {
+    padding: 0 14px !important;
+  }
+}
+
 .split-3d {
   flex: 1;
   height: 100%;

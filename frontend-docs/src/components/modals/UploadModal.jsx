@@ -3,10 +3,23 @@
  * Refactorización Fase 2: Capa de Modales
  * Extraído de App.jsx líneas 2691-2821
  */
-import React, { useRef } from 'react';
+import React from 'react';
 import { renderFileIconSop } from '../../utils/fileIcons';
 import { formatSizeDetailed } from '../../utils/helpers';
 import { confirmAction } from '../../utils/confirm';
+
+function uploadStatusLabel(item, formatSize) {
+  switch (item.status) {
+    case 'queued': return 'En cola…';
+    case 'init': return 'Preparando la carga segura…';
+    case 'uploading': return `Subiendo… ${item.progress}% · ${formatSize(item.bytesUploaded || 0)} de ${formatSize(item.sizeBytes || 0)}`;
+    case 'confirming': return 'Guardando en Documentos…';
+    case 'paused': return item.statusText || 'Conexión interrumpida';
+    case 'completed': return item.statusText || 'Archivo listo';
+    case 'cancelled': return 'Cancelado';
+    default: return item.statusText || 'Esperando…';
+  }
+}
 
 export default function UploadModal({
   isOpen,
@@ -18,6 +31,7 @@ export default function UploadModal({
   onDragOver, onDragLeave, onDrop,
   onUpload,
   onListo,
+  onOpenUploaded,
   onClose,
 }) {
   if (!isOpen) return null;
@@ -47,11 +61,11 @@ export default function UploadModal({
                 <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.filename}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                   {item.status === 'completed' ? (
-                    <span style={{ fontSize: 11, color: '#33691e' }}>Listo</span>
+                    <span style={{ fontSize: 11, color: '#33691e' }}>{uploadStatusLabel(item, formatSize)}</span>
                   ) : item.status === 'error' ? (
                     <span style={{ fontSize: 11, color: '#d32f2f' }}>Error</span>
                   ) : (
-                    <span style={{ fontSize: 11, color: '#666' }}>{item.status === 'paused' ? 'Pausado' : item.status === 'queued' ? 'En cola' : `Cargando: ${item.progress}%`}</span>
+                    <span style={{ fontSize: 11, color: '#666' }}>{uploadStatusLabel(item, formatSize)}</span>
                   )}
                   <span style={{ fontSize: 11, color: '#999' }}>| {formatSize(item.sizeBytes || 0)}</span>
                 </div>
@@ -77,6 +91,11 @@ export default function UploadModal({
             <button className="file-viewer-close" style={{ background: 'none' }} title="Cerrar"
               onClick={async () => {
                 if (!chunkedUpload.hasActiveUploads) { onClose(); return; }
+                const canCancel = chunkedUpload.uploads.some(item => ['queued', 'init', 'uploading', 'paused'].includes(item.status));
+                if (!canCancel) {
+                  setSopMinimized(true);
+                  return;
+                }
                 const ok = await confirmAction({
                   title: 'Cancelar cargas en curso',
                   message: 'Hay archivos subiendo. Si cierras ahora, esas cargas se cancelarán.',
@@ -98,7 +117,16 @@ export default function UploadModal({
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ddd" strokeWidth="1"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></svg>
               <div style={{ color: '#999', fontSize: 13, marginTop: 12 }}>Arrastre archivos aqui o elija una opcion arriba</div>
             </div>
-            <input type="file" ref={fileRef} multiple style={{ display: 'none' }} onChange={e => onUpload(e.target.files)} />
+            <input
+              type="file"
+              ref={fileRef}
+              multiple
+              style={{ display: 'none' }}
+              onChange={event => {
+                onUpload(event.target.files);
+                event.target.value = '';
+              }}
+            />
           </div>
           {chunkedUpload.uploads.length > 0 && (
             <div style={{ marginTop: 20 }}>
@@ -128,14 +156,25 @@ export default function UploadModal({
                                 <div className="acc-mini-spinner" style={{ width: 10, height: 10, border: '2px solid #5f7fa3', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1.5s linear infinite' }} />
                               )}
                               <span style={{ fontSize: 11, color: '#666' }}>
-                                {item.status === 'queued' ? 'En cola...' : item.status === 'init' ? 'Validando...' : item.status === 'confirming' ? 'Procesando...' : `Cargando... (${formatSize(item.bytesUploaded || 0)} / ${formatSize(item.sizeBytes || 0)})`}
+                                {uploadStatusLabel(item, formatSize)}
                               </span>
                             </div>
                             {item.status === 'uploading' && <span style={{ fontSize: 11, color: '#5f7fa3', fontWeight: 600 }}>{item.progress}%</span>}
                           </div>
-                          <div className="acc-progress-container" style={{ marginTop: 6, height: 6, background: '#e8e8e8', borderRadius: 3, overflow: 'hidden' }}>
-                            {item.status === 'confirming' || item.status === 'init' ? (
+                          <div
+                            className="acc-progress-container"
+                            role="progressbar"
+                            aria-label={`Progreso de ${item.filename}`}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={item.status === 'confirming' ? 100 : item.status === 'uploading' ? item.progress : undefined}
+                            aria-busy={item.status === 'init' || item.status === 'confirming'}
+                            style={{ marginTop: 6, height: 6, background: '#e8e8e8', borderRadius: 3, overflow: 'hidden' }}
+                          >
+                            {item.status === 'init' ? (
                               <div className="acc-progress-bar indeterminate" style={{ height: '100%', borderRadius: 3 }} />
+                            ) : item.status === 'confirming' ? (
+                              <div className="acc-progress-bar" style={{ width: '100%', height: '100%', borderRadius: 3, background: '#5f7fa3' }} />
                             ) : (
                               <div className="acc-progress-bar" style={{ width: `${item.progress}%`, height: '100%', borderRadius: 3, transition: 'width 0.3s ease', background: item.status === 'paused' ? '#ff9800' : '#5f7fa3' }} />
                             )}
@@ -146,9 +185,18 @@ export default function UploadModal({
                   </div>
                   <div style={{ fontSize: 12, color: '#999', display: 'flex', alignItems: 'center', gap: 12 }}>
                     <span style={{ minWidth: 60, textAlign: 'right' }}>{formatSize(item.sizeBytes || 0)}</span>
+                    {item.status === 'completed' && item.nodeId && onOpenUploaded && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenUploaded(item)}
+                        style={{ border: '1px solid #5f7fa3', borderRadius: 4, background: '#fff', color: '#456b95', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '5px 10px' }}
+                      >
+                        Abrir
+                      </button>
+                    )}
                     {item.status === 'completed' ? (
                       <span style={{ color: '#33691e', fontSize: 16 }} title="Subido">✓</span>
-                    ) : item.status !== 'cancelled' ? (
+                    ) : ['queued', 'init', 'uploading', 'paused'].includes(item.status) ? (
                       <span onClick={() => chunkedUpload.cancelUpload(item.id)} style={{ cursor: 'pointer', fontSize: 16 }} title="Cancelar">✕</span>
                     ) : null}
                   </div>

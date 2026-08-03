@@ -33,11 +33,18 @@ export default function GatewayPanel({ project, onClose }) {
     return () => { cancelled = true; };
   }, [project.id]);
 
-  const handleOpenFront = (front) => {
+  const handleOpenFront = async (front) => {
     // Intercepta en frontend-react App.jsx Gateway Interceptor:
     // project (id BD) + frente -> el visor construye "1_CANAL" y carga sus modelos.
-    const url = `${VISOR_URL}/?project=${encodeURIComponent(project.id)}&frente=${encodeURIComponent(front.id)}&fn=${encodeURIComponent(front.title)}`;
-    window.location.href = url;
+    try {
+      const response = await apiFetch(`${API}/api/auth/handoff`, { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok || !data.ticket) throw new Error(data.error || 'No se pudo crear el acceso al Visor.');
+      const url = `${VISOR_URL}/?project=${encodeURIComponent(project.id)}&frente=${encodeURIComponent(front.id)}&fn=${encodeURIComponent(front.title)}&sso_ticket=${encodeURIComponent(data.ticket)}`;
+      window.location.href = url;
+    } catch (err) {
+      setError(err.message || 'No se pudo abrir el Visor.');
+    }
   };
 
   const cards = (frentes || []).map((f, i) => {

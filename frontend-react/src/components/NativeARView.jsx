@@ -1,16 +1,66 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   createAnchor, createAnchorAtCamera, getLastGeoPose,
-  onGeoPose, onTracking, startSession, stopSession,
+  onGeoPose, onReticle, onTracking, setAimPoint, setPlanesVisible,
+  startSession, stopSession,
 } from '../native/arcore';
 import { attachArToViewer } from '../native/arViewerBridge';
+import { showArStake, clearArStake } from '../native/arStake';
 import { geoToViewer, seedYawFromHeading } from '../native/geoAnchor';
 import './ARTransparent.css';
+
+
+// Ocultar/mostrar TODOS los modelos de forma robusta: la API cambia entre
+// versiones de LMV y `hideModel` no siempre existe (por eso el modelo seguía
+// visible al entrar en AR). Se prueban las tres vías conocidas.
+function setModelsVisible(viewer, visible) {
+  if (!viewer) return 0;
+  let hechos = 0;
+  const modelos = (viewer.getAllModels?.() || viewer.impl?.modelQueue?.().getModels?.() || []);
+  modelos.forEach((m) => {
+    let ok = false;
+    try {
+      if (visible ? viewer.showModel : viewer.hideModel) {
+        (visible ? viewer.showModel : viewer.hideModel).call(viewer, m.id);
+        ok = true;
+      }
+    } catch { /* siguiente vía */ }
+    if (!ok) { try { m.setAllVisibility?.(visible); ok = true; } catch { /* siguiente */ } }
+    if (!ok) {
+      try {
+        const it = m.getInstanceTree?.();
+        if (it) { viewer.impl.visibilityManager.setNodeOff(it.getRootId(), !visible, m); ok = true; }
+      } catch { /* sin vías */ }
+    }
+    if (ok) hechos++;
+  });
+  try { viewer.impl.invalidate(true, true, true); } catch { /* noop */ }
+  return hechos;
+}
+
+// Cuántos avisos seguidos del retículo (llegan a 10 Hz) hacen falta sobre un
+// PLANO para dar la superficie por buena y colocar solo. Medio segundo: menos
+// dispara con un reflejo pasajero, más se siente lento en campo.
+const AUTO_PLACE_TICKS = 5;
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
   const [tracking, setTracking] = useState('paused');
   const [anchored, setAnchored] = useState(false);
+  // RETÍCULO: qué ve ARCore bajo el punto de mira. Sin esto el usuario ancla a
+  // ciegas y por eso el modelo caía en cualquier lado.
+  const [reticle, setReticle] = useState({ found: false, type: null, planes: 0 });
+  // COLOCACIÓN AUTOMÁTICA (estilo Augin): apuntas al piso, aparece la malla y en
+  // cuanto la superficie es estable el modelo se ancla solo. Los refs evitan el
+  // cierre obsoleto: el manejador del retículo se registra UNA vez al montar.
+  const autoPlaceRef = useRef(true);
+  const stableTicksRef = useRef(0);
+  const placingRef = useRef(false);
+  const anchoredRef = useRef(false);
+  const anchorFnRef = useRef(null);
+  // El panel técnico solo con ?ardebug=1 — en campo estorba la vista del terreno
+  const showDebug = typeof window !== 'undefined' && /(\?|&)ardebug=1/.test(window.location.search);
+  const reticleCleanupRef = useRef(null);
   const [yawDegrees, setYawDegrees] = useState(0);
   const [unitsPerMeter, setUnitsPerMeter] = useState(1000);
   const [aligning, setAligning] = useState(false);
@@ -77,9 +127,28 @@ export default function NativeARView({ onExit }) {
             color: renderer.getClearColor?.().clone?.() || null,
             alpha: renderer.getClearAlpha?.() ?? 1,
           };
-          renderer.setClearColor(0x000000, 0);
-          renderer.setClearAlpha?.(0);
+          // TRANSPARENCIA REAL: no basta con el clear del canvas. LMV pinta
+          // ADEMÁS su propio fondo (el gris claro del visor y el env-map), y
+          // eso es lo que tapaba la cámara. Se apagan todas las capas.
+          const aplicado = [];
+          try { renderer.setClearColor(0x000000, 0); renderer.setClearAlpha?.(0); aplicado.push('renderCtx'); } catch { /* siguiente */ }
+          try {
+            const gl = viewer.impl.glrenderer?.();
+            if (gl) { gl.setClearColor(0x000000, 0); gl.setClearAlpha?.(0); aplicado.push('glrenderer'); }
+          } catch { /* siguiente */ }
+          // fondo propio del visor (setBackgroundColor) y entorno
+          try { viewer.impl.toggleEnvMapBackground?.(false); aplicado.push('envMap'); } catch { /* noop */ }
+          try { viewer.setLightPreset?.(0); aplicado.push('lightPreset'); } catch { /* noop */ }
+          try { viewer.impl.setClearColors?.(0, 0, 0, 0, 0, 0); aplicado.push('clearColors'); } catch { /* noop */ }
+          // sombra de suelo y reflejo: se dibujan sobre el fondo y estorban
+          try { viewer.setGroundShadow?.(false); viewer.setGroundReflection?.(false); aplicado.push('ground'); } catch { /* noop */ }
+          // el canvas y su contenedor, transparentes
+          try {
+            const cv = viewer.impl.canvas || viewer.canvas;
+            if (cv) cv.style.background = 'transparent';
+          } catch { /* noop */ }
           viewer.container.style.background = 'transparent';
+          console.log('[AR] transparencia aplicada:', aplicado.join(', ') || 'NADA');
           viewer.impl.invalidate(true, true, true);
         } catch (e) {
           console.warn('[NativeAR] No se pudo transparentar el renderer:', e);
@@ -101,7 +170,36 @@ export default function NativeARView({ onExit }) {
           unitsPerMeter,
           onFrame: setHud,
         });
-        setStatus('Escanea el suelo y apunta el reticulo al punto fisico equivalente al punto BIM que estabas mirando.');
+        // El modelo ARRANCA OCULTO: primero se ve el terreno real y el
+        // retículo; el modelo aparece SOLO cuando lo colocas. Antes entraba
+        // visible y quedaba pegado a la cámara tapando todo.
+        const ocultados = setModelsVisible(viewer, false);
+        console.log('[AR] modelos ocultos al entrar:', ocultados);
+
+        reticleCleanupRef.current = onReticle((r) => {
+          const found = !!r?.found;
+          const type = r?.type || null;
+          setReticle({ found, type, planes: r?.planes || 0 });
+
+          // Ya colocado, colocando ahora mismo, o en modo manual: no auto-anclar.
+          if (anchoredRef.current || placingRef.current || !autoPlaceRef.current) {
+            stableTicksRef.current = 0;
+            return;
+          }
+          // Solo un PLANO cuenta. Los 'point' son nubes sueltas: anclar ahí es
+          // lo que hacía caer el modelo en cualquier lado.
+          if (found && type === 'plane') {
+            stableTicksRef.current += 1;
+            if (stableTicksRef.current >= AUTO_PLACE_TICKS) {
+              stableTicksRef.current = 0;
+              placingRef.current = true;
+              anchorFnRef.current?.();
+            }
+          } else {
+            stableTicksRef.current = 0;
+          }
+        });
+        setStatus('Apunta la camara al piso y muevete despacio…');
       } catch (error) {
         setStatus('No se pudo iniciar AR: ' + (error?.message || error));
       }
@@ -109,6 +207,9 @@ export default function NativeARView({ onExit }) {
 
     return () => {
       cancelled = true;
+      try { setModelsVisible(window.NOP_VIEWER, true); } catch { /* Cleanup is best effort. */ }
+      try { reticleCleanupRef.current?.(); } catch { /* Cleanup is best effort. */ }
+      try { clearArStake(window.NOP_VIEWER); } catch { /* Cleanup is best effort. */ }
       try { detachRef.current?.(); } catch { /* Cleanup is best effort. */ }
       try { trackingCleanupRef.current?.(); } catch { /* Cleanup is best effort. */ }
       try { geoCleanupRef.current?.(); } catch { /* Cleanup is best effort. */ }
@@ -138,19 +239,48 @@ export default function NativeARView({ onExit }) {
     };
   }, []);
 
+  // TOCAR PARA COLOCAR: el punto que tocas pasa a ser el punto de mira y el
+  // anclaje se crea justo ahí (como Augin/Dalux), no en el centro fijo.
+  const handleTapPlace = async (ev) => {
+    if (anchored || placingRef.current) return;   // ya colocado: no re-anclar por roce
+    placingRef.current = true;                    // el auto no debe pisar este intento
+    const x = ev.clientX;
+    const y = ev.clientY;
+    const dpr = window.devicePixelRatio || 1;
+    await setAimPoint(x * dpr, y * dpr);      // ARCore trabaja en px físicos
+    await handleAnchor();
+    await setAimPoint(-1, -1);                // vuelve al centro para el retículo
+  };
+
   const handleAnchor = async () => {
     try {
-      setStatus('Buscando superficie en el reticulo...');
+      setStatus('Colocando el modelo sobre la superficie…');
       const result = await createAnchor();
       if (result?.matrix && detachRef.current?.setAnchorMatrix) {
         detachRef.current.setAnchorMatrix(result.matrix);
       }
+      setModelsVisible(window.NOP_VIEWER, true);
+      anchoredRef.current = true;
       setAnchored(true);
-      setStatus('Anclado sobre la superficie. Ajusta el giro hasta alinear el modelo con la obra.');
+      // La malla de escaneo cumplió: apagarla deja la obra limpia (como Augin).
+      setPlanesVisible(false);
+      // ESTACA de verificación en el punto anclado: si se queda clavada en el
+      // piso real mientras caminas, el anclaje y la escala son correctos.
+      showArStake(window.NOP_VIEWER, modelOriginRef.current,
+                  detachRef.current?.getUnitsPerMeter?.() || unitsPerMeter);
+      setStatus('Anclado. Camina alrededor: la estaca roja (1 m) debe quedarse clavada en el piso.');
     } catch (error) {
-      setStatus('No se pudo anclar: ' + (error?.message || error));
+      // Falló el anclaje: se vuelve a intentar solo en cuanto haya superficie
+      // estable otra vez. No hace falta que el operario haga nada.
+      setStatus('Buscando una superficie mejor… sigue apuntando al piso.');
+    } finally {
+      placingRef.current = false;
     }
   };
+
+  // El manejador del retículo se registró al montar y no ve los renders
+  // siguientes: se le deja SIEMPRE la versión vigente por ref.
+  anchorFnRef.current = handleAnchor;
 
   // ── Orientación por GPS (el modo "referenciarse en campo") ──────────────────
   // Coloca el modelo sobre el terreno real según TU posición GPS, sin anclar ni
@@ -180,7 +310,10 @@ export default function NativeARView({ onExit }) {
         detachRef.current.setYawDegrees?.(yaw);
         setYawDegrees(((Math.round(yaw) % 360) + 360) % 360);
       }
+      setModelsVisible(window.NOP_VIEWER, true);
       setAnchored(true);
+      showArStake(window.NOP_VIEWER, { x: p.x, y: p.y, z },
+                  detachRef.current?.getUnitsPerMeter?.() || unitsPerMeter);
       const acc = gp.accuracy ? `±${Math.round(gp.accuracy)} m` : '';
       setStatus(`Orientado por GPS ${acc}. Si el norte no calza, ajustalo con el dial o "Alinear".`);
     } catch (error) {
@@ -247,76 +380,73 @@ export default function NativeARView({ onExit }) {
       </div>
 
       {/* Panel de diagnóstico (temporal) para ver por qué el modelo no responde. */}
-      <div style={{ position: 'absolute', top: 74, left: 8, background: 'rgba(0,0,0,0.7)', color: '#3ee87a', font: '12px monospace', padding: '6px 9px', borderRadius: 6, zIndex: 9999, lineHeight: 1.5, pointerEvents: 'none' }}>
+      {showDebug && <div style={{ position: 'absolute', top: 74, left: 8, background: 'rgba(0,0,0,0.7)', color: '#3ee87a', font: '12px monospace', padding: '6px 9px', borderRadius: 6, zIndex: 9999, lineHeight: 1.5, pointerEvents: 'none' }}>
         <div>eventos pose: {hud.poseEvents} {hud.poseEvents === 0 ? '❌ NO llegan' : '✓'}</div>
         <div>aplicados: {hud.applied} {hud.applied === 0 && hud.poseEvents > 0 ? '⚠ apply FALLA' : ''}</div>
         <div>THREE: {hud.src} · track: {tracking}</div>
+        <div>planos: {reticle.planes} · mira: {reticle.found ? (reticle.type || 'si') : 'no'}</div>
         <div>upm: {hud.upm} · giro: {hud.yaw}°{hud.aligning ? ' ·ALIN' : ''}</div>
         <div>GPS: {geo ? `${geo.lat?.toFixed(6)}, ${geo.lon?.toFixed(6)} ±${Math.round(geo.accuracy || 0)}m` : 'sin senal'}{geo?.hasHeading ? ` · N ${Math.round(geo.heading)}°` : ''}</div>
         {hud.err ? <div style={{ color: '#ff6b6b', maxWidth: 260, wordBreak: 'break-word' }}>err: {hud.err}</div> : null}
-      </div>
+      </div>}
 
-      <div className="native-ar-reticle" aria-hidden="true" />
-
-      <div className="native-ar-controls">
-        {/* ACCIÓN PRINCIPAL: orientarse por GPS (modo campo, obra lineal). */}
-        <button
-          className="native-ar-primary"
-          onClick={handleGpsOrient}
-          disabled={tracking !== 'tracking' || !geo}
-          style={{ background: geo ? '#0e7490' : '#475569' }}
-        >
-          {geo
-            ? `📍 Orientarme por GPS (±${Math.round(geo.accuracy || 0)} m)`
-            : '📍 Buscando GPS…'}
-        </button>
-
-        {/* Alternativa manual (anclar sobre superficie + alinear a ojo). */}
-        <button
-          className="native-ar-primary"
-          onClick={handleAnchor}
-          disabled={tracking !== 'tracking'}
-          style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.4)' }}
-        >
-          {anchored ? 'Re-anclar a mano' : 'Anclar a mano'}
-        </button>
-
-        {/* Escala: maqueta <-> 1:1 real. Se ajusta en vivo desde el celular. */}
-        <div className="native-ar-yaw">
-          <button onClick={() => applyUpm(oneToOneRef.current * 500)} aria-label="Ver como maqueta">Maqueta</button>
-          <button onClick={() => applyUpm(unitsPerMeter * 1.25)} aria-label="Mas chico">− chico</button>
-          <span>1:{Math.max(1, Math.round(unitsPerMeter / oneToOneRef.current))}</span>
-          <button onClick={() => applyUpm(unitsPerMeter / 1.25)} aria-label="Mas grande">+ grande</button>
-          <button onClick={() => applyUpm(oneToOneRef.current)} aria-label="Escala real uno a uno">1:1</button>
+      {/* RETÍCULO: verde = piso detectado (puedes colocar) · ámbar = solo
+          puntos sueltos (sigue escaneando) · gris = nada aún. Además toda la
+          zona superior es zona de TOQUE para colocar el modelo ahí. */}
+      {!anchored && (
+        <div
+          className="native-ar-tap-layer"
+          onClick={handleTapPlace}
+          style={{ position: 'fixed', inset: 0, bottom: 190, zIndex: 8 }}
+          aria-label="Toca el piso para colocar el modelo"
+        />
+      )}
+      <div
+        className={`native-ar-reticle${reticle.found ? ' is-found' : ''}`}
+        data-kind={reticle.type || 'none'}
+        aria-hidden="true"
+      />
+      {!anchored && (
+        <div className="native-ar-hint">
+          {reticle.found && reticle.type === 'plane'
+            ? (autoPlaceRef.current ? 'Superficie detectada · colocando…' : 'Superficie detectada · toca para colocar')
+            : reticle.planes > 0
+              ? 'Apunta el centro a la malla del piso'
+              : 'Mueve el equipo despacio apuntando al piso…'}
         </div>
+      )}
 
-        {anchored && (
-          <div className="native-ar-yaw" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-            <button
-              className="native-ar-primary"
-              onClick={toggleAlign}
-              style={{ background: aligning ? '#ef4444' : undefined }}
-            >
-              {aligning ? '✔ Fijar orientacion' : '🧭 Alinear con mi direccion'}
-            </button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button onClick={() => changeYaw(-5)} aria-label="Girar cinco grados a la izquierda">-5</button>
-              <span style={{ minWidth: 92, textAlign: 'center' }}>Giro {yawDegrees}°</span>
-              <button onClick={() => changeYaw(5)} aria-label="Girar cinco grados a la derecha">+5</button>
-              <button onClick={() => changeYaw(90)} aria-label="Girar noventa grados">+90</button>
-            </div>
-            {/* Dial continuo: alinea el modelo con la obra sin ir de a 5°. */}
-            <input
-              type="range"
-              min="0"
-              max="359"
-              step="1"
-              value={yawDegrees}
-              onChange={(e) => setYawAbsolute(e.target.value)}
-              aria-label="Giro del modelo en grados"
-              style={{ width: '100%' }}
-            />
+      {/* AR SIMPLE: solo lo que funciona y hace falta en campo.
+          Escanear el piso → tocar para colocar → caminar. Se quitaron los
+          controles de GPS, giro, dial y escala: sobrecargaban la pantalla y
+          estorbaban el flujo básico. Vuelven cuando cada uno esté probado. */}
+      <div className="native-ar-controls">
+        {!anchored ? (
+          <div className="native-ar-primary" style={{ background: '#1f2937', textAlign: 'center' }}>
+            {reticle.planes > 0
+              ? `${reticle.planes} superficie${reticle.planes === 1 ? '' : 's'} detectada${reticle.planes === 1 ? '' : 's'}`
+              : 'Buscando superficies…'}
           </div>
+        ) : (
+          <button
+            className="native-ar-primary"
+            onClick={() => {
+              // Recolocar: vuelve el escaneo, pero en MANUAL. Si siguiera
+              // automático volvería a anclarse solo en el mismo sitio y no
+              // habría forma de elegir otro punto.
+              setModelsVisible(window.NOP_VIEWER, false);
+              clearArStake(window.NOP_VIEWER);
+              setPlanesVisible(true);
+              autoPlaceRef.current = false;
+              anchoredRef.current = false;
+              stableTicksRef.current = 0;
+              setAnchored(false);
+              setStatus('Toca el punto del piso donde quieres el modelo.');
+            }}
+            style={{ background: '#334155' }}
+          >
+            Recolocar en otro punto
+          </button>
         )}
 
         <button className="native-ar-exit" onClick={onExit}>Salir AR</button>

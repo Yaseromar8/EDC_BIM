@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { apiFetch } from '../utils/apiFetch';
 import { API, getAuthHeaders } from '../utils/helpers';
+import { clearRecentPdfCache } from '../utils/recentPdfCache';
 
 export function useUser() {
   const [user, setUser] = useState(() => {
@@ -34,11 +35,12 @@ export function useUser() {
   const logout = async () => {
     try {
       await apiFetch(`${API}/api/auth/logout`, { method: 'POST', headers: getAuthHeaders() });
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
     localStorage.removeItem('visor_user');
     localStorage.removeItem('visor_session_token');
     sessionStorage.removeItem('visor_user');
     sessionStorage.removeItem('visor_session_token');
+    clearRecentPdfCache();
     setUser(null);
   };
 

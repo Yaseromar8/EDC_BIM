@@ -370,9 +370,17 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                 // (queda fuera del marco); aquí tampoco. Evita el falso CC=0.
                 const ys = pts.map((p) => p[1]);
                 if (Math.max(...ys) - Math.min(...ys) < 0.001 && Math.abs(ys[0]) < 0.01) return;
-                const relCorr = sec.sourceType === 'CorridorShape' && sec.absolute === false;
-
-                if (relCorr) cls = { ...cls, key: `corr:${cls.key}`, label: `${cls.label} (corredor)` };
+                // TODO CorridorShape es "corredor" (absoluto o relativo): no es
+                // parte de la lámina del cadista → capa aparte, auto-oculta y
+                // FUERA del cuadro de áreas. Los DWG as-built traen regiones
+                // superpuestas → dedupe geométrico de los repetidos exactos.
+                const isCorr = sec.sourceType === 'CorridorShape';
+                if (isCorr) {
+                    const sig = `corr|${chainSig(pts)}`;
+                    if (seen.has(sig)) return;
+                    seen.add(sig);
+                    cls = { ...cls, key: `corr:${cls.key}`, label: `${cls.label} (corredor)` };
+                }
 
                 // Un hatch ES un área: se cierra aunque la polilínea venga closed=false
                 // (p.ej. _Hatch Relleno viene abierta y por eso no se pintaba).
@@ -388,12 +396,12 @@ const SectionViewer = ({ sectionsData, onClose, onSync, getModelSlice, alignment
                     // separado y el hatch invadía zonas que Civil deja limpias).
                     const loops = splitLoops(pts);
                     if (loops.length) {
-                        out.push({ id: `s${i}`, cls, pts, loops, closed: true, area: sec.area, corridor: relCorr, pat, rawName: sec.name || '' });
+                        out.push({ id: `s${i}`, cls, pts, loops, closed: true, area: sec.area, corridor: isCorr, pat, rawName: sec.name || '' });
                     }
                     return;
                 }
-                const closed = (sec.closed === true) && cls.fill;
-                out.push({ id: `s${i}`, cls, pts, closed, area: sec.area, corridor: relCorr, pat: null, rawName: sec.name || '' });
+                const closed = ((sec.closed === true) && cls.fill) || isCorr;
+                out.push({ id: `s${i}`, cls, pts, closed, area: sec.area, corridor: isCorr, pat: null, rawName: sec.name || '' });
                 return;
             }
             buildChains(sec.links).forEach((chain, c) => {

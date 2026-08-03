@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './TopBar.css';
-
-const DOCS_URL = import.meta.env.VITE_DOCS_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5174' : 'https://visor-ecd-docs.onrender.com');
+import { goToHub } from '../utils/hubLink';
 
 // SVGs for Tandem-like icons
 const LogoIcon = () => (
@@ -295,14 +294,16 @@ const TopBar = ({
             <div className="top-bar-right">
                 <button
                     className="tool-btn"
-                    onClick={() => window.location.href = DOCS_URL}
-                    title="Gestión Documental (ACC)"
+                    onClick={goToHub}
+                    title="Volver al inicio (elegir producto)"
                     style={{ marginRight: '8px', color: '#0696d7' }}
                 >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 10.5 12 3l9 7.5" />
+                        <path d="M5.5 9.5V20a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V9.5" />
+                        <path d="M9.5 21v-6h5v6" />
                     </svg>
-                    <span style={{ fontSize: '11px', fontWeight: 700, marginLeft: '4px' }}>DOCS</span>
+                    <span style={{ fontSize: '11px', fontWeight: 700, marginLeft: '4px' }}>INICIO</span>
                 </button>
 
                 <button

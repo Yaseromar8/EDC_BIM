@@ -725,9 +725,15 @@ from routes.photo_diag import photo_diag_bp
 from routes.presupuesto import presupuesto_bp
 from routes.compare import compare_bp
 from routes.link import link_bp
+from routes.dashboards import dashboards_bp
+from routes.civil_ghost import civil_ghost_bp
+from routes.civil_solids import civil_solids_bp
 
 app.register_blueprint(digital_twin_bp)
 app.register_blueprint(link_bp)
+app.register_blueprint(dashboards_bp)
+app.register_blueprint(civil_ghost_bp)
+app.register_blueprint(civil_solids_bp)
 app.register_blueprint(civil_da_bp)
 app.register_blueprint(audit_bp)
 app.register_blueprint(diag_bp)

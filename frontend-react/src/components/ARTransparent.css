@@ -153,3 +153,21 @@ body.ar-active .adsk-viewing-viewer canvas {
     color: #fff;
     font-weight: 800;
 }
+
+/* ── Retículo con ESTADO (patrón Augin/Dalux) ─────────────────────────────
+   El usuario debe ver si ya hay piso ANTES de anclar: sin esta señal estaba
+   colocando a ciegas. Verde = plano horizontal válido; ámbar = solo nube de
+   puntos; gris = todavía escaneando. */
+.native-ar-reticle { transition: border-color .15s, transform .15s, opacity .15s; opacity: .55; }
+.native-ar-reticle.is-found { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+.native-ar-reticle.is-found[data-kind="plane"] { border-color: #22c55e; box-shadow: 0 0 12px rgba(34,197,94,.55); }
+.native-ar-reticle.is-found[data-kind="point"] { border-color: #f59e0b; box-shadow: 0 0 10px rgba(245,158,11,.45); }
+
+.native-ar-hint {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: 200px; z-index: 9; pointer-events: none;
+    background: rgba(13,17,23,.78); color: #e6edf5;
+    padding: 6px 12px; border-radius: 14px;
+    font-size: 12.5px; font-weight: 600; letter-spacing: .2px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+}

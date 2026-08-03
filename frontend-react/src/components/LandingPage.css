@@ -324,52 +324,26 @@
 .acc-project-card {
     background: var(--acc-card-bg);
     border: 1px solid var(--acc-border);
-    border-radius: 6px;
-    overflow: hidden;
+    border-radius: 8px;
+    padding: 16px 18px;
     cursor: pointer;
-    transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+    transition: background 0.15s, border-color 0.15s;
 }
 
 .acc-project-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-    border-color: rgba(68, 136, 204, 0.4);
+    background: var(--acc-card-hover);
+    border-color: rgba(255, 255, 255, 0.18);
 }
 
-.acc-card-thumb {
-    height: 100px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    overflow: hidden;
-    background: #1e2025;
-    /* Darker clean background */
-}
-
-.acc-card-thumb img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-.acc-card-thumb-icon {
-    opacity: 0.7;
-}
-
+/* Punto de estado: en linea con el nombre, sin halo. */
 .acc-card-status-dot {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 8px;
-    height: 8px;
+    display: inline-block;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: #22c55e;
-    box-shadow: 0 0 6px #22c55e;
-}
-
-.acc-card-body {
-    padding: 16px;
+    margin-right: 8px;
+    flex-shrink: 0;
 }
 
 .acc-card-hub {
@@ -382,6 +356,8 @@
 }
 
 .acc-card-name {
+    display: flex;
+    align-items: center;
     font-size: 14px;
     font-weight: 600;
     color: #fff;
@@ -394,11 +370,11 @@
 .acc-card-desc {
     font-size: 12px;
     color: var(--acc-muted);
-    margin: 0 0 10px 0;
+    margin: 0;
     line-height: 1.4;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
@@ -412,14 +388,12 @@
 }
 
 .acc-card-tag {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
-    padding: 3px 8px;
-    border-radius: 4px;
-    /* Less rounded for more professional look */
-    border: 1px solid currentColor;
-    background: transparent !important;
-    /* Force transparent background */
+    color: var(--acc-muted);
+    padding: 0;
+    border: none;
+    background: transparent;
 }
 
 .acc-card-date {
@@ -467,8 +441,9 @@
 }
 
 .acc-empty-icon {
-    font-size: 48px;
-    margin-bottom: 8px;
+    color: var(--acc-muted);
+    opacity: 0.6;
+    margin-bottom: 10px;
 }
 
 .acc-empty h3 {
@@ -653,11 +628,11 @@
 
 .frente-container {
     width: 100%;
-    max-width: 900px;
+    max-width: 760px;
     padding: 40px;
     display: flex;
     flex-direction: column;
-    gap: 32px;
+    gap: 24px;
 }
 
 .back-to-projects {
@@ -682,100 +657,115 @@
     text-align: center;
 }
 
-.frente-project-tag {
-    display: inline-block;
-    padding: 4px 12px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 16px;
-    background: transparent !important;
-}
-
 .frente-header h1 {
-    font-size: 32px;
-    margin: 0 0 8px 0;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    margin: 0 0 6px 0;
     color: #fff;
 }
 
 .frente-header p {
     color: var(--acc-muted);
-    font-size: 16px;
+    font-size: 13px;
+    margin: 0;
 }
 
 .frente-options {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 24px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
 }
 
 .frente-card {
     background: var(--acc-card-bg);
     border: 1px solid var(--acc-border);
     border-radius: 8px;
-    padding: 32px;
+    padding: 16px 18px;
     display: flex;
     align-items: center;
-    gap: 24px;
+    gap: 12px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background 0.15s, border-color 0.15s;
     position: relative;
-    overflow: hidden;
 }
 
 .frente-card:hover {
     background: var(--acc-card-hover);
-    border-color: var(--acc-accent);
-    transform: translateY(-4px);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+    border-color: rgba(255, 255, 255, 0.18);
 }
 
+/* El icono lo elige el usuario al crear el frente: se muestra a tamano de
+   texto, sin recuadro. Antes era un mosaico de 64 px que dominaba la ficha. */
 .frente-card-icon {
-    font-size: 40px;
-    width: 64px;
-    height: 64px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.2s;
-}
-
-.frente-card:hover .frente-card-icon {
-    transform: scale(1.1);
-    background: rgba(68, 136, 204, 0.1);
+    font-size: 16px;
+    line-height: 1;
+    flex-shrink: 0;
+    opacity: 0.85;
 }
 
 .frente-card-content {
     flex: 1;
+    min-width: 0;
 }
 
 .frente-card-content h3 {
-    margin: 0 0 6px 0;
-    font-size: 18px;
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
     color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .frente-card-content p {
-    margin: 0;
-    font-size: 13px;
+    margin: 2px 0 0;
+    font-size: 12px;
     color: var(--acc-muted);
-    line-height: 1.5;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
+/* Flecha y boton de borrar: solo al pasar por encima, para que la rejilla en
+   reposo sea nombre + estado y nada mas. */
 .frente-card-arrow {
-    font-size: 20px;
-    opacity: 0.3;
-    transition: all 0.2s;
+    font-size: 15px;
+    color: var(--acc-muted);
+    opacity: 0;
+    transition: opacity 0.15s;
 }
 
 .frente-card:hover .frente-card-arrow {
     opacity: 1;
-    color: var(--acc-accent);
-    transform: translateX(4px);
+}
+
+.frente-card-del {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--acc-muted);
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    padding: 0;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+}
+
+.frente-card:hover .frente-card-del {
+    opacity: 1;
+}
+
+.frente-card-del:hover {
+    color: #ef4444;
 }
 
 /* Removed specific tag colors to let inline styles work properly */
@@ -799,7 +789,7 @@
     }
 
     .frente-header h1 {
-        font-size: 24px;
+        font-size: 19px;
     }
 }
 

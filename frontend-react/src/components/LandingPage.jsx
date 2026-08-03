@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { DOCS_URL, VISOR_DOCS_SHORTCUT, goToHub } from '../utils/hubLink';
 import './LandingPage.css';
 import { Capacitor } from '@capacitor/core';
 import { apiFetch } from '../utils/apiFetch';
@@ -181,18 +182,8 @@ const LandingPage = ({ onSelectProject }) => {
         setSaving(false);
     };
 
-    // ── Project color by type ────────────────────────────────────────────────
-    const typeColor = (type) => {
-        if (!type) return '#5f7fa3';
-        const t = type.toLowerCase();
-        if (t.includes('infraest')) return '#3b82f6';
-        if (t.includes('vial') || t.includes('canal')) return '#10b981';
-        if (t.includes('edificac')) return '#8b5cf6';
-        if (t.includes('drenaje') || t.includes('sanea')) return '#06b6d4';
-        return '#f59e0b';
-    };
-
-    const DOCS_URL = import.meta.env.VITE_DOCS_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5174' : 'https://visor-ecd-docs.onrender.com');
+    // (Se retiró typeColor: el tipo de proyecto ya no se pinta de colores; es
+    //  texto como el resto de los metadatos.)
 
     if (selectedBaseProject) {
         // Navegador agrupado por TIPO de componente (Aportantes/Canales/...),
@@ -219,11 +210,8 @@ const LandingPage = ({ onSelectProject }) => {
                     </button>
 
                     <div className="frente-header">
-                        <div className="frente-project-tag" style={{ color: typeColor(selectedBaseProject.project_type), border: `1px solid ${typeColor(selectedBaseProject.project_type)}` }}>
-                            {selectedBaseProject.project_type || 'Proyecto'}
-                        </div>
                         <h1>{selectedBaseProject.name}</h1>
-                        <p>Selecciona el frente de trabajo para continuar</p>
+                        <p>Selecciona un frente</p>
                     </div>
 
                     <div className="frente-options">
@@ -247,23 +235,23 @@ const LandingPage = ({ onSelectProject }) => {
                                 )}
                                 {list.map(f => (
                             <div key={f.frontId} className="frente-card" style={{ position: 'relative' }} onClick={() => handleFrontSelect(f.frontId, f.name)}>
-                                <div className="frente-card-icon">{f.icon || '📌'}</div>
+                                <div className="frente-card-icon">{f.icon || '·'}</div>
                                 <div className="frente-card-content">
                                     <h3>{f.name}</h3>
-                                    <p>{f.description || 'Frente de trabajo personalizado.'}</p>
-                                    {/* Estado Civil del frente: extraído o pendiente */}
+                                    {/* Lo único que se muestra bajo el nombre es el
+                                        estado de la extracción Civil: es dato, no adorno.
+                                        La descripción quedó fuera de la ficha. */}
                                     {f.civil && (f.civil.ejes > 0 || f.civil.estaciones > 0) ? (
-                                        <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, color: '#4ade80', fontFamily: 'IBM Plex Mono, monospace' }}>
-                                            ✓ Civil · {f.civil.ejes} {f.civil.ejes === 1 ? 'eje' : 'ejes'} · {f.civil.estaciones} est
-                                        </span>
+                                        <p style={{ color: '#4ade80' }}>
+                                            {f.civil.ejes} {f.civil.ejes === 1 ? 'eje' : 'ejes'} · {f.civil.estaciones} est
+                                        </p>
                                     ) : (
-                                        <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, color: '#7c8694' }}>
-                                            ⏳ sin extracción Civil
-                                        </span>
+                                        <p>sin extracción Civil</p>
                                     )}
                                 </div>
                                 <div className="frente-card-arrow">→</div>
                                 <button
+                                    className="frente-card-del"
                                     title="Eliminar frente (solo la tarjeta; los datos de su scope no se tocan)"
                                     onClick={async (e) => {
                                         e.stopPropagation();
@@ -276,7 +264,6 @@ const LandingPage = ({ onSelectProject }) => {
                                             if (res.ok) setCustomFrentes(prev => prev.filter(x => x.frontId !== f.frontId));
                                         } catch { /* noop */ }
                                     }}
-                                    style={{ position: 'absolute', top: 8, right: 10, width: 22, height: 22, borderRadius: 5, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(0,0,0,0.25)', color: '#8a919c', cursor: 'pointer', fontSize: 12, lineHeight: '18px', padding: 0 }}
                                 >✕</button>
                             </div>
                                 ))}
@@ -332,13 +319,11 @@ const LandingPage = ({ onSelectProject }) => {
                                 </div>
                             </div>
                         ) : (
-                            <div className="frente-card" style={{ borderStyle: 'dashed', opacity: 0.85 }} onClick={() => setShowNewFrente(true)}>
-                                <div className="frente-card-icon" style={{ opacity: 0.8 }}>➕</div>
+                            <div className="frente-card" style={{ borderStyle: 'dashed' }} onClick={() => setShowNewFrente(true)}>
+                                <div className="frente-card-icon">+</div>
                                 <div className="frente-card-content">
-                                    <h3>Crear frente</h3>
-                                    <p>Nuevo frente de trabajo con sus propios modelos y datos aislados.</p>
+                                    <h3 style={{ color: '#98a1ad', fontWeight: 500 }}>Crear frente</h3>
                                 </div>
-                                <div className="frente-card-arrow">＋</div>
                             </div>
                         )}
                     </div>
@@ -368,8 +353,14 @@ const LandingPage = ({ onSelectProject }) => {
                         <span>VISOR ECD</span>
                     </div>
                     <nav className="acc-topnav">
-                        <span className="acc-topnav-item active">Inicio</span>
-                        <span className="acc-topnav-item" onClick={() => window.open(DOCS_URL, '_blank')}>Documentación</span>
+                        {/* "Inicio" = volver al Hub (elegir producto). El atajo
+                            lateral a Documentación queda apagado: se llega a
+                            Docs por el Hub (ver utils/hubLink.js). */}
+                        <span className="acc-topnav-item" onClick={goToHub} title="Volver al inicio (elegir producto)">Inicio</span>
+                        <span className="acc-topnav-item active">Proyectos</span>
+                        {VISOR_DOCS_SHORTCUT && (
+                            <span className="acc-topnav-item" onClick={() => window.open(DOCS_URL, '_blank')}>Documentación</span>
+                        )}
                     </nav>
                 </div>
                 <div className="acc-topbar-right">
@@ -464,7 +455,13 @@ const LandingPage = ({ onSelectProject }) => {
                         </div>
                     ) : visibleProjects.length === 0 ? (
                         <div className="acc-empty">
-                            <div className="acc-empty-icon">🏗️</div>
+                            <div className="acc-empty-icon">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                                    <rect x="3" y="4" width="18" height="16" rx="2" />
+                                    <line x1="3" y1="10" x2="21" y2="10" />
+                                    <line x1="9" y1="10" x2="9" y2="20" />
+                                </svg>
+                            </div>
                             <h3>Sin proyectos</h3>
                             <p>
                                 {searchQuery ? 'No se encontraron resultados para tu búsqueda.' :
@@ -485,44 +482,29 @@ const LandingPage = ({ onSelectProject }) => {
                                     className="acc-project-card"
                                     onClick={() => handleProjectClick(proj)}
                                 >
-                                    {/* Thumbnail / Color strip */}
-                                    <div className="acc-card-thumb">
-                                        {proj.thumbnail_url
-                                            ? <img src={proj.thumbnail_url} alt={proj.name} />
-                                            : (
-                                                <div className="acc-card-thumb-icon">
-                                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={typeColor(proj.project_type)} strokeWidth="1.5">
-                                                        <rect x="3" y="4" width="18" height="16" rx="2" ry="2" />
-                                                        <line x1="12" y1="4" x2="12" y2="20" />
-                                                        <line x1="3" y1="12" x2="21" y2="12" />
-                                                    </svg>
-                                                </div>
-                                            )
-                                        }
+                                    {/* Sin miniatura: no hay imagen de proyecto que
+                                        mostrar, y el recuadro de 100 px con un icono
+                                        genérico era la mitad de la ficha llena de nada.
+                                        El estado pasa a un punto junto al nombre. */}
+                                    <div className="acc-card-hub">{proj.hub_name || 'Sin portafolio'}</div>
+                                    <h3 className="acc-card-name" title={proj.name}>
                                         {proj.status === 'active' && (
-                                            <div className="acc-card-status-dot" title="Activo" />
+                                            <span className="acc-card-status-dot" title="Activo" />
                                         )}
-                                    </div>
-
-                                    {/* Card Body */}
-                                    <div className="acc-card-body">
-                                        <div className="acc-card-hub">{proj.hub_name || 'Sin Portafolio'}</div>
-                                        <h3 className="acc-card-name" title={proj.name}>{proj.name}</h3>
-                                        {proj.description && (
-                                            <p className="acc-card-desc">{proj.description}</p>
+                                        {proj.name}
+                                    </h3>
+                                    {proj.description && (
+                                        <p className="acc-card-desc">{proj.description}</p>
+                                    )}
+                                    <div className="acc-card-meta">
+                                        {proj.project_type && (
+                                            <span className="acc-card-tag">{proj.project_type}</span>
                                         )}
-                                        <div className="acc-card-meta">
-                                            {proj.project_type && (
-                                                <span className="acc-card-tag" style={{ background: `${typeColor(proj.project_type)}22`, color: typeColor(proj.project_type) }}>
-                                                    {proj.project_type}
-                                                </span>
-                                            )}
-                                            {proj.updated_at && (
-                                                <span className="acc-card-date">
-                                                    {new Date(proj.updated_at).toLocaleDateString('es-PE', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                                </span>
-                                            )}
-                                        </div>
+                                        {proj.updated_at && (
+                                            <span className="acc-card-date">
+                                                {new Date(proj.updated_at).toLocaleDateString('es-PE', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                             ))}

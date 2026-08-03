@@ -30,6 +30,7 @@ PUBLIC_ENDPOINTS = {
     '/api/auth/login',
     '/api/auth/register', 
     '/api/auth/google',
+    '/api/auth/handoff/exchange',
     '/api/auth/logout',
     '/api/auth/status',
     '/api/auth/aps/login',
@@ -118,6 +119,28 @@ def create_session(user_id):
 # Peor caso: una sesión revocada tarda 60s en ser rechazada.
 _session_cache = {}  # token -> (user_dict, timestamp)
 _SESSION_CACHE_TTL = 60  # seconds
+
+# Los SPAs de Docs y Visor pueden estar en distintos orígenes. Un ticket
+# opaco, de un único uso y de 60 segundos evita exponer la sesión reutilizable
+# en una URL al pasar entre ellos.
+_handoff_tickets = {}  # ticket -> (session_token, expires_at)
+
+
+def create_handoff_ticket(session_token, ttl_seconds=60):
+    ticket = secrets.token_urlsafe(32)
+    now = time.time()
+    for key, (_token, expires_at) in list(_handoff_tickets.items()):
+        if expires_at <= now:
+            _handoff_tickets.pop(key, None)
+    _handoff_tickets[ticket] = (session_token, now + ttl_seconds)
+    return ticket
+
+
+def consume_handoff_ticket(ticket):
+    entry = _handoff_tickets.pop(ticket, None)
+    if not entry or entry[1] <= time.time():
+        return None
+    return entry[0]
 
 
 def validate_session(token):

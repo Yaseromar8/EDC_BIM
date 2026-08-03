@@ -66,6 +66,11 @@ public class ARCorePlugin extends Plugin {
     private Session session;
     private GLSurfaceView glView;
     private BackgroundRenderer bgRenderer;
+    private PlaneRenderer planeRenderer;
+    /** La malla de escaneo se apaga al colocar el modelo (como Augin). */
+    private volatile boolean showPlanes = true;
+    /** Planos de piso dibujados en el ultimo frame; la UI lo reporta. */
+    private volatile int floorPlanesVisible = 0;
     private volatile boolean running = false;
     private final float[] projMatrix = new float[16];
     private final float[] viewMatrix = new float[16];
@@ -160,6 +165,8 @@ public class ARCorePlugin extends Plugin {
                 originalWebViewBackground = webView.getBackground();
 
                 bgRenderer = new BackgroundRenderer();
+                showPlanes = true;
+                floorPlanesVisible = 0;
                 glView = new GLSurfaceView(getContext());
                 glView.setPreserveEGLContextOnPause(true);
                 glView.setEGLContextClientVersion(2);
@@ -336,6 +343,14 @@ public class ARCorePlugin extends Plugin {
         public void onSurfaceCreated(GL10 gl, EGLConfig config) {
             GLES20.glClearColor(0f, 0f, 0f, 0f);
             bgRenderer.createOnGlThread();
+            // Si el shader de planos fallara, el AR debe seguir funcionando: la
+            // malla es ayuda visual, no requisito para anclar.
+            try {
+                planeRenderer = new PlaneRenderer();
+                planeRenderer.createOnGlThread();
+            } catch (Throwable t) {
+                planeRenderer = null;
+            }
             if (session != null) session.setCameraTextureName(bgRenderer.getTextureId());
         }
 
@@ -365,8 +380,31 @@ public class ARCorePlugin extends Plugin {
                 emitTracking(trackingState);
                 if (trackingState != TrackingState.TRACKING) return;
 
+                // MALLA DE ESCANEO: las superficies que ARCore va reconociendo,
+                // dibujadas sobre el terreno real. Es lo que le dice al operario
+                // que el equipo esta "viendo" el piso y donde puede colocar.
+                if (planeRenderer != null && showPlanes) {
+                    try {
+                        floorPlanesVisible = planeRenderer.draw(
+                                session.getAllTrackables(Plane.class), camera, 0.75f);
+                    } catch (Throwable ignored) {
+                        floorPlanesVisible = 0;
+                    }
+                } else {
+                    floorPlanesVisible = 0;
+                }
+
                 resolvePendingAnchor(frame);
                 resolvePendingCameraAnchor(camera);
+
+                // RETÍCULO: hit-test en el punto de mira (centro, o donde el
+                // usuario tocó) para que la web dibuje el anillo sobre el piso
+                // detectado. Sin esta señal el usuario ancla a ciegas.
+                if (timestampReticleNs == 0
+                        || frame.getTimestamp() - timestampReticleNs >= RETICLE_INTERVAL_NS) {
+                    timestampReticleNs = frame.getTimestamp();
+                    emitReticle(frame);
+                }
 
                 long timestamp = frame.getTimestamp();
                 if (timestamp - lastPoseEmitNs >= POSE_INTERVAL_NS) {
@@ -443,11 +481,59 @@ public class ARCorePlugin extends Plugin {
         return result;
     }
 
-    private Anchor createAnchorFromCenterHit(Frame frame) {
-        if (viewportWidth <= 0 || viewportHeight <= 0) return null;
+    private long timestampReticleNs = 0;
+    private static final long RETICLE_INTERVAL_NS = 100_000_000L;  // 10 Hz basta
+    private float aimX = -1f;
+    private float aimY = -1f;
 
-        List<HitResult> hits =
-                frame.hitTest(viewportWidth * 0.5f, viewportHeight * 0.5f);
+    /**
+     * Enciende o apaga la malla de escaneo. Se apaga al colocar el modelo: una
+     * vez anclado, la rejilla solo ensucia la vista de la obra.
+     */
+    @PluginMethod
+    public void setPlanesVisible(PluginCall call) {
+        showPlanes = call.getBoolean("visible", Boolean.TRUE);
+        call.resolve();
+    }
+
+    /** Punto de mira en pixeles de pantalla; negativo = centro. */
+    @PluginMethod
+    public void setAimPoint(PluginCall call) {
+        aimX = call.getFloat("x", -1f);
+        aimY = call.getFloat("y", -1f);
+        call.resolve();
+    }
+
+    /** Emite {found, matrix, type} del hit-test en el punto de mira. */
+    private void emitReticle(Frame frame) {
+        if (viewportWidth <= 0 || viewportHeight <= 0) return;
+        float px = (aimX >= 0f) ? aimX : viewportWidth * 0.5f;
+        float py = (aimY >= 0f) ? aimY : viewportHeight * 0.5f;
+        JSObject payload = new JSObject();
+        // Cuantas superficies de piso hay reconocidas: con esto la web decide si
+        // ya puede colocar sola el modelo o hay que seguir barriendo el terreno.
+        payload.put("planes", floorPlanesVisible);
+        try {
+            HitResult best = pickHit(frame.hitTest(px, py));
+            if (best == null) {
+                payload.put("found", false);
+            } else {
+                Pose hp = best.getHitPose();
+                Pose flat = new Pose(hp.getTranslation(), new float[] { 0f, 0f, 0f, 1f });
+                float[] m = new float[16];
+                flat.toMatrix(m, 0);
+                payload.put("found", true);
+                payload.put("matrix", floatsToJsonArray(m));
+                payload.put("type", (best.getTrackable() instanceof Plane) ? "plane" : "point");
+            }
+        } catch (Throwable t) {
+            payload.put("found", false);
+        }
+        notifyListeners("onReticle", payload);
+    }
+
+    /** Mejor candidato: plano horizontal dentro del polígono; si no, punto. */
+    private HitResult pickHit(List<HitResult> hits) {
         HitResult pointFallback = null;
         for (HitResult hit : hits) {
             Trackable trackable = hit.getTrackable();
@@ -456,7 +542,7 @@ public class ARCorePlugin extends Plugin {
                 if (plane.getTrackingState() == TrackingState.TRACKING
                         && plane.getType() == Plane.Type.HORIZONTAL_UPWARD_FACING
                         && plane.isPoseInPolygon(hit.getHitPose())) {
-                    return createWorldAlignedAnchor(hit);
+                    return hit;
                 }
             } else if (trackable instanceof Point
                     && trackable.getTrackingState() == TrackingState.TRACKING
@@ -464,7 +550,18 @@ public class ARCorePlugin extends Plugin {
                 pointFallback = hit;
             }
         }
-        return pointFallback != null ? createWorldAlignedAnchor(pointFallback) : null;
+        return pointFallback;
+    }
+
+    private Anchor createAnchorFromCenterHit(Frame frame) {
+        if (viewportWidth <= 0 || viewportHeight <= 0) return null;
+
+        // Ancla DONDE APUNTA el retículo (centro, o el punto que tocó el
+        // usuario vía setAimPoint): lo que ves es donde cae el modelo.
+        float px = (aimX >= 0f) ? aimX : viewportWidth * 0.5f;
+        float py = (aimY >= 0f) ? aimY : viewportHeight * 0.5f;
+        HitResult best = pickHit(frame.hitTest(px, py));
+        return best != null ? createWorldAlignedAnchor(best) : null;
     }
 
     private Anchor createWorldAlignedAnchor(HitResult hit) {
@@ -523,6 +620,9 @@ public class ARCorePlugin extends Plugin {
         viewportHeight = 0;
         lastPoseEmitNs = 0L;
         lastState = null;
+        planeRenderer = null;
+        showPlanes = true;
+        floorPlanesVisible = 0;
     }
 
     private static com.getcapacitor.JSArray floatsToJsonArray(float[] matrix) {

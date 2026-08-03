@@ -25,6 +25,12 @@ export default function LinkRevitBadge({ project, backendUrl, variant = 'floatin
   const [revitOnline, setRevitOnline] = useState(false);
   const activeRef = useRef(false);
   const debounceRef = useRef(null);
+  // Anti-eco: mientras aplicamos lo que vino de Revit, NO republicar hacia Revit.
+  const suppressRef = useRef(false);
+  const reverseVersionRef = useRef(0);
+  // Última selección que publicamos hacia Revit: si vuelve idéntica por el canal
+  // inverso, es nuestro propio eco → no re-aislar/re-encuadrar.
+  const lastForwardKeyRef = useRef('');
 
   // El vínculo muere al cambiar de frente (aislamiento entre frentes).
   useEffect(() => { setActive(false); }, [project]);
@@ -46,6 +52,65 @@ export default function LinkRevitBadge({ project, backendUrl, variant = 'floatin
     return () => { stop = true; clearInterval(id); };
   }, [active, project, backendUrl]);
 
+  // Selección INVERSA Revit → web: sondear lo que Revit seleccionó y aislarlo aquí.
+  useEffect(() => {
+    if (!active || !project) return undefined;
+    const viewer = window.__mainViewer || window.NOP_VIEWER;
+    if (!viewer) return undefined;
+    let stop = false;
+
+    const getModels = () => (viewer.getAllModels ? viewer.getAllModels() : (viewer.model ? [viewer.model] : []));
+    const externalToDbIds = (model, externalIds) => new Promise((resolve) => {
+      try {
+        model.getExternalIdMapping((map) => {
+          const out = [];
+          for (const eid of externalIds) { const db = map[eid]; if (db != null) out.push(db); }
+          resolve(out);
+        }, () => resolve([]));
+      } catch { resolve([]); }
+    });
+
+    const applyReverse = async (externalIds) => {
+      const models = getModels();
+      if (!models.length) return;
+      suppressRef.current = true;
+      try {
+        if (!externalIds.length) { try { viewer.showAll(); } catch { /* */ } return; }
+        const byModel = new Map();
+        let total = 0;
+        for (const m of models) {
+          const ids = await externalToDbIds(m, externalIds);
+          if (ids.length) { byModel.set(m, ids); total += ids.length; }
+        }
+        if (!total) return; // los elementos no están en los modelos cargados de este frente
+        models.forEach(m => {
+          const ids = byModel.get(m);
+          if (ids && ids.length) viewer.isolate(ids, m);
+          else { try { viewer.hide(m); } catch { /* */ } }
+        });
+        const first = [...byModel.entries()][0];
+        if (first) { try { viewer.fitToView(first[1], first[0]); } catch { /* */ } }
+      } finally {
+        setTimeout(() => { suppressRef.current = false; }, 500);
+      }
+    };
+
+    const poll = async () => {
+      try {
+        const r = await apiFetch(`${backendUrl}/api/link/report?project=${encodeURIComponent(project)}&kind=selection&since_version=${reverseVersionRef.current}`);
+        const d = await r.json();
+        if (stop || !d.changed || !d.payload) return;
+        reverseVersionRef.current = d.version;
+        const incoming = d.payload.externalIds || [];
+        if (incoming.slice().sort().join(',') === lastForwardKeyRef.current) return; // eco de nuestra propia acción
+        await applyReverse(incoming);
+      } catch { /* red intermitente */ }
+    };
+    reverseVersionRef.current = 0; // al re-vincular, aceptar el estado actual de Revit
+    const id = setInterval(poll, 1200);
+    return () => { stop = true; clearInterval(id); };
+  }, [active, project, backendUrl]);
+
   // Escuchar selección/aislamiento del visor y publicar al canal.
   useEffect(() => {
     if (!active || !project) return undefined;
@@ -59,6 +124,7 @@ export default function LinkRevitBadge({ project, backendUrl, variant = 'floatin
       clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(async () => {
         if (!activeRef.current) return;
+        if (suppressRef.current) return; // lo provocó la selección inversa de Revit
         let externalIds = [];
         for (const entry of (aggregate || [])) {
           // El evento agregado de LMV entrega los ids como dbIdArray (la API
@@ -68,6 +134,7 @@ export default function LinkRevitBadge({ project, backendUrl, variant = 'floatin
           externalIds = externalIds.concat(ids);
         }
         const finalAction = externalIds.length ? action : 'clear';
+        lastForwardKeyRef.current = externalIds.slice().sort().join(','); // para descartar el eco
         try {
           await apiFetch(`${backendUrl}/api/link/cmd`, {
             method: 'POST',
@@ -158,9 +225,9 @@ export default function LinkRevitBadge({ project, backendUrl, variant = 'floatin
     ? {
         display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', height: 26,
         background: !active ? 'transparent' : bg,
-        color: !active ? '#8d98a8' : '#fff',
-        border: `1px solid ${!active ? '#3a4351' : 'rgba(255,255,255,0.25)'}`,
-        borderRadius: 15, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+        color: !active ? '#d8d8d8' : '#fff',
+        border: `1px solid ${!active ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.25)'}`,
+        borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
       }
     : {
         position: 'fixed', right: 18, bottom: 118, zIndex: 1200,

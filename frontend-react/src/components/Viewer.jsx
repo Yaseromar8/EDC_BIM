@@ -1,4 +1,5 @@
 import { apiFetch } from '../utils/apiFetch';
+import { installPivotUnderPointer } from '../utils/pivotUnderPointer';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './viewer.css';
 import './IconMarkup.css'; // Add this line
@@ -618,40 +619,13 @@ const Viewer = ({
                     progressive: (on) => { try { viewer.setProgressiveRendering(!!on); viewer.prefs?.set?.('progressiveRendering', !!on); viewer.impl.invalidate(true, true, true); } catch (e) { console.warn(e); } },
                 };
 
-                // ── ÓRBITA ALREDEDOR DEL CURSOR (estilo Tandem/Fusion) ────────
-                // Al presionar el mouse, el punto del modelo BAJO el cursor pasa a
-                // ser el pivote de órbita: giras alrededor de donde estás mirando,
-                // no del centro del proyecto. Si apuntas al vacío, se conserva el
-                // último pivote (no hay saltos). No interfiere con la selección.
+                // ── ÓRBITA ALREDEDOR DE LO QUE APUNTAS (estilo Tandem/Fusion) ─
+                // Mouse en escritorio y DEDO en tablet: el punto del modelo bajo
+                // el puntero pasa a ser el pivote de órbita. Ver utils/pivotUnderPointer.js.
                 try {
-                    const canvasEl = viewer.canvas || viewer.impl?.canvas;
-                    if (canvasEl) {
-                        const onPivotDown = (event) => {
-                            if (event.button !== 0 && event.button !== 1) return; // izq (orbit) o rueda (pan)
-                            if (!viewer.model || viewer.model.is2d?.()) return;
-                            // NO interferir con herramientas que necesitan el clic para
-                            // COLOCAR puntos (medir, sección, marcado, pins). Antes este
-                            // hitTest+pivote le robaba el pickeo a "Medir" → seleccionaba
-                            // el elemento en vez de medir.
-                            const activeTool = viewer.toolController?.getActiveToolName?.() || '';
-                            if (/measure|section|markup|pushpin|dimension|pin/i.test(activeTool)) return;
-                            const rect = canvasEl.getBoundingClientRect();
-                            const hit = viewer.impl.hitTest(
-                                event.clientX - rect.left,
-                                event.clientY - rect.top,
-                                true
-                            );
-                            if (hit && hit.intersectPoint) {
-                                viewer.navigation.setPivotPoint(hit.intersectPoint);
-                                viewer.navigation.setPivotSetFlag(true);
-                            }
-                        };
-                        // captura para correr ANTES que la herramienta de órbita
-                        canvasEl.addEventListener('mousedown', onPivotDown, true);
-                        viewer.__pivotUnderCursor = () => canvasEl.removeEventListener('mousedown', onPivotDown, true);
-                    }
+                    viewer.__pivotUnderCursor = installPivotUnderPointer(viewer);
                 } catch (e) {
-                    console.warn('[Viewer] Pivote bajo cursor no disponible:', e);
+                    console.warn('[Viewer] Pivote bajo el puntero no disponible:', e);
                 }
 
                 // ── FORZAR COMPORTAMIENTO NATIVO DE CLIC ──────────────────────
@@ -731,10 +705,28 @@ const Viewer = ({
                     models.forEach(model => {
                         viewer.clearThemingColors(model);
                     });
+                    // (los tintes por FUENTE ya los restaura el choke-point de
+                    // clearThemingColors; repetir aquí duplicaba el repintado)
                     viewer.impl.invalidate(true, true, true);
                 };
 
                 window.__ghostCleanup = stopGhostEnforcement;
+
+                // CHOKE-POINT anti-parpadeo de tintes por FUENTE: cualquier
+                // clearThemingColors — venga del flujo que venga (reset de
+                // filtros, LOB4D, tableros, aislamiento, código futuro) —
+                // restaura el tinte del modelo EN LA MISMA LLAMADA. Un solo
+                // punto en vez de perseguir cada sitio que borra.
+                try {
+                    const _origClearTheming = viewer.clearThemingColors.bind(viewer);
+                    viewer.clearThemingColors = (model) => {
+                        const r = _origClearTheming(model);
+                        try {
+                            if (window.__ecdReapplySourceTints) window.__ecdReapplySourceTints(viewer, model);
+                        } catch { /* noop */ }
+                        return r;
+                    };
+                } catch { /* noop */ }
                 
                 // GHOST ENFORCEMENT: Solo visual — mantenido aquí porque depende de
                 // las closures startGhostEnforcement/stopGhostEnforcement del Initializer.
@@ -2558,6 +2550,9 @@ const Viewer = ({
             Object.values(loadedModelsRef.current).forEach(model => {
                 viewer.clearThemingColors(model);
             });
+            // (los tintes por FUENTE los restaura el choke-point dentro de
+            // cada clearThemingColors; los colores por propiedad se aplican
+            // después por dbId y ganan sobre el tinte donde corresponde)
             viewer.clearSelection();
 
             // If no filters are active, show all (clear isolation) and exit

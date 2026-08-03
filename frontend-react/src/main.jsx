@@ -11,7 +11,7 @@ import ErrorBoundary from './components/ErrorBoundary.jsx'
   if (typeof document === 'undefined' || document.getElementById(ID)) return
   const b = document.createElement('div')
   b.id = ID
-  b.textContent = '🟢 LIVE-RELOAD v2 ✅'
+  b.textContent = '🟢 LIVE-RELOAD v3 · 09:51:06 ✅'
   b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:#16a34a;color:#fff;font:bold 12px monospace;padding:3px 10px;border-radius:0 0 8px 8px;pointer-events:none'
   document.body.appendChild(b)
 })()

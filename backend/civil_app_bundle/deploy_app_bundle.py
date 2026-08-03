@@ -213,11 +213,60 @@ def deploy():
     if r_sec.status_code not in [200, 201]:
         print(r_sec.text)
         return
-        
+
     print("7. Creating Section Activity Alias 'prod'...")
     r_sec_alias = requests.post(f"{da_url}/activities/{sec_act_name}/aliases", headers=headers, json=alias_data)
-    
+
     print(f"Deployment Complete for Sections! Activity ID: {nickname}.{sec_act_name}+prod")
+
+    print("8. Creating Surfaces Activity (v7 Fase 2)...")
+    surf_act_name = "ExtractSurfacesActivity"
+    requests.delete(f"{da_url}/activities/{surf_act_name}", headers=headers)
+
+    surf_activity_data = {
+        "id": surf_act_name,
+        "commandLine": [
+            f"$(engine.path)\\\\accoreconsole.exe /i \"$(args[HostDwg].path)\" /al \"$(appbundles[{app_name}].path)\" /s \"$(settings[script].path)\""
+        ],
+        "parameters": {
+            "HostDwg": {
+                "verb": "get",
+                "description": "Input DWG",
+                "required": True,
+                "localName": "HostDwg.dwg"
+            },
+            "Params": {
+                "verb": "get",
+                "description": "surfaceNames + clip (params.json)",
+                "localName": "params.json",
+                "required": False
+            },
+            "Result": {
+                "verb": "put",
+                "description": "Output Surfaces JSON",
+                "localName": "surfaces_result.json",
+                "required": True
+            }
+        },
+        "settings": {
+            "script": {
+                "value": "netload\n\"$(appbundles[AlignmentExtractorApp].path)\\\\Contents\\\\AlignmentExtractorApp.dll\"\nHelloWorld\nExtractSurfacesJSON\n"
+            }
+        },
+        "engine": engine_id,
+        "appbundles": [app_bundle_id],
+        "description": "Extracts Civil 3D TIN surface triangles to JSON (clipped)"
+    }
+
+    r_surf = requests.post(f"{da_url}/activities", headers=headers, json=surf_activity_data)
+    if r_surf.status_code not in [200, 201]:
+        print(r_surf.text)
+        return
+
+    print("9. Creating Surfaces Activity Alias 'prod'...")
+    requests.post(f"{da_url}/activities/{surf_act_name}/aliases", headers=headers, json=alias_data)
+
+    print(f"Deployment Complete for Surfaces! Activity ID: {nickname}.{surf_act_name}+prod")
 
 if __name__ == '__main__':
     deploy()

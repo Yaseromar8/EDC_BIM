@@ -20,6 +20,8 @@ import PhotoAlbumModal from './components/PhotoAlbumModal';
 import SheetViewerPanel from './components/SheetViewerPanel';
 import LinkRevitBadge from './components/LinkRevitBadge';
 import SectionCutTool from './components/SectionCutTool';
+// Tablero de análisis: diferido (React.lazy) — sale del bundle inicial del visor.
+const DashboardWorkspace = React.lazy(() => import('./components/dashboard/DashboardWorkspace'));
 import ProgressDetailPanel from './components/ProgressDetailPanel';
 import DocumentManager from './components/DocumentManager';
 import DocPinPanel from './components/DocPinPanel';
@@ -577,6 +579,45 @@ function App() {
     setUser(userData);
   }, []);
 
+  // SSO desde Docs: el URL contiene sólo un ticket efímero y de un único uso,
+  // nunca el token de sesión reutilizable.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ticket = params.get('sso_ticket');
+    if (!ticket) return;
+    fetch(`${BACKEND_URL}/api/auth/handoff/exchange`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket }) })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (!data?.session_token) return null;
+        localStorage.setItem('visor_session_token', data.session_token);
+        return apiFetch(`${BACKEND_URL}/api/auth/me`).then(r => (r.ok ? r.json() : null)).then(u => ({ u, token: data.session_token }));
+      })
+      .then(result => {
+        if (result?.u?.id) {
+          const userData = { ...result.u, session_token: result.token };
+          localStorage.setItem('visor_user', JSON.stringify(userData));
+          setUser(userData);
+        }
+      })
+      .catch(() => { /* si falla, el visor sigue con lo que haya en localStorage */ })
+      .finally(() => {
+        params.delete('sso_ticket');
+        params.delete('pick');   // este efecto guarda su propia copia del URL
+        const qs = params.toString();
+        window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+      });
+  }, []);
+
+  // `pick` cumplió su función en el arranque: fuera del URL para que un
+  // refresco no reabra el selector si ya elegiste modelo.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('pick')) return;
+    params.delete('pick');
+    const qs = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+  }, []);
+
   // ── PERMISOS por módulo (prueba de producción) ────────────────────────────
   // Civil, 4D LOB y BIM 5D: solo admin. Los demás usuarios ven el botón opaco
   // y al clickear reciben un aviso. (Gate simple de UI; el backend ya exige
@@ -692,6 +733,15 @@ function App() {
   const [budgetPoppedOut, setBudgetPoppedOut] = useState(false);
   const [budgetPanelHeight, setBudgetPanelHeight] = useState(320);
   const [lob4dTabOpen, setLob4dTabOpen] = useState(false);
+  const [tableroOpen, setTableroOpen] = useState(false); // Tablero de análisis (gráficos desde Inventory)
+  // Split real con el Tablero: el panel anuncia su ancho y el contenedor del
+  // visor lo reserva (el ResizeObserver del Viewer hace viewer.resize()).
+  const [tableroW, setTableroW] = useState(0);
+  useEffect(() => {
+    const onW = (e) => setTableroW(e.detail?.width || 0);
+    window.addEventListener('tablero-width', onW);
+    return () => window.removeEventListener('tablero-width', onW);
+  }, []);
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [isolatedExtIds, setIsolatedExtIds] = useState(null); // Lifted from InventoryDataGrid — persists across mount/unmount
 
@@ -847,7 +897,16 @@ function App() {
       };
     }
 
-    // PRIORITY 2: Restore from localStorage (page refresh without URL params)
+    // PRIORITY 2: llegada desde el Hub -> selector de modelos, siempre.
+    // Elegir producto (Hub) y elegir modelo son dos decisiones distintas: no se
+    // salta la segunda por recordar la última sesión. Se borra también lo
+    // guardado para que un refresco posterior no reviva el proyecto anterior.
+    if (params.get('pick') === '1' || params.get('sso_ticket')) {
+      localStorage.removeItem('visor_selectedProject');
+      return null;
+    }
+
+    // PRIORITY 3: Restore from localStorage (page refresh without URL params)
     const saved = localStorage.getItem('visor_selectedProject');
     if (saved) {
       try {
@@ -884,6 +943,17 @@ function App() {
       setHiddenModelUrns([]);
       window._lastHasActiveFilters = false;
       window._lastValidDbIds = null;
+      // Aislamiento POR FRENTE: la config de colores de un frente no debe
+      // aparecer en otro — se limpian también los globales (colores custom
+      // por valor y el coloreo por fuente) y se avisa al panel para que
+      // sincronice sus puntitos.
+      window._customValueColors = {};
+      window.__ecdSourceColorOn = false;
+      window.__ecdSourceCustomColors = {};
+      window.__ecdSourceAssigned = {};
+      try { window.__ecdSourceTintCache && window.__ecdSourceTintCache.clear(); } catch { /* noop */ }
+      window.dispatchEvent(new CustomEvent('custom-colors-restored', { detail: {} }));
+      window.dispatchEvent(new CustomEvent('ecd-source-tints-reset'));
     }
 
     prevProjectIdRef.current = newId;
@@ -954,6 +1024,26 @@ function App() {
     setFilterConfiguratorOpen(false);
     // Lámina 2D abierta (pertenece a un modelo del frente anterior)
     setActiveLmvSheet(null);
+    // Tablero de análisis (sus gráficos son del inventario del frente anterior)
+    setTableroOpen(false);
+  }, [selectedProject?.id]);
+
+  // Presencia web para AUTO-DETECCIÓN de frente desde Revit: mientras haya un
+  // frente abierto en el visor, latimos al backend; así el plugin "ECD Link"
+  // descubre solo a qué frente engancharse (sin que lo escribas).
+  useEffect(() => {
+    const pid = selectedProject?.id;
+    if (!pid) return undefined;
+    let stop = false;
+    const beat = () => {
+      apiFetch(`${BACKEND_URL}/api/link/web-presence`, {
+        method: 'POST',
+        body: JSON.stringify({ project: pid }),
+      }).catch(() => { /* sin sesión o backend caído: no pasa nada */ });
+    };
+    beat();
+    const id = setInterval(() => { if (!stop) beat(); }, 5000);
+    return () => { stop = true; clearInterval(id); };
   }, [selectedProject?.id]);
 
 
@@ -1663,6 +1753,133 @@ function App() {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject, models.length]);
+
+  // 👻 HOLOGRAMA DE MOVIMIENTO DE TIERRAS: la capa "Mov. tierras 3D" pide al
+  // backend la malla corte/relleno generada desde las secciones persistidas
+  // de Civil 3D (loft sobre el eje real) y la dibuja translúcida sobre el
+  // modelo. La matemática vive en el backend; aquí solo se dibuja.
+  useEffect(() => {
+    const scope = selectedProject?.id || 'global';
+    let cancelled = false;
+    // Payload cacheado por frente (el efecto se recrea al cambiar de frente):
+    // apagar/encender la capa no vuelve a ir al backend. Caché POR MODO:
+    // 'sections' = holograma por secciones (lámina del cadista) ·
+    // 'topo' = sólidos por topografías (recetas QTO evaluadas en continuo)
+    const cachedByMode = { sections: null, topo: null };
+    let currentMode = 'sections';
+
+    const fetchPayload = async (fresh = false, mode = currentMode) => {
+      if (fresh) cachedByMode[mode] = null;
+      if (cachedByMode[mode]) return { ok: true, d: cachedByMode[mode] };
+      const url = mode === 'topo'
+        ? `${BACKEND_URL}/api/civil/earthworks-solids?scope_urn=${encodeURIComponent(scope)}`
+        : `${BACKEND_URL}/api/civil/earthworks-mesh?scope_urn=${encodeURIComponent(scope)}${fresh ? '&fresh=1' : ''}`;
+      const res = await apiFetch(url);
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || d.error || !d.kinds) {
+        return { ok: false, reason: d.error || `http-${res.status}`, detail: d.detail };
+      }
+      // Respuesta del contrato VIEJO (malla fusionada, sin bodies): el
+      // backend en marcha es anterior al refactor — pedir reinicio en claro.
+      const hasBodies = Object.values(d.kinds).some(k => Array.isArray(k?.bodies) && k.bodies.length);
+      if (!hasBodies) return { ok: false, reason: mode === 'topo' ? 'sin-dibujo' : 'contrato-viejo' };
+      cachedByMode[mode] = d;
+      return { ok: true, d };
+    };
+
+    const onToggle = async (e) => {
+      const visible = !!e?.detail?.visible;
+      if (e?.detail?.mode) currentMode = e.detail.mode === 'topo' ? 'topo' : 'sections';
+      const viewer = window.__mainViewer || window.NOP_VIEWER;
+      if (!viewer) return;
+      const mod = await import('./components/ghostEarthworks');
+      if (cancelled) return;
+      if (!visible) { mod.clearGhostEarthworks(viewer); return; }
+      try {
+        const r = await fetchPayload();
+        if (cancelled) return;
+        if (!r.ok) {
+          window.dispatchEvent(new CustomEvent('ghost-earthworks-result', {
+            detail: { ok: false, reason: r.reason, detail: r.detail },
+          }));
+          return;
+        }
+        const drawn = mod.drawGhostEarthworks(viewer, r.d);
+        window.dispatchEvent(new CustomEvent('ghost-earthworks-result', {
+          detail: drawn
+            ? { ok: true, mode: currentMode, volumes: drawn.volumes, bodies: drawn.bodies, alignmentId: r.d.alignmentId, warnings: r.d.warnings }
+            : { ok: false, reason: 'sin-dibujo' },
+        }));
+      } catch (err) {
+        console.warn('[App] Holograma mov. tierras: fallo', err);
+        if (!cancelled) {
+          window.dispatchEvent(new CustomEvent('ghost-earthworks-result', { detail: { ok: false, reason: 'red' } }));
+        }
+      }
+    };
+
+    // Precalentamiento: a los pocos segundos de entrar al frente se pide la
+    // malla en silencio (calienta el caché del backend y el local) — cuando el
+    // usuario active la capa, aparece al instante.
+    const warmTimer = window.setTimeout(() => {
+      if (!cancelled) fetchPayload().catch(() => {});
+    }, 5000);
+
+    // El panel Civil avisó que la data cambió (extraer/actualizar/borrar):
+    // invalidar cachés y, si el holograma está visible, redibujarlo fresco.
+    const onCivilChanged = async () => {
+      cachedByMode.sections = null;
+      cachedByMode.topo = null;
+      try {
+        const mod = await import('./components/ghostEarthworks');
+        if (cancelled) return;
+        if (mod.hasGhostEarthworks()) {
+          const viewer = window.__mainViewer || window.NOP_VIEWER;
+          if (!viewer) return;
+          const r = await fetchPayload(true);
+          if (cancelled) return;
+          if (r.ok) {
+            const drawn = mod.drawGhostEarthworks(viewer, r.d);
+            window.dispatchEvent(new CustomEvent('ghost-earthworks-result', {
+              detail: drawn
+                ? { ok: true, volumes: drawn.volumes, bodies: drawn.bodies, alignmentId: r.d.alignmentId, warnings: r.d.warnings }
+                : { ok: false, reason: 'sin-dibujo' },
+            }));
+          } else {
+            mod.clearGhostEarthworks(viewer);
+            window.dispatchEvent(new CustomEvent('ghost-earthworks-result', {
+              detail: { ok: false, reason: r.reason, detail: r.detail },
+            }));
+          }
+        } else {
+          fetchPayload(true).catch(() => {});
+        }
+      } catch { /* noop */ }
+    };
+    window.addEventListener('civil-data-changed', onCivilChanged);
+
+    // Leyenda: ocultar/mostrar un cuerpo individual sin redibujar
+    const onBody = async (e) => {
+      const viewer = window.__mainViewer || window.NOP_VIEWER;
+      if (!viewer || !e?.detail?.id) return;
+      const mod = await import('./components/ghostEarthworks');
+      mod.setGhostBodyVisible(viewer, e.detail.id, e.detail.visible !== false);
+    };
+
+    window.addEventListener('ghost-earthworks', onToggle);
+    window.addEventListener('ghost-earthworks-body', onBody);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(warmTimer);
+      window.removeEventListener('ghost-earthworks', onToggle);
+      window.removeEventListener('ghost-earthworks-body', onBody);
+      window.removeEventListener('civil-data-changed', onCivilChanged);
+      // Cambio de frente/desmontaje: el holograma del frente anterior no debe quedar
+      const viewer = window.__mainViewer || window.NOP_VIEWER;
+      if (viewer) import('./components/ghostEarthworks').then((m) => m.clearGhostEarthworks(viewer)).catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject?.id]);
 
   // Twin Config: Load models from backend on mount (and when project changes)
   useEffect(() => {
@@ -2509,7 +2726,10 @@ function App() {
               urn,
               model_urn: scopeUrn,
               scope_urn: scopeUrn,
-              data: resultJson
+              data: resultJson,
+              // nombre legible del DWG: el panel Civil lo muestra en el
+              // selector (sin él quedaba "Carga en la nube · fecha (urn…)")
+              display_name: sourceModel?.name || sourceModel?.label || sourceModel?.fileName || null
             })
           });
           const persistData = await persistRes.json().catch(() => ({}));
@@ -3662,6 +3882,25 @@ function App() {
               <span className="rail-label" style={{ fontWeight: 700 }}>Comparar</span>
             </button>
 
+            <button
+              type="button"
+              data-test-id="nav-item-tablero"
+              className={`rail-button ${tableroOpen ? 'active' : ''}`}
+              style={restrictedRailStyle}
+              onClick={() => {
+                if (!isAdminUser) return denyAccess('Tablero');
+                setTableroOpen(prev => !prev);
+              }}
+              title={isAdminUser ? 'Tablero de análisis (gráficos desde el modelo)' : 'Tablero (requiere permisos)'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="6" y1="20" x2="6" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="18" y1="20" x2="18" y2="14"></line>
+              </svg>
+              <span className="rail-label" style={{ fontWeight: 700 }}>Tablero</span>
+            </button>
+
 
 
 
@@ -3875,7 +4114,12 @@ function App() {
             );
           })()}
 
-          <div className="split-view-container">
+          <div className="split-view-container" style={{
+            // Split real con el Tablero: se reserva su ancho y el visor 3D se
+            // encoge con transición (el ResizeObserver del Viewer re-encuadra).
+            marginRight: tableroOpen ? tableroW : 0,
+            transition: 'margin-right 0.22s ease',
+          }}>
             <div className="split-3d" style={{ position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               {/* 3D VIEWER - Hide when build is active */}
               <div style={{ flex: 1, minHeight: 0, position: 'relative', display: (activePanel === 'build') ? 'none' : 'block' }}>
@@ -3937,6 +4181,17 @@ function App() {
                 {/* 📐 Lámina 2D de Revit en panel dividido */}
                 {!compareMode && activeLmvSheet && (
                   <SheetViewerPanel sheet={activeLmvSheet} onClose={() => setActiveLmvSheet(null)} />
+                )}
+
+                {/* 📈 Tablero de análisis (gráficos desde el Inventory, sync con el 3D) */}
+                {tableroOpen && selectedProject && (
+                  <React.Suspense fallback={null}>
+                    <DashboardWorkspace
+                      project={selectedProject.id}
+                      backendUrl={BACKEND_URL}
+                      onClose={() => setTableroOpen(false)}
+                    />
+                  </React.Suspense>
                 )}
 
                 {/* 🔗 Live Link Web ↔ Revit: vive como chip en la barra inferior (rightSlot) */}
@@ -4105,7 +4360,7 @@ function App() {
                       title={isNativeAR() ? 'Realidad Aumentada (ARCore)' : 'Realidad Aumentada (navegador)'}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', height: 26,
-                        background: '#7e9bbd', color: '#fff', border: 'none', borderRadius: 15,
+                        background: '#7e9bbd', color: '#fff', border: 'none', borderRadius: 6,
                         fontWeight: 700, fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap',
                       }}
                     >

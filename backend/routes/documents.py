@@ -1737,11 +1737,19 @@ def share_document():
     model_urn = data.get('model_urn')
     shared_by = data.get('shared_by', 'system')
     role = data.get('role', 'viewer')
-    access_type = data.get('access_type', 'restricted')
+    access_type = data.get('access_type')
     expires_days = data.get('expires_days')  # None/0 = sin vencimiento
 
     if not node_id or not model_urn:
         return jsonify({"success": False, "error": "Missing node_id or model_urn"}), 400
+
+    # No existe aún una ACL por invitado para document_shares. Un UUID público
+    # marcado como restringido sería una promesa falsa: para el piloto sólo se
+    # emiten enlaces explícitamente públicos y de solo lectura.
+    if access_type != 'anyone':
+        return jsonify({"success": False, "error": "Los enlaces restringidos por invitado aún no están disponibles. Usa permisos de carpeta para usuarios con sesión."}), 400
+    if role != 'viewer':
+        return jsonify({"success": False, "error": "Los enlaces públicos del piloto son solo de lectura."}), 400
 
     # ── Crear un enlace público expone el archivo fuera de la plataforma:
     #    exigir acceso al proyecto y permiso de edición sobre el nodo ──

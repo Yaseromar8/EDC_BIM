@@ -1,11 +1,28 @@
 import os
 from datetime import datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from werkzeug.security import generate_password_hash, check_password_hash
 from db import get_db_connection
-from auth_middleware import create_session, revoke_session
+from auth_middleware import create_session, revoke_session, create_handoff_ticket, consume_handoff_ticket
 
 auth_bp = Blueprint('auth', __name__)
+
+
+def _require_admin(accion="esta acción"):
+    """Guard de administrador para gestión de usuarios.
+
+    Estos endpoints (invitar/eliminar usuarios y asignar accesos a proyectos)
+    confiaban SOLO en que el frontend escondiera el botón — sin validar el rol
+    en el servidor. Expuestos en producción eso permitía escalada de privilegios
+    (crear un usuario con role='admin'). Mismo patrón que routes/documents.py.
+    """
+    user = getattr(g, 'current_user', None)
+    if not user:
+        # Sin sesión: lo maneja el middleware de autenticación.
+        return None
+    if user.get('role') != 'admin':
+        return jsonify({'error': f'Solo los administradores pueden {accion}.'}), 403
+    return None
 
 def ensure_users_tables():
     """Crea las tablas de usuarios y la relación con proyectos si no existen"""
@@ -141,7 +158,9 @@ def google_auth():
                     'id': user[0],
                     'name': user[1],
                     'email': user[2],
-                    'role': user[4],
+                    # La cuarta columna es el rol; user[4] es la compañía y
+                    # hacía que un admin autenticado con Google perdiera acceso.
+                    'role': user[3],
                     'company': user[5],
                     'job_title': user[6],
                     'session_token': create_session(user[0])
@@ -217,6 +236,25 @@ def logout():
         revoke_session(token)
     return jsonify({'success': True}), 200
 
+
+@auth_bp.route('/api/auth/handoff', methods=['POST'])
+def create_handoff():
+    """Entrega un ticket SSO efímero para abrir el Visor desde Docs."""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer ') or not getattr(g, 'current_user', None):
+        return jsonify({'error': 'No autenticado'}), 401
+    return jsonify({'ticket': create_handoff_ticket(auth_header[7:]), 'expires_in': 60})
+
+
+@auth_bp.route('/api/auth/handoff/exchange', methods=['POST'])
+def exchange_handoff():
+    """Canjea una única vez un ticket SSO por la sesión existente."""
+    ticket = (request.get_json(silent=True) or {}).get('ticket')
+    token = consume_handoff_ticket(ticket) if ticket else None
+    if not token:
+        return jsonify({'error': 'Ticket inválido o vencido'}), 401
+    return jsonify({'session_token': token})
+
 @auth_bp.route('/api/auth/register', methods=['POST'])
 def register():
     """Permite a un usuario crear su propia cuenta"""
@@ -248,14 +286,25 @@ def register():
                         WHERE id=%s
                     ''', (name, hashed_pw, company_id, job_title_id, u_id))
                     conn.commit()
+                    # session_token: sin él, el invitado quedaba "logueado" pero
+                    # todas sus llamadas autenticadas daban 401 hasta relogearse.
                     return jsonify({
                         'id': u_id, 'name': name, 'email': email, 'role': u_role,
-                        'company': company_id, 'job_title': job_title_id
+                        'company': company_id, 'job_title': job_title_id,
+                        'session_token': create_session(u_id)
                     }), 200
                 else:
                     return jsonify({'error': 'El correo electrónico ya está registrado y activo'}), 400
             else:
-                # Registro normal
+                # SOLO POR INVITACIÓN (por defecto). Antes cualquiera con la URL
+                # podía crearse una cuenta en producción. Para abrir el registro
+                # libre (p. ej. en una demo), setear ALLOW_OPEN_REGISTRATION=true.
+                if os.environ.get('ALLOW_OPEN_REGISTRATION', 'false').lower() != 'true':
+                    return jsonify({
+                        'error': 'El registro es solo por invitación. Pide a un administrador que te invite con este correo.'
+                    }), 403
+
+                # Registro normal (solo si el registro abierto está habilitado)
                 cursor.execute('''
                     INSERT INTO users (name, email, password_hash, role, company_id, job_title_id)
                     VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
@@ -273,6 +322,21 @@ def register():
             
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@auth_bp.route('/api/auth/me', methods=['GET'])
+def me():
+    """Devuelve el usuario de la sesión actual (para que el Visor hidrate al
+    entrar desde Docs con el token en la URL, sin re-loguear)."""
+    user = getattr(g, 'current_user', None)
+    if not user:
+        return jsonify({'error': 'No autenticado'}), 401
+    return jsonify({
+        'id': user.get('id'),
+        'name': user.get('name'),
+        'email': user.get('email'),
+        'role': user.get('role', 'user'),
+    }), 200
+
 
 @auth_bp.route('/api/auth/change-password', methods=['POST'])
 def change_password():
@@ -337,13 +401,19 @@ def manage_users():
             return jsonify({'error': str(e)}), 500
             
     elif request.method == 'POST':
+        denied = _require_admin("invitar usuarios")
+        if denied:
+            return denied
         try:
             data = request.get_json()
             email = data.get('email')
             role = data.get('role', 'user')
-            
+
             if not email:
                 return jsonify({'error': 'El correo es requerido'}), 400
+            # Solo roles conocidos: bloquea inyectar un rol arbitrario por payload.
+            if role not in ('user', 'editor', 'viewer', 'admin'):
+                return jsonify({'error': 'Rol inválido'}), 400
                 
             with get_db_connection() as conn:
                 cursor = conn.cursor()
@@ -363,6 +433,9 @@ def manage_users():
 @auth_bp.route('/api/users/<int:user_id>', methods=['DELETE'])
 def delete_user(user_id):
     """Elimina un usuario"""
+    denied = _require_admin("eliminar usuarios")
+    if denied:
+        return denied
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -466,6 +539,9 @@ def get_project_users(project_id):
 @auth_bp.route('/api/projects/<project_id>/users', methods=['POST'])
 def update_project_users(project_id):
     """Actualiza la lista de usuarios asignados a un proyecto (reemplazo total)"""
+    denied = _require_admin("asignar usuarios a un proyecto")
+    if denied:
+        return denied
     try:
         data = request.get_json()
         user_ids = data.get('user_ids', [])

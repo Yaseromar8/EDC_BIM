@@ -10,6 +10,143 @@ const BACKEND_URL = VITE_API_URL || (
         : 'https://visor-ecd-backend.onrender.com'
 );
 
+// ── Zonas del frente (varios DWG sobre el MISMO eje) ────────────────────────
+// Un archivo Civil = una zona; el backend fusiona sus estaciones por eje (en
+// solape manda el más reciente). Aquí se lista cada zona con el estado de sus
+// SECCIONES y de sus TOPOGRAFÍAS (estas últimas alimentan el modo
+// "Topografía" del holograma) y se pueden extraer las topografías que falten
+// — mismo flujo de workitem que las secciones.
+const zonaBtnMini = {
+    height: 20, padding: '0 8px', background: 'transparent', color: '#8ecbff',
+    border: '1px solid #3aa0ff', borderRadius: 4, fontSize: 10.5, fontWeight: 700, cursor: 'pointer',
+};
+
+function ZonasFrente({ scopeUrn, resolveProjectId }) {
+    const [zonas, setZonas] = useState([]);
+    const [surf, setSurf] = useState({});
+    const [busy, setBusy] = useState({});   // urn -> texto de estado en curso
+
+    const load = useCallback(async () => {
+        if (!scopeUrn) return;
+        try {
+            const [rs, rf] = await Promise.all([
+                apiFetch(`${BACKEND_URL}/api/civil/sections?scope_urn=${encodeURIComponent(scopeUrn)}&meta=1`),
+                apiFetch(`${BACKEND_URL}/api/civil/surfaces?scope_urn=${encodeURIComponent(scopeUrn)}&meta=1`),
+            ]);
+            const ds = await rs.json().catch(() => ({}));
+            const df = await rf.json().catch(() => ({}));
+            setZonas(Array.isArray(ds.items) ? ds.items : []);
+            const map = {};
+            (Array.isArray(df.items) ? df.items : []).forEach(it => { map[it.urn] = it; });
+            setSurf(map);
+        } catch { /* noop */ }
+    }, [scopeUrn]);
+    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        const on = () => load();
+        window.addEventListener('civil-data-changed', on);
+        return () => window.removeEventListener('civil-data-changed', on);
+    }, [load]);
+
+    const extraerTopo = async (urn) => {
+        setBusy(prev => ({ ...prev, [urn]: 'Lanzando…' }));
+        try {
+            const r = await apiFetch(`${BACKEND_URL}/api/civil/extract-surfaces`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    urn,
+                    scope_urn: scopeUrn,
+                    // el panel conoce el proyecto ACC del archivo cargado; el
+                    // backend lo usa si la fila guardada no lo trae
+                    project_id: (resolveProjectId && resolveProjectId(urn)) || undefined,
+                }),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok || !d.workitem_id) throw new Error(d.detail || d.error || 'no se pudo lanzar');
+            const wid = d.workitem_id;
+            let ok = false;
+            for (let i = 0; i < 72; i++) {
+                await new Promise(res => setTimeout(res, 5000));
+                const rs = await apiFetch(`${BACKEND_URL}/api/civil/workitem-status/${wid}`);
+                const sd = await rs.json().catch(() => ({}));
+                const st = String(sd.status || '');
+                setBusy(prev => ({ ...prev, [urn]: `Civil 3D en la nube… (${st || 'en cola'})` }));
+                if (st === 'success') { ok = true; break; }
+                if (st.startsWith('failed') || st === 'cancelled') {
+                    // el reporte de Design Automation dice la causa real
+                    const tail = String(sd.report_tail || '');
+                    const clue = tail.split('\n').reverse()
+                        .find(l => /error|fail|denied|forbidden|not found/i.test(l));
+                    throw new Error(`workitem ${st}${clue ? ' · ' + clue.trim().slice(0, 120) : ''}`);
+                }
+            }
+            if (!ok) throw new Error('tiempo agotado');
+            setBusy(prev => ({ ...prev, [urn]: 'Guardando…' }));
+            const rr = await apiFetch(`${BACKEND_URL}/api/civil/alignment-result?workitem_id=${encodeURIComponent(wid)}`);
+            const data = await rr.json();
+            if (!rr.ok || !Array.isArray(data.surfaces)) throw new Error('resultado ilegible');
+            const rp = await apiFetch(`${BACKEND_URL}/api/civil/surfaces`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    urn, scope_urn: scopeUrn, data,
+                    display_name: `Topografías (${data.surfaces.length} superficies)`,
+                }),
+            });
+            if (!rp.ok) throw new Error('no se pudo guardar');
+            setBusy(prev => ({ ...prev, [urn]: null }));
+            window.dispatchEvent(new CustomEvent('civil-data-changed'));
+        } catch (e) {
+            setBusy(prev => ({ ...prev, [urn]: `Error: ${e.message}` }));
+        }
+    };
+
+    if (!zonas.length) return null;
+    return (
+        <div style={{
+            marginTop: 14, border: '1px solid rgba(255,255,255,0.10)', borderRadius: 6,
+            background: 'rgba(255,255,255,0.03)', padding: '10px 12px',
+        }}>
+            <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#8a919c', fontWeight: 700, marginBottom: 4 }}>
+                Zonas del frente ({zonas.length})
+            </div>
+            {zonas.map(z => {
+                const sf = surf[z.urn];
+                const stale = sf && z.updated_at && String(sf.updated_at) < String(z.updated_at);
+                const b = busy[z.urn];
+                return (
+                    <div key={z.urn} style={{ padding: '6px 0', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                        <div
+                            style={{ fontSize: 11.5, color: '#c8cdd6', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            title={z.display_name || z.urn}
+                        >
+                            {(z.display_name || `…${z.urn.slice(-10)}`).replace(/\.dwg$/i, '')}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, fontSize: 10.5, flexWrap: 'wrap' }}>
+                            <span style={{ color: '#22c55e' }}>✓ Secciones {String(z.updated_at || '').slice(0, 10)}</span>
+                            {b ? (
+                                <span style={{ color: b.startsWith('Error') ? '#f87171' : '#3aa0ff' }}>{b}</span>
+                            ) : sf ? (
+                                <>
+                                    <span style={{ color: stale ? '#eab308' : '#22c55e' }} title={stale ? 'Las secciones son más nuevas que las topografías' : ''}>
+                                        {stale ? '⚠' : '✓'} Topografías {String(sf.updated_at || '').slice(0, 10)}
+                                    </span>
+                                    {stale && (
+                                        <button onClick={() => extraerTopo(z.urn)} style={zonaBtnMini} title="Re-extraer topografías">↻</button>
+                                    )}
+                                </>
+                            ) : (
+                                <button onClick={() => extraerTopo(z.urn)} style={zonaBtnMini}>Extraer topografías</button>
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
 const getCivilSession = () => {
     if (typeof window === 'undefined') return { records: {}, lastKey: null };
     if (!window.__civilToolsSession) {
@@ -509,9 +646,12 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                     if (!seenUrns.has(item.urn)) {
                         const docMatch = docs.find(doc => doc.urn === item.urn);
                         const fecha = String(item.updated_at || '').slice(0, 10);
+                        // prioridad: nombre del doc vinculado → nombre guardado con
+                        // la extracción (display_name) → etiqueta genérica (legado)
                         combined.push({
                             urn: item.urn,
-                            name: docMatch ? docMatch.name : `Carga en la nube${fecha ? ` · ${fecha}` : ''} (${item.urn.substring(0, 10)}…)`
+                            name: docMatch?.name || item.display_name
+                                || `Carga en la nube${fecha ? ` · ${fecha}` : ''} (${item.urn.substring(0, 10)}…)`
                         });
                         seenUrns.add(item.urn);
                     }
@@ -549,6 +689,38 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
             .catch(() => { });
         return () => { alive = false; };
     }, [activeCacheKey, activeModelUrn, docs, dwgModelsList, selectedDwgUrn]);
+
+    // Estado de secciones POR ARCHIVO (chip "✓ Secciones · fecha" y jerarquía
+    // de botones). Listado LIGERO (?meta=1): urns y fechas, sin JSONB pesados.
+    const [sectionsMetaByUrn, setSectionsMetaByUrn] = useState({});
+    const refreshSectionsMeta = useCallback(() => {
+        if (!civilScopeUrn) return;
+        apiFetch(`${BACKEND_URL}/api/civil/sections?scope_urn=${encodeURIComponent(civilScopeUrn)}&meta=1`)
+            .then((r) => r.json())
+            .then((d) => {
+                const map = {};
+                (d.items || []).forEach((it) => { map[it.urn] = { updated_at: it.updated_at }; });
+                setSectionsMetaByUrn(map);
+            })
+            .catch(() => { /* sin red: los chips simplemente no se muestran */ });
+    }, [civilScopeUrn]);
+    useEffect(() => { refreshSectionsMeta(); }, [refreshSectionsMeta]);
+
+    // Nombre legible para persistir junto a la extracción (nunca la etiqueta
+    // genérica de legado, que congelaría "Carga en la nube…" en la BD)
+    const displayNameForUrn = useCallback((urn) => {
+        const n = availableCivilFiles.find((f) => f.urn === urn)?.name || '';
+        return n && !n.startsWith('Carga en la nube') ? n : null;
+    }, [availableCivilFiles]);
+
+    // Aviso global: la data civil del frente cambió (extraer/actualizar/borrar)
+    // — el holograma y otros consumidores refrescan su caché.
+    const notifyCivilChanged = useCallback(() => {
+        refreshSectionsMeta();
+        try {
+            window.dispatchEvent(new CustomEvent('civil-data-changed', { detail: { scope: civilScopeUrn } }));
+        } catch { /* noop */ }
+    }, [civilScopeUrn, refreshSectionsMeta]);
 
     useEffect(() => {
         const handleContextChange = (e) => {
@@ -885,9 +1057,11 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                 model_urn: civilScopeUrn,
                                 scope_urn: civilScopeUrn,
                                 acc_project_id: realProjectId,
+                                display_name: displayNameForUrn(realUrn),
                                 data: alignmentJSON
                             })
-                        }).catch((e) => console.warn('[CivilTools] No se pudo persistir la extracción:', e));
+                        }).then(() => notifyCivilChanged())
+                          .catch((e) => console.warn('[CivilTools] No se pudo persistir la extracción:', e));
 
                         if (alignmentJSON.length > 0) {
                             const first = alignmentJSON[0];
@@ -1042,10 +1216,12 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                                     model_urn: civilScopeUrn,
                                     scope_urn: civilScopeUrn,
                                     acc_project_id: realProjectId,
+                                    display_name: displayNameForUrn(realUrn),
                                     data: merged
                                 })
                             });
                         } catch (e) { console.warn('[Sections] No se pudo persistir:', e); }
+                        notifyCivilChanged();
 
                         const warns = (!Array.isArray(result) && result.warnings?.length)
                             ? ` · ${result.warnings.length} avisos` : '';
@@ -1198,6 +1374,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        display_name: displayNameForUrn(realUrn),
                         urn: realUrn,
                         model_urn: civilScopeUrn,
                         scope_urn: civilScopeUrn,
@@ -1206,6 +1383,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                     })
                 });
             } catch (e) { console.warn('[Sections] No se pudo persistir:', e); }
+            notifyCivilChanged();
 
             const warns = attemptWarnings.length ? ` - ${attemptWarnings.length} avisos` : '';
             const fallback = usedFallback ? ' - recuperado sin filtro de eje' : '';
@@ -1281,6 +1459,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
         setCivilOriginalUrn('');
         window.__lobCivilAlignments = null;
         clearSelection();
+        notifyCivilChanged();
         persistCache({
             alignmentData: [],
             civilOriginalUrn: '',
@@ -1300,6 +1479,14 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
     const currentProfileLabel = selectedProfile
         ? `${selectedAlignment?.alignmentId || ''} / ${selectedProfile.name}`
         : selectedAlignment?.alignmentId || 'Buscar eje o perfil...';
+
+    // Estado del archivo activo → guía del flujo: con ejes ya extraídos,
+    // "Extraer" pasa a secundario (actualizar) y "Secciones" es el siguiente
+    // paso natural (primario) hasta que existan.
+    const activeFileUrn = civilOriginalUrn || selectedDwgUrn || activeModelUrn;
+    const activeSectionsMeta = sectionsMetaByUrn[activeFileUrn] || null;
+    const hasEjes = Array.isArray(alignmentData) && alignmentData.length > 0;
+    const secPrimary = hasEjes && !activeSectionsMeta && !isExtracting;
 
     return (
         <div className="source-files-panel" style={{ minWidth: 0 }}>
@@ -1350,6 +1537,21 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                     </select>
                 )}
 
+                {/* Estado del archivo: qué hay extraído y qué falta (guía del flujo) */}
+                {(hasEjes || activeSectionsMeta) && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, margin: '-6px 2px -4px', color: '#8b95a5' }}>
+                        <span style={{ color: hasEjes ? '#7fd6a4' : '#8b95a5' }}>
+                            {hasEjes ? `✓ Ejes (${alignmentData.length})` : 'Ejes: sin extraer'}
+                        </span>
+                        <span>·</span>
+                        <span style={{ color: activeSectionsMeta ? '#7fd6a4' : '#e0a63f' }}>
+                            {activeSectionsMeta
+                                ? `✓ Secciones (${String(activeSectionsMeta.updated_at || '').slice(0, 10)})`
+                                : 'Secciones: sin extraer'}
+                        </span>
+                    </div>
+                )}
+
                 <div style={{ position: 'relative', display: 'flex', gap: 8 }}>
                     <button
                         type="button"
@@ -1377,12 +1579,14 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                         type="button"
                         onClick={handleExtractCurves}
                         disabled={isExtracting}
-                        title="Extraer curvas desde Civil 3D"
+                        title={hasEjes
+                            ? 'Actualizar ejes: re-extraer desde el DWG (reemplaza lo guardado)'
+                            : 'Extraer ejes y perfiles desde Civil 3D'}
                         style={{
                             height: 34,
                             border: '1px solid #3aa0ff',
-                            background: isExtracting ? '#3a3f47' : '#0078d4',
-                            color: '#fff',
+                            background: isExtracting ? '#3a3f47' : (hasEjes ? 'transparent' : '#0078d4'),
+                            color: (isExtracting || !hasEjes) ? '#fff' : '#8ecbff',
                             borderRadius: 4,
                             padding: '0 10px',
                             display: 'flex',
@@ -1394,20 +1598,22 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                             whiteSpace: 'nowrap'
                         }}
                     >
-                        <DownloadIcon />
-                        {isExtracting ? `${extractProgress}%` : 'Extraer'}
+                        {!hasEjes && <DownloadIcon />}
+                        {isExtracting ? `${extractProgress}%` : (hasEjes ? '↻ Ejes' : 'Extraer')}
                     </button>
 
                     <button
                         type="button"
                         onClick={handleExtractSections}
                         disabled={isExtracting || isExtractingSections}
-                        title="Extraer secciones transversales desde Civil 3D"
+                        title={activeSectionsMeta
+                            ? 'Actualizar secciones (re-extraer desde Civil 3D)'
+                            : 'Extraer secciones transversales desde Civil 3D — siguiente paso'}
                         style={{
                             height: 34,
                             border: '1px solid #3aa0ff',
-                            background: isExtractingSections ? '#3a3f47' : 'transparent',
-                            color: isExtractingSections ? '#fff' : '#8ecbff',
+                            background: isExtractingSections ? '#3a3f47' : (secPrimary ? '#0078d4' : 'transparent'),
+                            color: (isExtractingSections || secPrimary) ? '#fff' : '#8ecbff',
                             borderRadius: 4,
                             padding: '0 10px',
                             display: 'flex',
@@ -1419,7 +1625,7 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                             whiteSpace: 'nowrap'
                         }}
                     >
-                        {isExtractingSections ? `${sectionProgress}%` : 'Sec'}
+                        {isExtractingSections ? `${sectionProgress}%` : (secPrimary ? 'Secciones' : (activeSectionsMeta ? '↻ Sec' : 'Sec'))}
                     </button>
 
                     <button
@@ -1871,6 +2077,10 @@ const CivilToolsPanel = ({ activeModelUrn, models = [], docs = [], onClose }) =>
                         )}
                     </div>
                 )}
+
+                {/* Zonas del frente: cada DWG extraído con el estado de sus
+                    secciones y topografías (fusión por eje en el backend) */}
+                <ZonasFrente scopeUrn={civilScopeUrn} resolveProjectId={resolveProjectId} />
             </div>
             
             {showSectionViewer && sectionJSON && (
