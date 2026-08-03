@@ -1,8 +1,19 @@
 // frontend-docs/src/components/DocumentViewer.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import PDFViewer from './PDFViewer';
 import { apiFetch } from '../utils/apiFetch';
 import { getRecentPdfUrl } from '../utils/recentPdfCache';
+
+// El visor CAD arrastra el visor de Autodesk: diferido para que no pese en el
+// arranque de quien nunca abre un DWG.
+const CadViewer = lazy(() => import('./CadViewer'));
+
+// Formatos que Model Derivative sabe traducir. Debe ir en paralelo con
+// CAD_EXTENSIONS de backend/routes/docs_cad.py.
+const CAD_EXTENSIONS = [
+  '.dwg', '.dxf', '.dwf', '.dwfx', '.rvt', '.rfa', '.ifc', '.nwd', '.nwc',
+  '.dgn', '.3dm', '.sat', '.step', '.stp', '.iges', '.igs', '.obj', '.fbx', '.stl',
+];
 
 // Utility formatters
 function formatDate(iso) {
@@ -328,7 +339,21 @@ export default function DocumentViewer({
               nodeId={isShared ? null : file.id} projectPrefix={projectPrefix} />;
           }
 
-          // 6. DEFAULT FALLBACK (Iframe genérico)
+          // 6. CAD / BIM: DWG de Civil 3D, RVT, IFC... El navegador no sabe
+          //    dibujarlos, así que el iframe genérico acababa DESCARGANDO el
+          //    archivo. Se traducen con Model Derivative y se muestran con el
+          //    visor de Autodesk, el mismo que usa ACC por dentro.
+          //    En vistas compartidas no: un invitado no debe poder gastar
+          //    créditos de traducción.
+          if (!isShared && CAD_EXTENSIONS.some(ext => lowerName.endsWith(ext))) {
+            return (
+              <Suspense fallback={<div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>}>
+                <CadViewer file={file} />
+              </Suspense>
+            );
+          }
+
+          // 7. DEFAULT FALLBACK (Iframe genérico)
           return (
             <iframe 
               src={fileUrl} 

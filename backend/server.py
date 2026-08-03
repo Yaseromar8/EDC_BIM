@@ -728,12 +728,14 @@ from routes.link import link_bp
 from routes.dashboards import dashboards_bp
 from routes.civil_ghost import civil_ghost_bp
 from routes.civil_solids import civil_solids_bp
+from routes.docs_cad import docs_cad_bp
 
 app.register_blueprint(digital_twin_bp)
 app.register_blueprint(link_bp)
 app.register_blueprint(dashboards_bp)
 app.register_blueprint(civil_ghost_bp)
 app.register_blueprint(civil_solids_bp)
+app.register_blueprint(docs_cad_bp)   # ver DWG/Civil/IFC dentro de Documentos
 app.register_blueprint(civil_da_bp)
 app.register_blueprint(audit_bp)
 app.register_blueprint(diag_bp)

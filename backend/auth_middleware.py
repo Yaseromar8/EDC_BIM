@@ -27,6 +27,9 @@ else:
 
 # Endpoints that don't require authentication
 PUBLIC_ENDPOINTS = {
+    # Latido de servicio: debe responder SIN sesion. Es lo que se consulta
+    # cuando el backend no contesta, justo cuando nadie puede autenticarse.
+    '/api/health',
     '/api/auth/login',
     '/api/auth/register', 
     '/api/auth/google',
