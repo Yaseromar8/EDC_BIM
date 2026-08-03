@@ -29,7 +29,7 @@ import DocPinPanel from './components/DocPinPanel';
 import InventoryDataGrid from './components/InventoryDataGrid';
 import BudgetTree from './components/BudgetTree';
 import TandemSidebar from './components/TandemSidebar';
-import TandemFilterPanel from './components/TandemFilterPanel';
+import TandemFilterPanel, { restoreSourceTints } from './components/TandemFilterPanel';
 import PdfReader from './components/PdfReader';
 import CompareView from './components/CompareView';
 import LOB4DPanel from './components/LOB4DPanel';
@@ -710,11 +710,16 @@ function App() {
   }, []);
 
   const [models, setModels] = useState([]);
+  // Espejo de `models` para leerlos desde temporizadores y callbacks sin
+  // arrastrar una lista obsoleta (la restauracion de vistas pinta a +500 ms,
+  // cuando la lista pudo haber cambiado).
+  const modelsRef = useRef([]);
   const [relinkTargetModel, setRelinkTargetModel] = useState(null); // Relink State
   const [extractionJobs, setExtractionJobs] = useState({}); // Tracking BG extractions
   const pollIntervalsRef = useRef({}); // intervalos de sondeo de extracción por urn (para topar/limpiar)
 
   const [hiddenModelUrns, setHiddenModelUrns] = useState([]);
+  useEffect(() => { modelsRef.current = models; }, [models]);
 
   // Shared View Mode
   const [isSharedMode, setIsSharedMode] = useState(() => !!new URLSearchParams(window.location.search).get('shareView'));
@@ -1573,9 +1578,16 @@ function App() {
         window.dispatchEvent(new CustomEvent('custom-colors-restored', { detail: fs.customValueColors }));
       }
 
-      // Restaurar el coloreo por Source. Se avisa siempre (aunque venga
-      // apagado) para que el panel se ponga en el estado exacto de la vista y
-      // no herede el del momento anterior.
+      // Restaurar el coloreo por Source. Se PINTA aqui directamente, sin
+      // depender de que el panel de Filtros este abierto — al cargar una vista
+      // estas en el panel de Vistas, y antes el aviso no lo escuchaba nadie.
+      // El evento se emite ademas para que el panel, si esta montado, ponga
+      // sus puntitos al dia; y si se abre despues, sus estados iniciales ya
+      // leen los globales que acabamos de fijar.
+      try {
+        restoreSourceTints(window.NOP_VIEWER, modelsRef.current || [],
+                           !!fs.sourceColorOn, fs.sourceCustomColors || {});
+      } catch (e) { console.warn('[App] No se pudo restaurar el color por Source:', e); }
       window.dispatchEvent(new CustomEvent('ecd-source-tints-restore', {
         detail: { on: !!fs.sourceColorOn, customColors: fs.sourceCustomColors || {} },
       }));

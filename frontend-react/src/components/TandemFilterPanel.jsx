@@ -309,6 +309,50 @@ const SOURCE_PRESET_COLORS = [
     '#84CC16', '#22D3EE', '#FB923C',
 ];
 
+// RESTAURAR EL COLOREO POR SOURCE DESDE UNA VISTA GUARDADA.
+//
+// Vive a nivel de MODULO, no dentro del componente, y ese es justo el punto:
+// el panel de Filtros solo se monta cuando esta abierto (TandemSidebar lo
+// renderiza bajo `activePanel === 'filters'`), pero una vista se carga desde el
+// panel de VISTAS. Si la restauracion dependiera del componente, nadie estaria
+// escuchando y los modelos volvian en gris — que es exactamente lo que pasaba.
+//
+// El modulo se importa siempre, asi que esta funcion existe desde el arranque.
+export function restoreSourceTints(viewer, models, on, customColors) {
+    const colores = customColors || {};
+    const lista = models || [];
+    // Mismo criterio que sourceTintOf: color propio si lo hay; si no, el de la
+    // paleta segun la POSICION del modelo — el punto del panel y el 3D deben
+    // coincidir, y por eso la regla tiene que ser una sola.
+    const asignado = {};
+    if (on) {
+        lista.forEach((m, i) => {
+            const k = normUrn(m.urn);
+            const propio = colores[k];
+            if (propio === 'none') return;              // excluido a proposito
+            asignado[k] = propio || SOURCE_TINT_PALETTE[i % SOURCE_TINT_PALETTE.length];
+        });
+    }
+    window.__ecdSourceColorOn = !!on;
+    window.__ecdSourceCustomColors = colores;
+    window.__ecdSourceAssigned = asignado;
+
+    if (!viewer) return;
+    try {
+        if (!on) {
+            // La vista se guardo sin coloreo: quitar el que hubiera.
+            window.__ecdTintApplying = true;
+            (viewer.getAllModels ? viewer.getAllModels() : []).forEach(lmv => {
+                try { viewer.clearThemingColors(lmv); } catch { /* noop */ }
+            });
+            window.__ecdTintApplying = false;
+            if (viewer.impl) viewer.impl.invalidate(false, true, false);
+            return;
+        }
+        window.__ecdReapplySourceTints(viewer);
+    } catch { /* noop */ }
+}
+
 const TandemFilterPanel = ({
     models,
     hiddenModelUrns,
