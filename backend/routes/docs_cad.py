@@ -203,6 +203,18 @@ def _start_translation(token, urn, force=False, root_filename=None):
     return r.json(), None
 
 
+def _first_error(manifest):
+    """Primer mensaje de error del manifiesto, para guardar la causa real."""
+    for d in (manifest or {}).get('derivatives', []):
+        for msg in (d.get('messages') or []):
+            if msg.get('type') == 'error':
+                t = msg.get('message')
+                if isinstance(t, list):
+                    t = ' | '.join(str(x) for x in t)
+                return str(t)[:300]
+    return None
+
+
 def _manifest(token, urn):
     r = requests.get(
         '%s/modelderivative/v2/designdata/%s/manifest' % (APS_BASE, urn),
@@ -266,7 +278,13 @@ def _load_node(node_id):
         # Referencias: los archivos de LA MISMA CARPETA que este dibujo puede
         # necesitar. El usuario sube el DWG y sus ortofotos como documentos
         # normales del CDE; el empaquetado es cosa nuestra y no se ve.
-        if node['parent_id'] and node['name'].lower().endswith(HOST_EXTENSIONS):
+        #
+        # `skip_refs` es la marca de rendicion: si el paquete ya hizo fracasar
+        # una traduccion, se vuelve al dibujo suelto. Mas vale el plano sin su
+        # ortofoto que una pantalla de error — y hay formatos raster que tumban
+        # al extractor de Autodesk (visto con .ecw: exit code -1073741831).
+        salta_refs = bool(((node['meta'] or {}).get('cad') or {}).get('skip_refs'))
+        if not salta_refs and node['parent_id'] and node['name'].lower().endswith(HOST_EXTENSIONS):
             cur.execute("""
                 SELECT name, gcs_urn, COALESCE(size_bytes, 0)
                 FROM file_nodes
@@ -470,4 +488,20 @@ def cad_status():
         # propios de Civil se traducen como graficos proxy.
         _save_cad_meta(node, {'status': status, 'finished_at': time.time()})
 
-    return jsonify({'success': True, 'status': status, 'progress': progress, 'urn': urn})
+    # RENDICION ELEGANTE: si lo que fracaso fue el PAQUETE, se prescinde de las
+    # referencias y se reintenta con el dibujo suelto. El usuario acaba viendo
+    # su plano —sin la ortofoto— en vez de un error.
+    if status in ('failed', 'timeout') and node.get('refs'):
+        _save_cad_meta(node, {'skip_refs': True, 'pkg_error': _first_error(manifest)})
+        return jsonify({
+            'success': True, 'status': 'retry_plain',
+            'aviso': ('No se pudo procesar %s junto al dibujo. Se muestra el plano '
+                      'sin esa imagen.' % ', '.join(r['name'] for r in node['refs'])),
+        })
+
+    payload = {'success': True, 'status': status, 'progress': progress, 'urn': urn}
+    if status == 'success' and cad.get('pkg_error'):
+        payload['aviso'] = ('El plano se ve completo salvo la imagen adjunta, que '
+                            'Autodesk no pudo procesar. Si la necesitas, subela en '
+                            'formato GeoTIFF (.tif + .tfw).')
+    return jsonify(payload)

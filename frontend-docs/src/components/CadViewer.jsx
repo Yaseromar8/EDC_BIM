@@ -52,6 +52,7 @@ export default function CadViewer({ file }) {
   const [phase, setPhase] = useState('preparando');   // preparando | traduciendo | listo | error
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
+  const [aviso, setAviso] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -119,8 +120,15 @@ export default function CadViewer({ file }) {
         if (cancelled) return;
         if (!d.success) return fail(d.error || 'No se pudo consultar el estado.');
         if (d.status === 'success') return mount(d.urn);
+        if (d.status === 'retry_plain') {
+          // El paquete con la imagen adjunta fracasó; el backend ya se rindió
+          // con ella. Se pide de nuevo, ahora del dibujo suelto.
+          setAviso(d.aviso || '');
+          setPhase('preparando');
+          return arrancar();
+        }
         if (d.status === 'failed' || d.status === 'timeout') {
-          return fail('Autodesk no pudo traducir este archivo. Puede que esté dañado o use referencias externas (xrefs) que no se subieron.');
+          return fail('Autodesk no pudo traducir este dibujo: puede estar dañado o guardado en un formato que su traductor no admite.');
         }
         if (d.status === 'none') {
           // APS no tiene nada de este archivo: la subida no llegó a cuajar.
@@ -134,9 +142,9 @@ export default function CadViewer({ file }) {
       }
     };
 
-    (async () => {
+    const arrancar = async () => {
       try {
-        const d = await pedirTraduccion(file.id, async () => {
+        const d = await pedirTraduccion(file.id + ':' + Date.now(), async () => {
           const r = await apiFetch(`${API}/api/docs/cad/translate`, {
             method: 'POST',
             body: JSON.stringify({ node_id: file.id }),
@@ -151,7 +159,9 @@ export default function CadViewer({ file }) {
       } catch {
         fail('No se pudo contactar con el servidor.');
       }
-    })();
+    };
+
+    arrancar();
 
     return () => {
       cancelled = true;
@@ -164,6 +174,23 @@ export default function CadViewer({ file }) {
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', background: '#2b2f36' }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+
+      {/* Aviso discreto: el plano se ve, solo faltó algo accesorio. No es un
+          error y no debe ocupar la pantalla como si lo fuera. */}
+      {aviso && phase === 'listo' && (
+        <div style={{
+          position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
+          maxWidth: '80%', background: 'rgba(20,22,26,0.92)', color: '#dfe3e9',
+          border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8,
+          padding: '8px 14px', fontSize: 12.5, lineHeight: 1.45, zIndex: 5,
+        }}>
+          {aviso}
+          <button onClick={() => setAviso('')} style={{
+            marginLeft: 12, background: 'none', border: 'none', color: '#98a1ad',
+            cursor: 'pointer', fontSize: 13,
+          }}>✕</button>
+        </div>
+      )}
 
       {phase !== 'listo' && (
         <div style={{
