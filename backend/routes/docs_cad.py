@@ -18,7 +18,9 @@ hay que volver a traducirla.
 import base64
 import json
 import os
+import tempfile
 import time
+import zipfile
 
 import requests
 from flask import Blueprint, request, jsonify, g
@@ -44,6 +46,31 @@ CAD_EXTENSIONS = (
 
 # Traducciones que superan esto se dan por perdidas y se pueden relanzar.
 STALE_SECONDS = 60 * 60
+
+# Formatos que un DWG puede llevar ENGANCHADOS sin contenerlos: ortofotos,
+# imagenes insertadas y xrefs. AutoCAD guarda solo la RUTA a estos archivos, no
+# su contenido, asi que subir el .dwg suelto llega siempre incompleto — es lo
+# que avisa Autodesk con "Missing reference ... not uploaded".
+#
+# SOLO raster. Los xrefs entre dibujos quedan FUERA a proposito: dos planos en
+# la misma carpeta casi nunca se referencian entre si, y al incluirlos cada uno
+# arrastraba al otro — con archivos de 400 MB el paquete se vuelve absurdo.
+# Saber que DWG referencia a cual exige leer el propio DWG; hasta entonces, mas
+# vale quedarse corto que empaquetar de mas.
+REFERENCE_EXTENSIONS = (
+    '.tif', '.tiff', '.jpg', '.jpeg', '.png', '.bmp', '.gif',   # ortofotos e imagenes
+    '.ecw', '.sid', '.jp2', '.j2k',                              # raster comprimido de cartografia
+    '.tfw', '.jgw', '.pgw', '.wld',                              # world files (georreferencia)
+)
+
+# Formatos que ADMITEN referencias externas. Un RVT o un IFC se bastan solos.
+HOST_EXTENSIONS = ('.dwg', '.dxf', '.dgn')
+
+# Tope del paquete. Una ortofoto puede pesar cientos de MB y el backend vive en
+# una instancia modesta: mejor un aviso claro que quedarse sin memoria.
+MAX_PACKAGE_BYTES = 1024 * 1024 * 1024   # 1 GB
+# Por encima de esto la subida va troceada (S3 exige multipart en piezas).
+PART_SIZE = 90 * 1024 * 1024
 
 
 def is_cad_file(name):
@@ -77,14 +104,26 @@ def _ensure_bucket(token):
     return None, 'No se pudo preparar el bucket APS: %s' % r.text[:200]
 
 
-def _upload_to_oss(token, bucket, object_key, data):
+def _upload_to_oss(token, bucket, object_key, source, size=None):
     """Sube por S3 firmado (la subida directa a OSS esta descontinuada).
 
-    Tres pasos: pedir URL firmada, PUT a S3, y confirmar a APS.
+    `source` puede ser bytes o un fichero abierto en binario — un paquete con
+    ortofotos no cabe comodamente en memoria.
+
+    Tres pasos: pedir URL(es) firmada(s), PUT a S3, y confirmar a APS. Si el
+    tamaño supera PART_SIZE se pide una URL por trozo, porque S3 no admite un
+    PUT unico ilimitado.
     """
+    if size is None:
+        size = len(source) if isinstance(source, (bytes, bytearray)) else None
+    partes = 1
+    if size:
+        partes = max(1, (size + PART_SIZE - 1) // PART_SIZE)
+
     r = requests.get(
-        '%s/oss/v2/buckets/%s/objects/%s/signeds3upload' % (APS_BASE, bucket, object_key),
-        headers=_headers(token), timeout=30)
+        '%s/oss/v2/buckets/%s/objects/%s/signeds3upload?parts=%d'
+        % (APS_BASE, bucket, object_key, partes),
+        headers=_headers(token), timeout=60)
     if not r.ok:
         return None, 'No se pudo pedir la URL de subida: %s' % r.text[:200]
     info = r.json()
@@ -92,14 +131,26 @@ def _upload_to_oss(token, bucket, object_key, data):
     if not urls:
         return None, 'APS no devolvio URL de subida'
 
-    put = requests.put(urls[0], data=data, timeout=900)
-    if not put.ok:
-        return None, 'Fallo la subida del archivo a APS (%s)' % put.status_code
+    if isinstance(source, (bytes, bytearray)):
+        trozos = [source[i * PART_SIZE:(i + 1) * PART_SIZE] for i in range(len(urls))]
+        for url, trozo in zip(urls, trozos):
+            put = requests.put(url, data=trozo, timeout=1800)
+            if not put.ok:
+                return None, 'Fallo la subida a APS (%s)' % put.status_code
+    else:
+        source.seek(0)
+        for url in urls:
+            trozo = source.read(PART_SIZE)
+            if not trozo:
+                break
+            put = requests.put(url, data=trozo, timeout=1800)
+            if not put.ok:
+                return None, 'Fallo la subida a APS (%s)' % put.status_code
 
     done = requests.post(
         '%s/oss/v2/buckets/%s/objects/%s/signeds3upload' % (APS_BASE, bucket, object_key),
         headers=_headers(token, {'Content-Type': 'application/json'}),
-        json={'uploadKey': info.get('uploadKey')}, timeout=120)
+        json={'uploadKey': info.get('uploadKey')}, timeout=300)
     if not done.ok:
         return None, 'APS rechazo el cierre de la subida: %s' % done.text[:200]
 
@@ -112,7 +163,7 @@ def _urn_of(object_id):
     return base64.b64encode(object_id.encode('utf-8')).decode('utf-8').rstrip('=')
 
 
-def _start_translation(token, urn, force=False):
+def _start_translation(token, urn, force=False, root_filename=None):
     """Lanza la traduccion a SVF2 (2D y 3D).
 
     SIN forzar por defecto. Con `x-ads-force` cada peticion rehace el trabajo
@@ -132,6 +183,11 @@ def _start_translation(token, urn, force=False):
             'formats': [{'type': 'svf2', 'views': ['2d', '3d']}],
         },
     }
+    if root_filename:
+        # El paquete es un ZIP: hay que decirle cual de los archivos manda.
+        # Los demas (ortofotos, xrefs) los resuelve el solo dentro del ZIP.
+        payload['input']['compressedUrn'] = True
+        payload['input']['rootFilename'] = root_filename
     cabeceras = {'Content-Type': 'application/json'}
     if force:
         cabeceras['x-ads-force'] = 'true'
@@ -159,7 +215,14 @@ def _manifest(token, urn):
 
 
 def _object_key_for(node):
-    """Clave estable del objeto en APS para esta VERSION del archivo."""
+    """Clave estable del objeto en APS para esta VERSION del archivo.
+
+    Cambia si el dibujo pasa a llevar referencias: subir una ortofoto a la
+    carpeta cambia la clave, luego cambia el URN, luego se retraduce. Es lo
+    correcto — el dibujo completo NO es el mismo modelo que el dibujo suelto.
+    """
+    if node.get('refs'):
+        return 'docs-%s-pkg.zip' % (node['v_id'] or node['id'])
     ext = os.path.splitext(node['name'])[1].lower()
     return 'docs-%s%s' % (node['v_id'] or node['id'], ext)
 
@@ -181,22 +244,40 @@ def _load_node(node_id):
         cur = conn.cursor()
         cur.execute("""
             SELECT n.id, n.name, n.model_urn, n.gcs_urn, n.current_version_id,
+                   COALESCE(n.size_bytes, 0) AS tam,
                    -- El metadato puede estar en la version o, en archivos
                    -- antiguos sin versionar, en el propio nodo. Se fusionan con
                    -- la version a la derecha, que es la que manda.
                    COALESCE(n.metadata, '{}'::jsonb) || COALESCE(v.metadata, '{}'::jsonb),
-                   v.id
+                   v.id, n.parent_id
             FROM file_nodes n
             LEFT JOIN file_versions v ON v.id = n.current_version_id
             WHERE n.id = %s AND n.is_deleted = FALSE
         """, (node_id,))
         row = cur.fetchone()
-    if not row:
-        return None
-    return {
-        'id': row[0], 'name': row[1], 'model_urn': row[2], 'gcs_urn': row[3],
-        'version_id': row[4], 'meta': row[5] or {}, 'v_id': row[6],
-    }
+        if not row:
+            return None
+        node = {
+            'id': row[0], 'name': row[1], 'model_urn': row[2], 'gcs_urn': row[3],
+            'version_id': row[4], 'size': row[5] or 0, 'meta': row[6] or {},
+            'v_id': row[7], 'parent_id': row[8], 'refs': [],
+        }
+
+        # Referencias: los archivos de LA MISMA CARPETA que este dibujo puede
+        # necesitar. El usuario sube el DWG y sus ortofotos como documentos
+        # normales del CDE; el empaquetado es cosa nuestra y no se ve.
+        if node['parent_id'] and node['name'].lower().endswith(HOST_EXTENSIONS):
+            cur.execute("""
+                SELECT name, gcs_urn, COALESCE(size_bytes, 0)
+                FROM file_nodes
+                WHERE parent_id = %s AND id <> %s AND is_deleted = FALSE
+                  AND node_type = 'FILE' AND gcs_urn IS NOT NULL
+                ORDER BY name
+            """, (node['parent_id'], node['id']))
+            for nombre, gcs, tam in cur.fetchall():
+                if nombre.lower().endswith(REFERENCE_EXTENSIONS):
+                    node['refs'].append({'name': nombre, 'gcs_urn': gcs, 'size': tam or 0})
+    return node
 
 
 def _save_cad_meta(node, patch):
@@ -218,6 +299,49 @@ def _save_cad_meta(node, patch):
                 (json.dumps(meta), node['id']))
         conn.commit()
     return meta
+
+
+def _build_package(node):
+    """Arma el ZIP con el dibujo y sus referencias. Devuelve (fichero, tam, raiz).
+
+    Va a un fichero TEMPORAL, no a memoria: una ortofoto puede pesar cientos de
+    MB y el backend corre en una instancia modesta.
+
+    Todo se escribe PLANO, en la raiz del ZIP. AutoCAD guarda las rutas de sus
+    referencias de forma relativa o sin ruta, y con todo junto en el mismo nivel
+    es como mas veces resuelve.
+    """
+    total = (node.get('size') or 0) + sum(r['size'] for r in node['refs'])
+    if total > MAX_PACKAGE_BYTES:
+        return None, 0, None, ('El dibujo y sus referencias suman %d MB, mas del limite. '
+                               'Sube menos imagenes a esa carpeta o reduce su tamaño.'
+                               % (total // (1024 * 1024)))
+
+    tmp = tempfile.TemporaryFile()
+    try:
+        with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as z:
+            contenido, _ = get_blob_data(node['gcs_urn'])
+            if not contenido:
+                return None, 0, None, 'El dibujo esta vacio en GCS'
+            z.writestr(os.path.basename(node['name']), contenido)
+            for ref in node['refs']:
+                try:
+                    datos, _ = get_blob_data(ref['gcs_urn'])
+                except Exception:
+                    datos = None
+                if datos:
+                    # Una referencia que no se pueda leer no debe tumbar el
+                    # paquete: el dibujo se vera incompleto, pero se vera.
+                    z.writestr(os.path.basename(ref['name']), datos)
+        tam = tmp.tell()
+        tmp.seek(0)
+        return tmp, tam, os.path.basename(node['name']), None
+    except Exception as e:
+        try:
+            tmp.close()
+        except Exception:
+            pass
+        return None, 0, None, 'No se pudo armar el paquete: %s' % e
 
 
 @docs_cad_bp.route('/api/docs/cad/translate', methods=['POST'])
@@ -267,28 +391,44 @@ def translate_cad():
                 return jsonify({'success': True, 'status': 'inprogress',
                                 'progress': manifest.get('progress', ''), 'urn': urn})
 
-    try:
-        content, _ctype = get_blob_data(node['gcs_urn'])
-    except Exception as e:
-        return jsonify({'success': False, 'error': 'No se pudo leer de GCS: %s' % e}), 502
-    if not content:
-        return jsonify({'success': False, 'error': 'El archivo esta vacio en GCS'}), 400
-
     # Clave estable por version: re-traducir sobrescribe en vez de acumular.
     object_key = _object_key_for(node)
+    raiz = None
+    paquete = None
 
-    object_id, error = _upload_to_oss(token, bucket, object_key, content)
-    if error:
-        return jsonify({'success': False, 'error': error}), 502
+    if node.get('refs'):
+        # Dibujo CON referencias (ortofotos, xrefs): viaja en un ZIP junto a
+        # ellas. Model Derivative lo abre, resuelve lo que hay dentro y traduce.
+        paquete, tam, raiz, error = _build_package(node)
+        if error:
+            return jsonify({'success': False, 'error': error}), 400
+        object_id, error = _upload_to_oss(token, bucket, object_key, paquete, size=tam)
+        try:
+            paquete.close()
+        except Exception:
+            pass
+        if error:
+            return jsonify({'success': False, 'error': error}), 502
+    else:
+        try:
+            content, _ctype = get_blob_data(node['gcs_urn'])
+        except Exception as e:
+            return jsonify({'success': False, 'error': 'No se pudo leer de GCS: %s' % e}), 502
+        if not content:
+            return jsonify({'success': False, 'error': 'El archivo esta vacio en GCS'}), 400
+        object_id, error = _upload_to_oss(token, bucket, object_key, content)
+        if error:
+            return jsonify({'success': False, 'error': error}), 502
 
     # El URN se guarda ANTES de lanzar el trabajo. Si el trabajo fallara, el
     # URN sigue ahi y el estado se puede consultar: un fallo no deja el archivo
     # inalcanzable, que es lo que pasaba cuando el error borraba el URN.
     urn = _urn_of(object_id)
     _save_cad_meta(node, {'urn': urn, 'status': 'inprogress',
-                          'started_at': time.time(), 'object_key': object_key, 'error': None})
+                          'started_at': time.time(), 'object_key': object_key,
+                          'refs': [r['name'] for r in node.get('refs') or []], 'error': None})
 
-    _job, error = _start_translation(token, urn, force=forzar)
+    _job, error = _start_translation(token, urn, force=forzar, root_filename=raiz)
     if error:
         _save_cad_meta(node, {'status': 'failed', 'error': error})
         return jsonify({'success': False, 'error': error}), 502

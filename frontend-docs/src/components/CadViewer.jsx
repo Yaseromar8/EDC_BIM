@@ -96,7 +96,13 @@ export default function CadViewer({ file }) {
             const node = doc.getRoot().getDefaultGeometry();
             if (!node) return fail('La traducción no produjo ninguna vista visible.');
             viewer.loadDocumentNode(doc, node).then(() => {
-              if (!cancelled) setPhase('listo');
+              if (cancelled) return;
+              // Mismo sentido de scroll que el Visor 3D. El visor de Autodesk
+              // trae invertido el zoom con rueda por defecto, y tener dos
+              // comportamientos distintos entre productos desconcierta más que
+              // cualquiera de los dos. Ver Viewer.jsx:2520 — allí es lo mismo.
+              try { viewer.getNavigation?.()?.setReverseZoomDirection(false); } catch { /* noop */ }
+              setPhase('listo');
             });
           },
           (code, msg) => fail(`No se pudo abrir el modelo (${code}): ${msg || ''}`)
