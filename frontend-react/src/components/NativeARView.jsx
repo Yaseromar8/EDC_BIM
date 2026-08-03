@@ -78,7 +78,7 @@ export default function NativeARView({ onExit }) {
   // llamada de limpieza puede hacer transparente el lienzo: se compone opaco
   // siempre, y por eso el area del visor sale negra aunque la camara este ahi.
   const [transp, setTransp] = useState({ pasos: '', alpha: null });
-  const [arStats, setArStats] = useState({ frames: 0, state: '?', reason: '?' });
+  const [arStats, setArStats] = useState({ frames: 0, state: '?', reason: '?', ts: 0, cam: false, tex: -1, glError: '' });
   const statsCleanupRef = useRef(null);
   const oneToOneRef = useRef(1000); // unidades/metro para escala 1:1 real (según unidades del modelo)
   const [geo, setGeo] = useState(null); // última pose GPS { lat, lon, accuracy, heading, hasHeading }
@@ -441,6 +441,18 @@ export default function NativeARView({ onExit }) {
           frames AR: {arStats.frames} {arStats.frames === 0 ? '❌ el bucle NO corre' : ''}
         </div>
         <div>motivo ARCore: {arStats.reason}</div>
+        <div style={{ color: arStats.ts ? '#3ee87a' : '#ff6b6b' }}>
+          camara ts: {String(arStats.ts)} · pinta: {String(arStats.cam)}
+          {!arStats.ts ? ' ❌ SIN IMAGEN' : ''}
+        </div>
+        <div style={{ color: arStats.tex > 0 ? '#3ee87a' : '#ff6b6b' }}>
+          textura camara: {String(arStats.tex)} {arStats.tex > 0 ? '' : '❌ no creada'}
+        </div>
+        {arStats.glError ? (
+          <div style={{ color: '#ff6b6b', maxWidth: 260, wordBreak: 'break-word' }}>
+            GL: {arStats.glError}
+          </div>
+        ) : null}
         <div style={{ color: transp.alpha === false ? '#ff6b6b' : '#3ee87a' }}>
           gl.alpha: {String(transp.alpha)} {transp.alpha === false ? '❌ lienzo OPACO' : ''}
         </div>

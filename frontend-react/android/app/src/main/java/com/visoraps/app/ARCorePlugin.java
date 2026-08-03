@@ -88,6 +88,10 @@ public class ARCorePlugin extends Plugin {
     // dibujo no corre" y "corre pero no hay suficiente luz o textura".
     private long frameCount = 0L;
     private long lastStatsMs = 0L;
+    /** Ultimo error del hilo GL, para poder verlo desde la web. */
+    private volatile String glError = "";
+    /** true en cuanto ARCore tiene una textura valida donde escribir. */
+    private volatile boolean textureReady = false;
     private TrackingState lastState = null;
 
     // ── GPS + brújula ────────────────────────────────────────────────────────
@@ -364,7 +368,19 @@ public class ARCorePlugin extends Plugin {
         @Override
         public void onSurfaceCreated(GL10 gl, EGLConfig config) {
             GLES20.glClearColor(0f, 0f, 0f, 0f);
-            bgRenderer.createOnGlThread();
+            // La textura de camara se crea AQUI, y hasta ahora sin red de
+            // seguridad: si createOnGlThread lanzaba —un shader que no compila
+            // basta—, la excepcion salia del metodo y setCameraTextureName no
+            // llegaba a ejecutarse NUNCA. ARCore se quedaba sin textura donde
+            // escribir, getTimestamp() era 0 para siempre y la pantalla salia
+            // vacia mientras el bucle de dibujo seguia corriendo tan tranquilo.
+            textureReady = false;
+            try {
+                bgRenderer.createOnGlThread();
+                glError = "";
+            } catch (Throwable t) {
+                glError = "camara: " + String.valueOf(t.getMessage());
+            }
             // Si el shader de planos fallara, el AR debe seguir funcionando: la
             // malla es ayuda visual, no requisito para anclar.
             try {
@@ -372,8 +388,22 @@ public class ARCorePlugin extends Plugin {
                 planeRenderer.createOnGlThread();
             } catch (Throwable t) {
                 planeRenderer = null;
+                if (glError.isEmpty()) glError = "malla: " + String.valueOf(t.getMessage());
             }
-            if (session != null) session.setCameraTextureName(bgRenderer.getTextureId());
+            bindCameraTexture();
+        }
+
+        /** Entrega la textura a ARCore. Solo con un id valido. */
+        private void bindCameraTexture() {
+            try {
+                int tex = (bgRenderer != null) ? bgRenderer.getTextureId() : -1;
+                if (session != null && tex > 0) {
+                    session.setCameraTextureName(tex);
+                    textureReady = true;
+                }
+            } catch (Throwable t) {
+                glError = "bind: " + String.valueOf(t.getMessage());
+            }
         }
 
         @Override
@@ -389,13 +419,37 @@ public class ARCorePlugin extends Plugin {
 
         @Override
         public void onDrawFrame(GL10 gl) {
+            // PRUEBA DE VISIBILIDAD: mientras ARCore no rastrea, esta capa se
+            // limpia en MAGENTA en vez de transparente.
+            //
+            // Sirve para decidir algo que llevamos horas sin poder distinguir:
+            //   · se ve magenta -> la GLSurfaceView SI es visible, y lo que
+            //     falla es la imagen de camara o el propio tracking.
+            //   · sigue negro   -> la capa no se ve, y el problema es el
+            //     apilado de superficies, no ARCore.
+            // En cuanto el tracking arranca vuelve a transparente y no molesta.
+            if (lastState != TrackingState.TRACKING) {
+                GLES20.glClearColor(1f, 0f, 1f, 1f);
+            } else {
+                GLES20.glClearColor(0f, 0f, 0f, 0f);
+            }
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
             if (session == null || !running) return;
 
             try {
-                session.setCameraTextureName(bgRenderer.getTextureId());
+                // Reintento: si la textura no llego a crearse (o su creacion
+                // fallo), se vuelve a intentar aqui en vez de dejar la sesion
+                // inservible para siempre.
+                if (!textureReady) {
+                    if (bgRenderer.getTextureId() <= 0) {
+                        try { bgRenderer.createOnGlThread(); glError = ""; }
+                        catch (Throwable t) { glError = "camara: " + String.valueOf(t.getMessage()); }
+                    }
+                    bindCameraTexture();
+                }
                 Frame frame = session.update();
-                bgRenderer.draw(frame);
+                boolean camaraPintada = bgRenderer.draw(frame);
+                long tsCamara = frame.getTimestamp();
 
                 Camera camera = frame.getCamera();
                 TrackingState trackingState = camera.getTrackingState();
@@ -411,6 +465,13 @@ public class ARCorePlugin extends Plugin {
                     JSObject st = new JSObject();
                     st.put("frames", frameCount);
                     st.put("state", trackingState.name());
+                    // ts=0 significa que la CAMARA no entrega imagen: ARCore
+                    // corre en vacio. Es la diferencia entre "no dibujamos" y
+                    // "no hay nada que dibujar".
+                    st.put("ts", tsCamara);
+                    st.put("cam", camaraPintada);
+                    st.put("tex", bgRenderer != null ? bgRenderer.getTextureId() : -1);
+                    st.put("glError", glError);
                     try {
                         st.put("reason", camera.getTrackingFailureReason().name());
                     } catch (Throwable ignored) {
@@ -668,6 +729,8 @@ public class ARCorePlugin extends Plugin {
         lastPoseEmitNs = 0L;
         frameCount = 0L;
         lastStatsMs = 0L;
+        glError = "";
+        textureReady = false;
         lastState = null;
         planeRenderer = null;
         showPlanes = true;

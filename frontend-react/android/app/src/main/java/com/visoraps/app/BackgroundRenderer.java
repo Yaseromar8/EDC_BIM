@@ -93,9 +93,10 @@ public class BackgroundRenderer {
         }
     }
 
-    public void draw(Frame frame) {
+    /** @return true si llego a pintar la imagen de camara. */
+    public boolean draw(Frame frame) {
         updateTexCoords(frame);
-        if (frame.getTimestamp() == 0) return; // aún sin frame
+        if (frame.getTimestamp() == 0) return false; // aún sin frame
 
         quadTexCoords.position(0);
         GLES20.glDisable(GLES20.GL_DEPTH_TEST);
@@ -111,6 +112,7 @@ public class BackgroundRenderer {
         GLES20.glDisableVertexAttribArray(texCoordAttrib);
         GLES20.glDepthMask(true);
         GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+        return true;
     }
 
     private static int loadShader(int type, String src) {
