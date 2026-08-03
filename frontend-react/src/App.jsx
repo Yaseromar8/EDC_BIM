@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import './App.css';
+import { resetFrenteSession } from './utils/frenteSession';
 import TopBar from './components/TopBar';
 import ViewsPanel from './components/ViewsPanel';
 import SourceFilesPanel from './components/SourceFilesPanel';
@@ -745,6 +746,18 @@ function App() {
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [isolatedExtIds, setIsolatedExtIds] = useState(null); // Lifted from InventoryDataGrid — persists across mount/unmount
 
+  // window.postgresInventory es el inventario ya descargado, compartido para
+  // que el grid no baje una segunda copia de 73 MB. Va SIEMPRE acompañado del
+  // frente al que pertenece: sin esa marca, una descarga de Canal que termina
+  // tarde deja sus filas en el global y el grid las muestra en Drenaje Urbano
+  // como si fueran suyas. El consumidor compara la marca y, si no coincide,
+  // descarga lo que le toca.
+  const tagInventory = useCallback((rows, urn) => {
+    window.postgresInventory = rows;
+    window.postgresInventoryUrn = rows ? (urn || null) : null;
+  }, []);
+
+
   // Popout Window Bridge: Forward events between visor and undocked inventory
   useEffect(() => {
     // From popout → parent: row click selection
@@ -927,33 +940,38 @@ function App() {
     }
   }, [selectedProject]);
 
-  // 🔄 Reset filtros al cambiar de frente
-  // Solo se activa cuando se pasa de un proyecto a OTRO proyecto distinto.
-  // NO se activa en: carga inicial, logout (null), ni shared views.
+  // 🔄 Reset al cambiar de frente — LO DE UN FRENTE SE QUEDA EN ESE FRENTE.
+  //
+  // La referencia guarda el último frente REAL, y salir a la lista de proyectos
+  // (selectedProject = null) no la toca. Antes sí la borraba, y como para
+  // cambiar de frente hay que pasar SIEMPRE por esa lista, al llegar al frente
+  // nuevo el "anterior" ya era null y el reset no se ejecutaba nunca: los
+  // colores y los paneles de Canal aparecían en Drenaje Urbano.
   const prevProjectIdRef = useRef(selectedProject?.id || null);
   useEffect(() => {
     const newId = selectedProject?.id || null;
     const prevId = prevProjectIdRef.current;
 
-    // Solo resetear si AMBOS son non-null y son DIFERENTES
-    if (prevId && newId && prevId !== newId) {
-      console.log(`[App] Frente cambió: ${prevId} → ${newId}. Limpiando filtros.`);
+    // Salir a la lista de proyectos no es cambiar de frente: se conserva la
+    // referencia para poder comparar cuando se entre al siguiente.
+    if (newId === null) return;
+
+    if (prevId && prevId !== newId) {
+      console.log(`[App] Frente cambió: ${prevId} → ${newId}. Reiniciando el estado del frente anterior.`);
+
+      // Todo el estado que vive en `window` — inventario, mapas de identidad,
+      // filtros, colores, datos civiles — está DECLARADO en un solo sitio.
+      // Ver utils/frenteSession.js: ahí se añade lo nuevo, no aquí.
+      resetFrenteSession();
+
+      // Y el estado que vive en React, que es el que dibuja la interfaz.
       setFilterSelections({});
       setFilterColors({});
       setHiddenModelUrns([]);
-      window._lastHasActiveFilters = false;
-      window._lastValidDbIds = null;
-      // Aislamiento POR FRENTE: la config de colores de un frente no debe
-      // aparecer en otro — se limpian también los globales (colores custom
-      // por valor y el coloreo por fuente) y se avisa al panel para que
-      // sincronice sus puntitos.
-      window._customValueColors = {};
-      window.__ecdSourceColorOn = false;
-      window.__ecdSourceCustomColors = {};
-      window.__ecdSourceAssigned = {};
-      try { window.__ecdSourceTintCache && window.__ecdSourceTintCache.clear(); } catch { /* noop */ }
-      window.dispatchEvent(new CustomEvent('custom-colors-restored', { detail: {} }));
-      window.dispatchEvent(new CustomEvent('ecd-source-tints-reset'));
+      setInventoryTabOpen(false);
+      setIsolatedExtIds(null);
+      setActivePanel(null);
+      setPanelVisible(false);
     }
 
     prevProjectIdRef.current = newId;
@@ -1891,7 +1909,7 @@ function App() {
     setAvailableProperties([]);
     setDynamicFilterBuckets({});
     setHiddenModelUrns([]);
-    window.postgresInventory = null;
+    window.postgresInventory = null; window.postgresInventoryUrn = null;
 
     // Load Project Config Models
     apiFetch(`${BACKEND_URL}/api/config/project?project=${selectedProject.id}`)
@@ -1996,7 +2014,7 @@ function App() {
       if (verKey) {
         const cached = await getCachedInventory(selectedProject.id);
         if (cached && cached.verKey === verKey && Array.isArray(cached.mappedData) && cached.mappedData.length) {
-          window.postgresInventory = cached.mappedData;
+          tagInventory(cached.mappedData, selectedProject?.id);
           console.log(`[Piedra Rosetta] ⚡ Inventario desde caché LOCAL (${cached.mappedData.length} activos, 0 bytes descargados)`);
           window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema: cached.schemaList || [] } }));
           return;
@@ -2066,7 +2084,7 @@ function App() {
 
           return row;
         });
-        window.postgresInventory = mappedData;
+        tagInventory(mappedData, selectedProject?.id);
         console.log(`[Piedra Rosetta] Descargados ${mappedData.length} activos desde PostgreSQL (Enterprise CDE Mode)`);
 
         // Registrar 'Revit Category' como propiedad disponible para filtros
@@ -2158,7 +2176,7 @@ function App() {
             return row;
           });
 
-          window.postgresInventory = mappedData;
+          tagInventory(mappedData, selectedProject?.id);
           window.__inventoryCache = null;
           console.log(`[Piedra Rosetta] Recarga reactiva completada: ${mappedData.length} activos actualizados`);
 
@@ -2358,7 +2376,7 @@ function App() {
           // Invalidate inventory caches immediately so stale data from the old URN
           // isn't displayed while the background extraction runs
           window.__inventoryCache = null;
-          window.postgresInventory = null;
+          window.postgresInventory = null; window.postgresInventoryUrn = null;
 
           // Clear status after 5s
           setTimeout(() => setUpdateCheckStatus(prev => { const n = { ...prev }; delete n[urn]; return n; }), 5000);
@@ -2441,7 +2459,7 @@ function App() {
           return next;
         });
         window.__inventoryCache = null;
-        window.postgresInventory = null;
+        window.postgresInventory = null; window.postgresInventoryUrn = null;
         updatedResults.forEach(r => {
           if (r.newUrn) triggerBackgroundExtraction(r.newUrn, r.extraction_job_id || null);
         });
@@ -2621,7 +2639,7 @@ function App() {
 
               return row;
             });
-            window.postgresInventory = mappedData;
+            tagInventory(mappedData, selectedProject?.id);
             console.log(`[Piedra Rosetta] Caché reactualizada: ${mappedData.length} activos`);
 
             // Registrar 'Revit Category' en el schema
@@ -2857,7 +2875,7 @@ function App() {
       // modelo eliminado. Sin este refresh, sus elementos seguían apareciendo
       // en Inventario y Filtros hasta recargar la página.
       window.__inventoryCache = null;
-      window.postgresInventory = null;
+      window.postgresInventory = null; window.postgresInventoryUrn = null;
       window.dispatchEvent(new CustomEvent('inventory-needs-refresh'));
     } catch (e) {
       console.error("Error removing model:", e);

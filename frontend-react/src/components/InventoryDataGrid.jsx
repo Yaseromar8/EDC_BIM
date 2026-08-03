@@ -419,12 +419,21 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                 // una SEGUNDA copia del inventario en paralelo (73MB duplicados
                 // era la mitad de la lentitud). El preload resuelve y deja
                 // window.postgresInventory listo.
-                if ((!window.postgresInventory || !window.postgresInventory.length) && window.__inventoryPreloadPromise) {
+                // El global solo sirve si es DE ESTE frente. Antes bastaba con
+                // que estuviera lleno: al abrir Inventory en Drenaje Urbano se
+                // mostraban las filas de Canal que habia dejado una descarga
+                // anterior, sin llegar a pedir nunca las propias.
+                const globalEsDeEsteFrente = () =>
+                    window.postgresInventoryUrn === activeModelUrn
+                    && Array.isArray(window.postgresInventory)
+                    && window.postgresInventory.length > 0;
+
+                if (!globalEsDeEsteFrente() && window.__inventoryPreloadPromise) {
                     console.log('[Inventory] ⏳ Esperando preload compartido (sin descarga duplicada)…');
                     try { await window.__inventoryPreloadPromise; } catch { /* cae al fetch propio */ }
                     if (!isMounted) return;
                 }
-                if (window.postgresInventory && window.postgresInventory.length > 0) {
+                if (globalEsDeEsteFrente()) {
                     console.log(`[Inventory] 📦 Using offline window.postgresInventory — ${window.postgresInventory.length} items`);
                     
                     const allProps = new Set(['Name', 'Material', 'Status', 'Vaciado_Nro']);

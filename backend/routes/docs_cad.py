@@ -112,8 +112,15 @@ def _urn_of(object_id):
     return base64.b64encode(object_id.encode('utf-8')).decode('utf-8').rstrip('=')
 
 
-def _start_translation(token, urn, filename):
+def _start_translation(token, urn, force=False):
     """Lanza la traduccion a SVF2 (2D y 3D).
+
+    SIN forzar por defecto. Con `x-ads-force` cada peticion rehace el trabajo
+    desde cero, y dos llamadas casi simultaneas chocaban con un 409 Conflict
+    ("conflicts with a previous request that is in-progress"): la primera
+    traducia bien y la segunda devolvia error. Sin forzar, una llamada
+    repetida sobre un trabajo ya lanzado responde 200 y se limita a informar
+    del que ya existe — que es justo lo que queremos.
 
     rootFilename + compressedUrn irian aqui si algun dia se aceptan ZIP con
     referencias externas (xrefs de Civil). Por ahora, archivo suelto.
@@ -125,13 +132,16 @@ def _start_translation(token, urn, filename):
             'formats': [{'type': 'svf2', 'views': ['2d', '3d']}],
         },
     }
+    cabeceras = {'Content-Type': 'application/json'}
+    if force:
+        cabeceras['x-ads-force'] = 'true'
     r = requests.post(
         '%s/modelderivative/v2/designdata/job' % APS_BASE,
-        headers=_headers(token, {
-            'Content-Type': 'application/json',
-            'x-ads-force': 'true',           # rehacer si ya existia una traduccion
-        }),
-        json=payload, timeout=60)
+        headers=_headers(token, cabeceras), json=payload, timeout=60)
+    # 409 = ya hay un trabajo en marcha para este mismo archivo. No es un fallo:
+    # es exactamente el estado que buscabamos.
+    if r.status_code == 409:
+        return {'result': 'in-progress'}, None
     if r.status_code not in (200, 201):
         return None, 'Model Derivative rechazo el trabajo: %s' % r.text[:200]
     return r.json(), None
@@ -148,13 +158,34 @@ def _manifest(token, urn):
     return r.json(), None
 
 
+def _object_key_for(node):
+    """Clave estable del objeto en APS para esta VERSION del archivo."""
+    ext = os.path.splitext(node['name'])[1].lower()
+    return 'docs-%s%s' % (node['v_id'] or node['id'], ext)
+
+
+def _urn_for(node, bucket):
+    """URN deducido de bucket + clave. Deterministico.
+
+    Antes el URN se guardaba en la base y esa copia era la fuente de verdad;
+    si una escritura fallida la pisaba, el archivo quedaba inalcanzable aunque
+    Autodesk ya lo hubiera traducido. Ahora se recalcula siempre y la fuente de
+    verdad es el manifiesto de APS. La base solo cachea el estado.
+    """
+    return _urn_of('urn:adsk.objects:os.object:%s/%s' % (bucket, _object_key_for(node)))
+
+
 # ── Persistencia: la traduccion se guarda en la VERSION, no en el nodo ──────
 def _load_node(node_id):
     with get_db_connection() as conn:
         cur = conn.cursor()
         cur.execute("""
             SELECT n.id, n.name, n.model_urn, n.gcs_urn, n.current_version_id,
-                   COALESCE(v.metadata, '{}'::jsonb), v.id
+                   -- El metadato puede estar en la version o, en archivos
+                   -- antiguos sin versionar, en el propio nodo. Se fusionan con
+                   -- la version a la derecha, que es la que manda.
+                   COALESCE(n.metadata, '{}'::jsonb) || COALESCE(v.metadata, '{}'::jsonb),
+                   v.id
             FROM file_nodes n
             LEFT JOIN file_versions v ON v.id = n.current_version_id
             WHERE n.id = %s AND n.is_deleted = FALSE
@@ -209,13 +240,7 @@ def translate_cad():
     if not node['gcs_urn']:
         return jsonify({'success': False, 'error': 'El archivo no tiene contenido'}), 400
 
-    cad = node['meta'].get('cad') or {}
-    if cad.get('status') == 'success' and cad.get('urn') and not data.get('force'):
-        return jsonify({'success': True, 'status': 'success', 'urn': cad['urn'], 'cached': True})
-    if (cad.get('status') == 'inprogress' and cad.get('urn')
-            and time.time() - float(cad.get('started_at') or 0) < STALE_SECONDS
-            and not data.get('force')):
-        return jsonify({'success': True, 'status': 'inprogress', 'urn': cad['urn']})
+    forzar = bool(data.get('force'))
 
     token, error = get_internal_token()
     if error or not token:
@@ -225,6 +250,23 @@ def translate_cad():
     if error:
         return jsonify({'success': False, 'error': error}), 502
 
+    urn = _urn_for(node, bucket)
+
+    # Lo primero: preguntarle a APS. Si ya esta traducido —o traduciendose— no
+    # se sube nada ni se lanza nada. Esto hace la llamada idempotente aunque
+    # entren dos a la vez, que es lo que rompia antes.
+    if not forzar:
+        manifest, _err = _manifest(token, urn)
+        if manifest:
+            estado = manifest.get('status')
+            if estado == 'success':
+                _save_cad_meta(node, {'urn': urn, 'status': 'success'})
+                return jsonify({'success': True, 'status': 'success', 'urn': urn, 'cached': True})
+            if estado in ('inprogress', 'pending'):
+                _save_cad_meta(node, {'urn': urn, 'status': 'inprogress'})
+                return jsonify({'success': True, 'status': 'inprogress',
+                                'progress': manifest.get('progress', ''), 'urn': urn})
+
     try:
         content, _ctype = get_blob_data(node['gcs_urn'])
     except Exception as e:
@@ -233,23 +275,24 @@ def translate_cad():
         return jsonify({'success': False, 'error': 'El archivo esta vacio en GCS'}), 400
 
     # Clave estable por version: re-traducir sobrescribe en vez de acumular.
-    ext = os.path.splitext(node['name'])[1].lower()
-    object_key = 'docs-%s%s' % (node['v_id'] or node['id'], ext)
+    object_key = _object_key_for(node)
 
     object_id, error = _upload_to_oss(token, bucket, object_key, content)
     if error:
         return jsonify({'success': False, 'error': error}), 502
 
+    # El URN se guarda ANTES de lanzar el trabajo. Si el trabajo fallara, el
+    # URN sigue ahi y el estado se puede consultar: un fallo no deja el archivo
+    # inalcanzable, que es lo que pasaba cuando el error borraba el URN.
     urn = _urn_of(object_id)
-    _job, error = _start_translation(token, urn, node['name'])
+    _save_cad_meta(node, {'urn': urn, 'status': 'inprogress',
+                          'started_at': time.time(), 'object_key': object_key, 'error': None})
+
+    _job, error = _start_translation(token, urn, force=forzar)
     if error:
         _save_cad_meta(node, {'status': 'failed', 'error': error})
         return jsonify({'success': False, 'error': error}), 502
 
-    _save_cad_meta(node, {
-        'urn': urn, 'status': 'inprogress', 'started_at': time.time(),
-        'object_key': object_key, 'error': None,
-    })
     return jsonify({'success': True, 'status': 'inprogress', 'urn': urn})
 
 
@@ -265,13 +308,14 @@ def cad_status():
         return jsonify({'success': False, 'error': 'Archivo no encontrado'}), 404
 
     cad = node['meta'].get('cad') or {}
-    urn = cad.get('urn')
-    if not urn:
-        return jsonify({'success': True, 'status': 'none'})
 
     token, error = get_internal_token()
     if error or not token:
         return jsonify({'success': False, 'error': 'Sin credenciales APS'}), 502
+
+    # Se deriva del bucket + version: aunque la base tenga basura de un intento
+    # anterior, el estado real se puede consultar igualmente.
+    urn = cad.get('urn') or _urn_for(node, _bucket_key())
 
     manifest, error = _manifest(token, urn)
     if error:

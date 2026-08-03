@@ -17,6 +17,17 @@ const VIEWER_CSS = 'https://developer.api.autodesk.com/modelderivative/v2/viewer
 
 // El script del visor pesa; se carga UNA vez y sólo cuando alguien abre un CAD.
 let viewerScriptPromise = null;
+
+// Una única petición de traducción por archivo en esta pestaña. Sin esto, un
+// remontaje del visor lanzaba dos a la vez y Autodesk devolvía 409 Conflict a
+// la segunda: la primera traducía bien y la segunda escribía "falló" encima.
+const traduccionesEnCurso = new Map();
+function pedirTraduccion(fileId, hacer) {
+  if (!traduccionesEnCurso.has(fileId)) {
+    traduccionesEnCurso.set(fileId, hacer().finally(() => traduccionesEnCurso.delete(fileId)));
+  }
+  return traduccionesEnCurso.get(fileId);
+}
 function loadViewerScript() {
   if (window.Autodesk?.Viewing) return Promise.resolve();
   if (viewerScriptPromise) return viewerScriptPromise;
@@ -105,6 +116,11 @@ export default function CadViewer({ file }) {
         if (d.status === 'failed' || d.status === 'timeout') {
           return fail('Autodesk no pudo traducir este archivo. Puede que esté dañado o use referencias externas (xrefs) que no se subieron.');
         }
+        if (d.status === 'none') {
+          // APS no tiene nada de este archivo: la subida no llegó a cuajar.
+          // Se pide una vez más en lugar de sondear un trabajo inexistente.
+          return fail('La preparación no llegó a iniciarse. Cierra y vuelve a abrir el archivo.');
+        }
         setProgress(d.progress || '');
         timer = setTimeout(poll, 4000);
       } catch {
@@ -114,11 +130,13 @@ export default function CadViewer({ file }) {
 
     (async () => {
       try {
-        const r = await apiFetch(`${API}/api/docs/cad/translate`, {
-          method: 'POST',
-          body: JSON.stringify({ node_id: file.id }),
+        const d = await pedirTraduccion(file.id, async () => {
+          const r = await apiFetch(`${API}/api/docs/cad/translate`, {
+            method: 'POST',
+            body: JSON.stringify({ node_id: file.id }),
+          });
+          return r.json();
         });
-        const d = await r.json();
         if (cancelled) return;
         if (!d.success) return fail(d.error || 'No se pudo preparar el archivo.');
         if (d.status === 'success') return mount(d.urn);
