@@ -412,6 +412,35 @@ const TandemFilterPanel = ({
         window.addEventListener('ecd-source-tints-reset', onReset);
         return () => window.removeEventListener('ecd-source-tints-reset', onReset);
     }, []);
+
+    // VISTA GUARDADA: el coloreo por Source vuelve tal cual se guardó.
+    // Sin esto, una vista guardada con los modelos coloreados se restauraba
+    // en gris: el color por Source vive en `window`, y nadie lo estaba
+    // guardando ni devolviendo.
+    useEffect(() => {
+        const onRestore = (e) => {
+            const d = e.detail || {};
+            const colores = d.customColors || {};
+            window.__ecdSourceCustomColors = colores;
+            window.__ecdSourceColorOn = !!d.on;
+            setSourceCustomColors({ ...colores });
+            setSourcesColorOn(!!d.on);
+            setSourcePickerUrn(null);
+            // Pintar de verdad. Los modelos pueden seguir cargando cuando
+            // llega la vista, así que se da un margen y el efecto de
+            // _modelsKey cubre a los que lleguen después.
+            setTimeout(() => {
+                models.forEach(m => {
+                    if (!isUrnHidden(m.urn)) {
+                        _applySourceTint(m.urn, d.on ? sourceTintOf(m.urn) : null);
+                    }
+                });
+            }, 700);
+        };
+        window.addEventListener('ecd-source-tints-restore', onRestore);
+        return () => window.removeEventListener('ecd-source-tints-restore', onRestore);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [models]);
     // La restauración de tintes vive en UN solo lugar: el choke-point sobre
     // clearThemingColors (Viewer.jsx) — restaura dentro de la misma llamada
     // de borrado. Aquí NO hay timers ni listeners de respaldo: cada

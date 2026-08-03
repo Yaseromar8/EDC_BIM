@@ -1422,6 +1422,12 @@ function App() {
           if (sharedViewData.filterState.customValueColors) {
             window._customValueColors = sharedViewData.filterState.customValueColors;
             window.dispatchEvent(new CustomEvent('custom-colors-restored', { detail: window._customValueColors }));
+            window.dispatchEvent(new CustomEvent('ecd-source-tints-restore', {
+              detail: {
+                on: !!sharedViewData.filterState.sourceColorOn,
+                customColors: sharedViewData.filterState.sourceCustomColors || {},
+              },
+            }));
           }
           // Heatmap de avance por PK de la vista compartida
           if (sharedViewData.filterState.pkHeatmap) {
@@ -1488,6 +1494,11 @@ function App() {
         // window._customValueColors (solo memoria) — sin guardarlos aquí, la
         // vista restauraba la paleta por defecto y perdía tu configuración.
         customValueColors: window._customValueColors || {},
+        // Coloreo por SOURCE (el de la cabecera de Sources): vive tambien en
+        // window y no se estaba guardando, asi que una vista con los modelos
+        // coloreados volvia en gris.
+        sourceColorOn: !!window.__ecdSourceColorOn,
+        sourceCustomColors: window.__ecdSourceCustomColors || {},
         // Heatmap de avance por PK (tramos por alineamiento + estado)
         pkHeatmap: window.__pkHeatmap || null
       };
@@ -1561,6 +1572,13 @@ function App() {
         window._customValueColors = fs.customValueColors;
         window.dispatchEvent(new CustomEvent('custom-colors-restored', { detail: fs.customValueColors }));
       }
+
+      // Restaurar el coloreo por Source. Se avisa siempre (aunque venga
+      // apagado) para que el panel se ponga en el estado exacto de la vista y
+      // no herede el del momento anterior.
+      window.dispatchEvent(new CustomEvent('ecd-source-tints-restore', {
+        detail: { on: !!fs.sourceColorOn, customColors: fs.sourceCustomColors || {} },
+      }));
 
       // Restaurar Heatmap de avance por PK (la extensión reintenta sola si los
       // modelos aún no terminan de cargar).
