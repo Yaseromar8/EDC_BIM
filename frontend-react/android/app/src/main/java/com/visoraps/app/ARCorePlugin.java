@@ -83,6 +83,11 @@ public class ARCorePlugin extends Plugin {
     private Drawable originalWebViewBackground = null;
     private Drawable originalWindowBackground = null;
     private long lastPoseEmitNs = 0L;
+    // Latido de diagnostico: cuantas veces se ha dibujado y por que ARCore no
+    // rastrea. Sin esto, "track: paused" no distingue entre "el bucle de
+    // dibujo no corre" y "corre pero no hay suficiente luz o textura".
+    private long frameCount = 0L;
+    private long lastStatsMs = 0L;
     private TrackingState lastState = null;
 
     // ── GPS + brújula ────────────────────────────────────────────────────────
@@ -395,6 +400,25 @@ public class ARCorePlugin extends Plugin {
                 Camera camera = frame.getCamera();
                 TrackingState trackingState = camera.getTrackingState();
                 emitTracking(trackingState);
+
+                // Latido 1 Hz con la verdad de ARCore. `reason` es lo decisivo:
+                // INSUFFICIENT_LIGHT / INSUFFICIENT_FEATURES / EXCESSIVE_MOTION
+                // / CAMERA_UNAVAILABLE / BAD_STATE / NONE.
+                frameCount++;
+                long ahora = System.currentTimeMillis();
+                if (ahora - lastStatsMs >= 1000L) {
+                    lastStatsMs = ahora;
+                    JSObject st = new JSObject();
+                    st.put("frames", frameCount);
+                    st.put("state", trackingState.name());
+                    try {
+                        st.put("reason", camera.getTrackingFailureReason().name());
+                    } catch (Throwable ignored) {
+                        st.put("reason", "?");
+                    }
+                    notifyListeners("onArStats", st);
+                }
+
                 if (trackingState != TrackingState.TRACKING) return;
 
                 // MALLA DE ESCANEO: las superficies que ARCore va reconociendo,
@@ -642,6 +666,8 @@ public class ARCorePlugin extends Plugin {
         viewportWidth = 0;
         viewportHeight = 0;
         lastPoseEmitNs = 0L;
+        frameCount = 0L;
+        lastStatsMs = 0L;
         lastState = null;
         planeRenderer = null;
         showPlanes = true;

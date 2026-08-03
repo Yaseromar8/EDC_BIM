@@ -519,24 +519,26 @@ const Viewer = ({
                     disabledExtensions: {
                         measure: false,
                         section: false
-                    },
-                    // CANAL ALFA en el lienzo del visor. Sin esto el contexto
-                    // WebGL se crea opaco y NINGUNA llamada de limpieza puede
-                    // volverlo transparente: en AR el area del visor salia
-                    // NEGRA tapando la camara, por mucho que apagaramos fondos.
-                    //
-                    // Comprobado en el codigo de LMV: initialize() pasa
-                    // webglInitParams a createRenderer, y ademas hace
-                    //   removeAlphaInOutput = (webglInitParams?.alpha !== true)
-                    // o sea que con alpha:true deja de borrar el alfa de salida.
-                    //
-                    // En uso normal no cambia nada: el visor sigue pintando su
-                    // propio fondo. Solo habilita que el AR pueda apagarlo.
-                    webglInitParams: { alpha: true }
+                    }
                 };
 
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);
-                viewer.start();
+                // CANAL ALFA del lienzo. Sin el, el contexto WebGL se crea
+                // opaco y ninguna llamada de limpieza puede volverlo
+                // transparente: en AR el area del visor tapaba la camara.
+                //
+                // Va en el QUINTO argumento de start(), no en la config del
+                // constructor. Leido en el propio LMV:
+                //   Viewer3D.start(url, opts, onOk, onErr, initOptions)
+                //     -> this.initialize(initOptions) -> impl.initialize(e)
+                //     -> createRenderer(canvas, e.webglInitParams)
+                //   y ademas: removeAlphaInOutput = (webglInitParams?.alpha !== true)
+                //
+                // En uso normal no cambia nada — el visor sigue pintando su
+                // fondo; solo habilita que el AR pueda apagarlo.
+                viewer.start(undefined, undefined, undefined, undefined, {
+                    webglInitParams: { alpha: true }
+                });
                 
                 // Expose globally for panels and extensions
                 window.viewer = viewer;

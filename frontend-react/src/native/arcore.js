@@ -99,4 +99,12 @@ export async function setPlanesVisible(visible) {
   try { return await ARCore.setPlanesVisible({ visible: !!visible }); } catch { return null; }
 }
 
+// onArStats: latido 1 Hz con { frames, state, reason }. `frames` dice si el
+// bucle de dibujo corre siquiera; `reason` es el motivo que da ARCore para no
+// rastrear (poca luz, poca textura, movimiento excesivo, camara ocupada...).
+export function onArStats(handler) {
+  const sub = ARCore.addListener('onArStats', handler);
+  return () => { sub.then(s => s.remove()).catch(() => {}); };
+}
+
 export default ARCore;

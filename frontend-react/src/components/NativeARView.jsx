@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   createAnchor, createAnchorAtCamera, getLastGeoPose,
-  onGeoPose, onReticle, onTracking, setAimPoint, setPlanesVisible,
+  onArStats, onGeoPose, onReticle, onTracking, setAimPoint, setPlanesVisible,
   startSession, stopSession,
 } from '../native/arcore';
 import { attachArToViewer } from '../native/arViewerBridge';
@@ -78,6 +78,8 @@ export default function NativeARView({ onExit }) {
   // llamada de limpieza puede hacer transparente el lienzo: se compone opaco
   // siempre, y por eso el area del visor sale negra aunque la camara este ahi.
   const [transp, setTransp] = useState({ pasos: '', alpha: null });
+  const [arStats, setArStats] = useState({ frames: 0, state: '?', reason: '?' });
+  const statsCleanupRef = useRef(null);
   const oneToOneRef = useRef(1000); // unidades/metro para escala 1:1 real (según unidades del modelo)
   const [geo, setGeo] = useState(null); // última pose GPS { lat, lon, accuracy, heading, hasHeading }
   const georefRef = useRef({ globalOffset: { x: 0, y: 0, z: 0 }, metersPerUnit: 0.001 });
@@ -178,6 +180,7 @@ export default function NativeARView({ onExit }) {
 
         // Subscribe before start: ARCore only emits when the tracking state changes.
         trackingCleanupRef.current = onTracking((next) => setTracking(next.state));
+        statsCleanupRef.current = onArStats((st) => setArStats(st));
         // GPS + rumbo: se guarda la última pose para orientar al instante.
         geoCleanupRef.current = onGeoPose((g) => setGeo(g));
 
@@ -240,6 +243,7 @@ export default function NativeARView({ onExit }) {
       try { clearArStake(window.NOP_VIEWER); } catch { /* Cleanup is best effort. */ }
       try { detachRef.current?.(); } catch { /* Cleanup is best effort. */ }
       try { trackingCleanupRef.current?.(); } catch { /* Cleanup is best effort. */ }
+      try { statsCleanupRef.current?.(); } catch { /* Cleanup is best effort. */ }
       try { geoCleanupRef.current?.(); } catch { /* Cleanup is best effort. */ }
       stopSession();
 
@@ -417,6 +421,10 @@ export default function NativeARView({ onExit }) {
         <div>aplicados: {hud.applied} {hud.applied === 0 && hud.poseEvents > 0 ? '⚠ apply FALLA' : ''}</div>
         <div>THREE: {hud.src} · track: {tracking}</div>
         <div>planos: {reticle.planes} · mira: {reticle.found ? (reticle.type || 'si') : 'no'}</div>
+        <div style={{ color: arStats.frames === 0 ? '#ff6b6b' : '#3ee87a' }}>
+          frames AR: {arStats.frames} {arStats.frames === 0 ? '❌ el bucle NO corre' : ''}
+        </div>
+        <div>motivo ARCore: {arStats.reason}</div>
         <div style={{ color: transp.alpha === false ? '#ff6b6b' : '#3ee87a' }}>
           gl.alpha: {String(transp.alpha)} {transp.alpha === false ? '❌ lienzo OPACO' : ''}
         </div>
