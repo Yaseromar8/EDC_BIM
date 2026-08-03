@@ -145,18 +145,34 @@ export default function NativeARView({ onExit }) {
           // TRANSPARENCIA REAL: no basta con el clear del canvas. LMV pinta
           // ADEMÁS su propio fondo (el gris claro del visor y el env-map), y
           // eso es lo que tapaba la cámara. Se apagan todas las capas.
+          //
+          // CADA PASO VA EN SU PROPIO try. Antes dos llamadas compartian uno, y
+          // como el RenderContext de LMV NO tiene setClearColor —solo
+          // setClearAlpha—, la primera reventaba y se llevaba por delante a la
+          // segunda, que era justo LA que hace transparente el lienzo.
           const aplicado = [];
-          try { renderer.setClearColor(0x000000, 0); renderer.setClearAlpha?.(0); aplicado.push('renderCtx'); } catch { /* siguiente */ }
-          try {
+          const paso = (nombre, fn) => {
+            try { fn(); aplicado.push(nombre); } catch { /* el resto sigue */ }
+          };
+
+          // EL PASO DECISIVO: alfa 0 en el limpiado del RenderContext. Es lo
+          // que deja ver la camara detras del modelo. Verificado en el codigo
+          // de LMV: RenderContext expone setClearAlpha(a) y guarda _clearAlpha.
+          paso('renderCtxAlpha', () => renderer.setClearAlpha(0));
+          // useOverlayAlpha(0): que las capas de overlay tampoco rellenen alfa.
+          paso('overlayAlpha', () => renderer.useOverlayAlpha?.(0));
+          paso('glrenderer', () => {
             const gl = viewer.impl.glrenderer?.();
-            if (gl) { gl.setClearColor(0x000000, 0); gl.setClearAlpha?.(0); aplicado.push('glrenderer'); }
-          } catch { /* siguiente */ }
+            if (!gl) throw new Error('sin glrenderer');
+            gl.setClearColor(0x000000, 0);
+            gl.setClearAlpha?.(0);
+          });
           // fondo propio del visor (setBackgroundColor) y entorno
-          try { viewer.impl.toggleEnvMapBackground?.(false); aplicado.push('envMap'); } catch { /* noop */ }
-          try { viewer.setLightPreset?.(0); aplicado.push('lightPreset'); } catch { /* noop */ }
-          try { viewer.impl.setClearColors?.(0, 0, 0, 0, 0, 0); aplicado.push('clearColors'); } catch { /* noop */ }
+          paso('envMap', () => viewer.impl.toggleEnvMapBackground(false));
+          paso('lightPreset', () => viewer.setLightPreset(0));
+          paso('clearColors', () => viewer.impl.setClearColors(0, 0, 0, 0, 0, 0));
           // sombra de suelo y reflejo: se dibujan sobre el fondo y estorban
-          try { viewer.setGroundShadow?.(false); viewer.setGroundReflection?.(false); aplicado.push('ground'); } catch { /* noop */ }
+          paso('ground', () => { viewer.setGroundShadow(false); viewer.setGroundReflection(false); });
           // el canvas y su contenedor, transparentes
           try {
             const cv = viewer.impl.canvas || viewer.canvas;
