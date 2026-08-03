@@ -58,13 +58,21 @@ export default function NativeARView({ onExit }) {
   const placingRef = useRef(false);
   const anchoredRef = useRef(false);
   const anchorFnRef = useRef(null);
-  // El panel técnico solo con ?ardebug=1 — en campo estorba la vista del terreno
-  const showDebug = typeof window !== 'undefined' && /(\?|&)ardebug=1/.test(window.location.search);
+  // El panel técnico aparece SOLO cuando algo va mal: si a los 6 segundos no
+  // ha llegado ninguna pose de ARCore, o el tracking no arranca. En un APK
+  // empaquetado no se puede añadir ?ardebug=1 a mano, y sin estos numeros
+  // diagnosticar el AR desde lejos es adivinar. Con ?ardebug=1 sigue saliendo
+  // siempre, para desarrollo.
+  const forzarDebug = typeof window !== 'undefined' && /(\?|&)ardebug=1/.test(window.location.search);
+  const [algoVaMal, setAlgoVaMal] = useState(false);
+  const showDebug = forzarDebug || algoVaMal;
   const reticleCleanupRef = useRef(null);
   const [yawDegrees, setYawDegrees] = useState(0);
   const [unitsPerMeter, setUnitsPerMeter] = useState(1000);
   const [aligning, setAligning] = useState(false);
   const [hud, setHud] = useState({ src: '?', poseEvents: 0, applied: 0, upm: 1000, yaw: 0, aligning: false, err: '' });
+  // Espejo del HUD para leerlo desde temporizadores sin arrastrar valores viejos.
+  const hudRef = useRef({ poseEvents: 0, applied: 0 });
   const oneToOneRef = useRef(1000); // unidades/metro para escala 1:1 real (según unidades del modelo)
   const [geo, setGeo] = useState(null); // última pose GPS { lat, lon, accuracy, heading, hasHeading }
   const georefRef = useRef({ globalOffset: { x: 0, y: 0, z: 0 }, metersPerUnit: 0.001 });
@@ -168,7 +176,7 @@ export default function NativeARView({ onExit }) {
         detachRef.current = attachArToViewer(viewer, {
           modelOrigin: modelOriginRef.current,
           unitsPerMeter,
-          onFrame: setHud,
+          onFrame: (h) => { hudRef.current = h; setHud(h); },
         });
         // El modelo ARRANCA OCULTO: primero se ve el terreno real y el
         // retículo; el modelo aparece SOLO cuando lo colocas. Antes entraba
@@ -200,8 +208,14 @@ export default function NativeARView({ onExit }) {
           }
         });
         setStatus('Apunta la camara al piso y muevete despacio…');
+        // Si en 6 segundos no llega ni una pose, el AR no esta vivo: se
+        // enseña el panel tecnico en vez de dejar al operario mirando negro.
+        setTimeout(() => {
+          if (!cancelled) setAlgoVaMal((prev) => prev || (hudRef.current.poseEvents === 0));
+        }, 6000);
       } catch (error) {
         setStatus('No se pudo iniciar AR: ' + (error?.message || error));
+        setAlgoVaMal(true);
       }
     })();
 

@@ -3,6 +3,7 @@ package com.visoraps.app;
 import android.Manifest;
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.hardware.GeomagneticField;
 import android.hardware.Sensor;
@@ -80,6 +81,7 @@ public class ARCorePlugin extends Plugin {
     private volatile int viewportWidth = 0;
     private volatile int viewportHeight = 0;
     private Drawable originalWebViewBackground = null;
+    private Drawable originalWindowBackground = null;
     private long lastPoseEmitNs = 0L;
     private TrackingState lastState = null;
 
@@ -173,8 +175,23 @@ public class ARCorePlugin extends Plugin {
                 glView.setEGLConfigChooser(8, 8, 8, 8, 16, 0);
                 glView.setRenderer(renderer);
                 glView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
+                // La capa de video se compone POR ENCIMA del fondo de la ventana
+                // y POR DEBAJO del WebView — exactamente el sandwich que hace
+                // falta. Sin esto la GLSurfaceView queda detras del fondo de la
+                // ventana y no se ve: la pantalla sale NEGRA aunque la camara
+                // este funcionando y ARCore siga emitiendo poses.
+                glView.setZOrderMediaOverlay(true);
 
+                // TODA la pila por encima del video tiene que ser transparente.
+                // Con el WebView transparente pero la ventana opaca seguias
+                // viendo negro: faltaban estos dos.
                 webView.setBackgroundColor(Color.TRANSPARENT);
+                parent.setBackgroundColor(Color.TRANSPARENT);
+                try {
+                    originalWindowBackground = getActivity().getWindow().getDecorView().getBackground();
+                    getActivity().getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+                } catch (Exception ignored) { }
+
                 parent.addView(glView, 0, new ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT));
@@ -604,6 +621,12 @@ public class ARCorePlugin extends Plugin {
             }
             if (getBridge() != null && getBridge().getWebView() != null) {
                 getBridge().getWebView().setBackground(originalWebViewBackground);
+            }
+            if (originalWindowBackground != null) {
+                try {
+                    getActivity().getWindow().setBackgroundDrawable(originalWindowBackground);
+                } catch (Exception ignored) { }
+                originalWindowBackground = null;
             }
             for (Anchor anchor : anchors) anchor.detach();
             anchors.clear();
