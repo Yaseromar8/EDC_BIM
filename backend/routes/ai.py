@@ -34,11 +34,32 @@ for path in [
 else:
     print("[AI] ⚠️ CRÍTICO: No se encontró gcp_sa.json")
 
-try:
-    vertexai.init(project=PROJECT_ID, location=LOCATION)
-    print(f"[AI] Vertex AI inicializado en {LOCATION}")
-except Exception as e:
-    print(f"[AI] Error inicializando Vertex: {e}")
+# Vertex se inicializa PEREZOSAMENTE, en la primera peticion de IA que lo
+# necesite — NUNCA al importar el modulo.
+#
+# Por que: sin gcp_sa.json (esta en .gitignore, asi que en produccion no
+# existe salvo que se monte como secreto), vertexai.init cae a las credenciales
+# por defecto y sondea el servidor de metadatos de GCE en 169.254.169.254. En
+# Render, que no corre sobre GCP, esa IP no responde ni rechaza: la peticion se
+# queda esperando. Como esto vivia en el arranque, el worker de gunicorn no
+# terminaba de importar; el puerto quedaba abierto pero ninguna peticion recibia
+# respuesta. El resto de la plataforma (documentos, visor, Civil) no necesita
+# Vertex para nada, y se caia entera con el.
+_vertex_ready = False
+
+
+def ensure_vertex():
+    """Inicializa Vertex la primera vez. Devuelve True si esta utilizable."""
+    global _vertex_ready
+    if _vertex_ready:
+        return True
+    try:
+        vertexai.init(project=PROJECT_ID, location=LOCATION)
+        _vertex_ready = True
+        print(f"[AI] Vertex AI inicializado en {LOCATION}")
+    except Exception as e:
+        print(f"[AI] Error inicializando Vertex: {e}")
+    return _vertex_ready
 
 # ─── Caché en memoria ─────────────────────────────────────────────────────────
 # Estructura:
@@ -240,6 +261,7 @@ def ask_document():
     print(f"[AI] Pregunta sobre {gcs_urn}: '{question[:80]}...'")
 
     try:
+        ensure_vertex()
         model  = GenerativeModel("gemini-2.0-flash")
         cached = _get_cached(gcs_urn)
         
@@ -445,6 +467,7 @@ def universal_search():
         intent_data = {"intent": "document_query"} # Default to document_query
         try:
             # Use gemini-1.5-flash-002 but don't fail if model not found
+            ensure_vertex()
             router_model = GenerativeModel("gemini-2.0-flash")
             router_prompt = f"""
             Eres un clasificador de intenciones para un Asistente de Ingeniería.
@@ -569,6 +592,7 @@ def universal_search():
             })
 
         # --- 5. CUSTOM SYNTHESIS (Gemini 2.0 Flash) ---
+        ensure_vertex()
         synthesis_model = GenerativeModel("gemini-2.0-flash")
         synthesis_prompt = f"""
 ERES UN ANALISTA TÉCNICO EXPERTO (AUDITOR SENIOR) EN EL PROYECTO TALARA.
@@ -649,6 +673,7 @@ def analyze_drawing_title():
 
     try:
         # Usamos flash para que sea instantáneo
+        ensure_vertex()
         model = GenerativeModel("gemini-1.5-pro") # Trying pro for title analysis if available
         
         # Descargamos solo para procesar la primera página

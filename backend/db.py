@@ -27,7 +27,12 @@ def init_db_pool():
             port=os.environ.get("DB_PORT", "5432"),
             database=os.environ.get("DB_NAME"),
             connect_timeout=10,
-            options='-c statement_timeout=30000',  # 30s max per query
+            # statement_timeout: ninguna consulta puede colgarse mas de 30 s.
+            # lock_timeout: y ninguna espera mas de 5 s por un LOCK. Sin esto,
+            # un DDL del arranque que choca con otra transaccion espera PARA
+            # SIEMPRE: gunicorn abre el puerto pero el worker nunca termina de
+            # importar, y el servicio acepta conexiones sin responder jamas.
+            options='-c statement_timeout=30000 -c lock_timeout=5000',
             keepalives=1,
             keepalives_idle=30,
             keepalives_interval=10,
@@ -226,6 +231,15 @@ def ensure_file_nodes_table():
                 GROUP BY model_urn HAVING count(*) > 1
             """)
             for dup_urn, root_ids in cursor.fetchall():
+                # array_agg puede volver como lista o como el literal '{a,b,c}'
+                # segun se haya registrado el tipo uuid[]. Si llega como texto y
+                # se indexa a ciegas, keeper acaba siendo el caracter '{' y la
+                # query revienta con "malformed array literal".
+                if isinstance(root_ids, str):
+                    root_ids = [x for x in root_ids.strip('{}').split(',') if x]
+                root_ids = list(root_ids or [])
+                if len(root_ids) < 2:
+                    continue
                 keeper, extras = root_ids[0], root_ids[1:]
                 cursor.execute(
                     "UPDATE file_nodes SET parent_id = %s WHERE parent_id = ANY(%s::uuid[]) AND is_deleted = FALSE",

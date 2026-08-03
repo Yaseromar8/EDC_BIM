@@ -775,36 +775,82 @@ app.register_blueprint(lob4d_linear_bp)
 def serve_map_file(filename):
     return send_from_directory(MAP_UPLOAD_FOLDER, filename)
 
-# Inicializar tablas maestras de la BD
+# ── Inicializacion de esquema (se ejecuta AL IMPORTAR, es decir en el arranque
+# de cada worker de gunicorn) ────────────────────────────────────────────────
+#
+# Son 20+ rutinas de DDL contra Cloud SQL. Antes se llamaban en cadena y a pelo:
+# si UNA se colgaba esperando un lock, el import no terminaba nunca. Gunicorn ya
+# habia abierto el puerto, asi que Render daba el servicio por vivo, el TLS
+# conectaba... y ninguna peticion recibia respuesta jamas. Eso tumbo produccion.
+#
+# Ahora cada rutina va aislada: si una falla o tarda, se registra y el arranque
+# CONTINUA. El esquema es idempotente (CREATE ... IF NOT EXISTS), de modo que la
+# que fallo se reintenta sola en el siguiente arranque. Servir la aplicacion
+# importa mas que completar una migracion accesoria.
 from db import ensure_file_nodes_table, ensure_ai_brain_schema, ensure_rfi_schema, ensure_redline_schema, ensure_partidas_schema, ensure_asset_user_data_table, ensure_project_identity_columns
 from routes.presupuesto import ensure_presupuesto_schema
-ensure_file_nodes_table()
-ensure_ai_brain_schema()
-ensure_rfi_schema()
-ensure_redline_schema()
-ensure_partidas_schema()
-ensure_presupuesto_schema()
-ensure_asset_user_data_table()
-ensure_project_identity_columns()
-ensure_pdf_tools_tables()
-ensure_reviews_table()
-ensure_transmittals_table()
-ensure_attributes_tables()
-ensure_sets_tables()
-ensure_element_docs_table()
 from routes.inventory import ensure_extraction_jobs_table, ensure_inventory_identity
-ensure_extraction_jobs_table()
-ensure_inventory_identity()  # identidad (model_urn, external_id): duplicados imposibles por diseño
-ensure_lob4d_tables()  # LOB 4D: cronograma/metrados por frente (fuente de verdad del 4D)
 from routes.civil_design_automation import ensure_civil_alignments_table
-ensure_civil_alignments_table()  # extracciones civiles persistentes (solo re-extraer explícito)
 from routes.digital_twin import ensure_frentes_table
-ensure_frentes_table()  # frentes dinámicos por proyecto (INTERFERENCIAS, etc.)
-
 from folder_permissions import init_folder_permissions_table
-init_folder_permissions_table()
 from routes.documents import _ensure_share_revoked_column
-_ensure_share_revoked_column()
+
+
+def _run_schema_setup():
+    import time as _t
+    rutinas = [
+        ('file_nodes', ensure_file_nodes_table),
+        ('ai_brain', ensure_ai_brain_schema),
+        ('rfi', ensure_rfi_schema),
+        ('redline', ensure_redline_schema),
+        ('partidas', ensure_partidas_schema),
+        ('presupuesto', ensure_presupuesto_schema),
+        ('asset_user_data', ensure_asset_user_data_table),
+        ('project_identity', ensure_project_identity_columns),
+        ('pdf_tools', ensure_pdf_tools_tables),
+        ('reviews', ensure_reviews_table),
+        ('transmittals', ensure_transmittals_table),
+        ('attributes', ensure_attributes_tables),
+        ('sets', ensure_sets_tables),
+        ('element_docs', ensure_element_docs_table),
+        ('extraction_jobs', ensure_extraction_jobs_table),
+        ('inventory_identity', ensure_inventory_identity),
+        ('lob4d', ensure_lob4d_tables),
+        ('civil_alignments', ensure_civil_alignments_table),
+        ('frentes', ensure_frentes_table),
+        ('folder_permissions', init_folder_permissions_table),
+        ('share_revoked', _ensure_share_revoked_column),
+    ]
+    inicio = _t.time()
+    fallos = []
+    for nombre, fn in rutinas:
+        t0 = _t.time()
+        try:
+            fn()
+        except Exception as e:
+            fallos.append(nombre)
+            print('[schema] FALLO %s: %s' % (nombre, str(e)[:200]), flush=True)
+            continue
+        dt = _t.time() - t0
+        if dt > 3:
+            print('[schema] %s tardo %.1f s' % (nombre, dt), flush=True)
+    print('[schema] arranque completado en %.1f s · %d fallos%s'
+          % (_t.time() - inicio, len(fallos),
+             (' (' + ', '.join(fallos) + ')') if fallos else ''), flush=True)
+
+
+_run_schema_setup()
+
+
+@app.route('/api/health')
+def health_check():
+    """Latido que NO toca la base de datos.
+
+    Permite distinguir "el servicio no arranco" de "la base no responde" sin
+    tener que adivinar leyendo logs. Si esto contesta y el resto no, el problema
+    es la base; si ni esto contesta, es el arranque.
+    """
+    return jsonify({'status': 'ok', 'service': 'visor-ecd-backend'})
 
 @app.route('/api/inventory/schema', methods=['GET'])
 def get_inventory_schema():
