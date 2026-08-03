@@ -299,6 +299,11 @@ window.__ecdReapplySourceTints = (viewer, onlyModel) => {
 // Paleta estable de tintes por fuente (estilo Tandem): el modelo i-ésimo de la
 // lista siempre recibe el mismo color — el punto del panel y el 3D coinciden.
 const SOURCE_TINT_PALETTE = ['#4fc3f7', '#ab7df6', '#ffb300', '#66bb6a', '#ef5350', '#26c6da', '#ff7043', '#d4e157'];
+// Normalizacion de URN: base64 url-safe con y sin relleno se refieren al mismo
+// modelo. Vive a nivel de MODULO porque la usan tanto el componente como
+// restoreSourceTints() — que corre con el panel cerrado.
+const normUrn = (u) => String(u || '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
 // Presets del picker de fuentes (mismos del picker de propiedades)
 const SOURCE_PRESET_COLORS = [
     '#10B981', '#059669', '#34D399',
@@ -377,7 +382,6 @@ const TandemFilterPanel = ({
     DEFAULT_VISIBLE_VALUES
 }) => {
     // Shared URN normalizer for consistent comparisons
-    const normUrn = (u) => String(u || '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const isUrnHidden = (urn) => hiddenModelUrns.some(u => normUrn(u) === normUrn(urn));
     const visibleCount = models.filter(m => !isUrnHidden(m.urn)).length;
 
