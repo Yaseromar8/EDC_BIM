@@ -163,4 +163,16 @@ export function onArStats(handler) {
   return () => { sub.then(s => s.remove()).catch(() => {}); };
 }
 
+// Últimas líneas del log del propio proceso: ahí ARCore escribe el motivo
+// real de un fallo de cámara que su API no reporta.
+export async function getDiagLog() {
+  if (SIM) return 'ensayo: sin log nativo (no hay plugin en el navegador)';
+  try {
+    const r = await ARCore.getDiagLog();
+    return (r && r.log) || '';
+  } catch (e) {
+    return 'sin log: ' + String((e && e.message) || e);
+  }
+}
+
 export default ARCore;

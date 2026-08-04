@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   createAnchor, createAnchorAtCamera, getLastGeoPose,
-  esSimulado,
+  esSimulado, getDiagLog,
   onArStats, onGeoPose, onReticle, onTracking, setAimPoint, setPlanesVisible,
   startSession, stopSession,
 } from '../native/arcore';
@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-26';
+const AR_BUILD = 'ar-27';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -129,6 +129,7 @@ export default function NativeARView({ onExit }) {
   // llamada de limpieza puede hacer transparente el lienzo: se compone opaco
   // siempre, y por eso el area del visor sale negra aunque la camara este ahi.
   const [transp, setTransp] = useState({ pasos: '', alpha: null });
+  const [diagLog, setDiagLog] = useState('');
   const [arStats, setArStats] = useState({ frames: 0, state: '?', reason: '?', ts: 0, cam: false, tex: -1, glError: '', resumes: 0, resumeError: '', camCfgs: -1 });
   const statsCleanupRef = useRef(null);
   const oneToOneRef = useRef(1000); // unidades/metro para escala 1:1 real (según unidades del modelo)
@@ -611,6 +612,29 @@ export default function NativeARView({ onExit }) {
         </div>
         {/* 'sesiones' debe ser 1 SIEMPRE. 2 = dos Session de ARCore peleandose
             la camara: es la firma exacta de 'ts 0 sin error'. */}
+        {/* SONDA: fotogramas que Camera2 entrego a ESTA app antes de ARCore.
+            >0 = el sistema si nos da imagen; <=0 = nos la niega a nosotros. */}
+        <div style={{ color: (arStats.probe ?? 0) > 0 ? '#3ee87a' : '#ff6b6b' }}>
+          sonda camara directa: {arStats.probe ?? '?'} fotogramas
+          {(arStats.probe ?? 0) > 0 ? ' ✓ el sistema SI entrega' : ' ❌'}
+        </div>
+        <div>
+          <button
+            onClick={async () => {
+              const l = await getDiagLog();
+              setDiagLog(l || '(vacio)');
+              console.log('[AR][LOG NATIVO] ' + l);
+            }}
+            style={{ marginTop: 4, padding: '3px 10px', borderRadius: 6, border: '1px solid #3a3f45', background: '#1b1f24', color: '#8ab4f8', fontSize: 11, pointerEvents: 'auto' }}
+          >
+            Ver log nativo
+          </button>
+        </div>
+        {diagLog && (
+          <pre style={{ maxHeight: 180, maxWidth: 300, overflow: 'auto', fontSize: 9, whiteSpace: 'pre-wrap', background: '#0008', padding: 6, borderRadius: 6, pointerEvents: 'auto' }}>
+            {diagLog}
+          </pre>
+        )}
         <div style={{ color: (arStats.sesiones ?? 1) > 1 ? '#ff6b6b' : arStats.resumes > 1 ? '#f0b429' : '#3ee87a' }}>
           sesiones ARCore: {arStats.sesiones ?? '?'}{(arStats.sesiones ?? 1) > 1 ? ' ❌ DOBLE' : ''}
           {' '}· reanudada: {arStats.resumes} · camaras: {arStats.camCfgs}

@@ -15,7 +15,16 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
+import android.graphics.ImageFormat;
+import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CaptureRequest;
+import android.media.Image;
+import android.media.ImageReader;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.ViewGroup;
 import android.webkit.WebView;
 
@@ -38,7 +47,10 @@ import com.google.ar.core.Session;
 import com.google.ar.core.Trackable;
 import com.google.ar.core.TrackingState;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import javax.microedition.khronos.egl.EGLConfig;
@@ -103,6 +115,21 @@ public class ARCorePlugin extends Plugin {
     // exactamente 'ts 0 sin error': ninguna recibe imagen. Se muestra en el
     // panel para que este fallo se delate solo.
     private volatile int sesionesCreadas = 0;
+    // SONDA DE CAMARA: antes de crear la sesion de ARCore se abre la camara a
+    // pelo (Camera2) durante ~1 s y se cuentan los fotogramas que entrega.
+    //   > 0  -> el sistema SI da imagen a esta app: el bloqueo esta entre
+    //           ARCore y nosotros.
+    //   <= 0 -> el sistema no entrega imagen a ESTA app aunque el permiso
+    //           este concedido (otra app AR funcionando lo confirma): el
+    //           bloqueo es del sistema hacia esta app en concreto.
+    // Existe porque llevamos dias con 'ts 0 sin error' y hay que partir el
+    // problema en dos con un hecho, no con otra hipotesis.
+    private volatile int probeFrames = -1;
+    // Reanudar DESPUES de que la textura exista (patron que corrige el negro
+    // sin error en apps hibridas): la sesion no se reanuda en el arranque sino
+    // cuando onSurfaceCreated ya registro la textura de camara.
+    private volatile boolean resumePendiente = false;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     /** true en cuanto ARCore tiene una textura valida donde escribir. */
     private volatile boolean textureReady = false;
     private TrackingState lastState = null;
@@ -169,6 +196,77 @@ public class ARCorePlugin extends Plugin {
                 call.resolve();
                 return;
             }
+            probarCamaraDirecta(() -> continuarArranque(call));
+        });
+    }
+
+    /** Abre la camara con Camera2 (sin ARCore) ~1 s y cuenta fotogramas. */
+    private void probarCamaraDirecta(final Runnable despues) {
+        probeFrames = -1;
+        try {
+            final CameraManager cm = (CameraManager) getContext().getSystemService(Context.CAMERA_SERVICE);
+            final String id = cm.getCameraIdList()[0];
+            final ImageReader reader = ImageReader.newInstance(640, 480, ImageFormat.YUV_420_888, 2);
+            final int[] cuenta = { 0 };
+            reader.setOnImageAvailableListener((r) -> {
+                Image im = r.acquireLatestImage();
+                if (im != null) { cuenta[0]++; im.close(); }
+            }, mainHandler);
+            cm.openCamera(id, new CameraDevice.StateCallback() {
+                @Override public void onOpened(CameraDevice dev) {
+                    try {
+                        dev.createCaptureSession(Arrays.asList(reader.getSurface()),
+                                new CameraCaptureSession.StateCallback() {
+                            @Override public void onConfigured(CameraCaptureSession ses) {
+                                try {
+                                    CaptureRequest.Builder b = dev.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+                                    b.addTarget(reader.getSurface());
+                                    ses.setRepeatingRequest(b.build(), null, mainHandler);
+                                } catch (Throwable t) { /* la cuenta queda en 0 */ }
+                                mainHandler.postDelayed(() -> {
+                                    probeFrames = cuenta[0];
+                                    try { ses.close(); } catch (Throwable t) { }
+                                    try { dev.close(); } catch (Throwable t) { }
+                                    try { reader.close(); } catch (Throwable t) { }
+                                    // Un respiro para que el sistema libere la
+                                    // camara antes de entregarsela a ARCore.
+                                    mainHandler.postDelayed(despues, 400);
+                                }, 1000);
+                            }
+                            @Override public void onConfigureFailed(CameraCaptureSession ses) {
+                                probeFrames = -3;
+                                try { dev.close(); } catch (Throwable t) { }
+                                try { reader.close(); } catch (Throwable t) { }
+                                mainHandler.post(despues);
+                            }
+                        }, mainHandler);
+                    } catch (Throwable t) {
+                        probeFrames = -4;
+                        try { dev.close(); } catch (Throwable e) { }
+                        mainHandler.post(despues);
+                    }
+                }
+                @Override public void onDisconnected(CameraDevice dev) {
+                    try { dev.close(); } catch (Throwable t) { }
+                }
+                @Override public void onError(CameraDevice dev, int error) {
+                    probeFrames = -100 - error;   // -101..-105: codigo Camera2
+                    try { dev.close(); } catch (Throwable t) { }
+                    mainHandler.post(despues);
+                }
+            }, mainHandler);
+        } catch (Throwable t) {
+            probeFrames = -2;
+            despues.run();
+        }
+    }
+
+    private void continuarArranque(final PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            if (running && session != null) {
+                call.resolve();
+                return;
+            }
             try {
                 ArCoreApk.Availability availability =
                         ArCoreApk.getInstance().checkAvailability(getContext());
@@ -231,17 +329,13 @@ public class ARCorePlugin extends Plugin {
                         ViewGroup.LayoutParams.MATCH_PARENT));
                 webView.bringToFront();
 
-                try {
-                    session.resume();
-                    resumeCount++;
-                    resumeError = "";
-                } catch (Throwable t) {
-                    // Antes esto subia al catch general y abortaba con un mensaje
-                    // generico. Ahora queda registrado y visible en el panel.
-                    resumeError = String.valueOf(t.getClass().getSimpleName()) + ": " + t.getMessage();
-                    throw t;
-                }
-                running = true;
+                // La sesion se reanuda cuando la TEXTURA de camara ya existe
+                // (lo dispara onSurfaceCreated). Reanudar antes es el patron
+                // del ejemplo oficial, pero en apps hibridas hay dispositivos
+                // donde la camara arranca sin destino y jamas entrega imagen:
+                // exactamente 'ts 0 sin error'.
+                resumePendiente = true;
+                running = true;   // el bucle GL puede correr; update() espera al resume
                 glView.onResume();
                 startGeoSensors();
                 call.resolve();
@@ -253,6 +347,31 @@ public class ARCorePlugin extends Plugin {
     }
 
     // ── GPS + rumbo ──────────────────────────────────────────────────────────
+    /** Ultimas lineas del logcat DEL PROPIO PROCESO. ARCore escribe aqui el
+     *  motivo real de un fallo de camara que su API no reporta. Un proceso
+     *  puede leer su propio log sin permisos especiales. */
+    @PluginMethod
+    public void getDiagLog(PluginCall call) {
+        StringBuilder sb = new StringBuilder();
+        try {
+            Process pr = Runtime.getRuntime().exec(new String[] { "logcat", "-d", "-t", "500", "-v", "time" });
+            BufferedReader br = new BufferedReader(new InputStreamReader(pr.getInputStream()));
+            String linea;
+            while ((linea = br.readLine()) != null) {
+                String l = linea.toLowerCase();
+                if (l.contains("arcore") || l.contains("camera") || l.contains("camara")
+                        || l.contains("androidruntime") || l.contains("tango")) {
+                    sb.append(linea).append('\n');
+                }
+            }
+        } catch (Throwable t) {
+            sb.append("logcat inaccesible: ").append(String.valueOf(t.getMessage()));
+        }
+        JSObject out = new JSObject();
+        out.put("log", sb.toString());
+        call.resolve(out);
+    }
+
     private void startGeoSensors() {
         // Ubicación (best-effort: si no hay permiso, se omite sin romper el AR).
         try {
@@ -461,6 +580,21 @@ public class ARCorePlugin extends Plugin {
                 if (glError.isEmpty()) glError = "malla: " + String.valueOf(t.getMessage());
             }
             bindCameraTexture();
+            // Textura registrada: AHORA se reanuda la sesion (en el hilo
+            // principal, como el ejemplo oficial). Ver resumePendiente.
+            if (resumePendiente) {
+                mainHandler.post(() -> {
+                    if (session == null || !resumePendiente) return;
+                    resumePendiente = false;
+                    try {
+                        session.resume();
+                        resumeCount++;
+                        resumeError = "";
+                    } catch (Throwable t) {
+                        resumeError = "resume(textura): " + String.valueOf(t.getMessage());
+                    }
+                });
+            }
         }
 
         /** Entrega la textura a ARCore. Solo con un id valido. */
@@ -504,7 +638,7 @@ public class ARCorePlugin extends Plugin {
                 GLES20.glClearColor(0f, 0f, 0f, 0f);
             }
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
-            if (session == null || !running) return;
+            if (session == null || !running || resumePendiente) return;
 
             try {
                 // Reintento: si la textura no llego a crearse (o su creacion
@@ -564,6 +698,7 @@ public class ARCorePlugin extends Plugin {
                     JSObject st = new JSObject();
                     st.put("frames", frameCount);
                     st.put("sesiones", sesionesCreadas);
+                    st.put("probe", probeFrames);
                     st.put("state", trackingState.name());
                     // ts=0 significa que la CAMARA no entrega imagen: ARCore
                     // corre en vacio. Es la diferencia entre "no dibujamos" y
