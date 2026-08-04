@@ -23,6 +23,20 @@ import { simActivo, simMirarA } from '../native/arSim';
 
 const NOMBRES = ['primera cara', 'segunda cara', 'tercera cara'];
 
+// Clase de una cara según su normal (ejes de ARCore, Y arriba). Se deriva de
+// la geometría y no del campo `kind` del plugin: así funciona igual con un
+// APK viejo — y si ese APK aplana las normales, todo sale "piso", el control
+// de composición lo rechaza y el error se ve EN LA PRIMERA captura, no en un
+// resultado absurdo al final.
+const claseDeNormal = (n) => {
+  const v = n[1];
+  if (v > 0.85) return 'piso';
+  if (v < -0.85) return 'techo';
+  if (Math.abs(v) < 0.5) return 'muro';
+  return 'inclinada';
+};
+const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
 const boton = {
   padding: '10px 16px', borderRadius: 999, border: '1px solid #3a3f45',
   background: '#1b1f24', color: '#e6e8ea', fontSize: 14, cursor: 'pointer',
@@ -52,6 +66,21 @@ export default function ArCornerPanel({
   const obsModeloRef = useRef(null);
   const obsMundoRef = useRef([]);
 
+  // Qué hay bajo el punto de mira, en vivo. Capturar a ciegas era la mitad
+  // del riesgo del procedimiento: ahora el botón dice "Capturar muro" o
+  // "Capturar piso" y el operario sabe qué va a llevarse antes de tocar.
+  const [mira, setMira] = useState(null);
+  useEffect(() => {
+    if (paso !== 'obra') return undefined;
+    const t = setInterval(() => {
+      const r = reticuloRef?.current;
+      if (!r || !r.found || !r.matrix || r.type === 'point') { setMira(null); return; }
+      const q = planoDesdePose(r.matrix);
+      setMira(q ? claseDeNormal(q.n) : null);
+    }, 250);
+    return () => clearInterval(t);
+  }, [paso, reticuloRef]);
+
   // ── Paso 1: señalar caras en el modelo ────────────────────────────────────
   // La cámara SOLO se enciende en el paso de la obra. Hasta entonces esto
   // sigue siendo el visor de siempre: modelo iluminado, orbitable, con su
@@ -75,7 +104,15 @@ export default function ArCornerPanel({
     if (!plano) { setAviso('Ahí no hay geometría: toca sobre una cara del modelo.'); return; }
     setAviso('');
     obsModeloRef.current = camaraDelVisor(viewer);
-    setCarasModelo((prev) => (prev.length >= 3 ? prev : [...prev, plano]));
+    setCarasModelo((prev) => {
+      if (prev.length >= 3) return prev;
+      // Una cara paralela a otra ya señalada no forma rincón: avisar YA.
+      if (prev.some((c) => Math.abs(dot3(c.n, plano.n)) > 0.966)) {
+        setAviso('Esa cara es paralela a una que ya señalaste: toca las tres caras del rincón.');
+        return prev;
+      }
+      return [...prev, plano];
+    });
   }, [viewer]);
 
   useEffect(() => {
@@ -99,19 +136,43 @@ export default function ArCornerPanel({
   }, [paso, viewer, tocar]);
 
   // ── Paso 2: apuntar a las caras reales ────────────────────────────────────
+  // Cada captura se valida EN EL MOMENTO. Aceptar en silencio y quejarse al
+  // final, en Calcular, es descubrir el error cuando ya no se sabe cuál de
+  // las tres capturas fue — en campo eso es repetirlo todo.
   const capturarObra = () => {
     const r = reticuloRef?.current;
     if (!r || !r.found || !r.matrix) {
       setAviso('Todavía no hay superficie bajo el punto de mira. Muévete despacio y vuelve a intentarlo.');
       return;
     }
+    if (r.type === 'point') {
+      setAviso('Eso son puntos sueltos, no una superficie firme: barre la cara despacio hasta que aparezca su malla.');
+      return;
+    }
     const plano = planoDesdePose(r.matrix);
     if (!plano) { setAviso('La superficie llegó incompleta; repite la captura.'); return; }
+
+    const clase = claseDeNormal(plano.n);
+    if (clase === 'inclinada') {
+      setAviso('Esa cara está inclinada: la esquina necesita un piso a nivel y muros a plomo. Un talud no sirve.');
+      return;
+    }
+    // ¿Ya está capturada? Misma clase y normal casi igual = la misma cara (o
+    // una paralela, que para el rincón es igual de inservible).
+    if (carasObra.some((c) => c.clase === clase && dot3(c.plano.n, plano.n) > 0.966)) {
+      setAviso('Ese ' + clase + ' ya está capturado: gira hacia la otra cara.');
+      return;
+    }
     setAviso('');
     const cam = puente?.getArCamPos?.();
     if (cam) obsMundoRef.current = [...obsMundoRef.current, cam];
-    setCarasObra((prev) => (prev.length >= 3 ? prev : [...prev, plano]));
+    setCarasObra((prev) => (prev.length >= 3 ? prev : [...prev, { plano, clase }]));
   };
+
+  // Composición correcta: UNA cara horizontal (piso o techo) y DOS muros.
+  const horizontales = carasObra.filter((c) => c.clase === 'piso' || c.clase === 'techo').length;
+  const muros = carasObra.filter((c) => c.clase === 'muro').length;
+  const composicionOk = carasObra.length === 3 && horizontales === 1 && muros === 2;
 
   const resolver = () => {
     // El observador del mundo es donde estaba el operario: se promedian las
@@ -120,7 +181,7 @@ export default function ArCornerPanel({
     const obsMundo = obs.length
       ? [0, 1, 2].map((i) => obs.reduce((a, c) => a + c[i], 0) / obs.length)
       : null;
-    const r = calibrarPorEsquina(carasModelo, carasObra, {
+    const r = calibrarPorEsquina(carasModelo, carasObra.map((c) => c.plano), {
       upm, obsMundo, obsModelo: obsModeloRef.current,
     });
     setResultado(r);
@@ -205,7 +266,21 @@ export default function ArCornerPanel({
             Céntrala en el punto de mira y captura. Quédate en el mismo sitio
             para las tres.
           </p>
-          <div style={{ marginBottom: 10 }}>caras: {carasObra.length} de 3</div>
+          <div style={{ marginBottom: 6 }}>
+            mira: <b>{mira || 'nada firme'}</b>
+            {mira === 'inclinada' && ' (no sirve para la esquina)'}
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            capturado: {carasObra.length
+              ? carasObra.map((c, i) => <span key={i}>{i > 0 && ' · '}{c.clase} ✓</span>)
+              : 'nada aún'}
+            {' '}({carasObra.length} de 3)
+          </div>
+          {carasObra.length === 3 && !composicionOk && (
+            <div style={{ marginBottom: 10, color: '#e2b93b' }}>
+              ⚠ Hacen falta un piso (o techo) y dos muros. Deshaz y captura la cara que falta.
+            </div>
+          )}
           {simActivo() && (
             <div style={{ marginBottom: 10, color: '#8ab4f8', fontSize: 13 }}>
               Simulador: teclas 1, 2 y 3 para mirar al piso y a cada muro.
@@ -214,16 +289,16 @@ export default function ArCornerPanel({
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
               type="button"
-              style={carasObra.length < 3 ? botonFuerte : { ...boton, opacity: 0.5 }}
+              style={carasObra.length < 3 && mira ? botonFuerte : { ...boton, opacity: 0.5 }}
               disabled={carasObra.length >= 3}
               onClick={capturarObra}
             >
-              Capturar cara
+              {mira && mira !== 'inclinada' ? 'Capturar ' + mira : 'Capturar cara'}
             </button>
             <button
               type="button"
-              style={carasObra.length === 3 ? botonFuerte : { ...boton, opacity: 0.5 }}
-              disabled={carasObra.length !== 3}
+              style={composicionOk ? botonFuerte : { ...boton, opacity: 0.5 }}
+              disabled={!composicionOk}
               onClick={() => setPaso('modelo')}
             >
               Siguiente
