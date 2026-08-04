@@ -21,8 +21,22 @@ let temporizador = null;
 let t0 = 0;
 let frames = 0;
 
+// El modo simulado se ACTIVA con ?arsim=1 y se QUEDA activo hasta apagarlo con
+// ?arsim=0. Depender del parámetro en cada carga era frágil: el visor reescribe
+// el URL en varios sitios (limpia `pick`, `sso_ticket`, `project`...) y basta
+// una navegación para perderlo — con el resultado de que el simulador parecía
+// no existir.
 export function simActivo() {
-  return typeof window !== 'undefined' && /(\?|&)arsim=1/.test(window.location.search);
+  if (typeof window === 'undefined') return false;
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const v = p.get('arsim');
+    if (v === '1') { sessionStorage.setItem('ecd_arsim', '1'); return true; }
+    if (v === '0') { sessionStorage.removeItem('ecd_arsim'); return false; }
+    return sessionStorage.getItem('ecd_arsim') === '1';
+  } catch {
+    return /(\?|&)arsim=1/.test(window.location.search);
+  }
 }
 
 export function simSubscribe(evento, handler) {
