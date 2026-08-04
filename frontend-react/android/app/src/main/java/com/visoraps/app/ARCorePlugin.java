@@ -170,6 +170,8 @@ public class ARCorePlugin extends Plugin {
     private volatile boolean depthOk = true;
     private volatile int depthDesacuerdos = 0;
     private volatile int depthPuntos = 0;
+    private volatile boolean depthActiva = false;
+    private volatile long depthActivadaMs = 0L;
     private volatile float ultimaDistanciaHit = -1f;
     private long lastDepthMs = 0L;
     private long lastRansacMs = 0L;
@@ -341,10 +343,7 @@ public class ARCorePlugin extends Plugin {
                 config.setFocusMode(Config.FocusMode.AUTO);
                 config.setPlaneFindingMode(Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL);
                 try {
-                    if (session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
-                        config.setDepthMode(Config.DepthMode.AUTOMATIC);
-                        depthSoportada = true;
-                    }
+                    depthSoportada = session.isDepthModeSupported(Config.DepthMode.AUTOMATIC);
                 } catch (Throwable t) {
                     depthSoportada = false;
                 }
@@ -439,13 +438,29 @@ public class ARCorePlugin extends Plugin {
         // confunde. Aqui manda la nube tenida por caras.
         showPlanes = false;
         cornerScan = true;
+        activarProfundidad(true);
         call.resolve();
+    }
+
+    /** Enciende/apaga la Depth API reconfigurando la sesion en vivo. */
+    private void activarProfundidad(boolean on) {
+        if (session == null || sessionConfig == null) return;
+        if (on && (!depthSoportada || !depthOk)) return;
+        try {
+            sessionConfig.setDepthMode(on ? Config.DepthMode.AUTOMATIC : Config.DepthMode.DISABLED);
+            session.configure(sessionConfig);
+            depthActiva = on;
+            depthActivadaMs = System.currentTimeMillis();
+        } catch (Throwable t) {
+            depthActiva = false;
+        }
     }
 
     @PluginMethod
     public void stopCornerScan(PluginCall call) {
         cornerScan = false;
         showPlanes = true;
+        activarProfundidad(false);
         synchronized (nube) { nube.clear(); }
         call.resolve();
     }
@@ -513,7 +528,7 @@ public class ARCorePlugin extends Plugin {
 
     /** Muestrea la imagen de profundidad y la vuelca a la nube (voxel 5 cm). */
     private void ingerirProfundidad(Frame frame, Camera camera) {
-        if (!depthSoportada || !depthOk) return;
+        if (!depthSoportada || !depthOk || !depthActiva) return;
         long ahora = System.currentTimeMillis();
         if (ahora - lastDepthMs < 220L) return;   // ~4 barridos por segundo bastan
         lastDepthMs = ahora;
@@ -935,9 +950,11 @@ public class ARCorePlugin extends Plugin {
             call.reject("Sesion AR no activa");
             return;
         }
+        // La peticion nueva REEMPLAZA a la pendiente. Antes una peticion hecha
+        // sin tracking quedaba en cola PARA SIEMPRE y rechazaba todas las
+        // siguientes: 'Ya hay una solicitud en curso' y ningun modo colocaba.
         if (pendingAnchorCall != null) {
-            call.reject("Ya hay una solicitud de anchor en curso");
-            return;
+            pendingAnchorCall.reject("Reemplazada por una solicitud nueva");
         }
         pendingAnchorCall = call;
     }
@@ -953,8 +970,7 @@ public class ARCorePlugin extends Plugin {
             return;
         }
         if (pendingCameraAnchorCall != null) {
-            call.reject("Ya hay una solicitud de anchor en curso");
-            return;
+            pendingCameraAnchorCall.reject("Reemplazada por una solicitud nueva");
         }
         pendingCameraAnchorCall = call;
     }
@@ -1100,6 +1116,16 @@ public class ARCorePlugin extends Plugin {
                 Camera camera = frame.getCamera();
                 TrackingState trackingState = camera.getTrackingState();
                 emitTracking(trackingState);
+
+                // La profundidad NO puede costarnos el tracking: si lleva
+                // activa 4 s y el rastreador sigue PAUSED, se apaga sola y no
+                // vuelve en esta sesion. Con ella apagada el detector sigue
+                // funcionando con los puntos de rastreo.
+                if (depthActiva && trackingState == TrackingState.PAUSED
+                        && System.currentTimeMillis() - depthActivadaMs > 4000L) {
+                    depthOk = false;
+                    activarProfundidad(false);
+                }
 
                 // Latido 1 Hz con la verdad de ARCore. `reason` es lo decisivo:
                 // INSUFFICIENT_LIGHT / INSUFFICIENT_FEATURES / EXCESSIVE_MOTION
