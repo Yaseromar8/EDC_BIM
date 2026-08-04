@@ -2,7 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { calibrarPorEsquina, clasificar, planoDesdePose } from '../native/arCornerCalib';
 import { cornerPoint } from '../native/registrationCorner.js';
 import { camaraDelVisor, planoDelToque } from '../native/modelFacePick';
-import { simActivo, simMirarA } from '../native/arSim';
+// esSimulado y no simActivo: desde que el navegador usa SIEMPRE el simulador
+// (no hay otra fuente de poses sin plataforma nativa), simActivo() -- que solo
+// mira el ?arsim=1 del URL -- quedo obsoleto como pregunta. Seguir usandolo
+// dejaba las teclas 1/2/3 muertas y la pista escondida en cuanto el URL
+// perdia el parametro, con el simulador corriendo perfectamente por debajo.
+import { esSimulado } from '../native/arcore';
+import { simMirarA } from '../native/arSim';
 
 // Asistente de CALIBRACIÓN POR ESQUINA — el método de Revizto, EN SU ORDEN.
 //
@@ -395,9 +401,10 @@ export default function ArCornerPanel({
               ⚠ Hacen falta un piso (o techo) y dos muros. Deshaz y captura la cara que falta.
             </div>
           )}
-          {simActivo() && (
+          {esSimulado() && (
             <div style={{ marginBottom: 10, color: '#8ab4f8', fontSize: 13 }}>
-              Simulador: teclas 1, 2 y 3 para mirar al piso y a cada muro.
+              Ensayo: teclas <b>1</b>, <b>2</b> y <b>3</b> para mirar al piso y a
+              cada muro (mantén un segundo). <b>0</b> vuelve a la órbita.
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -482,7 +489,7 @@ export default function ArCornerPanel({
 /** Teclas 1/2/3 del simulador: mirar al piso y a cada muro. Solo con ?arsim=1. */
 export function useTeclasSimulador(activo) {
   useEffect(() => {
-    if (!activo || !simActivo()) return undefined;
+    if (!activo || !esSimulado()) return undefined;
     const alPulsar = (e) => {
       const i = ['1', '2', '3'].indexOf(e.key);
       if (i >= 0) simMirarA(i);
