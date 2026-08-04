@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Respaldos que crea "cap sync" al copiar el bundle: generados, nunca del repo
+android/app/src/main/assets/public_old_*/
