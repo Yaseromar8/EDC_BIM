@@ -90,6 +90,11 @@ export default function ArCornerPanel({
   const carasObraRef = useRef([]);
   useEffect(() => { carasObraRef.current = carasObra; }, [carasObra]);
   const estableRef = useRef(null);     // cara vista en ticks seguidos
+  // Ventana de muestras para el AUTO-AFINADO de puntos orientados: como
+  // Revizto, sin botón — mantienes la mira sobre el muro y cuando la nube es
+  // estable la cara entra sola. Umbrales MAS estrictos que el botón, porque
+  // aquí nadie confirmó nada: 8 muestras coherentes o no hay captura.
+  const ventanaRef = useRef([]);
   const vetadaRef = useRef(null);      // la última deshecha: no re-capturarla sola
   const esquinaRef = useRef(null);     // punto 3D del rincón (mundo AR)
 
@@ -110,10 +115,33 @@ export default function ArCornerPanel({
       if (!q) { setMira(null); return; }
       const clase = claseDeNormal(q.n);
       setMira(clase);
-      // La captura AUTOMATICA sigue siendo solo de PLANOS: los puntos
-      // orientados son valiosos pero ruidosos, y para ellos esta el boton
-      // con afinado. Auto-capturar ruido seria peor que no capturar.
-      if (r.type !== 'plane') return;
+      // AUTO-AFINADO también para puntos orientados — el método Revizto de
+      // verdad: barres, las caras se fijan solas, y el operario solo acepta
+      // cuando VE el punto del rincón clavado. Para un plano de ARCore basta
+      // verlo firme dos ticks (abajo); para puntos orientados se exige una
+      // ventana de 8 muestras con la normal quieta (<18°) antes de dejarla
+      // entrar sola.
+      if (r.type !== 'plane') {
+        if (clase === 'inclinada' || carasObraRef.current.length >= 3) return;
+        if (vetadaRef.current && vetadaRef.current.clase === clase
+            && dot3(vetadaRef.current.plano.n, q.n) > 0.966) return;
+        const v = ventanaRef.current;
+        // La ventana se reinicia si la clase cambia (se movió a otra cara).
+        if (v.length && claseDeNormal(v[v.length - 1].n) !== clase) v.length = 0;
+        v.push(q);
+        if (v.length > 12) v.shift();
+        if (v.length >= 8) {
+          const nm = [0, 1, 2].map((i) => v.reduce((a, c) => a + c.n[i], 0) / v.length);
+          const L = Math.hypot(nm[0], nm[1], nm[2]) || 1;
+          const n = nm.map((x) => x / L);
+          if (v.every((c) => dot3(c.n, n) > 0.95)) {
+            const pM = [0, 1, 2].map((i) => v.reduce((a, c) => a + c.p[i], 0) / v.length);
+            if (intentaCapturar({ n, p: pM }, claseDeNormal(n), true)) v.length = 0;
+          }
+        }
+        return;
+      }
+      ventanaRef.current.length = 0;   // hay plano: la ventana de puntos sobra
 
       // Auto-captura: la misma cara vista en DOS ticks seguidos (≈0.5 s) se
       // considera firme y se toma. La deshecha queda vetada para el modo
