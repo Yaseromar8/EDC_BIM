@@ -51,6 +51,7 @@ public class PlaneRenderer {
             "void main() {\n" +
             "  vec4 local = vec4(a_XZAlpha.x, 0.0, a_XZAlpha.y, 1.0);\n" +
             "  gl_Position = u_MVP * local;\n" +
+            "  gl_PointSize = 7.0;\n" +
             "  v_Alpha = a_XZAlpha.z;\n" +
             "  v_Cell = vec2(a_XZAlpha.x, a_XZAlpha.y) * u_CellsPerMeter;\n" +
             "}";
@@ -84,6 +85,14 @@ public class PlaneRenderer {
     private int lineWidthUniform;
 
     private FloatBuffer vertices;
+    // Buffers de la ESTETICA AUGIN: triangulacion radial, contorno y matriz
+    // de puntos. Referencia directa: captura de Augin del usuario en su misma
+    // sala -- malla oscura con puntitos que se ve profesional sobre cualquier
+    // material, donde la rejilla cian brillante parecia un holograma roto.
+    private FloatBuffer lineas;
+    private FloatBuffer puntos;
+    /** Separacion de la matriz de puntos, en metros. */
+    private static final float PASO_PUNTOS_M = 0.35f;
     private final float[] modelMatrix = new float[16];
     private final float[] viewMatrix = new float[16];
     private final float[] projMatrix = new float[16];
@@ -129,6 +138,29 @@ public class PlaneRenderer {
      * @return cuántos planos se dibujaron (la UI lo usa para decir si ya
      *         reconoció superficie o hay que seguir moviendo el equipo).
      */
+    private FloatBuffer asegurar(FloatBuffer b, int floats) {
+        if (b == null || b.capacity() < floats) {
+            b = ByteBuffer.allocateDirect(Math.max(floats, 1024) * BYTES_PER_FLOAT)
+                    .order(ByteOrder.nativeOrder()).asFloatBuffer();
+        }
+        b.clear();
+        return b;
+    }
+
+    /** ¿El punto (x,z) cae dentro del poligono del plano? (par-impar). */
+    private static boolean dentro(FloatBuffer poly, int n, float x, float z) {
+        boolean in = false;
+        for (int i = 0, j = n - 1; i < n; j = i++) {
+            float xi = poly.get(i * 2), zi = poly.get(i * 2 + 1);
+            float xj = poly.get(j * 2), zj = poly.get(j * 2 + 1);
+            if (((zi > z) != (zj > z))
+                    && (x < (xj - xi) * (z - zi) / (zj - zi) + xi)) {
+                in = !in;
+            }
+        }
+        return in;
+    }
+
     public int draw(Collection<Plane> planes, Camera camera, float opacity) {
         if (program == 0 || planes == null || planes.isEmpty()) return 0;
 
@@ -182,18 +214,78 @@ public class PlaneRenderer {
             Matrix.multiplyMM(mvpMatrix, 0, projMatrix, 0, modelViewMatrix, 0);
             GLES20.glUniformMatrix4fv(mvpUniform, 1, false, mvpMatrix, 0);
 
-            // Horizontal hacia arriba = piso donde SÍ se puede colocar (cian).
-            // El resto (paredes, techos) en gris: se ven, pero no invitan.
+            // ESTETICA AUGIN: relleno oscuro neutro que lee "superficie" sobre
+            // cualquier material. El piso apenas se distingue del resto por un
+            // matiz; el dibujo fuerte lo ponen las lineas y los puntos.
             boolean floor = plane.getType() == Plane.Type.HORIZONTAL_UPWARD_FACING;
             if (floor) {
-                GLES20.glUniform3f(colorUniform, 0.24f, 0.86f, 0.94f);
+                GLES20.glUniform3f(colorUniform, 0.05f, 0.06f, 0.09f);
             } else {
-                GLES20.glUniform3f(colorUniform, 0.62f, 0.66f, 0.72f);
+                GLES20.glUniform3f(colorUniform, 0.10f, 0.10f, 0.10f);
             }
 
             GLES20.glVertexAttribPointer(xzAlphaAttrib, COORDS_PER_VERTEX,
                     GLES20.GL_FLOAT, false, COORDS_PER_VERTEX * BYTES_PER_FLOAT, vertices);
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_FAN, 0, needed);
+
+            // TRIANGULACION RADIAL + CONTORNO, en un solo buffer de segmentos:
+            // (centro -> vi) y (vi -> vi+1). Con u_CellsPerMeter = 0 el shader
+            // pinta solido (la rejilla procedural queda neutralizada).
+            lineas = asegurar(lineas, boundaryVerts * 4 * COORDS_PER_VERTEX);
+            for (int i = 0; i < boundaryVerts; i++) {
+                float x = polygon.get(i * 2), z = polygon.get(i * 2 + 1);
+                int j = (i + 1) % boundaryVerts;
+                float xj = polygon.get(j * 2), zj = polygon.get(j * 2 + 1);
+                lineas.put(0f).put(0f).put(1f);
+                lineas.put(x).put(z).put(1f);
+                lineas.put(x).put(z).put(1f);
+                lineas.put(xj).put(zj).put(1f);
+            }
+            int lineaVerts = boundaryVerts * 4;
+            lineas.rewind();
+            GLES20.glUniform1f(cellsUniform, 0f);
+            GLES20.glUniform3f(colorUniform, 0.02f, 0.02f, 0.02f);
+            GLES20.glUniform1f(opacityUniform, opacity * 0.45f);
+            GLES20.glLineWidth(2.5f);
+            GLES20.glVertexAttribPointer(xzAlphaAttrib, COORDS_PER_VERTEX,
+                    GLES20.GL_FLOAT, false, COORDS_PER_VERTEX * BYTES_PER_FLOAT, lineas);
+            GLES20.glDrawArrays(GLES20.GL_LINES, 0, lineaVerts);
+
+            // MATRIZ DE PUNTOS: reticula de 35 cm recortada al poligono real.
+            float minX = 1e9f, maxX = -1e9f, minZ = 1e9f, maxZ = -1e9f;
+            for (int i = 0; i < boundaryVerts; i++) {
+                float x = polygon.get(i * 2), z = polygon.get(i * 2 + 1);
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (z < minZ) minZ = z;
+                if (z > maxZ) maxZ = z;
+            }
+            int cabenX = (int) ((maxX - minX) / PASO_PUNTOS_M) + 1;
+            int cabenZ = (int) ((maxZ - minZ) / PASO_PUNTOS_M) + 1;
+            if (cabenX * cabenZ <= 4000) {
+                puntos = asegurar(puntos, cabenX * cabenZ * COORDS_PER_VERTEX);
+                int nPuntos = 0;
+                for (float px = minX; px <= maxX; px += PASO_PUNTOS_M) {
+                    for (float pz = minZ; pz <= maxZ; pz += PASO_PUNTOS_M) {
+                        if (dentro(polygon, boundaryVerts, px, pz)) {
+                            puntos.put(px).put(pz).put(1f);
+                            nPuntos++;
+                        }
+                    }
+                }
+                if (nPuntos > 0) {
+                    puntos.rewind();
+                    GLES20.glUniform3f(colorUniform, 0.02f, 0.02f, 0.02f);
+                    GLES20.glUniform1f(opacityUniform, opacity * 0.9f);
+                    GLES20.glVertexAttribPointer(xzAlphaAttrib, COORDS_PER_VERTEX,
+                            GLES20.GL_FLOAT, false, COORDS_PER_VERTEX * BYTES_PER_FLOAT, puntos);
+                    GLES20.glDrawArrays(GLES20.GL_POINTS, 0, nPuntos);
+                }
+            }
+
+            // Restaurar los uniformes del relleno para el siguiente plano.
+            GLES20.glUniform1f(cellsUniform, 1f / GRID_CELL_M);
+            GLES20.glUniform1f(opacityUniform, opacity);
             if (floor) drawn++;
         }
 
