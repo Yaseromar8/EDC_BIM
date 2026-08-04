@@ -178,6 +178,17 @@ public class ARCorePlugin extends Plugin {
     private final Random azar = new Random();
     private float[] esquinaPrevia = null;
     private PointCloudRenderer pointCloudRenderer;
+    private FaceRenderer faceRenderer;
+    // Paneles de las caras reconocidas [piso, muroA, muroB]: 4 esquinas xyz
+    // cada uno (o null si esa cara aún no está), y su área en m². Los escribe
+    // el ajuste (hilo GL) y los dibuja el mismo hilo: sin carrera.
+    private final float[][] carasQuads = new float[3][];
+    private final float[] carasAreas = new float[3];
+    private static final float[][] CARAS_COLORES = {
+            { 0.2f, 0.9f, 0.95f },    // piso: cian
+            { 0.35f, 0.95f, 0.4f },   // muro A: verde
+            { 1f, 0.65f, 0.2f },      // muro B: naranja
+    };
     private final float[] mvpNube = new float[16];
     /** true en cuanto ARCore tiene una textura valida donde escribir. */
     private volatile boolean textureReady = false;
@@ -688,13 +699,26 @@ public class ARCorePlugin extends Plugin {
 
         float tol = 0.035f;
         float[] piso = ransacPlano(pts, false, tol);
-        if (piso == null) { emitirEsquina(null, null, null, null, pts.size()); return; }
+        if (piso == null) {
+            carasQuads[0] = null; carasQuads[1] = null; carasQuads[2] = null;
+            carasAreas[0] = 0f; carasAreas[1] = 0f; carasAreas[2] = 0f;
+            emitirEsquina(null, null, null, null, pts.size());
+            return;
+        }
         piso = refinarPlano(pts, piso, tol);
+        panelDeCara(pts, piso, tol, 0);
         ArrayList<float[]> sinPiso = quitarInliers(pts, piso, tol * 2f);
 
         float[] muroA = ransacPlano(sinPiso, true, tol);
-        if (muroA == null) { tenirNube(pts, piso, null, null); emitirEsquina(piso, null, null, null, pts.size()); return; }
+        if (muroA == null) {
+            carasQuads[1] = null; carasQuads[2] = null;
+            carasAreas[1] = 0f; carasAreas[2] = 0f;
+            tenirNube(pts, piso, null, null);
+            emitirEsquina(piso, null, null, null, pts.size());
+            return;
+        }
         muroA = refinarPlano(sinPiso, muroA, tol);
+        panelDeCara(sinPiso, muroA, tol, 1);
         ArrayList<float[]> resto = quitarInliers(sinPiso, muroA, tol * 2f);
 
         float[] muroB = null;
@@ -706,8 +730,14 @@ public class ARCorePlugin extends Plugin {
             if (cos < 0.906f) { muroB = cand; break; }        // > ~25 grados
             resto = quitarInliers(resto, cand, tol * 2f);      // muro paralelo: fuera
         }
-        if (muroB == null) { tenirNube(pts, piso, muroA, null); emitirEsquina(piso, muroA, null, null, pts.size()); return; }
+        if (muroB == null) {
+            carasQuads[2] = null; carasAreas[2] = 0f;
+            tenirNube(pts, piso, muroA, null);
+            emitirEsquina(piso, muroA, null, null, pts.size());
+            return;
+        }
         muroB = refinarPlano(resto, muroB, tol);
+        panelDeCara(resto, muroB, tol, 2);
 
         // Punto de corte de los tres planos (sistema 3x3 por Cramer).
         float[] n1 = piso, n2 = muroA, n3 = muroB;
@@ -734,6 +764,57 @@ public class ARCorePlugin extends Plugin {
         float[] punto = new float[] { px, py, pz };
         tenirNube(pts, piso, muroA, muroB);
         emitirEsquina(piso, muroA, muroB, punto, pts.size());
+    }
+
+    /**
+     * Panel de una cara: rectángulo en el plano ajustado, recortado a la
+     * extensión REAL de sus puntos (percentiles 5-95 para que un punto suelto
+     * no infle el panel). Es lo que el operario ve crecer mientras barre — la
+     * señal inequívoca de "esta cara ya está detectada y mide esto".
+     */
+    private void panelDeCara(ArrayList<float[]> pts, float[] plano, float tol, int idx) {
+        if (plano == null) { carasQuads[idx] = null; carasAreas[idx] = 0f; return; }
+        ArrayList<float[]> in = new ArrayList<>();
+        double cx = 0, cy = 0, cz = 0;
+        for (float[] q : pts) {
+            float dist = plano[0] * q[0] + plano[1] * q[1] + plano[2] * q[2] - plano[3];
+            if (dist < tol && dist > -tol) { in.add(q); cx += q[0]; cy += q[1]; cz += q[2]; }
+        }
+        if (in.size() < 25) { carasQuads[idx] = null; carasAreas[idx] = 0f; return; }
+        cx /= in.size(); cy /= in.size(); cz /= in.size();
+
+        // Base del plano: u,v perpendiculares a la normal.
+        float nx = plano[0], ny = plano[1], nz = plano[2];
+        float ax = Math.abs(ny) < 0.9f ? 0f : 1f, ay = Math.abs(ny) < 0.9f ? 1f : 0f;
+        float ux = ay * nz, uy = -ax * nz, uz = ax * ny - ay * nx;
+        float uL = (float) Math.sqrt(ux * ux + uy * uy + uz * uz);
+        if (uL < 1e-6f) { carasQuads[idx] = null; return; }
+        ux /= uL; uy /= uL; uz /= uL;
+        float vx = ny * uz - nz * uy, vy = nz * ux - nx * uz, vz = nx * uy - ny * ux;
+
+        float[] us = new float[in.size()];
+        float[] vs = new float[in.size()];
+        for (int i = 0; i < in.size(); i++) {
+            float[] q = in.get(i);
+            float dx = (float) (q[0] - cx), dy = (float) (q[1] - cy), dz = (float) (q[2] - cz);
+            us[i] = dx * ux + dy * uy + dz * uz;
+            vs[i] = dx * vx + dy * vy + dz * vz;
+        }
+        java.util.Arrays.sort(us);
+        java.util.Arrays.sort(vs);
+        int p05 = in.size() / 20, p95 = in.size() - 1 - in.size() / 20;
+        float u0 = us[p05], u1 = us[p95], v0 = vs[p05], v1 = vs[p95];
+        if (u1 - u0 < 0.15f || v1 - v0 < 0.15f) { carasQuads[idx] = null; carasAreas[idx] = 0f; return; }
+
+        float[] quad = new float[12];
+        float[][] esquinas = { { u0, v0 }, { u1, v0 }, { u1, v1 }, { u0, v1 } };
+        for (int i = 0; i < 4; i++) {
+            quad[i * 3] = (float) (cx + esquinas[i][0] * ux + esquinas[i][1] * vx);
+            quad[i * 3 + 1] = (float) (cy + esquinas[i][0] * uy + esquinas[i][1] * vy);
+            quad[i * 3 + 2] = (float) (cz + esquinas[i][0] * uz + esquinas[i][1] * vz);
+        }
+        carasQuads[idx] = quad;
+        carasAreas[idx] = (u1 - u0) * (v1 - v0);
     }
 
     /** Tine los puntos segun la cara reconocida: cian piso, verde A, naranja B. */
@@ -770,6 +851,11 @@ public class ARCorePlugin extends Plugin {
     private void emitirEsquina(float[] piso, float[] muroA, float[] muroB, float[] punto, int puntos) {
         JSObject ev = new JSObject();
         ev.put("points", puntos);
+        com.getcapacitor.JSArray areas = new com.getcapacitor.JSArray();
+        areas.put((Object) Double.valueOf(carasAreas[0]));
+        areas.put((Object) Double.valueOf(carasAreas[1]));
+        areas.put((Object) Double.valueOf(carasAreas[2]));
+        ev.put("areas", areas);
         ev.put("depthPts", depthPuntos);
         ev.put("depthOk", depthSoportada && depthOk);
         ev.put("floor", piso != null);
@@ -1043,6 +1129,12 @@ public class ARCorePlugin extends Plugin {
             } catch (Throwable t) {
                 pointCloudRenderer = null;
             }
+            try {
+                faceRenderer = new FaceRenderer();
+                faceRenderer.createOnGlThread();
+            } catch (Throwable t) {
+                faceRenderer = null;
+            }
             bindCameraTexture();
             // Textura registrada: AHORA se reanuda la sesion (en el hilo
             // principal, como el ejemplo oficial). Con REINTENTOS: al volver a
@@ -1242,6 +1334,16 @@ public class ARCorePlugin extends Plugin {
                         camera.getProjectionMatrix(projMatrix, 0, 0.05f, 2000f);
                         android.opengl.Matrix.multiplyMM(mvpNube, 0, projMatrix, 0, viewMatrix, 0);
                         try { pointCloudRenderer.draw(mvpNube, nubeDibujo, nubeColor, nubeDibujoN); } catch (Throwable ignored) { }
+                        if (faceRenderer != null) {
+                            for (int fi = 0; fi < 3; fi++) {
+                                if (carasQuads[fi] != null) {
+                                    try {
+                                        faceRenderer.draw(mvpNube, carasQuads[fi],
+                                                CARAS_COLORES[fi][0], CARAS_COLORES[fi][1], CARAS_COLORES[fi][2]);
+                                    } catch (Throwable ignored) { }
+                                }
+                            }
+                        }
                     }
                     long ahoraMs = System.currentTimeMillis();
                     if (ahoraMs - lastRansacMs >= 600L) {

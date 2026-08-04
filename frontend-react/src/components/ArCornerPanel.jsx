@@ -80,6 +80,7 @@ export default function ArCornerPanel({
   // para equipos donde la nube no alcance.
   const [nubePuntos, setNubePuntos] = useState(0);
   const [profundidad, setProfundidad] = useState(null);   // null = sin dato
+  const [areas, setAreas] = useState([0, 0, 0]);          // [piso, muroA, muroB] m2
   const [linterna, setLinterna] = useState(false);
   useEffect(() => {
     if (paso !== 'obra') return undefined;
@@ -87,6 +88,7 @@ export default function ArCornerPanel({
     const off = onCornerDetect((ev) => {
       setNubePuntos(ev?.points || 0);
       if (ev && ev.depthOk != null) setProfundidad(ev.depthOk ? (ev.depthPts || 0) : -1);
+      if (ev && ev.areas && ev.areas.length === 3) setAreas(ev.areas);
       if (!ev || !ev.found || !ev.stable) return;
       if (carasObraRef.current.length >= 3) return;
       const planos = ev.planes || [];
@@ -516,6 +518,21 @@ export default function ArCornerPanel({
             <span style={{ color: '#33e5f2' }}> piso</span> ·
             <span style={{ color: '#59f266' }}> muro</span> ·
             <span style={{ color: '#ffa633' }}> muro</span>
+          </div>
+          {/* El medidor por cara: el panel de color crece en pantalla y aqui
+              se ve cuanto mide. Es la respuesta a "¿esta detectando o no?". */}
+          <div style={{ marginBottom: 6, fontSize: 13 }}>
+            <span style={{ color: '#33e5f2', fontWeight: areas[0] > 0.3 ? 700 : 400 }}>
+              piso {areas[0] > 0.05 ? areas[0].toFixed(1) + ' m²' : '—'}{areas[0] > 0.3 ? ' ✓' : ''}
+            </span>
+            {' · '}
+            <span style={{ color: '#59f266', fontWeight: areas[1] > 0.3 ? 700 : 400 }}>
+              muro {areas[1] > 0.05 ? areas[1].toFixed(1) + ' m²' : '—'}{areas[1] > 0.3 ? ' ✓' : ''}
+            </span>
+            {' · '}
+            <span style={{ color: '#ffa633', fontWeight: areas[2] > 0.3 ? 700 : 400 }}>
+              muro {areas[2] > 0.05 ? areas[2].toFixed(1) + ' m²' : '—'}{areas[2] > 0.3 ? ' ✓' : ''}
+            </span>
           </div>
           <div style={{ marginBottom: 6 }}>
             mira: <b>{mira || 'nada firme'}</b>
