@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-14';
+const AR_BUILD = 'ar-15';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -95,6 +95,7 @@ export default function NativeARView({ onExit }) {
   const calibrandoRef = useRef(false);
   const modoCamaraRef = useRef(null);
   const enCamaraRef = useRef(false);
+  const [enCamara, setEnCamara] = useState(false);
   // El panel técnico aparece SOLO cuando algo va mal: si a los 6 segundos no
   // ha llegado ninguna pose de ARCore, o el tracking no arranca. En un APK
   // empaquetado no se puede añadir ?ardebug=1 a mano, y sin estos numeros
@@ -194,6 +195,7 @@ export default function NativeARView({ onExit }) {
         const entrarModoCamara = () => {
         if (enCamaraRef.current) return;      // ya estamos; no repetir
         enCamaraRef.current = true;
+        setEnCamara(true);
         document.body.classList.add('ar-active');
         document.documentElement.classList.add('ar-active');
         document.body.style.background = 'transparent';
@@ -286,6 +288,7 @@ export default function NativeARView({ onExit }) {
         const salirModoCamara = () => {
           if (!enCamaraRef.current) return;
           enCamaraRef.current = false;
+          setEnCamara(false);
           try { detachRef.current?.setPausado?.(true); } catch { /* noop */ }
           document.body.classList.remove('ar-active');
           document.documentElement.classList.remove('ar-active');
@@ -635,12 +638,14 @@ export default function NativeARView({ onExit }) {
           aria-label="Toca el piso para colocar el modelo"
         />
       )}
-      <div
-        className={`native-ar-reticle${reticle.found ? ' is-found' : ''}`}
-        data-kind={reticle.type || 'none'}
-        aria-hidden="true"
-      />
-      {!anchored && (
+      {enCamara && (
+        <div
+          className={`native-ar-reticle${reticle.found ? ' is-found' : ''}`}
+          data-kind={reticle.type || 'none'}
+          aria-hidden="true"
+        />
+      )}
+      {enCamara && !anchored && (
         <div className="native-ar-hint">
           {reticle.found && reticle.type === 'plane'
             ? (autoPlaceRef.current ? 'Superficie detectada · colocando…' : 'Superficie detectada · toca para colocar')
@@ -764,7 +769,10 @@ export default function NativeARView({ onExit }) {
         <ArAdjustPanel bridge={detachRef.current} onClose={() => setAjustando(false)} />
       )}
 
-      <div className="native-ar-controls">
+      {/* El pie tambien es del modo camara: mientras se navega el modelo, el
+          selector y el asistente ya traen sus propios botones de salida, y
+          "Colocar sin calibrar" seria un duplicado del selector. */}
+      {enCamara && <div className="native-ar-controls">
         {!anchored ? (
           <>
             <div className="native-ar-primary" style={{ background: '#1f2937', textAlign: 'center' }}>
@@ -812,7 +820,7 @@ export default function NativeARView({ onExit }) {
         )}
 
         <button className="native-ar-exit" onClick={onExit}>Salir AR</button>
-      </div>
+      </div>}
     </div>
   );
 }
