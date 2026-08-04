@@ -11,7 +11,7 @@
 // WebXR. Usa `isNativeAR()` para decidir.
 
 import { registerPlugin, Capacitor } from '@capacitor/core';
-import { simActivo, simSubscribe, simStart, simStop, simAnchor } from './arSim';
+import { simActivo, simSubscribe, simStart, simStop, simAnchor, simCornerScan } from './arSim';
 
 // MODO SIMULADO (?arsim=1): el plugin nativo se sustituye por una fuente de
 // datos sintéticos con la MISMA forma. Sirve para desarrollar y probar todo el
@@ -160,6 +160,24 @@ export async function setPlanesVisible(visible) {
 export function onArStats(handler) {
   if (SIM) return simSubscribe('onArStats', handler);
   const sub = ARCore.addListener('onArStats', handler);
+  return () => { sub.then(s => s.remove()).catch(() => {}); };
+}
+
+// ── Detector de esquina por nube de puntos (método Revizto) ────────────────
+// El plugin acumula la nube mientras el operario barre, ajusta piso + dos
+// muros por RANSAC y emite 'onCornerDetect' con las tres caras y el punto de
+// corte. La web solo escucha: nada de capturar cara por cara.
+export async function startCornerScan() {
+  if (SIM) { simCornerScan(true); return; }
+  try { return await ARCore.startCornerScan(); } catch { return null; }
+}
+export async function stopCornerScan() {
+  if (SIM) { simCornerScan(false); return; }
+  try { return await ARCore.stopCornerScan(); } catch { return null; }
+}
+export function onCornerDetect(handler) {
+  if (SIM) return simSubscribe('onCornerDetect', handler);
+  const sub = ARCore.addListener('onCornerDetect', handler);
   return () => { sub.then(s => s.remove()).catch(() => {}); };
 }
 

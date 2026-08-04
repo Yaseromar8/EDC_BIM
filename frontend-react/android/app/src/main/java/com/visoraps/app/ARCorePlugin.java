@@ -42,6 +42,7 @@ import com.google.ar.core.Frame;
 import com.google.ar.core.HitResult;
 import com.google.ar.core.Plane;
 import com.google.ar.core.Point;
+import com.google.ar.core.PointCloud;
 import com.google.ar.core.Pose;
 import com.google.ar.core.Session;
 import com.google.ar.core.Trackable;
@@ -50,6 +51,9 @@ import com.google.ar.core.TrackingState;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Random;
 import java.util.Arrays;
 import java.util.List;
 
@@ -130,6 +134,24 @@ public class ARCorePlugin extends Plugin {
     // cuando onSurfaceCreated ya registro la textura de camara.
     private volatile boolean resumePendiente = false;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    // ── DETECTOR DE ESQUINA POR NUBE DE PUNTOS (el metodo Revizto real) ────
+    // ARCore casi nunca forma el PLANO de un muro liso, pero sus puntos de
+    // rastreo si van cayendo sobre el. Revizto no espera al plano: acumula la
+    // nube mientras el operario barre y ajusta el las tres caras por RANSAC.
+    // Aqui, lo mismo: voxel de 4 cm para deduplicar, tope de puntos, ajuste
+    // cada ~600 ms y evento 'onCornerDetect' cuando piso + dos muros se
+    // cortan en un punto estable delante de la camara.
+    private volatile boolean cornerScan = false;
+    private final LinkedHashMap<Long, float[]> nube = new LinkedHashMap<>();
+    private static final int NUBE_MAX = 9000;
+    private float[] nubeDibujo = new float[0];
+    private int nubeDibujoN = 0;
+    private long lastRansacMs = 0L;
+    private final Random azar = new Random();
+    private float[] esquinaPrevia = null;
+    private PointCloudRenderer pointCloudRenderer;
+    private final float[] mvpNube = new float[16];
     /** true en cuanto ARCore tiene una textura valida donde escribir. */
     private volatile boolean textureReady = false;
     private TrackingState lastState = null;
@@ -347,6 +369,191 @@ public class ARCorePlugin extends Plugin {
     }
 
     // ── GPS + rumbo ──────────────────────────────────────────────────────────
+    @PluginMethod
+    public void startCornerScan(PluginCall call) {
+        synchronized (nube) { nube.clear(); }
+        esquinaPrevia = null;
+        cornerScan = true;
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopCornerScan(PluginCall call) {
+        cornerScan = false;
+        synchronized (nube) { nube.clear(); }
+        call.resolve();
+    }
+
+    /** Acumula la nube del frame (voxel 4 cm, confianza minima) y dibuja. */
+    private void acumularNube(Frame frame) {
+        try (PointCloud pc = frame.acquirePointCloud()) {
+            java.nio.FloatBuffer pts = pc.getPoints();
+            synchronized (nube) {
+                while (pts.remaining() >= 4) {
+                    float x = pts.get(), y = pts.get(), z = pts.get(), c = pts.get();
+                    if (c < 0.25f) continue;
+                    long kx = (long) Math.floor(x / 0.04f) + 32768L;
+                    long ky = (long) Math.floor(y / 0.04f) + 32768L;
+                    long kz = (long) Math.floor(z / 0.04f) + 32768L;
+                    long key = (kx << 34) | (ky << 17) | kz;
+                    nube.put(key, new float[] { x, y, z });
+                }
+                if (nube.size() > NUBE_MAX) {
+                    java.util.Iterator<Map.Entry<Long, float[]>> it = nube.entrySet().iterator();
+                    int sobra = nube.size() - NUBE_MAX;
+                    while (sobra-- > 0 && it.hasNext()) { it.next(); it.remove(); }
+                }
+                // Copia plana para dibujar sin tocar el mapa fuera del lock.
+                if (nubeDibujo.length < nube.size() * 3) nubeDibujo = new float[nube.size() * 3 + 3000];
+                int i = 0;
+                for (float[] q : nube.values()) {
+                    nubeDibujo[i++] = q[0]; nubeDibujo[i++] = q[1]; nubeDibujo[i++] = q[2];
+                }
+                nubeDibujoN = nube.size();
+            }
+        } catch (Throwable ignored) { }
+    }
+
+    /** RANSAC de un plano sobre `pts`, con la normal restringida. */
+    private float[] ransacPlano(ArrayList<float[]> pts, boolean vertical, float tolDist) {
+        if (pts.size() < 40) return null;
+        float[] mejor = null;
+        int mejorInliers = 0;
+        for (int iter = 0; iter < 220; iter++) {
+            float[] a = pts.get(azar.nextInt(pts.size()));
+            float[] b = pts.get(azar.nextInt(pts.size()));
+            float[] c = pts.get(azar.nextInt(pts.size()));
+            float ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+            float vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+            float nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+            float L = (float) Math.sqrt(nx * nx + ny * ny + nz * nz);
+            if (L < 1e-6f) continue;
+            nx /= L; ny /= L; nz /= L;
+            float vert = Math.abs(ny);              // ARCore: Y es arriba
+            if (vertical ? vert > 0.35f : vert < 0.9f) continue;
+            float d = nx * a[0] + ny * a[1] + nz * a[2];
+            int inliers = 0;
+            for (int i = 0; i < pts.size(); i++) {
+                float[] q = pts.get(i);
+                float dist = nx * q[0] + ny * q[1] + nz * q[2] - d;
+                if (dist < tolDist && dist > -tolDist) inliers++;
+            }
+            if (inliers > mejorInliers) {
+                mejorInliers = inliers;
+                mejor = new float[] { nx, ny, nz, d, inliers };
+            }
+        }
+        return (mejor != null && mejorInliers >= 45) ? mejor : null;
+    }
+
+    private ArrayList<float[]> quitarInliers(ArrayList<float[]> pts, float[] plano, float tol) {
+        ArrayList<float[]> fuera = new ArrayList<>();
+        for (float[] q : pts) {
+            float dist = plano[0] * q[0] + plano[1] * q[1] + plano[2] * q[2] - plano[3];
+            if (dist > tol || dist < -tol) fuera.add(q);
+        }
+        return fuera;
+    }
+
+    /** Ajusta piso + dos muros a la nube y emite onCornerDetect. */
+    private void detectarEsquina(Camera camera) {
+        ArrayList<float[]> pts;
+        synchronized (nube) { pts = new ArrayList<>(nube.values()); }
+        if (pts.size() < 150) { emitirEsquina(null, null, null, null, pts.size()); return; }
+
+        float tol = 0.035f;
+        float[] piso = ransacPlano(pts, false, tol);
+        if (piso == null) { emitirEsquina(null, null, null, null, pts.size()); return; }
+        ArrayList<float[]> sinPiso = quitarInliers(pts, piso, tol * 2f);
+
+        float[] muroA = ransacPlano(sinPiso, true, tol);
+        if (muroA == null) { emitirEsquina(piso, null, null, null, pts.size()); return; }
+        ArrayList<float[]> resto = quitarInliers(sinPiso, muroA, tol * 2f);
+
+        float[] muroB = null;
+        // El segundo muro ademas tiene que abrirse respecto al primero.
+        for (int intento = 0; intento < 3 && muroB == null; intento++) {
+            float[] cand = ransacPlano(resto, true, tol);
+            if (cand == null) break;
+            float cos = Math.abs(cand[0] * muroA[0] + cand[1] * muroA[1] + cand[2] * muroA[2]);
+            if (cos < 0.906f) { muroB = cand; break; }        // > ~25 grados
+            resto = quitarInliers(resto, cand, tol * 2f);      // muro paralelo: fuera
+        }
+        if (muroB == null) { emitirEsquina(piso, muroA, null, null, pts.size()); return; }
+
+        // Punto de corte de los tres planos (sistema 3x3 por Cramer).
+        float[] n1 = piso, n2 = muroA, n3 = muroB;
+        float det = n1[0] * (n2[1] * n3[2] - n2[2] * n3[1])
+                - n1[1] * (n2[0] * n3[2] - n2[2] * n3[0])
+                + n1[2] * (n2[0] * n3[1] - n2[1] * n3[0]);
+        if (Math.abs(det) < 1e-5f) { emitirEsquina(piso, muroA, muroB, null, pts.size()); return; }
+        float px = (n1[3] * (n2[1] * n3[2] - n2[2] * n3[1])
+                - n1[1] * (n2[3] * n3[2] - n2[2] * n3[3])
+                + n1[2] * (n2[3] * n3[1] - n2[1] * n3[3])) / det;
+        float py = (n1[0] * (n2[3] * n3[2] - n2[2] * n3[3])
+                - n1[3] * (n2[0] * n3[2] - n2[2] * n3[0])
+                + n1[2] * (n2[0] * n3[3] - n2[3] * n3[0])) / det;
+        float pz = (n1[0] * (n2[1] * n3[3] - n2[3] * n3[1])
+                - n1[1] * (n2[0] * n3[3] - n2[3] * n3[0])
+                + n1[3] * (n2[0] * n3[1] - n2[1] * n3[0])) / det;
+
+        // La esquina tiene que estar delante y cerca (el rincon que miras, no
+        // un cruce matematico a 40 m).
+        Pose cam = camera.getPose();
+        float dx = px - cam.tx(), dy = py - cam.ty(), dz = pz - cam.tz();
+        if (dx * dx + dy * dy + dz * dz > 25f) { emitirEsquina(piso, muroA, muroB, null, pts.size()); return; }
+
+        float[] punto = new float[] { px, py, pz };
+        emitirEsquina(piso, muroA, muroB, punto, pts.size());
+    }
+
+    private JSObject planoJson(float[] pl) {
+        JSObject o = new JSObject();
+        com.getcapacitor.JSArray n = new com.getcapacitor.JSArray();
+        n.put((Object) Double.valueOf(pl[0])); n.put((Object) Double.valueOf(pl[1])); n.put((Object) Double.valueOf(pl[2]));
+        com.getcapacitor.JSArray q = new com.getcapacitor.JSArray();
+        q.put((Object) Double.valueOf(pl[0] * pl[3])); q.put((Object) Double.valueOf(pl[1] * pl[3])); q.put((Object) Double.valueOf(pl[2] * pl[3]));
+        o.put("n", n);
+        o.put("p", q);
+        o.put("inliers", (int) pl[4]);
+        return o;
+    }
+
+    private void emitirEsquina(float[] piso, float[] muroA, float[] muroB, float[] punto, int puntos) {
+        JSObject ev = new JSObject();
+        ev.put("points", puntos);
+        ev.put("floor", piso != null);
+        ev.put("walls", (muroA != null ? 1 : 0) + (muroB != null ? 1 : 0));
+        boolean found = punto != null;
+        // Estable = dos ajustes seguidos con la esquina a <8 cm. Sin esto el
+        // punto "baila" y el operario acepta una esquina que aun se mueve.
+        boolean estable = false;
+        if (found) {
+            if (esquinaPrevia != null) {
+                float ddx = punto[0] - esquinaPrevia[0];
+                float ddy = punto[1] - esquinaPrevia[1];
+                float ddz = punto[2] - esquinaPrevia[2];
+                estable = (ddx * ddx + ddy * ddy + ddz * ddz) < 0.0064f;
+            }
+            esquinaPrevia = punto;
+        } else {
+            esquinaPrevia = null;
+        }
+        ev.put("found", found);
+        ev.put("stable", estable);
+        if (found) {
+            com.getcapacitor.JSArray pt = new com.getcapacitor.JSArray();
+            pt.put((Object) Double.valueOf(punto[0])); pt.put((Object) Double.valueOf(punto[1])); pt.put((Object) Double.valueOf(punto[2]));
+            ev.put("point", pt);
+            com.getcapacitor.JSArray planos = new com.getcapacitor.JSArray();
+            planos.put(planoJson(piso));
+            planos.put(planoJson(muroA));
+            planos.put(planoJson(muroB));
+            ev.put("planes", planos);
+        }
+        notifyListeners("onCornerDetect", ev);
+    }
+
     /** Ultimas lineas del logcat DEL PROPIO PROCESO. ARCore escribe aqui el
      *  motivo real de un fallo de camara que su API no reporta. Un proceso
      *  puede leer su propio log sin permisos especiales. */
@@ -579,6 +786,12 @@ public class ARCorePlugin extends Plugin {
                 planeRenderer = null;
                 if (glError.isEmpty()) glError = "malla: " + String.valueOf(t.getMessage());
             }
+            try {
+                pointCloudRenderer = new PointCloudRenderer();
+                pointCloudRenderer.createOnGlThread();
+            } catch (Throwable t) {
+                pointCloudRenderer = null;
+            }
             bindCameraTexture();
             // Textura registrada: AHORA se reanuda la sesion (en el hilo
             // principal, como el ejemplo oficial). Ver resumePendiente.
@@ -739,6 +952,24 @@ public class ARCorePlugin extends Plugin {
                     }
                 } else {
                     floorPlanesVisible = 0;
+                }
+
+                // DETECTOR DE ESQUINA: mientras el asistente escanea, la nube
+                // se acumula, se dibuja (los puntitos estilo Revizto) y cada
+                // ~600 ms se ajustan piso + dos muros por RANSAC.
+                if (cornerScan) {
+                    acumularNube(frame);
+                    if (pointCloudRenderer != null && nubeDibujoN > 0) {
+                        camera.getViewMatrix(viewMatrix, 0);
+                        camera.getProjectionMatrix(projMatrix, 0, 0.05f, 2000f);
+                        android.opengl.Matrix.multiplyMM(mvpNube, 0, projMatrix, 0, viewMatrix, 0);
+                        try { pointCloudRenderer.draw(mvpNube, nubeDibujo, nubeDibujoN); } catch (Throwable ignored) { }
+                    }
+                    long ahoraMs = System.currentTimeMillis();
+                    if (ahoraMs - lastRansacMs >= 600L) {
+                        lastRansacMs = ahoraMs;
+                        try { detectarEsquina(camera); } catch (Throwable ignored) { }
+                    }
                 }
 
                 resolvePendingAnchor(frame);

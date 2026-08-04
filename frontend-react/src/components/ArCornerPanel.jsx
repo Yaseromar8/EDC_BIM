@@ -7,7 +7,7 @@ import { camaraDelVisor, planoDelToque } from '../native/modelFacePick';
 // mira el ?arsim=1 del URL -- quedo obsoleto como pregunta. Seguir usandolo
 // dejaba las teclas 1/2/3 muertas y la pista escondida en cuanto el URL
 // perdia el parametro, con el simulador corriendo perfectamente por debajo.
-import { esSimulado } from '../native/arcore';
+import { esSimulado, onCornerDetect, startCornerScan, stopCornerScan } from '../native/arcore';
 import { simMirarA, simRinconAbierto } from '../native/arSim';
 
 // Asistente de CALIBRACIÓN POR ESQUINA — el método de Revizto, EN SU ORDEN.
@@ -72,6 +72,34 @@ export default function ArCornerPanel({
 
   const obsModeloRef = useRef(null);
   const obsMundoRef = useRef([]);
+
+  // ── DETECTOR NATIVO DE ESQUINA (método Revizto de verdad) ───────────────
+  // Mientras dura el paso de obra, el plugin acumula la nube de puntos y
+  // ajusta piso + dos muros por RANSAC. Cuando el rincón llega ESTABLE, las
+  // tres caras entran de golpe — el barrido cara por cara queda de respaldo
+  // para equipos donde la nube no alcance.
+  const [nubePuntos, setNubePuntos] = useState(0);
+  useEffect(() => {
+    if (paso !== 'obra') return undefined;
+    startCornerScan();
+    const off = onCornerDetect((ev) => {
+      setNubePuntos(ev?.points || 0);
+      if (!ev || !ev.found || !ev.stable) return;
+      if (carasObraRef.current.length >= 3) return;
+      const planos = ev.planes || [];
+      if (planos.length !== 3) return;
+      const caras = planos.map((q) => ({ plano: { n: q.n, p: q.p }, clase: claseDeNormal(q.n) }));
+      const horiz = caras.filter((c) => c.clase === 'piso' || c.clase === 'techo').length;
+      const murosN = caras.filter((c) => c.clase === 'muro').length;
+      if (horiz !== 1 || murosN !== 2) return;   // el RANSAC pescó otra cosa
+      const cam = puente?.getArCamPos?.();
+      if (cam) obsMundoRef.current = [cam];
+      setCarasObra(caras);
+      setAviso('');
+    });
+    return () => { off(); stopCornerScan(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paso]);
 
   // Qué hay bajo el punto de mira, en vivo — y CAPTURA AUTOMÁTICA, como
   // Revizto: el operario barre el rincón, las caras se reconocen solas y al
@@ -471,6 +499,10 @@ export default function ArCornerPanel({
               ¡Esquina detectada!
             </div>
           )}
+          <div style={{ marginBottom: 4, color: '#8ab4f8', fontSize: 12.5 }}>
+            relieve reconocido: {nubePuntos} puntos — barre despacio las tres
+            caras y el rincón se arma solo
+          </div>
           <div style={{ marginBottom: 6 }}>
             mira: <b>{mira || 'nada firme'}</b>
             {mira === 'inclinada' && ' (no sirve para la esquina)'}

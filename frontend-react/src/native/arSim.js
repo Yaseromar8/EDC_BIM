@@ -16,7 +16,7 @@
 // La escena simulada es un RINCÓN —piso y dos muros que se cortan—, que es
 // justo lo que pide la calibración por esquina.
 
-const suscriptores = { onCameraPose: [], onTracking: [], onReticle: [], onArStats: [], onGeoPose: [] };
+const suscriptores = { onCameraPose: [], onTracking: [], onReticle: [], onArStats: [], onGeoPose: [], onCornerDetect: [] };
 let temporizador = null;
 let t0 = 0;
 let frames = 0;
@@ -79,6 +79,22 @@ export function simRinconAbierto(abierto) {
   planosActivos = abierto ? SIM_PLANOS_ABIERTO : SIM_PLANOS;
 }
 export function simEsAbierto() { return planosActivos === SIM_PLANOS_ABIERTO; }
+
+// Escaneo de esquina simulado: a los ~2 s del arranque el "detector" entrega
+// las tres caras del rincón activo y su punto de corte, estable — la misma
+// forma que el evento del plugin.
+let escaneandoEsquina = false;
+export function simCornerScan(activo) { escaneandoEsquina = !!activo; }
+export function simEmitirEsquina(seg) {
+  if (!escaneandoEsquina || seg < 2.5) return;
+  const esquina = [-1.5, 0, -2.0];        // vale para el rincón recto y el abierto
+  emitir('onCornerDetect', {
+    found: true, stable: seg > 3.2, points: Math.min(4000, Math.round(seg * 700)),
+    floor: true, walls: 2,
+    point: esquina,
+    planes: planosActivos.map((q) => ({ n: q.n, p: q.p, inliers: 300 })),
+  });
+}
 
 /**
  * Cámara dando una vuelta lenta alrededor del rincón, a 1.6 m de altura y
@@ -236,6 +252,7 @@ export function simStart() {
       emitir('onCameraPose', poseEnSegundo(seg));
       emitir('onReticle', reticuloEnSegundo(seg));
     }
+    if (seg - ultimoLatido >= 0.6) simEmitirEsquina(seg);
     // Latido por TIEMPO, no por número de frames: si el ritmo baja, el latido
     // sigue llegando y el panel sigue diciendo la verdad.
     if (seg - ultimoLatido >= 1) {
