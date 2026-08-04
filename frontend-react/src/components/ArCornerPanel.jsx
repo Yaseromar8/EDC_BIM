@@ -229,7 +229,14 @@ export default function ArCornerPanel({
     if (!esquinaRef.current) setMarcador(null);
   }, [carasObra, composicionOk]);
 
+  // COMO REVIZTO: no hay "Calcular" ni "Aplicar". Al señalar la tercera cara
+  // del modelo se resuelve y, si sale bien, el modelo SE ACOMODA SOLO a la
+  // realidad. El paso de resultado solo existe para el fallo — el éxito se ve
+  // donde debe verse: en el modelo clavado en su sitio.
+  const resueltoRef = useRef(false);
   const resolver = () => {
+    if (resueltoRef.current) return;
+    resueltoRef.current = true;
     // El observador del mundo es donde estaba el operario: se promedian las
     // tres capturas porque se mueve un poco entre una cara y otra.
     const obs = obsMundoRef.current;
@@ -240,24 +247,30 @@ export default function ArCornerPanel({
       upm, obsMundo, obsModelo: obsModeloRef.current,
     });
     setResultado(r);
-    setPaso('resultado');
+    if (r.ok) {
+      try {
+        puente.setYawDegrees(r.yaw);
+        puente.setModelOrigin(r.modelOrigin);
+      } catch { /* lo dirá el panel técnico */ }
+      mostrarModelo?.(true);
+      onAplicar?.(r);
+    } else {
+      resueltoRef.current = false;   // el fallo se puede reintentar
+      setPaso('resultado');
+    }
   };
+
+  useEffect(() => {
+    if (paso === 'modelo' && carasModelo.length === 3) resolver();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paso, carasModelo]);
 
   const reiniciar = () => {
     setCarasModelo([]); setCarasObra([]); setResultado(null);
     obsMundoRef.current = []; obsModeloRef.current = null;
     vetadaRef.current = null; estableRef.current = null;
+    resueltoRef.current = false;
     setAviso(''); setPaso('obra');
-  };
-
-  const aplicar = () => {
-    if (!resultado?.ok) return;
-    try {
-      puente.setYawDegrees(resultado.yaw);
-      puente.setModelOrigin(resultado.modelOrigin);
-    } catch { /* lo dirá el panel técnico */ }
-    mostrarModelo?.(true);
-    onAplicar?.(resultado);
   };
 
   const caja = {
@@ -346,20 +359,13 @@ export default function ArCornerPanel({
           </div>
           <p style={{ margin: '0 0 10px', color: '#a9b0b8' }}>
             La cámara queda en pausa: gira y acerca el modelo con normalidad.
-            Toca las mismas tres caras que escaneaste — el orden da igual.
+            Toca las mismas tres caras que escaneaste — el orden da igual. Al
+            tocar la tercera, el modelo se acomoda solo a la realidad.
           </p>
           <div style={{ marginBottom: 10 }}>
             caras: {carasModelo.length} de 3 {carasModelo.length === 3 && `· ${resumen(carasModelo, (v) => v)}`}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              style={carasModelo.length === 3 ? botonFuerte : { ...boton, opacity: 0.5 }}
-              disabled={carasModelo.length !== 3}
-              onClick={resolver}
-            >
-              Calcular
-            </button>
             <button type="button" style={boton} onClick={() => setCarasModelo((p) => p.slice(0, -1))}>
               Deshacer
             </button>
@@ -450,32 +456,12 @@ export default function ArCornerPanel({
         </>
       )}
 
-      {paso === 'resultado' && resultado && (
+      {paso === 'resultado' && resultado && !resultado.ok && (
         <>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>
-            {resultado.ok ? 'Rincón resuelto' : 'No se pudo calibrar'}
-          </div>
-          {resultado.ok ? (
-            <div style={{ marginBottom: 10 }}>
-              <div>giro: {resultado.yaw.toFixed(1)}°</div>
-              {/* El ángulo por sí solo no dice nada en obra; lo que se entiende
-                  es cuánto se desviaría el replanteo a diez metros. */}
-              <div>
-                ajuste de las caras: {resultado.discrepanciaMuros.toFixed(1)}°
-                {' '}(≈ {(resultado.errorA10m * 100).toFixed(0)} cm de desvío a 10 m)
-              </div>
-              {resultado.avisos.map((a) => (
-                <div key={a} style={{ color: '#e2b93b', marginTop: 4 }}>⚠ {a}</div>
-              ))}
-            </div>
-          ) : (
-            <p style={{ margin: '0 0 10px', color: '#e2b93b' }}>{resultado.motivo}</p>
-          )}
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>No se pudo calibrar</div>
+          <p style={{ margin: '0 0 10px', color: '#e2b93b' }}>{resultado.motivo}</p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {resultado.ok && (
-              <button type="button" style={botonFuerte} onClick={aplicar}>Aplicar</button>
-            )}
-            <button type="button" style={boton} onClick={reiniciar}>Repetir</button>
+            <button type="button" style={botonFuerte} onClick={reiniciar}>Repetir</button>
             <button type="button" style={boton} onClick={onCancelar}>Cancelar</button>
           </div>
         </>

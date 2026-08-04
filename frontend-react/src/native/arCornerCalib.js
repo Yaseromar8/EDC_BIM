@@ -185,14 +185,22 @@ export function calibrarPorEsquina(planosModelo, planosMundo, opts = {}) {
 
   // ¿Los dos muros se cortan en condiciones? Dos muros casi paralelos dejan la
   // posición indefinida a lo largo de ellos.
-  const anguloEntreMuros = (ms) => {
-    const c = Math.abs(punto(norma(ms[0].n), norma(ms[1].n)));
-    return grados(Math.acos(Math.min(1, c)));
+  // Cuánto se ABRE el rincón: el ángulo diedro entre las dos caras, con las
+  // normales ya orientadas hacia el observador (apertura = 180° − ángulo entre
+  // normales). Antes se plegaba con |dot| y un rincón de 135° salía como
+  // "45°" — correcto para la matemática, incomprensible para quien está
+  // mirando el rincón físico.
+  const aperturaRincon = (ms) => {
+    const c = Math.max(-1, Math.min(1, punto(norma(ms[0].n), norma(ms[1].n))));
+    return 180 - grados(Math.acos(c));
   };
-  const abreModelo = anguloEntreMuros(cm.muros);
-  const abreMundo = anguloEntreMuros(cw.muros);
+  const abreModelo = aperturaRincon(cm.muros);
+  const abreMundo = aperturaRincon(cw.muros);
+  if (abreModelo > 155 || abreMundo > 155) {
+    return fallo('los dos muros son casi paralelos: el rincón es casi plano, busca uno más marcado');
+  }
   if (abreModelo < 25 || abreMundo < 25) {
-    return fallo('los dos muros son casi paralelos: busca un rincón más marcado');
+    return fallo('el rincón es demasiado cerrado para calibrar: busca uno más abierto');
   }
 
   // ¿Son EL MISMO rincón? La forma no depende de la orientación: el ángulo
@@ -201,8 +209,8 @@ export function calibrarPorEsquina(planosModelo, planosMundo, opts = {}) {
   // adivinar cuál de los dos lados está mal. Con los dos números, el operario
   // sabe al instante si tocó mal el modelo o escaneó otro rincón.
   if (Math.abs(abreModelo - abreMundo) > 20) {
-    return fallo('no parecen el mismo rincón: los muros del modelo se abren '
-      + abreModelo.toFixed(0) + '° y los de la obra ' + abreMundo.toFixed(0)
+    return fallo('no parecen el mismo rincón: el del modelo se abre '
+      + abreModelo.toFixed(0) + '° y el de la obra ' + abreMundo.toFixed(0)
       + '°. Revisa las caras que tocaste en el modelo.');
   }
 

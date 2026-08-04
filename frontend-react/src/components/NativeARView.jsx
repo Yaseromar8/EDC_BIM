@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-24';
+const AR_BUILD = 'ar-25';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -755,7 +755,8 @@ export default function NativeARView({ onExit }) {
             setAnchored(true);
             setAjustando(true);
             const cm = (r.errorA10m * 100).toFixed(0);
-            setStatus(`Calibrado por esquina (≈ ${cm} cm de desvío a 10 m). Afina con las flechas si hace falta.`);
+            const extra = r.avisos && r.avisos.length ? ` ⚠ ${r.avisos[0]}.` : '';
+            setStatus(`Modelo acomodado (≈ ${cm} cm de desvío a 10 m).${extra} Afina con las flechas si hace falta.`);
           }}
           onCancelar={() => {
             calibrandoRef.current = false;
