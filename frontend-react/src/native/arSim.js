@@ -111,11 +111,16 @@ const normaliza = (v) => {
 // sin emitir una sola pose — con el seguimiento funcionando, porque ese va por
 // setTimeout. Aplazando la parada un tick, un arranque inmediato la cancela y
 // el ciclo sobrevive.
-let pendienteParar = null;
+// Cada arranque incrementa la generación. Una parada solo surte efecto si
+// NADIE ha arrancado después de programarla — el intento anterior fallaba
+// justo aquí: cancelaba las paradas ya pendientes, pero no las que se
+// programaban DESPUÉS del arranque, que son las que llegaban tarde y mataban
+// el ciclo recién creado.
+let generacion = 0;
 
 export function simStart() {
-  if (pendienteParar) { clearTimeout(pendienteParar); pendienteParar = null; }
-  if (temporizador) return;           // ya está corriendo: se aprovecha
+  generacion++;
+  if (temporizador) clearInterval(temporizador);
   t0 = performance.now();
   frames = 0;
 
@@ -146,9 +151,9 @@ export function simStart() {
 }
 
 export function simStop() {
-  if (pendienteParar) clearTimeout(pendienteParar);
-  pendienteParar = setTimeout(() => {
-    pendienteParar = null;
+  const mia = generacion;
+  setTimeout(() => {
+    if (generacion !== mia) return;      // alguien arrancó después: no es mi ciclo
     if (temporizador) clearInterval(temporizador);
     temporizador = null;
     emitir('onTracking', { state: 'stopped' });
