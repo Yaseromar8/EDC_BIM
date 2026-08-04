@@ -15,6 +15,27 @@ import './ARTransparent.css';
 // Ocultar/mostrar TODOS los modelos de forma robusta: la API cambia entre
 // versiones de LMV y `hideModel` no siempre existe (por eso el modelo seguía
 // visible al entrar en AR). Se prueban las tres vías conocidas.
+// Devuelve al visor su aspecto de siempre: iluminación, entorno, sombras y
+// fondo. La usan tanto la salida del AR como el paso ATRÁS desde la cámara al
+// modelo — el AR es un modo temporal y no puede dejar el visor peor de como
+// lo encontró.
+function restaurarAspecto(viewer, saved, estilos) {
+  if (!viewer) return;
+  const intenta = (fn) => { try { fn(); } catch { /* siguiente */ } };
+  intenta(() => { viewer.container.style.background = estilos?.viewer || ''; });
+  const renderer = viewer.impl.renderer();
+  if (!renderer || !saved) return;
+  intenta(() => renderer.setClearColor(saved.color || 0x000000, saved.alpha));
+  intenta(() => renderer.setClearAlpha?.(saved.alpha));
+  intenta(() => renderer.useOverlayAlpha?.(1));
+  if (saved.lightPreset != null) intenta(() => viewer.setLightPreset(saved.lightPreset));
+  intenta(() => viewer.impl.toggleEnvMapBackground(saved.envMap !== false));
+  intenta(() => viewer.setGroundShadow(saved.groundShadow !== false));
+  intenta(() => viewer.setGroundReflection(saved.groundReflection !== false));
+  intenta(() => { const cv = viewer.impl.canvas || viewer.canvas; if (cv) cv.style.background = ''; });
+  intenta(() => viewer.impl.invalidate(true, true, true));
+}
+
 function setModelsVisible(viewer, visible) {
   if (!viewer) return 0;
   let hechos = 0;
@@ -49,7 +70,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-11';
+const AR_BUILD = 'ar-12';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -71,6 +92,8 @@ export default function NativeARView({ onExit }) {
   // calibración necesita la POSE completa de la superficie apuntada.
   const reticuloRef = useRef(null);
   const calibrandoRef = useRef(false);
+  const modoCamaraRef = useRef(null);
+  const enCamaraRef = useRef(false);
   // El panel técnico aparece SOLO cuando algo va mal: si a los 6 segundos no
   // ha llegado ninguna pose de ARCore, o el tracking no arranca. En un APK
   // empaquetado no se puede añadir ?ardebug=1 a mano, y sin estos numeros
@@ -157,6 +180,19 @@ export default function NativeARView({ onExit }) {
           html: document.documentElement.style.background,
           viewer: viewer.container.style.background,
         };
+        // EL AR ARRANCA COMO EL VISOR DE SIEMPRE.
+        //
+        // Antes se oscurecía todo de golpe al entrar: fondo negro, modelo
+        // apagado y geometría oculta, sin que nadie lo hubiera pedido. Así no
+        // trabaja Revizto y así no se puede trabajar: primero navegas el modelo
+        // NORMAL hasta plantarte donde vas a referenciarte —reconociendo el
+        // sitio, buscando el rincón— y solo entonces arranca la cámara.
+        //
+        // Por eso todo lo que apaga el visor vive aquí dentro y no se ejecuta
+        // hasta que se pide el modo cámara.
+        const entrarModoCamara = () => {
+        if (enCamaraRef.current) return;      // ya estamos; no repetir
+        enCamaraRef.current = true;
         document.body.classList.add('ar-active');
         document.documentElement.classList.add('ar-active');
         document.body.style.background = 'transparent';
@@ -169,7 +205,10 @@ export default function NativeARView({ onExit }) {
           // descolorido para siempre: sin mapa de entorno, sin iluminacion y
           // sin sombras. El AR es un modo temporal; no puede dejar el visor
           // peor de como lo encontro.
-          rendererStateRef.current = {
+          // Solo la PRIMERA vez: si se entra y se sale de la cámara varias
+          // veces, volver a guardar aquí capturaría el estado ya apagado y el
+          // visor no recuperaría nunca su aspecto.
+          if (!rendererStateRef.current) rendererStateRef.current = {
             color: renderer.getClearColor?.().clone?.() || null,
             alpha: renderer.getClearAlpha?.() ?? 1,
             lightPreset: (() => {
@@ -237,6 +276,24 @@ export default function NativeARView({ onExit }) {
         } catch (e) {
           console.warn('[NativeAR] No se pudo transparentar el renderer:', e);
         }
+          setModelsVisible(viewer, false);
+          try { detachRef.current?.setPausado?.(false); } catch { /* noop */ }
+        };
+
+        // Volver del modo cámara al visor normal, sin salir del AR ni perder
+        // la sesión de seguimiento.
+        const salirModoCamara = () => {
+          if (!enCamaraRef.current) return;
+          enCamaraRef.current = false;
+          try { detachRef.current?.setPausado?.(true); } catch { /* noop */ }
+          document.body.classList.remove('ar-active');
+          document.documentElement.classList.remove('ar-active');
+          document.body.style.background = previousStylesRef.current?.body || '';
+          document.documentElement.style.background = previousStylesRef.current?.html || '';
+          restaurarAspecto(viewer, rendererStateRef.current, previousStylesRef.current);
+          setModelsVisible(viewer, true);
+        };
+        modoCamaraRef.current = { entrar: entrarModoCamara, salir: salirModoCamara };
 
         // Subscribe before start: ARCore only emits when the tracking state changes.
         trackingCleanupRef.current = onTracking((next) => setTracking(next.state));
@@ -258,11 +315,12 @@ export default function NativeARView({ onExit }) {
           unitsPerMeter,
           onFrame: (h) => { hudRef.current = h; setHud(h); },
         });
-        // El modelo ARRANCA OCULTO: primero se ve el terreno real y el
-        // retículo; el modelo aparece SOLO cuando lo colocas. Antes entraba
-        // visible y quedaba pegado a la cámara tapando todo.
-        const ocultados = setModelsVisible(viewer, false);
-        console.log('[AR] modelos ocultos al entrar:', ocultados);
+        // El puente queda enganchado pero EN PAUSA: recibe las poses y
+        // mantiene viva la sesión de ARCore, pero no toca la cámara del visor.
+        // Así el operario navega el modelo con normalidad mientras el
+        // seguimiento ya está calentando por debajo — cuando pida la cámara,
+        // no habrá que esperar al reconocimiento.
+        try { detachRef.current.setPausado?.(true); } catch { /* noop */ }
 
         reticleCleanupRef.current = onReticle((r) => {
           reticuloRef.current = r;
@@ -289,7 +347,7 @@ export default function NativeARView({ onExit }) {
             stableTicksRef.current = 0;
           }
         });
-        setStatus('Apunta la camara al piso y muevete despacio…');
+        setStatus('Navega hasta donde vayas a referenciarte y elige cómo calibrar.');
         // Si en 6 segundos no llega ni una pose, el AR no esta vivo: se
         // enseña el panel tecnico en vez de dejar al operario mirando negro.
         setTimeout(() => {
@@ -557,7 +615,7 @@ export default function NativeARView({ onExit }) {
       {/* RETÍCULO: verde = piso detectado (puedes colocar) · ámbar = solo
           puntos sueltos (sigue escaneando) · gris = nada aún. Además toda la
           zona superior es zona de TOQUE para colocar el modelo ahí. */}
-      {!anchored && (
+      {!anchored && !eligiendoModo && !calibrandoEsquina && (
         <div
           className="native-ar-tap-layer"
           onClick={handleTapPlace}
@@ -587,13 +645,17 @@ export default function NativeARView({ onExit }) {
       {/* ELEGIR MÉTODO — es lo primero que hace Revizto al entrar en AR, y es lo
           correcto: el operario decide, nada se coloca a sus espaldas. */}
       {eligiendoModo && !anchored && (
+        /* Barra ABAJO y no un panel a pantalla completa: mientras se elige hay
+           que poder girar y acercar el modelo para reconocer el sitio y buscar
+           el rincon. Un modal encima lo impide, que es justo lo que estorbaba. */
         <div style={{
-          position: 'absolute', inset: 0, zIndex: 30, display: 'flex',
-          flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: 12, background: 'rgba(8,10,14,0.82)', pointerEvents: 'auto', padding: 24,
+          position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30,
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          gap: 8, background: 'linear-gradient(transparent, rgba(8,10,14,0.92) 38%)',
+          pointerEvents: 'none', padding: '48px 16px 14px',
         }}>
-          <div style={{ color: '#e9ecf1', fontSize: 17, fontWeight: 600, marginBottom: 4 }}>
-            ¿Cómo quieres calibrar?
+          <div style={{ color: '#e9ecf1', fontSize: 15, fontWeight: 600 }}>
+            Navega hasta tu punto y elige cómo referenciarte
           </div>
           {[
             {
@@ -622,6 +684,9 @@ export default function NativeARView({ onExit }) {
                 autoPlaceRef.current = (m.id === 'piso');
                 calibrandoRef.current = (m.id === 'esquina');
                 setCalibrandoEsquina(m.id === 'esquina');
+                // Por esquina se sigue EN EL MODELO: el asistente pide primero
+                // las tres caras ahi. Los otros dos van directos a la camara.
+                if (m.id !== 'esquina') modoCamaraRef.current?.entrar();
                 if (m.id === 'ninguna') colocarSinCalibrar();
                 else setStatus(m.id === 'esquina'
                   ? 'Señala el rincón en el modelo y luego en la obra.'
@@ -629,21 +694,21 @@ export default function NativeARView({ onExit }) {
               }}
               style={{
                 width: 'min(420px, 92vw)', textAlign: 'left', cursor: 'pointer',
-                background: 'rgba(20,23,28,0.94)', color: '#e9ecf1',
+                background: 'rgba(20,23,28,0.94)', color: '#e9ecf1', pointerEvents: 'auto',
                 border: '1px solid rgba(255,255,255,0.14)', borderRadius: 12,
-                padding: '14px 16px',
+                padding: '10px 14px',
               }}
             >
-              <div style={{ fontSize: 15.5, fontWeight: 700 }}>{m.titulo}</div>
-              <div style={{ fontSize: 13, color: '#aab3bf', marginTop: 3 }}>{m.texto}</div>
-              <div style={{ fontSize: 11.5, color: '#7f8894', marginTop: 3 }}>{m.nota}</div>
+              <div style={{ fontSize: 14.5, fontWeight: 700 }}>{m.titulo}</div>
+              <div style={{ fontSize: 12.5, color: '#aab3bf', marginTop: 2 }}>{m.texto}</div>
             </button>
           ))}
-          <div style={{ color: '#7f8894', fontSize: 11.5, maxWidth: 420, textAlign: 'center', marginTop: 6 }}>
+          <div style={{ color: '#7f8894', fontSize: 11, maxWidth: 420, textAlign: 'center' }}>
             El AR es una ayuda visual. Para medir o replantear, usa los métodos de siempre.
           </div>
           <button onClick={onExit} style={{
-            marginTop: 4, background: 'none', border: 'none', color: '#98a1ad',
+            pointerEvents: 'auto',
+            marginTop: 2, background: 'none', border: 'none', color: '#98a1ad',
             fontSize: 13, cursor: 'pointer',
           }}>Salir</button>
         </div>
@@ -657,6 +722,10 @@ export default function NativeARView({ onExit }) {
           puente={detachRef.current}
           upm={unitsPerMeter}
           reticuloRef={reticuloRef}
+          modoCamara={(v) => {
+            if (v) modoCamaraRef.current?.entrar();
+            else modoCamaraRef.current?.salir();
+          }}
           mostrarModelo={(v) => { try { setModelsVisible(window.NOP_VIEWER, v); } catch { /* noop */ } }}
           onAplicar={(r) => {
             calibrandoRef.current = false;
@@ -670,11 +739,11 @@ export default function NativeARView({ onExit }) {
           onCancelar={() => {
             calibrandoRef.current = false;
             setCalibrandoEsquina(false);
-            try { detachRef.current?.setPausado?.(false); } catch { /* noop */ }
-            try { setModelsVisible(window.NOP_VIEWER, false); } catch { /* noop */ }
+            // Cancelar devuelve al visor normal, no a una pantalla negra.
+            modoCamaraRef.current?.salir();
             setEligiendoModo(true);
             setModo(null);
-            setStatus('¿Cómo quieres calibrar?');
+            setStatus('Navega hasta donde vayas a referenciarte y elige cómo calibrar.');
           }}
         />
       )}

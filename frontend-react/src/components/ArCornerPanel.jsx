@@ -39,7 +39,7 @@ function resumen(planos, arriba) {
 }
 
 export default function ArCornerPanel({
-  viewer, puente, upm, reticuloRef, mostrarModelo, onAplicar, onCancelar,
+  viewer, puente, upm, reticuloRef, modoCamara, mostrarModelo, onAplicar, onCancelar,
 }) {
   const [paso, setPaso] = useState('intro');
   const [carasModelo, setCarasModelo] = useState([]);
@@ -51,14 +51,20 @@ export default function ArCornerPanel({
   const obsMundoRef = useRef([]);
 
   // ── Paso 1: señalar caras en el modelo ────────────────────────────────────
-  // El puente suelta la cámara para que el visor se pueda orbitar.
+  // La cámara SOLO se enciende en el paso de la obra. Hasta entonces esto
+  // sigue siendo el visor de siempre: modelo iluminado, orbitable, con su
+  // fondo. Encenderla antes es lo que convertía la entrada al AR en una
+  // pantalla oscura con un modelo irreconocible.
+  // Solo se avisa cuando CAMBIA. La función llega nueva en cada render, así
+  // que sin esta guarda el efecto se dispararía continuamente y volvería a
+  // apagar el visor en cada repintado.
+  const camaraPuestaRef = useRef(null);
   useEffect(() => {
-    if (!puente) return undefined;
-    const enModelo = paso === 'modelo';
-    try { puente.setPausado?.(enModelo); } catch { /* noop */ }
-    mostrarModelo?.(enModelo);
-    return () => {};
-  }, [paso, puente, mostrarModelo]);
+    const quiere = paso === 'obra';
+    if (camaraPuestaRef.current === quiere) return;
+    camaraPuestaRef.current = quiere;
+    modoCamara?.(quiere);
+  }, [paso, modoCamara]);
 
   const tocar = useCallback((ev) => {
     const plano = planoDelToque(viewer, ev.clientX, ev.clientY);
