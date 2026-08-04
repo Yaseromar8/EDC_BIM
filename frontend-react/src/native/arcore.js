@@ -20,6 +20,9 @@ import { simActivo, simSubscribe, simStart, simStop, simAnchor } from './arSim';
 // todo lo demás es lógica que no tiene por qué depender de él para probarse.
 const SIM = simActivo();
 
+// Se re-exporta para que App decida montar el AR nativo en el navegador.
+export { simActivo };
+
 // El nombre 'ARCore' debe coincidir con @CapacitorPlugin(name = "ARCore") en Kotlin/Java.
 const ARCore = registerPlugin('ARCore');
 

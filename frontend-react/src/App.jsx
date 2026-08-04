@@ -16,7 +16,7 @@ import LoginScreen from './components/LoginScreen';
 import FilterConfiguratorModal from './components/FilterConfiguratorModal';
 import ARView from './components/ARView';
 import NativeARView from './components/NativeARView';
-import { isNativeAR } from './native/arcore';
+import { isNativeAR, simActivo} from './native/arcore';
 import PhotoAlbumModal from './components/PhotoAlbumModal';
 import SheetViewerPanel from './components/SheetViewerPanel';
 import LinkRevitBadge from './components/LinkRevitBadge';
@@ -4404,7 +4404,13 @@ function App() {
                   <LinkRevitBadge variant="inline" project={selectedProject?.id} backendUrl={BACKEND_URL} />
                   {!isSharedMode && !arModeActive && !nativeArActive && selectedProject && models && models.length > 0 && (
                     <button
-                      onClick={() => { if (isNativeAR()) setNativeArActive(true); else setArModeActive(true); }}
+                      onClick={() => {
+                        // Con ?arsim=1 se abre el AR NATIVO tambien en el navegador,
+                        // alimentado por el simulador. Es lo que permite construir y
+                        // probar todo el flujo en la laptop, sin tablet ni APK.
+                        if (isNativeAR() || simActivo()) setNativeArActive(true);
+                        else setArModeActive(true);
+                      }}
                       title={isNativeAR() ? 'Realidad Aumentada (ARCore)' : 'Realidad Aumentada (navegador)'}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', height: 26,
