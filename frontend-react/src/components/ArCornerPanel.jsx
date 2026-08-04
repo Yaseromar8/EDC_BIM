@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { calibrarPorEsquina, clasificar, planoDesdePose } from '../native/arCornerCalib';
+import { cornerPoint } from '../native/registrationCorner.js';
 import { camaraDelVisor, planoDelToque } from '../native/modelFacePick';
 import { simActivo, simMirarA } from '../native/arSim';
 
@@ -66,20 +67,54 @@ export default function ArCornerPanel({
   const obsModeloRef = useRef(null);
   const obsMundoRef = useRef([]);
 
-  // Qué hay bajo el punto de mira, en vivo. Capturar a ciegas era la mitad
-  // del riesgo del procedimiento: ahora el botón dice "Capturar muro" o
-  // "Capturar piso" y el operario sabe qué va a llevarse antes de tocar.
+  // Qué hay bajo el punto de mira, en vivo — y CAPTURA AUTOMÁTICA, como
+  // Revizto: el operario barre el rincón, las caras se reconocen solas y al
+  // coincidir las tres se pinta el punto del rincón ("Corner detected!").
+  // Capturar a botonazos sigue disponible como respaldo, pero el camino
+  // normal es barrer y mirar.
   const [mira, setMira] = useState(null);
+  const [marcador, setMarcador] = useState(null);
+  const carasObraRef = useRef([]);
+  useEffect(() => { carasObraRef.current = carasObra; }, [carasObra]);
+  const estableRef = useRef(null);     // cara vista en ticks seguidos
+  const vetadaRef = useRef(null);      // la última deshecha: no re-capturarla sola
+  const esquinaRef = useRef(null);     // punto 3D del rincón (mundo AR)
+
   useEffect(() => {
     if (paso !== 'obra') return undefined;
     const t = setInterval(() => {
+      // El punto del rincón sigue a la cámara aunque no haya nada bajo la mira.
+      if (esquinaRef.current && puente?.proyectarMundo) {
+        setMarcador(puente.proyectarMundo(esquinaRef.current));
+      } else {
+        setMarcador(null);
+      }
+
       const r = reticuloRef?.current;
       if (!r || !r.found || !r.matrix || r.type === 'point') { setMira(null); return; }
       const q = planoDesdePose(r.matrix);
-      setMira(q ? claseDeNormal(q.n) : null);
+      if (!q) { setMira(null); return; }
+      const clase = claseDeNormal(q.n);
+      setMira(clase);
+
+      // Auto-captura: la misma cara vista en DOS ticks seguidos (≈0.5 s) se
+      // considera firme y se toma. La deshecha queda vetada para el modo
+      // automático — sin esto, Deshacer no serviría de nada: la cara seguiría
+      // bajo la mira y volvería a entrar sola medio segundo después.
+      if (clase === 'inclinada' || carasObraRef.current.length >= 3) return;
+      if (vetadaRef.current && vetadaRef.current.clase === clase
+          && dot3(vetadaRef.current.plano.n, q.n) > 0.966) return;
+      const prev = estableRef.current;
+      if (prev && prev.clase === clase && dot3(prev.n, q.n) > 0.98) {
+        prev.ticks += 1;
+        if (prev.ticks >= 2) { intentaCapturar(q, clase, true); prev.ticks = 0; }
+      } else {
+        estableRef.current = { clase, n: q.n, ticks: 1 };
+      }
     }, 250);
     return () => clearInterval(t);
-  }, [paso, reticuloRef]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paso, reticuloRef, puente]);
 
   // ── Paso 1: señalar caras en el modelo ────────────────────────────────────
   // La cámara SOLO se enciende en el paso de la obra. Hasta entonces esto
@@ -136,9 +171,29 @@ export default function ArCornerPanel({
   }, [paso, viewer, tocar]);
 
   // ── Paso 2: apuntar a las caras reales ────────────────────────────────────
-  // Cada captura se valida EN EL MOMENTO. Aceptar en silencio y quejarse al
-  // final, en Calcular, es descubrir el error cuando ya no se sabe cuál de
-  // las tres capturas fue — en campo eso es repetirlo todo.
+  // Cada captura se valida EN EL MOMENTO — y la validación es LA MISMA para
+  // el modo automático y el botón de respaldo. Aceptar en silencio y quejarse
+  // al final, en Calcular, es descubrir el error cuando ya no se sabe cuál de
+  // las tres capturas fue.
+  const intentaCapturar = (plano, clase, silencioso) => {
+    if (carasObraRef.current.length >= 3) return false;
+    if (clase === 'inclinada') {
+      if (!silencioso) setAviso('Esa cara está inclinada: la esquina necesita un piso a nivel y muros a plomo. Un talud no sirve.');
+      return false;
+    }
+    // ¿Ya está capturada? Misma clase y normal casi igual = la misma cara (o
+    // una paralela, que para el rincón es igual de inservible).
+    if (carasObraRef.current.some((c) => c.clase === clase && dot3(c.plano.n, plano.n) > 0.966)) {
+      if (!silencioso) setAviso('Ese ' + clase + ' ya está capturado: gira hacia la otra cara.');
+      return false;
+    }
+    if (!silencioso) setAviso('');
+    const cam = puente?.getArCamPos?.();
+    if (cam) obsMundoRef.current = [...obsMundoRef.current, cam];
+    setCarasObra((prev) => (prev.length >= 3 ? prev : [...prev, { plano, clase }]));
+    return true;
+  };
+
   const capturarObra = () => {
     const r = reticuloRef?.current;
     if (!r || !r.found || !r.matrix) {
@@ -151,28 +206,22 @@ export default function ArCornerPanel({
     }
     const plano = planoDesdePose(r.matrix);
     if (!plano) { setAviso('La superficie llegó incompleta; repite la captura.'); return; }
-
-    const clase = claseDeNormal(plano.n);
-    if (clase === 'inclinada') {
-      setAviso('Esa cara está inclinada: la esquina necesita un piso a nivel y muros a plomo. Un talud no sirve.');
-      return;
-    }
-    // ¿Ya está capturada? Misma clase y normal casi igual = la misma cara (o
-    // una paralela, que para el rincón es igual de inservible).
-    if (carasObra.some((c) => c.clase === clase && dot3(c.plano.n, plano.n) > 0.966)) {
-      setAviso('Ese ' + clase + ' ya está capturado: gira hacia la otra cara.');
-      return;
-    }
-    setAviso('');
-    const cam = puente?.getArCamPos?.();
-    if (cam) obsMundoRef.current = [...obsMundoRef.current, cam];
-    setCarasObra((prev) => (prev.length >= 3 ? prev : [...prev, { plano, clase }]));
+    // El botón salta el veto: tocar es una orden explícita del operario.
+    vetadaRef.current = null;
+    intentaCapturar(plano, claseDeNormal(plano.n), false);
   };
 
   // Composición correcta: UNA cara horizontal (piso o techo) y DOS muros.
   const horizontales = carasObra.filter((c) => c.clase === 'piso' || c.clase === 'techo').length;
   const muros = carasObra.filter((c) => c.clase === 'muro').length;
   const composicionOk = carasObra.length === 3 && horizontales === 1 && muros === 2;
+
+  // Donde se cortan las tres caras: el punto del rincón, en el mundo de AR.
+  // Es lo que se pinta en pantalla — el "Corner detected!" de Revizto.
+  useEffect(() => {
+    esquinaRef.current = composicionOk ? cornerPoint(carasObra.map((c) => c.plano)) : null;
+    if (!esquinaRef.current) setMarcador(null);
+  }, [carasObra, composicionOk]);
 
   const resolver = () => {
     // El observador del mundo es donde estaba el operario: se promedian las
@@ -191,6 +240,7 @@ export default function ArCornerPanel({
   const reiniciar = () => {
     setCarasModelo([]); setCarasObra([]); setResultado(null);
     obsMundoRef.current = []; obsModeloRef.current = null;
+    vetadaRef.current = null; estableRef.current = null;
     setAviso(''); setPaso('obra');
   };
 
@@ -212,6 +262,21 @@ export default function ArCornerPanel({
   };
 
   return (
+    <>
+      {paso === 'obra' && marcador?.visible && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'fixed',
+            left: 'calc(' + (marcador.x * 100).toFixed(2) + '% - 11px)',
+            top: 'calc(' + (marcador.y * 100).toFixed(2) + '% - 11px)',
+            width: 22, height: 22, borderRadius: '50%',
+            background: '#2563eb', border: '3px solid #fff',
+            boxShadow: '0 0 0 8px rgba(37,99,235,0.35)',
+            zIndex: 39, pointerEvents: 'none',
+          }}
+        />
+      )}
     <div style={caja}>
       {paso === 'intro' && (
         <>
@@ -263,9 +328,18 @@ export default function ArCornerPanel({
             1 de 2 · Apunta a la {NOMBRES[carasObra.length] || 'última cara'} del rincón real
           </div>
           <p style={{ margin: '0 0 10px', color: '#a9b0b8' }}>
-            Céntrala en el punto de mira y captura. Quédate en el mismo sitio
-            para las tres.
+            Barre despacio el piso y los dos muros, quedándote en el mismo
+            sitio. Las caras se capturan solas; cuando las tres coincidan verás
+            el punto del rincón.
           </p>
+          {composicionOk && (
+            <div style={{
+              marginBottom: 8, padding: '6px 10px', borderRadius: 8,
+              background: '#1d4ed8', color: '#fff', fontWeight: 700, textAlign: 'center',
+            }}>
+              ¡Esquina detectada!
+            </div>
+          )}
           <div style={{ marginBottom: 6 }}>
             mira: <b>{mira || 'nada firme'}</b>
             {mira === 'inclinada' && ' (no sirve para la esquina)'}
@@ -301,10 +375,28 @@ export default function ArCornerPanel({
               disabled={!composicionOk}
               onClick={() => setPaso('modelo')}
             >
-              Siguiente
+              Continuar
             </button>
-            <button type="button" style={boton} onClick={() => setCarasObra((p) => p.slice(0, -1))}>
+            <button
+              type="button"
+              style={boton}
+              onClick={() => {
+                const ultima = carasObra[carasObra.length - 1];
+                if (ultima) vetadaRef.current = ultima;
+                setCarasObra((p) => p.slice(0, -1));
+              }}
+            >
               Deshacer
+            </button>
+            <button
+              type="button"
+              style={boton}
+              onClick={() => {
+                setCarasObra([]); obsMundoRef.current = [];
+                vetadaRef.current = null; estableRef.current = null; setAviso('');
+              }}
+            >
+              Reiniciar
             </button>
           </div>
         </>
@@ -343,6 +435,7 @@ export default function ArCornerPanel({
 
       {aviso && <div style={{ marginTop: 10, color: '#e2b93b' }}>{aviso}</div>}
     </div>
+    </>
   );
 }
 

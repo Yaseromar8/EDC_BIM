@@ -288,6 +288,27 @@ export function attachArToViewer(viewer, opts = {}) {
     return [inv[12], inv[13], inv[14]];
   };
 
+  // Proyecta un punto del mundo de ARCore (metros, Y arriba) a pantalla,
+  // como FRACCIONES del viewport (0..1). Lo usa la esquina para pintar el
+  // punto del rincón donde de verdad está — el "Corner detected!" de Revizto.
+  detach.proyectarMundo = (p) => {
+    if (!latest?.view || !latest?.proj || !p) return null;
+    const V = latest.view, P = latest.proj;
+    const vx = V[0] * p[0] + V[4] * p[1] + V[8] * p[2] + V[12];
+    const vy = V[1] * p[0] + V[5] * p[1] + V[9] * p[2] + V[13];
+    const vz = V[2] * p[0] + V[6] * p[1] + V[10] * p[2] + V[14];
+    const cx = P[0] * vx + P[4] * vy + P[8] * vz + P[12];
+    const cy = P[1] * vx + P[5] * vy + P[9] * vz + P[13];
+    const cw = P[3] * vx + P[7] * vy + P[11] * vz + P[15];
+    if (cw <= 1e-6) return { visible: false, x: 0, y: 0 };   // detrás de la cámara
+    const nx = cx / cw, ny = cy / cw;
+    return {
+      visible: nx >= -1.05 && nx <= 1.05 && ny >= -1.05 && ny <= 1.05,
+      x: (nx + 1) / 2,
+      y: (1 - ny) / 2,
+    };
+  };
+
   // Rumbo actual de la cámara en el mundo ARCore: lo usa geoAnchor para sembrar
   // el yaw a partir del rumbo verdadero de la brújula.
   detach.getArHeading = () => headingDeg();
