@@ -163,6 +163,12 @@ export function onArStats(handler) {
   return () => { sub.then(s => s.remove()).catch(() => {}); };
 }
 
+// Linterna de la cámara (poca luz: buzón, sombra). En ensayo no hay.
+export async function setTorch(on) {
+  if (SIM) return null;
+  try { return await ARCore.setTorch({ on: !!on }); } catch { return null; }
+}
+
 // ── Detector de esquina por nube de puntos (método Revizto) ────────────────
 // El plugin acumula la nube mientras el operario barre, ajusta piso + dos
 // muros por RANSAC y emite 'onCornerDetect' con las tres caras y el punto de

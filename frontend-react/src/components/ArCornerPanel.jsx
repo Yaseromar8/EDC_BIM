@@ -7,7 +7,7 @@ import { camaraDelVisor, planoDelToque } from '../native/modelFacePick';
 // mira el ?arsim=1 del URL -- quedo obsoleto como pregunta. Seguir usandolo
 // dejaba las teclas 1/2/3 muertas y la pista escondida en cuanto el URL
 // perdia el parametro, con el simulador corriendo perfectamente por debajo.
-import { esSimulado, onCornerDetect, startCornerScan, stopCornerScan } from '../native/arcore';
+import { esSimulado, onCornerDetect, setTorch, startCornerScan, stopCornerScan } from '../native/arcore';
 import { simMirarA, simRinconAbierto } from '../native/arSim';
 
 // Asistente de CALIBRACIÓN POR ESQUINA — el método de Revizto, EN SU ORDEN.
@@ -79,6 +79,7 @@ export default function ArCornerPanel({
   // tres caras entran de golpe — el barrido cara por cara queda de respaldo
   // para equipos donde la nube no alcance.
   const [nubePuntos, setNubePuntos] = useState(0);
+  const [linterna, setLinterna] = useState(false);
   useEffect(() => {
     if (paso !== 'obra') return undefined;
     startCornerScan();
@@ -97,7 +98,12 @@ export default function ArCornerPanel({
       setCarasObra(caras);
       setAviso('');
     });
-    return () => { off(); stopCornerScan(); };
+    return () => {
+      off();
+      stopCornerScan();
+      setTorch(false);
+      setLinterna(false);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paso]);
 
@@ -501,7 +507,10 @@ export default function ArCornerPanel({
           )}
           <div style={{ marginBottom: 4, color: '#8ab4f8', fontSize: 12.5 }}>
             relieve reconocido: {nubePuntos} puntos — barre despacio las tres
-            caras y el rincón se arma solo
+            caras y el rincón se arma solo. Los puntos se tiñen al reconocer:
+            <span style={{ color: '#33e5f2' }}> piso</span> ·
+            <span style={{ color: '#59f266' }}> muro</span> ·
+            <span style={{ color: '#ffa633' }}> muro</span>
           </div>
           <div style={{ marginBottom: 6 }}>
             mira: <b>{mira || 'nada firme'}</b>
@@ -570,6 +579,17 @@ export default function ArCornerPanel({
               }}
             >
               Reiniciar
+            </button>
+            <button
+              type="button"
+              style={linterna ? { ...boton, background: '#7a5b12', borderColor: '#7a5b12', color: '#ffe08a' } : boton}
+              onClick={() => {
+                const v = !linterna;
+                setLinterna(v);
+                setTorch(v);
+              }}
+            >
+              {linterna ? '🔦 Apagar' : '🔦 Linterna'}
             </button>
           </div>
         </>

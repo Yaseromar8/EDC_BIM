@@ -146,7 +146,9 @@ public class ARCorePlugin extends Plugin {
     private final LinkedHashMap<Long, float[]> nube = new LinkedHashMap<>();
     private static final int NUBE_MAX = 9000;
     private float[] nubeDibujo = new float[0];
+    private float[] nubeColor = new float[0];
     private int nubeDibujoN = 0;
+    private Config sessionConfig;   // para reconfigurar en vivo (linterna)
     private long lastRansacMs = 0L;
     private final Random azar = new Random();
     private float[] esquinaPrevia = null;
@@ -315,6 +317,7 @@ public class ARCorePlugin extends Plugin {
                 config.setFocusMode(Config.FocusMode.AUTO);
                 config.setPlaneFindingMode(Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL);
                 session.configure(config);
+                sessionConfig = config;
 
                 final WebView webView = getBridge().getWebView();
                 final ViewGroup parent = (ViewGroup) webView.getParent();
@@ -369,6 +372,24 @@ public class ARCorePlugin extends Plugin {
     }
 
     // ── GPS + rumbo ──────────────────────────────────────────────────────────
+    /** Linterna de la camara durante la sesion (poca luz: buzon, sombra). */
+    @PluginMethod
+    public void setTorch(PluginCall call) {
+        boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        try {
+            if (session != null && sessionConfig != null) {
+                sessionConfig.setFlashMode(on ? Config.FlashMode.TORCH : Config.FlashMode.OFF);
+                session.configure(sessionConfig);
+                call.resolve();
+                return;
+            }
+        } catch (Throwable t) {
+            call.reject("linterna: " + String.valueOf(t.getMessage()));
+            return;
+        }
+        call.reject("sin sesion");
+    }
+
     @PluginMethod
     public void startCornerScan(PluginCall call) {
         synchronized (nube) { nube.clear(); }
@@ -391,7 +412,11 @@ public class ARCorePlugin extends Plugin {
             synchronized (nube) {
                 while (pts.remaining() >= 4) {
                     float x = pts.get(), y = pts.get(), z = pts.get(), c = pts.get();
-                    if (c < 0.25f) continue;
+                    // Umbral ADAPTATIVO: con la nube pobre (muro blanco, poca
+                    // luz) se aceptan hasta los puntos debiles -- RANSAC existe
+                    // para tragar ruido. Con nube rica, se filtra mas.
+                    float minConf = nube.size() < 900 ? 0.02f : 0.08f;
+                    if (c < minConf) continue;
                     long kx = (long) Math.floor(x / 0.04f) + 32768L;
                     long ky = (long) Math.floor(y / 0.04f) + 32768L;
                     long kz = (long) Math.floor(z / 0.04f) + 32768L;
@@ -404,9 +429,16 @@ public class ARCorePlugin extends Plugin {
                     while (sobra-- > 0 && it.hasNext()) { it.next(); it.remove(); }
                 }
                 // Copia plana para dibujar sin tocar el mapa fuera del lock.
-                if (nubeDibujo.length < nube.size() * 3) nubeDibujo = new float[nube.size() * 3 + 3000];
+                if (nubeDibujo.length < nube.size() * 3) {
+                    nubeDibujo = new float[nube.size() * 3 + 3000];
+                    float[] nc = new float[nubeDibujo.length];
+                    System.arraycopy(nubeColor, 0, nc, 0, Math.min(nubeColor.length, nc.length));
+                    nubeColor = nc;
+                }
                 int i = 0;
                 for (float[] q : nube.values()) {
+                    // Blanco por defecto; el ajuste lo tine cuando reconoce la cara.
+                    if (i >= nubeDibujoN * 3) { nubeColor[i] = 1f; nubeColor[i + 1] = 1f; nubeColor[i + 2] = 1f; }
                     nubeDibujo[i++] = q[0]; nubeDibujo[i++] = q[1]; nubeDibujo[i++] = q[2];
                 }
                 nubeDibujoN = nube.size();
@@ -416,7 +448,7 @@ public class ARCorePlugin extends Plugin {
 
     /** RANSAC de un plano sobre `pts`, con la normal restringida. */
     private float[] ransacPlano(ArrayList<float[]> pts, boolean vertical, float tolDist) {
-        if (pts.size() < 40) return null;
+        if (pts.size() < 30) return null;
         float[] mejor = null;
         int mejorInliers = 0;
         for (int iter = 0; iter < 220; iter++) {
@@ -443,7 +475,10 @@ public class ARCorePlugin extends Plugin {
                 mejor = new float[] { nx, ny, nz, d, inliers };
             }
         }
-        return (mejor != null && mejorInliers >= 45) ? mejor : null;
+        // Proporcional a la nube: con 300 puntos no se puede exigir lo mismo
+        // que con 8000 -- muro blanco y poca luz dan nubes pobres y validas.
+        int minimo = Math.max(vertical ? 24 : 30, pts.size() / (vertical ? 90 : 60));
+        return (mejor != null && mejorInliers >= minimo) ? mejor : null;
     }
 
     private ArrayList<float[]> quitarInliers(ArrayList<float[]> pts, float[] plano, float tol) {
@@ -467,7 +502,7 @@ public class ARCorePlugin extends Plugin {
         ArrayList<float[]> sinPiso = quitarInliers(pts, piso, tol * 2f);
 
         float[] muroA = ransacPlano(sinPiso, true, tol);
-        if (muroA == null) { emitirEsquina(piso, null, null, null, pts.size()); return; }
+        if (muroA == null) { tenirNube(pts, piso, null, null); emitirEsquina(piso, null, null, null, pts.size()); return; }
         ArrayList<float[]> resto = quitarInliers(sinPiso, muroA, tol * 2f);
 
         float[] muroB = null;
@@ -479,7 +514,7 @@ public class ARCorePlugin extends Plugin {
             if (cos < 0.906f) { muroB = cand; break; }        // > ~25 grados
             resto = quitarInliers(resto, cand, tol * 2f);      // muro paralelo: fuera
         }
-        if (muroB == null) { emitirEsquina(piso, muroA, null, null, pts.size()); return; }
+        if (muroB == null) { tenirNube(pts, piso, muroA, null); emitirEsquina(piso, muroA, null, null, pts.size()); return; }
 
         // Punto de corte de los tres planos (sistema 3x3 por Cramer).
         float[] n1 = piso, n2 = muroA, n3 = muroB;
@@ -504,7 +539,27 @@ public class ARCorePlugin extends Plugin {
         if (dx * dx + dy * dy + dz * dz > 25f) { emitirEsquina(piso, muroA, muroB, null, pts.size()); return; }
 
         float[] punto = new float[] { px, py, pz };
+        tenirNube(pts, piso, muroA, muroB);
         emitirEsquina(piso, muroA, muroB, punto, pts.size());
+    }
+
+    /** Tine los puntos segun la cara reconocida: cian piso, verde A, naranja B. */
+    private void tenirNube(ArrayList<float[]> pts, float[] piso, float[] muroA, float[] muroB) {
+        synchronized (nube) {
+            int n = Math.min(pts.size(), nubeDibujoN);
+            for (int i = 0; i < n; i++) {
+                float[] q = pts.get(i);
+                float r = 1f, g = 1f, b = 1f;
+                if (piso != null && Math.abs(piso[0] * q[0] + piso[1] * q[1] + piso[2] * q[2] - piso[3]) < 0.05f) {
+                    r = 0.2f; g = 0.9f; b = 0.95f;
+                } else if (muroA != null && Math.abs(muroA[0] * q[0] + muroA[1] * q[1] + muroA[2] * q[2] - muroA[3]) < 0.05f) {
+                    r = 0.35f; g = 0.95f; b = 0.4f;
+                } else if (muroB != null && Math.abs(muroB[0] * q[0] + muroB[1] * q[1] + muroB[2] * q[2] - muroB[3]) < 0.05f) {
+                    r = 1f; g = 0.65f; b = 0.2f;
+                }
+                nubeColor[i * 3] = r; nubeColor[i * 3 + 1] = g; nubeColor[i * 3 + 2] = b;
+            }
+        }
     }
 
     private JSObject planoJson(float[] pl) {
@@ -963,7 +1018,7 @@ public class ARCorePlugin extends Plugin {
                         camera.getViewMatrix(viewMatrix, 0);
                         camera.getProjectionMatrix(projMatrix, 0, 0.05f, 2000f);
                         android.opengl.Matrix.multiplyMM(mvpNube, 0, projMatrix, 0, viewMatrix, 0);
-                        try { pointCloudRenderer.draw(mvpNube, nubeDibujo, nubeDibujoN); } catch (Throwable ignored) { }
+                        try { pointCloudRenderer.draw(mvpNube, nubeDibujo, nubeColor, nubeDibujoN); } catch (Throwable ignored) { }
                     }
                     long ahoraMs = System.currentTimeMillis();
                     if (ahoraMs - lastRansacMs >= 600L) {
