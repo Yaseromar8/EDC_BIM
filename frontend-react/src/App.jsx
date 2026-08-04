@@ -14,9 +14,8 @@ import AddDocumentModal from './components/AddDocumentModal';
 import LandingPage from './components/LandingPage'; // Import Landing Page
 import LoginScreen from './components/LoginScreen';
 import FilterConfiguratorModal from './components/FilterConfiguratorModal';
-import ARView from './components/ARView';
 import NativeARView from './components/NativeARView';
-import { isNativeAR, simActivo} from './native/arcore';
+import { isNativeAR } from './native/arcore';
 import PhotoAlbumModal from './components/PhotoAlbumModal';
 import SheetViewerPanel from './components/SheetViewerPanel';
 import LinkRevitBadge from './components/LinkRevitBadge';
@@ -1004,9 +1003,7 @@ function App() {
   const [userLocation, setUserLocation] = useState(null);
   const [minimapActive, setMinimapActive] = useState(false);
   const [vrActive, setVrActive] = useState(false);
-  const [arModeActive, setArModeActive] = useState(false);
   const [nativeArActive, setNativeArActive] = useState(false); // AR nativo (ARCore en APK)
-  const [arInitialCamera, setArInitialCamera] = useState(null);
 
   // Album Modal State
   const [photoAlbumOpen, setPhotoAlbumOpen] = useState(false);
@@ -1038,7 +1035,6 @@ function App() {
     setSelectedElement(null);
     // Modos de pantalla completa (comparan/superponen modelos DEL frente)
     setCompareMode(false);
-    setArModeActive(false);
     setNativeArActive(false);
     // Modales (importar hereda además el guard del relink)
     setImportModalOpen(false);
@@ -4402,16 +4398,16 @@ function App() {
                 <ViewerLabelsBar rightSlot={<>
                   <SectionCutTool />
                   <LinkRevitBadge variant="inline" project={selectedProject?.id} backendUrl={BACKEND_URL} />
-                  {!isSharedMode && !arModeActive && !nativeArActive && selectedProject && models && models.length > 0 && (
+                  {!isSharedMode && !nativeArActive && selectedProject && models && models.length > 0 && (
                     <button
                       onClick={() => {
-                        // Con ?arsim=1 se abre el AR NATIVO tambien en el navegador,
-                        // alimentado por el simulador. Es lo que permite construir y
-                        // probar todo el flujo en la laptop, sin tablet ni APK.
-                        if (isNativeAR() || simActivo()) setNativeArActive(true);
-                        else setArModeActive(true);
+                        // UN SOLO AR. En el APK lo alimenta ARCore; en el
+                        // navegador, el simulador. Antes habia dos componentes
+                        // distintos y en la laptop se entraba al viejo, que no
+                        // tenia seguimiento: de ahi el "por que hay dos AR".
+                        setNativeArActive(true);
                       }}
-                      title={isNativeAR() ? 'Realidad Aumentada (ARCore)' : 'Realidad Aumentada (navegador)'}
+                      title={isNativeAR() ? 'Realidad Aumentada (ARCore)' : 'Realidad Aumentada (ensayo, sin cámara real)'}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', height: 26,
                         background: '#7e9bbd', color: '#fff', border: 'none', borderRadius: 6,
@@ -4822,19 +4818,7 @@ function App() {
           }}
         />
 
-        {/* AR VIEW OVERLAY (WebXR — navegador) */}
-        {arModeActive && (
-          <ARView
-            models={models}
-            initialCamera={arInitialCamera}
-            onExit={() => {
-              setArModeActive(false);
-              setArInitialCamera(null);
-            }}
-          />
-        )}
-
-        {/* AR NATIVO (ARCore — APK) */}
+        {/* AR — uno solo: ARCore en el APK, simulador en el navegador */}
         {nativeArActive && (
           <NativeARView onExit={() => setNativeArActive(false)} />
         )}

@@ -18,7 +18,16 @@ import { simActivo, simSubscribe, simStart, simStop, simAnchor } from './arSim';
 // flujo de AR —calibración, ajuste, interfaz, residuos— en la laptop, sin
 // tablet y sin compilar un APK por cada cambio. La capa nativa es un sensor;
 // todo lo demás es lógica que no tiene por qué depender de él para probarse.
-const SIM = simActivo();
+// Sin plataforma nativa NO EXISTE otra fuente de poses, así que el simulador
+// no es un modo de pruebas escondido: es lo único que puede alimentar el AR en
+// un navegador. Antes, no darse cuenta de esto obligaba a mantener un segundo
+// AR web —vídeo de la webcam detrás del modelo, sin seguimiento— que no era
+// realidad aumentada sino un fondo de foto: al girar la cámara no se movía
+// nada. Con esto hay UN SOLO AR.
+const SIM = simActivo() || !isNativeAR();
+
+/** ¿Las poses vienen del simulador y no de un sensor real? */
+export function esSimulado() { return SIM; }
 
 // Se re-exporta para que App decida montar el AR nativo en el navegador.
 export { simActivo };

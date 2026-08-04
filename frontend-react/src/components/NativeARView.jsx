@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   createAnchor, createAnchorAtCamera, getLastGeoPose,
+  esSimulado,
   onArStats, onGeoPose, onReticle, onTracking, setAimPoint, setPlanesVisible,
   startSession, stopSession,
 } from '../native/arcore';
@@ -70,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-12';
+const AR_BUILD = 'ar-13';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -566,6 +567,17 @@ export default function NativeARView({ onExit }) {
         onClick={() => setAlgoVaMal((v) => !v)}
         title="Tocar para ver el diagnóstico técnico"
       >
+        {/* En el navegador no hay camara ni sensores: el flujo se puede
+            ENSAYAR entero, pero no vale para replantear nada. Decirlo aqui y
+            no en una nota al pie, que es donde no se lee. */}
+        {esSimulado() && (
+          <span style={{
+            marginRight: 8, padding: '2px 8px', borderRadius: 999,
+            background: '#7a5b12', color: '#ffe08a', fontSize: 11.5, fontWeight: 700,
+          }}>
+            ENSAYO · sin cámara real
+          </span>
+        )}
         <span className={tracking === 'tracking' ? 'tracking-ok' : 'tracking-wait'}>
           {tracking === 'tracking' ? 'Tracking OK' : 'Reconociendo...'}
         </span>
