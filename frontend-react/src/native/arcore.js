@@ -11,6 +11,14 @@
 // WebXR. Usa `isNativeAR()` para decidir.
 
 import { registerPlugin, Capacitor } from '@capacitor/core';
+import { simActivo, simSubscribe, simStart, simStop, simAnchor } from './arSim';
+
+// MODO SIMULADO (?arsim=1): el plugin nativo se sustituye por una fuente de
+// datos sintéticos con la MISMA forma. Sirve para desarrollar y probar todo el
+// flujo de AR —calibración, ajuste, interfaz, residuos— en la laptop, sin
+// tablet y sin compilar un APK por cada cambio. La capa nativa es un sensor;
+// todo lo demás es lógica que no tiene por qué depender de él para probarse.
+const SIM = simActivo();
 
 // El nombre 'ARCore' debe coincidir con @CapacitorPlugin(name = "ARCore") en Kotlin/Java.
 const ARCore = registerPlugin('ARCore');
@@ -23,28 +31,33 @@ export function isNativeAR() {
 // startSession: arranca ARCore + cámara transparente. Resuelve cuando la
 // sesión está activa (o rechaza si el device no soporta ARCore / sin permiso).
 export async function startSession() {
+  if (SIM) { simStart(); return { simulado: true }; }
   return ARCore.start();
 }
 
 export async function stopSession() {
+  if (SIM) { simStop(); return; }
   try { return await ARCore.stop(); } catch (e) { /* noop */ }
 }
 
 // createAnchor: fija el mundo en la pose actual de la cámara (o en un hit-test
 // central). Devuelve { anchorId }. El modelo se bloquea contra este anchor.
 export async function createAnchor(opts = {}) {
+  if (SIM) return simAnchor();
   return ARCore.createAnchor(opts);
 }
 
 // onCameraPose: suscribe el stream de poses (matriz de vista + proyección).
 // Devuelve una función para desuscribir.
 export function onCameraPose(handler) {
+  if (SIM) return simSubscribe('onCameraPose', handler);
   const sub = ARCore.addListener('onCameraPose', handler);
   return () => { sub.then(s => s.remove()).catch(() => {}); };
 }
 
 // onTracking: estado del tracking ('tracking' | 'paused' | 'stopped') + razón.
 export function onTracking(handler) {
+  if (SIM) return simSubscribe('onTracking', handler);
   const sub = ARCore.addListener('onTracking', handler);
   return () => { sub.then(s => s.remove()).catch(() => {}); };
 }
@@ -72,6 +85,7 @@ export function getLastGeoPose() {
 // Ancla en la POSE ACTUAL de la cámara (sin hit-test de superficie). Robusto en
 // terreno abierto —tierra/pasto del canal— donde la detección de plano falla.
 export async function createAnchorAtCamera(opts = {}) {
+  if (SIM) return simAnchor();
   return ARCore.createAnchorAtCamera(opts);
 }
 
@@ -82,6 +96,7 @@ export async function createAnchorAtCamera(opts = {}) {
 // ve DÓNDE va a caer el modelo antes de anclar — y sabe si ARCore ya reconoció
 // terreno suficiente como para colocar el modelo sin que nadie toque nada.
 export function onReticle(handler) {
+  if (SIM) return simSubscribe('onReticle', handler);
   const sub = ARCore.addListener('onReticle', handler);
   return () => { sub.then(s => s.remove()).catch(() => {}); };
 }
@@ -103,6 +118,7 @@ export async function setPlanesVisible(visible) {
 // bucle de dibujo corre siquiera; `reason` es el motivo que da ARCore para no
 // rastrear (poca luz, poca textura, movimiento excesivo, camara ocupada...).
 export function onArStats(handler) {
+  if (SIM) return simSubscribe('onArStats', handler);
   const sub = ARCore.addListener('onArStats', handler);
   return () => { sub.then(s => s.remove()).catch(() => {}); };
 }
