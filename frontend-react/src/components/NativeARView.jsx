@@ -44,6 +44,12 @@ function setModelsVisible(viewer, visible) {
 // dispara con un reflejo pasajero, más se siente lento en campo.
 const AUTO_PLACE_TICKS = 5;
 
+// SELLO DE VERSIÓN DEL AR. Se muestra en el panel y se sube con cada cambio.
+// Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
+// el último código: sin un sello visible, un panel idéntico puede ser el de
+// hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
+const AR_BUILD = 'ar-09';
+
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
   const [tracking, setTracking] = useState('paused');
@@ -499,6 +505,7 @@ export default function NativeARView({ onExit }) {
 
       {/* Panel de diagnóstico (temporal) para ver por qué el modelo no responde. */}
       {showDebug && <div style={{ position: 'absolute', top: 74, left: 8, background: 'rgba(0,0,0,0.7)', color: '#3ee87a', font: '12px monospace', padding: '6px 9px', borderRadius: 6, zIndex: 9999, lineHeight: 1.5, pointerEvents: 'none' }}>
+        <div style={{ color: '#8ab4f8' }}>build: {AR_BUILD}</div>
         <div>eventos pose: {hud.poseEvents} {hud.poseEvents === 0 ? '❌ NO llegan' : '✓'}</div>
         <div>aplicados: {hud.applied} {hud.applied === 0 && hud.poseEvents > 0 ? '⚠ apply FALLA' : ''}</div>
         <div>THREE: {hud.src} · track: {tracking}</div>
