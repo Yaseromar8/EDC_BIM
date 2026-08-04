@@ -101,6 +101,12 @@ export function attachArToViewer(viewer, opts = {}) {
   const unsubPose = onCameraPose((data) => {
     poseEvents++;
     latest = data;
+    // Si la pose trae la POSE VIVA del ancla de calibracion, se adopta: asi
+    // las correcciones del SLAM mueven el ancla y el modelo se queda clavado
+    // al mundo en vez de irse con el mapa.
+    if (data && data.anchor && data.anchor.length === 16) {
+      try { setAnchorMatrix(data.anchor); } catch (e) { /* pose siguiente */ }
+    }
     // Llamar apply() DIRECTO (rAF puede no tickear en el WebView transparente).
     try { apply(); } catch (e) { lastErr = String((e && e.message) || e); }
     if (opts.onFrame) {

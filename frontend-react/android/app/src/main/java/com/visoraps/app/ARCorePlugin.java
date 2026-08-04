@@ -177,6 +177,14 @@ public class ARCorePlugin extends Plugin {
     private long lastRansacMs = 0L;
     private final Random azar = new Random();
     private float[] esquinaPrevia = null;
+    private int esquinaSeguidas = 0;
+    private long scanStartMs = 0L;
+    // Ancla de la CALIBRACION: el rincon resuelto se fija a un Anchor real de
+    // ARCore y su pose viaja en cada evento de pose. Sin ancla, el puente
+    // mapeaba a pelo y cada correccion del SLAM arrastraba el modelo -- el
+    // 'no se queda quieto' de campo.
+    private volatile Anchor anclaCalibracion = null;
+    private final float[] anclaMatrixTmp = new float[16];
     private PointCloudRenderer pointCloudRenderer;
     private FaceRenderer faceRenderer;
     // Paneles de las caras reconocidas [piso, muroA, muroB]: 4 esquinas xyz
@@ -432,6 +440,34 @@ public class ARCorePlugin extends Plugin {
         call.reject("sin sesion");
     }
 
+    /** Ancla un punto FIJO del mundo (el rincon calibrado). Su pose viaja en
+     *  cada evento de pose para que el puente siga las correcciones del SLAM:
+     *  es lo que mantiene el modelo clavado al caminar. */
+    @PluginMethod
+    public void createAnchorAtPoint(PluginCall call) {
+        Double x = call.getDouble("x"), y = call.getDouble("y"), z = call.getDouble("z");
+        if (x == null || y == null || z == null) {
+            call.reject("faltan coordenadas");
+            return;
+        }
+        try {
+            if (anclaCalibracion != null) {
+                try { anclaCalibracion.detach(); } catch (Throwable t) { }
+            }
+            Pose pose = new Pose(
+                    new float[] { x.floatValue(), y.floatValue(), z.floatValue() },
+                    new float[] { 0f, 0f, 0f, 1f });
+            anclaCalibracion = session.createAnchor(pose);
+            float[] m = new float[16];
+            anclaCalibracion.getPose().toMatrix(m, 0);
+            JSObject out = new JSObject();
+            out.put("matrix", floatsToJsonArray(m));
+            call.resolve(out);
+        } catch (Throwable t) {
+            call.reject("ancla: " + String.valueOf(t.getMessage()));
+        }
+    }
+
     @PluginMethod
     public void startCornerScan(PluginCall call) {
         synchronized (nube) {
@@ -441,6 +477,8 @@ public class ARCorePlugin extends Plugin {
             nubeDibujoN = 0;
         }
         esquinaPrevia = null;
+        esquinaSeguidas = 0;
+        scanStartMs = System.currentTimeMillis();
         depthOk = true;
         depthDesacuerdos = 0;
         depthPuntos = 0;
@@ -622,9 +660,11 @@ public class ARCorePlugin extends Plugin {
                 mejor = new float[] { nx, ny, nz, d, inliers };
             }
         }
-        // Proporcional a la nube: con 300 puntos no se puede exigir lo mismo
-        // que con 8000 -- muro blanco y poca luz dan nubes pobres y validas.
-        int minimo = Math.max(vertical ? 24 : 30, pts.size() / (vertical ? 90 : 60));
+        // Umbrales de ADULTO. Los minimos bajos que pedia el muro blanco
+        // dejaban que 24 puntos de ruido (patas de silla, un borde) votaran
+        // un "muro": cualquier piso + basura = esquina instantanea. El area
+        // minima por cara (m2) termina el trabajo mas abajo.
+        int minimo = Math.max(vertical ? 45 : 90, pts.size() / (vertical ? 50 : 22));
         return (mejor != null && mejorInliers >= minimo) ? mejor : null;
     }
 
@@ -695,7 +735,7 @@ public class ARCorePlugin extends Plugin {
     private void detectarEsquina(Camera camera) {
         ArrayList<float[]> pts;
         synchronized (nube) { pts = new ArrayList<>(nube.values()); }
-        if (pts.size() < 150) { emitirEsquina(null, null, null, null, pts.size()); return; }
+        if (pts.size() < 400) { emitirEsquina(null, null, null, null, pts.size()); return; }
 
         float tol = 0.035f;
         float[] piso = ransacPlano(pts, false, tol);
@@ -760,6 +800,18 @@ public class ARCorePlugin extends Plugin {
         Pose cam = camera.getPose();
         float dx = px - cam.tx(), dy = py - cam.ty(), dz = pz - cam.tz();
         if (dx * dx + dy * dy + dz * dz > 25f) { emitirEsquina(piso, muroA, muroB, null, pts.size()); return; }
+
+        // CARAS DE VERDAD, no votos sueltos: piso >= 0.5 m2 y cada muro
+        // >= 0.3 m2. Y un barrido minimo de 3.5 s -- una esquina que aparece
+        // "de inmediato" sin haber barrido no es deteccion, es alucinacion.
+        boolean carasSuficientes = carasAreas[0] >= 0.5f
+                && carasAreas[1] >= 0.3f && carasAreas[2] >= 0.3f;
+        boolean barridoMinimo = System.currentTimeMillis() - scanStartMs >= 3500L;
+        if (!carasSuficientes || !barridoMinimo) {
+            tenirNube(pts, piso, muroA, muroB);
+            emitirEsquina(piso, muroA, muroB, null, pts.size());
+            return;
+        }
 
         float[] punto = new float[] { px, py, pz };
         tenirNube(pts, piso, muroA, muroB);
@@ -865,15 +917,19 @@ public class ARCorePlugin extends Plugin {
         // punto "baila" y el operario acepta una esquina que aun se mueve.
         boolean estable = false;
         if (found) {
+            boolean coincide = false;
             if (esquinaPrevia != null) {
                 float ddx = punto[0] - esquinaPrevia[0];
                 float ddy = punto[1] - esquinaPrevia[1];
                 float ddz = punto[2] - esquinaPrevia[2];
-                estable = (ddx * ddx + ddy * ddy + ddz * ddz) < 0.0064f;
+                coincide = (ddx * ddx + ddy * ddy + ddz * ddz) < 0.0064f;
             }
+            esquinaSeguidas = coincide ? esquinaSeguidas + 1 : 0;
+            estable = esquinaSeguidas >= 2;   // tercer ajuste coincidente
             esquinaPrevia = punto;
         } else {
             esquinaPrevia = null;
+            esquinaSeguidas = 0;
         }
         ev.put("found", found);
         ev.put("stable", estable);
@@ -1372,6 +1428,11 @@ public class ARCorePlugin extends Plugin {
                     JSObject pose = new JSObject();
                     pose.put("view", floatsToJsonArray(viewMatrix));
                     pose.put("proj", floatsToJsonArray(projMatrix));
+                    Anchor ancla = anclaCalibracion;
+                    if (ancla != null && ancla.getTrackingState() == TrackingState.TRACKING) {
+                        ancla.getPose().toMatrix(anclaMatrixTmp, 0);
+                        pose.put("anchor", floatsToJsonArray(anclaMatrixTmp));
+                    }
                     notifyListeners("onCameraPose", pose);
                 }
             } catch (Throwable error) {
@@ -1607,6 +1668,10 @@ public class ARCorePlugin extends Plugin {
             anchors.clear();
             if (session != null) {
                 session.pause();
+                if (anclaCalibracion != null) {
+                    try { anclaCalibracion.detach(); } catch (Throwable t) { }
+                    anclaCalibracion = null;
+                }
                 session.close();
                 if (sesionesVivas > 0) sesionesVivas--;
                 session = null;

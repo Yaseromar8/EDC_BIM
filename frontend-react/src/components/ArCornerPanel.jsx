@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { calibrarPorEsquina, clasificar, planoDesdePose } from '../native/arCornerCalib';
+import { arAVisor, calibrarPorEsquina, clasificar, giraZ, planoDesdePose } from '../native/arCornerCalib';
 import { cornerPoint } from '../native/registrationCorner.js';
 import { camaraDelVisor, planoDelToque } from '../native/modelFacePick';
 // esSimulado y no simActivo: desde que el navegador usa SIEMPRE el simulador
@@ -7,7 +7,7 @@ import { camaraDelVisor, planoDelToque } from '../native/modelFacePick';
 // mira el ?arsim=1 del URL -- quedo obsoleto como pregunta. Seguir usandolo
 // dejaba las teclas 1/2/3 muertas y la pista escondida en cuanto el URL
 // perdia el parametro, con el simulador corriendo perfectamente por debajo.
-import { esSimulado, onCornerDetect, setTorch, startCornerScan, stopCornerScan } from '../native/arcore';
+import { createAnchorAtPoint, esSimulado, onCornerDetect, setTorch, startCornerScan, stopCornerScan } from '../native/arcore';
 import { simMirarA, simRinconAbierto } from '../native/arSim';
 
 // Asistente de CALIBRACIÓN POR ESQUINA — el método de Revizto, EN SU ORDEN.
@@ -90,6 +90,9 @@ export default function ArCornerPanel({
       if (ev && ev.depthOk != null) setProfundidad(ev.depthOk ? (ev.depthPts || 0) : -1);
       if (ev && ev.areas && ev.areas.length === 3) setAreas(ev.areas);
       if (!ev || !ev.found || !ev.stable) return;
+      // Doble compuerta con el plugin: caras con area de verdad. Un piso con
+      // dos votos de ruido no es una esquina.
+      if (!(ev.areas && ev.areas[0] >= 0.5 && ev.areas[1] >= 0.3 && ev.areas[2] >= 0.3)) return;
       if (carasObraRef.current.length >= 3) return;
       const planos = ev.planes || [];
       if (planos.length !== 3) return;
@@ -367,7 +370,33 @@ export default function ArCornerPanel({
     if (r.ok) {
       try {
         puente.setYawDegrees(r.yaw);
-        puente.setModelOrigin(r.modelOrigin);
+        // ANCLAR EL RINCON: el punto calibrado se fija a un Anchor real de
+        // ARCore y el puente sigue su pose viva. Con ancla en el rincon (y
+        // rotacion identidad), el origen del modelo pasa a ser el punto del
+        // rincon EN EL MODELO: Pm = upm·Rz(-yaw)·B·Pw + origin.
+        const Pw = esquinaRef.current;
+        if (Pw) {
+          const g = giraZ(arAVisor(Pw), (-r.yaw * Math.PI) / 180);
+          const Pm = {
+            x: r.modelOrigin.x + upm * g[0],
+            y: r.modelOrigin.y + upm * g[1],
+            z: r.modelOrigin.z + upm * g[2],
+          };
+          createAnchorAtPoint(Pw).then((res) => {
+            if (res && res.matrix) {
+              try {
+                puente.setAnchorMatrix(res.matrix);
+                puente.setModelOrigin(Pm);
+              } catch { /* lo dirá el panel técnico */ }
+            }
+          });
+          puente.setModelOrigin(Pm);
+          if (Pw && puente.setAnchorMatrix) {
+            puente.setAnchorMatrix([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, Pw[0], Pw[1], Pw[2], 1]);
+          }
+        } else {
+          puente.setModelOrigin(r.modelOrigin);
+        }
       } catch { /* lo dirá el panel técnico */ }
       mostrarModelo?.(true);
       onAplicar?.(r);

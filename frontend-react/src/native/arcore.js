@@ -163,6 +163,13 @@ export function onArStats(handler) {
   return () => { sub.then(s => s.remove()).catch(() => {}); };
 }
 
+// Ancla un punto fijo del mundo (el rincón calibrado): devuelve { matrix }.
+// Su pose viva viaja después en cada evento de pose.
+export async function createAnchorAtPoint(p) {
+  if (SIM) return { matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, p[0], p[1], p[2], 1] };
+  try { return await ARCore.createAnchorAtPoint({ x: p[0], y: p[1], z: p[2] }); } catch { return null; }
+}
+
 // Linterna de la cámara (poca luz: buzón, sombra). En ensayo no hay.
 export async function setTorch(on) {
   if (SIM) return null;
