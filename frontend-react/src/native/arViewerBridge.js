@@ -22,8 +22,19 @@ export function attachArToViewer(viewer, opts = {}) {
   // modelo congelado. Era EL bug de "poses: 0".
   const THREE = window.THREE
     || (window.Autodesk && window.Autodesk.Viewing && window.Autodesk.Viewing.Private && window.Autodesk.Viewing.Private.THREE);
-  if (!viewer) { console.warn('[AR] attach: sin viewer'); return () => {}; }
-  if (!THREE) { console.warn('[AR] attach: THREE no encontrado (ni window ni Private)'); return () => {}; }
+  // ABANDONAR EN SILENCIO ES EL PEOR FALLO POSIBLE: sin THREE no hay poses, el
+  // modelo se queda congelado y el panel muestra ceros — pero nada dice POR
+  // QUÉ. Se ha perdido una tarde entera creyendo que era la cámara. Ahora el
+  // motivo sube a la interfaz.
+  const abandonar = (motivo) => {
+    console.warn('[AR] attach: ' + motivo);
+    try { opts.onFrame?.({ src: 'NO', poseEvents: 0, applied: 0, upm: 0, yaw: 0, aligning: false, err: motivo }); } catch { /* noop */ }
+    const nop = () => {};
+    nop.fallo = motivo;
+    return nop;
+  };
+  if (!viewer) return abandonar('sin viewer');
+  if (!THREE) return abandonar('THREE no encontrado (ni window ni Autodesk.Viewing.Private)');
 
   const camera = viewer.impl.camera;
   // Unidades del visor por METRO físico. En 1:1 = unidades-del-modelo-por-metro

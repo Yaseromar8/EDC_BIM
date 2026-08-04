@@ -129,25 +129,34 @@ export function simStart() {
   emitir('onTracking', { state: 'paused' });
   setTimeout(() => emitir('onTracking', { state: 'tracking' }), 2500);
 
-  temporizador = setInterval(() => {
+  // Ciclo con setInterval, no con requestAnimationFrame: rAF se detiene POR
+  // COMPLETO en pestaña de fondo, y eso impide comprobarlo desde fuera. Con
+  // intervalo, el navegador lo estrangula a ~2 Hz en segundo plano pero sigue
+  // latiendo, así que la simulación se puede verificar sin depender de que
+  // alguien esté mirando la pantalla.
+  let ultimoLatido = 0;
+  const tick = () => {
     const seg = (performance.now() - t0) / 1000;
     frames++;
     if (seg > 2.5) {
       emitir('onCameraPose', poseEnSegundo(seg));
-      // El retículo encuentra piso en cuanto hay seguimiento.
       emitir('onReticle', {
         found: true, type: 'plane', planes: 1,
         matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
       });
     }
-    if (frames % 30 === 0) {
+    // Latido por TIEMPO, no por número de frames: si el ritmo baja, el latido
+    // sigue llegando y el panel sigue diciendo la verdad.
+    if (seg - ultimoLatido >= 1) {
+      ultimoLatido = seg;
       emitir('onArStats', {
         frames, state: seg > 2.5 ? 'TRACKING' : 'PAUSED', reason: 'NONE',
         ts: seg > 2.5 ? Math.round(seg * 1e9) : 0, cam: seg > 2.5,
         tex: 1, glError: '', resumes: 1, camCfgs: 3, sim: true,
       });
     }
-  }, 33);
+  };
+  temporizador = setInterval(tick, 33);
 }
 
 export function simStop() {
