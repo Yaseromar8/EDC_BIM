@@ -5,6 +5,7 @@ import {
   startSession, stopSession,
 } from '../native/arcore';
 import { attachArToViewer } from '../native/arViewerBridge';
+import ArCornerPanel, { useTeclasSimulador } from './ArCornerPanel';
 import { showArStake, clearArStake } from '../native/arStake';
 import ArAdjustPanel from './ArAdjustPanel';
 import { geoToViewer, seedYawFromHeading } from '../native/geoAnchor';
@@ -48,7 +49,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-10';
+const AR_BUILD = 'ar-11';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -66,6 +67,10 @@ export default function NativeARView({ onExit }) {
   const anchoredRef = useRef(false);
   const anchorFnRef = useRef(null);
   const eligiendoModoRef = useRef(true);
+  // El estado `reticle` solo guarda lo justo para pintar el anillo; la
+  // calibración necesita la POSE completa de la superficie apuntada.
+  const reticuloRef = useRef(null);
+  const calibrandoRef = useRef(false);
   // El panel técnico aparece SOLO cuando algo va mal: si a los 6 segundos no
   // ha llegado ninguna pose de ARCore, o el tracking no arranca. En un APK
   // empaquetado no se puede añadir ?ardebug=1 a mano, y sin estos numeros
@@ -90,6 +95,7 @@ export default function NativeARView({ onExit }) {
   // que el operario elige. Antes se buscaban planos y se anclaba por su cuenta,
   // y el operario no sabia que estaba pasando ni podia decidir.
   const [eligiendoModo, setEligiendoModo] = useState(true);
+  const [calibrandoEsquina, setCalibrandoEsquina] = useState(false);
   const [hud, setHud] = useState({ src: '?', poseEvents: 0, applied: 0, upm: 1000, yaw: 0, aligning: false, err: '' });
   // Espejo del HUD para leerlo desde temporizadores sin arrastrar valores viejos.
   const hudRef = useRef({ poseEvents: 0, applied: 0 });
@@ -259,13 +265,14 @@ export default function NativeARView({ onExit }) {
         console.log('[AR] modelos ocultos al entrar:', ocultados);
 
         reticleCleanupRef.current = onReticle((r) => {
+          reticuloRef.current = r;
           const found = !!r?.found;
           const type = r?.type || null;
           setReticle({ found, type, planes: r?.planes || 0 });
 
           // Ya colocado, colocando ahora mismo, o en modo manual: no auto-anclar.
           if (anchoredRef.current || placingRef.current || !autoPlaceRef.current
-              || eligiendoModoRef.current) {
+              || eligiendoModoRef.current || calibrandoRef.current) {
             stableTicksRef.current = 0;
             return;
           }
@@ -404,6 +411,7 @@ export default function NativeARView({ onExit }) {
   // siguientes: se le deja SIEMPRE la versión vigente por ref.
   anchorFnRef.current = handleAnchor;
   eligiendoModoRef.current = eligiendoModo;
+  useTeclasSimulador(calibrandoEsquina);
 
   // ── Orientación por GPS (el modo "referenciarse en campo") ──────────────────
   // Coloca el modelo sobre el terreno real según TU posición GPS, sin anclar ni
@@ -609,10 +617,14 @@ export default function NativeARView({ onExit }) {
               onClick={() => {
                 setModo(m.id);
                 setEligiendoModo(false);
-                autoPlaceRef.current = (m.id !== 'ninguna');
+                // Por esquina NO se coloca solo: lo guía el asistente, que
+                // primero pide las caras en el modelo y luego en la obra.
+                autoPlaceRef.current = (m.id === 'piso');
+                calibrandoRef.current = (m.id === 'esquina');
+                setCalibrandoEsquina(m.id === 'esquina');
                 if (m.id === 'ninguna') colocarSinCalibrar();
                 else setStatus(m.id === 'esquina'
-                  ? 'Apunta a cada una de las tres caras del rincón.'
+                  ? 'Señala el rincón en el modelo y luego en la obra.'
                   : 'Apunta al piso y muévete despacio…');
               }}
               style={{
@@ -639,6 +651,34 @@ export default function NativeARView({ onExit }) {
 
       {/* AJUSTAR: mover, elevar y girar. Vale tanto para colocar de cero como
           para corregir la deriva sin recalibrar entero. */}
+      {calibrandoEsquina && !anchored && (
+        <ArCornerPanel
+          viewer={window.NOP_VIEWER}
+          puente={detachRef.current}
+          upm={unitsPerMeter}
+          reticuloRef={reticuloRef}
+          mostrarModelo={(v) => { try { setModelsVisible(window.NOP_VIEWER, v); } catch { /* noop */ } }}
+          onAplicar={(r) => {
+            calibrandoRef.current = false;
+            setCalibrandoEsquina(false);
+            anchoredRef.current = true;
+            setAnchored(true);
+            setAjustando(true);
+            const cm = (r.errorA10m * 100).toFixed(0);
+            setStatus(`Calibrado por esquina (≈ ${cm} cm de desvío a 10 m). Afina con las flechas si hace falta.`);
+          }}
+          onCancelar={() => {
+            calibrandoRef.current = false;
+            setCalibrandoEsquina(false);
+            try { detachRef.current?.setPausado?.(false); } catch { /* noop */ }
+            try { setModelsVisible(window.NOP_VIEWER, false); } catch { /* noop */ }
+            setEligiendoModo(true);
+            setModo(null);
+            setStatus('¿Cómo quieres calibrar?');
+          }}
+        />
+      )}
+
       {ajustando && anchored && (
         <ArAdjustPanel bridge={detachRef.current} onClose={() => setAjustando(false)} />
       )}

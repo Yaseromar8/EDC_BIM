@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ProfileIcon, ZoneTagIcon, ExcavationIcon, EarthworksGhostIcon, HeatmapIcon, HoverInfoIcon } from './TandemIcons';
-import { iniciarPredict, resumenPredict, detallePredict, soles } from '../lib/predictBim';
 
 // "0+125.50" o "125.5" → metros
 const parsePk = (txt) => {
@@ -68,73 +67,6 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
         if (!next) { setHoverData(null); setExecCfgOpen(false); }
         window.dispatchEvent(new CustomEvent('lob-zone-hover', { detail: { visible: next } }));
     };
-
-    // ── PREDICT: partidas del expediente para el grupo bajo el cursor ───────
-    // El catálogo se precarga una vez; el hover luego es instantáneo (memoria,
-    // cero red). Si PREDICT está apagado, esto no afecta al visor en nada.
-    useEffect(() => { iniciarPredict(); }, []);
-    const predict = useMemo(
-        () => resumenPredict(hoverData?.zone),
-        [hoverData?.zone]
-    );
-    // La LISTA de partidas se pide aparte (es más pesada). Con un respiro de
-    // 180 ms: al barrer el modelo con el mouse no se dispara en cada pieza.
-    const [predictDet, setPredictDet] = useState(null);
-    useEffect(() => {
-        const cod = hoverData?.zone;
-        if (!cod || !predict) { setPredictDet(null); return; }
-        let vivo = true;
-        const t = setTimeout(async () => {
-            const d = await detallePredict(cod);
-            if (vivo) setPredictDet(d);
-        }, 180);
-        return () => { vivo = false; clearTimeout(t); };
-    }, [hoverData?.zone, predict]);
-
-    // ── El panel se QUEDA ──────────────────────────────────────────────────
-    // Un panel que desaparece al mover el mouse no se puede leer ni desplazar.
-    // Al entrar con el cursor al panel se congela lo que está mostrando; con 📌
-    // se fija aunque vuelvas al modelo. La × lo suelta.
-    const [fijado, setFijado] = useState(false);      // explícito, con el 📌
-    const [congelado, setCongelado] = useState(null); // instantánea al entrar
-    const vista = congelado || (hoverData ? { hoverData, predict, predictDet } : null);
-    const congelar = () => { if (hoverData) setCongelado({ hoverData, predict, predictDet }); };
-    const soltar = () => { setFijado(false); setCongelado(null); };
-    // mientras no esté fijado con 📌, salir del panel lo suelta
-    const salirPanel = () => { if (!fijado) setCongelado(null); };
-    // si el detalle llega después de congelar, se actualiza la instantánea
-    useEffect(() => {
-        if (congelado && predictDet && congelado.hoverData?.zone === hoverData?.zone) {
-            setCongelado(c => c ? { ...c, predictDet } : c);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [predictDet]);
-
-    // RESUMEN: dónde está lo que falta. Ordenado por soles pendientes, no por
-    // código — el código te dice el orden del presupuesto, los soles te dicen
-    // qué mover primero.
-    const faltante = useMemo(() => {
-        const ps = vista?.predictDet?.partidas;
-        if (!ps?.length) return null;
-        const total = ps.reduce((s, p) => s + (p.parcial || 0), 0);
-        const filas = ps
-            .map(p => ({
-                id: p.id,
-                nombre: (p.nombre || '').replace(/^[\d.]+\s*-\s*/, ''),
-                pct: p.valorizado_pct ?? 0,
-                falta: (p.parcial || 0) * (1 - (p.valorizado_pct ?? 0) / 100),
-            }))
-            .filter(f => f.falta > 1)
-            .sort((a, b) => b.falta - a.falta);
-        const faltaTotal = filas.reduce((s, f) => s + f.falta, 0);
-        const top = filas.slice(0, 5);
-        const restoMonto = filas.slice(5).reduce((s, f) => s + f.falta, 0);
-        return {
-            total, faltaTotal, top, restoMonto, restoN: Math.max(0, filas.length - 5),
-            maxFalta: top.length ? top[0].falta : 1,
-        };
-    }, [vista?.predictDet]);
-    const [verTodas, setVerTodas] = useState(false);
 
     // ── Parámetros de la capa Ejecución (agrupación + avance) ───────────────
     // El inventario DSI trae varios candidatos ("01_02_DSI_Localizador",
@@ -686,148 +618,32 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
 
             {/* PANEL DE EJECUCIÓN POR SUBZONA — informa del GRUPO completo bajo
                 el cursor (20, 200 o 2000 elementos), no de la pieza suelta. */}
-            {hoverOn && vista && (
-                <div
-                    onMouseEnter={congelar}
-                    onMouseLeave={salirPanel}
-                    style={{
-                    position: 'fixed', right: 18, bottom: 58, zIndex: 55, width: 340,
-                    // crece hacia arriba SOLO lo que necesite, sin pasarse de pantalla
-                    maxHeight: 'calc(100vh - 130px)', display: 'flex', flexDirection: 'column',
+            {hoverOn && hoverData && (
+                <div style={{
+                    position: 'fixed', right: 18, bottom: 58, zIndex: 55, width: 320,
                     background: 'rgba(13,17,23,0.82)', backdropFilter: 'blur(10px)',
                     border: '1px solid rgba(251,191,36,0.42)', borderRadius: 10,
                     padding: '13px 15px', color: '#e6edf5',
-                    boxShadow: '0 8px 30px rgba(0,0,0,.45)',
-                    // 'auto' para poder desplazar la lista con la rueda cuando
-                    // el grupo tiene muchas partidas (PAISAJISMO tiene 58)
-                    pointerEvents: 'auto',
+                    boxShadow: '0 8px 30px rgba(0,0,0,.45)', pointerEvents: 'none',
                     animation: 'fadeIn .12s ease-out',
                 }}>
-                    {/* Encabezado con el control para FIJAR el panel */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 13.5, fontWeight: 800, color: '#fcd34d', letterSpacing: '.3px',
-                                       flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {vista.hoverData.zone}
-                        </span>
-                        <button type="button" title={fijado ? 'Soltar' : 'Fijar el panel'}
-                            onClick={() => { if (fijado) soltar(); else { congelar(); setFijado(true); } }}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12,
-                                     opacity: fijado ? 1 : 0.45, padding: 0, lineHeight: 1 }}>📌</button>
-                        {fijado && (
-                            <button type="button" title="Cerrar" onClick={soltar}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15,
-                                         color: '#6b7684', padding: 0, lineHeight: 1 }}>×</button>
-                        )}
-                    </div>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: '#fcd34d', letterSpacing: '.3px' }}>{hoverData.zone}</div>
 
-                    {/* MODELO — piezas de geometría. Rotulado expreso para que no
-                        se confunda con el avance del contrato (son cosas distintas). */}
-                    <div style={{ fontSize: 10, color: '#7c8798', marginTop: 9 }}>
-                        Modelo · <span style={{ color: '#9aa4b2' }}>{vista.hoverData.total} elementos</span>
-                        {vista.hoverData.hasEjecutado && (
-                            <span style={{ color: '#9aa4b2' }}> · {vista.hoverData.done} marcados ({vista.hoverData.pct}%)</span>
-                        )}
-                    </div>
-
-                    {/* EXPEDIENTE (PREDICT) — el contrato detrás del objeto.
-                        Se separa del bloque de arriba a propósito: "elementos"
-                        es geometría del modelo, "partidas" son líneas del
-                        presupuesto. Juntarlos confundiría dos conteos distintos. */}
-                    {vista.predict && (
-                        <div style={{ marginTop: 11, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,.10)',
-                                      minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ fontSize: 9, letterSpacing: '.18em', color: '#7c8798', textTransform: 'uppercase' }}>
-                                Expediente
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
-                                <span style={{ fontSize: 19, fontWeight: 800, color: '#7dd3a8', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-                                    {vista.predict.valorizado_pct ?? '—'}%
-                                </span>
-                                <span style={{ fontSize: 10, color: '#9aa4b2' }}>valorizado</span>
-                                <span style={{ marginLeft: 'auto', fontSize: 10.5, color: '#8fa0b3', fontVariantNumeric: 'tabular-nums' }}>
-                                    {vista.predict.partidas} partidas · {soles(vista.predict.valor)}
+                    {hoverData.hasEjecutado ? (
+                        <>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 11 }}>
+                                <span style={{ fontSize: 22, fontWeight: 800, color: '#fff', lineHeight: 1 }}>{hoverData.pct}%</span>
+                                <span style={{ fontSize: 11, color: '#9aa4b2' }}>
+                                    {hoverData.done} de {hoverData.total} elementos
                                 </span>
                             </div>
-                            <div style={{ height: 4, background: 'rgba(255,255,255,.09)', borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
-                                <div style={{ width: `${Math.min(100, vista.predict.valorizado_pct || 0)}%`, height: '100%', background: '#3f9e73' }} />
+                            <div style={{ height: 6, background: 'rgba(255,255,255,.09)', borderRadius: 3, marginTop: 7, overflow: 'hidden' }}>
+                                <div style={{ width: `${hoverData.pct}%`, height: '100%', background: 'linear-gradient(90deg,#10b981,#34d399)', transition: 'width .18s' }} />
                             </div>
-
-                            {/* FALTA — el número accionable. "67%" no dice qué hacer;
-                                "faltan S/ 315,601" sí. */}
-                            {faltante && faltante.faltaTotal > 1 && (
-                                <div style={{ marginTop: 11, display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                                    <span style={{ fontSize: 9, letterSpacing: '.16em', color: '#7c8798', textTransform: 'uppercase' }}>Falta</span>
-                                    <span style={{ fontSize: 15, fontWeight: 800, color: '#fbbf24', fontVariantNumeric: 'tabular-nums' }}>
-                                        {soles(faltante.faltaTotal)}
-                                    </span>
-                                </div>
-                            )}
-
-                            {/* DÓNDE ESTÁ LO QUE FALTA — ordenado por soles pendientes,
-                                no por código: lo gordo primero, el resto agrupado. */}
-                            {faltante && faltante.top.length > 0 && !verTodas && (
-                                <div style={{ marginTop: 8, minHeight: 0, overflowY: 'auto', paddingRight: 4 }}>
-                                    {faltante.top.map(f => (
-                                        <div key={f.id} style={{ marginTop: 6 }}>
-                                            <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 10 }}>
-                                                <span style={{ color: '#b6c2d0', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    {f.nombre}
-                                                </span>
-                                                <span style={{ color: '#8fa0b3', flex: 'none', fontVariantNumeric: 'tabular-nums' }}>{f.pct.toFixed(0)}%</span>
-                                                <span style={{ color: '#e6edf5', flex: 'none', fontVariantNumeric: 'tabular-nums', minWidth: 62, textAlign: 'right' }}>
-                                                    {soles(f.falta)}
-                                                </span>
-                                            </div>
-                                            <div style={{ height: 3, background: 'rgba(255,255,255,.07)', borderRadius: 2, marginTop: 3 }}>
-                                                <div style={{ width: `${(f.falta / faltante.maxFalta) * 100}%`, height: '100%', background: '#c2963c', borderRadius: 2 }} />
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {faltante.restoN > 0 && (
-                                        <div style={{ display: 'flex', gap: 6, fontSize: 10, marginTop: 8, color: '#6b7684' }}>
-                                            <span style={{ flex: 1 }}>resto ({faltante.restoN} partidas)</span>
-                                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{soles(faltante.restoMonto)}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* La lista completa, solo cuando la pidas */}
-                            {vista.predictDet?.grupos?.length > 0 && (
-                                <button type="button" onClick={() => setVerTodas(v => !v)}
-                                    style={{ marginTop: 9, alignSelf: 'flex-start', background: 'none', border: 'none',
-                                             color: '#8fa0b3', fontSize: 9.5, cursor: 'pointer', padding: 0,
-                                             letterSpacing: '.1em', textTransform: 'uppercase' }}>
-                                    {verTodas ? '▾ ver resumen' : `▸ ver las ${vista.predict.partidas} partidas`}
-                                </button>
-                            )}
-
-                            {verTodas && vista.predictDet?.grupos?.length > 0 && (
-                                <div style={{
-                                    marginTop: 6, overflowY: 'auto', overscrollBehavior: 'contain',
-                                    minHeight: 0, flex: '1 1 auto', paddingRight: 4,
-                                }}>
-                                    {vista.predictDet.grupos.map((g) => (
-                                        <div key={g.nodo} style={{ marginTop: 7 }}>
-                                            <div style={{ fontSize: 9, color: '#7c8798', letterSpacing: '.06em', textTransform: 'uppercase' }}>
-                                                {(g.nombre || g.nodo).replace(/^[\d.]+\s*-\s*/, '')} · {g.partidas.length}
-                                            </div>
-                                            {g.partidas.map((p) => (
-                                                <div key={p.id} style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 9.5, marginTop: 1.5 }}>
-                                                    <span style={{ color: '#8fa0b3', fontVariantNumeric: 'tabular-nums', flex: 'none' }}>{p.id}</span>
-                                                    <span style={{ color: '#b6c2d0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                        {(p.nombre || '').replace(/^[\d.]+\s*-\s*/, '')}
-                                                    </span>
-                                                    <span style={{
-                                                        marginLeft: 'auto', flex: 'none', fontVariantNumeric: 'tabular-nums',
-                                                        color: p.valorizado_pct >= 99.5 ? '#7dd3a8' : (p.valorizado_pct > 0 ? '#fbbf24' : '#6b7684'),
-                                                    }}>{(p.valorizado_pct ?? 0).toFixed(0)}%</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                        </>
+                    ) : (
+                        <div style={{ fontSize: 11.5, color: '#9aa4b2', marginTop: 10 }}>
+                            {hoverData.total} elementos · sin campo de avance en el inventario
                         </div>
                     )}
 

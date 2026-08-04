@@ -92,6 +92,7 @@ export function attachArToViewer(viewer, opts = {}) {
 
   let raf = null;
   let latest = null;
+  let pausado = false;   // ver detach.setPausado
   let poseEvents = 0; // eventos de pose recibidos del plugin (ANTES de aplicar)
   let applied = 0;    // veces que apply() completó sin error
   let lastErr = '';
@@ -110,6 +111,7 @@ export function attachArToViewer(viewer, opts = {}) {
 
   function apply() {
     raf = null;
+    if (pausado) return;
     if (!latest?.view) return;
 
     // Camera-to-world, expressed relative to the physical anchor.
@@ -156,10 +158,10 @@ export function attachArToViewer(viewer, opts = {}) {
     applied++;
   }
 
-  const detach = function detach() {
-    unsubPose();
-    unsubTrack();
-    if (raf) cancelAnimationFrame(raf);
+  // Devolver la cámara a como estaba. Lo usan tanto la salida del AR como la
+  // PAUSA: durante la calibración por esquina hay que soltar la cámara para
+  // que el operario orbite el modelo y señale las tres caras con el dedo.
+  function restaurarCamara() {
     camera.matrixAutoUpdate = saved.autoUpdate;
     camera.position.copy(saved.position);
     camera.up.copy(saved.up);
@@ -168,7 +170,26 @@ export function attachArToViewer(viewer, opts = {}) {
     camera.updateProjectionMatrix?.();
     try { viewer.impl.syncCamera(true); } catch { /* Viewer version dependent. */ }
     viewer.impl.invalidate(true, true, true);
+  }
+
+  const detach = function detach() {
+    unsubPose();
+    unsubTrack();
+    if (raf) cancelAnimationFrame(raf);
+    restaurarCamara();
   };
+
+  // PAUSA: el AR deja de mandar sobre la cámara y el visor vuelve a ser un
+  // visor normal, orbitable. Es lo que permite señalar las caras del modelo
+  // sin salir del AR y sin perder la sesión de seguimiento ya arrancada
+  // —volver a arrancarla cuesta varios segundos de reconocimiento y, en obra,
+  // esa espera es la diferencia entre usar la herramienta o no usarla.
+  detach.setPausado = (v) => {
+    pausado = !!v;
+    if (pausado) restaurarCamara();
+    else if (latest) { try { apply(); } catch (e) { lastErr = String((e && e.message) || e); } }
+  };
+  detach.estaPausado = () => pausado;
 
   detach.setAnchorMatrix = setAnchorMatrix;
   detach.setYawDegrees = (value) => {
@@ -258,6 +279,15 @@ export function attachArToViewer(viewer, opts = {}) {
     z: (modelOrigin.z - origenInicial.z) / unitsPerMeter,
     giro: yawDegrees - yawInicial,
   });
+  // Dónde está la cámara en el mundo de ARCore (metros). Lo pide la
+  // calibración por esquina para orientar las normales hacia quien mira, que
+  // es lo que desempata el emparejamiento de los dos muros.
+  detach.getArCamPos = () => {
+    if (!latest?.view) return null;
+    const inv = new THREE.Matrix4().fromArray(latest.view).invert().elements;
+    return [inv[12], inv[13], inv[14]];
+  };
+
   // Rumbo actual de la cámara en el mundo ARCore: lo usa geoAnchor para sembrar
   // el yaw a partir del rumbo verdadero de la brújula.
   detach.getArHeading = () => headingDeg();
