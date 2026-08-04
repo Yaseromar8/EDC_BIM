@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-33';
+const AR_BUILD = 'ar-34';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -635,10 +635,15 @@ export default function NativeARView({ onExit }) {
             {diagLog}
           </pre>
         )}
-        <div style={{ color: (arStats.sesiones ?? 1) > 1 ? '#ff6b6b' : arStats.resumes > 1 ? '#f0b429' : '#3ee87a' }}>
-          sesiones ARCore: {arStats.sesiones ?? '?'}{(arStats.sesiones ?? 1) > 1 ? ' ❌ DOBLE' : ''}
-          {' '}· reanudada: {arStats.resumes} · camaras: {arStats.camCfgs}
+        {/* VIVAS debe ser 1; 'creadas' sube con cada entrada al AR y NO es
+            alarma — el susto de DOBLE con el contador acumulado fue falso. */}
+        <div style={{ color: (arStats.vivas ?? 1) > 1 ? '#ff6b6b' : '#3ee87a' }}>
+          sesiones vivas: {arStats.vivas ?? '?'}{(arStats.vivas ?? 1) > 1 ? ' ❌ DOBLE REAL' : ''}
+          {' '}· creadas: {arStats.sesiones ?? '?'} · reanudada: {arStats.resumes} · camaras: {arStats.camCfgs}
         </div>
+        {arStats.congelados > 30 && (
+          <div style={{ color: '#f0b429' }}>stream congelado: {arStats.congelados} frames — re-armando…</div>
+        )}
         {arStats.resumeError ? (
           <div style={{ color: '#ff6b6b', maxWidth: 260, wordBreak: 'break-word' }}>
             resume: {arStats.resumeError}
