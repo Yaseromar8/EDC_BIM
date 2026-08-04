@@ -120,6 +120,16 @@ public class ARCorePlugin extends Plugin {
     // exactamente 'ts 0 sin error': ninguna recibe imagen. Se muestra en el
     // panel para que este fallo se delate solo.
     private volatile int sesionesCreadas = 0;
+    // VIVAS a la vez (lo que de verdad importa): creadas cuenta la historia
+    // del proceso y entrar/salir del AR la sube -- mostrarla como "DOBLE" fue
+    // una falsa alarma. Vivas debe ser 1 siempre.
+    private volatile int sesionesVivas = 0;
+    // Vigilante de CONGELAMIENTO: una sesion reanudada cuyo stream se detiene
+    // devuelve el ULTIMO frame una y otra vez -- ts distinto de cero pero
+    // clavado, pintando una imagen estancada, sin error y sin poses. El
+    // re-arme viejo solo vigilaba ts==0 y este estado se le escapaba.
+    private long tsPrevio = -1L;
+    private int framesCongelados = 0;
     // SONDA DE CAMARA: antes de crear la sesion de ARCore se abre la camara a
     // pelo (Camera2) durante ~1 s y se cuentan los fotogramas que entrega.
     //   > 0  -> el sistema SI da imagen a esta app: el bloqueo esta entre
@@ -325,6 +335,7 @@ public class ARCorePlugin extends Plugin {
 
                 session = new Session(getContext());
                 sesionesCreadas++;
+                sesionesVivas++;
                 Config config = new Config(session);
                 config.setUpdateMode(Config.UpdateMode.LATEST_CAMERA_IMAGE);
                 config.setFocusMode(Config.FocusMode.AUTO);
@@ -481,6 +492,23 @@ public class ARCorePlugin extends Plugin {
                 nubeDibujoN = nube.size();
             }
         } catch (Throwable ignored) { }
+    }
+
+    /** Reanuda la sesion con reintentos (la camara puede tardar en soltarse). */
+    private void intentarResume(final int intento) {
+        mainHandler.post(() -> {
+            if (session == null || !running) return;
+            try {
+                session.resume();
+                resumeCount++;
+                resumeError = "";
+            } catch (Throwable t) {
+                resumeError = "resume(" + intento + "): " + String.valueOf(t.getMessage());
+                if (intento < 6) {
+                    mainHandler.postDelayed(() -> intentarResume(intento + 1), 700);
+                }
+            }
+        });
     }
 
     /** Muestrea la imagen de profundidad y la vuelca a la nube (voxel 5 cm). */
@@ -1001,19 +1029,13 @@ public class ARCorePlugin extends Plugin {
             }
             bindCameraTexture();
             // Textura registrada: AHORA se reanuda la sesion (en el hilo
-            // principal, como el ejemplo oficial). Ver resumePendiente.
+            // principal, como el ejemplo oficial). Con REINTENTOS: al volver a
+            // entrar al AR la camara de la sesion anterior puede tardar unos
+            // cientos de ms en soltarse, y un unico intento fallido dejaba la
+            // sesion pausada PARA SIEMPRE, sin error visible y sin retry.
             if (resumePendiente) {
-                mainHandler.post(() -> {
-                    if (session == null || !resumePendiente) return;
-                    resumePendiente = false;
-                    try {
-                        session.resume();
-                        resumeCount++;
-                        resumeError = "";
-                    } catch (Throwable t) {
-                        resumeError = "resume(textura): " + String.valueOf(t.getMessage());
-                    }
-                });
+                resumePendiente = false;
+                intentarResume(0);
             }
         }
 
@@ -1096,6 +1118,25 @@ public class ARCorePlugin extends Plugin {
                 // permisos, el WebView tomando el foco) sin que nadie volviera a
                 // llamar a resume(). Aqui se detecta y se corrige solo, en vez
                 // de dejar al operario mirando una pantalla vacia.
+                // CONGELAMIENTO: ts clavado (no cero) = stream detenido con la
+                // sesion reanudada. Mismo remedio que el ts==0: re-armar.
+                if (tsCamara != 0 && tsCamara == tsPrevio) {
+                    framesCongelados++;
+                    if (framesCongelados == 90 || framesCongelados == 300) {
+                        try {
+                            session.pause();
+                            session.resume();
+                            resumeCount++;
+                            resumeError = "";
+                        } catch (Throwable t) {
+                            resumeError = "descongelar: " + String.valueOf(t.getMessage());
+                        }
+                    }
+                } else {
+                    framesCongelados = 0;
+                }
+                tsPrevio = tsCamara;
+
                 if (tsCamara == 0) {
                     framesSinImagen++;
                     if (framesSinImagen == 60 || framesSinImagen == 240) {
@@ -1118,6 +1159,9 @@ public class ARCorePlugin extends Plugin {
                     JSObject st = new JSObject();
                     st.put("frames", frameCount);
                     st.put("sesiones", sesionesCreadas);
+                    st.put("vivas", sesionesVivas);
+                    st.put("resumeErr", resumeError);
+                    st.put("congelados", framesCongelados);
                     st.put("probe", probeFrames);
                     st.put("state", trackingState.name());
                     // ts=0 significa que la CAMARA no entrega imagen: ARCore
@@ -1436,6 +1480,7 @@ public class ARCorePlugin extends Plugin {
             if (session != null) {
                 session.pause();
                 session.close();
+                if (sesionesVivas > 0) sesionesVivas--;
                 session = null;
             }
         } catch (Exception ignored) {
