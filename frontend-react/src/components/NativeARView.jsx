@@ -59,6 +59,7 @@ export default function NativeARView({ onExit }) {
   const placingRef = useRef(false);
   const anchoredRef = useRef(false);
   const anchorFnRef = useRef(null);
+  const eligiendoModoRef = useRef(true);
   // El panel técnico aparece SOLO cuando algo va mal: si a los 6 segundos no
   // ha llegado ninguna pose de ARCore, o el tracking no arranca. En un APK
   // empaquetado no se puede añadir ?ardebug=1 a mano, y sin estos numeros
@@ -79,6 +80,10 @@ export default function NativeARView({ onExit }) {
   // Se arranca por el mas simple: el que nunca falla.
   const [modo, setModo] = useState(null);        // null = aun eligiendo
   const [ajustando, setAjustando] = useState(false);
+  // El AR abre PREGUNTANDO el metodo, como Revizto: nada se coloca solo hasta
+  // que el operario elige. Antes se buscaban planos y se anclaba por su cuenta,
+  // y el operario no sabia que estaba pasando ni podia decidir.
+  const [eligiendoModo, setEligiendoModo] = useState(true);
   const [hud, setHud] = useState({ src: '?', poseEvents: 0, applied: 0, upm: 1000, yaw: 0, aligning: false, err: '' });
   // Espejo del HUD para leerlo desde temporizadores sin arrastrar valores viejos.
   const hudRef = useRef({ poseEvents: 0, applied: 0 });
@@ -147,9 +152,27 @@ export default function NativeARView({ onExit }) {
 
         try {
           const renderer = viewer.impl.renderer();
+          // Se guarda TODO lo que el AR va a apagar. Antes solo se guardaba el
+          // color de limpiado, asi que al salir de AR el modelo se quedaba
+          // descolorido para siempre: sin mapa de entorno, sin iluminacion y
+          // sin sombras. El AR es un modo temporal; no puede dejar el visor
+          // peor de como lo encontro.
           rendererStateRef.current = {
             color: renderer.getClearColor?.().clone?.() || null,
             alpha: renderer.getClearAlpha?.() ?? 1,
+            lightPreset: (() => {
+              try { return viewer.impl.currentLightPreset?.() ?? viewer.prefs?.get?.('lightPreset'); }
+              catch { return null; }
+            })(),
+            envMap: (() => {
+              try { return viewer.prefs?.get?.('envMapBackground'); } catch { return null; }
+            })(),
+            groundShadow: (() => {
+              try { return viewer.prefs?.get?.('groundShadow'); } catch { return null; }
+            })(),
+            groundReflection: (() => {
+              try { return viewer.prefs?.get?.('groundReflection'); } catch { return null; }
+            })(),
           };
           // TRANSPARENCIA REAL: no basta con el clear del canvas. LMV pinta
           // ADEMÁS su propio fondo (el gris claro del visor y el env-map), y
@@ -232,7 +255,8 @@ export default function NativeARView({ onExit }) {
           setReticle({ found, type, planes: r?.planes || 0 });
 
           // Ya colocado, colocando ahora mismo, o en modo manual: no auto-anclar.
-          if (anchoredRef.current || placingRef.current || !autoPlaceRef.current) {
+          if (anchoredRef.current || placingRef.current || !autoPlaceRef.current
+              || eligiendoModoRef.current) {
             stableTicksRef.current = 0;
             return;
           }
@@ -285,9 +309,17 @@ export default function NativeARView({ onExit }) {
           const renderer = viewer.impl.renderer();
           const saved = rendererStateRef.current;
           if (renderer && saved) {
-            renderer.setClearColor(saved.color || 0x000000, saved.alpha);
-            renderer.setClearAlpha?.(saved.alpha);
-            viewer.impl.invalidate(true, true, true);
+            const restaurar = (fn) => { try { fn(); } catch { /* siguiente */ } };
+            restaurar(() => renderer.setClearColor(saved.color || 0x000000, saved.alpha));
+            restaurar(() => renderer.setClearAlpha?.(saved.alpha));
+            restaurar(() => renderer.useOverlayAlpha?.(1));
+            // Devolver el aspecto: iluminacion, entorno y sombras. Sin esto el
+            // modelo se quedaba gris y apagado despues de cada visita al AR.
+            if (saved.lightPreset != null) restaurar(() => viewer.setLightPreset(saved.lightPreset));
+            restaurar(() => viewer.impl.toggleEnvMapBackground(saved.envMap !== false));
+            restaurar(() => viewer.setGroundShadow(saved.groundShadow !== false));
+            restaurar(() => viewer.setGroundReflection(saved.groundReflection !== false));
+            restaurar(() => viewer.impl.invalidate(true, true, true));
           }
         }
       } catch {
@@ -362,6 +394,7 @@ export default function NativeARView({ onExit }) {
   // El manejador del retículo se registró al montar y no ve los renders
   // siguientes: se le deja SIEMPRE la versión vigente por ref.
   anchorFnRef.current = handleAnchor;
+  eligiendoModoRef.current = eligiendoModo;
 
   // ── Orientación por GPS (el modo "referenciarse en campo") ──────────────────
   // Coloca el modelo sobre el terreno real según TU posición GPS, sin anclar ni
@@ -533,6 +566,67 @@ export default function NativeARView({ onExit }) {
           Escanear el piso → tocar para colocar → caminar. Se quitaron los
           controles de GPS, giro, dial y escala: sobrecargaban la pantalla y
           estorbaban el flujo básico. Vuelven cuando cada uno esté probado. */}
+      {/* ELEGIR MÉTODO — es lo primero que hace Revizto al entrar en AR, y es lo
+          correcto: el operario decide, nada se coloca a sus espaldas. */}
+      {eligiendoModo && !anchored && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 30, display: 'flex',
+          flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 12, background: 'rgba(8,10,14,0.82)', pointerEvents: 'auto', padding: 24,
+        }}>
+          <div style={{ color: '#e9ecf1', fontSize: 17, fontWeight: 600, marginBottom: 4 }}>
+            ¿Cómo quieres calibrar?
+          </div>
+          {[
+            {
+              id: 'esquina', titulo: 'Por esquina',
+              texto: 'Dos muros y el piso que se corten. El más preciso.',
+              nota: 'Necesita superficies de 1 m × 1 m.',
+            },
+            {
+              id: 'piso', titulo: 'Por piso',
+              texto: 'Apunta al suelo y el modelo se apoya en él.',
+              nota: 'Luego lo afinas con las flechas.',
+            },
+            {
+              id: 'ninguna', titulo: 'Sin calibrar',
+              texto: 'Colócalo a mano donde estás.',
+              nota: 'En terreno abierto, sin rincones, es el único que funciona.',
+            },
+          ].map((m) => (
+            <button
+              key={m.id}
+              onClick={() => {
+                setModo(m.id);
+                setEligiendoModo(false);
+                autoPlaceRef.current = (m.id !== 'ninguna');
+                if (m.id === 'ninguna') colocarSinCalibrar();
+                else setStatus(m.id === 'esquina'
+                  ? 'Apunta a cada una de las tres caras del rincón.'
+                  : 'Apunta al piso y muévete despacio…');
+              }}
+              style={{
+                width: 'min(420px, 92vw)', textAlign: 'left', cursor: 'pointer',
+                background: 'rgba(20,23,28,0.94)', color: '#e9ecf1',
+                border: '1px solid rgba(255,255,255,0.14)', borderRadius: 12,
+                padding: '14px 16px',
+              }}
+            >
+              <div style={{ fontSize: 15.5, fontWeight: 700 }}>{m.titulo}</div>
+              <div style={{ fontSize: 13, color: '#aab3bf', marginTop: 3 }}>{m.texto}</div>
+              <div style={{ fontSize: 11.5, color: '#7f8894', marginTop: 3 }}>{m.nota}</div>
+            </button>
+          ))}
+          <div style={{ color: '#7f8894', fontSize: 11.5, maxWidth: 420, textAlign: 'center', marginTop: 6 }}>
+            El AR es una ayuda visual. Para medir o replantear, usa los métodos de siempre.
+          </div>
+          <button onClick={onExit} style={{
+            marginTop: 4, background: 'none', border: 'none', color: '#98a1ad',
+            fontSize: 13, cursor: 'pointer',
+          }}>Salir</button>
+        </div>
+      )}
+
       {/* AJUSTAR: mover, elevar y girar. Vale tanto para colocar de cero como
           para corregir la deriva sin recalibrar entero. */}
       {ajustando && anchored && (
@@ -568,11 +662,12 @@ export default function NativeARView({ onExit }) {
               anchoredRef.current = false;
               stableTicksRef.current = 0;
               setAnchored(false);
-              setStatus('Toca el punto del piso donde quieres el modelo.');
+              setEligiendoModo(true);      // vuelve a preguntar el método
+              setStatus('¿Cómo quieres calibrar?');
             }}
             style={{ background: '#334155' }}
           >
-            Recolocar
+            Calibrar
           </button>
         )}
 
