@@ -99,6 +99,11 @@ export function onTracking(handler) {
 let _lastGeoPose = null;
 
 export function onGeoPose(handler) {
+  // Era la ÚNICA suscripción sin guarda de simulador, y en web el plugin no
+  // existe: Capacitor rechazaba la promesa y el error subía sin catch a la
+  // consola. El simulador no emite GPS a propósito —una laptop no tiene— y el
+  // panel lo dice honesto: "GPS: sin señal".
+  if (SIM) return () => {};
   const sub = ARCore.addListener('onGeoPose', (data) => {
     _lastGeoPose = data;
     handler(data);
