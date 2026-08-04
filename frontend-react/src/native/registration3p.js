@@ -30,7 +30,7 @@ function centroid(pts) {
  * Autovector del mayor autovalor de una simétrica 4x4, por rotaciones de
  * Jacobi. Una 4x4 simétrica converge en un puñado de barridos.
  */
-function largestEigenvector4(A) {
+export function largestEigenvector4(A) {
   // Copia de trabajo y matriz de autovectores acumulada.
   const a = A.map((r) => r.slice());
   let v = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
@@ -76,7 +76,7 @@ function largestEigenvector4(A) {
 }
 
 /** Matriz de rotación 3x3 a partir de un cuaternión (w, x, y, z). */
-function quatToMatrix(q) {
+export function quatToMatrix(q) {
   const [w, x, y, z] = q;
   const n = Math.hypot(w, x, y, z) || 1;
   const [W, X, Y, Z] = [w / n, x / n, y / n, z / n];
