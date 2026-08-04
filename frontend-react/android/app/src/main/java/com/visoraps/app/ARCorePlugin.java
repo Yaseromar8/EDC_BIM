@@ -37,6 +37,7 @@ import com.getcapacitor.annotation.Permission;
 import com.google.ar.core.Anchor;
 import com.google.ar.core.ArCoreApk;
 import com.google.ar.core.Camera;
+import com.google.ar.core.CameraIntrinsics;
 import com.google.ar.core.Config;
 import com.google.ar.core.Frame;
 import com.google.ar.core.HitResult;
@@ -149,6 +150,18 @@ public class ARCorePlugin extends Plugin {
     private float[] nubeColor = new float[0];
     private int nubeDibujoN = 0;
     private Config sessionConfig;   // para reconfigurar en vivo (linterna)
+    // ── PROFUNDIDAD (Depth API): la clave de los muros lisos ───────────────
+    // Los puntos de rastreo solo caen donde hay textura; la profundidad por
+    // movimiento cubre la superficie ENTERA — es como Augin llena sus mallas.
+    // depthOk se AUTO-VALIDA: el pixel central se compara contra el hit-test
+    // del reticulo; si discrepan sostenidamente, la ingesta se apaga sola en
+    // vez de envenenar el ajuste con puntos mal proyectados.
+    private volatile boolean depthSoportada = false;
+    private volatile boolean depthOk = true;
+    private volatile int depthDesacuerdos = 0;
+    private volatile int depthPuntos = 0;
+    private volatile float ultimaDistanciaHit = -1f;
+    private long lastDepthMs = 0L;
     private long lastRansacMs = 0L;
     private final Random azar = new Random();
     private float[] esquinaPrevia = null;
@@ -316,6 +329,14 @@ public class ARCorePlugin extends Plugin {
                 config.setUpdateMode(Config.UpdateMode.LATEST_CAMERA_IMAGE);
                 config.setFocusMode(Config.FocusMode.AUTO);
                 config.setPlaneFindingMode(Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL);
+                try {
+                    if (session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
+                        config.setDepthMode(Config.DepthMode.AUTOMATIC);
+                        depthSoportada = true;
+                    }
+                } catch (Throwable t) {
+                    depthSoportada = false;
+                }
                 session.configure(config);
                 sessionConfig = config;
 
@@ -399,6 +420,13 @@ public class ARCorePlugin extends Plugin {
             nubeDibujoN = 0;
         }
         esquinaPrevia = null;
+        depthOk = true;
+        depthDesacuerdos = 0;
+        depthPuntos = 0;
+        // La rejilla de planos de ARCore (cuadriculas cian, solo pisos) es
+        // RUIDO durante el escaneo de esquina: se pinta encima de los muros y
+        // confunde. Aqui manda la nube tenida por caras.
+        showPlanes = false;
         cornerScan = true;
         call.resolve();
     }
@@ -406,6 +434,7 @@ public class ARCorePlugin extends Plugin {
     @PluginMethod
     public void stopCornerScan(PluginCall call) {
         cornerScan = false;
+        showPlanes = true;
         synchronized (nube) { nube.clear(); }
         call.resolve();
     }
@@ -452,6 +481,62 @@ public class ARCorePlugin extends Plugin {
                 nubeDibujoN = nube.size();
             }
         } catch (Throwable ignored) { }
+    }
+
+    /** Muestrea la imagen de profundidad y la vuelca a la nube (voxel 5 cm). */
+    private void ingerirProfundidad(Frame frame, Camera camera) {
+        if (!depthSoportada || !depthOk) return;
+        long ahora = System.currentTimeMillis();
+        if (ahora - lastDepthMs < 220L) return;   // ~4 barridos por segundo bastan
+        lastDepthMs = ahora;
+        try (Image img = frame.acquireDepthImage16Bits()) {
+            int dw = img.getWidth(), dh = img.getHeight();
+            java.nio.ShortBuffer sb = img.getPlanes()[0].getBuffer()
+                    .order(java.nio.ByteOrder.nativeOrder()).asShortBuffer();
+            int rowStride = img.getPlanes()[0].getRowStride() / 2;
+            CameraIntrinsics intr = camera.getTextureIntrinsics();
+            int[] dims = intr.getImageDimensions();
+            float fx = intr.getFocalLength()[0] * dw / dims[0];
+            float fy = intr.getFocalLength()[1] * dh / dims[1];
+            float cx = intr.getPrincipalPoint()[0] * dw / dims[0];
+            float cy = intr.getPrincipalPoint()[1] * dh / dims[1];
+            Pose camPose = camera.getPose();
+
+            // AUTO-VALIDACION con el pixel central contra el hit del reticulo.
+            int mmCentro = sb.get((dh / 2) * rowStride + (dw / 2)) & 0xFFFF;
+            if (mmCentro > 0 && ultimaDistanciaHit > 0.3f) {
+                float zc = mmCentro / 1000f;
+                if (Math.abs(zc - ultimaDistanciaHit) > 0.25f + 0.25f * ultimaDistanciaHit) {
+                    if (++depthDesacuerdos > 8) depthOk = false;
+                } else if (depthDesacuerdos > 0) {
+                    depthDesacuerdos--;
+                }
+            }
+
+            int paso = Math.max(4, dw / 44);      // ~44 x N muestras por barrido
+            int agregados = 0;
+            synchronized (nube) {
+                for (int v = paso / 2; v < dh; v += paso) {
+                    int fila = v * rowStride;
+                    for (int u = paso / 2; u < dw; u += paso) {
+                        int mm = sb.get(fila + u) & 0xFFFF;
+                        if (mm < 300 || mm > 6000) continue;   // 30 cm a 6 m
+                        float z = mm / 1000f;
+                        float px = z * (u - cx) / fx;
+                        float py = z * (cy - v) / fy;
+                        float[] w = camPose.transformPoint(new float[] { px, py, -z });
+                        long kx = (long) Math.floor(w[0] / 0.05f) + 32768L;
+                        long ky = (long) Math.floor(w[1] / 0.05f) + 32768L;
+                        long kz = (long) Math.floor(w[2] / 0.05f) + 32768L;
+                        nube.put((kx << 34) | (ky << 17) | kz, new float[] { w[0], w[1], w[2] });
+                        agregados++;
+                    }
+                }
+            }
+            depthPuntos += agregados;
+        } catch (Throwable ignored) {
+            // NotYetAvailable al principio: normal, se reintenta al siguiente.
+        }
     }
 
     /** RANSAC de un plano sobre `pts`, con la normal restringida. */
@@ -642,6 +727,8 @@ public class ARCorePlugin extends Plugin {
     private void emitirEsquina(float[] piso, float[] muroA, float[] muroB, float[] punto, int puntos) {
         JSObject ev = new JSObject();
         ev.put("points", puntos);
+        ev.put("depthPts", depthPuntos);
+        ev.put("depthOk", depthSoportada && depthOk);
         ev.put("floor", piso != null);
         ev.put("walls", (muroA != null ? 1 : 0) + (muroB != null ? 1 : 0));
         boolean found = punto != null;
@@ -1079,6 +1166,7 @@ public class ARCorePlugin extends Plugin {
                 // ~600 ms se ajustan piso + dos muros por RANSAC.
                 if (cornerScan) {
                     acumularNube(frame);
+                    ingerirProfundidad(frame, camera);
                     if (pointCloudRenderer != null && nubeDibujoN > 0) {
                         camera.getViewMatrix(viewMatrix, 0);
                         camera.getProjectionMatrix(projMatrix, 0, 0.05f, 2000f);
@@ -1224,6 +1312,11 @@ public class ARCorePlugin extends Plugin {
                 // vive de esa normal: el eje Y de la pose de un plano de ARCore
                 // ES la normal de la superficie.
                 Pose hp = best.getHitPose();
+                try {
+                    Pose camP = frame.getCamera().getPose();
+                    float ddx = hp.tx() - camP.tx(), ddy = hp.ty() - camP.ty(), ddz = hp.tz() - camP.tz();
+                    ultimaDistanciaHit = (float) Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+                } catch (Throwable ignored) { }
                 float[] m = new float[16];
                 hp.toMatrix(m, 0);
                 payload.put("found", true);

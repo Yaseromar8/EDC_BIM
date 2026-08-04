@@ -79,12 +79,14 @@ export default function ArCornerPanel({
   // tres caras entran de golpe — el barrido cara por cara queda de respaldo
   // para equipos donde la nube no alcance.
   const [nubePuntos, setNubePuntos] = useState(0);
+  const [profundidad, setProfundidad] = useState(null);   // null = sin dato
   const [linterna, setLinterna] = useState(false);
   useEffect(() => {
     if (paso !== 'obra') return undefined;
     startCornerScan();
     const off = onCornerDetect((ev) => {
       setNubePuntos(ev?.points || 0);
+      if (ev && ev.depthOk != null) setProfundidad(ev.depthOk ? (ev.depthPts || 0) : -1);
       if (!ev || !ev.found || !ev.stable) return;
       if (carasObraRef.current.length >= 3) return;
       const planos = ev.planes || [];
@@ -506,8 +508,11 @@ export default function ArCornerPanel({
             </div>
           )}
           <div style={{ marginBottom: 4, color: '#8ab4f8', fontSize: 12.5 }}>
-            relieve reconocido: {nubePuntos} puntos — barre despacio las tres
-            caras y el rincón se arma solo. Los puntos se tiñen al reconocer:
+            relieve reconocido: {nubePuntos} puntos
+            {profundidad != null && profundidad >= 0 && ` (+${profundidad} de profundidad)`}
+            {profundidad === -1 && ' (profundidad apagada: no validó)'}
+            {' '}— barre despacio las tres caras y el rincón se arma solo. Los
+            puntos se tiñen al reconocer:
             <span style={{ color: '#33e5f2' }}> piso</span> ·
             <span style={{ color: '#59f266' }}> muro</span> ·
             <span style={{ color: '#ffa633' }}> muro</span>
