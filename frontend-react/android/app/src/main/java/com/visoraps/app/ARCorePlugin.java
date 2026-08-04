@@ -98,6 +98,11 @@ public class ARCorePlugin extends Plugin {
     // en ese caso handleOnResume debe reanudarla. Reanudar una sesion ya
     // activa es un error de ARCore.
     private volatile boolean pausadaPorCicloDeVida = false;
+    // Cuantas Session de ARCore se han CREADO. Debe ser 1. Si marca 2, dos
+    // arranques se colaron y hay dos sesiones peleandose la camara -- que es
+    // exactamente 'ts 0 sin error': ninguna recibe imagen. Se muestra en el
+    // panel para que este fallo se delate solo.
+    private volatile int sesionesCreadas = 0;
     /** true en cuanto ARCore tiene una textura valida donde escribir. */
     private volatile boolean textureReady = false;
     private TrackingState lastState = null;
@@ -153,6 +158,17 @@ public class ARCorePlugin extends Plugin {
 
     private void startInternal(final PluginCall call) {
         getActivity().runOnUiThread(() -> {
+            // GUARDA REAL contra el doble arranque. La de start() no basta:
+            // 'running' no es true hasta el FINAL de este bloque, asi que dos
+            // llamadas seguidas (React en desarrollo monta los efectos dos
+            // veces) pasaban la guarda ambas y se encolaban ambas. Aqui, en el
+            // hilo de UI, se ejecutan en orden: la segunda ve la sesion de la
+            // primera y se retira. Crear una segunda Session deja a las dos
+            // sin camara: ts 0 para siempre, sin ningun error.
+            if (running && session != null) {
+                call.resolve();
+                return;
+            }
             try {
                 ArCoreApk.Availability availability =
                         ArCoreApk.getInstance().checkAvailability(getContext());
@@ -173,6 +189,7 @@ public class ARCorePlugin extends Plugin {
                 }
 
                 session = new Session(getContext());
+                sesionesCreadas++;
                 Config config = new Config(session);
                 config.setUpdateMode(Config.UpdateMode.LATEST_CAMERA_IMAGE);
                 config.setFocusMode(Config.FocusMode.AUTO);
@@ -546,6 +563,7 @@ public class ARCorePlugin extends Plugin {
                     lastStatsMs = ahora;
                     JSObject st = new JSObject();
                     st.put("frames", frameCount);
+                    st.put("sesiones", sesionesCreadas);
                     st.put("state", trackingState.name());
                     // ts=0 significa que la CAMARA no entrega imagen: ARCore
                     // corre en vacio. Es la diferencia entre "no dibujamos" y

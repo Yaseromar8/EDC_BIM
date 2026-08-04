@@ -50,6 +50,10 @@ export function isNativeAR() {
 // testigo sigue siendo el de la sesión viva. Sin testigo, apaga siempre — que
 // es lo que quiere quien sale del AR a propósito.
 let sesionActual = 0;
+// UNA sola sesion nativa. En desarrollo React monta los efectos dos veces y
+// ambos montajes llaman a startSession; sin esto llegaban DOS start() al
+// plugin y se creaban dos Session de ARCore peleandose la camara.
+let arranqueNativo = null;
 
 // ── API de alto nivel ───────────────────────────────────────────────
 // startSession: arranca ARCore + cámara transparente. Resuelve cuando la
@@ -57,7 +61,8 @@ let sesionActual = 0;
 export async function startSession() {
   const testigo = ++sesionActual;
   if (SIM) { simStart(); return { simulado: true, testigo }; }
-  const r = await ARCore.start();
+  if (!arranqueNativo) arranqueNativo = ARCore.start();
+  const r = await arranqueNativo;
   return { ...(r || {}), testigo };
 }
 
@@ -66,6 +71,7 @@ export async function stopSession(testigo) {
   const t = (testigo && typeof testigo === 'object') ? testigo.testigo : testigo;
   if (t != null && t !== sesionActual) return;   // no es mi sesión: no la toco
   if (SIM) { simStop(); return; }
+  arranqueNativo = null;
   try { return await ARCore.stop(); } catch (e) { /* noop */ }
 }
 

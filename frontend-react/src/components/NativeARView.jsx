@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-25';
+const AR_BUILD = 'ar-26';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -609,8 +609,11 @@ export default function NativeARView({ onExit }) {
         <div style={{ color: arStats.tex > 0 ? '#3ee87a' : '#ff6b6b' }}>
           textura camara: {String(arStats.tex)} {arStats.tex > 0 ? '' : '❌ no creada'}
         </div>
-        <div style={{ color: arStats.resumes > 1 ? '#f0b429' : '#3ee87a' }}>
-          sesion: {arStats.resumes} arranque{arStats.resumes === 1 ? '' : 's'} · camaras: {arStats.camCfgs}
+        {/* 'sesiones' debe ser 1 SIEMPRE. 2 = dos Session de ARCore peleandose
+            la camara: es la firma exacta de 'ts 0 sin error'. */}
+        <div style={{ color: (arStats.sesiones ?? 1) > 1 ? '#ff6b6b' : arStats.resumes > 1 ? '#f0b429' : '#3ee87a' }}>
+          sesiones ARCore: {arStats.sesiones ?? '?'}{(arStats.sesiones ?? 1) > 1 ? ' ❌ DOBLE' : ''}
+          {' '}· reanudada: {arStats.resumes} · camaras: {arStats.camCfgs}
         </div>
         {arStats.resumeError ? (
           <div style={{ color: '#ff6b6b', maxWidth: 260, wordBreak: 'break-word' }}>
