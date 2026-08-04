@@ -90,6 +90,10 @@ public class ARCorePlugin extends Plugin {
     private long lastStatsMs = 0L;
     /** Ultimo error del hilo GL, para poder verlo desde la web. */
     private volatile String glError = "";
+    /** Cuantas veces se ha (re)arrancado la sesion y el ultimo fallo al hacerlo. */
+    private volatile int resumeCount = 0;
+    private volatile String resumeError = "";
+    private long framesSinImagen = 0L;
     /** true en cuanto ARCore tiene una textura valida donde escribir. */
     private volatile boolean textureReady = false;
     private TrackingState lastState = null;
@@ -206,7 +210,16 @@ public class ARCorePlugin extends Plugin {
                         ViewGroup.LayoutParams.MATCH_PARENT));
                 webView.bringToFront();
 
-                session.resume();
+                try {
+                    session.resume();
+                    resumeCount++;
+                    resumeError = "";
+                } catch (Throwable t) {
+                    // Antes esto subia al catch general y abortaba con un mensaje
+                    // generico. Ahora queda registrado y visible en el panel.
+                    resumeError = String.valueOf(t.getClass().getSimpleName()) + ": " + t.getMessage();
+                    throw t;
+                }
                 running = true;
                 glView.onResume();
                 startGeoSensors();
@@ -459,6 +472,35 @@ public class ARCorePlugin extends Plugin {
                 // INSUFFICIENT_LIGHT / INSUFFICIENT_FEATURES / EXCESSIVE_MOTION
                 // / CAMERA_UNAVAILABLE / BAD_STATE / NONE.
                 frameCount++;
+
+                // RE-ARMADO DE LA SESION.
+                //
+                // Sintoma observado en tablet: el bucle GL corre, la textura es
+                // valida, update() no lanza y ARCore no reporta fallo, pero el
+                // sello de tiempo del marco es 0 para siempre. Eso es lo que
+                // devuelve una sesion que NO esta realmente reanudada: no hay
+                // imagen de camara que entregar.
+                //
+                // Puede pasar si la actividad se pauso y volvio (el dialogo de
+                // permisos, el WebView tomando el foco) sin que nadie volviera a
+                // llamar a resume(). Aqui se detecta y se corrige solo, en vez
+                // de dejar al operario mirando una pantalla vacia.
+                if (tsCamara == 0) {
+                    framesSinImagen++;
+                    if (framesSinImagen == 60 || framesSinImagen == 240) {
+                        try {
+                            session.pause();
+                            session.resume();
+                            resumeCount++;
+                            resumeError = "";
+                        } catch (Throwable t) {
+                            resumeError = "re-arme: " + String.valueOf(t.getMessage());
+                        }
+                    }
+                } else {
+                    framesSinImagen = 0;
+                }
+
                 long ahora = System.currentTimeMillis();
                 if (ahora - lastStatsMs >= 1000L) {
                     lastStatsMs = ahora;
@@ -472,6 +514,16 @@ public class ARCorePlugin extends Plugin {
                     st.put("cam", camaraPintada);
                     st.put("tex", bgRenderer != null ? bgRenderer.getTextureId() : -1);
                     st.put("glError", glError);
+                    st.put("resumes", resumeCount);
+                    st.put("resumeError", resumeError);
+                    // Configuraciones de camara que ofrece el equipo. En algunos
+                    // modelos la de por defecto no entrega imagen y hay que
+                    // elegir otra explicitamente.
+                    try {
+                        st.put("camCfgs", session.getSupportedCameraConfigs(new com.google.ar.core.CameraConfigFilter(session)).size());
+                    } catch (Throwable ignored) {
+                        st.put("camCfgs", -1);
+                    }
                     try {
                         st.put("reason", camera.getTrackingFailureReason().name());
                     } catch (Throwable ignored) {
@@ -731,6 +783,9 @@ public class ARCorePlugin extends Plugin {
         lastStatsMs = 0L;
         glError = "";
         textureReady = false;
+        resumeCount = 0;
+        resumeError = "";
+        framesSinImagen = 0L;
         lastState = null;
         planeRenderer = null;
         showPlanes = true;
