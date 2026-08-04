@@ -3,21 +3,23 @@ import { calibrarPorEsquina, clasificar, planoDesdePose } from '../native/arCorn
 import { camaraDelVisor, planoDelToque } from '../native/modelFacePick';
 import { simActivo, simMirarA } from '../native/arSim';
 
-// Asistente de CALIBRACIÓN POR ESQUINA — el método de Revizto.
+// Asistente de CALIBRACIÓN POR ESQUINA — el método de Revizto, EN SU ORDEN.
 //
-// Dos pasos, y el orden importa:
-//   1. Señalar en el MODELO las tres caras del rincón (dos muros y el piso).
-//   2. Apuntar a esas mismas tres caras EN LA OBRA.
+//   1. Escanear las tres caras del rincón EN LA OBRA (dos muros y el piso).
+//   2. Señalar esas mismas tres caras EN EL MODELO.
 //
-// Se hace primero el modelo porque ahí el operario puede orbitar, acercarse y
-// tocar con calma; luego, ya en la obra, solo tiene que apuntar. Al revés
-// obligaría a sostener la tablet en alto mientras se busca una cara diminuta.
+// Primero campo y después modelo, como lo documenta Revizto ("después de
+// escanear las tres superficies, seleccione tres superficies correspondientes
+// en el modelo"). Aquí se hizo primero al revés por una idea de ergonomía, y
+// hubo que corregirlo: además de no ser lo que el operario ya conoce, el orden
+// de Revizto tiene su lógica física — mientras escaneas, la detección de
+// planos termina de reconocer el entorno; y al acabar bajas la tablet y
+// eliges las caras del modelo con calma, orbitando.
 //
 // Durante el paso del modelo el puente se PAUSA: la cámara vuelve a ser la del
-// visor de siempre y el rincón se señala orbitando. La sesión de ARCore sigue
-// viva por debajo — volver a arrancarla costaría varios segundos de
-// reconocimiento, y en obra esa espera es lo que hace que una herramienta se
-// use o se abandone.
+// visor de siempre. La sesión de ARCore sigue viva por debajo — volver a
+// arrancarla costaría varios segundos de reconocimiento, y en obra esa espera
+// es lo que hace que una herramienta se use o se abandone.
 
 const NOMBRES = ['primera cara', 'segunda cara', 'tercera cara'];
 
@@ -60,7 +62,9 @@ export default function ArCornerPanel({
   // apagar el visor en cada repintado.
   const camaraPuestaRef = useRef(null);
   useEffect(() => {
-    const quiere = paso === 'obra';
+    // En el RESULTADO la cámara sigue encendida: los números se leen sobre la
+    // obra y, al tocar Aplicar, el modelo aparece ya calzado en su sitio.
+    const quiere = paso === 'obra' || paso === 'resultado';
     if (camaraPuestaRef.current === quiere) return;
     camaraPuestaRef.current = quiere;
     modoCamara?.(quiere);
@@ -126,7 +130,7 @@ export default function ArCornerPanel({
   const reiniciar = () => {
     setCarasModelo([]); setCarasObra([]); setResultado(null);
     obsMundoRef.current = []; obsModeloRef.current = null;
-    setAviso(''); setPaso('modelo');
+    setAviso(''); setPaso('obra');
   };
 
   const aplicar = () => {
@@ -152,12 +156,12 @@ export default function ArCornerPanel({
         <>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>Calibrar por esquina</div>
           <p style={{ margin: '0 0 12px', color: '#a9b0b8' }}>
-            Busca un rincón que exista igual en el modelo y en la obra: dos muros
-            y el piso. Primero lo señalas en el modelo y después apuntas a las
-            mismas tres caras aquí.
+            Busca un rincón que exista igual en la obra y en el modelo: dos muros
+            y el piso. Primero escaneas las tres caras aquí, con la cámara, y
+            después las señalas en el modelo.
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" style={botonFuerte} onClick={() => setPaso('modelo')}>Empezar</button>
+            <button type="button" style={botonFuerte} onClick={() => setPaso('obra')}>Empezar</button>
             <button type="button" style={boton} onClick={onCancelar}>Cancelar</button>
           </div>
         </>
@@ -166,11 +170,11 @@ export default function ArCornerPanel({
       {paso === 'modelo' && (
         <>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>
-            1 de 2 · Toca en el modelo la {NOMBRES[carasModelo.length] || 'última cara'}
+            2 de 2 · Toca en el modelo la {NOMBRES[carasModelo.length] || 'última cara'}
           </div>
           <p style={{ margin: '0 0 10px', color: '#a9b0b8' }}>
-            Gira y acerca el modelo con normalidad. Toca el piso y los dos muros
-            del rincón — el orden da igual.
+            La cámara queda en pausa: gira y acerca el modelo con normalidad.
+            Toca las mismas tres caras que escaneaste — el orden da igual.
           </p>
           <div style={{ marginBottom: 10 }}>
             caras: {carasModelo.length} de 3 {carasModelo.length === 3 && `· ${resumen(carasModelo, (v) => v)}`}
@@ -180,9 +184,9 @@ export default function ArCornerPanel({
               type="button"
               style={carasModelo.length === 3 ? botonFuerte : { ...boton, opacity: 0.5 }}
               disabled={carasModelo.length !== 3}
-              onClick={() => setPaso('obra')}
+              onClick={resolver}
             >
-              Siguiente
+              Calcular
             </button>
             <button type="button" style={boton} onClick={() => setCarasModelo((p) => p.slice(0, -1))}>
               Deshacer
@@ -195,7 +199,7 @@ export default function ArCornerPanel({
       {paso === 'obra' && (
         <>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>
-            2 de 2 · Apunta a la {NOMBRES[carasObra.length] || 'última cara'} del rincón real
+            1 de 2 · Apunta a la {NOMBRES[carasObra.length] || 'última cara'} del rincón real
           </div>
           <p style={{ margin: '0 0 10px', color: '#a9b0b8' }}>
             Céntrala en el punto de mira y captura. Quédate en el mismo sitio
@@ -220,9 +224,9 @@ export default function ArCornerPanel({
               type="button"
               style={carasObra.length === 3 ? botonFuerte : { ...boton, opacity: 0.5 }}
               disabled={carasObra.length !== 3}
-              onClick={resolver}
+              onClick={() => setPaso('modelo')}
             >
-              Calcular
+              Siguiente
             </button>
             <button type="button" style={boton} onClick={() => setCarasObra((p) => p.slice(0, -1))}>
               Deshacer
