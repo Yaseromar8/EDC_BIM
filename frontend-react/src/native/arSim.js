@@ -105,8 +105,17 @@ const normaliza = (v) => {
   return [v[0] / m, v[1] / m, v[2] / m];
 };
 
+// PARADA DIFERIDA: React monta los efectos DOS veces en desarrollo (montar →
+// limpiar → montar). La limpieza del primer montaje llegaba a destiempo y
+// mataba el intervalo que acababa de crear el segundo, dejando la simulación
+// sin emitir una sola pose — con el seguimiento funcionando, porque ese va por
+// setTimeout. Aplazando la parada un tick, un arranque inmediato la cancela y
+// el ciclo sobrevive.
+let pendienteParar = null;
+
 export function simStart() {
-  if (temporizador) return;
+  if (pendienteParar) { clearTimeout(pendienteParar); pendienteParar = null; }
+  if (temporizador) return;           // ya está corriendo: se aprovecha
   t0 = performance.now();
   frames = 0;
 
@@ -137,9 +146,13 @@ export function simStart() {
 }
 
 export function simStop() {
-  if (temporizador) clearInterval(temporizador);
-  temporizador = null;
-  emitir('onTracking', { state: 'stopped' });
+  if (pendienteParar) clearTimeout(pendienteParar);
+  pendienteParar = setTimeout(() => {
+    pendienteParar = null;
+    if (temporizador) clearInterval(temporizador);
+    temporizador = null;
+    emitir('onTracking', { state: 'stopped' });
+  }, 0);
 }
 
 /** Anclaje simulado: identidad en el origen del rincón. */
