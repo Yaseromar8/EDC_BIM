@@ -80,6 +80,13 @@ export default function ArCornerPanel({
   // normal es barrer y mirar.
   const [mira, setMira] = useState(null);
   const [marcador, setMarcador] = useState(null);
+  // CAPTURA AFINADA: en vez de fiarse de UN hit-test —que en muros lisos
+  // baila—, el botón recoge ~1.2 s de muestras (planos o PUNTOS con normal
+  // estimada, los mismos que usa Revizto), promedia la normal y el punto, y
+  // rechaza si la nube no es estable. Es lo que hace robusto capturar un muro
+  // blanco donde el plano completo nunca llega.
+  const [afinando, setAfinando] = useState(0);   // 0 = quieto; 0..1 progreso
+  const afinandoRef = useRef(null);
   const carasObraRef = useRef([]);
   useEffect(() => { carasObraRef.current = carasObra; }, [carasObra]);
   const estableRef = useRef(null);     // cara vista en ticks seguidos
@@ -97,11 +104,16 @@ export default function ArCornerPanel({
       }
 
       const r = reticuloRef?.current;
-      if (!r || !r.found || !r.matrix || r.type === 'point') { setMira(null); return; }
+      const usable = r && r.found && r.matrix && (r.type === 'plane' || r.oriented);
+      if (!usable) { setMira(null); return; }
       const q = planoDesdePose(r.matrix);
       if (!q) { setMira(null); return; }
       const clase = claseDeNormal(q.n);
       setMira(clase);
+      // La captura AUTOMATICA sigue siendo solo de PLANOS: los puntos
+      // orientados son valiosos pero ruidosos, y para ellos esta el boton
+      // con afinado. Auto-capturar ruido seria peor que no capturar.
+      if (r.type !== 'plane') return;
 
       // Auto-captura: la misma cara vista en DOS ticks seguidos (≈0.5 s) se
       // considera firme y se toma. La deshecha queda vetada para el modo
@@ -201,21 +213,60 @@ export default function ArCornerPanel({
   };
 
   const capturarObra = () => {
-    const r = reticuloRef?.current;
-    if (!r || !r.found || !r.matrix) {
+    if (afinandoRef.current) return;
+    const r0 = reticuloRef?.current;
+    if (!r0 || !r0.found || !r0.matrix) {
       setAviso('Todavía no hay superficie bajo el punto de mira. Muévete despacio y vuelve a intentarlo.');
       return;
     }
-    if (r.type === 'point') {
-      setAviso('Eso son puntos sueltos, no una superficie firme: barre la cara despacio hasta que aparezca su malla.');
+    if (r0.type === 'point' && !r0.oriented) {
+      setAviso('Esos puntos aún no tienen orientación: acércate un poco al muro o apunta a un borde (zócalo, esquina) y vuelve a capturar.');
       return;
     }
-    const plano = planoDesdePose(r.matrix);
-    if (!plano) { setAviso('La superficie llegó incompleta; repite la captura.'); return; }
+    setAviso('');
     // El botón salta el veto: tocar es una orden explícita del operario.
     vetadaRef.current = null;
-    intentaCapturar(plano, claseDeNormal(plano.n), false);
+
+    const muestras = [];
+    const TICKS = 12;                      // ~1.2 s a 100 ms
+    let tick = 0;
+    afinandoRef.current = setInterval(() => {
+      tick += 1;
+      setAfinando(tick / TICKS);
+      const r = reticuloRef?.current;
+      if (r && r.found && r.matrix && (r.type === 'plane' || r.oriented)) {
+        const q = planoDesdePose(r.matrix);
+        if (q) muestras.push(q);
+      }
+      if (tick < TICKS) return;
+
+      clearInterval(afinandoRef.current);
+      afinandoRef.current = null;
+      setAfinando(0);
+
+      if (muestras.length < 6) {
+        setAviso('No se pudo fijar la cara: mantén la mira quieta sobre la superficie e inténtalo otra vez.');
+        return;
+      }
+      // Promedio de normales y puntos. Si la nube de normales se dispersa,
+      // el operario se movió o la superficie no es una cara: se rechaza.
+      const nm = [0, 1, 2].map((i) => muestras.reduce((a, c) => a + c.n[i], 0) / muestras.length);
+      const largo = Math.hypot(nm[0], nm[1], nm[2]) || 1;
+      const n = nm.map((v) => v / largo);
+      const disperso = muestras.some((c) => dot3(c.n, n) < 0.94);   // >20 grados
+      if (disperso) {
+        setAviso('La superficie no se ve estable (la normal baila). Apunta a una zona con más detalle y mantén firme.');
+        return;
+      }
+      const pMedio = [0, 1, 2].map((i) => muestras.reduce((a, c) => a + c.p[i], 0) / muestras.length);
+      intentaCapturar({ n, p: pMedio }, claseDeNormal(n), false);
+    }, 100);
   };
+
+  // Si el panel se desmonta a media captura, el afinado no puede quedar vivo.
+  useEffect(() => () => {
+    if (afinandoRef.current) clearInterval(afinandoRef.current);
+  }, []);
 
   // Composición correcta: UNA cara horizontal (piso o techo) y DOS muros.
   const horizontales = carasObra.filter((c) => c.clase === 'piso' || c.clase === 'techo').length;
@@ -396,6 +447,12 @@ export default function ArCornerPanel({
             mira: <b>{mira || 'nada firme'}</b>
             {mira === 'inclinada' && ' (no sirve para la esquina)'}
           </div>
+          {!mira && muros < 2 && (
+            <div style={{ marginBottom: 8, color: '#8ab4f8', fontSize: 12.5 }}>
+              Muro liso: apunta al zócalo, a una esquina o a un borde con
+              detalle, acércate a 1–2 m, y usa el botón manteniendo firme.
+            </div>
+          )}
           <div style={{ marginBottom: 10 }}>
             capturado: {carasObra.length
               ? carasObra.map((c, i) => <span key={i}>{i > 0 && ' · '}{c.clase} ✓</span>)
@@ -417,11 +474,13 @@ export default function ArCornerPanel({
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
               type="button"
-              style={carasObra.length < 3 && mira ? botonFuerte : { ...boton, opacity: 0.5 }}
-              disabled={carasObra.length >= 3}
+              style={carasObra.length < 3 && (mira || afinando > 0) ? botonFuerte : { ...boton, opacity: 0.5 }}
+              disabled={carasObra.length >= 3 || afinando > 0}
               onClick={capturarObra}
             >
-              {mira && mira !== 'inclinada' ? 'Capturar ' + mira : 'Capturar cara'}
+              {afinando > 0
+                ? 'Fijando… ' + Math.round(afinando * 100) + '% — mantén firme'
+                : mira && mira !== 'inclinada' ? 'Capturar ' + mira : 'Capturar cara'}
             </button>
             <button
               type="button"

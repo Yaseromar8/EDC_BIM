@@ -189,7 +189,7 @@ function reticuloEnSegundo(seg) {
   const ejeX = normaliza(cruz(auxiliar, ejeY));
   const ejeZ = cruz(ejeX, ejeY);
   return {
-    found: true, type: 'plane', planes: planosActivos.length,
+    found: true, type: 'plane', planes: planosActivos.length, oriented: true,
     // Mismo contrato que el plugin: 'floor' | 'wall'. La web coloca solo
     // sobre 'floor'; la esquina captura tambien los muros.
     kind: mejor.plano.tipo === 'piso' ? 'floor' : 'wall',

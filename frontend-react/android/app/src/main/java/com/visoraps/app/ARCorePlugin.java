@@ -878,6 +878,19 @@ public class ARCorePlugin extends Plugin {
                 payload.put("found", true);
                 payload.put("matrix", floatsToJsonArray(m));
                 payload.put("type", (best.getTrackable() instanceof Plane) ? "plane" : "point");
+                // ¿La pose trae una NORMAL de superficie confiable? Los planos
+                // siempre; los puntos solo si ARCore estimo su normal. Es la
+                // llave de los muros lisos: un muro blanco casi nunca llega a
+                // plano completo, pero sus bordes y zocalos SI dan puntos con
+                // normal estimada -- exactamente lo que usa Revizto (sus
+                // cruces blancas son estos puntos). Tirarlos era quedarse
+                // ciego ante la mitad de los muros reales.
+                boolean orientado = best.getTrackable() instanceof Plane;
+                if (best.getTrackable() instanceof Point) {
+                    orientado = ((Point) best.getTrackable()).getOrientationMode()
+                            == Point.OrientationMode.ESTIMATED_SURFACE_NORMAL;
+                }
+                payload.put("oriented", orientado);
                 // floor | wall | ceiling: la web coloca solo sobre 'floor',
                 // pero la esquina necesita capturar tambien los muros.
                 if (best.getTrackable() instanceof Plane) {
