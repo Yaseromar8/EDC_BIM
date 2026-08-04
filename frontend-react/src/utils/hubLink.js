@@ -13,10 +13,14 @@
  */
 import { apiFetch } from './apiFetch';
 
+// El sitio de Docs se llama visor-ecd-PORTAL en Render. El respaldo apuntaba a
+// 'visor-ecd-docs', que NO EXISTE (404): el botón INICIO del visor llevaba a un
+// host muerto en producción. Define VITE_DOCS_URL para fijarlo sin depender de
+// este respaldo.
 export const DOCS_URL = import.meta.env.VITE_DOCS_URL
   || (typeof window !== 'undefined' && window.location.hostname === 'localhost'
     ? 'http://localhost:5174'
-    : 'https://visor-ecd-docs.onrender.com');
+    : 'https://visor-ecd-portal.onrender.com');
 
 // ATAJO INTERNO Visor -> Documentos (saltar al explorador desde dentro del
 // visor, sin pasar por el Hub). Apagado a propósito. El Hub sí ofrece
