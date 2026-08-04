@@ -772,7 +772,7 @@ export default function NativeARView({ onExit }) {
       {/* El pie tambien es del modo camara: mientras se navega el modelo, el
           selector y el asistente ya traen sus propios botones de salida, y
           "Colocar sin calibrar" seria un duplicado del selector. */}
-      {enCamara && <div className="native-ar-controls">
+      {enCamara && !calibrandoEsquina && <div className="native-ar-controls">
         {!anchored ? (
           <>
             <div className="native-ar-primary" style={{ background: '#1f2937', textAlign: 'center' }}>
