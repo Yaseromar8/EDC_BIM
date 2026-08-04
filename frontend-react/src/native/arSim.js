@@ -245,6 +245,7 @@ export function simStart() {
   // —leía la generación en el momento de la llamada, que ya era la del
   // montaje siguiente— y por eso un efecto viejo mataba el ciclo del nuevo.
   let ultimoLatido = 0;
+  let ultimaEsquina = 0;
   const tick = () => {
     const seg = (performance.now() - t0) / 1000;
     frames++;
@@ -252,7 +253,7 @@ export function simStart() {
       emitir('onCameraPose', poseEnSegundo(seg));
       emitir('onReticle', reticuloEnSegundo(seg));
     }
-    if (seg - ultimoLatido >= 0.6) simEmitirEsquina(seg);
+    if (seg - ultimaEsquina >= 1) { ultimaEsquina = seg; simEmitirEsquina(seg); }
     // Latido por TIEMPO, no por número de frames: si el ritmo baja, el latido
     // sigue llegando y el panel sigue diciendo la verdad.
     if (seg - ultimoLatido >= 1) {

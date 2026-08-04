@@ -392,7 +392,12 @@ public class ARCorePlugin extends Plugin {
 
     @PluginMethod
     public void startCornerScan(PluginCall call) {
-        synchronized (nube) { nube.clear(); }
+        synchronized (nube) {
+            nube.clear();
+            // Sin esto, un arranque tras Reiniciar podia pintar un fotograma
+            // de nube vieja antes de la primera acumulacion.
+            nubeDibujoN = 0;
+        }
         esquinaPrevia = null;
         cornerScan = true;
         call.resolve();
@@ -417,9 +422,12 @@ public class ARCorePlugin extends Plugin {
                     // para tragar ruido. Con nube rica, se filtra mas.
                     float minConf = nube.size() < 900 ? 0.02f : 0.08f;
                     if (c < minConf) continue;
-                    long kx = (long) Math.floor(x / 0.04f) + 32768L;
-                    long ky = (long) Math.floor(y / 0.04f) + 32768L;
-                    long kz = (long) Math.floor(z / 0.04f) + 32768L;
+                    // Celda de 5 cm: la resolucion que pide el reconocimiento
+                    // de caras de obra (zocalos, bordes, bruñas) sin reventar
+                    // el tope de puntos en superficies grandes.
+                    long kx = (long) Math.floor(x / 0.05f) + 32768L;
+                    long ky = (long) Math.floor(y / 0.05f) + 32768L;
+                    long kz = (long) Math.floor(z / 0.05f) + 32768L;
                     long key = (kx << 34) | (ky << 17) | kz;
                     nube.put(key, new float[] { x, y, z });
                 }
@@ -481,6 +489,60 @@ public class ARCorePlugin extends Plugin {
         return (mejor != null && mejorInliers >= minimo) ? mejor : null;
     }
 
+    /**
+     * Refina el plano con TODOS sus inliers (centroide + autovector menor de
+     * la covarianza, por iteracion de potencia inversa). El plano de RANSAC
+     * sale de 3 puntos al azar: sirve para VOTAR, no para medir — su normal
+     * puede venir torcida unos grados, y esos grados van directo al giro del
+     * modelo. Con el refinamiento, la normal es la de la nube entera.
+     */
+    private float[] refinarPlano(ArrayList<float[]> pts, float[] plano, float tol) {
+        double cx = 0, cy = 0, cz = 0;
+        ArrayList<float[]> in = new ArrayList<>();
+        for (float[] q : pts) {
+            float dist = plano[0] * q[0] + plano[1] * q[1] + plano[2] * q[2] - plano[3];
+            if (dist < tol && dist > -tol) { in.add(q); cx += q[0]; cy += q[1]; cz += q[2]; }
+        }
+        if (in.size() < 20) return plano;
+        cx /= in.size(); cy /= in.size(); cz /= in.size();
+        double xx = 0, xy = 0, xz = 0, yy = 0, yz = 0, zz = 0;
+        for (float[] q : in) {
+            double ax = q[0] - cx, ay = q[1] - cy, az = q[2] - cz;
+            xx += ax * ax; xy += ax * ay; xz += ax * az;
+            yy += ay * ay; yz += ay * az; zz += az * az;
+        }
+        double eps = 1e-6 * (xx + yy + zz + 1e-9);
+        double vx = plano[0], vy = plano[1], vz = plano[2];
+        for (int it = 0; it < 6; it++) {
+            double[] r = resolver3(xx + eps, xy, xz, xy, yy + eps, yz, xz, yz, zz + eps, vx, vy, vz);
+            if (r == null) break;
+            double L = Math.sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+            if (L < 1e-12) break;
+            vx = r[0] / L; vy = r[1] / L; vz = r[2] / L;
+        }
+        if (vx * plano[0] + vy * plano[1] + vz * plano[2] < 0) { vx = -vx; vy = -vy; vz = -vz; }
+        // Si el refinado rompe la restriccion (vertical/horizontal), fue
+        // ruido: se conserva el plano original.
+        float vert = (float) Math.abs(vy);
+        float vertOrig = Math.abs(plano[1]);
+        if ((vertOrig > 0.9f && vert < 0.85f) || (vertOrig < 0.35f && vert > 0.4f)) return plano;
+        float d = (float) (vx * cx + vy * cy + vz * cz);
+        return new float[] { (float) vx, (float) vy, (float) vz, d, in.size() };
+    }
+
+    /** Sistema 3x3 (matriz simetrica dada por filas) por Cramer. */
+    private double[] resolver3(double a, double b, double c,
+                               double d, double e, double f,
+                               double g, double h, double i,
+                               double px, double py, double pz) {
+        double det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+        if (Math.abs(det) < 1e-18) return null;
+        double x = (px * (e * i - f * h) - b * (py * i - f * pz) + c * (py * h - e * pz)) / det;
+        double y = (a * (py * i - f * pz) - px * (d * i - f * g) + c * (d * pz - py * g)) / det;
+        double z = (a * (e * pz - py * h) - b * (d * pz - py * g) + px * (d * h - e * g)) / det;
+        return new double[] { x, y, z };
+    }
+
     private ArrayList<float[]> quitarInliers(ArrayList<float[]> pts, float[] plano, float tol) {
         ArrayList<float[]> fuera = new ArrayList<>();
         for (float[] q : pts) {
@@ -499,10 +561,12 @@ public class ARCorePlugin extends Plugin {
         float tol = 0.035f;
         float[] piso = ransacPlano(pts, false, tol);
         if (piso == null) { emitirEsquina(null, null, null, null, pts.size()); return; }
+        piso = refinarPlano(pts, piso, tol);
         ArrayList<float[]> sinPiso = quitarInliers(pts, piso, tol * 2f);
 
         float[] muroA = ransacPlano(sinPiso, true, tol);
         if (muroA == null) { tenirNube(pts, piso, null, null); emitirEsquina(piso, null, null, null, pts.size()); return; }
+        muroA = refinarPlano(sinPiso, muroA, tol);
         ArrayList<float[]> resto = quitarInliers(sinPiso, muroA, tol * 2f);
 
         float[] muroB = null;
@@ -515,6 +579,7 @@ public class ARCorePlugin extends Plugin {
             resto = quitarInliers(resto, cand, tol * 2f);      // muro paralelo: fuera
         }
         if (muroB == null) { tenirNube(pts, piso, muroA, null); emitirEsquina(piso, muroA, null, null, pts.size()); return; }
+        muroB = refinarPlano(resto, muroB, tol);
 
         // Punto de corte de los tres planos (sistema 3x3 por Cramer).
         float[] n1 = piso, n2 = muroA, n3 = muroB;
