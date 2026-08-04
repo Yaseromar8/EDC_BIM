@@ -30,15 +30,32 @@ export function isNativeAR() {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 }
 
+// TESTIGO DE SESIÓN. En desarrollo React monta los efectos DOS veces
+// (montar → limpiar → montar). El efecto del PRIMER montaje se queda dormido
+// en su `await startSession()`, despierta DESPUÉS de que el segundo ya arrancó
+// su sesión, ve su propio `cancelled` y llama a stopSession() — apagando una
+// sesión que no es la suya. Síntoma: cero poses y cero latidos, con el estado
+// de seguimiento en 'tracking' porque ese llega por otra vía.
+//
+// startSession devuelve un testigo; stopSession(testigo) solo apaga si ese
+// testigo sigue siendo el de la sesión viva. Sin testigo, apaga siempre — que
+// es lo que quiere quien sale del AR a propósito.
+let sesionActual = 0;
+
 // ── API de alto nivel ───────────────────────────────────────────────
 // startSession: arranca ARCore + cámara transparente. Resuelve cuando la
 // sesión está activa (o rechaza si el device no soporta ARCore / sin permiso).
 export async function startSession() {
-  if (SIM) { simStart(); return { simulado: true }; }
-  return ARCore.start();
+  const testigo = ++sesionActual;
+  if (SIM) { simStart(); return { simulado: true, testigo }; }
+  const r = await ARCore.start();
+  return { ...(r || {}), testigo };
 }
 
-export async function stopSession() {
+export async function stopSession(testigo) {
+  // Acepta el testigo suelto o el objeto que devolvió startSession.
+  const t = (testigo && typeof testigo === 'object') ? testigo.testigo : testigo;
+  if (t != null && t !== sesionActual) return;   // no es mi sesión: no la toco
   if (SIM) { simStop(); return; }
   try { return await ARCore.stop(); } catch (e) { /* noop */ }
 }

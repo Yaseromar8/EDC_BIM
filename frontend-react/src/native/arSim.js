@@ -105,21 +105,7 @@ const normaliza = (v) => {
   return [v[0] / m, v[1] / m, v[2] / m];
 };
 
-// PARADA DIFERIDA: React monta los efectos DOS veces en desarrollo (montar →
-// limpiar → montar). La limpieza del primer montaje llegaba a destiempo y
-// mataba el intervalo que acababa de crear el segundo, dejando la simulación
-// sin emitir una sola pose — con el seguimiento funcionando, porque ese va por
-// setTimeout. Aplazando la parada un tick, un arranque inmediato la cancela y
-// el ciclo sobrevive.
-// Cada arranque incrementa la generación. Una parada solo surte efecto si
-// NADIE ha arrancado después de programarla — el intento anterior fallaba
-// justo aquí: cancelaba las paradas ya pendientes, pero no las que se
-// programaban DESPUÉS del arranque, que son las que llegaban tarde y mataban
-// el ciclo recién creado.
-let generacion = 0;
-
 export function simStart() {
-  generacion++;
   if (temporizador) clearInterval(temporizador);
   t0 = performance.now();
   frames = 0;
@@ -134,6 +120,11 @@ export function simStart() {
   // intervalo, el navegador lo estrangula a ~2 Hz en segundo plano pero sigue
   // latiendo, así que la simulación se puede verificar sin depender de que
   // alguien esté mirando la pantalla.
+  //
+  // Quién puede PARAR este ciclo se decide en arcore.js con un testigo de
+  // sesión. Aquí hubo una guarda por generación que se autorizaba a sí misma
+  // —leía la generación en el momento de la llamada, que ya era la del
+  // montaje siguiente— y por eso un efecto viejo mataba el ciclo del nuevo.
   let ultimoLatido = 0;
   const tick = () => {
     const seg = (performance.now() - t0) / 1000;
@@ -160,13 +151,9 @@ export function simStart() {
 }
 
 export function simStop() {
-  const mia = generacion;
-  setTimeout(() => {
-    if (generacion !== mia) return;      // alguien arrancó después: no es mi ciclo
-    if (temporizador) clearInterval(temporizador);
-    temporizador = null;
-    emitir('onTracking', { state: 'stopped' });
-  }, 0);
+  if (temporizador) clearInterval(temporizador);
+  temporizador = null;
+  emitir('onTracking', { state: 'stopped' });
 }
 
 /** Anclaje simulado: identidad en el origen del rincón. */

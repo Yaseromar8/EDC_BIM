@@ -48,7 +48,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-09';
+const AR_BUILD = 'ar-10';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -238,9 +238,12 @@ export default function NativeARView({ onExit }) {
         // GPS + rumbo: se guarda la última pose para orientar al instante.
         geoCleanupRef.current = onGeoPose((g) => setGeo(g));
 
-        await startSession();
+        const sesion = await startSession();
         if (cancelled) {
-          stopSession();
+          // Con el testigo, este efecto ya obsoleto solo puede apagar SU
+          // sesión. Antes apagaba la del montaje siguiente y el AR quedaba
+          // mudo: sin poses, sin latido y sin una sola pista del motivo.
+          stopSession(sesion);
           return;
         }
 
