@@ -259,7 +259,43 @@ export default function ArCornerPanel({
     width: 'min(92vw, 460px)', background: 'rgba(12,14,17,0.94)', color: '#e6e8ea',
     border: '1px solid #2a2f35', borderRadius: 14, padding: 16,
     font: '14px/1.45 system-ui, sans-serif', zIndex: 40,
+    // La raíz del AR es pointer-events:none para dejar pasar los gestos al
+    // visor; TODO panel interactivo debe declararse 'auto'. Sin esta línea el
+    // asistente era sordo: ni Empezar ni Cancelar recibían el clic.
+    pointerEvents: 'auto',
   };
+
+  // ── Indicador de paso ──────────────────────────────────────────────────
+  // "¿En qué paso estoy?" no puede ser una pregunta. Tres fichas siempre a la
+  // vista: la actual en azul, la hecha en verde, la pendiente apagada.
+  const PASOS = [
+    { id: 'obra', num: '1', nombre: 'Escanear obra' },
+    { id: 'modelo', num: '2', nombre: 'Señalar modelo' },
+    { id: 'resultado', num: '3', nombre: 'Resultado' },
+  ];
+  const ordenPaso = { intro: -1, obra: 0, modelo: 1, resultado: 2 };
+  const fichas = (
+    <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+      {PASOS.map((q, i) => {
+        const actual = ordenPaso[paso] === i;
+        const hecho = ordenPaso[paso] > i;
+        return (
+          <div
+            key={q.id}
+            style={{
+              flex: 1, textAlign: 'center', padding: '5px 4px', borderRadius: 8,
+              fontSize: 11.5, fontWeight: actual ? 700 : 500,
+              background: actual ? '#1d4ed8' : hecho ? '#14532d' : '#1b1f24',
+              color: actual ? '#fff' : hecho ? '#86efac' : '#6b7280',
+              border: '1px solid ' + (actual ? '#1d4ed8' : hecho ? '#14532d' : '#2a2f35'),
+            }}
+          >
+            {hecho ? '✓ ' : q.num + ' · '}{q.nombre}
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
     <>
@@ -278,6 +314,7 @@ export default function ArCornerPanel({
         />
       )}
     <div style={caja}>
+      {fichas}
       {paso === 'intro' && (
         <>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>Calibrar por esquina</div>
@@ -285,6 +322,9 @@ export default function ArCornerPanel({
             Busca un rincón que exista igual en la obra y en el modelo: dos muros
             y el piso. Primero escaneas las tres caras aquí, con la cámara, y
             después las señalas en el modelo.
+          </p>
+          <p style={{ margin: '0 0 12px', color: '#7f8894', fontSize: 12.5 }}>
+            Aún no empieza nada: la cámara se enciende al pulsar Empezar.
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" style={botonFuerte} onClick={() => setPaso('obra')}>Empezar</button>
@@ -296,7 +336,7 @@ export default function ArCornerPanel({
       {paso === 'modelo' && (
         <>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>
-            2 de 2 · Toca en el modelo la {NOMBRES[carasModelo.length] || 'última cara'}
+            Toca en el modelo la {NOMBRES[carasModelo.length] || 'última cara'}
           </div>
           <p style={{ margin: '0 0 10px', color: '#a9b0b8' }}>
             La cámara queda en pausa: gira y acerca el modelo con normalidad.
@@ -325,7 +365,7 @@ export default function ArCornerPanel({
       {paso === 'obra' && (
         <>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>
-            1 de 2 · Apunta a la {NOMBRES[carasObra.length] || 'última cara'} del rincón real
+            Apunta a la {NOMBRES[carasObra.length] || 'última cara'} del rincón real
           </div>
           <p style={{ margin: '0 0 10px', color: '#a9b0b8' }}>
             Barre despacio el piso y los dos muros, quedándote en el mismo
