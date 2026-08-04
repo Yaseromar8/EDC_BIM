@@ -6,6 +6,7 @@ import {
 } from '../native/arcore';
 import { attachArToViewer } from '../native/arViewerBridge';
 import { showArStake, clearArStake } from '../native/arStake';
+import ArAdjustPanel from './ArAdjustPanel';
 import { geoToViewer, seedYawFromHeading } from '../native/geoAnchor';
 import './ARTransparent.css';
 
@@ -70,6 +71,14 @@ export default function NativeARView({ onExit }) {
   const [yawDegrees, setYawDegrees] = useState(0);
   const [unitsPerMeter, setUnitsPerMeter] = useState(1000);
   const [aligning, setAligning] = useState(false);
+  // MODOS DE CALIBRACION, como los ofrece Revizto:
+  //   'esquina'    dos muros y el piso — el mas preciso, exige un rincon real
+  //   'piso'       alinea el suelo y abre Ajustar
+  //   'ninguna'    coloca y ajustas a mano — el UNICO que funciona en canal
+  //                a cielo abierto, donde no hay rincones que escanear
+  // Se arranca por el mas simple: el que nunca falla.
+  const [modo, setModo] = useState(null);        // null = aun eligiendo
+  const [ajustando, setAjustando] = useState(false);
   const [hud, setHud] = useState({ src: '?', poseEvents: 0, applied: 0, upm: 1000, yaw: 0, aligning: false, err: '' });
   // Espejo del HUD para leerlo desde temporizadores sin arrastrar valores viejos.
   const hudRef = useRef({ poseEvents: 0, applied: 0 });
@@ -300,6 +309,26 @@ export default function NativeARView({ onExit }) {
     await setAimPoint(-1, -1);                // vuelve al centro para el retículo
   };
 
+  // MODO "SIN CALIBRACION": el modelo aparece donde estas y lo colocas a mano.
+  // Es el que Revizto ofrece como salida cuando no hay superficies utiles, y en
+  // obra lineal a cielo abierto es directamente el modo principal.
+  const colocarSinCalibrar = async () => {
+    try {
+      setStatus('Colocando el modelo…');
+      const res = await createAnchorAtCamera();
+      if (res?.matrix) detachRef.current?.setAnchorMatrix(res.matrix);
+      setModelsVisible(window.NOP_VIEWER, true);
+      anchoredRef.current = true;
+      setAnchored(true);
+      setPlanesVisible(false);
+      setModo('ninguna');
+      setAjustando(true);
+      setStatus('Colócalo con las flechas hasta que calce con la obra.');
+    } catch (error) {
+      setStatus('No se pudo colocar: ' + (error?.message || error));
+    }
+  };
+
   const handleAnchor = async () => {
     try {
       setStatus('Colocando el modelo sobre la superficie…');
@@ -316,7 +345,11 @@ export default function NativeARView({ onExit }) {
       // piso real mientras caminas, el anclaje y la escala son correctos.
       showArStake(window.NOP_VIEWER, modelOriginRef.current,
                   detachRef.current?.getUnitsPerMeter?.() || unitsPerMeter);
-      setStatus('Anclado. Camina alrededor: la estaca roja (1 m) debe quedarse clavada en el piso.');
+      setModo((m) => m || 'piso');
+      // Revizto abre Ajustar automáticamente tras calibrar por piso: el
+      // aterrizaje casi nunca es perfecto y el afinado es parte del método.
+      setAjustando(true);
+      setStatus('Colocado. Afina con las flechas hasta que calce con la obra.');
     } catch (error) {
       // Falló el anclaje: se vuelve a intentar solo en cuanto haya superficie
       // estable otra vez. No hace falta que el operario haga nada.
@@ -492,13 +525,27 @@ export default function NativeARView({ onExit }) {
           Escanear el piso → tocar para colocar → caminar. Se quitaron los
           controles de GPS, giro, dial y escala: sobrecargaban la pantalla y
           estorbaban el flujo básico. Vuelven cuando cada uno esté probado. */}
+      {/* AJUSTAR: mover, elevar y girar. Vale tanto para colocar de cero como
+          para corregir la deriva sin recalibrar entero. */}
+      {ajustando && anchored && (
+        <ArAdjustPanel bridge={detachRef.current} onClose={() => setAjustando(false)} />
+      )}
+
       <div className="native-ar-controls">
         {!anchored ? (
-          <div className="native-ar-primary" style={{ background: '#1f2937', textAlign: 'center' }}>
-            {reticle.planes > 0
-              ? `${reticle.planes} superficie${reticle.planes === 1 ? '' : 's'} detectada${reticle.planes === 1 ? '' : 's'}`
-              : 'Buscando superficies…'}
-          </div>
+          <>
+            <div className="native-ar-primary" style={{ background: '#1f2937', textAlign: 'center' }}>
+              {reticle.planes > 0
+                ? `${reticle.planes} superficie${reticle.planes === 1 ? '' : 's'} detectada${reticle.planes === 1 ? '' : 's'}`
+                : 'Buscando superficies…'}
+            </div>
+            {/* Salida que SIEMPRE funciona: en terreno abierto puede no haber
+                ni un plano que detectar, y sin esto el operario se queda
+                mirando "buscando superficies" para siempre. */}
+            <button className="native-ar-exit" onClick={colocarSinCalibrar}>
+              Colocar sin calibrar
+            </button>
+          </>
         ) : (
           <button
             className="native-ar-primary"
@@ -517,7 +564,16 @@ export default function NativeARView({ onExit }) {
             }}
             style={{ background: '#334155' }}
           >
-            Recolocar en otro punto
+            Recolocar
+          </button>
+        )}
+
+        {/* Ajustar queda a mano SIEMPRE que haya modelo colocado: la deriva del
+            SLAM aparece al caminar, y Revizto insiste en recalibrar/afinar al
+            cambiar de zona. */}
+        {anchored && !ajustando && (
+          <button className="native-ar-exit" onClick={() => setAjustando(true)}>
+            Ajustar
           </button>
         )}
 

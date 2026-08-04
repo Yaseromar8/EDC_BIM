@@ -195,6 +195,58 @@ export function attachArToViewer(viewer, opts = {}) {
     if (latest) { try { apply(); } catch (e) { lastErr = String((e && e.message) || e); } }
   };
   detach.getModelOrigin = () => ({ ...modelOrigin });
+
+  // ── AJUSTAR (mover · elevar · girar) ───────────────────────────────────────
+  // Es la herramienta que Revizto ofrece en DOS de sus tres modos de
+  // calibración, y la que usan para corregir la deriva sin recalibrar entero.
+  // Sin esto, el modo "sin calibración" no sirve de nada — y ese modo es el
+  // único que funciona en un canal a cielo abierto, donde no hay rincones.
+  //
+  // Se mueve en METROS y RESPECTO A LO QUE MIRAS: el operario piensa "medio
+  // metro a mi derecha", no "+500 en la X del modelo". La dirección se saca de
+  // la cámara ya aplicada, proyectada al plano horizontal.
+  //
+  // OJO AL SIGNO: modelOrigin desplaza la CÁMARA dentro del modelo, así que
+  // mover la cámara a la derecha se ve como el modelo yéndose a la izquierda.
+  // Por eso va negado. Si en campo resulta invertido, se cambia SENTIDO a -1 y
+  // queda arreglado sin tocar nada más.
+  const SENTIDO = -1;
+  detach.nudgeMeters = (dDerecha = 0, dAdelante = 0, dArriba = 0) => {
+    const e = mWorld.elements;
+    // Tercera columna de la matriz cámara→mundo = eje Z de la cámara; el
+    // "adelante" de una cámara OpenGL es su -Z.
+    let ax = -e[8], ay = -e[9];
+    const largo = Math.hypot(ax, ay);
+    if (largo < 1e-6) { ax = 1; ay = 0; } else { ax /= largo; ay /= largo; }
+    // Derecha = adelante girado -90° en el plano XY (visor Z arriba).
+    const dx = ay, dy = -ax;
+
+    const u = unitsPerMeter * SENTIDO;
+    modelOrigin = {
+      x: modelOrigin.x + (dx * dDerecha + ax * dAdelante) * u,
+      y: modelOrigin.y + (dy * dDerecha + ay * dAdelante) * u,
+      z: modelOrigin.z + dArriba * u,
+    };
+    if (latest) { try { apply(); } catch (err) { lastErr = String((err && err.message) || err); } }
+  };
+
+  // Vuelve al estado con el que se entró: deshace todo el ajuste manual.
+  const origenInicial = { ...modelOrigin };
+  const yawInicial = yawDegrees;
+  detach.resetAdjust = () => {
+    modelOrigin = { ...origenInicial };
+    yawDegrees = yawInicial;
+    if (latest) { try { apply(); } catch (err) { lastErr = String((err && err.message) || err); } }
+  };
+  // Cuánto se ha movido a mano desde el inicio, en metros. Se enseña al
+  // operario: un ajuste de 3 m suele significar que la calibración estaba mal,
+  // no que el modelo esté mal dibujado.
+  detach.getAdjustMeters = () => ({
+    x: (modelOrigin.x - origenInicial.x) / unitsPerMeter,
+    y: (modelOrigin.y - origenInicial.y) / unitsPerMeter,
+    z: (modelOrigin.z - origenInicial.z) / unitsPerMeter,
+    giro: yawDegrees - yawInicial,
+  });
   // Rumbo actual de la cámara en el mundo ARCore: lo usa geoAnchor para sembrar
   // el yaw a partir del rumbo verdadero de la brújula.
   detach.getArHeading = () => headingDeg();
