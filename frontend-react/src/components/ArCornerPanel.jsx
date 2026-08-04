@@ -48,7 +48,7 @@ const boton = {
   padding: '10px 16px', borderRadius: 999, border: '1px solid #3a3f45',
   background: '#1b1f24', color: '#e6e8ea', fontSize: 14, cursor: 'pointer',
 };
-const botonFuerte = { ...boton, background: '#2b6cb0', borderColor: '#2b6cb0', color: '#fff' };
+const botonFuerte = { ...boton, background: '#2b6cb0', border: '1px solid #2b6cb0', color: '#fff' };
 
 /** Etiqueta legible de lo capturado, para que se vea que el trío es un rincón. */
 function resumen(planos, arriba) {

@@ -158,3 +158,22 @@ test('sin las posiciones de cámara se niega en vez de adivinar', () => {
   assert.equal(r.ok, false);
   assert.match(r.motivo, /cámara/);
 });
+
+test('un rincon de 135 en el modelo contra 90 en la obra se rechaza con los dos numeros', () => {
+  // El operario toco un quiebre achaflanado del modelo (135°) pero escaneo un
+  // rincon recto. No hay emparejamiento posible y el mensaje debe decir ambos
+  // angulos para saber que lado esta mal.
+  const upm = 1;
+  const modelo135 = [
+    { n: [0, 0, 1], p: [0, 0, 0] },                                   // piso (visor Z arriba)
+    { n: [1, 0, 0], p: [0, 0, 0] },
+    { n: [-Math.SQRT1_2, Math.SQRT1_2, 0], p: [0, 0, 0] },            // 135° respecto al otro
+  ];
+  const r = calibrarPorEsquina(modelo135, MUNDO, {
+    upm, obsMundo: OBS_MUNDO, obsModelo: [1, 1, 1],
+  });
+  assert.equal(r.ok, false);
+  assert.match(r.motivo, /mismo rincón/);
+  assert.match(r.motivo, /135|45/);
+  assert.match(r.motivo, /90/);
+});

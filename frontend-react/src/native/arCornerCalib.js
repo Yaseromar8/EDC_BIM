@@ -195,6 +195,17 @@ export function calibrarPorEsquina(planosModelo, planosMundo, opts = {}) {
     return fallo('los dos muros son casi paralelos: busca un rincón más marcado');
   }
 
+  // ¿Son EL MISMO rincón? La forma no depende de la orientación: el ángulo
+  // con que se abren los dos muros tiene que coincidir a ambos lados. Si no
+  // coincide, no hay nada que emparejar — y decir SOLO "no casan" obliga a
+  // adivinar cuál de los dos lados está mal. Con los dos números, el operario
+  // sabe al instante si tocó mal el modelo o escaneó otro rincón.
+  if (Math.abs(abreModelo - abreMundo) > 20) {
+    return fallo('no parecen el mismo rincón: los muros del modelo se abren '
+      + abreModelo.toFixed(0) + '° y los de la obra ' + abreMundo.toFixed(0)
+      + '°. Revisa las caras que tocaste en el modelo.');
+  }
+
   // EMPAREJAR LOS MUROS por quiralidad, no por "el que mejor casa": ver el
   // comentario de orientarHaciaObservador. Con las normales ya orientadas
   // hacia el observador, el emparejamiento correcto es el que conserva el
