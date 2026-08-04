@@ -163,6 +163,9 @@ function reticuloEnSegundo(seg) {
   const ejeZ = cruz(ejeX, ejeY);
   return {
     found: true, type: 'plane', planes: SIM_PLANOS.length,
+    // Mismo contrato que el plugin: 'floor' | 'wall'. La web coloca solo
+    // sobre 'floor'; la esquina captura tambien los muros.
+    kind: mejor.plano.tipo === 'piso' ? 'floor' : 'wall',
     matrix: [
       ejeX[0], ejeX[1], ejeX[2], 0,
       ejeY[0], ejeY[1], ejeY[2], 0,

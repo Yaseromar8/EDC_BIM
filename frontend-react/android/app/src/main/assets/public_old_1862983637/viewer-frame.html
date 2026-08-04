@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APS Viewer Frame</title>
+    <link rel="stylesheet" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css" type="text/css">
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+        #apsViewer { width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <div id="apsViewer"></div>
+    <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js"></script>
+    <script type="module">
+        import { SummaryExtension } from './src/aps/dashboard/SummaryExtension.js';
+        import { HistogramExtension } from './src/aps/dashboard/HistogramExtension.js';
+        import { PhasingExtension } from './src/aps/dashboard/PhasingExtension.js';
+
+        let viewer;
+
+        async function getAccessToken() {
+            // This script is running in the iframe, which is on the same origin,
+            // so it can directly call the backend API.
+            const resp = await fetch('/api/token');
+            if (!resp.ok) {
+                throw new Error(`Failed to get access token: ${await resp.text()}`);
+            }
+            const { access_token, expires_in } = await resp.json();
+            return { accessToken: access_token, expiresIn: expires_in };
+        }
+
+        function initializeViewer() {
+            const options = {
+                env: 'AutodeskProduction',
+                getAccessToken: (callback) => {
+                    getAccessToken().then(token => callback(token.accessToken, token.expiresIn));
+                },
+                extensions: ['SummaryExtension', 'HistogramExtension', 'PhasingExtension']
+            };
+
+            Autodesk.Viewing.theExtensionManager.registerExtension('SummaryExtension', SummaryExtension);
+            Autodesk.Viewing.theExtensionManager.registerExtension('HistogramExtension', HistogramExtension);
+            Autodesk.Viewing.theExtensionManager.registerExtension('PhasingExtension', PhasingExtension);
+            Autodesk.Viewing.Initializer(options, () => {
+                viewer = new Autodesk.Viewing.GuiViewer3D(document.getElementById('apsViewer'), options);
+                viewer.start();
+            });
+        }
+
+        function loadModel(urn) {
+            if (!viewer) {
+                console.error('Viewer not initialized yet. Retrying in 100ms.');
+                setTimeout(() => loadModel(urn), 100);
+                return;
+            }
+            const documentId = 'urn:' + btoa(urn).replace(/=/g, '');
+            Autodesk.Viewing.Document.load(documentId, (doc) => {
+                const viewables = doc.getRoot().getDefaultGeometry();
+                viewer.loadDocumentNode(doc, viewables).then(() => {
+                    viewer.fitToView();
+                });
+            }, (errorCode, errorMsg) => {
+                console.error('Model Load Failure: ' + errorMsg);
+            });
+        }
+
+        // Listen for messages from the parent React component
+        window.addEventListener('message', (event) => {
+            // A basic security check on the origin is recommended in a production app
+            // if (event.origin !== 'http://your-app-domain.com') return;
+            
+            if (event.data && event.data.urn) {
+                loadModel(event.data.urn);
+            }
+        });
+
+        initializeViewer();
+    </script>
+</body>
+</html>

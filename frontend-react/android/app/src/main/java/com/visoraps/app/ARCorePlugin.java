@@ -672,13 +672,26 @@ public class ARCorePlugin extends Plugin {
             if (best == null) {
                 payload.put("found", false);
             } else {
+                // La pose REAL del impacto, sin aplanar. Antes se le ponia
+                // rotacion identidad y eso borraba la normal de la superficie:
+                // todo lo capturado decia "piso mirando arriba", incluso un
+                // muro. Para colocar el modelo daba igual (el ancla se aplana
+                // en createWorldAlignedAnchor), pero la calibracion por esquina
+                // vive de esa normal: el eje Y de la pose de un plano de ARCore
+                // ES la normal de la superficie.
                 Pose hp = best.getHitPose();
-                Pose flat = new Pose(hp.getTranslation(), new float[] { 0f, 0f, 0f, 1f });
                 float[] m = new float[16];
-                flat.toMatrix(m, 0);
+                hp.toMatrix(m, 0);
                 payload.put("found", true);
                 payload.put("matrix", floatsToJsonArray(m));
                 payload.put("type", (best.getTrackable() instanceof Plane) ? "plane" : "point");
+                // floor | wall | ceiling: la web coloca solo sobre 'floor',
+                // pero la esquina necesita capturar tambien los muros.
+                if (best.getTrackable() instanceof Plane) {
+                    Plane.Type pt = ((Plane) best.getTrackable()).getType();
+                    payload.put("kind", pt == Plane.Type.HORIZONTAL_UPWARD_FACING ? "floor"
+                            : pt == Plane.Type.VERTICAL ? "wall" : "ceiling");
+                }
             }
         } catch (Throwable t) {
             payload.put("found", false);
@@ -686,7 +699,11 @@ public class ARCorePlugin extends Plugin {
         notifyListeners("onReticle", payload);
     }
 
-    /** Mejor candidato: plano horizontal dentro del polígono; si no, punto. */
+    /** Mejor candidato: el plano rastreado más cercano; si no hay, punto.
+     *  Acepta TAMBIÉN muros y techos — antes se filtraba a pisos y apuntar a
+     *  un muro no devolvía nada, con lo que la calibración por esquina era
+     *  imposible: sus tres caras son un piso y DOS MUROS. Quién puede colocar
+     *  sobre qué lo decide la web con el campo 'kind' del retículo. */
     private HitResult pickHit(List<HitResult> hits) {
         HitResult pointFallback = null;
         for (HitResult hit : hits) {
@@ -694,7 +711,6 @@ public class ARCorePlugin extends Plugin {
             if (trackable instanceof Plane) {
                 Plane plane = (Plane) trackable;
                 if (plane.getTrackingState() == TrackingState.TRACKING
-                        && plane.getType() == Plane.Type.HORIZONTAL_UPWARD_FACING
                         && plane.isPoseInPolygon(hit.getHitPose())) {
                     return hit;
                 }

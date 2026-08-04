@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-16';
+const AR_BUILD = 'ar-17';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -339,8 +339,12 @@ export default function NativeARView({ onExit }) {
             return;
           }
           // Solo un PLANO cuenta. Los 'point' son nubes sueltas: anclar ahí es
-          // lo que hacía caer el modelo en cualquier lado.
-          if (found && type === 'plane') {
+          // lo que hacía caer el modelo en cualquier lado. Y desde que el
+          // retículo también reporta muros (los pide la esquina), colocar
+          // sigue siendo cosa de PISOS: un modelo auto-colocado sobre un muro
+          // no tiene ningún sentido.
+          const esPiso = !r?.kind || r.kind === 'floor';
+          if (found && type === 'plane' && esPiso) {
             stableTicksRef.current += 1;
             if (stableTicksRef.current >= AUTO_PLACE_TICKS) {
               stableTicksRef.current = 0;
