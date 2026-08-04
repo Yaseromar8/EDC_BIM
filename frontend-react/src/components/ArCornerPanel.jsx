@@ -8,7 +8,7 @@ import { camaraDelVisor, planoDelToque } from '../native/modelFacePick';
 // dejaba las teclas 1/2/3 muertas y la pista escondida en cuanto el URL
 // perdia el parametro, con el simulador corriendo perfectamente por debajo.
 import { esSimulado } from '../native/arcore';
-import { simMirarA } from '../native/arSim';
+import { simMirarA, simRinconAbierto } from '../native/arSim';
 
 // Asistente de CALIBRACIÓN POR ESQUINA — el método de Revizto, EN SU ORDEN.
 //
@@ -404,7 +404,8 @@ export default function ArCornerPanel({
           {esSimulado() && (
             <div style={{ marginBottom: 10, color: '#8ab4f8', fontSize: 13 }}>
               Ensayo: teclas <b>1</b>, <b>2</b> y <b>3</b> para mirar al piso y a
-              cada muro (mantén un segundo). <b>0</b> vuelve a la órbita.
+              cada muro (mantén un segundo). <b>4</b>/<b>5</b>: rincón abierto
+              (135°) / recto. <b>0</b> vuelve a la órbita.
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -494,6 +495,10 @@ export function useTeclasSimulador(activo) {
       const i = ['1', '2', '3'].indexOf(e.key);
       if (i >= 0) simMirarA(i);
       if (e.key === '0') simMirarA(null);
+      // 4/5: cambia el rincón simulado entre abierto (135°) y recto. Para
+      // ensayar rincones que no son de 90, que el motor admite igual.
+      if (e.key === '4') simRinconAbierto(true);
+      if (e.key === '5') simRinconAbierto(false);
     };
     window.addEventListener('keydown', alPulsar);
     return () => window.removeEventListener('keydown', alPulsar);

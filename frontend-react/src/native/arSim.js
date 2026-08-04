@@ -59,6 +59,27 @@ export const SIM_PLANOS = [
   { tipo: 'muro', n: [0, 0, 1], p: [0, 0, -2.0] },
 ];
 
+// Rincón ABIERTO (135°): el segundo muro girado 45°. Existe porque la
+// calibración admite cualquier ángulo de rincón —solo exige que el del modelo
+// y el de la obra tengan la MISMA forma— y sin esta variante el ensayo solo
+// podía practicar rincones rectos: tocar un quiebre achaflanado del modelo
+// fallaba siempre, no por la matemática sino porque el mundo simulado no
+// tenía ese rincón.
+// El muro girado pasa por la ARISTA del rincón (x=−1.5, z=−2): girarlo en su
+// sitio original lo dejaba cruzando el cuarto, y el rayo hacia el muro 1
+// chocaba primero con él — dos capturas de la misma cara y ensayo imposible.
+export const SIM_PLANOS_ABIERTO = [
+  { tipo: 'piso', n: [0, 1, 0], p: [0, 0, 0] },
+  { tipo: 'muro', n: [1, 0, 0], p: [-1.5, 0, 0] },
+  { tipo: 'muro', n: [Math.SQRT1_2, 0, Math.SQRT1_2], p: [-1.5, 0, -2.0] },
+];
+
+let planosActivos = SIM_PLANOS;
+export function simRinconAbierto(abierto) {
+  planosActivos = abierto ? SIM_PLANOS_ABIERTO : SIM_PLANOS;
+}
+export function simEsAbierto() { return planosActivos === SIM_PLANOS_ABIERTO; }
+
 /**
  * Cámara dando una vuelta lenta alrededor del rincón, a 1.6 m de altura y
  * mirando hacia él. Reproduce lo que hace un operario caminando alrededor: si
@@ -80,6 +101,9 @@ const MIRAS = [
   [-1.5, 1.0, -0.7],    // muro que mira a +X
   [-0.5, 1.0, -2.0],    // muro que mira a +Z
 ];
+// En el rincón abierto la tercera cara está en otro plano (x+z=−3.5): mirar
+// al objetivo del rincón recto capturaría la cara equivocada.
+const MIRAS_ABIERTO = [MIRAS[0], MIRAS[1], [-0.5, 1.0, -3.0]];
 
 export function simMirarA(indice) {
   mirando = (indice == null) ? null : Math.max(0, Math.min(2, indice | 0));
@@ -88,7 +112,10 @@ export function simMirando() { return mirando; }
 
 /** Dónde está la cámara y a dónde apunta en este instante. */
 function camaraEnSegundo(seg) {
-  if (mirando != null) return { ojo: DENTRO, mira: MIRAS[mirando] };
+  if (mirando != null) {
+    const tabla = planosActivos === SIM_PLANOS_ABIERTO ? MIRAS_ABIERTO : MIRAS;
+    return { ojo: DENTRO, mira: tabla[mirando] };
+  }
   const a = seg * 0.25;                       // rad/s: una vuelta cada ~25 s
   const r = 3.0;
   return { ojo: [Math.sin(a) * r, 1.6, Math.cos(a) * r], mira: [0, 0.5, 0] };
@@ -141,7 +168,7 @@ function reticuloEnSegundo(seg) {
   const dir = normaliza([mira[0] - ojo[0], mira[1] - ojo[1], mira[2] - ojo[2]]);
 
   let mejor = null;
-  for (const plano of SIM_PLANOS) {
+  for (const plano of planosActivos) {
     const denom = plano.n[0] * dir[0] + plano.n[1] * dir[1] + plano.n[2] * dir[2];
     if (denom > -1e-6) continue;               // de espaldas o de canto
     const haciaPlano = [plano.p[0] - ojo[0], plano.p[1] - ojo[1], plano.p[2] - ojo[2]];
@@ -154,7 +181,7 @@ function reticuloEnSegundo(seg) {
     if (!mejor || t < mejor.t) mejor = { t, plano, golpe };
   }
 
-  if (!mejor) return { found: false, type: null, planes: SIM_PLANOS.length };
+  if (!mejor) return { found: false, type: null, planes: planosActivos.length };
 
   // Pose con el eje Y en la normal, como la da ARCore.
   const ejeY = normaliza(mejor.plano.n);
@@ -162,7 +189,7 @@ function reticuloEnSegundo(seg) {
   const ejeX = normaliza(cruz(auxiliar, ejeY));
   const ejeZ = cruz(ejeX, ejeY);
   return {
-    found: true, type: 'plane', planes: SIM_PLANOS.length,
+    found: true, type: 'plane', planes: planosActivos.length,
     // Mismo contrato que el plugin: 'floor' | 'wall'. La web coloca solo
     // sobre 'floor'; la esquina captura tambien los muros.
     kind: mejor.plano.tipo === 'piso' ? 'floor' : 'wall',
