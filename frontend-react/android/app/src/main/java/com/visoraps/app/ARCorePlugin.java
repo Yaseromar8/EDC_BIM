@@ -94,6 +94,10 @@ public class ARCorePlugin extends Plugin {
     private volatile int resumeCount = 0;
     private volatile String resumeError = "";
     private long framesSinImagen = 0L;
+    // Pausada por el CICLO DE VIDA de la actividad (no por el usuario): solo
+    // en ese caso handleOnResume debe reanudarla. Reanudar una sesion ya
+    // activa es un error de ARCore.
+    private volatile boolean pausadaPorCicloDeVida = false;
     /** true en cuanto ARCore tiene una textura valida donde escribir. */
     private volatile boolean textureReady = false;
     private TrackingState lastState = null;
@@ -375,6 +379,42 @@ public class ARCorePlugin extends Plugin {
             return;
         }
         pendingCameraAnchorCall = call;
+    }
+
+    // ── Ciclo de vida de la actividad ───────────────────────────────────────
+    // ARCore EXIGE pausar y reanudar la sesion junto con la actividad. Sin
+    // esto, al cambiar de app, apagarse la pantalla o salir un dialogo,
+    // Android le quita la camara a la sesion y NUNCA se la devuelve: el bucle
+    // GL sigue corriendo, update() no lanza, reason es NONE... y el sello de
+    // tiempo de la camara queda en 0 para siempre. Es la firma exacta del
+    // "sin imagen" observado en la tablet. El re-arme del bucle de dibujo era
+    // un parche a ciegas para esto; lo correcto es acompanar a la actividad.
+    @Override
+    protected void handleOnPause() {
+        super.handleOnPause();
+        if (!running || session == null) return;
+        try {
+            if (glView != null) glView.onPause();
+            session.pause();
+            pausadaPorCicloDeVida = true;
+        } catch (Throwable t) {
+            resumeError = "pausa: " + String.valueOf(t.getMessage());
+        }
+    }
+
+    @Override
+    protected void handleOnResume() {
+        super.handleOnResume();
+        if (!running || session == null || !pausadaPorCicloDeVida) return;
+        try {
+            session.resume();          // primero la sesion, como el ejemplo oficial
+            pausadaPorCicloDeVida = false;
+            resumeCount++;
+            resumeError = "";
+        } catch (Throwable t) {
+            resumeError = "resume: " + String.valueOf(t.getMessage());
+        }
+        if (glView != null) glView.onResume();
     }
 
     private final GLSurfaceView.Renderer renderer = new GLSurfaceView.Renderer() {
