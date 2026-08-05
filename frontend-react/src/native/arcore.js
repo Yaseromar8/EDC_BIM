@@ -170,6 +170,13 @@ export async function createAnchorAtPoint(p) {
   try { return await ARCore.createAnchorAtPoint({ x: p[0], y: p[1], z: p[2] }); } catch { return null; }
 }
 
+// Profundidad EXPERIMENTAL bajo demanda (transformaría los muros lisos si el
+// pipeline del equipo la tolera). Con red de auto-apagado en el plugin.
+export async function setDepth(on) {
+  if (SIM) return { activa: false, soportada: false };
+  try { return await ARCore.setDepth({ on: !!on }); } catch { return null; }
+}
+
 // Linterna de la cámara (poca luz: buzón, sombra). En ensayo no hay.
 export async function setTorch(on) {
   if (SIM) return null;

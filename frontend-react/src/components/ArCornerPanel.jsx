@@ -7,7 +7,7 @@ import { camaraDelVisor, planoDelToque } from '../native/modelFacePick';
 // mira el ?arsim=1 del URL -- quedo obsoleto como pregunta. Seguir usandolo
 // dejaba las teclas 1/2/3 muertas y la pista escondida en cuanto el URL
 // perdia el parametro, con el simulador corriendo perfectamente por debajo.
-import { createAnchorAtPoint, esSimulado, onCornerDetect, setTorch, startCornerScan, stopCornerScan } from '../native/arcore';
+import { createAnchorAtPoint, esSimulado, onCornerDetect, setDepth, setTorch, startCornerScan, stopCornerScan } from '../native/arcore';
 import { simMirarA, simRinconAbierto } from '../native/arSim';
 
 // Asistente de CALIBRACIÓN POR ESQUINA — el método de Revizto, EN SU ORDEN.
@@ -82,6 +82,7 @@ export default function ArCornerPanel({
   const [profundidad, setProfundidad] = useState(null);   // null = sin dato
   const [areas, setAreas] = useState([0, 0, 0]);          // [piso, muroA, muroB] m2
   const [linterna, setLinterna] = useState(false);
+  const [profExp, setProfExp] = useState(false);
   useEffect(() => {
     if (paso !== 'obra') return undefined;
     startCornerScan();
@@ -110,6 +111,8 @@ export default function ArCornerPanel({
       stopCornerScan();
       setTorch(false);
       setLinterna(false);
+      setDepth(false);
+      setProfExp(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paso]);
@@ -641,6 +644,18 @@ export default function ArCornerPanel({
               }}
             >
               {linterna ? '🔦 Apagar' : '🔦 Linterna'}
+            </button>
+            <button
+              type="button"
+              style={profExp ? { ...boton, background: '#134e4a', borderColor: '#134e4a', color: '#5eead4' } : boton}
+              onClick={() => {
+                const v = !profExp;
+                setProfExp(v);
+                setDepth(v);
+              }}
+              title="Rellena los muros lisos con profundidad por movimiento. Si el tracking se cae, se apaga sola."
+            >
+              {profExp ? '🧪 Profundidad ON' : '🧪 Profundidad'}
             </button>
           </div>
         </>

@@ -483,6 +483,22 @@ public class ARCorePlugin extends Plugin {
         }
     }
 
+    /** Profundidad EXPERIMENTAL bajo demanda. La hipotesis de que envenenaba
+     *  el tracking se confundio con el atasco del HAL (la sonda): con el
+     *  pipeline sano puede que funcione -- y transformaria la deteccion de
+     *  muros lisos. Boton manual + el auto-apagado de 4 s como red: si el
+     *  tracking se cae, se apaga sola y queda vetada esta sesion. */
+    @PluginMethod
+    public void setDepth(PluginCall call) {
+        boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        if (on) depthOk = true;   // el operario pidio reintentar
+        activarProfundidad(on);
+        JSObject out = new JSObject();
+        out.put("activa", depthActiva);
+        out.put("soportada", depthSoportada);
+        call.resolve(out);
+    }
+
     @PluginMethod
     public void startCornerScan(PluginCall call) {
         synchronized (nube) {
@@ -1541,6 +1557,12 @@ public class ARCorePlugin extends Plugin {
         for (Anchor oldAnchor : anchors) oldAnchor.detach();
         anchors.clear();
         anchors.add(anchor);
+        // ANCLA VIVA para TODA colocacion, no solo la de esquina: su pose
+        // viaja en cada evento de pose y el puente la sigue. Sin esto, cada
+        // recolocalizacion del SLAM (ARCore corrige su mapa cada tanto)
+        // dejaba el modelo desplazado -- el 'se queda quieto y luego se
+        // vuelve a mover' de campo.
+        anclaCalibracion = anchor;
     }
 
     private JSObject anchorResult(Anchor anchor) {
