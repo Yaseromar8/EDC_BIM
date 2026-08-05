@@ -479,7 +479,6 @@ public class ARCorePlugin extends Plugin {
         esquinaPrevia = null;
         esquinaSeguidas = 0;
         scanStartMs = System.currentTimeMillis();
-        depthOk = true;
         depthDesacuerdos = 0;
         depthPuntos = 0;
         // La rejilla de planos de ARCore (cuadriculas cian, solo pisos) es
@@ -487,7 +486,14 @@ public class ARCorePlugin extends Plugin {
         // confunde. Aqui manda la nube tenida por caras.
         showPlanes = false;
         cornerScan = true;
-        activarProfundidad(true);
+        // PROFUNDIDAD APAGADA A PROPOSITO. Cronologia de campo: tracking OK
+        // hasta ar-32 (el detector capturo caras con 737 puntos de rastreo,
+        // SIN profundidad); muerto desde ar-33, cuando entro la Depth API. El
+        // auto-apagado de 4 s no salvaba nada: el rastreador ya quedaba
+        // envenenado para TODA la sesion, y al reentrar el escaneo la volvia
+        // a encender. En HyperOS esta tuberia mata el tracking: no se toca
+        // hasta tener un dispositivo donde valide. El detector funciona con
+        // los puntos de rastreo, que ya lo demostraron.
         call.resolve();
     }
 
