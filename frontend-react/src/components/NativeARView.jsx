@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-43';
+const AR_BUILD = 'ar-44';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -165,6 +165,14 @@ export default function NativeARView({ onExit }) {
           const mpu = viewer.model.getUnitScale && viewer.model.getUnitScale();
           if (mpu && mpu > 0) oneToOneRef.current = 1 / mpu;
         } catch { /* usa el default 1000 */ }
+        // EL BUG DE LA ESCALA GIGANTE E INESTABLE: la escala 1:1 se calculaba
+        // arriba... y nunca se APLICABA — nada llamaba a setUnitsPerMeter al
+        // arrancar (los botones manuales que lo hacían se quitaron), así que
+        // el puente recibía SIEMPRE el default 1000. Con un modelo en metros
+        // eso es un factor 1000x: un metro caminando = un kilómetro dentro
+        // del modelo, y 2 mm de temblor de pose = 2 METROS de sacudida. La
+        // 'inestabilidad' era en gran parte este multiplicador.
+        setUnitsPerMeter(oneToOneRef.current);
 
         // Georreferencia del modelo para el anclaje por GPS: globalOffset (lo que
         // APS resta a las coords reales) + metros por unidad. Con esto, geoToViewer
@@ -345,7 +353,7 @@ export default function NativeARView({ onExit }) {
 
         detachRef.current = attachArToViewer(viewer, {
           modelOrigin: modelOriginRef.current,
-          unitsPerMeter,
+          unitsPerMeter: oneToOneRef.current,
           onFrame: (h) => { hudRef.current = h; setHud(h); },
         });
         // El puente queda enganchado pero EN PAUSA: recibe las poses y
