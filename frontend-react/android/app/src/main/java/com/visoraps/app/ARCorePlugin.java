@@ -1037,10 +1037,7 @@ public class ARCorePlugin extends Plugin {
             String crash = getContext().getSharedPreferences("ar_diag", android.content.Context.MODE_PRIVATE)
                     .getString("crash_nativo", null);
             if (crash != null) {
-                sb.append("== ULTIMO CRASH DEL MOTOR NATIVO ==
-").append(crash).append("
-====
-");
+                sb.append("== ULTIMO CRASH DEL MOTOR NATIVO ==\n").append(crash).append("\n====\n");
             }
         } catch (Throwable ignored) { }
         try {
