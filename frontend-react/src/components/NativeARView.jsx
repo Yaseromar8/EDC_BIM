@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-50';
+const AR_BUILD = 'ar-51';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -772,8 +772,8 @@ export default function NativeARView({ onExit }) {
             },
             {
               id: 'nativo', titulo: '🚀 Motor nativo — TU OBRA',
-              texto: 'Toca la malla y quedas parado DENTRO del canal, a escala real.',
-              nota: 'La red va enterrada bajo tus pies, como en la obra. Camina y rodéala.',
+              texto: 'Un tramo de 50 m del canal, a escala real, anclado donde toques.',
+              nota: 'La red va bajo tus pies. En obras largas se avanza por tramos: así lo hacen todos.',
             },
             {
               id: 'ninguna', titulo: 'Sin calibrar',
@@ -792,10 +792,14 @@ export default function NativeARView({ onExit }) {
                 calibrandoRef.current = (m.id === 'esquina');
                 setCalibrandoEsquina(m.id === 'esquina');
                 // El motor nativo abre su propia actividad: nuestra sesion se
-                // pausa sola (ciclo de vida) y se reanuda al volver. El GLB de
-                // los canales viaja DENTRO del APK (assets/ar/): obra sin
-                // internet. Ya está en metros y con el techo del cajón en y=0.
-                if (m.id === 'nativo') { openNativeAr({ url: 'ar/canales.glb', escala: 1 }); setEligiendoModo(true); return; }
+                // pausa sola (ciclo de vida) y se reanuda al volver. El GLB
+                // viaja DENTRO del APK (assets/ar/): obra sin internet. Va el
+                // TRAMO de 50 m, no el canal entero: el error del ancla es
+                // angular y un modelo largo es un brazo de palanca que lo
+                // multiplica — 0.3° invisibles en un tigre son 40 cm de baile
+                // a 70 m. En obra lineal el contenido vive CERCA del ancla y
+                // se re-ancla por tramos (Dalux/XYZ Reality hacen lo mismo).
+                if (m.id === 'nativo') { openNativeAr({ url: 'ar/tramo50.glb', escala: 1 }); setEligiendoModo(true); return; }
                 // Por esquina se sigue EN EL MODELO: el asistente pide primero
                 // las tres caras ahi. Los otros dos van directos a la camara.
                 if (m.id !== 'esquina') modoCamaraRef.current?.entrar();

@@ -104,10 +104,15 @@ public class ArNativoActivity extends AppCompatActivity {
         // lightEstimationConfig es propiedad de EXTENSION de Kotlin, no metodo
         // de ArSceneView: desde Java se llama por su clase contenedora estatica
         // (firma verificada con javap sobre el jar de core-1.23.0).
-        arFragment.setOnViewCreatedListener((arSceneView) ->
-                com.gorisse.thomas.sceneform.ArSceneViewKt.setLightEstimationConfig(
-                        arSceneView,
-                        com.gorisse.thomas.sceneform.light.LightEstimationConfig.AMBIENT_INTENSITY));
+        arFragment.setOnViewCreatedListener((arSceneView) -> {
+            com.gorisse.thomas.sceneform.ArSceneViewKt.setLightEstimationConfig(
+                    arSceneView,
+                    com.gorisse.thomas.sceneform.light.LightEstimationConfig.AMBIENT_INTENSITY);
+            // Sceneform recorta el render a 30 m por defecto (far plane): en un
+            // modelo de obra las partes lejanas aparecian/desaparecian al girar
+            // — la "desorientacion" reportada en ar-50. 150 m cubre el tramo.
+            arSceneView.getScene().getCamera().setFarClipPlane(150f);
+        });
 
         // BALA 2: el modelo REAL. La web manda url + escala por el Intent;
         // sin url cae al tigre de validacion.
