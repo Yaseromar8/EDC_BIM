@@ -61,6 +61,29 @@ export function attachArToViewer(viewer, opts = {}) {
 
   camera.matrixAutoUpdate = false;
 
+  // ── COMPATIBILIDAD CON EL THREE ANTIGUO DEL VISOR ─────────────────────
+  // En la tablet, window.THREE es el THREE.js r71 que empaqueta LMV: NO tiene
+  // premultiply() ni invert() ni MathUtils (llegaron años despues). En la
+  // laptop hay un THREE moderno y por eso el ensayo funcionaba — y en la
+  // tablet apply() reventaba en la primera matriz ('premultiply is not a
+  // function'): las poses llegaban y NINGUNA se aplico jamas. El modelo
+  // pegado a la pantalla de todos los builds era esto.
+  const mTmpCompat = new THREE.Matrix4();
+  const tienePremultiply = typeof mTmpCompat.premultiply === 'function';
+  const tieneInvert = typeof mTmpCompat.invert === 'function';
+  // premultiply: destino = a * destino (equivalente r71: multiplyMatrices).
+  const premul = (destino, a) => {
+    if (tienePremultiply) { destino.premultiply(a); return; }
+    mTmpCompat.copy(destino);
+    destino.multiplyMatrices(a, mTmpCompat);
+  };
+  // inverso: destino = src^-1 (r71 usa getInverse).
+  const inverso = (destino, src) => {
+    if (tieneInvert) { destino.copy(src).invert(); return; }
+    destino.getInverse(src);
+  };
+  const RAD = Math.PI / 180;
+
   const mView = new THREE.Matrix4();
   const mProj = new THREE.Matrix4();
   const mWorld = new THREE.Matrix4();
@@ -75,14 +98,17 @@ export function attachArToViewer(viewer, opts = {}) {
   // así que el signo exacto no importa (si gira al revés, se invierte fácil).
   function headingDeg() {
     if (!latest?.view) return 0;
-    mHeading.fromArray(latest.view).invert(); // cámara -> mundo
+    mTmpCompat.fromArray(latest.view);
+    inverso(mHeading, mTmpCompat); // cámara -> mundo
     const e = mHeading.elements;
-    return THREE.MathUtils.radToDeg(Math.atan2(-e[8], -e[10]));
+    return Math.atan2(-e[8], -e[10]) / RAD;
   }
 
+  const mAnchorSrc = new THREE.Matrix4();
   function setAnchorMatrix(matrix) {
     if (matrix && matrix.length === 16) {
-      mAnchorInv.fromArray(matrix).invert();
+      mAnchorSrc.fromArray(matrix);
+      inverso(mAnchorInv, mAnchorSrc);
     } else {
       mAnchorInv.identity();
     }
@@ -129,8 +155,8 @@ export function attachArToViewer(viewer, opts = {}) {
 
     // Camera-to-world, expressed relative to the physical anchor.
     mView.fromArray(latest.view);
-    mRelative.copy(mView).invert();
-    mRelative.premultiply(mAnchorInv);
+    inverso(mRelative, mView);
+    premul(mRelative, mAnchorInv);
 
     // Convert the ARCore world basis while keeping the OpenGL camera-local
     // basis unchanged: ARCore (x, y, z) -> APS (x, -z, y).
@@ -143,8 +169,8 @@ export function attachArToViewer(viewer, opts = {}) {
 
     // Rotating the virtual model clockwise equals rotating the camera in the
     // opposite direction around the matched BIM point.
-    mYaw.makeRotationZ(THREE.MathUtils.degToRad(-yawDegrees));
-    mWorld.premultiply(mYaw);
+    mYaw.makeRotationZ(-yawDegrees * RAD);
+    premul(mWorld, mYaw);
 
     // Convert AR meters to APS millimeters and place them at the BIM origin.
     const elements = mWorld.elements;
@@ -156,13 +182,13 @@ export function attachArToViewer(viewer, opts = {}) {
     camera.matrix.decompose(camera.position, camera.quaternion, cameraScale);
     camera.up.set(0, 0, 1);
     camera.matrixWorld.copy(mWorld);
-    camera.matrixWorldInverse?.copy(mWorld).invert();
+    if (camera.matrixWorldInverse) inverso(camera.matrixWorldInverse, mWorld);
     camera.matrixWorldNeedsUpdate = false;
 
     if (latest.proj && camera.projectionMatrix) {
       mProj.fromArray(latest.proj);
       camera.projectionMatrix.copy(mProj);
-      camera.projectionMatrixInverse?.copy(mProj).invert();
+      if (camera.projectionMatrixInverse) inverso(camera.projectionMatrixInverse, mProj);
     }
 
     try { viewer.impl.syncCamera(true); } catch { /* Viewer version dependent. */ }
@@ -297,8 +323,14 @@ export function attachArToViewer(viewer, opts = {}) {
   // es lo que desempata el emparejamiento de los dos muros.
   detach.getArCamPos = () => {
     if (!latest?.view) return null;
-    const inv = new THREE.Matrix4().fromArray(latest.view).invert().elements;
-    return [inv[12], inv[13], inv[14]];
+    // Posicion de camara SIN invertir la matriz (compatible con cualquier
+    // THREE): para una vista rigida V=[R|t], pos = -R^T t.
+    const e = latest.view;
+    return [
+      -(e[0] * e[12] + e[1] * e[13] + e[2] * e[14]),
+      -(e[4] * e[12] + e[5] * e[13] + e[6] * e[14]),
+      -(e[8] * e[12] + e[9] * e[13] + e[10] * e[14]),
+    ];
   };
 
   // Proyecta un punto del mundo de ARCore (metros, Y arriba) a pantalla,
