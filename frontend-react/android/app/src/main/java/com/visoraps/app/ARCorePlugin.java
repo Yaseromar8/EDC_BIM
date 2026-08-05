@@ -196,6 +196,8 @@ public class ARCorePlugin extends Plugin {
     // el ajuste (hilo GL) y los dibuja el mismo hilo: sin carrera.
     private final float[][] carasQuads = new float[3][];
     private final float[] carasAreas = new float[3];
+    private final float[] carasDens = new float[3];      // puntos por m2
+    private final float[] carasLadoMin = new float[3];   // lado corto, m
     private static final float[][] CARAS_COLORES = {
             { 0.2f, 0.9f, 0.95f },    // piso: cian
             { 0.35f, 0.95f, 0.4f },   // muro A: verde
@@ -822,8 +824,23 @@ public class ARCorePlugin extends Plugin {
         // CARAS DE VERDAD, no votos sueltos: piso >= 0.5 m2 y cada muro
         // >= 0.3 m2. Y un barrido minimo de 3.5 s -- una esquina que aparece
         // "de inmediato" sin haber barrido no es deteccion, es alucinacion.
-        boolean carasSuficientes = carasAreas[0] >= 0.5f
-                && carasAreas[1] >= 0.3f && carasAreas[2] >= 0.3f;
+        // CARAS DE VERDAD, no fantasmas. La linea del zocalo soporta
+        // infinitos planos verticales: el RANSAC ajustaba 'muros' de 100+ m2
+        // con cuatro puntos desperdigados. Tres requisitos por cara:
+        //  - area minima (0.5 piso / 0.3 muros) y MAXIMA sana (<= 25 m2: no
+        //    existe un panel visible mas grande a distancia de escaneo),
+        //  - lado corto >= 0.35 m (una cinta de puntos no es una cara),
+        //  - DENSIDAD >= 30 pts/m2 (voxel de 5 cm lleno da ~400: 30 es
+        //    apenas el 8%% -- un fantasma anda en 1-5).
+        boolean carasSuficientes = true;
+        for (int ci = 0; ci < 3; ci++) {
+            float minArea = ci == 0 ? 0.5f : 0.3f;
+            if (carasAreas[ci] < minArea || carasAreas[ci] > 25f
+                    || carasLadoMin[ci] < 0.35f || carasDens[ci] < 30f) {
+                carasSuficientes = false;
+                break;
+            }
+        }
         boolean barridoMinimo = System.currentTimeMillis() - scanStartMs >= 3500L;
         if (!carasSuficientes || !barridoMinimo) {
             tenirNube(pts, piso, muroA, muroB);
@@ -885,6 +902,8 @@ public class ARCorePlugin extends Plugin {
         }
         carasQuads[idx] = quad;
         carasAreas[idx] = (u1 - u0) * (v1 - v0);
+        carasLadoMin[idx] = Math.min(u1 - u0, v1 - v0);
+        carasDens[idx] = carasAreas[idx] > 0.01f ? in.size() / carasAreas[idx] : 0f;
     }
 
     /** Tine los puntos segun la cara reconocida: cian piso, verde A, naranja B. */

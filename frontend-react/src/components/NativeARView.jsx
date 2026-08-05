@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-40';
+const AR_BUILD = 'ar-41';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -281,6 +281,13 @@ export default function NativeARView({ onExit }) {
           console.warn('[NativeAR] No se pudo transparentar el renderer:', e);
         }
           setModelsVisible(viewer, false);
+          // EL VISOR NO PUEDE PELEAR POR SU CAMARA. Con la fase de visor
+          // navegable, la herramienta de orbita queda activa y su bucle
+          // reescribe la camara CADA fotograma -- pisando la pose del AR.
+          // Sintoma exacto: el modelo pegado a la tablet, moviendose con
+          // ella. En julio anclaba porque se entraba directo a camara sin
+          // orbitar antes. El candado apaga esa pelea.
+          try { viewer.setNavigationLock(true); } catch { /* version del visor */ }
           try { detachRef.current?.setPausado?.(false); } catch { /* noop */ }
         };
 
@@ -295,6 +302,7 @@ export default function NativeARView({ onExit }) {
           document.documentElement.classList.remove('ar-active');
           document.body.style.background = previousStylesRef.current?.body || '';
           document.documentElement.style.background = previousStylesRef.current?.html || '';
+          try { viewer.setNavigationLock(false); } catch { /* noop */ }
           restaurarAspecto(viewer, rendererStateRef.current, previousStylesRef.current);
           setModelsVisible(viewer, true);
         };
@@ -381,6 +389,7 @@ export default function NativeARView({ onExit }) {
 
       document.body.classList.remove('ar-active');
       document.documentElement.classList.remove('ar-active');
+      try { window.NOP_VIEWER?.setNavigationLock?.(false); } catch { /* noop */ }
       const previous = previousStylesRef.current;
       document.body.style.background = previous?.body || '';
       document.documentElement.style.background = previous?.html || '';
