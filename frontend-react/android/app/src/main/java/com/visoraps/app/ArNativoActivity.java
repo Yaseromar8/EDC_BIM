@@ -39,6 +39,24 @@ public class ArNativoActivity extends AppCompatActivity {
 
     private ArFragment arFragment;
     private ModelRenderable modelo;
+    private float escala = 1f;
+    private boolean modeloPropio = false;
+
+    /** Los GLB sin esquema http(s) viajan DENTRO del APK (assets/): en obra no
+     *  hay internet. Filament necesita un archivo real, asi que se copia una
+     *  vez a cache y se carga con file:// — cero adivinanza de esquemas raros. */
+    private Uri resolverFuente(String url) throws java.io.IOException {
+        if (url.startsWith("http://") || url.startsWith("https://")) return Uri.parse(url);
+        java.io.File destino = new java.io.File(getCacheDir(),
+                url.replace('/', '_'));
+        try (java.io.InputStream in = getAssets().open(url);
+             java.io.OutputStream out = new java.io.FileOutputStream(destino)) {
+            byte[] buf = new byte[65536];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+        }
+        return Uri.fromFile(destino);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -91,15 +109,34 @@ public class ArNativoActivity extends AppCompatActivity {
                         arSceneView,
                         com.gorisse.thomas.sceneform.light.LightEstimationConfig.AMBIENT_INTENSITY));
 
+        // BALA 2: el modelo REAL. La web manda url + escala por el Intent;
+        // sin url cae al tigre de validacion.
+        String glbUrl = getIntent().getStringExtra("glbUrl");
+        escala = getIntent().getFloatExtra("escala", 1f);
+        modeloPropio = glbUrl != null && !glbUrl.isEmpty();
+        final String fuente = modeloPropio ? glbUrl : GLB;
+
+        Uri uriFuente;
+        try {
+            uriFuente = resolverFuente(fuente);
+        } catch (Throwable t) {
+            Toast.makeText(this, "No se encontro el modelo " + fuente + ": "
+                    + String.valueOf(t.getMessage()), Toast.LENGTH_LONG).show();
+            uriFuente = Uri.parse(GLB);
+            modeloPropio = false;
+        }
+
         ModelRenderable.builder()
-                .setSource(this, Uri.parse(GLB))
+                .setSource(this, uriFuente)
                 .setIsFilamentGltf(true)
                 .setAsyncLoadEnabled(true)
                 .build()
                 .thenAccept(renderable -> {
                     modelo = renderable;
                     Toast.makeText(this,
-                            "Modelo listo. Barre el piso y TOCA la malla para colocarlo.",
+                            modeloPropio
+                                    ? "MODELO DE OBRA listo (1:1). Barre el piso y TOCA la malla: quedaras PARADO DENTRO del modelo."
+                                    : "Modelo listo. Barre el piso y TOCA la malla para colocarlo.",
                             Toast.LENGTH_LONG).show();
                 })
                 .exceptionally(t -> {
@@ -111,16 +148,28 @@ public class ArNativoActivity extends AppCompatActivity {
 
         arFragment.setOnTapArPlaneListener((HitResult hit, Plane plane, android.view.MotionEvent ev) -> {
             if (modelo == null) {
-                Toast.makeText(this, "El modelo aun esta descargando…", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "El modelo aun esta cargando…", Toast.LENGTH_SHORT).show();
                 return;
             }
             Anchor anchor = hit.createAnchor();
             AnchorNode anchorNode = new AnchorNode(anchor);
             anchorNode.setParent(arFragment.getArSceneView().getScene());
-            TransformableNode nodo = new TransformableNode(arFragment.getTransformationSystem());
-            nodo.setParent(anchorNode);
-            nodo.setRenderable(modelo);
-            nodo.select();
+            if (modeloPropio) {
+                // Modelo de obra: escala FIJA (1:1 es sagrado — sin pellizco) y
+                // sin gestos que lo arrastren sin querer. El GLB ya viene con
+                // la planta centrada y el techo del cajon en y=0: al anclar en
+                // el piso, la estructura queda ENTERRADA bajo tus pies, que es
+                // donde esta la red de drenaje real.
+                com.google.ar.sceneform.Node nodo = new com.google.ar.sceneform.Node();
+                nodo.setParent(anchorNode);
+                nodo.setLocalScale(new com.google.ar.sceneform.math.Vector3(escala, escala, escala));
+                nodo.setRenderable(modelo);
+            } else {
+                TransformableNode nodo = new TransformableNode(arFragment.getTransformationSystem());
+                nodo.setParent(anchorNode);
+                nodo.setRenderable(modelo);
+                nodo.select();
+            }
         });
     }
 }

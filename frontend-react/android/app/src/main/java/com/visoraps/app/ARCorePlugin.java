@@ -494,6 +494,12 @@ public class ARCorePlugin extends Plugin {
     public void openNativeAr(PluginCall call) {
         try {
             android.content.Intent i = new android.content.Intent(getContext(), ArNativoActivity.class);
+            // url: http(s) = descarga; sin esquema = asset empaquetado en el APK
+            // (p.ej. "ar/canales.glb"). Vacio = el tigre de validacion.
+            String url = call.getString("url", "");
+            float escala = (float) call.getDouble("escala", 1.0).doubleValue();
+            if (url != null && !url.isEmpty()) i.putExtra("glbUrl", url);
+            i.putExtra("escala", escala);
             getActivity().startActivity(i);
             call.resolve();
         } catch (Throwable t) {

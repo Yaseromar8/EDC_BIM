@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-49';
+const AR_BUILD = 'ar-50';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -640,7 +640,11 @@ export default function NativeARView({ onExit }) {
         <div>eventos pose: {hud.poseEvents} {hud.poseEvents === 0 ? '❌ NO llegan' : '✓'}
           {hud.rate != null && ` · ${hud.rate}/s${hud.rate > 0 && hud.rate < 45 ? ' ⚠ lento' : ''}`}
         </div>
-        <div>aplicados: {hud.applied} {hud.applied === 0 && hud.poseEvents > 0 ? '⚠ apply FALLA' : ''}</div>
+        {/* En fase visor el puente está EN PAUSA a propósito (LMV navegable):
+            aplicados=0 ahí es lo correcto, no una falla. La alarma solo vale
+            con la cámara activa. */}
+        <div>aplicados: {hud.applied} {!enCamara ? '(en pausa: fase visor)'
+          : hud.applied === 0 && hud.poseEvents > 0 ? '⚠ apply FALLA' : ''}</div>
         <div>THREE: {hud.src} · track: {tracking}</div>
         <div>planos: {reticle.planes} · mira: {reticle.found ? (reticle.type || 'si') : 'no'}</div>
         <div style={{ color: arStats.frames === 0 ? '#ff6b6b' : '#3ee87a' }}>
@@ -767,9 +771,9 @@ export default function NativeARView({ onExit }) {
               nota: 'Luego lo afinas con las flechas.',
             },
             {
-              id: 'nativo', titulo: '🚀 Motor nativo (beta)',
-              texto: 'Toca la malla detectada y el modelo aparece ahí. Rodéalo.',
-              nota: 'Validación Fase 2 con modelo de muestra — el stack de Augin.',
+              id: 'nativo', titulo: '🚀 Motor nativo — TU OBRA',
+              texto: 'Toca la malla y quedas parado DENTRO del canal, a escala real.',
+              nota: 'La red va enterrada bajo tus pies, como en la obra. Camina y rodéala.',
             },
             {
               id: 'ninguna', titulo: 'Sin calibrar',
@@ -788,8 +792,10 @@ export default function NativeARView({ onExit }) {
                 calibrandoRef.current = (m.id === 'esquina');
                 setCalibrandoEsquina(m.id === 'esquina');
                 // El motor nativo abre su propia actividad: nuestra sesion se
-                // pausa sola (ciclo de vida) y se reanuda al volver.
-                if (m.id === 'nativo') { openNativeAr(); setEligiendoModo(true); return; }
+                // pausa sola (ciclo de vida) y se reanuda al volver. El GLB de
+                // los canales viaja DENTRO del APK (assets/ar/): obra sin
+                // internet. Ya está en metros y con el techo del cajón en y=0.
+                if (m.id === 'nativo') { openNativeAr({ url: 'ar/canales.glb', escala: 1 }); setEligiendoModo(true); return; }
                 // Por esquina se sigue EN EL MODELO: el asistente pide primero
                 // las tres caras ahi. Los otros dos van directos a la camara.
                 if (m.id !== 'esquina') modoCamaraRef.current?.entrar();

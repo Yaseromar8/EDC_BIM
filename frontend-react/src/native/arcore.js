@@ -177,11 +177,14 @@ export async function setDepth(on) {
   try { return await ARCore.setDepth({ on: !!on }); } catch { return null; }
 }
 
-// Abre el MOTOR NATIVO (Fase 2, validación): Filament+ARCore en un solo
-// bucle, patrón Augin. Nuestra sesión se pausa sola y se reanuda al volver.
-export async function openNativeAr() {
+// Abre el MOTOR NATIVO (Fase 2): Filament+ARCore en un solo bucle, patrón
+// Augin. Nuestra sesión se pausa sola y se reanuda al volver.
+//   opts.url:    http(s) = descarga; sin esquema = asset del APK
+//                ("ar/canales.glb"); vacío = tigre de validación.
+//   opts.escala: factor extra sobre el GLB (el GLB ya viene en metros → 1).
+export async function openNativeAr(opts = {}) {
   if (SIM) return null;
-  try { return await ARCore.openNativeAr(); } catch { return null; }
+  try { return await ARCore.openNativeAr(opts); } catch { return null; }
 }
 
 // Linterna de la cámara (poca luz: buzón, sombra). En ensayo no hay.
