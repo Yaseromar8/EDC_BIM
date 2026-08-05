@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-39';
+const AR_BUILD = 'ar-40';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -595,7 +595,9 @@ export default function NativeARView({ onExit }) {
       {/* Panel de diagnóstico (temporal) para ver por qué el modelo no responde. */}
       {showDebug && <div style={{ position: 'absolute', top: 74, left: 8, background: 'rgba(0,0,0,0.7)', color: '#3ee87a', font: '12px monospace', padding: '6px 9px', borderRadius: 6, zIndex: 9999, lineHeight: 1.5, pointerEvents: 'none' }}>
         <div style={{ color: '#8ab4f8' }}>build: {AR_BUILD}</div>
-        <div>eventos pose: {hud.poseEvents} {hud.poseEvents === 0 ? '❌ NO llegan' : '✓'}</div>
+        <div>eventos pose: {hud.poseEvents} {hud.poseEvents === 0 ? '❌ NO llegan' : '✓'}
+          {hud.rate != null && ` · ${hud.rate}/s${hud.rate > 0 && hud.rate < 45 ? ' ⚠ lento' : ''}`}
+        </div>
         <div>aplicados: {hud.applied} {hud.applied === 0 && hud.poseEvents > 0 ? '⚠ apply FALLA' : ''}</div>
         <div>THREE: {hud.src} · track: {tracking}</div>
         <div>planos: {reticle.planes} · mira: {reticle.found ? (reticle.type || 'si') : 'no'}</div>
@@ -615,8 +617,9 @@ export default function NativeARView({ onExit }) {
         {/* SONDA: fotogramas que Camera2 entrego a ESTA app antes de ARCore.
             >0 = el sistema si nos da imagen; <=0 = nos la niega a nosotros. */}
         <div style={{ color: (arStats.probe ?? 0) > 0 ? '#3ee87a' : '#ff6b6b' }}>
-          sonda camara directa: {arStats.probe ?? '?'} fotogramas
-          {(arStats.probe ?? 0) > 0 ? ' ✓ el sistema SI entrega' : ' ❌'}
+          {arStats.probe === -99
+            ? 'sonda: desactivada (ya cumplió su misión)'
+            : `sonda camara directa: ${arStats.probe ?? '?'} fotogramas${(arStats.probe ?? 0) > 0 ? ' ✓' : ' ❌'}`}
         </div>
         <div>
           <button

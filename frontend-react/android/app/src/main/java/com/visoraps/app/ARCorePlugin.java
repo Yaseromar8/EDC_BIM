@@ -78,7 +78,11 @@ import javax.microedition.khronos.opengles.GL10;
 )
 public class ARCorePlugin extends Plugin {
 
-    private static final long POSE_INTERVAL_NS = 33_333_333L; // 30 Hz to reduce JS bridge load.
+    // 60 Hz: cada fotograma de camara lleva su pose. A 30 Hz el modelo iba
+    // SIEMPRE al menos un fotograma detras de la imagen -- parte medible del
+    // 'no se queda quieto'. Si el WebView no da abasto, el sintoma sera
+    // visible en el medidor poses/s del panel, no invisible como antes.
+    private static final long POSE_INTERVAL_NS = 16_000_000L;
     private static final long GEO_EMIT_INTERVAL_MS = 200L;    // 5 Hz para GPS/rumbo.
 
     private Session session;
@@ -264,7 +268,15 @@ public class ARCorePlugin extends Plugin {
                 call.resolve();
                 return;
             }
-            probarCamaraDirecta(() -> continuarArranque(call));
+            // LA SONDA YA NO CORRE. Cumplio su mision diagnostica (demostro
+            // repetidas veces que el sistema entrega imagen), pero su costo
+            // era abrir la camara a pelo y pasarsela a ARCore 400 ms despues
+            // EN CADA ENTRADA -- el doble abrir/cerrar rapido que atasca el
+            // HAL de HyperOS y obligaba a reiniciar la tablet para que el AR
+            // 'funcionara otra vez'. El metodo queda por si algun diagnostico
+            // futuro lo pide a mano.
+            probeFrames = -99;   // -99 = desactivada
+            continuarArranque(call);
         });
     }
 

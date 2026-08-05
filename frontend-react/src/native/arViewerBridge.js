@@ -98,8 +98,15 @@ export function attachArToViewer(viewer, opts = {}) {
   let lastErr = '';
   const threeSrc = window.THREE ? 'win' : 'priv';
 
+  // Medidor de FLUJO real: poses recibidas en el ultimo segundo. Es el
+  // numero que separa 'el puente va sobrado' de 'el WebView se ahoga' -- sin
+  // el, la latencia se discute con fe en vez de con datos.
+  const ventanaPoses = [];
   const unsubPose = onCameraPose((data) => {
     poseEvents++;
+    const ahora = performance.now();
+    ventanaPoses.push(ahora);
+    while (ventanaPoses.length && ahora - ventanaPoses[0] > 1000) ventanaPoses.shift();
     latest = data;
     // Si la pose trae la POSE VIVA del ancla de calibracion, se adopta: asi
     // las correcciones del SLAM mueven el ancla y el modelo se queda clavado
@@ -110,7 +117,7 @@ export function attachArToViewer(viewer, opts = {}) {
     // Llamar apply() DIRECTO (rAF puede no tickear en el WebView transparente).
     try { apply(); } catch (e) { lastErr = String((e && e.message) || e); }
     if (opts.onFrame) {
-      opts.onFrame({ src: threeSrc, poseEvents, applied, upm: Math.round(unitsPerMeter * 100) / 100, yaw: Math.round(yawDegrees), aligning, err: lastErr });
+      opts.onFrame({ src: threeSrc, poseEvents, applied, rate: ventanaPoses.length, upm: Math.round(unitsPerMeter * 100) / 100, yaw: Math.round(yawDegrees), aligning, err: lastErr });
     }
   });
   const unsubTrack = onTracking((status) => opts.onStatus?.(status));
