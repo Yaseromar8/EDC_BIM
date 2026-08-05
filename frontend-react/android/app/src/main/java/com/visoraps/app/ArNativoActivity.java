@@ -41,6 +41,11 @@ public class ArNativoActivity extends AppCompatActivity {
     private ModelRenderable modelo;
     private float escala = 1f;
     private boolean modeloPropio = false;
+    // UN solo ejemplar en escena: cada toque REUBICA (antes cada tap apilaba
+    // otra copia y el usuario lo percibia como "el modelo se movio").
+    private AnchorNode ancla = null;
+    private com.google.ar.sceneform.Node nodoModelo = null;
+    private float factorMaqueta = 1f;   // 1 = obra real; 0.01 = 1:100; 0.005 = 1:200
 
     /** Los GLB sin esquema http(s) viajan DENTRO del APK (assets/): en obra no
      *  hay internet. Filament necesita un archivo real, asi que se copia una
@@ -112,6 +117,7 @@ public class ArNativoActivity extends AppCompatActivity {
             // modelo de obra las partes lejanas aparecian/desaparecian al girar
             // — la "desorientacion" reportada en ar-50. 150 m cubre el tramo.
             arSceneView.getScene().getCamera().setFarClipPlane(150f);
+            vestirMallaDeEscaneo(arSceneView);
         });
 
         // BALA 2: el modelo REAL. La web manda url + escala por el Intent;
@@ -156,25 +162,128 @@ public class ArNativoActivity extends AppCompatActivity {
                 Toast.makeText(this, "El modelo aun esta cargando…", Toast.LENGTH_SHORT).show();
                 return;
             }
+            quitarModelo();
             Anchor anchor = hit.createAnchor();
-            AnchorNode anchorNode = new AnchorNode(anchor);
-            anchorNode.setParent(arFragment.getArSceneView().getScene());
+            ancla = new AnchorNode(anchor);
+            ancla.setParent(arFragment.getArSceneView().getScene());
             if (modeloPropio) {
-                // Modelo de obra: escala FIJA (1:1 es sagrado — sin pellizco) y
-                // sin gestos que lo arrastren sin querer. El GLB ya viene con
-                // la planta centrada y el techo del cajon en y=0: al anclar en
-                // el piso, la estructura queda ENTERRADA bajo tus pies, que es
-                // donde esta la red de drenaje real.
-                com.google.ar.sceneform.Node nodo = new com.google.ar.sceneform.Node();
-                nodo.setParent(anchorNode);
-                nodo.setLocalScale(new com.google.ar.sceneform.math.Vector3(escala, escala, escala));
-                nodo.setRenderable(modelo);
+                // Modelo de obra: sin gestos que lo arrastren sin querer. La
+                // escala la mandan los chips (1:1 sagrado por defecto).
+                nodoModelo = new com.google.ar.sceneform.Node();
+                nodoModelo.setParent(ancla);
+                nodoModelo.setRenderable(modelo);
+                aplicarEscala();
             } else {
                 TransformableNode nodo = new TransformableNode(arFragment.getTransformationSystem());
-                nodo.setParent(anchorNode);
+                nodo.setParent(ancla);
                 nodo.setRenderable(modelo);
                 nodo.select();
+                nodoModelo = nodo;
             }
         });
+
+        // Chips de escala + Quitar. En 1:1 el GLB va con el techo del cajon en
+        // y=0: anclas al piso y la red queda ENTERRADA bajo tus pies (donde
+        // esta la real). En maqueta eso dejaria un modelo microscopico bajo la
+        // loseta: se LEVANTA para que repose SOBRE el piso, como en Augin.
+        wireEscala(R.id.btn_escala_real, 1f, "Escala real 1:1 — la red queda bajo tus pies");
+        wireEscala(R.id.btn_escala_100, 0.01f, "Maqueta 1:100 sobre el piso");
+        wireEscala(R.id.btn_escala_200, 0.005f, "Maqueta 1:200 sobre el piso");
+        findViewById(R.id.btn_quitar).setOnClickListener(v -> quitarModelo());
+    }
+
+    private void wireEscala(int idBoton, float factor, String aviso) {
+        findViewById(idBoton).setOnClickListener(v -> {
+            factorMaqueta = factor;
+            pintarChips(idBoton);
+            aplicarEscala();
+            Toast.makeText(this, aviso, Toast.LENGTH_SHORT).show();
+        });
+    }
+
+    private void pintarChips(int activo) {
+        int[] ids = { R.id.btn_escala_real, R.id.btn_escala_100, R.id.btn_escala_200 };
+        for (int id : ids) {
+            android.widget.Button b = findViewById(id);
+            b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                    id == activo ? 0xFF2E6BE6 : 0xFF3A3A46));
+        }
+    }
+
+    /** Escala el ejemplar vivo (si lo hay) y lo apoya donde corresponde:
+     *  1:1 pegado al ancla (enterrado por diseno del GLB); maqueta levantada
+     *  para que su punto MAS BAJO toque el piso. */
+    private void aplicarEscala() {
+        if (nodoModelo == null || modelo == null) return;
+        float e = escala * factorMaqueta;
+        nodoModelo.setLocalScale(new com.google.ar.sceneform.math.Vector3(e, e, e));
+        float alzado = 0f;
+        if (factorMaqueta < 1f) {
+            com.google.ar.sceneform.collision.CollisionShape forma = modelo.getCollisionShape();
+            if (forma instanceof com.google.ar.sceneform.collision.Box) {
+                com.google.ar.sceneform.collision.Box caja = (com.google.ar.sceneform.collision.Box) forma;
+                float fondo = caja.getCenter().y - caja.getSize().y / 2f;   // y minimo local
+                alzado = -fondo * e;
+            }
+        }
+        nodoModelo.setLocalPosition(new com.google.ar.sceneform.math.Vector3(0f, alzado, 0f));
+    }
+
+    private void quitarModelo() {
+        if (ancla != null) {
+            try {
+                if (ancla.getAnchor() != null) ancla.getAnchor().detach();
+                arFragment.getArSceneView().getScene().removeChild(ancla);
+            } catch (Throwable ignored) { }
+            ancla = null;
+            nodoModelo = null;
+        }
+    }
+
+    /** La malla de escaneo profesional (estilo Augin): rejilla triangulada
+     *  fina con puntos en los vertices, tenida de cian, visible en TODO el
+     *  plano (no solo el circulo alrededor de la mira). La textura se dibuja
+     *  aqui mismo en un Bitmap: sin assets nuevos que empaquetar. */
+    private void vestirMallaDeEscaneo(com.google.ar.sceneform.ArSceneView vista) {
+        try {
+            android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(
+                    256, 256, android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas c = new android.graphics.Canvas(bmp);
+            android.graphics.Paint linea = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            linea.setColor(0x66FFFFFF);
+            linea.setStrokeWidth(2f);
+            android.graphics.Paint punto = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            punto.setColor(0xFFFFFFFF);
+            // Celda de 128 px repetida 2x2: lados + una diagonal = triangulos.
+            for (int i = 0; i <= 2; i++) {
+                c.drawLine(0, i * 128, 256, i * 128, linea);
+                c.drawLine(i * 128, 0, i * 128, 256, linea);
+            }
+            c.drawLine(0, 0, 256, 256, linea);
+            c.drawLine(128, 0, 256, 128, linea);
+            c.drawLine(0, 128, 128, 256, linea);
+            for (int x = 0; x <= 2; x++)
+                for (int y = 0; y <= 2; y++)
+                    c.drawCircle(x * 128, y * 128, 7f, punto);
+
+            com.google.ar.sceneform.rendering.Texture.Sampler sampler =
+                    com.google.ar.sceneform.rendering.Texture.Sampler.builder()
+                            .setWrapMode(com.google.ar.sceneform.rendering.Texture.Sampler.WrapMode.REPEAT)
+                            .build();
+            com.google.ar.sceneform.rendering.Texture.builder()
+                    .setSource(bmp)
+                    .setSampler(sampler)
+                    .build()
+                    .thenAccept(tex -> vista.getPlaneRenderer().getMaterial().thenAccept(mat -> {
+                        mat.setTexture(com.google.ar.sceneform.rendering.PlaneRenderer.MATERIAL_TEXTURE, tex);
+                        mat.setFloat3(com.google.ar.sceneform.rendering.PlaneRenderer.MATERIAL_COLOR,
+                                new com.google.ar.sceneform.rendering.Color(0.35f, 0.85f, 1f, 1f));
+                        // El foco por defecto solo ilumina ~0.5 m alrededor de
+                        // la mira; 15 m = se ve el plano completo detectado.
+                        mat.setFloat(com.google.ar.sceneform.rendering.PlaneRenderer.MATERIAL_SPOTLIGHT_RADIUS, 15f);
+                    }));
+        } catch (Throwable t) {
+            // Cosmetico: si algo falla se queda la malla por defecto.
+        }
     }
 }

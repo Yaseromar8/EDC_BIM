@@ -1,7 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.fragment.app.FragmentContainerView
+<FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/ar_fragment"
-    android:name="com.google.ar.sceneform.ux.ArFragment"
     android:layout_width="match_parent"
-    android:layout_height="match_parent" />
+    android:layout_height="match_parent">
+
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/ar_fragment"
+        android:name="com.google.ar.sceneform.ux.ArFragment"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Botonera de escala: chips abajo al centro, estilo obra (oscuro).
+         1:1 = enterrado real bajo el piso; maquetas = apoyadas SOBRE el piso. -->
+    <LinearLayout
+        android:id="@+id/barra_escalas"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="28dp"
+        android:orientation="horizontal"
+        android:background="#B31C1C27"
+        android:padding="6dp">
+
+        <Button
+            android:id="@+id/btn_escala_real"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:text="1:1"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#2E6BE6" />
+
+        <Button
+            android:id="@+id/btn_escala_100"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:layout_marginStart="6dp"
+            android:text="1:100"
+            android:textColor="#E6E6F0"
+            android:backgroundTint="#3A3A46" />
+
+        <Button
+            android:id="@+id/btn_escala_200"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:layout_marginStart="6dp"
+            android:text="1:200"
+            android:textColor="#E6E6F0"
+            android:backgroundTint="#3A3A46" />
+
+        <Button
+            android:id="@+id/btn_quitar"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:layout_marginStart="14dp"
+            android:text="Quitar"
+            android:textColor="#FFB4B4"
+            android:backgroundTint="#3A2430" />
+    </LinearLayout>
+</FrameLayout>
