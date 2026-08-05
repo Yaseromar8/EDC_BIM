@@ -198,6 +198,7 @@ public class ARCorePlugin extends Plugin {
     private final float[] carasAreas = new float[3];
     private final float[] carasDens = new float[3];      // puntos por m2
     private final float[] carasLadoMin = new float[3];   // lado corto, m
+    private final float[] carasAltoY = new float[3];     // extension VERTICAL real, m
     private static final float[][] CARAS_COLORES = {
             { 0.2f, 0.9f, 0.95f },    // piso: cian
             { 0.35f, 0.95f, 0.4f },   // muro A: verde
@@ -840,6 +841,12 @@ public class ARCorePlugin extends Plugin {
                 carasSuficientes = false;
                 break;
             }
+            // Los muros ademas tienen que SUBIR: 45 cm de extension vertical
+            // minima. El fleco del zocalo no puede cumplirlo.
+            if (ci > 0 && carasAltoY[ci] < 0.45f) {
+                carasSuficientes = false;
+                break;
+            }
         }
         boolean barridoMinimo = System.currentTimeMillis() - scanStartMs >= 3500L;
         if (!carasSuficientes || !barridoMinimo) {
@@ -904,6 +911,14 @@ public class ARCorePlugin extends Plugin {
         carasAreas[idx] = (u1 - u0) * (v1 - v0);
         carasLadoMin[idx] = Math.min(u1 - u0, v1 - v0);
         carasDens[idx] = carasAreas[idx] > 0.01f ? in.size() / carasAreas[idx] : 0f;
+        // Extension VERTICAL de los inliers (Y de ARCore = arriba). Un muro de
+        // verdad SUBE; el fleco del zocalo es largo pero mide 15 cm de alto.
+        float yMin = 1e9f, yMax = -1e9f;
+        for (float[] q : in) {
+            if (q[1] < yMin) yMin = q[1];
+            if (q[1] > yMax) yMax = q[1];
+        }
+        carasAltoY[idx] = yMax - yMin;
     }
 
     /** Tine los puntos segun la cara reconocida: cian piso, verde A, naranja B. */

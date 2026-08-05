@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-42';
+const AR_BUILD = 'ar-43';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -95,6 +95,7 @@ export default function NativeARView({ onExit }) {
   const calibrandoRef = useRef(false);
   const modoCamaraRef = useRef(null);
   const enCamaraRef = useRef(false);
+  const calidadPreviaRef = useRef(null);
   const [enCamara, setEnCamara] = useState(false);
   // El panel técnico aparece SOLO cuando algo va mal: si a los 6 segundos no
   // ha llegado ninguna pose de ARCore, o el tracking no arranca. En un APK
@@ -288,6 +289,20 @@ export default function NativeARView({ onExit }) {
           // ella. En julio anclaba porque se entraba directo a camara sin
           // orbitar antes. El candado apaga esa pelea.
           try { viewer.setNavigationLock(true); } catch { /* version del visor */ }
+          // DIETA DE RENDER. En modo camara cada pose re-renderiza el frente
+          // completo con calidad de escritorio; el render progresivo se
+          // reinicia 30 veces por segundo y no termina jamas ('Renderizando…'
+          // perpetuo, pocos fps, modelo a tirones detras de la camara). En AR
+          // manda la FLUIDEZ: fuera sombras ambientales, antialiasing y
+          // progresivo; se restauran al salir.
+          try {
+            calidadPreviaRef.current = {
+              sao: viewer.prefs?.get?.('ambientShadows') !== false,
+              aa: viewer.prefs?.get?.('antialiasing') !== false,
+            };
+            viewer.setQualityLevel(false, false);
+          } catch { /* noop */ }
+          try { viewer.setProgressiveRendering(false); } catch { /* noop */ }
           try { detachRef.current?.setPausado?.(false); } catch { /* noop */ }
         };
 
@@ -303,6 +318,11 @@ export default function NativeARView({ onExit }) {
           document.body.style.background = previousStylesRef.current?.body || '';
           document.documentElement.style.background = previousStylesRef.current?.html || '';
           try { viewer.setNavigationLock(false); } catch { /* noop */ }
+          try {
+            const q = calidadPreviaRef.current;
+            if (q) viewer.setQualityLevel(q.sao, q.aa);
+            viewer.setProgressiveRendering(true);
+          } catch { /* noop */ }
           restaurarAspecto(viewer, rendererStateRef.current, previousStylesRef.current);
           setModelsVisible(viewer, true);
         };
