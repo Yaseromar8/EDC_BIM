@@ -41,6 +41,10 @@ dependencies {
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
     implementation 'com.google.ar:core:1.46.0' // ARCore Dependency
+    // FASE 2 - BALA 1: motor nativo Filament+ARCore (Sceneform Maintained),
+    // el mismo patron de Augin/Dalux: camara y modelo en UN solo motor.
+    // Valida la fijeza clase Revizto antes de invertir en el pipeline glTF.
+    implementation 'com.gorisse.thomas.sceneform:sceneform:1.23.0'
 }
 
 apply from: 'capacitor.build.gradle'

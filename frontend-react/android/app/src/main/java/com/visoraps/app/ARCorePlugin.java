@@ -488,6 +488,19 @@ public class ARCorePlugin extends Plugin {
      *  pipeline sano puede que funcione -- y transformaria la deteccion de
      *  muros lisos. Boton manual + el auto-apagado de 4 s como red: si el
      *  tracking se cae, se apaga sola y queda vetada esta sesion. */
+    /** Abre la actividad del MOTOR NATIVO (Fase 2, validacion). Nuestra
+     *  sesion se pausa sola por el ciclo de vida y se reanuda al volver. */
+    @PluginMethod
+    public void openNativeAr(PluginCall call) {
+        try {
+            android.content.Intent i = new android.content.Intent(getContext(), ArNativoActivity.class);
+            getActivity().startActivity(i);
+            call.resolve();
+        } catch (Throwable t) {
+            call.reject("No se pudo abrir el motor nativo: " + String.valueOf(t.getMessage()));
+        }
+    }
+
     @PluginMethod
     public void setDepth(PluginCall call) {
         boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));

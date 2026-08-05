@@ -177,6 +177,13 @@ export async function setDepth(on) {
   try { return await ARCore.setDepth({ on: !!on }); } catch { return null; }
 }
 
+// Abre el MOTOR NATIVO (Fase 2, validación): Filament+ARCore en un solo
+// bucle, patrón Augin. Nuestra sesión se pausa sola y se reanuda al volver.
+export async function openNativeAr() {
+  if (SIM) return null;
+  try { return await ARCore.openNativeAr(); } catch { return null; }
+}
+
 // Linterna de la cámara (poca luz: buzón, sombra). En ensayo no hay.
 export async function setTorch(on) {
   if (SIM) return null;

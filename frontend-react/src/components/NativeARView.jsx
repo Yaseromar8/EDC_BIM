@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   createAnchor, createAnchorAtCamera, getLastGeoPose,
-  esSimulado, getDiagLog,
+  esSimulado, getDiagLog, openNativeAr,
   onArStats, onGeoPose, onReticle, onTracking, setAimPoint, setPlanesVisible,
   startSession, stopSession,
 } from '../native/arcore';
@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-46';
+const AR_BUILD = 'ar-47';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -767,6 +767,11 @@ export default function NativeARView({ onExit }) {
               nota: 'Luego lo afinas con las flechas.',
             },
             {
+              id: 'nativo', titulo: '🚀 Motor nativo (beta)',
+              texto: 'Toca la malla detectada y el modelo aparece ahí. Rodéalo.',
+              nota: 'Validación Fase 2 con modelo de muestra — el stack de Augin.',
+            },
+            {
               id: 'ninguna', titulo: 'Sin calibrar',
               texto: 'Colócalo a mano donde estás.',
               nota: 'En terreno abierto, sin rincones, es el único que funciona.',
@@ -782,6 +787,9 @@ export default function NativeARView({ onExit }) {
                 autoPlaceRef.current = (m.id === 'piso');
                 calibrandoRef.current = (m.id === 'esquina');
                 setCalibrandoEsquina(m.id === 'esquina');
+                // El motor nativo abre su propia actividad: nuestra sesion se
+                // pausa sola (ciclo de vida) y se reanuda al volver.
+                if (m.id === 'nativo') { openNativeAr(); setEligiendoModo(true); return; }
                 // Por esquina se sigue EN EL MODELO: el asistente pide primero
                 // las tres caras ahi. Los otros dos van directos a la camara.
                 if (m.id !== 'esquina') modoCamaraRef.current?.entrar();
