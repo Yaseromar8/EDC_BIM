@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-45';
+const AR_BUILD = 'ar-46';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -108,6 +108,10 @@ export default function NativeARView({ onExit }) {
   const reticleCleanupRef = useRef(null);
   const [yawDegrees, setYawDegrees] = useState(0);
   const [unitsPerMeter, setUnitsPerMeter] = useState(1000);
+  // MODO MAQUETA: el "dar la vuelta al modelo" de Augin/Dalux es esto — el
+  // modelo a escala reducida sobre tu piso, como mesa de arena. A 1:1 nadie
+  // rodea un canal de kilometros: estas dentro. 1 = real; 50/200 = maqueta.
+  const [escala, setEscala] = useState(1);
   const [aligning, setAligning] = useState(false);
   // MODOS DE CALIBRACION, como los ofrece Revizto:
   //   'esquina'    dos muros y el piso — el mas preciso, exige un rincon real
@@ -465,6 +469,7 @@ export default function NativeARView({ onExit }) {
   // Es el que Revizto ofrece como salida cuando no hay superficies utiles, y en
   // obra lineal a cielo abierto es directamente el modo principal.
   const colocarSinCalibrar = async () => {
+    setEscala(1);
     try {
       setStatus('Colocando el modelo…');
       const res = await createAnchorAtCamera();
@@ -895,6 +900,28 @@ export default function NativeARView({ onExit }) {
             Ajustar
           </button>
         )}
+
+        {/* Maqueta: reduce la escala alrededor del punto anclado para poder
+            RODEAR el modelo caminando, como Augin. Vuelve a 1:1 cuando
+            quieras la superposicion real. */}
+        {anchored && [['1:1', 1], ['1:50', 50], ['1:200', 200]].map(([etiqueta, factor]) => (
+          <button
+            key={etiqueta}
+            className="native-ar-exit"
+            style={escala === factor ? { background: '#2b6cb0', color: '#fff' } : undefined}
+            onClick={() => {
+              setEscala(factor);
+              const upm = oneToOneRef.current * factor;
+              try { detachRef.current?.setUnitsPerMeter?.(upm); } catch { /* noop */ }
+              setUnitsPerMeter(upm);
+              setStatus(factor === 1
+                ? 'Escala real 1:1.'
+                : `Maqueta 1:${factor} — camina alrededor del modelo.`);
+            }}
+          >
+            {etiqueta}
+          </button>
+        ))}
 
         <button className="native-ar-exit" onClick={onExit}>Salir AR</button>
       </div>}
