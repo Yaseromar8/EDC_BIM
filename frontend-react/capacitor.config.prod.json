@@ -1,0 +1,15 @@
+{
+  "appId": "com.visoraps.app",
+  "appName": "Visor APS",
+  "webDir": "dist_field",
+  "backgroundColor": "#00000000",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

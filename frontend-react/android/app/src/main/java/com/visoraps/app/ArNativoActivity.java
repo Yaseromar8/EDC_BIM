@@ -73,6 +73,24 @@ public class ArNativoActivity extends AppCompatActivity {
             return;
         }
 
+        // SIN ESTIMACION DE LUZ HDR. La caja negra cazo el crash exacto:
+        // Sceneform 1.23 llama acquireEnvironmentalHdrCubeMap() con la firma
+        // del ARCore viejo (ArImage[]), que en el 1.46 ya no existe ->
+        // NoSuchMethodError en el PRIMER fotograma. La ruta solo corre en modo
+        // ENVIRONMENTAL_HDR (iluminacion cosmetica): con AMBIENT_INTENSITY el
+        // metodo fantasma jamas se invoca. Bajar ARCore no es opcion: la
+        // linterna usa Config.FlashMode (1.42+).
+        arFragment.setOnSessionConfigurationListener((session, config) ->
+                config.setLightEstimationMode(
+                        com.google.ar.core.Config.LightEstimationMode.AMBIENT_INTENSITY));
+        // lightEstimationConfig es propiedad de EXTENSION de Kotlin, no metodo
+        // de ArSceneView: desde Java se llama por su clase contenedora estatica
+        // (firma verificada con javap sobre el jar de core-1.23.0).
+        arFragment.setOnViewCreatedListener((arSceneView) ->
+                com.gorisse.thomas.sceneform.ArSceneViewKt.setLightEstimationConfig(
+                        arSceneView,
+                        com.gorisse.thomas.sceneform.light.LightEstimationConfig.AMBIENT_INTENSITY));
+
         ModelRenderable.builder()
                 .setSource(this, Uri.parse(GLB))
                 .setIsFilamentGltf(true)
