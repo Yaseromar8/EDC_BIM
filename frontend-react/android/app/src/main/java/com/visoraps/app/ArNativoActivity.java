@@ -43,8 +43,35 @@ public class ArNativoActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_ar_nativo);
-        arFragment = (ArFragment) getSupportFragmentManager().findFragmentById(R.id.ar_fragment);
+        // CAJA NEGRA: si el motor revienta (en el arranque O en el hilo GL de
+        // Filament), el stack queda guardado ANTES de morir y 'Ver log nativo'
+        // lo ensena como primera linea. Un crash con nombre es un arreglo de
+        // un solo tiro; un 'me boto del visor' son tres rondas de adivinanza.
+        final android.content.SharedPreferences prefs =
+                getSharedPreferences("ar_diag", MODE_PRIVATE);
+        final Thread.UncaughtExceptionHandler previo =
+                Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((hilo, error) -> {
+            try {
+                prefs.edit().putString("crash_nativo",
+                        android.util.Log.getStackTraceString(error)).commit();
+            } catch (Throwable ignored) { }
+            if (previo != null) previo.uncaughtException(hilo, error);
+        });
+
+        try {
+            setContentView(R.layout.activity_ar_nativo);
+            arFragment = (ArFragment) getSupportFragmentManager().findFragmentById(R.id.ar_fragment);
+        } catch (Throwable t) {
+            try {
+                prefs.edit().putString("crash_nativo",
+                        android.util.Log.getStackTraceString(t)).commit();
+            } catch (Throwable ignored) { }
+            Toast.makeText(this, "Motor nativo fallo al arrancar: "
+                    + String.valueOf(t.getMessage()), Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
 
         ModelRenderable.builder()
                 .setSource(this, Uri.parse(GLB))

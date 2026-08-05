@@ -1034,6 +1034,16 @@ public class ARCorePlugin extends Plugin {
     public void getDiagLog(PluginCall call) {
         StringBuilder sb = new StringBuilder();
         try {
+            String crash = getContext().getSharedPreferences("ar_diag", android.content.Context.MODE_PRIVATE)
+                    .getString("crash_nativo", null);
+            if (crash != null) {
+                sb.append("== ULTIMO CRASH DEL MOTOR NATIVO ==
+").append(crash).append("
+====
+");
+            }
+        } catch (Throwable ignored) { }
+        try {
             Process pr = Runtime.getRuntime().exec(new String[] { "logcat", "-d", "-t", "500", "-v", "time" });
             BufferedReader br = new BufferedReader(new InputStreamReader(pr.getInputStream()));
             String linea;
