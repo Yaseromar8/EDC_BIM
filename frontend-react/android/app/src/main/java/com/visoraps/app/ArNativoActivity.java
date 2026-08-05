@@ -46,6 +46,7 @@ public class ArNativoActivity extends AppCompatActivity {
     private AnchorNode ancla = null;
     private com.google.ar.sceneform.Node nodoModelo = null;
     private float factorMaqueta = 1f;   // 1 = obra real; 0.01 = 1:100; 0.005 = 1:200
+    private android.widget.TextView avisoTracking = null;   // cacheado: el guardian corre por frame
 
     /** Los GLB sin esquema http(s) viajan DENTRO del APK (assets/): en obra no
      *  hay internet. Filament necesita un archivo real, asi que se copia una
@@ -116,6 +117,12 @@ public class ArNativoActivity extends AppCompatActivity {
             // Sceneform recorta el render a 30 m por defecto (far plane): en un
             // modelo de obra las partes lejanas aparecian/desaparecian al girar
             // — la "desorientacion" reportada en ar-50. 150 m cubre el tramo.
+            // AUDITORIA ar-54: near quedo en el 0.01 de fabrica al subir far a
+            // 150 — razon near:far de 15,000 y el z-buffer pierde precision a
+            // distancia: las FRANJAS NEGRAS sobre caras coplanares del DWG son
+            // eso. near 0.05 la recorta 5x sin estorbar (nadie pega la tablet
+            // a 5 cm de un muro virtual).
+            arSceneView.getScene().getCamera().setNearClipPlane(0.05f);
             arSceneView.getScene().getCamera().setFarClipPlane(150f);
             vestirMallaDeEscaneo(arSceneView);
         });
@@ -160,6 +167,15 @@ public class ArNativoActivity extends AppCompatActivity {
         arFragment.setOnTapArPlaneListener((HitResult hit, Plane plane, android.view.MotionEvent ev) -> {
             if (modelo == null) {
                 Toast.makeText(this, "El modelo aun esta cargando…", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            // AUDITORIA ar-54: con el modelo colocado y sano, un roce en la
+            // pantalla re-anclaba EN SILENCIO — el modelo "saltaba" sin que
+            // nadie supiera por que. Reubicar es un acto deliberado: primero
+            // QUITAR (o que el ancla salga de zona), despues tocar.
+            if (nodoModelo != null && nodoModelo.isEnabled()) {
+                Toast.makeText(this, "Modelo colocado. Para reubicarlo: QUITAR y toca de nuevo.",
+                        Toast.LENGTH_SHORT).show();
                 return;
             }
             quitarModelo();
@@ -208,14 +224,17 @@ public class ArNativoActivity extends AppCompatActivity {
             if (nodoModelo != null && nodoModelo.isEnabled() != visible) {
                 nodoModelo.setEnabled(visible);
                 if (!visible && !anclaOk) ponerMallaVisible(true);   // que pueda re-anclar
+                // AUDITORIA ar-54: al RECUPERAR el ancla la malla se quedaba
+                // encendida sobre el modelo ya colocado — se apaga de vuelta.
+                if (visible) ponerMallaVisible(false);
             }
-            android.widget.TextView tv = findViewById(R.id.aviso_tracking);
-            if (tv != null) {
-                if (aviso == null && tv.getVisibility() == android.view.View.VISIBLE) {
-                    tv.setVisibility(android.view.View.GONE);
+            if (avisoTracking == null) avisoTracking = findViewById(R.id.aviso_tracking);
+            if (avisoTracking != null) {
+                if (aviso == null && avisoTracking.getVisibility() == android.view.View.VISIBLE) {
+                    avisoTracking.setVisibility(android.view.View.GONE);
                 } else if (aviso != null) {
-                    tv.setText(aviso);
-                    tv.setVisibility(android.view.View.VISIBLE);
+                    avisoTracking.setText(aviso);
+                    avisoTracking.setVisibility(android.view.View.VISIBLE);
                 }
             }
         });
