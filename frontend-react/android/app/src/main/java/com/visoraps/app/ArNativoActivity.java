@@ -180,6 +180,44 @@ public class ArNativoActivity extends AppCompatActivity {
                 nodo.select();
                 nodoModelo = nodo;
             }
+            // Modelo colocado: la malla de escaneo ya cumplio (asi lo hace
+            // Augin). La deteccion SIGUE corriendo por debajo — un toque
+            // nuevo re-ancla — pero sin ensuciar la vista de obra.
+            ponerMallaVisible(false);
+        });
+
+        // GUARDIAN DE TRACKING. Si ARCore pierde el mapa, la camara virtual se
+        // congela mientras el operario sigue caminando: todo lo virtual queda
+        // pegado a la pantalla ("el modelo me sigue" tras caminar lejos en
+        // 1:1). Fingir que no paso es de amateur; lo profesional es ocultar el
+        // modelo, decir POR QUE y como recuperar. Al relocalizar, todo vuelve.
+        arFragment.getArSceneView().getScene().addOnUpdateListener(ft -> {
+            com.google.ar.core.Frame frame = arFragment.getArSceneView().getArFrame();
+            if (frame == null) return;
+            boolean camaraOk = frame.getCamera().getTrackingState()
+                    == com.google.ar.core.TrackingState.TRACKING;
+            boolean anclaOk = ancla == null || ancla.getAnchor() == null
+                    || ancla.getAnchor().getTrackingState() == com.google.ar.core.TrackingState.TRACKING;
+            String aviso = null;
+            if (!camaraOk) {
+                aviso = "Se perdio el rastreo — vuelve sobre tus pasos y barre despacio la zona donde anclaste";
+            } else if (!anclaOk) {
+                aviso = "Saliste de la zona del ancla — toca la malla para re-anclar el tramo AQUI";
+            }
+            boolean visible = aviso == null;
+            if (nodoModelo != null && nodoModelo.isEnabled() != visible) {
+                nodoModelo.setEnabled(visible);
+                if (!visible && !anclaOk) ponerMallaVisible(true);   // que pueda re-anclar
+            }
+            android.widget.TextView tv = findViewById(R.id.aviso_tracking);
+            if (tv != null) {
+                if (aviso == null && tv.getVisibility() == android.view.View.VISIBLE) {
+                    tv.setVisibility(android.view.View.GONE);
+                } else if (aviso != null) {
+                    tv.setText(aviso);
+                    tv.setVisibility(android.view.View.VISIBLE);
+                }
+            }
         });
 
         // Chips de escala + Quitar. En 1:1 el GLB va con el techo del cajon en
@@ -238,6 +276,17 @@ public class ArNativoActivity extends AppCompatActivity {
             ancla = null;
             nodoModelo = null;
         }
+        ponerMallaVisible(true);   // sin modelo, el escaneo vuelve a mandar
+    }
+
+    /** Malla de escaneo + manita de instrucciones: visibles solo mientras NO
+     *  hay modelo colocado. La deteccion de planos nunca se detiene. */
+    private void ponerMallaVisible(boolean visible) {
+        try {
+            arFragment.getArSceneView().getPlaneRenderer().setVisible(visible);
+            if (arFragment.getInstructionsController() != null)
+                arFragment.getInstructionsController().setEnabled(visible);
+        } catch (Throwable ignored) { }
     }
 
     /** La malla de escaneo profesional (estilo Augin): rejilla triangulada

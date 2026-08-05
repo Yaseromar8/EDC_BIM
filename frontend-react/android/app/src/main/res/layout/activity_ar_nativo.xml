@@ -10,6 +10,25 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Aviso de tracking: cuando ARCore pierde el mapa, la camara virtual se
+         congela y todo lo virtual queda pegado a la pantalla ("el modelo me
+         sigue"). Se oculta el modelo y este letrero explica como recuperar. -->
+    <TextView
+        android:id="@+id/aviso_tracking"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="24dp"
+        android:paddingLeft="18dp"
+        android:paddingRight="18dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        android:background="#D9271C2C"
+        android:textColor="#FFD9A8"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
     <!-- Botonera de escala: chips abajo al centro, estilo obra (oscuro).
          1:1 = enterrado real bajo el piso; maquetas = apoyadas SOBRE el piso. -->
     <LinearLayout
