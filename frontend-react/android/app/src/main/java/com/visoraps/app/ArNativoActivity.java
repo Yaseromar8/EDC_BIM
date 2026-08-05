@@ -129,6 +129,7 @@ public class ArNativoActivity extends AppCompatActivity {
             arSceneView.getScene().getCamera().setNearClipPlane(0.05f);
             arSceneView.getScene().getCamera().setFarClipPlane(150f);
             vestirMallaDeEscaneo(arSceneView);
+            vigilarTracking(arSceneView);
         });
 
         // BALA 2: el modelo REAL. La web manda url + escala por el Intent;
@@ -210,43 +211,9 @@ public class ArNativoActivity extends AppCompatActivity {
             ponerMallaVisible(false);
         });
 
-        // GUARDIAN DE TRACKING. Si ARCore pierde el mapa, la camara virtual se
-        // congela mientras el operario sigue caminando: todo lo virtual queda
-        // pegado a la pantalla ("el modelo me sigue" tras caminar lejos en
-        // 1:1). Fingir que no paso es de amateur; lo profesional es ocultar el
-        // modelo, decir POR QUE y como recuperar. Al relocalizar, todo vuelve.
-        arFragment.getArSceneView().getScene().addOnUpdateListener(ft -> {
-            com.google.ar.core.Frame frame = arFragment.getArSceneView().getArFrame();
-            if (frame == null) return;
-            boolean camaraOk = frame.getCamera().getTrackingState()
-                    == com.google.ar.core.TrackingState.TRACKING;
-            boolean anclaOk = ancla == null || ancla.getAnchor() == null
-                    || ancla.getAnchor().getTrackingState() == com.google.ar.core.TrackingState.TRACKING;
-            String aviso = null;
-            if (!camaraOk) {
-                aviso = "Se perdio el rastreo — vuelve sobre tus pasos y barre despacio la zona donde anclaste";
-            } else if (!anclaOk) {
-                aviso = "Saliste de la zona del ancla — toca la malla para re-anclar el tramo AQUI";
-            }
-            boolean visible = aviso == null;
-            if (nodoModelo != null && nodoModelo.isEnabled() != visible) {
-                nodoModelo.setEnabled(visible);
-                if (!visible && !anclaOk) ponerMallaVisible(true);   // que pueda re-anclar
-                // AUDITORIA ar-54: al RECUPERAR el ancla la malla se quedaba
-                // encendida sobre el modelo ya colocado — se apaga de vuelta.
-                if (visible) ponerMallaVisible(false);
-            }
-            if (avisoTracking == null) avisoTracking = findViewById(R.id.aviso_tracking);
-            if (avisoTracking != null) {
-                if (aviso == null && avisoTracking.getVisibility() == android.view.View.VISIBLE) {
-                    avisoTracking.setVisibility(android.view.View.GONE);
-                } else if (aviso != null) {
-                    avisoTracking.setText(aviso);
-                    avisoTracking.setVisibility(android.view.View.VISIBLE);
-                }
-            }
-        });
-
+        // (el guardian de tracking se registra en vigilarTracking(), llamado
+        // desde el listener de vista creada: registrarlo aqui directo era el
+        // crash de ar-53/55 — ver comentario alla)
         // Chips de escala + Quitar. En 1:1 el GLB va con el techo del cajon en
         // y=0: anclas al piso y la red queda ENTERRADA bajo tus pies (donde
         // esta la real). En maqueta eso dejaria un modelo microscopico bajo la
@@ -368,6 +335,50 @@ public class ArNativoActivity extends AppCompatActivity {
         android.view.View barra = findViewById(R.id.barra_ajuste);
         if (barra != null) barra.setVisibility(android.view.View.GONE);
         ponerMallaVisible(true);   // sin modelo, el escaneo vuelve a mandar
+    }
+
+    /** GUARDIAN DE TRACKING. Si ARCore pierde el mapa, la camara virtual se
+     *  congela mientras el operario sigue caminando: todo lo virtual queda
+     *  pegado a la pantalla ("el modelo me sigue"). Se oculta el modelo y un
+     *  letrero dice por que y como recuperar; al relocalizar, todo vuelve.
+     *
+     *  CRASH ar-53/55 ("me bota" al abrir): esto estaba registrado DIRECTO en
+     *  onCreate, pero ahi la vista AR del fragment AUN NO EXISTE (por eso la
+     *  luz, el far plane y la malla van dentro de setOnViewCreatedListener).
+     *  getArSceneView() devolvia null y reventaba al tocar Motor nativo. Se
+     *  registra aqui, llamado desde ese mismo listener. */
+    private void vigilarTracking(com.google.ar.sceneform.ArSceneView vista) {
+        vista.getScene().addOnUpdateListener(ft -> {
+            com.google.ar.core.Frame frame = vista.getArFrame();
+            if (frame == null) return;
+            boolean camaraOk = frame.getCamera().getTrackingState()
+                    == com.google.ar.core.TrackingState.TRACKING;
+            boolean anclaOk = ancla == null || ancla.getAnchor() == null
+                    || ancla.getAnchor().getTrackingState() == com.google.ar.core.TrackingState.TRACKING;
+            String aviso = null;
+            if (!camaraOk) {
+                aviso = "Se perdio el rastreo — vuelve sobre tus pasos y barre despacio la zona donde anclaste";
+            } else if (!anclaOk) {
+                aviso = "Saliste de la zona del ancla — toca la malla para re-anclar el tramo AQUI";
+            }
+            boolean visible = aviso == null;
+            if (nodoModelo != null && nodoModelo.isEnabled() != visible) {
+                nodoModelo.setEnabled(visible);
+                if (!visible && !anclaOk) ponerMallaVisible(true);   // que pueda re-anclar
+                // AUDITORIA ar-54: al RECUPERAR el ancla la malla se quedaba
+                // encendida sobre el modelo ya colocado — se apaga de vuelta.
+                if (visible) ponerMallaVisible(false);
+            }
+            if (avisoTracking == null) avisoTracking = findViewById(R.id.aviso_tracking);
+            if (avisoTracking != null) {
+                if (aviso == null && avisoTracking.getVisibility() == android.view.View.VISIBLE) {
+                    avisoTracking.setVisibility(android.view.View.GONE);
+                } else if (aviso != null) {
+                    avisoTracking.setText(aviso);
+                    avisoTracking.setVisibility(android.view.View.VISIBLE);
+                }
+            }
+        });
     }
 
     /** Malla de escaneo + manita de instrucciones: visibles solo mientras NO
