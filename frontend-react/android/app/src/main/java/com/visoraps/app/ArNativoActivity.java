@@ -45,7 +45,11 @@ public class ArNativoActivity extends AppCompatActivity {
     // otra copia y el usuario lo percibia como "el modelo se movio").
     private AnchorNode ancla = null;
     private com.google.ar.sceneform.Node nodoModelo = null;
+    // Nodo intermedio ancla→ajuste→modelo: acumula los ajustes de campo
+    // (mover/girar/cota) sin pelearse con la escala/alzado del nodo modelo.
+    private com.google.ar.sceneform.Node nodoAjuste = null;
     private float factorMaqueta = 1f;   // 1 = obra real; 0.01 = 1:100; 0.005 = 1:200
+    private float pasoMetros = 0.1f;    // paso del ajuste de campo: 1 / 0.1 / 0.01
     private android.widget.TextView avisoTracking = null;   // cacheado: el guardian corre por frame
 
     /** Los GLB sin esquema http(s) viajan DENTRO del APK (assets/): en obra no
@@ -185,10 +189,14 @@ public class ArNativoActivity extends AppCompatActivity {
             if (modeloPropio) {
                 // Modelo de obra: sin gestos que lo arrastren sin querer. La
                 // escala la mandan los chips (1:1 sagrado por defecto).
+                nodoAjuste = new com.google.ar.sceneform.Node();
+                nodoAjuste.setParent(ancla);
                 nodoModelo = new com.google.ar.sceneform.Node();
-                nodoModelo.setParent(ancla);
+                nodoModelo.setParent(nodoAjuste);
                 nodoModelo.setRenderable(modelo);
                 aplicarEscala();
+                android.view.View barra = findViewById(R.id.barra_ajuste);
+                if (barra != null) barra.setVisibility(android.view.View.VISIBLE);
             } else {
                 TransformableNode nodo = new TransformableNode(arFragment.getTransformationSystem());
                 nodo.setParent(ancla);
@@ -247,6 +255,67 @@ public class ArNativoActivity extends AppCompatActivity {
         wireEscala(R.id.btn_escala_100, 0.01f, "Maqueta 1:100 sobre el piso");
         wireEscala(R.id.btn_escala_200, 0.005f, "Maqueta 1:200 sobre el piso");
         findViewById(R.id.btn_quitar).setOnClickListener(v -> quitarModelo());
+
+        // AJUSTE DE CAMPO. Mover es relativo a COMO MIRA el operario (▲ aleja
+        // en la direccion de la vista, ◀▶ de lado): en obra nadie piensa en
+        // ejes del modelo. Girar pivota sobre el punto anclado. Todo con paso
+        // conocido — esto es referenciar, no decorar.
+        findViewById(R.id.btn_mov_lejos).setOnClickListener(v -> moverCampo(0, 1));
+        findViewById(R.id.btn_mov_cerca).setOnClickListener(v -> moverCampo(0, -1));
+        findViewById(R.id.btn_mov_izq).setOnClickListener(v -> moverCampo(-1, 0));
+        findViewById(R.id.btn_mov_der).setOnClickListener(v -> moverCampo(1, 0));
+        findViewById(R.id.btn_subir).setOnClickListener(v -> moverCota(1));
+        findViewById(R.id.btn_bajar).setOnClickListener(v -> moverCota(-1));
+        findViewById(R.id.btn_girar_izq).setOnClickListener(v -> girarCampo(1));
+        findViewById(R.id.btn_girar_der).setOnClickListener(v -> girarCampo(-1));
+        findViewById(R.id.btn_paso).setOnClickListener(v -> {
+            pasoMetros = pasoMetros > 0.5f ? 0.1f : pasoMetros > 0.05f ? 0.01f : 1f;
+            ((android.widget.Button) v).setText(etiquetaPaso());
+        });
+    }
+
+    private String etiquetaPaso() {
+        return pasoMetros >= 1f ? "paso: 1 m" : pasoMetros >= 0.1f ? "paso: 10 cm" : "paso: 1 cm";
+    }
+
+    /** Grados por toque, proporcionales al paso: grueso 2°, medio 0.5°, fino 0.1°. */
+    private float gradosPaso() {
+        return pasoMetros >= 1f ? 2f : pasoMetros >= 0.1f ? 0.5f : 0.1f;
+    }
+
+    /** Mueve el modelo en el plano horizontal, relativo a la vista del
+     *  operario: adelante = a donde miras, proyectado al plano del suelo. */
+    private void moverCampo(int lado, int frente) {
+        if (nodoAjuste == null) return;
+        com.google.ar.sceneform.Camera cam = arFragment.getArSceneView().getScene().getCamera();
+        com.google.ar.sceneform.math.Vector3 f = cam.getForward();
+        f.y = 0;
+        if (f.length() < 1e-4) return;   // mirando al cenit: sin direccion util
+        f = f.normalized();
+        com.google.ar.sceneform.math.Vector3 der =
+                com.google.ar.sceneform.math.Vector3.cross(f, com.google.ar.sceneform.math.Vector3.up()).normalized();
+        com.google.ar.sceneform.math.Vector3 delta = com.google.ar.sceneform.math.Vector3.add(
+                f.scaled(frente * pasoMetros), der.scaled(lado * pasoMetros));
+        nodoAjuste.setWorldPosition(com.google.ar.sceneform.math.Vector3.add(
+                nodoAjuste.getWorldPosition(), delta));
+    }
+
+    private void moverCota(int signo) {
+        if (nodoAjuste == null) return;
+        nodoAjuste.setWorldPosition(com.google.ar.sceneform.math.Vector3.add(
+                nodoAjuste.getWorldPosition(),
+                new com.google.ar.sceneform.math.Vector3(0, signo * pasoMetros, 0)));
+    }
+
+    /** Gira alrededor de la vertical que pasa por el punto de ajuste (donde
+     *  el operario anclo y esta parado): asi se orienta un tramo en campo. */
+    private void girarCampo(int signo) {
+        if (nodoAjuste == null) return;
+        com.google.ar.sceneform.math.Quaternion giro =
+                com.google.ar.sceneform.math.Quaternion.axisAngle(
+                        com.google.ar.sceneform.math.Vector3.up(), signo * gradosPaso());
+        nodoAjuste.setLocalRotation(com.google.ar.sceneform.math.Quaternion.multiply(
+                giro, nodoAjuste.getLocalRotation()));
     }
 
     private void wireEscala(int idBoton, float factor, String aviso) {
@@ -294,7 +363,10 @@ public class ArNativoActivity extends AppCompatActivity {
             } catch (Throwable ignored) { }
             ancla = null;
             nodoModelo = null;
+            nodoAjuste = null;
         }
+        android.view.View barra = findViewById(R.id.barra_ajuste);
+        if (barra != null) barra.setVisibility(android.view.View.GONE);
         ponerMallaVisible(true);   // sin modelo, el escaneo vuelve a mandar
     }
 

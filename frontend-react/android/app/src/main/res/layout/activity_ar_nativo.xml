@@ -29,6 +29,41 @@
         android:textStyle="bold"
         android:visibility="gone" />
 
+    <!-- AJUSTE DE CAMPO: mover/girar el modelo YA colocado para referenciarlo
+         contra la obra real. Botones con paso conocido (1 m / 10 cm / 1 cm),
+         no gestos: en un modelo de 50 m un arrastre tactil es ambiguo y se
+         dispara sin querer. Solo visible con modelo colocado. -->
+    <LinearLayout
+        android:id="@+id/barra_ajuste"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="86dp"
+        android:orientation="horizontal"
+        android:background="#B31C1C27"
+        android:padding="6dp"
+        android:visibility="gone">
+
+        <Button android:id="@+id/btn_girar_izq" android:layout_width="52dp" android:layout_height="44dp"
+            android:text="⟲" android:textSize="18sp" android:textColor="#E6E6F0" android:backgroundTint="#3A3A46"/>
+        <Button android:id="@+id/btn_girar_der" android:layout_width="52dp" android:layout_height="44dp"
+            android:layout_marginStart="4dp" android:text="⟳" android:textSize="18sp" android:textColor="#E6E6F0" android:backgroundTint="#3A3A46"/>
+        <Button android:id="@+id/btn_mov_izq" android:layout_width="52dp" android:layout_height="44dp"
+            android:layout_marginStart="12dp" android:text="◀" android:textColor="#E6E6F0" android:backgroundTint="#2C3A50"/>
+        <Button android:id="@+id/btn_mov_lejos" android:layout_width="52dp" android:layout_height="44dp"
+            android:layout_marginStart="4dp" android:text="▲" android:textColor="#E6E6F0" android:backgroundTint="#2C3A50"/>
+        <Button android:id="@+id/btn_mov_cerca" android:layout_width="52dp" android:layout_height="44dp"
+            android:layout_marginStart="4dp" android:text="▼" android:textColor="#E6E6F0" android:backgroundTint="#2C3A50"/>
+        <Button android:id="@+id/btn_mov_der" android:layout_width="52dp" android:layout_height="44dp"
+            android:layout_marginStart="4dp" android:text="▶" android:textColor="#E6E6F0" android:backgroundTint="#2C3A50"/>
+        <Button android:id="@+id/btn_subir" android:layout_width="wrap_content" android:layout_height="44dp"
+            android:layout_marginStart="12dp" android:text="Subir" android:textColor="#E6E6F0" android:backgroundTint="#3A3A46"/>
+        <Button android:id="@+id/btn_bajar" android:layout_width="wrap_content" android:layout_height="44dp"
+            android:layout_marginStart="4dp" android:text="Bajar" android:textColor="#E6E6F0" android:backgroundTint="#3A3A46"/>
+        <Button android:id="@+id/btn_paso" android:layout_width="wrap_content" android:layout_height="44dp"
+            android:layout_marginStart="12dp" android:text="paso: 10 cm" android:textColor="#FFE9A8" android:backgroundTint="#4A3A24"/>
+    </LinearLayout>
+
     <!-- Botonera de escala: chips abajo al centro, estilo obra (oscuro).
          1:1 = enterrado real bajo el piso; maquetas = apoyadas SOBRE el piso. -->
     <LinearLayout
