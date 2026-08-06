@@ -159,6 +159,24 @@ def leer_georef():
         return jsonify({"error": str(e)}), 500
 
 
+@geo_control_bp.route('/api/geo/georef', methods=['DELETE'])
+def borrar_georef():
+    """Quita el amarre de un modelo (p.ej. limpiar un ensayo de oficina)."""
+    project_id = request.args.get('project')
+    urn = request.args.get('urn')
+    if not project_id or not urn:
+        return jsonify({"error": "project y urn son obligatorios"}), 400
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM geo_model_georef WHERE project_id = %s AND urn = %s",
+                           (project_id, urn))
+            conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @geo_control_bp.route('/api/geo/georef', methods=['POST'])
 def guardar_georef():
     """Guarda el amarre modelo↔UTM de un modelo (urn) del proyecto.

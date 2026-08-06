@@ -184,13 +184,38 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
     }
   };
 
-  // Captura de los 2 toques del ensayo sobre el visor
+  // Borra el kit de ensayo del SERVIDOR: puntos ENSAYO-* + amarre del modelo.
+  const borrarEnsayo = async () => {
+    if (!window.confirm('¿Borrar los puntos ENSAYO-A/B/C y el amarre de este modelo del servidor?')) return;
+    try {
+      for (const id of ['ENSAYO-A', 'ENSAYO-B', 'ENSAYO-C']) {
+        await apiFetch(api(`/api/geo/control-points/${encodeURIComponent(id)}?project=${encodeURIComponent(projectId)}`), { method: 'DELETE' });
+      }
+      await apiFetch(api(`/api/geo/georef?project=${encodeURIComponent(projectId)}&urn=${encodeURIComponent(urn)}`), { method: 'DELETE' });
+      const rr = await apiFetch(api(`/api/geo/control-points?project=${encodeURIComponent(projectId)}`));
+      setPuntos((await rr.json()).puntos || []);
+      setGeoref(null);
+      setPares([]);
+      setEnsayoClics([]);
+      setMsj('Ensayo borrado del servidor. Empieza de cero cuando quieras.');
+    } catch (e) {
+      setMsj('No se pudo borrar: ' + String(e?.message || e));
+    }
+  };
+
+  // Captura de los 2 toques del ensayo sobre el visor.
+  // GUARDIA ANTI-ARRASTRE: navegar (orbitar/panear) también dispara 'click'
+  // al soltar — así se "eligieron solos" dos puntos en la primera prueba.
+  // Solo cuenta un toque QUIETO: menos de 6 px entre bajar y soltar el dedo.
   useEffect(() => {
     if (!ensayoActivo) return undefined;
     const viewer = elViewer();
     if (!viewer) { setMsj('El visor aún no está listo'); setEnsayoActivo(false); return undefined; }
     const canvas = viewer.impl?.canvas || viewer.canvas;
+    let bajo = null;
+    const onDown = (ev) => { bajo = [ev.clientX, ev.clientY]; };
     const onClick = (ev) => {
+      if (bajo && Math.hypot(ev.clientX - bajo[0], ev.clientY - bajo[1]) > 6) return;   // fue arrastre
       const rect = canvas.getBoundingClientRect();
       let golpe = null;
       try { golpe = viewer.impl.hitTest(ev.clientX - rect.left, ev.clientY - rect.top, false); } catch { /* nada */ }
@@ -199,7 +224,7 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
       setEnsayoClics((prev) => {
         const sig = [...prev, p];
         if (sig.length === 1) {
-          setMsj('Punto A capturado ✓. Ahora toca tu punto B (otro buzón, a unos 3-10 m del A).');
+          setMsj('Punto A capturado ✓. Ahora toca tu punto B (otro buzón, a unos 3-10 m del A). Puedes navegar: solo cuentan los toques quietos.');
         } else if (sig.length >= 2) {
           setEnsayoActivo(false);
           guardarEnsayo(sig[0], sig[1]);
@@ -207,8 +232,9 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
         return sig;
       });
     };
+    canvas.addEventListener('mousedown', onDown);
     canvas.addEventListener('click', onClick);
-    return () => canvas.removeEventListener('click', onClick);
+    return () => { canvas.removeEventListener('mousedown', onDown); canvas.removeEventListener('click', onClick); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ensayoActivo]);
 
@@ -377,8 +403,11 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
             onChange={(e) => { const f = e.target.files?.[0]; if (f) subirCsv(f); e.target.value = ''; }} />
         </div>
         <div style={{ opacity: 0.65, marginTop: 4 }}>Formato: ID, Este, Norte, Cota[, descripción] — el mismo del dron.</div>
-        <div style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
           <button style={S.botonGris} onClick={crearEnsayoOficina}>🧪 Ensayo de oficina (3 cruces de cinta)</button>
+          {(georef || puntos.some((p) => p.punto_id.startsWith('ENSAYO'))) && (
+            <button style={{ ...S.botonGris, color: '#ffb4b4' }} onClick={borrarEnsayo}>🗑 Borrar ensayo</button>
+          )}
         </div>
 
         {msj && <div style={S.aviso}>{msj}</div>}
