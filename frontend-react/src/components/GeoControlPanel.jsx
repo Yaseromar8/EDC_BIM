@@ -210,6 +210,30 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
     } catch { /* n/a */ }
     try { d.globalOffset = m.getData?.()?.globalOffset || null; } catch { /* n/a */ }
     try { d.placement = m.getData?.()?.placementWithOffset?.elements || m.getData?.()?.placementTransform?.elements || null; } catch { /* n/a */ }
+    // TESTIGOS: 3 fragmentos reales con su dbId y su centro EN EL MARCO DE
+    // LOS CLICS. Esos mismos elementos viven en el GLB del AR con el mismo
+    // dbId: comparar ambos resuelve la transformación exacta entre marcos,
+    // medida sobre geometría real — cero teoría de LMV.
+    try {
+      const fl = m.getFragmentList?.();
+      const THREE = window.THREE;
+      if (fl && THREE) {
+        const n = fl.getCount?.() ?? fl.fragments?.length ?? 0;
+        const caja = new THREE.Box3();
+        d.testigos = [];
+        for (const f of [0, Math.floor(n / 3), Math.floor((2 * n) / 3), n - 1]) {
+          if (f < 0 || f >= n) continue;
+          try {
+            fl.getWorldBounds(f, caja);
+            const dbId = fl.getDbIds ? fl.getDbIds(f) : (fl.fragments?.fragId2dbId?.[f]);
+            d.testigos.push({
+              dbId: Array.isArray(dbId) ? dbId[0] : dbId,
+              c: [((caja.min.x + caja.max.x) / 2), ((caja.min.y + caja.max.y) / 2), ((caja.min.z + caja.max.z) / 2)].map((v) => Math.round(v * 10) / 10),
+            });
+          } catch { /* siguiente */ }
+        }
+      }
+    } catch { /* n/a */ }
     const txt = JSON.stringify(d);
     try { navigator.clipboard?.writeText(txt); } catch { /* igual se muestra */ }
     console.log('[geo] marco del visor:', d);
