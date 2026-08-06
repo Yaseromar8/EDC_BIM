@@ -231,16 +231,14 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
     } else setMsj('Error guardando: ' + (d.error || '?'));
   };
 
-  // ── capa de esferas sobre el modelo (con amarre: UTM → modelo) ───────
-  useEffect(() => {
-    const viewer = elViewer();
-    const THREE = typeof window !== 'undefined' ? window.THREE : null;
-    if (!viewer || !THREE || !georef?.transform || !puntos.length) return undefined;
-    const t = georef.transform;
+  // Inversa del Helmert del amarre: UTM → coordenadas del modelo. La usan la
+  // capa de esferas y el "volar al punto" de la lista.
+  const aModelo = useMemo(() => {
+    const t = georef?.transform;
+    if (!t) return null;
     const RAD = Math.PI / 180;
     const cos = Math.cos(t.yawDeg * RAD), sin = Math.sin(t.yawDeg * RAD);
-    // inversa del Helmert: UTM → modelo
-    const aModelo = (E, N, Z) => {
+    return (E, N, Z) => {
       const x = E - t.tx, y = N - t.ty;
       return [
         (cos * x + sin * y) / t.escala,
@@ -248,23 +246,58 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
         (Z - t.tz) / t.escala,
       ];
     };
+  }, [georef]);
+
+  // Volar la cámara a un punto de control: así se VE dónde cayó cada uno.
+  const volarAPunto = (p) => {
+    const viewer = elViewer();
+    const THREE = typeof window !== 'undefined' ? window.THREE : null;
+    if (!viewer || !THREE || !aModelo) return;
+    const [x, y, z] = aModelo(p.este, p.norte, p.cota ?? 0);
+    try {
+      const nav = viewer.navigation;
+      const lejos = 25 / (georef?.transform?.escala || 1);   // ~25 m en unidades del modelo
+      nav.setRequestTransition(true,
+        new THREE.Vector3(x + lejos * 0.7, y + lejos * 0.7, z + lejos * 0.6),
+        new THREE.Vector3(x, y, z),
+        nav.getCamera()?.fov || 45);
+      setMsj(`Volando a «${p.punto_id}» — la esfera amarilla marca su posición exacta.`);
+    } catch { setMsj('No se pudo mover la cámara'); }
+  };
+
+  // ── capa de esferas sobre el modelo (con amarre: UTM → modelo) ───────
+  useEffect(() => {
+    const viewer = elViewer();
+    const THREE = typeof window !== 'undefined' ? window.THREE : null;
+    if (!viewer || !THREE || !aModelo || !puntos.length) return undefined;
     const nombre = overlayRef.current.nombre;
     try { viewer.impl.createOverlayScene(nombre); } catch { /* ya existe */ }
     const mat = new THREE.MeshBasicMaterial({ color: 0xffc83d });
+    const matPalo = new THREE.MeshBasicMaterial({ color: 0xff5030 });
     const objetos = [];
+    // Radio visible a zoom de red: ~60 cm reales, en unidades del modelo.
+    const radio = 0.6 / (georef?.transform?.escala || 1);
     for (const p of puntos) {
       const [x, y, z] = aModelo(p.este, p.norte, p.cota ?? 0);
-      const esfera = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 10), mat);
+      const esfera = new THREE.Mesh(new THREE.SphereGeometry(radio, 14, 12), mat);
       esfera.position.set(x, y, z);
       viewer.impl.addOverlay(nombre, esfera);
       objetos.push(esfera);
+      // Palo vertical de 8 m: un banderín que se ve desde lejos, como las
+      // balizas de obra — la esfera sola se pierde en una red de cuadras.
+      const alto = 8 / (georef?.transform?.escala || 1);
+      const palo = new THREE.Mesh(new THREE.CylinderGeometry(radio * 0.18, radio * 0.18, alto, 8), matPalo);
+      palo.position.set(x, y, z + alto / 2);
+      palo.rotation.x = Math.PI / 2;   // el cilindro nace a lo largo de Y; el modelo es Z-arriba
+      viewer.impl.addOverlay(nombre, palo);
+      objetos.push(palo);
     }
     viewer.impl.invalidate(false, false, true);
     overlayRef.current.instalado = true;
     return () => {
       try { objetos.forEach((o) => viewer.impl.removeOverlay(nombre, o)); viewer.impl.invalidate(false, false, true); } catch { /* visor cerrado */ }
     };
-  }, [georef, puntos]);
+  }, [georef, puntos, aModelo]);
 
   if (!projectId) return null;
 
@@ -352,12 +385,12 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
         {/* 3 · LISTA */}
         {puntos.length > 0 && (
           <div style={{ marginTop: 14, borderTop: '1px solid #33363f', paddingTop: 10 }}>
-            <strong>Red de puntos {georef?.transform ? '· dibujada sobre el modelo 🟡' : '(amarra para verlos en el 3D)'}</strong>
+            <strong>Red de puntos {georef?.transform ? '· toca uno para VOLAR a él 🟡' : '(amarra para verlos en el 3D)'}</strong>
             <table style={{ ...S.tabla, marginTop: 6 }}>
               <tbody>
                 {puntos.slice(0, 60).map((p) => (
-                  <tr key={p.punto_id}>
-                    <td style={{ ...S.celda, textAlign: 'left' }}>{p.punto_id}</td>
+                  <tr key={p.punto_id} onClick={() => volarAPunto(p)} style={{ cursor: 'pointer' }}>
+                    <td style={{ ...S.celda, textAlign: 'left', color: '#ffc83d' }}>{p.punto_id}</td>
                     <td style={S.celda}>{p.este.toFixed(2)}</td>
                     <td style={S.celda}>{p.norte.toFixed(2)}</td>
                     <td style={S.celda}>{p.cota != null ? p.cota.toFixed(2) : '—'}</td>
