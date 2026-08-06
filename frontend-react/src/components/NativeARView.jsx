@@ -71,7 +71,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-56';
+const AR_BUILD = 'ar-57';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -138,6 +138,36 @@ export default function NativeARView({ onExit }) {
   const [arStats, setArStats] = useState({ frames: 0, state: '?', reason: '?', ts: 0, cam: false, tex: -1, glError: '', resumes: 0, resumeError: '', camCfgs: -1 });
   const statsCleanupRef = useRef(null);
   const oneToOneRef = useRef(1000); // unidades/metro para escala 1:1 real (según unidades del modelo)
+
+  // ESTACION LIBRE: junta los datos del proyecto (puntos de control + amarre
+  // modelo↔UTM, cargados en la web) y abre el motor nativo con ellos. Si el
+  // proyecto no los tiene, el motor abre en modo de siempre (tocar la malla).
+  // Los datos viven en la PLATAFORMA; aqui solo se transportan.
+  const abrirMotorNativo = async () => {
+    const base = { url: 'ar/tramo50.glb', escala: 1 };
+    try {
+      const proy = JSON.parse(localStorage.getItem('visor_selectedProject') || 'null');
+      if (!proy?.id || !proy?.urn) { openNativeAr(base); return; }
+      const BACKEND = 'https://visor-ecd-backend.onrender.com'; // camino solo-APK
+      const [rp, rg] = await Promise.all([
+        fetch(`${BACKEND}/api/geo/control-points?project=${encodeURIComponent(proy.id)}`),
+        fetch(`${BACKEND}/api/geo/georef?project=${encodeURIComponent(proy.id)}&urn=${encodeURIComponent(proy.urn)}`),
+      ]);
+      const puntos = (await rp.json())?.puntos || [];
+      const georef = (await rg.json())?.georef;
+      if (puntos.length >= 2 && georef?.transform) {
+        openNativeAr({
+          ...base,
+          puntosJson: JSON.stringify(puntos.map((p) => ({
+            id: p.punto_id, e: p.este, n: p.norte, z: p.cota ?? 0,
+          }))),
+          amarreJson: JSON.stringify(georef.transform),
+        });
+        return;
+      }
+    } catch { /* sin red o sin datos: modo de siempre */ }
+    openNativeAr(base);
+  };
   const [geo, setGeo] = useState(null); // última pose GPS { lat, lon, accuracy, heading, hasHeading }
   const georefRef = useRef({ globalOffset: { x: 0, y: 0, z: 0 }, metersPerUnit: 0.001 });
   const geoCleanupRef = useRef(null);
@@ -796,10 +826,12 @@ export default function NativeARView({ onExit }) {
                 // viaja DENTRO del APK (assets/ar/): obra sin internet. Va el
                 // TRAMO de 50 m, no el canal entero: el error del ancla es
                 // angular y un modelo largo es un brazo de palanca que lo
-                // multiplica — 0.3° invisibles en un tigre son 40 cm de baile
-                // a 70 m. En obra lineal el contenido vive CERCA del ancla y
-                // se re-ancla por tramos (Dalux/XYZ Reality hacen lo mismo).
-                if (m.id === 'nativo') { openNativeAr({ url: 'ar/tramo50.glb', escala: 1 }); setEligiendoModo(true); return; }
+                // multiplica. Si el proyecto tiene PUNTOS DE CONTROL cargados
+                // y amarre modelo↔UTM hecho en la web, se los pasamos: el
+                // motor abre la ESTACION LIBRE (medir 2 puntos → modelo
+                // georreferenciado solo, con cierre en cm). Sin datos, cae al
+                // modo de siempre (tocar la malla).
+                if (m.id === 'nativo') { abrirMotorNativo(); setEligiendoModo(true); return; }
                 // Por esquina se sigue EN EL MODELO: el asistente pide primero
                 // las tres caras ahi. Los otros dos van directos a la camara.
                 if (m.id !== 'esquina') modoCamaraRef.current?.entrar();

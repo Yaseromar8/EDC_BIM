@@ -52,6 +52,12 @@ public class ArNativoActivity extends AppCompatActivity {
     private float pasoMetros = 0.1f;    // paso del ajuste de campo: 1 / 0.1 / 0.01
     private android.widget.TextView avisoTracking = null;   // cacheado: el guardian corre por frame
 
+    // ── ESTACION LIBRE (AR georreferenciado por puntos de control) ──────
+    // Los datos vienen de la PLATAFORMA via Intent: nada incrustado aqui.
+    private final java.util.List<GeoCalibrador.PuntoControl> puntosControl = new java.util.ArrayList<>();
+    private final GeoCalibrador calibrador = new GeoCalibrador();
+    private GeoCalibrador.Semejanza glbAUtm = null;   // amarre(svf→UTM) ∘ sidecar(glb→svf)
+
     /** Los GLB sin esquema http(s) viajan DENTRO del APK (assets/): en obra no
      *  hay internet. Filament necesita un archivo real, asi que se copia una
      *  vez a cache y se carga con file:// — cero adivinanza de esquemas raros. */
@@ -223,6 +229,8 @@ public class ArNativoActivity extends AppCompatActivity {
         wireEscala(R.id.btn_escala_200, 0.005f, "Maqueta 1:200 sobre el piso");
         findViewById(R.id.btn_quitar).setOnClickListener(v -> quitarModelo());
 
+        prepararEstacionLibre();
+
         // AJUSTE DE CAMPO. Mover es relativo a COMO MIRA el operario (▲ aleja
         // en la direccion de la vista, ◀▶ de lado): en obra nadie piensa en
         // ejes del modelo. Girar pivota sobre el punto anclado. Todo con paso
@@ -335,6 +343,154 @@ public class ArNativoActivity extends AppCompatActivity {
         android.view.View barra = findViewById(R.id.barra_ajuste);
         if (barra != null) barra.setVisibility(android.view.View.GONE);
         ponerMallaVisible(true);   // sin modelo, el escaneo vuelve a mandar
+    }
+
+    /** ESTACION LIBRE. Parsea puntos de control + amarre del Intent, compone
+     *  la cadena glb→UTM con el sidecar del GLB, y arma la barra de medicion.
+     *  Con 2+ puntos medidos el modelo aparece georreferenciado SOLO — sin
+     *  tocar la malla — con su cierre visible. Re-medir re-referencia. */
+    private void prepararEstacionLibre() {
+        try {
+            String puntosJson = getIntent().getStringExtra("puntosJson");
+            String amarreJson = getIntent().getStringExtra("amarreJson");
+            String glbUrl = getIntent().getStringExtra("glbUrl");
+            if (puntosJson == null || puntosJson.isEmpty()
+                    || amarreJson == null || amarreJson.isEmpty()
+                    || glbUrl == null || glbUrl.startsWith("http")) return;
+
+            org.json.JSONArray arr = new org.json.JSONArray(puntosJson);
+            for (int i = 0; i < arr.length(); i++) {
+                org.json.JSONObject p = arr.getJSONObject(i);
+                puntosControl.add(new GeoCalibrador.PuntoControl(
+                        p.getString("id"), p.getDouble("e"), p.getDouble("n"),
+                        p.optDouble("z", 0)));
+            }
+            if (puntosControl.isEmpty()) return;
+
+            // amarre: svf(mundo del visor) → UTM, calculado y guardado en la web
+            org.json.JSONObject am = new org.json.JSONObject(amarreJson);
+            GeoCalibrador.Semejanza svfAUtm = new GeoCalibrador.Semejanza();
+            svfAUtm.escala = am.getDouble("escala");
+            svfAUtm.yawRad = Math.toRadians(am.getDouble("yawDeg"));
+            svfAUtm.tx = am.getDouble("tx");
+            svfAUtm.ty = am.getDouble("ty");
+            svfAUtm.tz = am.getDouble("tz");
+
+            // sidecar del GLB: p_glb = Ryup(0.3048·p_svf) + off →
+            // en el plano (x,−z): glb2 = 0.3048·svf2 + (offx, −offz); cota: y = 0.3048·z_svf + offy
+            String sidecarAsset = glbUrl.replace(".glb", ".geo.json");
+            org.json.JSONObject sc;
+            try (java.io.InputStream in = getAssets().open(sidecarAsset)) {
+                byte[] buf = new byte[in.available()];
+                int leidos = in.read(buf);
+                sc = new org.json.JSONObject(new String(buf, 0, Math.max(leidos, 0), "UTF-8"));
+            }
+            org.json.JSONArray off = sc.getJSONArray("off");
+            double s3 = sc.getDouble("escalaSvf");
+            GeoCalibrador.Semejanza svfAGlb = new GeoCalibrador.Semejanza();
+            svfAGlb.escala = s3;
+            svfAGlb.yawRad = 0;
+            svfAGlb.tx = off.getDouble(0);
+            svfAGlb.ty = -off.getDouble(2);
+            svfAGlb.tz = off.getDouble(1);
+            glbAUtm = svfAUtm.componer(svfAGlb.inversa());
+
+            // UI: spinner de puntos + reticula + boton Medir
+            android.widget.Spinner sel = findViewById(R.id.sel_punto);
+            java.util.List<String> ids = new java.util.ArrayList<>();
+            for (GeoCalibrador.PuntoControl p : puntosControl) ids.add(p.id);
+            android.widget.ArrayAdapter<String> ad = new android.widget.ArrayAdapter<>(
+                    this, android.R.layout.simple_spinner_dropdown_item, ids);
+            sel.setAdapter(ad);
+            findViewById(R.id.barra_medicion).setVisibility(android.view.View.VISIBLE);
+            findViewById(R.id.reticula_geo).setVisibility(android.view.View.VISIBLE);
+            findViewById(R.id.btn_medir).setOnClickListener(v -> medirPuntoActual());
+            Toast.makeText(this, puntosControl.size()
+                    + " puntos de control del proyecto. Parate sobre uno, apunta la cruz a la marca y MIDE.",
+                    Toast.LENGTH_LONG).show();
+        } catch (Throwable t) {
+            Toast.makeText(this, "Estacion libre no disponible: "
+                    + String.valueOf(t.getMessage()), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /** Hit-test en la cruz central → posicion AR de la marca → re-ajuste. */
+    private void medirPuntoActual() {
+        try {
+            com.google.ar.core.Frame frame = arFragment.getArSceneView().getArFrame();
+            if (frame == null || frame.getCamera().getTrackingState()
+                    != com.google.ar.core.TrackingState.TRACKING) {
+                Toast.makeText(this, "Sin rastreo: barre el piso un momento y reintenta", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            android.view.View vista = arFragment.getArSceneView();
+            java.util.List<com.google.ar.core.HitResult> hits =
+                    frame.hitTest(vista.getWidth() / 2f, vista.getHeight() / 2f);
+            com.google.ar.core.HitResult mejor = null;
+            for (com.google.ar.core.HitResult h : hits) {
+                if (h.getTrackable() instanceof Plane
+                        && ((Plane) h.getTrackable()).isPoseInPolygon(h.getHitPose())) { mejor = h; break; }
+                if (mejor == null) mejor = h;
+            }
+            if (mejor == null) {
+                Toast.makeText(this, "La cruz no toca superficie detectada: barre el piso alrededor de la marca", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            android.widget.Spinner sel = findViewById(R.id.sel_punto);
+            int idx = sel.getSelectedItemPosition();
+            if (idx < 0 || idx >= puntosControl.size()) return;
+            GeoCalibrador.PuntoControl pc = puntosControl.get(idx);
+            com.google.ar.core.Pose pose = mejor.getHitPose();
+            calibrador.medir(pc, pose.tx(), pose.ty(), pose.tz());
+
+            android.widget.TextView estado = findViewById(R.id.txt_geo_estado);
+            GeoCalibrador.Resultado res = calibrador.resolver();
+            if (res == null) {
+                estado.setText(calibrador.cuantasMediciones() + " medido · falta 1 más");
+                Toast.makeText(this, pc.id + " medido. Camina al siguiente punto y mide.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            estado.setText("cierre " + Math.round(res.rmsM * 100) + " cm (" + res.detalle + ")");
+            colocarGeorreferenciado(res, pose);
+        } catch (Throwable t) {
+            Toast.makeText(this, "No se pudo medir: " + String.valueOf(t.getMessage()), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** Cuelga el modelo de un ancla en el ultimo punto medido y le pone la
+     *  transformacion glb→AR compuesta. Re-medir = re-referenciar en vivo. */
+    private void colocarGeorreferenciado(GeoCalibrador.Resultado res, com.google.ar.core.Pose poseAncla) {
+        if (modelo == null || glbAUtm == null) {
+            Toast.makeText(this, "El modelo aun esta cargando…", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        quitarModelo();
+        GeoCalibrador.Semejanza glbAAr = res.utmAAr.componer(glbAUtm);
+
+        Anchor anchor = arFragment.getArSceneView().getSession()
+                .createAnchor(com.google.ar.core.Pose.makeTranslation(
+                        poseAncla.tx(), poseAncla.ty(), poseAncla.tz()));
+        ancla = new AnchorNode(anchor);
+        ancla.setParent(arFragment.getArSceneView().getScene());
+        nodoAjuste = new com.google.ar.sceneform.Node();
+        nodoAjuste.setParent(ancla);
+        nodoModelo = new com.google.ar.sceneform.Node();
+        nodoModelo.setParent(nodoAjuste);
+        nodoModelo.setRenderable(modelo);
+
+        // Mundo AR: posicion (tx, tz_cota, −ty) y giro yaw sobre la vertical.
+        nodoAjuste.setWorldPosition(new com.google.ar.sceneform.math.Vector3(
+                (float) glbAAr.tx, (float) glbAAr.tz, (float) -glbAAr.ty));
+        nodoAjuste.setWorldRotation(com.google.ar.sceneform.math.Quaternion.axisAngle(
+                com.google.ar.sceneform.math.Vector3.up(), (float) Math.toDegrees(glbAAr.yawRad)));
+        float e = (float) glbAAr.escala;
+        nodoModelo.setLocalScale(new com.google.ar.sceneform.math.Vector3(e, e, e));
+
+        android.view.View barra = findViewById(R.id.barra_ajuste);
+        if (barra != null) barra.setVisibility(android.view.View.VISIBLE);
+        ponerMallaVisible(false);
+        Toast.makeText(this, "Modelo georreferenciado · cierre " + Math.round(res.rmsM * 100)
+                + " cm. Re-mide cualquier punto para re-referenciar.", Toast.LENGTH_LONG).show();
     }
 
     /** GUARDIAN DE TRACKING. Si ARCore pierde el mapa, la camara virtual se

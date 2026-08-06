@@ -29,6 +29,59 @@
         android:textStyle="bold"
         android:visibility="gone" />
 
+    <!-- ESTACION LIBRE: medir puntos de control con el reticulo central.
+         Solo visible si el proyecto trae puntos (via Intent). Con 2+ medidos
+         el modelo aparece georreferenciado SOLO, con su cierre en cm. -->
+    <TextView
+        android:id="@+id/reticula_geo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:text="＋"
+        android:textSize="34sp"
+        android:textColor="#FFC83D"
+        android:shadowColor="#000000"
+        android:shadowRadius="6"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/barra_medicion"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="70dp"
+        android:orientation="horizontal"
+        android:background="#B31C1C27"
+        android:padding="6dp"
+        android:visibility="gone">
+
+        <Spinner
+            android:id="@+id/sel_punto"
+            android:layout_width="150dp"
+            android:layout_height="44dp"
+            android:backgroundTint="#E6E6F0" />
+
+        <Button
+            android:id="@+id/btn_medir"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:layout_marginStart="8dp"
+            android:text="📍 Medir aquí"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#1F8A4C" />
+
+        <TextView
+            android:id="@+id/txt_geo_estado"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:layout_marginStart="10dp"
+            android:textColor="#BFE8CF"
+            android:textSize="12sp"
+            android:text="0 medidos" />
+    </LinearLayout>
+
     <!-- AJUSTE DE CAMPO: mover/girar el modelo YA colocado para referenciarlo
          contra la obra real. Botones con paso conocido (1 m / 10 cm / 1 cm),
          no gestos: en un modelo de 50 m un arrastre tactil es ambiguo y se

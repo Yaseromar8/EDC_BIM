@@ -500,6 +500,12 @@ public class ARCorePlugin extends Plugin {
             float escala = (float) call.getDouble("escala", 1.0).doubleValue();
             if (url != null && !url.isEmpty()) i.putExtra("glbUrl", url);
             i.putExtra("escala", escala);
+            // Estacion libre: puntos de control del proyecto + amarre svf→UTM
+            // (datos de la PLATAFORMA — el APK jamas los trae incrustados).
+            String puntos = call.getString("puntosJson", "");
+            String amarre = call.getString("amarreJson", "");
+            if (puntos != null && !puntos.isEmpty()) i.putExtra("puntosJson", puntos);
+            if (amarre != null && !amarre.isEmpty()) i.putExtra("amarreJson", amarre);
             getActivity().startActivity(i);
             call.resolve();
         } catch (Throwable t) {

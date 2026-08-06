@@ -15,6 +15,7 @@ import LandingPage from './components/LandingPage'; // Import Landing Page
 import LoginScreen from './components/LoginScreen';
 import FilterConfiguratorModal from './components/FilterConfiguratorModal';
 import NativeARView from './components/NativeARView';
+import GeoControlPanel from './components/GeoControlPanel';
 import { isNativeAR } from './native/arcore';
 import PhotoAlbumModal from './components/PhotoAlbumModal';
 import SheetViewerPanel from './components/SheetViewerPanel';
@@ -738,6 +739,8 @@ function App() {
   const [budgetPoppedOut, setBudgetPoppedOut] = useState(false);
   const [budgetPanelHeight, setBudgetPanelHeight] = useState(320);
   const [lob4dTabOpen, setLob4dTabOpen] = useState(false);
+  // Topografía: puntos de control + amarre modelo↔UTM (base del AR georref.)
+  const [geoPanelOpen, setGeoPanelOpen] = useState(false);
   const [tableroOpen, setTableroOpen] = useState(false); // Tablero de análisis (gráficos desde Inventory)
   // Split real con el Tablero: el panel anuncia su ancho y el contenedor del
   // visor lo reserva (el ResizeObserver del Viewer hace viewer.resize()).
@@ -3913,6 +3916,25 @@ function App() {
 
             <button
               type="button"
+              className={`rail-button ${geoPanelOpen ? 'active' : ''}`}
+              style={restrictedRailStyle}
+              onClick={() => {
+                if (!isAdminUser) return denyAccess('Topografía');
+                setGeoPanelOpen((v) => !v);
+              }}
+              title={isAdminUser ? 'Topografía: puntos de control y amarre UTM' : 'Topografía (requiere permisos)'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3 L12 13"></path>
+                <circle cx="12" cy="16" r="3"></circle>
+                <path d="M5 21 L19 21"></path>
+                <path d="M7 6 L12 3 L17 6"></path>
+              </svg>
+              <span className="rail-label" style={{ fontWeight: 700 }}>Topografía</span>
+            </button>
+
+            <button
+              type="button"
               className={`rail-button ${compareMode ? 'active' : ''}`}
               onClick={() => setCompareMode(true)}
               title="Comparar (contractual vs avance)"
@@ -3995,6 +4017,14 @@ function App() {
             activeViewableGuids={activeViewableGuids}
             project={selectedProject}
             onClose={() => setLob4dTabOpen(false)}
+          />
+        )}
+
+        {geoPanelOpen && (
+          <GeoControlPanel
+            project={selectedProject}
+            BACKEND_URL={BACKEND_URL}
+            onClose={() => setGeoPanelOpen(false)}
           />
         )}
 

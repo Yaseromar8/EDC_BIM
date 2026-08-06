@@ -772,6 +772,8 @@ from routes.lob4d import lob4d_bp, ensure_lob4d_tables
 app.register_blueprint(lob4d_bp)
 from routes.lob4d_linear import lob4d_linear_bp
 app.register_blueprint(lob4d_linear_bp)
+from routes.geo_control import geo_control_bp
+app.register_blueprint(geo_control_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
