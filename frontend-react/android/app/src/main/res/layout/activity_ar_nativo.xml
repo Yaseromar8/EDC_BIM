@@ -117,6 +117,25 @@
             android:layout_marginStart="12dp" android:text="paso: 10 cm" android:textColor="#FFE9A8" android:backgroundTint="#4A3A24"/>
     </LinearLayout>
 
+    <!-- Veredicto con numeros: fps + posicion de la camara. Si los numeros no
+         cambian al mover la tablet = rastreo solo-rotacion (luz/piso). -->
+    <TextView
+        android:id="@+id/hud_diag"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_marginTop="8dp"
+        android:layout_marginStart="8dp"
+        android:paddingLeft="8dp"
+        android:paddingRight="8dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp"
+        android:background="#99101318"
+        android:textColor="#8FE3A8"
+        android:textSize="11sp"
+        android:fontFamily="monospace"
+        android:visibility="gone" />
+
     <!-- Botonera de escala: chips abajo al centro, estilo obra (oscuro).
          1:1 = enterrado real bajo el piso; maquetas = apoyadas SOBRE el piso. -->
     <LinearLayout

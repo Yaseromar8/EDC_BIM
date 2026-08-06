@@ -176,6 +176,10 @@ public class ArNativoActivity extends AppCompatActivity {
                 });
 
         arFragment.setOnTapArPlaneListener((HitResult hit, Plane plane, android.view.MotionEvent ev) -> {
+            // ESTACION LIBRE ACTIVA: el toque-coloca queda MUERTO. Convivian
+            // los dos y el modelo aparecia donde sea ANTES de medir — el
+            // usuario nunca supo que lo coloco un roce y no su medicion.
+            if (!puntosControl.isEmpty()) return;
             if (modelo == null) {
                 Toast.makeText(this, "El modelo aun esta cargando…", Toast.LENGTH_SHORT).show();
                 return;
@@ -446,8 +450,13 @@ public class ArNativoActivity extends AppCompatActivity {
             android.widget.TextView estado = findViewById(R.id.txt_geo_estado);
             GeoCalibrador.Resultado res = calibrador.resolver();
             if (res == null) {
-                estado.setText(calibrador.cuantasMediciones() + " medido · falta 1 más");
-                Toast.makeText(this, pc.id + " medido. Camina al siguiente punto y mide.", Toast.LENGTH_SHORT).show();
+                // FLUJO GUIADO: medido el 1o, el selector SALTA SOLO al
+                // siguiente sin medir — nada de menus (queja: "A o B confuso").
+                for (int i = 0; i < puntosControl.size(); i++) {
+                    if (!puntosControl.get(i).id.equals(pc.id)) { sel.setSelection(i); break; }
+                }
+                estado.setText("✓ " + pc.id + " — camina al 2º punto y MIDE");
+                Toast.makeText(this, pc.id + " listo. Camina a tu segundo punto y toca MEDIR.", Toast.LENGTH_SHORT).show();
                 return;
             }
             estado.setText("cierre " + Math.round(res.rmsM * 100) + " cm (" + res.detalle + ")");
@@ -534,8 +543,30 @@ public class ArNativoActivity extends AppCompatActivity {
                     avisoTracking.setVisibility(android.view.View.VISIBLE);
                 }
             }
+
+            // VEREDICTO CON NUMEROS ("el modelo me sigue"): si al mover la
+            // tablet estos numeros NO cambian, ARCore dejo de medir traslacion
+            // (rastreo solo-rotacion: poca luz / piso brilloso / VIO ahogado)
+            // y NINGUN motor puede anclar — la evidencia queda en pantalla.
+            framesHud++;
+            long ahora = android.os.SystemClock.elapsedRealtime();
+            if (ahora - ultimoHud > 500) {
+                float fps = framesHud * 1000f / Math.max(1, ahora - ultimoHud);
+                framesHud = 0; ultimoHud = ahora;
+                com.google.ar.core.Pose pc = frame.getCamera().getPose();
+                android.widget.TextView hud = findViewById(R.id.hud_diag);
+                if (hud != null) {
+                    hud.setText(String.format(java.util.Locale.US,
+                            "%.0f fps · cam %.2f %.2f %.2f", fps, pc.tx(), pc.ty(), pc.tz()));
+                    if (hud.getVisibility() != android.view.View.VISIBLE)
+                        hud.setVisibility(android.view.View.VISIBLE);
+                }
+            }
         });
     }
+
+    private int framesHud = 0;
+    private long ultimoHud = 0;
 
     /** Malla de escaneo + manita de instrucciones: visibles solo mientras NO
      *  hay modelo colocado. La deteccion de planos nunca se detiene. */
