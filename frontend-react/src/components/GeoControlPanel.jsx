@@ -89,6 +89,42 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
 
   const api = (ruta) => `${BACKEND_URL}${ruta}`;
 
+  // ── ENSAYO DE OFICINA ────────────────────────────────────────────────
+  // Crea 3 puntos falsos (A/B/C, geometría de cinta métrica: B a 5.00 m al
+  // este de A, C a 3.00 m al norte) y un amarre de PRUEBA calculado para que
+  // el CENTRO del tramo50 del APK caiga en A con su cota de techo al piso.
+  // Constantes ligadas a assets/ar/tramo50.geo.json (sidecar del GLB):
+  //   svf→UTM: escala 0.3048 (pies), yaw 0, t = off_sidecar ∘ (A=1000,2000,100)
+  // Es un KIT DE PRUEBA, no dato de proyecto: sobrescribe el amarre del
+  // modelo abierto — úsalo en un modelo de ensayo o re-amarra después.
+  const crearEnsayoOficina = async () => {
+    if (!window.confirm('Esto crea los puntos ENSAYO-A/B/C y SOBRESCRIBE el amarre del modelo abierto con uno de prueba. ¿Continuar?')) return;
+    const A = [1000, 2000, 100];
+    const puntosEnsayo = [
+      { punto_id: 'ENSAYO-A', este: A[0], norte: A[1], cota: A[2], descripcion: 'cruz de cinta — origen' },
+      { punto_id: 'ENSAYO-B', este: A[0] + 5, norte: A[1], cota: A[2], descripcion: 'a 5.00 m de A (esa dirección será el Este)' },
+      { punto_id: 'ENSAYO-C', este: A[0], norte: A[1] + 3, cota: A[2], descripcion: 'a 3.00 m de A, a la IZQUIERDA mirando a B' },
+    ];
+    // off del sidecar de tramo50.glb (precisión completa)
+    const off = [0.392236523437532, -1.626842559814465, -0.24774301757810235];
+    const transform = {
+      escala: 0.3048, yawDeg: 0,
+      tx: off[0] + A[0], ty: -off[2] + A[1], tz: off[1] + A[2],
+    };
+    await fetch(api('/api/geo/control-points'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: projectId, puntos: puntosEnsayo }),
+    });
+    await fetch(api('/api/geo/georef'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: projectId, urn, crs: 'ENSAYO-OFICINA', pares: [], transform, residual_m: 0 }),
+    });
+    const rr = await fetch(api(`/api/geo/control-points?project=${encodeURIComponent(projectId)}`));
+    setPuntos((await rr.json()).puntos || []);
+    setGeoref({ crs: 'ENSAYO-OFICINA', pares: [], transform, residual_m: 0 });
+    setMsj('Kit de ensayo creado: pega las cruces (B a 5.00 m de A; C a 3.00 m, a la izquierda mirando a B). Las esferas amarillas muestran DÓNDE caerán sobre el modelo.');
+  };
+
   // ── datos ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!projectId) return;
@@ -219,6 +255,9 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
             onChange={(e) => { const f = e.target.files?.[0]; if (f) subirCsv(f); e.target.value = ''; }} />
         </div>
         <div style={{ opacity: 0.65, marginTop: 4 }}>Formato: ID, Este, Norte, Cota[, descripción] — el mismo del dron.</div>
+        <div style={{ marginTop: 8 }}>
+          <button style={S.botonGris} onClick={crearEnsayoOficina}>🧪 Ensayo de oficina (3 cruces de cinta)</button>
+        </div>
 
         {msj && <div style={S.aviso}>{msj}</div>}
 
