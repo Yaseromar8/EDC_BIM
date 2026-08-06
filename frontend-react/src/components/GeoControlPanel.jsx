@@ -114,8 +114,16 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
   // ajuste Helmert de producción, y te dice a cuántos metros pegar la cruz B.
   // Las balizas quedan DONDE TOCASTE: sabes exactamente qué parte del modelo
   // caerá sobre cada cruz del piso.
-  const [ensayoClics, setEnsayoClics] = useState([]);   // [ [x,y,z] modelo ]
-  const [ensayoActivo, setEnsayoActivo] = useState(false);
+  // REGLA DE ORO (aprendida a golpes): NADA se captura ni se guarda solo.
+  // La versión anterior escuchaba clics del visor y los clics normales
+  // (seleccionar un elemento) creaban ensayos fantasma, y además inventaba
+  // un ENSAYO-C perpendicular "en el aire" que confundía. Ahora: armar la
+  // captura es un botón, captura UN toque y se desarma; guardar es OTRO
+  // botón; y solo existen A y B — exactamente donde TÚ tocaste.
+  const [modoEnsayo, setModoEnsayo] = useState(false);
+  const [capturando, setCapturando] = useState(null);   // null | 'A' | 'B'
+  const [ensayoA, setEnsayoA] = useState(null);         // [x,y,z] modelo
+  const [ensayoB, setEnsayoB] = useState(null);
 
   // El APK de prueba (ar-59) muestra el TRAMO DEL CANAL (URN v30 del DWG):
   // para que lo que tocas aquí sea lo que ves en AR, hay que amarrar ESE
@@ -126,13 +134,14 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
     if (urn && !urn.startsWith(URN_CANAL)) {
       if (!window.confirm('OJO: el AR de prueba muestra el modelo del CANAL y aquí tienes abierto OTRO modelo — en la tablet verías el canal donde no corresponde. ¿Continuar igual? (Recomendado: abre el modelo del canal y repite)')) return;
     }
-    if (!window.confirm('Vas a ELEGIR 2 puntos tocando el modelo (dos buzones que reconozcas, separados unos 3-10 m). Esto sobrescribe el amarre del modelo abierto con uno de prueba. ¿Continuar?')) return;
-    setEnsayoClics([]);
-    setEnsayoActivo(true);
-    setMsj('Toca en el MODELO tu punto A: un buzón o esquina que reconozcas fácil.');
+    setModoEnsayo(true);
+    setEnsayoA(null); setEnsayoB(null); setCapturando(null);
+    setMsj('Modo ensayo abierto: captura tus 2 puntos con los botones de abajo. NADA se guarda hasta que toques «Crear ensayo».');
   };
 
-  const guardarEnsayo = async (clicA, clicB) => {
+  const guardarEnsayo = async () => {
+    if (!ensayoA || !ensayoB) return;
+    const clicA = ensayoA, clicB = ensayoB;
     // Distancia REAL entre los toques: unidades del modelo × escala a metros
     const viewer = elViewer();
     let escalaU = 1;
@@ -140,8 +149,7 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
     const dU = Math.hypot(clicB[0] - clicA[0], clicB[1] - clicA[1], clicB[2] - clicA[2]);
     const dM = dU * escalaU;
     if (dM < 1 || dM > 60) {
-      setMsj(`Esos puntos están a ${dM.toFixed(1)} m — elige dos entre 1 y 60 m. Reintenta.`);
-      setEnsayoClics([]); setEnsayoActivo(true);
+      setMsj(`Esos puntos están a ${dM.toFixed(1)} m — captura dos entre 1 y 60 m.`);
       return;
     }
     const A = [1000, 2000, 100];
@@ -155,7 +163,6 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
     const puntosEnsayo = [
       { punto_id: 'ENSAYO-A', este: A[0], norte: A[1], cota: A[2], descripcion: 'cruz origen — el 1er punto que tocaste' },
       { punto_id: 'ENSAYO-B', este: B[0], norte: B[1], cota: B[2], descripcion: `cruz a ${dM.toFixed(2)} m de A — el 2º punto` },
-      { punto_id: 'ENSAYO-C', este: A[0], norte: A[1] + 3, cota: A[2], descripcion: 'cruz a 3.00 m de A, IZQUIERDA mirando a B' },
     ];
     const transform = { escala: aj.escala, yawDeg: aj.yawDeg, tx: aj.tx, ty: aj.ty, tz: aj.tz };
     // Sin ilusiones: el éxito se declara SOLO si el servidor confirmó ambos
@@ -177,8 +184,9 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
       const rr = await apiFetch(api(`/api/geo/control-points?project=${encodeURIComponent(projectId)}`));
       setPuntos((await rr.json()).puntos || []);
       setGeoref({ crs: 'ENSAYO-OFICINA', pares: paresEnsayo, transform, residual_m: 0 });
+      setModoEnsayo(false);
       const dTxt = (B[0] - A[0]).toFixed(2);
-      setMsj(`✅ Guardado. EN EL PISO: cruz A donde quieras; cruz B a ${dTxt} m exactos; cruz C a 3.00 m de A, a la izquierda mirando a B. En AR, lo que tocaste como A aparecerá sobre tu cruz A.`);
+      setMsj(`✅ Guardado. EN EL PISO: cruz A donde quieras; cruz B a ${dTxt} m exactos en línea recta. En AR, lo que tocaste como A aparecerá sobre tu cruz A.`);
     } catch (e) {
       setMsj('Sin conexión con el servidor: ' + String(e?.message || e));
     }
@@ -186,7 +194,7 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
 
   // Borra el kit de ensayo del SERVIDOR: puntos ENSAYO-* + amarre del modelo.
   const borrarEnsayo = async () => {
-    if (!window.confirm('¿Borrar los puntos ENSAYO-A/B/C y el amarre de este modelo del servidor?')) return;
+    if (!window.confirm('¿Borrar los puntos ENSAYO-* y el amarre de este modelo del servidor?')) return;
     try {
       for (const id of ['ENSAYO-A', 'ENSAYO-B', 'ENSAYO-C']) {
         await apiFetch(api(`/api/geo/control-points/${encodeURIComponent(id)}?project=${encodeURIComponent(projectId)}`), { method: 'DELETE' });
@@ -196,21 +204,20 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
       setPuntos((await rr.json()).puntos || []);
       setGeoref(null);
       setPares([]);
-      setEnsayoClics([]);
+      setEnsayoA(null); setEnsayoB(null); setModoEnsayo(false); setCapturando(null);
       setMsj('Ensayo borrado del servidor. Empieza de cero cuando quieras.');
     } catch (e) {
       setMsj('No se pudo borrar: ' + String(e?.message || e));
     }
   };
 
-  // Captura de los 2 toques del ensayo sobre el visor.
-  // GUARDIA ANTI-ARRASTRE: navegar (orbitar/panear) también dispara 'click'
-  // al soltar — así se "eligieron solos" dos puntos en la primera prueba.
-  // Solo cuenta un toque QUIETO: menos de 6 px entre bajar y soltar el dedo.
+  // Captura de UN toque quieto sobre el visor, solo mientras `capturando`
+  // está armado por su botón. GUARDIA ANTI-ARRASTRE: navegar también dispara
+  // 'click' al soltar; solo cuenta si el mouse se movió <6 px.
   useEffect(() => {
-    if (!ensayoActivo) return undefined;
+    if (!capturando) return undefined;
     const viewer = elViewer();
-    if (!viewer) { setMsj('El visor aún no está listo'); setEnsayoActivo(false); return undefined; }
+    if (!viewer) { setMsj('El visor aún no está listo'); setCapturando(null); return undefined; }
     const canvas = viewer.impl?.canvas || viewer.canvas;
     let bajo = null;
     const onDown = (ev) => { bajo = [ev.clientX, ev.clientY]; };
@@ -221,22 +228,15 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
       try { golpe = viewer.impl.hitTest(ev.clientX - rect.left, ev.clientY - rect.top, false); } catch { /* nada */ }
       if (!golpe || !golpe.intersectPoint) { setMsj('Ese clic no tocó el modelo — apunta a una superficie'); return; }
       const p = [golpe.intersectPoint.x, golpe.intersectPoint.y, golpe.intersectPoint.z];
-      setEnsayoClics((prev) => {
-        const sig = [...prev, p];
-        if (sig.length === 1) {
-          setMsj('Punto A capturado ✓. Ahora toca tu punto B (otro buzón, a unos 3-10 m del A). Puedes navegar: solo cuentan los toques quietos.');
-        } else if (sig.length >= 2) {
-          setEnsayoActivo(false);
-          guardarEnsayo(sig[0], sig[1]);
-        }
-        return sig;
-      });
+      if (capturando === 'A') setEnsayoA(p); else setEnsayoB(p);
+      setMsj(`Punto ${capturando} capturado ✓ — revisa las coordenadas y captura el otro, o toca «Crear ensayo».`);
+      setCapturando(null);   // UN toque y se desarma: nada queda escuchando
     };
     canvas.addEventListener('mousedown', onDown);
     canvas.addEventListener('click', onClick);
     return () => { canvas.removeEventListener('mousedown', onDown); canvas.removeEventListener('click', onClick); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ensayoActivo]);
+  }, [capturando]);
 
   // ── datos ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -404,11 +404,41 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
         </div>
         <div style={{ opacity: 0.65, marginTop: 4 }}>Formato: ID, Este, Norte, Cota[, descripción] — el mismo del dron.</div>
         <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-          <button style={S.botonGris} onClick={crearEnsayoOficina}>🧪 Ensayo de oficina (3 cruces de cinta)</button>
+          <button style={S.botonGris} onClick={crearEnsayoOficina}>🧪 Ensayo de oficina (2 cruces de cinta)</button>
           {(georef || puntos.some((p) => p.punto_id.startsWith('ENSAYO'))) && (
             <button style={{ ...S.botonGris, color: '#ffb4b4' }} onClick={borrarEnsayo}>🗑 Borrar ensayo</button>
           )}
         </div>
+
+        {modoEnsayo && (
+          <div style={{ ...S.aviso, borderLeft: '3px solid #ffc83d' }}>
+            <strong>Ensayo: elige tus 2 puntos</strong>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+              <button
+                style={capturando === 'A' ? { ...S.boton, background: '#c94f4f' } : S.boton}
+                onClick={() => { setCapturando(capturando === 'A' ? null : 'A'); setMsj(capturando === 'A' ? 'Captura cancelada' : 'Toca (quieto) en el modelo tu punto A — un buzón que reconozcas.'); }}
+              >
+                {capturando === 'A' ? '… tocando A (cancelar)' : ensayoA ? 'A ✓ (re-capturar)' : 'Capturar punto A'}
+              </button>
+              <button
+                style={capturando === 'B' ? { ...S.boton, background: '#c94f4f' } : S.boton}
+                onClick={() => { setCapturando(capturando === 'B' ? null : 'B'); setMsj(capturando === 'B' ? 'Captura cancelada' : 'Toca (quieto) en el modelo tu punto B — otro buzón, a 3-10 m del A.'); }}
+              >
+                {capturando === 'B' ? '… tocando B (cancelar)' : ensayoB ? 'B ✓ (re-capturar)' : 'Capturar punto B'}
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button
+                style={ensayoA && ensayoB ? { ...S.boton, background: '#1f8a4c' } : { ...S.botonGris, opacity: 0.5 }}
+                disabled={!ensayoA || !ensayoB}
+                onClick={guardarEnsayo}
+              >
+                💾 Crear ensayo (guardar en servidor)
+              </button>
+              <button style={S.botonGris} onClick={() => { setModoEnsayo(false); setCapturando(null); setMsj('Ensayo cancelado — nada se guardó.'); }}>Cancelar</button>
+            </div>
+          </div>
+        )}
 
         {msj && <div style={S.aviso}>{msj}</div>}
 
