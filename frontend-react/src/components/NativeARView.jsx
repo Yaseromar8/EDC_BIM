@@ -72,7 +72,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-59';
+const AR_BUILD = 'ar-60';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -145,7 +145,9 @@ export default function NativeARView({ onExit }) {
   // proyecto no los tiene, el motor abre en modo de siempre (tocar la malla).
   // Los datos viven en la PLATAFORMA; aqui solo se transportan.
   const abrirMotorNativo = async () => {
-    const base = { url: 'ar/tramo50.glb', escala: 1 };
+    // canal_v37: la zona de los 2 buzones del ensayo, RVT v37, sidecar
+  // calibrado contra los clics del usuario (desacuerdo 0.2 cm entre anclajes).
+  const base = { url: 'ar/canal_v37.glb', escala: 1 };
     try {
       const proy = JSON.parse(localStorage.getItem('visor_selectedProject') || 'null');
       // El URN puede faltar en el objeto de proyecto: el VISOR siempre sabe

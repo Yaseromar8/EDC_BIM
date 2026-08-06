@@ -1,0 +1,11 @@
+{
+  "cadena": "p_glb = Ryup(escalaSvf * p_click) + off",
+  "escalaSvf": 0.001,
+  "ejes": "click(x,y,z)->glb(x,z,-y)",
+  "off": [
+    -95.352940329234,
+    -7.125486261509897,
+    112.3750340807143
+  ],
+  "nota": "calibrado con los 2 buzones del ensayo (desacuerdo ver log)"
+}
