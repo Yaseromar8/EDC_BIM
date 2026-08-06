@@ -177,7 +177,7 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
       if (!d1.ok) { setMsj('El servidor rechazó los puntos: ' + (d1.error || r1.status)); return; }
       const r2 = await apiFetch(api('/api/geo/georef'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project: projectId, urn, crs: 'ENSAYO-OFICINA', pares: [], transform, residual_m: 0 }),
+        body: JSON.stringify({ project: projectId, urn, crs: 'ENSAYO-OFICINA', pares: paresEnsayo, transform, residual_m: 0 }),
       });
       const d2 = await r2.json();
       if (!d2.ok) { setMsj('El servidor rechazó el amarre: ' + (d2.error || r2.status)); return; }
@@ -190,6 +190,30 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
     } catch (e) {
       setMsj('Sin conexión con el servidor: ' + String(e?.message || e));
     }
+  };
+
+  // DIAGNÓSTICO DEL MARCO: el visor (LMV) aplica su propia conversión de
+  // unidades y desplazamiento interno al cargar el modelo. Para casar los
+  // clics del visor con el GLB del AR se necesita ese marco EXACTO — este
+  // botón se lo pregunta al visor y lo muestra para copiarlo, en vez de
+  // adivinar factores (así se cazó que "pies vs mm" era ambiguo).
+  const diagnosticoMarco = () => {
+    const viewer = elViewer();
+    if (!viewer?.model) { setMsj('El visor aún no tiene modelo'); return; }
+    const m = viewer.model;
+    const d = {};
+    try { d.unitScale = m.getUnitScale?.(); } catch { /* n/a */ }
+    try { d.units = m.getUnitString?.(); } catch { /* n/a */ }
+    try {
+      const bb = m.getBoundingBox?.();
+      if (bb) d.bbox = { min: [bb.min.x, bb.min.y, bb.min.z], max: [bb.max.x, bb.max.y, bb.max.z] };
+    } catch { /* n/a */ }
+    try { d.globalOffset = m.getData?.()?.globalOffset || null; } catch { /* n/a */ }
+    try { d.placement = m.getData?.()?.placementWithOffset?.elements || m.getData?.()?.placementTransform?.elements || null; } catch { /* n/a */ }
+    const txt = JSON.stringify(d);
+    try { navigator.clipboard?.writeText(txt); } catch { /* igual se muestra */ }
+    console.log('[geo] marco del visor:', d);
+    setMsj('MARCO DEL VISOR (copiado al portapapeles — pégamelo): ' + txt);
   };
 
   // Borra el kit de ensayo del SERVIDOR: puntos ENSAYO-* + amarre del modelo.
@@ -408,6 +432,7 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
           {(georef || puntos.some((p) => p.punto_id.startsWith('ENSAYO'))) && (
             <button style={{ ...S.botonGris, color: '#ffb4b4' }} onClick={borrarEnsayo}>🗑 Borrar ensayo</button>
           )}
+          <button style={S.botonGris} onClick={diagnosticoMarco} title="Marco de coordenadas del visor — para calibrar el GLB del AR">🔬</button>
         </div>
 
         {modoEnsayo && (
