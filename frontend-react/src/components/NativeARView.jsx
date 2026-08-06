@@ -72,7 +72,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-60';
+const AR_BUILD = 'ar-61';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -810,7 +810,7 @@ export default function NativeARView({ onExit }) {
             },
             {
               id: 'nativo', titulo: '🚀 Motor nativo — TU OBRA',
-              texto: 'Un tramo de 50 m del canal, anclado donde toques. Cada toque lo reubica.',
+              texto: 'TU zona con tuberías (RVT v37). Mide 2 puntos y el modelo hace lo mismo que tú.',
               nota: 'Chips 1:1 / 1:100 / 1:200 abajo: obra real enterrada o maqueta sobre el piso.',
             },
             {

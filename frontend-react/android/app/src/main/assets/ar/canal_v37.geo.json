@@ -3,9 +3,9 @@
   "escalaSvf": 0.001,
   "ejes": "click(x,y,z)->glb(x,z,-y)",
   "off": [
-    -95.352940329234,
-    -7.125486261509897,
-    112.3750340807143
+    -111.83836513392149,
+    -8.42340211961698,
+    135.93423119985488
   ],
   "nota": "calibrado con los 2 buzones del ensayo (desacuerdo ver log)"
 }
