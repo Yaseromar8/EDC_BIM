@@ -107,28 +107,57 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
 
   const api = (ruta) => `${BACKEND_URL}${ruta}`;
 
-  // ── ENSAYO DE OFICINA ────────────────────────────────────────────────
-  // Crea 3 puntos falsos (A/B/C, geometría de cinta métrica: B a 5.00 m al
-  // este de A, C a 3.00 m al norte) y un amarre de PRUEBA calculado para que
-  // el CENTRO del tramo50 del APK caiga en A con su cota de techo al piso.
-  // Constantes ligadas a assets/ar/tramo50.geo.json (sidecar del GLB):
-  //   svf→UTM: escala 0.3048 (pies), yaw 0, t = off_sidecar ∘ (A=1000,2000,100)
-  // Es un KIT DE PRUEBA, no dato de proyecto: sobrescribe el amarre del
-  // modelo abierto — úsalo en un modelo de ensayo o re-amarra después.
-  const crearEnsayoOficina = async () => {
-    if (!window.confirm('Esto crea los puntos ENSAYO-A/B/C y SOBRESCRIBE el amarre del modelo abierto con uno de prueba. ¿Continuar?')) return;
+  // ── ENSAYO DE OFICINA — TÚ eliges los puntos tocando el modelo ───────
+  // Flujo: tocas DOS sitios reconocibles del modelo (dos buzones); el panel
+  // les inventa coordenadas de ensayo coherentes (A=1000,2000 y B al este a
+  // la DISTANCIA REAL que separa tus toques), calcula el amarre con el mismo
+  // ajuste Helmert de producción, y te dice a cuántos metros pegar la cruz B.
+  // Las balizas quedan DONDE TOCASTE: sabes exactamente qué parte del modelo
+  // caerá sobre cada cruz del piso.
+  const [ensayoClics, setEnsayoClics] = useState([]);   // [ [x,y,z] modelo ]
+  const [ensayoActivo, setEnsayoActivo] = useState(false);
+
+  // El APK de prueba (ar-59) muestra el TRAMO DEL CANAL (URN v30 del DWG):
+  // para que lo que tocas aquí sea lo que ves en AR, hay que amarrar ESE
+  // modelo. Prefijo base64 de su URN (sin la versión):
+  const URN_CANAL = 'dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnpWOE5LU2pzVDRxcUxLQ2plUm1pSEE';
+
+  const crearEnsayoOficina = () => {
+    if (urn && !urn.startsWith(URN_CANAL)) {
+      if (!window.confirm('OJO: el AR de prueba muestra el modelo del CANAL y aquí tienes abierto OTRO modelo — en la tablet verías el canal donde no corresponde. ¿Continuar igual? (Recomendado: abre el modelo del canal y repite)')) return;
+    }
+    if (!window.confirm('Vas a ELEGIR 2 puntos tocando el modelo (dos buzones que reconozcas, separados unos 3-10 m). Esto sobrescribe el amarre del modelo abierto con uno de prueba. ¿Continuar?')) return;
+    setEnsayoClics([]);
+    setEnsayoActivo(true);
+    setMsj('Toca en el MODELO tu punto A: un buzón o esquina que reconozcas fácil.');
+  };
+
+  const guardarEnsayo = async (clicA, clicB) => {
+    // Distancia REAL entre los toques: unidades del modelo × escala a metros
+    const viewer = elViewer();
+    let escalaU = 1;
+    try { escalaU = viewer?.model?.getUnitScale?.() || 1; } catch { /* 1 */ }
+    const dU = Math.hypot(clicB[0] - clicA[0], clicB[1] - clicA[1], clicB[2] - clicA[2]);
+    const dM = dU * escalaU;
+    if (dM < 1 || dM > 60) {
+      setMsj(`Esos puntos están a ${dM.toFixed(1)} m — elige dos entre 1 y 60 m. Reintenta.`);
+      setEnsayoClics([]); setEnsayoActivo(true);
+      return;
+    }
     const A = [1000, 2000, 100];
-    const puntosEnsayo = [
-      { punto_id: 'ENSAYO-A', este: A[0], norte: A[1], cota: A[2], descripcion: 'cruz de cinta — origen' },
-      { punto_id: 'ENSAYO-B', este: A[0] + 5, norte: A[1], cota: A[2], descripcion: 'a 5.00 m de A (esa dirección será el Este)' },
-      { punto_id: 'ENSAYO-C', este: A[0], norte: A[1] + 3, cota: A[2], descripcion: 'a 3.00 m de A, a la IZQUIERDA mirando a B' },
+    const B = [1000 + dM, 2000, 100];
+    const paresEnsayo = [
+      { punto_id: 'ENSAYO-A', modelo: clicA, utm: A },
+      { punto_id: 'ENSAYO-B', modelo: clicB, utm: B },
     ];
-    // off del sidecar de tramo50.glb (precisión completa)
-    const off = [0.392236523437532, -1.626842559814465, -0.24774301757810235];
-    const transform = {
-      escala: 0.3048, yawDeg: 0,
-      tx: off[0] + A[0], ty: -off[2] + A[1], tz: off[1] + A[2],
-    };
+    const aj = ajustarHelmert(paresEnsayo.map((p) => ({ id: p.punto_id, origen: p.modelo, destino: p.utm })));
+    if (!aj?.ok) { setMsj('El ajuste falló: ' + (aj?.error || '?')); return; }
+    const puntosEnsayo = [
+      { punto_id: 'ENSAYO-A', este: A[0], norte: A[1], cota: A[2], descripcion: 'cruz origen — el 1er punto que tocaste' },
+      { punto_id: 'ENSAYO-B', este: B[0], norte: B[1], cota: B[2], descripcion: `cruz a ${dM.toFixed(2)} m de A — el 2º punto` },
+      { punto_id: 'ENSAYO-C', este: A[0], norte: A[1] + 3, cota: A[2], descripcion: 'cruz a 3.00 m de A, IZQUIERDA mirando a B' },
+    ];
+    const transform = { escala: aj.escala, yawDeg: aj.yawDeg, tx: aj.tx, ty: aj.ty, tz: aj.tz };
     // Sin ilusiones: el éxito se declara SOLO si el servidor confirmó ambos
     // guardados (la primera versión pintaba "amarre vigente" aunque el
     // backend hubiera respondido 401 — y el usuario probaba contra nada).
@@ -147,12 +176,41 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
       if (!d2.ok) { setMsj('El servidor rechazó el amarre: ' + (d2.error || r2.status)); return; }
       const rr = await apiFetch(api(`/api/geo/control-points?project=${encodeURIComponent(projectId)}`));
       setPuntos((await rr.json()).puntos || []);
-      setGeoref({ crs: 'ENSAYO-OFICINA', pares: [], transform, residual_m: 0 });
-      setMsj('✅ Kit guardado EN EL SERVIDOR. Pega las cruces (B a 5.00 m de A; C a 3.00 m, a la izquierda mirando a B) y abre el AR en la tablet.');
+      setGeoref({ crs: 'ENSAYO-OFICINA', pares: paresEnsayo, transform, residual_m: 0 });
+      const dTxt = (B[0] - A[0]).toFixed(2);
+      setMsj(`✅ Guardado. EN EL PISO: cruz A donde quieras; cruz B a ${dTxt} m exactos; cruz C a 3.00 m de A, a la izquierda mirando a B. En AR, lo que tocaste como A aparecerá sobre tu cruz A.`);
     } catch (e) {
       setMsj('Sin conexión con el servidor: ' + String(e?.message || e));
     }
   };
+
+  // Captura de los 2 toques del ensayo sobre el visor
+  useEffect(() => {
+    if (!ensayoActivo) return undefined;
+    const viewer = elViewer();
+    if (!viewer) { setMsj('El visor aún no está listo'); setEnsayoActivo(false); return undefined; }
+    const canvas = viewer.impl?.canvas || viewer.canvas;
+    const onClick = (ev) => {
+      const rect = canvas.getBoundingClientRect();
+      let golpe = null;
+      try { golpe = viewer.impl.hitTest(ev.clientX - rect.left, ev.clientY - rect.top, false); } catch { /* nada */ }
+      if (!golpe || !golpe.intersectPoint) { setMsj('Ese clic no tocó el modelo — apunta a una superficie'); return; }
+      const p = [golpe.intersectPoint.x, golpe.intersectPoint.y, golpe.intersectPoint.z];
+      setEnsayoClics((prev) => {
+        const sig = [...prev, p];
+        if (sig.length === 1) {
+          setMsj('Punto A capturado ✓. Ahora toca tu punto B (otro buzón, a unos 3-10 m del A).');
+        } else if (sig.length >= 2) {
+          setEnsayoActivo(false);
+          guardarEnsayo(sig[0], sig[1]);
+        }
+        return sig;
+      });
+    };
+    canvas.addEventListener('click', onClick);
+    return () => canvas.removeEventListener('click', onClick);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ensayoActivo]);
 
   // ── datos ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -256,12 +314,14 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
     const [x, y, z] = aModelo(p.este, p.norte, p.cota ?? 0);
     try {
       const nav = viewer.navigation;
-      const lejos = 25 / (georef?.transform?.escala || 1);   // ~25 m en unidades del modelo
+      const objetivo = new THREE.Vector3(x, y, z);
+      const lejos = 12 / (georef?.transform?.escala || 1);   // ~12 m en unidades del modelo
+      nav.setPivotPoint(objetivo);   // que la órbita gire alrededor del punto: sin esto el vuelo desorienta
       nav.setRequestTransition(true,
-        new THREE.Vector3(x + lejos * 0.7, y + lejos * 0.7, z + lejos * 0.6),
-        new THREE.Vector3(x, y, z),
+        new THREE.Vector3(x + lejos * 0.6, y - lejos * 0.6, z + lejos * 0.7),
+        objetivo,
         nav.getCamera()?.fov || 45);
-      setMsj(`Volando a «${p.punto_id}» — la esfera amarilla marca su posición exacta.`);
+      setMsj(`Volando a «${p.punto_id}» — baliza amarilla con palo rojo. Orbita alrededor de ella para ubicarte.`);
     } catch { setMsj('No se pudo mover la cámara'); }
   };
 
