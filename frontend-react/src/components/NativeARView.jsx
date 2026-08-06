@@ -72,7 +72,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-58';
+const AR_BUILD = 'ar-59';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -148,11 +148,16 @@ export default function NativeARView({ onExit }) {
     const base = { url: 'ar/tramo50.glb', escala: 1 };
     try {
       const proy = JSON.parse(localStorage.getItem('visor_selectedProject') || 'null');
-      if (!proy?.id || !proy?.urn) { openNativeAr(base); return; }
+      // El URN puede faltar en el objeto de proyecto: el VISOR siempre sabe
+      // qué modelo tiene cargado (misma fuente que usa la web al guardar).
+      const urn = proy?.urn
+        || (window.__mainViewer || window.NOP_VIEWER)?.model?.getData()?.urn
+        || null;
+      if (!proy?.id || !urn) { openNativeAr(base); return; }
       const BACKEND = 'https://visor-ecd-backend.onrender.com'; // camino solo-APK
       const [rp, rg] = await Promise.all([
         apiFetch(`${BACKEND}/api/geo/control-points?project=${encodeURIComponent(proy.id)}`),
-        apiFetch(`${BACKEND}/api/geo/georef?project=${encodeURIComponent(proy.id)}&urn=${encodeURIComponent(proy.urn)}`),
+        apiFetch(`${BACKEND}/api/geo/georef?project=${encodeURIComponent(proy.id)}&urn=${encodeURIComponent(urn)}`),
       ]);
       const puntos = (await rp.json())?.puntos || [];
       const georef = (await rg.json())?.georef;

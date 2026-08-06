@@ -78,7 +78,24 @@ export function parsearCsvPuntos(texto) {
 
 export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
   const projectId = project?.id != null ? String(project.id) : null;
-  const urn = project?.urn || null;
+  // El URN del modelo: el objeto de proyecto no siempre lo trae (llegó vacío
+  // en la primera prueba → 400 "project y urn son obligatorios"). El VISOR
+  // siempre sabe qué modelo tiene cargado: se le pregunta a él, con
+  // reintentos porque puede estar cargando cuando el panel abre.
+  const [urn, setUrn] = useState(project?.urn || null);
+  useEffect(() => {
+    if (urn) return undefined;
+    let intentos = 0;
+    const timer = setInterval(() => {
+      intentos += 1;
+      const delVisor = (() => {
+        try { return elViewer()?.model?.getData()?.urn || null; } catch { return null; }
+      })();
+      if (delVisor) { setUrn(delVisor); clearInterval(timer); }
+      else if (intentos > 15) clearInterval(timer);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [urn]);
   const [puntos, setPuntos] = useState([]);
   const [georef, setGeoref] = useState(null);
   const [pares, setPares] = useState([]);          // amarre en curso
