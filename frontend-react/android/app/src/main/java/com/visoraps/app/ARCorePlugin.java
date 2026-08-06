@@ -268,7 +268,7 @@ public class ARCorePlugin extends Plugin {
             // primera y se retira. Crear una segunda Session deja a las dos
             // sin camara: ts 0 para siempre, sin ningun error.
             if (running && session != null) {
-                call.resolve();
+                if (call != null) call.resolve();
                 return;
             }
             // LA SONDA YA NO CORRE. Cumplio su mision diagnostica (demostro
@@ -347,25 +347,25 @@ public class ARCorePlugin extends Plugin {
     private void continuarArranque(final PluginCall call) {
         getActivity().runOnUiThread(() -> {
             if (running && session != null) {
-                call.resolve();
+                if (call != null) call.resolve();
                 return;
             }
             try {
                 ArCoreApk.Availability availability =
                         ArCoreApk.getInstance().checkAvailability(getContext());
                 if (availability.isTransient()) {
-                    call.reject("ARCore esta verificando disponibilidad. Reintenta.");
+                    if (call != null) call.reject("ARCore esta verificando disponibilidad. Reintenta.");
                     return;
                 }
                 if (!availability.isSupported()) {
-                    call.reject("Este dispositivo no soporta ARCore");
+                    if (call != null) call.reject("Este dispositivo no soporta ARCore");
                     return;
                 }
 
                 ArCoreApk.InstallStatus installStatus =
                         ArCoreApk.getInstance().requestInstall(getActivity(), true);
                 if (installStatus == ArCoreApk.InstallStatus.INSTALL_REQUESTED) {
-                    call.reject("Instalando Google Play Services for AR. Reintenta al terminar.");
+                    if (call != null) call.reject("Instalando Google Play Services for AR. Reintenta al terminar.");
                     return;
                 }
 
@@ -428,10 +428,10 @@ public class ARCorePlugin extends Plugin {
                 running = true;   // el bucle GL puede correr; update() espera al resume
                 glView.onResume();
                 startGeoSensors();
-                call.resolve();
+                if (call != null) call.resolve();
             } catch (Exception error) {
                 cleanupSession();
-                call.reject("No se pudo iniciar ARCore: " + error.getMessage(), error);
+                if (call != null) call.reject("No se pudo iniciar ARCore: " + error.getMessage(), error);
             }
         });
     }
@@ -490,9 +490,23 @@ public class ARCorePlugin extends Plugin {
      *  tracking se cae, se apaga sola y queda vetada esta sesion. */
     /** Abre la actividad del MOTOR NATIVO (Fase 2, validacion). Nuestra
      *  sesion se pausa sola por el ciclo de vida y se reanuda al volver. */
+    // El motor nativo debe correr LIMPIO como Augin: sin otra Session de
+    // ARCore en el proceso (ni pausada — retiene pipeline y memoria) ni la
+    // GLSurfaceView del sandwich. Se LIBERA TODO antes de abrir la actividad
+    // y handleOnResume lo revive al volver. Evidencia: de noche Augin ancla
+    // firme y nuestro motor nadaba — el lastre del proceso comia el margen
+    // del tracking.
+    private boolean revivirTrasNativo = false;
+
     @PluginMethod
     public void openNativeAr(PluginCall call) {
         try {
+            if (running && session != null) {
+                getActivity().runOnUiThread(() -> {
+                    cleanupSession();
+                    revivirTrasNativo = true;
+                });
+            }
             android.content.Intent i = new android.content.Intent(getContext(), ArNativoActivity.class);
             // url: http(s) = descarga; sin esquema = asset empaquetado en el APK
             // (p.ej. "ar/canales.glb"). Vacio = el tigre de validacion.
@@ -1241,6 +1255,14 @@ public class ARCorePlugin extends Plugin {
     @Override
     protected void handleOnResume() {
         super.handleOnResume();
+        // Vuelta del motor nativo: la sesion se LIBERO entera al abrirlo
+        // (proceso limpio, como Augin). Aqui se revive de cero, sin
+        // PluginCall — el camino de arranque tolera call == null.
+        if (revivirTrasNativo && !running) {
+            revivirTrasNativo = false;
+            startInternal(null);
+            return;
+        }
         if (!running || session == null || !pausadaPorCicloDeVida) return;
         try {
             session.resume();          // primero la sesion, como el ejemplo oficial
