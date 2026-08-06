@@ -10,6 +10,7 @@ import ArCornerPanel, { useTeclasSimulador } from './ArCornerPanel';
 import { showArStake, clearArStake } from '../native/arStake';
 import ArAdjustPanel from './ArAdjustPanel';
 import { geoToViewer, seedYawFromHeading } from '../native/geoAnchor';
+import { apiFetch } from '../utils/apiFetch';
 import './ARTransparent.css';
 
 
@@ -71,7 +72,7 @@ const AUTO_PLACE_TICKS = 5;
 // Existe porque llevamos varias rondas discutiendo si el navegador tenía o no
 // el último código: sin un sello visible, un panel idéntico puede ser el de
 // hace tres arreglos y nadie lo sabe. Con esto se ve de un vistazo.
-const AR_BUILD = 'ar-57';
+const AR_BUILD = 'ar-58';
 
 export default function NativeARView({ onExit }) {
   const [status, setStatus] = useState('Iniciando camara...');
@@ -150,8 +151,8 @@ export default function NativeARView({ onExit }) {
       if (!proy?.id || !proy?.urn) { openNativeAr(base); return; }
       const BACKEND = 'https://visor-ecd-backend.onrender.com'; // camino solo-APK
       const [rp, rg] = await Promise.all([
-        fetch(`${BACKEND}/api/geo/control-points?project=${encodeURIComponent(proy.id)}`),
-        fetch(`${BACKEND}/api/geo/georef?project=${encodeURIComponent(proy.id)}&urn=${encodeURIComponent(proy.urn)}`),
+        apiFetch(`${BACKEND}/api/geo/control-points?project=${encodeURIComponent(proy.id)}`),
+        apiFetch(`${BACKEND}/api/geo/georef?project=${encodeURIComponent(proy.id)}&urn=${encodeURIComponent(proy.urn)}`),
       ]);
       const puntos = (await rp.json())?.puntos || [];
       const georef = (await rg.json())?.georef;

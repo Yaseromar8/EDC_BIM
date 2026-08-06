@@ -12,6 +12,7 @@
 // El campo (tablet) consumirá estos mismos datos: nada incrustado en APKs.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ajustarHelmert } from '../native/georefFit';
+import { apiFetch } from '../utils/apiFetch';
 
 const S = {
   panel: {
@@ -111,27 +112,38 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
       escala: 0.3048, yawDeg: 0,
       tx: off[0] + A[0], ty: -off[2] + A[1], tz: off[1] + A[2],
     };
-    await fetch(api('/api/geo/control-points'), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project: projectId, puntos: puntosEnsayo }),
-    });
-    await fetch(api('/api/geo/georef'), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project: projectId, urn, crs: 'ENSAYO-OFICINA', pares: [], transform, residual_m: 0 }),
-    });
-    const rr = await fetch(api(`/api/geo/control-points?project=${encodeURIComponent(projectId)}`));
-    setPuntos((await rr.json()).puntos || []);
-    setGeoref({ crs: 'ENSAYO-OFICINA', pares: [], transform, residual_m: 0 });
-    setMsj('Kit de ensayo creado: pega las cruces (B a 5.00 m de A; C a 3.00 m, a la izquierda mirando a B). Las esferas amarillas muestran DÓNDE caerán sobre el modelo.');
+    // Sin ilusiones: el éxito se declara SOLO si el servidor confirmó ambos
+    // guardados (la primera versión pintaba "amarre vigente" aunque el
+    // backend hubiera respondido 401 — y el usuario probaba contra nada).
+    try {
+      const r1 = await apiFetch(api('/api/geo/control-points'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project: projectId, puntos: puntosEnsayo }),
+      });
+      const d1 = await r1.json();
+      if (!d1.ok) { setMsj('El servidor rechazó los puntos: ' + (d1.error || r1.status)); return; }
+      const r2 = await apiFetch(api('/api/geo/georef'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project: projectId, urn, crs: 'ENSAYO-OFICINA', pares: [], transform, residual_m: 0 }),
+      });
+      const d2 = await r2.json();
+      if (!d2.ok) { setMsj('El servidor rechazó el amarre: ' + (d2.error || r2.status)); return; }
+      const rr = await apiFetch(api(`/api/geo/control-points?project=${encodeURIComponent(projectId)}`));
+      setPuntos((await rr.json()).puntos || []);
+      setGeoref({ crs: 'ENSAYO-OFICINA', pares: [], transform, residual_m: 0 });
+      setMsj('✅ Kit guardado EN EL SERVIDOR. Pega las cruces (B a 5.00 m de A; C a 3.00 m, a la izquierda mirando a B) y abre el AR en la tablet.');
+    } catch (e) {
+      setMsj('Sin conexión con el servidor: ' + String(e?.message || e));
+    }
   };
 
   // ── datos ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!projectId) return;
-    fetch(api(`/api/geo/control-points?project=${encodeURIComponent(projectId)}`))
+    apiFetch(api(`/api/geo/control-points?project=${encodeURIComponent(projectId)}`))
       .then((r) => r.json()).then((d) => setPuntos(d.puntos || [])).catch(() => {});
     if (urn) {
-      fetch(api(`/api/geo/georef?project=${encodeURIComponent(projectId)}&urn=${encodeURIComponent(urn)}`))
+      apiFetch(api(`/api/geo/georef?project=${encodeURIComponent(projectId)}&urn=${encodeURIComponent(urn)}`))
         .then((r) => r.json()).then((d) => setGeoref(d.georef || null)).catch(() => {});
     }
   }, [projectId, urn]);
@@ -140,14 +152,14 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
     const texto = await file.text();
     const { puntos: filas, errores } = parsearCsvPuntos(texto);
     if (!filas.length) { setMsj('CSV sin puntos válidos. ' + errores.join(' · ')); return; }
-    const r = await fetch(api('/api/geo/control-points'), {
+    const r = await apiFetch(api('/api/geo/control-points'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ project: projectId, puntos: filas }),
     });
     const d = await r.json();
     if (d.ok) {
       setMsj(`${d.cargados} puntos cargados${errores.length ? ` · ${errores.length} líneas ignoradas` : ''}`);
-      const rr = await fetch(api(`/api/geo/control-points?project=${encodeURIComponent(projectId)}`));
+      const rr = await apiFetch(api(`/api/geo/control-points?project=${encodeURIComponent(projectId)}`));
       setPuntos((await rr.json()).puntos || []);
     } else setMsj('Error: ' + (d.error || '?'));
   };
@@ -186,7 +198,7 @@ export default function GeoControlPanel({ project, BACKEND_URL, onClose }) {
 
   const guardarAmarre = async () => {
     if (!ajuste?.ok) return;
-    const r = await fetch(api('/api/geo/georef'), {
+    const r = await apiFetch(api('/api/geo/georef'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         project: projectId, urn, crs: 'UTM WGS84 17S',
