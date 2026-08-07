@@ -60,7 +60,13 @@ export async function apiFetch(url, options = {}) {
   }
   
   if (response.status === 401) {
-    if (!isPublicAuth) {
+    // En modo compartido (?shareView=) NO hay sesión a propósito: quien abre el
+    // enlace es un tercero. Tratar ese 401 como "sesión caducada" disparaba
+    // clearSession + auth-expired -> handleLogout -> setSelectedProject(null)
+    // EN MEDIO de la vista compartida, que se quedaba colgada cargando.
+    const esVistaCompartida = typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).has('shareView');
+    if (!isPublicAuth && !esVistaCompartida) {
       console.warn('[apiFetch] 401 Unauthorized — session expired');
       clearSession();
       if (onUnauthorized) {

@@ -3,6 +3,7 @@ import json
 import time
 import traceback
 from flask import Blueprint, request, jsonify
+from politica import publico_en_lectura
 from db import get_db_connection
 
 views_bp = Blueprint('views', __name__)
@@ -139,6 +140,7 @@ def delete_view_from_db(view_id):
 
 
 @views_bp.route("/api/views/<view_id>", methods=["GET"])
+@publico_en_lectura(motivo='es el enlace de vista compartida: quien lo abre es un tercero sin sesion')
 def get_view(view_id):
     view = get_view_by_id(view_id)
     if view:

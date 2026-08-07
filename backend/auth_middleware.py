@@ -260,8 +260,14 @@ def _user_in_project(user_id, project_id):
                         (str(project_id), user_id))
             ok = cur.fetchone() is not None
     except Exception as e:
+        # Ante caida de la BD: se responde con el ULTIMO valor conocido aunque
+        # haya caducado (el equipo en obra sigue trabajando durante un bache), y
+        # solo si no hay ninguno se decide por el modo. Antes era 'return True'
+        # a secas: un bache de Postgres abria todas las obras a todo el mundo.
         logger.error(f"error verificando membresia: {e}")
-        return True  # fail-open: no romper por error de BD
+        if cached:
+            return cached[0]
+        return not ENFORCE_PROJECT_AUTHZ
     _membership_cache[key] = (ok, _t.time())
     return ok
 
@@ -301,70 +307,133 @@ def _is_project_scoped(path):
     return any(path.startswith(p) for p in _PROJECT_SCOPED_PREFIXES)
 
 
+def _politica_manda():
+    """True cuando la politica declarada decide de verdad (modo estricto)."""
+    try:
+        import politica
+        return politica.MODO == 'estricto'
+    except Exception:
+        return False
+
+
+def _evaluar_politica(app, metodo, user):
+    """Aplica la politica declarada del endpoint. None = permitido."""
+    try:
+        import politica
+        pol = politica.politica_de(app, request.endpoint) if request.endpoint else None
+        if pol is None:
+            # Endpoint sin clasificar: fail-closed, exige sesion.
+            pol = politica.Politica(politica.SESION)
+        return pol.evaluar(metodo, user)
+    except Exception as e:
+        logger.error(f"error evaluando politica (se ignora): {e}")
+        return None
+
+
+def _registrar_divergencia(path, metodo, abierto, negativa, user):
+    """En sombra: registra donde la politica nueva y los prefijos no coinciden.
+
+    Estos son los logs que hay que leer ANTES de poner AUTH_POLICY_MODE=estricto.
+    Sin fecha de caducidad esto degenera: el modo log-only de la autorizacion por
+    proyecto lleva meses encendido y sus avisos no los ha leido nadie.
+    """
+    quien = (user or {}).get('id', 'anonimo')
+    if abierto and negativa:
+        logger.warning(
+            f"[politica SOMBRA cerraria] {metodo} {path} endpoint={request.endpoint} "
+            f"user={quien} motivo={negativa[1]} (hoy pasa por prefijo)"
+        )
+    elif not abierto and not negativa:
+        logger.info(
+            f"[politica SOMBRA abriria] {metodo} {path} endpoint={request.endpoint} user={quien}"
+        )
+
+
+def _abierto_por_prefijo(path, metodo):
+    """Decision HEREDADA (por prefijo de path). Se conserva para el modo sombra."""
+    if path in PUBLIC_ENDPOINTS:
+        return True
+    if metodo == 'GET' and path == '/api/config/project':
+        return True
+    for prefix in PUBLIC_PREFIXES:
+        if path.startswith(prefix):
+            return True
+    if metodo in _METODOS_LECTURA:
+        for prefix in PUBLIC_GET_PREFIXES:
+            if path.startswith(prefix):
+                return True
+    return False
+
+
+def _token_de_la_peticion(metodo):
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        return auth_header[7:]
+    if metodo in _METODOS_LECTURA:
+        # Respaldo por query string: solo en lectura. Este token de 7 dias
+        # queda escrito dentro de permalinks de fotos que luego se comparten
+        # (PhotoAlbumModal, uploadQueue), asi que quien reciba el enlace
+        # hereda la sesion. Limitarlo a GET evita que ademas sirva para
+        # escribir o borrar. Se retira del todo al firmar los enlaces (F2).
+        return request.args.get('session_token')
+    return None
+
+
 def init_auth_middleware(app):
     """Register the authentication middleware on a Flask app."""
-    
+
     @app.before_request
     def check_auth():
         # Always allow CORS preflight requests
         if request.method == 'OPTIONS':
             return None
-        
+
         path = request.path
-        
+        metodo = request.method
+
         # Skip non-API routes
         if not path.startswith('/api/'):
             return None
-        
-        # Skip public endpoints
-        if path in PUBLIC_ENDPOINTS:
-            return None
-            
-        # /api/config/project: solo GET (leer configuracion de vistas compartidas)
-        if request.method == 'GET' and path == '/api/config/project':
-            return None
 
-        # Prefijos publicos para cualquier metodo (estaticos y callbacks OAuth)
-        for prefix in PUBLIC_PREFIXES:
-            if path.startswith(prefix):
-                return None
-
-        # Prefijos publicos SOLO en lectura. Las escrituras (POST/PUT/PATCH/
-        # DELETE) caen al chequeo de sesion de abajo.
-        if request.method in _METODOS_LECTURA:
-            for prefix in PUBLIC_GET_PREFIXES:
-                if path.startswith(prefix):
-                    return None
-
-        # Extract token from Authorization header
-        auth_header = request.headers.get('Authorization', '')
-        if auth_header.startswith('Bearer '):
-            token = auth_header[7:]
-        elif request.method in _METODOS_LECTURA:
-            # Respaldo por query string: solo en lectura. Este token de 7 dias
-            # queda escrito dentro de permalinks de fotos que luego se comparten
-            # (PhotoAlbumModal, uploadQueue), asi que quien reciba el enlace
-            # hereda la sesion. Limitarlo a GET evita que ademas sirva para
-            # escribir o borrar. Se retira del todo al firmar los enlaces (F2).
-            token = request.args.get('session_token')
-        else:
-            token = None
-        
-        if not token:
-            return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
-        
-        # Validate the session (now with in-memory cache)
+        # ── 1. Identidad ──────────────────────────────────────────────────
+        # Se resuelve SIEMPRE que venga un token, incluso en rutas publicas.
+        # Antes las rutas publicas retornaban antes de mirar la cabecera, asi
+        # que g.current_user quedaba vacio y un endpoint publico-en-lectura no
+        # podia distinguir a un admin de un anonimo (GET /api/projects dejaba de
+        # entregar el invite_code al propio admin).
+        token = _token_de_la_peticion(metodo)
+        user = None
         if token == 'DEMO_TOKEN':
-            # Backdoor solo si ALLOW_DEMO_TOKEN esta activo (off por defecto -> None -> 401)
+            # Backdoor solo si ALLOW_DEMO_TOKEN esta activo (off por defecto)
             user = {'id': 'demo', 'name': 'Demo User', 'role': 'admin'} if ALLOW_DEMO_TOKEN else None
-        else:
+        elif token:
             user = validate_session(token)
-            
+        if user:
+            g.current_user = user
+
+        # ── 2. ¿Se permite? ───────────────────────────────────────────────
+        abierto = _abierto_por_prefijo(path, metodo)
+        negativa_politica = _evaluar_politica(app, metodo, user)
+
+        g._auth_verificada = True   # el tripwire sabe que aqui SI se comprobo
+
+        if _politica_manda():
+            if negativa_politica:
+                mensaje, codigo, http = negativa_politica
+                logger.warning(f"[politica BLOQUEA] {metodo} {path} endpoint={request.endpoint} code={codigo}")
+                return jsonify({'error': mensaje, 'code': codigo}), http
+        else:
+            # MODO SOMBRA: manda la logica heredada, pero se registra en que se
+            # habrian diferenciado, para poder leer los logs antes de activar.
+            _registrar_divergencia(path, metodo, abierto, negativa_politica, user)
+            if not abierto:
+                if not token:
+                    return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
+                if not user:
+                    return jsonify({'error': 'Sesión inválida o expirada', 'code': 'INVALID_TOKEN'}), 401
+
         if not user:
-            return jsonify({'error': 'Sesión inválida o expirada', 'code': 'INVALID_TOKEN'}), 401
-        
-        # Store authenticated user in Flask's g context
-        g.current_user = user
+            return None   # ruta abierta y visitante anonimo: nada mas que hacer
 
         # ── Autorizacion por proyecto ──
         # Rollout seguro: en log-only NO bloquea, pero registra EXACTAMENTE lo

@@ -25,6 +25,7 @@ import base64
 import traceback
 
 from aps import get_internal_token, get_api_data
+from politica import publico, publico_en_lectura, requiere_rol
 
 # Logging central (niveles via LOG_LEVEL). Configurar temprano, antes de todo.
 from app_logging import setup_logging
@@ -505,6 +506,7 @@ def auth_status():
     return jsonify({'connected': tokens is not None})
 
 @app.route('/api/auth/aps/login')
+@requiere_rol('admin')  # su callback SOBRESCRIBE las credenciales ACC de toda la plataforma
 def auth_login():
     client_id = os.getenv('APS_CLIENT_ID')
     redirect_uri = os.getenv('APS_REDIRECT_URI', 'http://localhost:3000/api/auth/aps/callback')
@@ -575,6 +577,7 @@ def auth_callback():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/token')
+@publico_en_lectura(motivo='el Viewer de Autodesk lo pide antes del login y en vistas compartidas por enlace; por eso el token es de solo lectura (aps.get_public_viewer_token)')
 def get_viewer_token():
     """Token para el Viewer del navegador. Publico a proposito (las vistas
     compartidas por enlace no tienen sesion), por eso es de SOLO LECTURA."""
@@ -799,6 +802,8 @@ app.register_blueprint(geo_control_bp)
 def serve_map_file(filename):
     return send_from_directory(MAP_UPLOAD_FOLDER, filename)
 
+
+
 # ── Inicializacion de esquema (se ejecuta AL IMPORTAR, es decir en el arranque
 # de cada worker de gunicorn) ────────────────────────────────────────────────
 #
@@ -867,6 +872,7 @@ _run_schema_setup()
 
 
 @app.route('/api/health')
+@publico(motivo='latido de servicio: se consulta justo cuando el backend no responde y nadie puede autenticarse')
 def health_check():
     """Latido que NO toca la base de datos.
 
@@ -950,6 +956,7 @@ def get_inventory_schema():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/inventory', methods=['GET'])
+@publico_en_lectura(motivo='la vista compartida por enlace lo pide sin sesion y sin el no se aplica ningun color ni filtro en el modelo')
 def get_inventory():
     """
     Fase 3: API Endpoint para entregar el inventario inmutable y masivo al Frontend.
@@ -1140,6 +1147,7 @@ def civil_base_axis():
 
 
 @app.route('/api/inventory/version', methods=['GET'])
+@publico_en_lectura(motivo='huella de ~100 bytes que la vista compartida consulta antes del inventario para reutilizar su cache y no bajar 7 MB')
 def get_inventory_version():
     """
     Huella de versión del inventario (respuesta de ~100 bytes). El frontend la
@@ -1302,6 +1310,26 @@ def bulk_update_inventory():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+# ── POLITICA DE ACCESO POR ENDPOINT ──────────────────────────────────────────
+# Va AL FINAL, cuando ya existen TODAS las rutas: recorre app.url_map y estampa
+# el defecto de cada blueprint donde no hay politica explicita. Si se llama antes
+# (por ejemplo justo tras registrar los blueprints), las rutas @app.route que
+# quedan mas abajo en este archivo se quedan sin clasificar.
+#
+# Sustituye el razonamiento por prefijo de path, que es el que abrio
+# POST /api/projects/<id>/users al mundo: un prefijo es una afirmacion sobre
+# TODAS las rutas que empiecen igual, presentes y futuras.
+#
+# Modo por defecto: SOMBRA (registra lo que bloquearia, no bloquea). Cuando los
+# logs esten limpios, AUTH_POLICY_MODE=estricto en Render.
+# Procedimiento completo: docs/activar-politica-de-acceso.md
+from politica import (POLITICAS_POR_BLUEPRINT, aplicar_politicas_por_defecto,
+                      instalar_tripwire)
+aplicar_politicas_por_defecto(app, POLITICAS_POR_BLUEPRINT)
+instalar_tripwire(app)
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 3000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    # debug=True nunca en produccion: en Render arranca gunicorn, no esta rama.
+    app.run(host='0.0.0.0', port=port, debug=os.getenv('FLASK_DEBUG', '') == '1')

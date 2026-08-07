@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from flask import Blueprint, request, jsonify, g
+from politica import publico, requiere_rol
 from werkzeug.security import generate_password_hash, check_password_hash
 from db import get_db_connection
 from auth_middleware import (create_session, revoke_session, revoke_all_sessions,
@@ -121,6 +122,7 @@ GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', 'placeholder-google-client-id')
 print(f"[AUTH] Google Client ID loaded: {GOOGLE_CLIENT_ID[:20]}...{GOOGLE_CLIENT_ID[-15:]}")
 
 @auth_bp.route('/api/auth/google', methods=['POST'])
+@publico(motivo='puerta de entrada: se llama antes de tener sesion')
 def google_auth():
     """Autenticación o Registro vía Google"""
     try:
@@ -193,6 +195,7 @@ def google_auth():
         return jsonify({'error': str(e)}), 500
 
 @auth_bp.route('/api/auth/login', methods=['POST'])
+@publico(motivo='puerta de entrada: se llama antes de tener sesion')
 @limite("20 per minute")                                  # por IP
 @limite("8 per minute", key_func=clave_por_correo)        # por cuenta
 @limite("40 per hour", key_func=clave_por_correo)         # barrido lento
@@ -234,6 +237,7 @@ def login():
         return jsonify({'error': str(e)}), 500
 
 @auth_bp.route('/api/auth/logout', methods=['POST'])
+@publico(motivo='debe poder cerrar sesion tambien con un token ya caducado; solo revoca el token que venga en la cabecera')
 def logout():
     """Revoke the current session token"""
     auth_header = request.headers.get('Authorization', '')
@@ -262,6 +266,7 @@ def exchange_handoff():
     return jsonify({'session_token': token})
 
 @auth_bp.route('/api/auth/register', methods=['POST'])
+@publico(motivo='alta por invitacion: quien la reclama todavia no tiene sesion (el token firmado es la prueba)')
 @limite("10 per hour")
 def register():
     """Permite a un usuario crear su propia cuenta"""
@@ -485,6 +490,7 @@ def manage_users():
             return jsonify({'error': str(e)}), 500
 
 @auth_bp.route('/api/users/<int:user_id>', methods=['DELETE'])
+@requiere_rol('admin')
 def delete_user(user_id):
     """Elimina un usuario"""
     denied = _require_admin("eliminar usuarios")

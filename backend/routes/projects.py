@@ -19,6 +19,7 @@ import json
 import re
 import time
 from flask import Blueprint, request, jsonify, g
+from politica import requiere_rol
 from db import get_db_connection
 
 projects_bp = Blueprint('projects', __name__)
@@ -166,6 +167,7 @@ def list_hubs():
 
 
 @projects_bp.route('/api/hubs', methods=['POST'])
+@requiere_rol('admin')
 def create_hub():
     """Crear una nueva municipalidad/cuenta (Hub)."""
     data = request.get_json()
@@ -278,6 +280,7 @@ def list_hub_projects(hub_id):
 
 
 @projects_bp.route('/api/hubs/<hub_id>/projects', methods=['POST'])
+@requiere_rol('admin')
 def create_hub_project(hub_id):
     """Crear un nuevo proyecto dentro de un hub."""
     data = request.get_json()
@@ -334,6 +337,7 @@ def create_hub_project(hub_id):
         return jsonify({"error": str(e)}), 500
 
 @projects_bp.route('/api/projects', methods=['POST'])
+@requiere_rol('admin')
 def create_project_legacy():
     """Fallback para crear proyectos sin especificar hub (usando el Hub default legacy)."""
     return create_hub_project('b.mdc_default_legacy')
@@ -415,6 +419,7 @@ def join_project():
 
 
 @projects_bp.route('/api/projects/<project_id>', methods=['PUT'])
+@requiere_rol('admin')
 def update_project(project_id):
     """Actualiza metadatos del proyecto (ej: vincular model_urn de APS)."""
     data = request.get_json()
@@ -445,6 +450,7 @@ def update_project(project_id):
 
 
 @projects_bp.route('/api/projects/<project_id>', methods=['DELETE'])
+@requiere_rol('admin')
 def delete_project(project_id):
     """Archiva un proyecto (soft delete)."""
     try:

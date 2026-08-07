@@ -101,7 +101,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
   // Fetch Hubs
   useEffect(() => {
     if (open && activeTab === 'DOCS') {
-      fetch(`${BACKEND_URL}/api/hubs`)
+      apiFetch(`${BACKEND_URL}/api/hubs`)
         .then(r => r.json())
         .then(res => {
           if (res.data) {
@@ -116,7 +116,7 @@ const ImportModelModal = ({ open, onClose, onLinkDocs, onUploadLocal, onExtractC
   // Fetch Projects
   useEffect(() => {
     if (selectedAccountId) {
-      fetch(`${BACKEND_URL}/api/hubs/${selectedAccountId}/projects`)
+      apiFetch(`${BACKEND_URL}/api/hubs/${selectedAccountId}/projects`)
         .then(r => r.json())
         .then(res => {
           if (res.data) {

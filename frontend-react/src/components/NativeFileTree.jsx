@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../utils/apiFetch';
 import { Capacitor } from '@capacitor/core';
 import './NativeFileTree.css';
 
@@ -22,7 +23,10 @@ const useFetch = (url) => {
         if (!url) return;
         const fetchData = async () => {
             try {
-                const res = await fetch(url);
+                // apiFetch (no fetch crudo): estas rutas devuelven el arbol de
+                // ACC resuelto con la credencial del servidor. Sin token viajaban
+                // a cualquiera que supiera la URL.
+                const res = await apiFetch(url);
                 if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
                 const json = await res.json();
                 setData(json.data);
@@ -106,7 +110,7 @@ const TreeNode = ({ node, selectedFiles, onFileSelect, hubId, projectId: context
         } else {
             const versionsUrl = API_ENDPOINTS.itemVersions(pid, node.id);
             try {
-                const res = await fetch(versionsUrl);
+                const res = await apiFetch(versionsUrl);
                 const json = await res.json();
                 if (!json.data || !json.data.length) return;
 

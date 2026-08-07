@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from flask import Blueprint, request, jsonify, redirect, Response
+from politica import publico_en_lectura, requiere_rol
 from werkzeug.utils import secure_filename
 from gcs_manager import generate_signed_url, upload_file_to_gcs, delete_gcs_blob
 
@@ -1787,6 +1788,7 @@ def share_document():
         return jsonify({"success": False, "error": str(e)}), 500
 
 @documents_bp.route('/api/docs/shared/<share_id>', methods=['GET'])
+@publico_en_lectura(motivo='enlace publico a un documento por UUID; la propia vista comprueba revocacion y vencimiento y solo entrega una URL firmada de lectura')
 def get_shared_document(share_id):
     """Retrieves a shared document metadata and a temporary signed URL for public viewing."""
     try:

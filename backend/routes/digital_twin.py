@@ -7,7 +7,8 @@ import traceback
 import threading
 import requests
 from datetime import datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
+from politica import publico_en_lectura
 from werkzeug.utils import secure_filename
 from aps import get_internal_token
 from routes.inventory import sanitize_urn
@@ -235,9 +236,20 @@ def ensure_bucket_exists(bucket_key, token):
 
 # Routes
 @digital_twin_bp.route('/api/config/project', methods=['GET'])
+@publico_en_lectura(motivo='la vista compartida por enlace la necesita para saber que modelo cargar; sin sesion solo responde si se le dice de que obra')
 def get_config_route():
     config = get_project_config_internal()
     project_id = request.args.get('project')
+
+    # Esta ruta es publica porque la vista compartida por enlace la necesita sin
+    # sesion. Pero SIN ?project devolvia TODOS los modelos de TODAS las obras
+    # con sus URN, que encadenado con /api/token (publico, data:read sobre la
+    # cuenta APS) permitia a un anonimo enumerar y abrir cualquier modelo. Sin
+    # sesion, y sin decir de que obra, no se entrega catalogo.
+    if not project_id and not getattr(g, 'current_user', None):
+        config['models'] = []
+        return jsonify(config)
+
     print(f"\n[DIAG-GET] project_id={project_id}, total_models_in_db={len(config.get('models',[]))}")
     for m in config.get('models', []):
         print(f"  [DIAG-GET] model: name={m.get('name')}, appProjectId={m.get('appProjectId')}, urn=...{str(m.get('urn',''))[-20:]}")
