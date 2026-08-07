@@ -20,3 +20,14 @@ services:
       # Render la genera una vez y la mantiene estable entre despliegues.
       - key: APP_SECRET
         generateValue: true
+      # Correo transaccional (reset de contraseña, invitaciones). Sin la clave,
+      # el backend NO se cae: registra el enlace en el log para envio manual.
+      # Alta en resend.com, plan gratis 3.000 correos/mes.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        value: COTA <onboarding@resend.dev>
+      # Origen al que apuntan los enlaces de los correos si no se puede deducir
+      # de la peticion.
+      - key: APP_URL
+        value: https://visor-ecd-frontend.onrender.com

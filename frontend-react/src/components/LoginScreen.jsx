@@ -32,6 +32,16 @@ const T = {
         entrando: 'Verificando…',
         despertando: 'El servidor estaba en reposo y está arrancando. Puede tardar hasta un minuto.',
         sinAcceso: '¿No tienes acceso? Pide al administrador de la obra que te invite.',
+        olvide: '¿Olvidaste tu contraseña?',
+        recTitulo: 'Recuperar el acceso',
+        recSub: 'Te enviaremos un enlace para elegir una contraseña nueva.',
+        recEnviar: 'Enviar enlace',
+        recEnviando: 'Enviando…',
+        recHecho: 'Si ese correo tiene una cuenta, te llegará un enlace en unos minutos. Revisa también la carpeta de no deseados.',
+        nuevaTitulo: 'Elige tu contraseña',
+        nuevaSub: 'Al cambiarla se cerrarán las demás sesiones abiertas.',
+        nuevaGuardar: 'Guardar y entrar',
+        volver: 'Volver al acceso',
         errRed: 'No se pudo conectar con el servidor. Revisa tu conexión.',
         errCreds: 'Correo o contraseña incorrectos.',
         errLimite: 'Demasiados intentos. Espera un momento antes de volver a probar.',
@@ -59,6 +69,16 @@ const T = {
         entrando: 'Checking…',
         despertando: 'The server was asleep and is starting up. This can take up to a minute.',
         sinAcceso: 'No access? Ask the site administrator to invite you.',
+        olvide: 'Forgot your password?',
+        recTitulo: 'Recover access',
+        recSub: "We'll email you a link to choose a new password.",
+        recEnviar: 'Send link',
+        recEnviando: 'Sending…',
+        recHecho: 'If that email has an account, a link is on its way. Check your spam folder too.',
+        nuevaTitulo: 'Choose your password',
+        nuevaSub: 'Changing it will sign out your other sessions.',
+        nuevaGuardar: 'Save and sign in',
+        volver: 'Back to sign in',
         errRed: 'Could not reach the server. Check your connection.',
         errCreds: 'Wrong email or password.',
         errLimite: 'Too many attempts. Please wait a moment before trying again.',
@@ -111,12 +131,23 @@ const LoginScreen = ({ onLogin }) => {
     const [lang, setLang] = useState('es');
     const t = T[lang];
 
-    const invitacion = typeof window !== 'undefined'
-        ? (new URLSearchParams(window.location.search).get('invite') || '')
-        : '';
-    const modoRegistro = Boolean(invitacion);
+    const params = typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search) : new URLSearchParams();
+    const invitacion = params.get('invite') || '';
+    const tokenReset = params.get('reset') || '';
 
-    const [correo, setCorreo] = useState(() => (invitacion ? correoDeInvitacion(invitacion) : ''));
+    // 4 modos excluyentes: acceso · alta por invitación · pedir enlace ·
+    // elegir contraseña nueva. Los dos últimos existen porque hasta ahora, si
+    // alguien olvidaba su contraseña, no había NINGUNA forma de recuperarla.
+    const [pidiendoEnlace, setPidiendoEnlace] = useState(false);
+    const [enlaceEnviado, setEnlaceEnviado] = useState(false);
+    const modoRegistro = Boolean(invitacion);
+    const modoNuevaClave = Boolean(tokenReset);
+    const modoRecuperar = pidiendoEnlace && !modoRegistro && !modoNuevaClave;
+
+    // El correo sale del token (firmado, no cifrado) para no obligar a teclearlo
+    // y para poder entrar solo tras restablecer la contraseña.
+    const [correo, setCorreo] = useState(() => correoDeInvitacion(invitacion || tokenReset));
     const [clave, setClave] = useState('');
     const [verClave, setVerClave] = useState(false);
     const [nombre, setNombre] = useState('');
@@ -199,6 +230,32 @@ const LoginScreen = ({ onLogin }) => {
         }
     };
 
+    const pedirEnlace = async (e) => {
+        e.preventDefault();
+        if (enviando || !correo.trim()) return;
+        // La respuesta del servidor es CONSTANTE exista o no la cuenta, así que
+        // aquí tampoco se distingue: decirlo sería un buscador de correos.
+        await pedir('/api/auth/forgot-password', { email: correo.trim() });
+        setEnlaceEnviado(true);
+    };
+
+    const guardarNuevaClave = async (e) => {
+        e.preventDefault();
+        if (enviando || !clave) return;
+        if (clave !== clave2) { setError(t.errDistintas); return; }
+        const { ok, estado, datos } = await pedir('/api/auth/reset-password', {
+            token: tokenReset, password: clave,
+        });
+        if (ok) {
+            // La contraseña ya cambió; se entra con ella para no pedirla dos veces.
+            const acceso = await pedir('/api/auth/login', { email: correo.trim(), password: clave });
+            if (acceso.ok) { setEntrado(true); onLogin(acceso.datos); }
+            else { window.history.replaceState({}, '', window.location.pathname); setPidiendoEnlace(false); }
+        } else {
+            setError(estado === 0 ? t.errRed : (datos.error || t.errCreds));
+        }
+    };
+
     // Google solo si de verdad está cargado. Sin red (APK en obra) el script no
     // existe y el botón no debe aparecer prometiendo algo que no funciona.
     const [hayGoogle, setHayGoogle] = useState(false);
@@ -216,9 +273,31 @@ const LoginScreen = ({ onLogin }) => {
         setHayGoogle(true);
     }, [pedir, onLogin, t]);
 
-    const enviarTexto = modoRegistro
-        ? (enviando ? t.creando : t.crear)
+    const enviarTexto = modoRegistro ? (enviando ? t.creando : t.crear)
+        : modoRecuperar ? (enviando ? t.recEnviando : t.recEnviar)
+        : modoNuevaClave ? (enviando ? t.creando : t.nuevaGuardar)
         : (enviando ? t.entrando : t.entrar);
+
+    const alEnviar = modoRegistro ? registrar
+        : modoRecuperar ? pedirEnlace
+        : modoNuevaClave ? guardarNuevaClave
+        : acceder;
+
+    const titulo = modoRegistro ? t.regTitulo
+        : modoRecuperar ? t.recTitulo
+        : modoNuevaClave ? t.nuevaTitulo
+        : t.titulo;
+
+    const subtitulo = modoRegistro ? t.regSub
+        : modoRecuperar ? t.recSub
+        : modoNuevaClave ? t.nuevaSub
+        : t.sub;
+
+    // Campos visibles por modo
+    const pideNombre = modoRegistro;
+    const pideClave = !modoRecuperar;
+    const pideRepetir = modoRegistro || modoNuevaClave;
+    const correoBloqueado = modoRegistro || modoNuevaClave;
 
     return (
         <div className="cta-login">
@@ -243,11 +322,20 @@ const LoginScreen = ({ onLogin }) => {
                 <div className="cta-panel__caja">
                     <div className="cta-panel__marca"><Marca /><span className="cta-bajada">{MARCA_BAJADA}</span></div>
 
-                    <h1 className="cta-titulo">{modoRegistro ? t.regTitulo : t.titulo}</h1>
-                    <p className="cta-sub">{modoRegistro ? t.regSub : t.sub}</p>
+                    <h1 className="cta-titulo">{titulo}</h1>
+                    <p className="cta-sub">{subtitulo}</p>
 
-                    <form onSubmit={modoRegistro ? registrar : acceder} noValidate>
-                        {modoRegistro && (
+                    {enlaceEnviado ? (
+                        <>
+                            <p className="cta-espera" role="status">{t.recHecho}</p>
+                            <button
+                                type="button" className="cta-google"
+                                onClick={() => { setEnlaceEnviado(false); setPidiendoEnlace(false); }}
+                            >{t.volver}</button>
+                        </>
+                    ) : (
+                    <form onSubmit={alEnviar} noValidate>
+                        {pideNombre && (
                             <div className="cta-campo">
                                 <label htmlFor="nombre">{t.nombre}</label>
                                 <input
@@ -269,20 +357,22 @@ const LoginScreen = ({ onLogin }) => {
                                 /* readOnly y no disabled: el correo de la invitación no
                                    se teclea (evita erratas) pero el campo sigue contando
                                    para que el gestor de contraseñas ofrezca guardarlo. */
-                                readOnly={modoRegistro}
-                                required autoFocus={!modoRegistro}
+                                readOnly={correoBloqueado}
+                                required autoFocus={!correoBloqueado}
                             />
                         </div>
 
+                        {pideClave && (
                         <div className="cta-campo">
                             <label htmlFor="clave">{t.password}</label>
                             <div className="cta-campo__conBoton">
                                 <input
                                     id="clave" name="password"
                                     type={verClave ? 'text' : 'password'}
-                                    autoComplete={modoRegistro ? 'new-password' : 'current-password'}
+                                    autoComplete={pideRepetir ? 'new-password' : 'current-password'}
                                     value={clave} onChange={(e) => setClave(e.target.value)}
                                     disabled={enviando} required
+                                    autoFocus={modoNuevaClave}
                                 />
                                 <button
                                     type="button" className="cta-ojo"
@@ -295,8 +385,9 @@ const LoginScreen = ({ onLogin }) => {
                                 </button>
                             </div>
                         </div>
+                        )}
 
-                        {modoRegistro && (
+                        {pideRepetir && (
                             <div className="cta-campo">
                                 <label htmlFor="clave2">{t.repetir}</label>
                                 <input
@@ -318,9 +409,19 @@ const LoginScreen = ({ onLogin }) => {
                             {enviando && <span className="cta-giro" aria-hidden="true" />}
                             {enviarTexto}
                         </button>
-                    </form>
 
-                    {!modoRegistro && hayGoogle && (
+                        {/* Recuperar la contraseña: hasta ahora no existía
+                            ninguna vía y cada olvido acababa en la base de datos. */}
+                        {!modoRegistro && !modoNuevaClave && (
+                            <button
+                                type="button" className="cta-enlace"
+                                onClick={() => { setError(''); setPidiendoEnlace(!pidiendoEnlace); }}
+                            >{modoRecuperar ? t.volver : t.olvide}</button>
+                        )}
+                    </form>
+                    )}
+
+                    {!modoRegistro && !modoRecuperar && !modoNuevaClave && !enlaceEnviado && hayGoogle && (
                         <>
                             <div className="cta-separador"><span>o</span></div>
                             <button
@@ -339,7 +440,9 @@ const LoginScreen = ({ onLogin }) => {
                         </>
                     )}
 
-                    <p className="cta-nota">{modoRegistro ? '' : t.sinAcceso}</p>
+                    <p className="cta-nota">
+                        {modoRegistro || modoNuevaClave || enlaceEnviado ? '' : t.sinAcceso}
+                    </p>
                 </div>
             </section>
         </div>

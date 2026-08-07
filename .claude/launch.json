@@ -1,17 +1,6 @@
 {
   "version": "0.0.1",
   "configurations": [
-    {
-      "name": "visor-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend-react", "run", "dev"],
-      "autoPort": true
-    },
-    {
-      "name": "docs-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend-docs", "run", "dev"],
-      "autoPort": true
-    }
+    { "name": "visor-dev", "url": "http://localhost:5181" }
   ]
 }

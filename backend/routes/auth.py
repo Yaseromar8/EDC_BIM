@@ -7,9 +7,22 @@ from db import get_db_connection
 from auth_middleware import (create_session, revoke_session, revoke_all_sessions,
                              create_handoff_ticket, consume_handoff_ticket)
 from rate_limit import limite, clave_por_correo
-from enlaces_firmados import emitir, leer, PROPOSITO_INVITACION
+from enlaces_firmados import emitir, leer, PROPOSITO_INVITACION, PROPOSITO_RESET
+from password_policy import validar as validar_password
+import mailer
 
 auth_bp = Blueprint('auth', __name__)
+
+
+def _origen_del_cliente():
+    """De donde vino la peticion, para armar enlaces que apunten a la web
+    correcta (visor o portal de documentos) y no al backend."""
+    origen = (request.headers.get('Origin') or request.headers.get('Referer') or '').strip()
+    if origen.startswith('http'):
+        from urllib.parse import urlparse
+        u = urlparse(origen)
+        return f'{u.scheme}://{u.netloc}'
+    return os.getenv('APP_URL', 'https://visor-ecd-frontend.onrender.com').rstrip('/')
 
 
 def _require_admin(accion="esta acción"):
@@ -266,6 +279,103 @@ def exchange_handoff():
         return jsonify({'error': 'Ticket inválido o vencido'}), 401
     return jsonify({'session_token': token})
 
+@auth_bp.route('/api/auth/forgot-password', methods=['POST'])
+@publico(motivo='quien ha olvidado su contraseña por definicion no puede autenticarse')
+@limite("5 per hour", key_func=clave_por_correo)
+@limite("20 per hour")
+def forgot_password():
+    """Envía un enlace de restablecimiento. Nunca revela si el correo existe."""
+    correo = ((request.get_json(silent=True) or {}).get('email') or '').strip().lower()
+
+    # RESPUESTA CONSTANTE, exista o no la cuenta. Si aqui se distinguiera, este
+    # endpoint se convertiria en un oraculo para saber quien trabaja en la obra
+    # — que es justo la lista que necesita un ataque de phishing dirigido.
+    respuesta = jsonify({
+        'success': True,
+        'message': 'Si ese correo tiene una cuenta, le llegará un enlace para restablecer la contraseña.'
+    }), 200
+
+    if not correo:
+        return respuesta
+
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT id, name, password_hash FROM users WHERE email = %s', (correo,))
+            fila = cursor.fetchone()
+    except Exception as e:
+        print(f"[auth] forgot-password: error de BD: {e}")
+        return respuesta
+
+    # Sin cuenta, o invitacion pendiente (password_hash vacio): no hay nada que
+    # restablecer. Se responde igual, sin decirlo.
+    if not fila or not fila[2]:
+        return respuesta
+
+    user_id, nombre = fila[0], fila[1]
+    token = emitir(PROPOSITO_RESET, {'uid': user_id, 'email': correo})
+    enlace = f"{_origen_del_cliente()}/?reset={token}"
+
+    enviado, detalle = mailer.enviar(
+        destino=correo,
+        asunto='Restablece tu contraseña',
+        titulo='Restablece tu contraseña',
+        cuerpo=f'Hola {nombre or ""}, recibimos una solicitud para cambiar la contraseña de tu cuenta. '
+               f'El enlace caduca en 1 hora y solo puede usarse una vez.',
+        enlace=enlace,
+        texto_boton='Cambiar mi contraseña',
+    )
+    if not enviado:
+        print(f"[auth] enlace de reset NO enviado ({detalle}); queda en el log para envio manual")
+    return respuesta
+
+
+@auth_bp.route('/api/auth/reset-password', methods=['POST'])
+@publico(motivo='se llama con el token del enlace, no con una sesion')
+@limite("10 per hour")
+def reset_password():
+    """Fija una contraseña nueva a partir del token del enlace."""
+    datos = request.get_json(silent=True) or {}
+    contenido, motivo = leer(PROPOSITO_RESET, datos.get('token'))
+    if not contenido:
+        return jsonify({'error': f'El enlace no sirve: {motivo}. Pide uno nuevo.',
+                        'code': 'TOKEN_INVALIDO'}), 400
+
+    nueva = datos.get('password') or ''
+    user_id = contenido.get('uid')
+    correo = contenido.get('email')
+
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # El token lleva el correo dentro y va firmado: se exige que ambos
+            # sigan casando, para que un cambio de correo invalide los enlaces
+            # emitidos antes.
+            cursor.execute('SELECT email, name FROM users WHERE id = %s', (user_id,))
+            fila = cursor.fetchone()
+            if not fila or (fila[0] or '').lower() != (correo or '').lower():
+                return jsonify({'error': 'El enlace ya no es válido. Pide uno nuevo.'}), 400
+
+            # Con el nombre real delante: la política también rechaza que la
+            # contraseña sea el propio nombre del usuario.
+            fallo = validar_password(nueva, correo=correo, nombre=fila[1])
+            if fallo:
+                return jsonify({'error': fallo, 'code': 'PASSWORD_DEBIL'}), 400
+
+            cursor.execute('UPDATE users SET password_hash = %s WHERE id = %s',
+                           (generate_password_hash(nueva), user_id))
+            conn.commit()
+    except Exception as e:
+        print(f"[auth] reset-password: error de BD: {e}")
+        return jsonify({'error': 'No se pudo cambiar la contraseña. Inténtalo de nuevo.'}), 500
+
+    # Restablecer la contraseña cierra TODAS las sesiones: el motivo habitual
+    # para llegar aqui es que alguien mas tiene acceso.
+    cerradas = revoke_all_sessions(user_id)
+    return jsonify({'success': True, 'sesiones_cerradas': cerradas,
+                    'message': 'Contraseña actualizada. Ya puedes entrar.'}), 200
+
+
 @auth_bp.route('/api/auth/register', methods=['POST'])
 @publico(motivo='alta por invitacion: quien la reclama todavia no tiene sesion (el token firmado es la prueba)')
 @limite("10 per hour")
@@ -281,7 +391,13 @@ def register():
         
         if not name or not email or not password:
             return jsonify({'error': 'Nombre, correo y contraseña son requeridos'}), 400
-            
+
+        # La politica se aplica en el SERVIDOR. El minimo vivia solo en la
+        # pantalla, asi que llamando la API se creaba una cuenta con "a".
+        fallo = validar_password(password, correo=email, nombre=name)
+        if fallo:
+            return jsonify({'error': fallo, 'code': 'PASSWORD_DEBIL'}), 400
+
         hashed_pw = generate_password_hash(password)
         
         with get_db_connection() as conn:
@@ -378,8 +494,11 @@ def change_password():
         if not current_password or not new_password:
             return jsonify({'error': 'Faltan campos requeridos'}), 400
 
-        if len(new_password) < 6:
-            return jsonify({'error': 'La nueva contraseña debe tener al menos 6 caracteres'}), 400
+        # Misma politica que en registro y reset: antes aqui el minimo era 6 y
+        # en el registro no habia ninguno.
+        fallo = validar_password(new_password, correo=sesion.get('email'), nombre=sesion.get('name'))
+        if fallo:
+            return jsonify({'error': fallo, 'code': 'PASSWORD_DEBIL'}), 400
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
