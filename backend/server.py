@@ -45,24 +45,41 @@ else:
     CORS(app, resources={r"/*": {"origins": "*"}})
     print("[security] CORS abierto (*). Define CORS_ORIGINS para restringir en produccion.")
 
+
+# --- CABECERAS DE SEGURIDAD ---
+# El backend no ponia ninguna: HTTPS existia solo porque lo termina el borde de
+# Render, y la app no declaraba nada. Estas cuatro son las que aplican a una API
+# JSON (no se define CSP aqui: esta app no sirve HTML, y una CSP mal puesta
+# rompe el Viewer de Autodesk sin aportar nada).
+@app.after_request
+def cabeceras_de_seguridad(respuesta):
+    respuesta.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    respuesta.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+    respuesta.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    if request.is_secure or request.headers.get('X-Forwarded-Proto') == 'https':
+        respuesta.headers.setdefault(
+            'Strict-Transport-Security', 'max-age=31536000; includeSubDomains'
+        )
+    return respuesta
+
+
 # --- AUTH MIDDLEWARE ---
 from auth_middleware import init_auth_middleware
 init_auth_middleware(app)
 
 # --- RATE LIMITING ---
-try:
-    from flask_limiter import Limiter
-    from flask_limiter.util import get_remote_address
-    limiter = Limiter(
-        get_remote_address,
-        app=app,
-        default_limits=["200 per minute"],
-        storage_uri="memory://",
-    )
-    print("[security] Rate limiter initialized: 200 req/min general")
-except ImportError:
-    print("[security] WARNING: Flask-Limiter not installed. Run: pip install Flask-Limiter")
-    limiter = None
+# Flask-Limiter figuraba aqui pero NO en requirements.txt, asi que en Render se
+# ejecutaba el except ImportError y limiter quedaba en None: cero limite real
+# contra fuerza bruta en /api/auth/login. Ahora esta pinneado.
+#
+# Almacenamiento: si hay REDIS_URL (Render Key Value) el contador es COMPARTIDO
+# entre los 4 workers de gunicorn y el limite es exacto. Sin el, cae a memoria
+# de proceso y cada worker cuenta aparte, con lo que el limite efectivo se
+# multiplica por el numero de workers. Aun asi frena la fuerza bruta; queda
+# anotado para no leer los numeros como exactos.
+from rate_limit import limiter
+if limiter is not None:
+    limiter.init_app(app)
 
 # Register Blueprints
 
@@ -559,7 +576,10 @@ def auth_callback():
 
 @app.route('/api/token')
 def get_viewer_token():
-    token, error = get_internal_token()
+    """Token para el Viewer del navegador. Publico a proposito (las vistas
+    compartidas por enlace no tienen sesion), por eso es de SOLO LECTURA."""
+    from aps import get_public_viewer_token
+    token, error = get_public_viewer_token()
     if error:
         return jsonify({'error': error}), 500
     return jsonify({'access_token': token})

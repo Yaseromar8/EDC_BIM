@@ -43,40 +43,39 @@ PUBLIC_ENDPOINTS = {
     '/api/job_titles',      # Public for registration form
 }
 
-# Prefixes that bypass session-token auth
-# ─ Static files: served directly, no auth needed
-# ─ APS proxy endpoints: authenticated via Autodesk 2-legged/3-legged tokens
-#   (managed by the backend, not by user session)
-# 
-# PROTECTED by session token (NOT listed here):
-#   /api/docs/*      → ECD document CRUD
-#   /api/users       → User listing
-#   /api/tracking/*  → Construction progress tracking
-#   /api/pins/*      → 3D annotation pins
-#   /api/digital-twin/* → Digital twin data
-#   /api/views/*     → Saved views
-#   /api/maps/*      → GIS maps
-#   /api/ai/*        → AI assistant
-#   /api/schedule/*  → Project schedule
+# Prefijos exentos de sesion para CUALQUIER metodo. Solo ficheros estaticos y
+# callbacks OAuth de Autodesk, que no pueden llevar nuestra cabecera.
 PUBLIC_PREFIXES = (
-    # Static file serving
-    '/maps/',                 # Static map tiles
-    '/docs/uploads/',         # Static uploaded file serving
-    # Autodesk APS proxy (uses internal Autodesk tokens, not user sessions)
-    '/api/auth/aps/',         # APS OAuth callbacks
-    '/api/hubs',              # ACC hubs (2-legged token)
-    '/api/projects',          # ACC projects (2-legged token)
-    '/api/build/',            # ACC upload/translation (2-legged token)
-    '/api/images/',           # Image proxy (2-legged token)
-    '/api/documents/',        # ACC document linking (2-legged token)
-    # ── Secure Share Engine: SOLO links publicos por UUID ──────────────
-    '/api/docs/shared/',      # Public UUID-based document viewer links
-    '/api/views/',            # Public UUID-based shared views
-    # NOTA (Fase 3): /api/inventory, /api/presupuesto y /api/config/* salieron
-    # de aqui -> ahora EXIGEN sesion (y quedan cubiertos por authz por proyecto).
-    # El frontend ya los llama via apiFetch (token). GET /api/config/project
-    # sigue permitido por el caso especial de abajo (vistas compartidas).
+    '/maps/',                 # Tiles de mapa estaticos
+    '/docs/uploads/',         # Servido estatico de ficheros subidos
+    '/api/auth/aps/',         # Callbacks OAuth de APS
 )
+
+# ── Prefijos publicos SOLO PARA LECTURA (GET/HEAD) ─────────────────────────
+# Estos endpoints se sirven con el token 2-legged de Autodesk que pone el
+# backend, y hay lectores anonimos legitimos (vistas compartidas por UUID,
+# miniaturas). Pero la ESCRITURA nunca fue publica a proposito: el prefijo
+# '/api/projects' (sin barra final) tapaba tambien POST /api/projects/<id>/users,
+# POST /api/projects/join y PUT/DELETE /api/projects/<id>, y como _require_admin
+# permitia cuando no habia sesion, un anonimo podia reasignar la membresia de
+# una obra o repuntarla a otro modelo. Separar por metodo cierra esa via sin
+# tocar a los lectores.
+#
+# PROTEGIDO por sesion (no listado aqui): /api/docs/*, /api/users,
+# /api/tracking/*, /api/pins/*, /api/digital-twin/*, /api/maps/*, /api/ai/*,
+# /api/schedule/*, /api/inventory, /api/presupuesto, /api/config/*.
+PUBLIC_GET_PREFIXES = (
+    '/api/hubs',              # Hubs de ACC (token 2-legged)
+    '/api/projects',          # Proyectos de ACC (token 2-legged)
+    '/api/build/',            # Subida/traduccion en ACC (token 2-legged)
+    '/api/images/',           # Proxy de imagenes (token 2-legged)
+    '/api/documents/',        # Vinculacion de documentos de ACC (token 2-legged)
+    # ── Secure Share Engine: SOLO enlaces publicos por UUID ──────────────
+    '/api/docs/shared/',      # Enlaces publicos a documentos por UUID
+    '/api/views/',            # Vistas compartidas por UUID
+)
+
+_METODOS_LECTURA = ('GET', 'HEAD')
 
 
 def generate_session_token():
@@ -185,6 +184,40 @@ def validate_session(token):
         return None
 
 
+def revoke_all_sessions(user_id, excepto=None):
+    """Cierra TODAS las sesiones de un usuario. Devuelve cuantas cerro.
+
+    Se usa al cambiar la contrasena: si te roban la tablet en obra, cambiarla
+    tiene que echar al ladron. Sin esto su token seguia valido hasta 7 dias.
+    """
+    from db import get_db_connection
+    # Vaciar el cache local: el token revocado no debe seguir sirviendo desde
+    # memoria. Con varios workers cada uno limpia el suyo al pasar por aqui;
+    # el resto caduca en _SESSION_CACHE_TTL.
+    for token, (user, _ts) in list(_session_cache.items()):
+        if str(user.get('id')) == str(user_id) and token != excepto:
+            _session_cache.pop(token, None)
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            if excepto:
+                cursor.execute(
+                    'UPDATE sessions SET is_active = FALSE WHERE user_id = %s AND token <> %s AND is_active = TRUE',
+                    (user_id, excepto)
+                )
+            else:
+                cursor.execute(
+                    'UPDATE sessions SET is_active = FALSE WHERE user_id = %s AND is_active = TRUE',
+                    (user_id,)
+                )
+            cerradas = cursor.rowcount
+            conn.commit()
+            return cerradas
+    except Exception as e:
+        logger.error(f"Error revocando sesiones del usuario {user_id}: {e}")
+        return 0
+
+
 def revoke_session(token):
     """Revoke a session token (logout)."""
     # Immediately evict from cache on logout
@@ -287,25 +320,35 @@ def init_auth_middleware(app):
         if path in PUBLIC_ENDPOINTS:
             return None
             
-        # Specific public routes for Gateway/BYPASS_AUTH mode
-        # /api/views: Allow all methods (save/delete views without session token)
-        # /api/config/project: Allow GET only (read config for shared views)
-        if path == '/api/views':
-            return None
+        # /api/config/project: solo GET (leer configuracion de vistas compartidas)
         if request.method == 'GET' and path == '/api/config/project':
             return None
-        
-        # Skip public prefixes
+
+        # Prefijos publicos para cualquier metodo (estaticos y callbacks OAuth)
         for prefix in PUBLIC_PREFIXES:
             if path.startswith(prefix):
                 return None
-        
+
+        # Prefijos publicos SOLO en lectura. Las escrituras (POST/PUT/PATCH/
+        # DELETE) caen al chequeo de sesion de abajo.
+        if request.method in _METODOS_LECTURA:
+            for prefix in PUBLIC_GET_PREFIXES:
+                if path.startswith(prefix):
+                    return None
+
         # Extract token from Authorization header
         auth_header = request.headers.get('Authorization', '')
         if auth_header.startswith('Bearer '):
             token = auth_header[7:]
+        elif request.method in _METODOS_LECTURA:
+            # Respaldo por query string: solo en lectura. Este token de 7 dias
+            # queda escrito dentro de permalinks de fotos que luego se comparten
+            # (PhotoAlbumModal, uploadQueue), asi que quien reciba el enlace
+            # hereda la sesion. Limitarlo a GET evita que ademas sirva para
+            # escribir o borrar. Se retira del todo al firmar los enlaces (F2).
+            token = request.args.get('session_token')
         else:
-            token = request.args.get('session_token')  # Fallback: query param
+            token = None
         
         if not token:
             return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401

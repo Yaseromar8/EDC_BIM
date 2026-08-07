@@ -3,7 +3,10 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 from werkzeug.security import generate_password_hash, check_password_hash
 from db import get_db_connection
-from auth_middleware import create_session, revoke_session, create_handoff_ticket, consume_handoff_ticket
+from auth_middleware import (create_session, revoke_session, revoke_all_sessions,
+                             create_handoff_ticket, consume_handoff_ticket)
+from rate_limit import limite, clave_por_correo
+from enlaces_firmados import emitir, leer, PROPOSITO_INVITACION
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -18,8 +21,11 @@ def _require_admin(accion="esta acción"):
     """
     user = getattr(g, 'current_user', None)
     if not user:
-        # Sin sesión: lo maneja el middleware de autenticación.
-        return None
+        # FAIL-CLOSED. Antes devolvia None (=permitido) delegando en el middleware,
+        # pero el middleware no corria para las rutas bajo el prefijo publico
+        # '/api/projects', asi que un anonimo pasaba este guard. Un guard nunca
+        # debe asumir que otro ya comprobo: si no hay sesion, aqui se corta.
+        return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
     if user.get('role') != 'admin':
         return jsonify({'error': f'Solo los administradores pueden {accion}.'}), 403
     return None
@@ -190,16 +196,19 @@ def google_auth():
         return jsonify({'error': str(e)}), 500
 
 @auth_bp.route('/api/auth/login', methods=['POST'])
+@limite("20 per minute")                                  # por IP
+@limite("8 per minute", key_func=clave_por_correo)        # por cuenta
+@limite("40 per hour", key_func=clave_por_correo)         # barrido lento
 def login():
     """Valida las credenciales de un usuario con contraseña"""
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         email = data.get('email')
         password = data.get('password')
-        
+
         if not email or not password:
             return jsonify({'error': 'Faltan credenciales'}), 400
-            
+
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
@@ -256,6 +265,7 @@ def exchange_handoff():
     return jsonify({'session_token': token})
 
 @auth_bp.route('/api/auth/register', methods=['POST'])
+@limite("10 per hour")
 def register():
     """Permite a un usuario crear su propia cuenta"""
     try:
@@ -281,6 +291,16 @@ def register():
             if existing_user:
                 u_id, u_hash, u_role = existing_user
                 if not u_hash: # Es una invitación pendiente
+                    # Reclamar exige el token firmado que emitio el admin al
+                    # invitar. Antes bastaba con conocer el correo, y ademas se
+                    # heredaba el rol invitado (admin incluido): toma de cuenta.
+                    datos, motivo = leer(PROPOSITO_INVITACION, data.get('invite_token'))
+                    if not datos or (datos.get('email') or '').lower() != (email or '').strip().lower():
+                        return jsonify({
+                            'error': 'Necesitas el enlace de invitación que te envió el administrador'
+                                     + (f' ({motivo})' if motivo else '.'),
+                            'code': 'INVITE_REQUIRED'
+                        }), 403
                     cursor.execute('''
                         UPDATE users SET name=%s, password_hash=%s, company_id=%s, job_title_id=%s
                         WHERE id=%s
@@ -342,12 +362,17 @@ def me():
 def change_password():
     """Permite al usuario cambiar su contraseña (requiere contraseña actual)"""
     try:
-        data = request.get_json()
-        user_id = data.get('user_id')
+        data = request.get_json() or {}
+        # El usuario sale de la SESION, no del cuerpo: antes se podia operar
+        # sobre la cuenta de otro pasando su user_id.
+        sesion = getattr(g, 'current_user', None)
+        if not sesion:
+            return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
+        user_id = sesion.get('id')
         current_password = data.get('current_password')
         new_password = data.get('new_password')
 
-        if not user_id or not current_password or not new_password:
+        if not current_password or not new_password:
             return jsonify({'error': 'Faltan campos requeridos'}), 400
 
         if len(new_password) < 6:
@@ -368,7 +393,18 @@ def change_password():
             cursor.execute('UPDATE users SET password_hash = %s WHERE id = %s', (new_hash, user_id))
             conn.commit()
 
-            return jsonify({'success': True, 'message': 'Contraseña actualizada correctamente'}), 200
+        # Fuera del bloque anterior para que el UPDATE ya este confirmado.
+        # Se conserva la sesion actual: quien cambia la contraseña no se
+        # autoexpulsa, pero cualquier otra sesion (tablet perdida) muere aqui.
+        actual = request.headers.get('Authorization', '')
+        actual = actual[7:] if actual.startswith('Bearer ') else None
+        cerradas = revoke_all_sessions(user_id, excepto=actual)
+
+        return jsonify({
+            'success': True,
+            'message': 'Contraseña actualizada correctamente',
+            'sesiones_cerradas': cerradas
+        }), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -389,13 +425,22 @@ def manage_users():
                     ORDER BY u.created_at DESC
                 ''')
                 rows = cursor.fetchall()
+                # El padron completo (correo, empresa, cargo, rol) es una lista
+                # de objetivos de phishing dirigido. Solo el admin lo ve entero;
+                # el resto recibe lo justo para elegir destinatarios en
+                # transmittals y revisiones.
+                sesion = getattr(g, 'current_user', None)
+                es_admin = bool(sesion and sesion.get('role') == 'admin')
                 users = []
                 for r in rows:
-                    users.append({
-                        'id': r[0], 'name': r[1], 'email': r[2], 'role': r[3],
-                        'created_at': r[4].isoformat() if r[4] else None,
-                        'company_name': r[5] or 'N/A', 'job_title_name': r[6] or 'N/A'
-                    })
+                    if es_admin:
+                        users.append({
+                            'id': r[0], 'name': r[1], 'email': r[2], 'role': r[3],
+                            'created_at': r[4].isoformat() if r[4] else None,
+                            'company_name': r[5] or 'N/A', 'job_title_name': r[6] or 'N/A'
+                        })
+                    else:
+                        users.append({'id': r[0], 'name': r[1]})
                 return jsonify(users), 200
         except Exception as e:
             return jsonify({'error': str(e)}), 500
@@ -421,12 +466,24 @@ def manage_users():
                 if cursor.fetchone():
                     return jsonify({'error': 'El email ya existe o ya fue invitado'}), 400
                     
+                correo = email.strip().lower()
                 cursor.execute('''
                     INSERT INTO users (name, email, password_hash, role)
                     VALUES (%s, %s, %s, %s)
-                ''', ('(Invitado pendiente)', email.strip(), '', role))
+                ''', ('(Invitado pendiente)', correo, '', role))
                 conn.commit()
-                return jsonify({'success': True}), 201
+
+                # El token es la prueba de que la invitacion viene del admin.
+                # Sin el, reclamar la cuenta solo exigia conocer el correo.
+                # Mientras no haya envio de correo (F3), el admin copia este
+                # enlace y lo hace llegar por su medio.
+                token = emitir(PROPOSITO_INVITACION, {'email': correo, 'role': role})
+                return jsonify({
+                    'success': True,
+                    'invite_token': token,
+                    'invite_url': f"{request.host_url.rstrip('/')}/registro?invite={token}",
+                    'nota': 'Comparte este enlace con la persona invitada. Caduca en 14 días.'
+                }), 201
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 

@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import NativeFileTree from './NativeFileTree';
+import { apiFetch } from '../utils/apiFetch';
+
+const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location.hostname.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) ? `http://${window.location.hostname}:3000` : 'https://visor-ecd-backend.onrender.com')));
 
 const ACCEPTED_TYPES = '.apng,.avif,.csv,.doc,.docx,.gif,.jpeg,.jpg,.odp,.ods,.odt,.pdf,.png,.ppt,.pptx,.svg,.txt,.webp,.xls,.xlsx';
 
@@ -32,7 +35,7 @@ const AddDocumentModal = ({ open, onClose, onConfirm, targetSpriteId, selectedPr
     for (const file of files) {
       const form = new FormData();
       form.append('file', file);
-      const response = await fetch('/api/documents/upload', {
+      const response = await apiFetch(`${BACKEND_URL}/api/documents/upload`, {
         method: 'POST',
         body: form
       });
@@ -69,7 +72,7 @@ const AddDocumentModal = ({ open, onClose, onConfirm, targetSpriteId, selectedPr
     if (tab === 'docs' && selectedAccDoc) {
       try {
         setUploading(true);
-        const response = await fetch('/api/documents/link', {
+        const response = await apiFetch(`${BACKEND_URL}/api/documents/link`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

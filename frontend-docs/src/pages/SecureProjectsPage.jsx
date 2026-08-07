@@ -16,6 +16,10 @@ function UsersTab() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('user');
   const [error, setError] = useState('');
+  // Enlace de invitacion recien emitido. Sin el, la persona no puede reclamar
+  // su cuenta: reclamarla ya no basta con conocer el correo.
+  const [invitacion, setInvitacion] = useState(null);
+  const [copiado, setCopiado] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -36,15 +40,26 @@ function UsersTab() {
         method: 'POST',
         body: JSON.stringify({ email: email.trim(), role })
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setShowCreate(false);
-        setEmail(''); setRole('user');
+        // El enlace se arma con el origen de ESTA web (donde se registra la
+        // persona), no con el del backend.
+        setInvitacion({
+          email: email.trim(),
+          url: `${window.location.origin}/?invite=${encodeURIComponent(data.invite_token || '')}`
+        });
+        setCopiado(false);
         fetchUsers();
       } else {
-        const data = await res.json();
         setError(data.error || 'Error al crear usuario');
       }
     } catch (e) { setError('Error de red'); }
+  };
+
+  const cerrarInvitacion = () => {
+    setInvitacion(null);
+    setShowCreate(false);
+    setEmail(''); setRole('user');
   };
 
   const handleDelete = async (id) => {
@@ -101,7 +116,32 @@ function UsersTab() {
           </tbody>
         </table>
       }
-      {showCreate && (
+      {showCreate && invitacion && (
+        <div className="modal-overlay" onClick={cerrarInvitacion}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <h3>Invitación creada</h3>
+            <p style={{ fontSize: 13, color: '#555', marginBottom: 12, lineHeight: 1.4 }}>
+              Envíale este enlace a <b>{invitacion.email}</b> por WhatsApp o correo. Es la
+              prueba de que la invitación es tuya: sin él nadie puede reclamar esa cuenta,
+              aunque conozca el correo. <b>Caduca en 14 días.</b>
+            </p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+              <input readOnly value={invitacion.url} onFocus={e => e.target.select()} style={{ flex: 1, fontSize: 12, fontFamily: 'monospace' }} />
+              <button
+                className="btn btn-secondary"
+                onClick={async () => {
+                  try { await navigator.clipboard.writeText(invitacion.url); setCopiado(true); }
+                  catch { setCopiado(false); }
+                }}
+              >{copiado ? '✓ Copiado' : 'Copiar'}</button>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-primary" onClick={cerrarInvitacion}>Listo</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showCreate && !invitacion && (
         <div className="modal-overlay" onClick={() => setShowCreate(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <h3>Invitar usuario</h3>
@@ -110,7 +150,7 @@ function UsersTab() {
             </p>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#fff8e6', border: '1px solid #f0d9a0', borderRadius: 5, padding: '9px 11px', marginBottom: 12, fontSize: 12.5, color: '#7a5c14', lineHeight: 1.45 }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
-              <span><b>El sistema no envía correos.</b> Avísale tú por WhatsApp o teléfono y pídele que entre a esta misma dirección web y cree su cuenta usando <b>exactamente</b> este correo.</span>
+              <span><b>El sistema no envía correos.</b> Al invitar se genera un <b>enlace de invitación</b> que tendrás que hacerle llegar tú (WhatsApp, correo). Sin ese enlace la cuenta no se puede reclamar.</span>
             </div>
             {error && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

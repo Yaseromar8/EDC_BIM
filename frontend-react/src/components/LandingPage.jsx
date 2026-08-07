@@ -92,9 +92,11 @@ const LandingPage = ({ onSelectProject }) => {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
+            // apiFetch (no fetch crudo): el backend deriva de la SESION que
+            // obras puede ver quien llama, en vez de fiarse de ?role= en la URL.
             const [hubsRes, projsRes] = await Promise.all([
-                fetch(`${BACKEND_URL}/api/hubs`),
-                fetch(`${BACKEND_URL}/api/projects`)
+                apiFetch(`${BACKEND_URL}/api/hubs`),
+                apiFetch(`${BACKEND_URL}/api/projects`)
             ]);
             if (hubsRes.ok) {
                 const hd = await hubsRes.json();
@@ -144,7 +146,7 @@ const LandingPage = ({ onSelectProject }) => {
         if (!newHubName.trim()) return;
         setSaving(true);
         try {
-            const res = await fetch(`${BACKEND_URL}/api/hubs`, {
+            const res = await apiFetch(`${BACKEND_URL}/api/hubs`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: newHubName.trim(), region: newHubRegion.trim() })
@@ -164,7 +166,7 @@ const LandingPage = ({ onSelectProject }) => {
         if (!newProjName.trim() || !targetHub) return;
         setSaving(true);
         try {
-            const res = await fetch(`${BACKEND_URL}/api/hubs/${targetHub}/projects`, {
+            const res = await apiFetch(`${BACKEND_URL}/api/hubs/${targetHub}/projects`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

@@ -170,8 +170,12 @@ def check_folder_permission(user, node_id, model_urn, required_level, action_nam
     from flask import jsonify
     
     if not user:
-        return None  # Sin usuario autenticado, dejar que el middleware lo maneje
-    
+        # FAIL-CLOSED. Un guard no debe asumir que el middleware ya rechazo al
+        # anonimo: basta que la ruta caiga bajo un prefijo publico para que no
+        # lo haya hecho.
+        return jsonify({"success": False, "error": "Autenticación requerida"}), 401
+
+
     user_id = user.get('id')
     effective = get_effective_permission(user_id, node_id, model_urn)
     effective_level = PERMISSION_LEVELS.get(effective, 0)

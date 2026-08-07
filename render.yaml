@@ -12,3 +12,11 @@ services:
         value: 5
       - key: LOB_REQUIRE_SOURCE_ARCHIVE
         value: true
+      # Sin esta variable el backend cae a CORS '*' (server.py). Incluye los
+      # origenes del APK Capacitor o la app de campo deja de hablar con el backend.
+      - key: CORS_ORIGINS
+        value: https://visor-ecd-frontend.onrender.com,https://visor-ecd-docs.onrender.com,https://visor-ecd-portal.onrender.com,capacitor://localhost,https://localhost,http://localhost:5173
+      # Clave para firmar enlaces de invitacion / reset / verificacion.
+      # Render la genera una vez y la mantiene estable entre despliegues.
+      - key: APP_SECRET
+        generateValue: true

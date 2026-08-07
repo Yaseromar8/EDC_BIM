@@ -222,9 +222,12 @@ const LoginScreen = ({ onLogin }) => {
         if (regPass !== regConfirm) { setError('Passwords do not match'); return; }
         setLoading(true); setError('');
         try {
+            // invite_token: prueba de que la invitación la emitió el admin.
+            // Sin él, reclamar una cuenta pendiente bastaba con saber el correo.
+            const invite = new URLSearchParams(window.location.search).get('invite') || '';
             const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: regName.trim(), email: regEmail.trim(), password: regPass })
+                body: JSON.stringify({ name: regName.trim(), email: regEmail.trim(), password: regPass, invite_token: invite })
             });
             const data = await res.json();
             if (res.ok) {

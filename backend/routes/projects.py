@@ -18,7 +18,7 @@ import os
 import json
 import re
 import time
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from db import get_db_connection
 
 projects_bp = Blueprint('projects', __name__)
@@ -192,8 +192,19 @@ def create_hub():
 @projects_bp.route('/api/projects', methods=['GET'])
 def list_all_projects():
     """Todos los proyectos agrupados por Hub. Usado por Landing Page."""
-    user_id = request.args.get('user_id')
-    role = request.args.get('role', 'user')
+    # La identidad sale de la SESION, nunca de la query string. Antes bastaba
+    # con pedir ?role=admin para saltarse el filtro de membresia y recibir el
+    # catalogo entero: el rol se leia de la URL, que la pone quien llama.
+    sesion = getattr(g, 'current_user', None)
+    if sesion:
+        user_id = sesion.get('id')
+        role = sesion.get('role', 'user')
+    else:
+        # Lector anonimo (vistas compartidas): ve lo minimo y nunca el codigo
+        # de invitacion.
+        user_id = None
+        role = 'anon'
+    es_admin = role == 'admin'
 
     try:
         with get_db_connection() as conn:
@@ -211,7 +222,7 @@ def list_all_projects():
             params = []
 
             # Si no es admin, filtrar por los proyectos asignados en project_users
-            if role != 'admin' and user_id:
+            if not es_admin and user_id:
                 query += " AND p.id IN (SELECT project_id FROM project_users WHERE user_id = %s)"
                 params.append(user_id)
 
@@ -228,7 +239,9 @@ def list_all_projects():
                 "updated_at": r[10].isoformat() if r[10] else None,
                 "hub_name": r[11] or "Sin Municipalidad",
                 "region": r[12],
-                "invite_code": r[13]
+                # El invite_code es la llave de auto-inscripcion a la obra
+                # (POST /api/projects/join). Solo lo ve un admin.
+                "invite_code": r[13] if es_admin else None
             } for r in rows]
         return jsonify({"projects": projects}), 200
     except Exception as e:
@@ -361,13 +374,20 @@ def get_project(project_id):
 @projects_bp.route('/api/projects/join', methods=['POST'])
 def join_project():
     """Unirse a un proyecto usando su invite_code."""
-    data = request.get_json()
+    data = request.get_json() or {}
     code = (data.get('invite_code') or '').strip().upper()
-    user_id = data.get('user_id')
-    
-    if not code or not user_id:
-        return jsonify({"error": "Código de invitación y usuario requeridos"}), 400
-        
+
+    # Uno se inscribe a SI MISMO. Antes el user_id venia del cuerpo, asi que con
+    # un codigo de invitacion se podia meter en la obra a cualquier tercero.
+    sesion = getattr(g, 'current_user', None)
+    if not sesion:
+        return jsonify({"error": "Autenticación requerida", "code": "NO_TOKEN"}), 401
+    user_id = sesion.get('id')
+
+    if not code:
+        return jsonify({"error": "Código de invitación requerido"}), 400
+
+
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()

@@ -58,8 +58,10 @@ def verify_project_access(user_or_id, model_urn):
     model_urn == 'global' se permite sin verificación (datos compartidos).
     Usa caché in-memory con TTL de 120s.
     """
-    if not user_or_id or not model_urn or model_urn == 'global':
-        return True  # Global namespace no requiere verificación
+    if not model_urn or model_urn == 'global':
+        return True  # Namespace global: dato compartido, sin obra asociada
+    if not user_or_id:
+        return False  # FAIL-CLOSED: sin identidad no se accede a datos de obra
     try:
         if isinstance(user_or_id, dict):
             user_id = user_or_id.get('id')
@@ -72,7 +74,7 @@ def verify_project_access(user_or_id, model_urn):
             return True
 
         if not user_id:
-            return True
+            return False  # FAIL-CLOSED
 
         # 1. Check in-memory cache (0ms)
         cache_key = (user_id, model_urn)
