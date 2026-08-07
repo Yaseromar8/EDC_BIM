@@ -25,6 +25,22 @@ def _origen_del_cliente():
     return os.getenv('APP_URL', 'https://visor-ecd-frontend.onrender.com').rstrip('/')
 
 
+def registrar_evento(evento, email=None, user_id=None, detalle=None):
+    """Deja rastro de los accesos. Nunca revienta la peticion por fallar."""
+    try:
+        ip = (request.headers.get('X-Forwarded-For') or request.remote_addr or '').split(',')[0].strip()
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                'INSERT INTO auth_events (evento, email, user_id, ip, user_agent, detalle)'
+                ' VALUES (%s, %s, %s, %s, %s, %s)',
+                (evento, (email or '')[:255] or None, user_id, ip[:64],
+                 (request.headers.get('User-Agent') or '')[:500], detalle))
+            conn.commit()
+    except Exception as e:
+        print(f"[auth] no se pudo registrar el evento {evento}: {e}")
+
+
 def _require_admin(accion="esta acción"):
     """Guard de administrador para gestión de usuarios.
 
@@ -97,6 +113,32 @@ def ensure_users_tables():
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_project_users_user_project
                 ON project_users (user_id, project_id)
+            ''')
+
+            # Desactivar en vez de borrar: hasta ahora la unica accion sobre un
+            # usuario era el DELETE fisico, que arrastra en cascada sus sesiones,
+            # accesos y permisos. Retirar el acceso a alguien que deja la obra no
+            # deberia borrar su rastro de quien hizo que.
+            cursor.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE')
+            cursor.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP')
+
+            # Auditoria de accesos: sin esto un ataque de fuerza bruta no deja
+            # ningun rastro y no hay forma de saber quien entro ni desde donde.
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS auth_events (
+                    id SERIAL PRIMARY KEY,
+                    creado_en TIMESTAMP DEFAULT NOW(),
+                    evento VARCHAR(40) NOT NULL,
+                    email VARCHAR(255),
+                    user_id INTEGER,
+                    ip VARCHAR(64),
+                    user_agent TEXT,
+                    detalle TEXT
+                )
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_auth_events_creado
+                ON auth_events (creado_en DESC)
             ''')
             
             # La migración pesada se ha removido para evitar bloqueos en la base de datos
@@ -225,16 +267,28 @@ def login():
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                SELECT u.id, u.name, u.email, u.password_hash, u.role, 
-                       c.name as company_name, j.name as job_title_name
+                SELECT u.id, u.name, u.email, u.password_hash, u.role,
+                       c.name as company_name, j.name as job_title_name,
+                       COALESCE(u.is_active, TRUE)
                 FROM users u
                 LEFT JOIN companies c ON u.company_id = c.id
                 LEFT JOIN job_titles j ON u.job_title_id = j.id
                 WHERE u.email = %s
             ''', (email,))
             user = cursor.fetchone()
-            
+
             if user and user[3] and check_password_hash(user[3], password):
+                if not user[7]:
+                    # Cuenta desactivada: mismo mensaje que credenciales malas.
+                    # Decir "tu cuenta esta desactivada" confirmaria que existe.
+                    registrar_evento('login_desactivado', email=email, user_id=user[0])
+                    return jsonify({'error': 'Correo o contraseña incorrectos'}), 401
+                registrar_evento('login_ok', email=email, user_id=user[0])
+                try:
+                    cursor.execute('UPDATE users SET last_login_at = NOW() WHERE id = %s', (user[0],))
+                    conn.commit()
+                except Exception:
+                    pass
                 return jsonify({
                     'id': user[0],
                     'name': user[1],
@@ -245,9 +299,13 @@ def login():
                     'session_token': create_session(user[0])
                 }), 200
             else:
+                registrar_evento('login_fallido', email=email,
+                                 user_id=(user[0] if user else None))
                 return jsonify({'error': 'Correo o contraseña incorrectos'}), 401
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        # str(e) al cliente filtraba detalles internos de la base de datos.
+        print(f"[auth] error en login: {e}")
+        return jsonify({'error': 'No se pudo procesar el acceso. Inténtalo de nuevo.'}), 500
 
 @auth_bp.route('/api/auth/logout', methods=['POST'])
 @publico(motivo='debe poder cerrar sesion tambien con un token ya caducado; solo revoca el token que venga en la cabecera')
@@ -612,18 +670,91 @@ def manage_users():
 @auth_bp.route('/api/users/<int:user_id>', methods=['DELETE'])
 @requiere_rol('admin')
 def delete_user(user_id):
-    """Elimina un usuario"""
-    denied = _require_admin("eliminar usuarios")
+    """Retira el acceso de un usuario. DESACTIVA, no borra.
+
+    El DELETE fisico arrastraba en cascada sus sesiones, accesos y permisos: al
+    retirar a alguien que deja la obra se perdia tambien el rastro de quien hizo
+    que. Se puede forzar el borrado real con ?purgar=1, pero no es lo normal.
+    """
+    denied = _require_admin("retirar el acceso de un usuario")
     if denied:
         return denied
+
+    sesion = getattr(g, 'current_user', None)
+    if sesion and str(sesion.get('id')) == str(user_id):
+        return jsonify({'error': 'No puedes retirarte el acceso a ti mismo.'}), 400
+
+    purgar = request.args.get('purgar') == '1'
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('DELETE FROM users WHERE id = %s', (user_id,))
+            # No dejar la plataforma sin ningun admin activo.
+            cursor.execute("SELECT role, COALESCE(is_active, TRUE) FROM users WHERE id = %s", (user_id,))
+            fila = cursor.fetchone()
+            if not fila:
+                return jsonify({'error': 'Usuario no encontrado'}), 404
+            if fila[0] == 'admin':
+                cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin' AND COALESCE(is_active, TRUE)")
+                if (cursor.fetchone() or [0])[0] <= 1:
+                    return jsonify({'error': 'Es el único administrador activo: asigna otro antes.'}), 400
+
+            if purgar:
+                cursor.execute('DELETE FROM users WHERE id = %s', (user_id,))
+                evento = 'usuario_borrado'
+            else:
+                cursor.execute('UPDATE users SET is_active = FALSE WHERE id = %s', (user_id,))
+                evento = 'usuario_desactivado'
             conn.commit()
-            return jsonify({'success': True}), 200
+
+        # Desactivar sin cerrar sus sesiones no retira nada: su token seguiria
+        # sirviendo hasta 7 dias.
+        revoke_all_sessions(user_id)
+        registrar_evento(evento, user_id=user_id,
+                         detalle=f"por admin {sesion.get('id') if sesion else '?'}")
+        return jsonify({'success': True, 'purgado': purgar}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"[auth] error retirando acceso: {e}")
+        return jsonify({'error': 'No se pudo completar la operación.'}), 500
+
+
+@auth_bp.route('/api/users/<int:user_id>/role', methods=['PATCH'])
+@requiere_rol('admin')
+def cambiar_rol(user_id):
+    """Cambia el rol de un usuario. Antes no habia forma: solo borrar y reinvitar."""
+    denied = _require_admin("cambiar el rol de un usuario")
+    if denied:
+        return denied
+
+    nuevo = ((request.get_json(silent=True) or {}).get('role') or '').strip()
+    if nuevo not in ('user', 'editor', 'viewer', 'admin'):
+        return jsonify({'error': 'Rol inválido'}), 400
+
+    sesion = getattr(g, 'current_user', None)
+    if sesion and str(sesion.get('id')) == str(user_id) and nuevo != 'admin':
+        return jsonify({'error': 'No puedes quitarte a ti mismo el rol de administrador.'}), 400
+
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT role FROM users WHERE id = %s', (user_id,))
+            fila = cursor.fetchone()
+            if not fila:
+                return jsonify({'error': 'Usuario no encontrado'}), 404
+            if fila[0] == 'admin' and nuevo != 'admin':
+                cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin' AND COALESCE(is_active, TRUE)")
+                if (cursor.fetchone() or [0])[0] <= 1:
+                    return jsonify({'error': 'Es el único administrador activo.'}), 400
+            cursor.execute('UPDATE users SET role = %s WHERE id = %s', (nuevo, user_id))
+            conn.commit()
+
+        # Cambiar el rol tiene que surtir efecto YA: el rol viaja dentro de la
+        # sesion cacheada, asi que sin revocar seguiria con el rol viejo.
+        revoke_all_sessions(user_id)
+        registrar_evento('rol_cambiado', user_id=user_id, detalle=f'{fila[0]} -> {nuevo}')
+        return jsonify({'success': True, 'role': nuevo}), 200
+    except Exception as e:
+        print(f"[auth] error cambiando rol: {e}")
+        return jsonify({'error': 'No se pudo cambiar el rol.'}), 500
 
 # -------------------------------------------------------------
 # Endpoints para Etiquetas de Empresas y Cargos (Admin)

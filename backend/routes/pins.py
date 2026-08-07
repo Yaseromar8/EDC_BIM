@@ -66,11 +66,13 @@ def get_pins():
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            # CRITICO: Filtrar por project_id para evitar fuga de datos
+            # Filtrar por project_id. Antes llevaba 'OR project_id IS NULL', que
+            # con los pines antiguos sin obra asignada devolvia marcadores de
+            # cualquier obra a cualquiera.
             cursor.execute("""
                 SELECT id, name, type, x_coord, y_coord, z_coord, created_at, updated_at, attachment_urn 
                 FROM control_pins 
-                WHERE project_id = %s OR project_id IS NULL
+                WHERE project_id = %s
                 ORDER BY created_at ASC
             """, (project_id,))
             rows = cursor.fetchall()

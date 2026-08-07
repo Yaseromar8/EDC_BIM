@@ -220,6 +220,46 @@ def _existing_file_id(cursor, model_urn, parent_id, filename):
     return row[0] if row else None
 
 
+def _acceso_al_recurso(gcs_urn=None, node_id=None):
+    """Comprueba el acceso a un archivo POR EL ARCHIVO, no por lo que diga el cliente.
+
+    Estas rutas sirven bytes identificando el fichero por ?urn=, ?id= o ?path=,
+    y tomaban la obra del parametro ?model_urn, que lo elige quien llama. Es
+    decir: se validaba la obra que el atacante DECLARABA, no la del archivo
+    pedido. Mandar (model_urn = mi obra, id = de otra obra) pasaba el control.
+
+    Devuelve None si se permite, o una respuesta de error.
+    """
+    user = getattr(g, 'current_user', None)
+    if not user:
+        return jsonify({"success": False, "error": "Autenticación requerida"}), 401
+    if user.get('role') == 'admin':
+        return None
+
+    obra_real = None
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            if node_id:
+                cursor.execute("SELECT model_urn FROM file_nodes WHERE id = %s", (node_id,))
+            elif gcs_urn:
+                cursor.execute("SELECT model_urn FROM file_nodes WHERE gcs_urn = %s LIMIT 1", (gcs_urn,))
+            else:
+                return None
+            fila = cursor.fetchone()
+            obra_real = fila[0] if fila else None
+    except Exception as e:
+        print(f"[ACL] no se pudo resolver la obra del recurso: {e}")
+        return jsonify({"success": False, "error": "No se pudo verificar el acceso"}), 503
+
+    if obra_real is None:
+        return None   # el fichero no esta en el arbol: no hay obra que proteger
+    if not verify_project_access(user, obra_real):
+        return jsonify({"success": False, "error": "Sin acceso a este documento"}), 403
+    return None
+
+
 @documents_bp.route('/api/docs/view', methods=['GET'])
 def view_document():
     """Redirige a una URL firmada fresca. Acepta path o urn directamente."""
@@ -248,6 +288,10 @@ def view_document():
 
     if not gcs_urn:
         return jsonify({"success": False, "error": "File not found"}), 404
+
+    denegado = _acceso_al_recurso(gcs_urn=gcs_urn, node_id=node_id or None)
+    if denegado:
+        return denegado
 
     url = generate_signed_url(gcs_urn)
     if url:
@@ -281,6 +325,10 @@ def get_signed_url_json():
     
     if not gcs_urn:
         return jsonify({"success": False, "error": "File not found"}), 404
+
+    denegado = _acceso_al_recurso(gcs_urn=gcs_urn, node_id=node_id or None)
+    if denegado:
+        return denegado
 
     url = generate_signed_url(gcs_urn)
     if url:
@@ -409,6 +457,10 @@ def proxy_document():
     
     if not gcs_urn:
         return jsonify({"success": False, "error": "Document URN not found"}), 404
+
+    denegado = _acceso_al_recurso(gcs_urn=gcs_urn, node_id=node_id or None)
+    if denegado:
+        return denegado
 
     from gcs_manager import generate_signed_url, get_blob_data, get_or_create_thumbnail
     from flask import redirect, Response

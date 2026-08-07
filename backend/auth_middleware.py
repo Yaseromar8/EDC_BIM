@@ -127,25 +127,69 @@ _SESSION_CACHE_TTL = 60  # seconds
 
 # Los SPAs de Docs y Visor pueden estar en distintos orígenes. Un ticket
 # opaco, de un único uso y de 60 segundos evita exponer la sesión reutilizable
-# en una URL al pasar entre ellos.
-_handoff_tickets = {}  # ticket -> (session_token, expires_at)
+# en una URL al pasar entre ellos. Se guarda en Postgres (ver más abajo): en
+# memoria de proceso no funcionaba con varios workers.
+
+
+def _asegurar_tabla_tickets(cursor):
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS handoff_tickets (
+            ticket VARCHAR(64) PRIMARY KEY,
+            session_token VARCHAR(128) NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            used_at TIMESTAMP
+        )
+    ''')
 
 
 def create_handoff_ticket(session_token, ttl_seconds=60):
+    """Emite un ticket de un solo uso para pasar de Docs al Visor.
+
+    EN POSTGRES, no en memoria del proceso. Antes vivia en un diccionario y
+    gunicorn corre con 4 workers: el ticket se creaba en un worker y se canjeaba
+    en otro con probabilidad 3/4. Esa es la causa real de que el paso entre Docs
+    y el Visor fallara ~3 de cada 4 veces; no era un problema de sesion.
+    """
+    from db import get_db_connection
     ticket = secrets.token_urlsafe(32)
-    now = time.time()
-    for key, (_token, expires_at) in list(_handoff_tickets.items()):
-        if expires_at <= now:
-            _handoff_tickets.pop(key, None)
-    _handoff_tickets[ticket] = (session_token, now + ttl_seconds)
-    return ticket
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            _asegurar_tabla_tickets(cursor)
+            cursor.execute("DELETE FROM handoff_tickets WHERE expires_at < NOW() - INTERVAL '1 hour'")
+            cursor.execute(
+                "INSERT INTO handoff_tickets (ticket, session_token, expires_at)"
+                " VALUES (%s, %s, NOW() + make_interval(secs => %s))",
+                (ticket, session_token, ttl_seconds))
+            conn.commit()
+        return ticket
+    except Exception as e:
+        logger.error(f"Error creando ticket de handoff: {e}")
+        return None
 
 
 def consume_handoff_ticket(ticket):
-    entry = _handoff_tickets.pop(ticket, None)
-    if not entry or entry[1] <= time.time():
+    """Canjea el ticket UNA sola vez. Devuelve el token de sesion o None."""
+    from db import get_db_connection
+    if not ticket:
         return None
-    return entry[0]
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            _asegurar_tabla_tickets(cursor)
+            # El UPDATE ... RETURNING hace atomico el "solo una vez": si dos
+            # peticiones llegan a la vez, solo una encuentra used_at IS NULL.
+            cursor.execute(
+                "UPDATE handoff_tickets SET used_at = NOW()"
+                " WHERE ticket = %s AND used_at IS NULL AND expires_at > NOW()"
+                " RETURNING session_token",
+                (ticket,))
+            fila = cursor.fetchone()
+            conn.commit()
+            return fila[0] if fila else None
+    except Exception as e:
+        logger.error(f"Error canjeando ticket de handoff: {e}")
+        return None
 
 
 def validate_session(token):
@@ -169,6 +213,10 @@ def validate_session(token):
                 FROM sessions s
                 JOIN users u ON s.user_id = u.id
                 WHERE s.token = %s AND s.is_active = TRUE AND s.expires_at > NOW()
+                  -- Defensa en profundidad: desactivar un usuario ya revoca sus
+                  -- sesiones, pero si esa revocacion fallara su token seguiria
+                  -- sirviendo hasta 7 dias.
+                  AND COALESCE(u.is_active, TRUE)
             ''', (token,))
             row = cursor.fetchone()
             if row:

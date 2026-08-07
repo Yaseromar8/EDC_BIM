@@ -1,5 +1,23 @@
 from flask import Blueprint, jsonify, request
+from flask import g
 from db import get_db_connection, resolve_project_id
+
+
+def _filtro_de_obra(cursor):
+    """Devuelve (sql, params) para acotar a las obras del usuario.
+
+    Las rutas por id de recurso hacian 'WHERE id = %s' a secas: aunque el
+    middleware acierte la obra de la peticion, la consulta podia tocar filas de
+    OTRA obra. La restriccion tiene que estar en el SQL, no solo en el guard.
+    """
+    user = getattr(g, 'current_user', None)
+    if not user:
+        return ' AND FALSE', []          # sin sesion no se toca nada
+    if user.get('role') == 'admin':
+        return '', []
+    return (' AND (project_id IS NULL OR project_id IN'
+            ' (SELECT project_id FROM project_users WHERE user_id = %s))'), [user.get('id')]
+
 import json
 
 partidas_bp = Blueprint('partidas_bp', __name__)
@@ -155,12 +173,14 @@ def update_partida(partida_id):
     updates.append("updated_at = CURRENT_TIMESTAMP")
     values.append(partida_id)
     
-    query = f"UPDATE doc_partidas SET {', '.join(updates)} WHERE id = %s RETURNING id"
+    query = f"UPDATE doc_partidas SET {', '.join(updates)} WHERE id = %s RETURNING id"  # + filtro de obra abajo
     
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(query, tuple(values))
+            filtro, extra = _filtro_de_obra(cursor)
+            query_final = query.replace(' RETURNING id', filtro + ' RETURNING id')
+            cursor.execute(query_final, tuple(values) + tuple(extra))
             if cursor.fetchone():
                 conn.commit()
                 return jsonify({"message": "Updated successfully"})
@@ -176,7 +196,10 @@ def delete_partida(partida_id):
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('DELETE FROM doc_partidas WHERE id = %s RETURNING id', (partida_id,))
+            filtro, extra = _filtro_de_obra(cursor)
+            cursor.execute(
+                'DELETE FROM doc_partidas WHERE id = %s' + filtro + ' RETURNING id',
+                (partida_id, *extra))
             if cursor.fetchone():
                 conn.commit()
                 return jsonify({"message": "Deleted successfully"})
