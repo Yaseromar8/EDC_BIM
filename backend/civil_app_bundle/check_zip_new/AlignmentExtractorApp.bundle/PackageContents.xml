@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ApplicationPackage SchemaVersion="1.0" Version="1.0.0" ProductCode="{F11EA57A-1E7E-4B6D-8E81-986B071E3E07}" Name="AlignmentExtractorApp" Description="Alignment Extractor App for Civil 3D" Author="ECD BIM">
+  <CompanyDetails Name="ECD BIM" />
+  <Components>
+    <RuntimeRequirements OS="Win64" Platform="Civil3D" SeriesMin="R24.0" SeriesMax="R26.0" />
+    <ComponentEntry AppName="AlignmentExtractorApp" ModuleName="./Contents/AlignmentExtractorApp.dll" AppDescription="Extracts alignments to JSON" LoadOnCommandInvocation="True" LoadOnAutoCADStartup="True">
+      <Commands GroupName="CivilCmds">
+        <Command Global="HelloWorld" Local="HelloWorld" />
+        <Command Global="ExtractAlignmentJSON" Local="ExtractAlignmentJSON" />
+        <Command Global="ExtractCurvesJSON" Local="ExtractCurvesJSON" />
+      </Commands>
+    </ComponentEntry>
+  </Components>
+</ApplicationPackage>

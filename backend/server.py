@@ -64,6 +64,15 @@ def cabeceras_de_seguridad(respuesta):
     return respuesta
 
 
+# --- IP REAL DEL CLIENTE ---
+# En Render la app corre detras de un proxy, asi que request.remote_addr es la
+# del proxy: sin esto el limitador de peticiones contaba a TODA la obra como una
+# sola IP (y compartiendo el cupo), mientras que un atacante desde fuera tambien
+# se mezclaba con los usuarios legitimos. x_for=1: se confia en UN solo salto,
+# el de Render; confiar en mas permitiria falsificar la IP con la cabecera.
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+
 # --- AUTH MIDDLEWARE ---
 from auth_middleware import init_auth_middleware
 init_auth_middleware(app)

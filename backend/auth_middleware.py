@@ -39,8 +39,19 @@ PUBLIC_ENDPOINTS = {
     '/api/auth/aps/login',
     '/api/auth/aps/callback',
     '/api/token',           # Viewer token (Autodesk internal, not user-facing)
-    '/api/companies',       # Public for registration form
-    '/api/job_titles',      # Public for registration form
+    # Quien ha olvidado su contraseña, por definicion, no puede autenticarse.
+    # Sin estas dos lineas el flujo entero respondia 401 y era inservible.
+    '/api/auth/forgot-password',
+    '/api/auth/reset-password',
+}
+
+# Publicos SOLO en lectura. '/api/companies' y '/api/job_titles' estaban en la
+# lista de arriba, que se comprueba por PATH y sin mirar el metodo: eso dejaba
+# POST anonimo sobre los catalogos. Y el motivo original ('para el formulario de
+# registro') ya no existe: la pantalla nueva no los pide.
+PUBLIC_ENDPOINTS_LECTURA = {
+    '/api/companies',
+    '/api/job_titles',
 }
 
 # Prefijos exentos de sesion para CUALQUIER metodo. Solo ficheros estaticos y
@@ -360,18 +371,32 @@ def _request_project_id():
     elif request.form:
         origenes.append(request.form)
 
+    # Se recorren TODAS las fuentes y se recogen las obras que de verdad
+    # resuelven. Antes se cortaba en la primera fuente que trajera una clave,
+    # resolviera o no: bastaba colgar ?urn=basura a cualquier peticion para que
+    # la obra saliera None y la comprobacion de membresia se saltara entera.
+    # request.args es lo primero que se mira y lo controla quien llama.
+    encontradas = []
     for origen in origenes:
-        clave, valor = _primer_valor(origen)
-        if not valor:
-            continue
-        if clave == 'project_id':
-            # Se VALIDA contra las obras reales en vez de devolverlo crudo: los
-            # frontends mandan tres cosas distintas en ese mismo nombre (el id de
-            # la obra, el id de proyecto de ACC y el scope con frente), y darlo
-            # por bueno convertia la comprobacion en un sello de goma.
-            return resolve_project_id(valor) or None
-        return resolve_project_id(valor)
-    return None
+        for clave in _CLAVES_OBRA:
+            valor = origen.get(clave)
+            if not valor:
+                continue
+            # Se VALIDA contra las obras reales en vez de fiarse del valor: los
+            # frontends mandan tres cosas distintas bajo 'project_id' (el id de
+            # la obra, el de ACC y el scope con frente), y darlo por bueno
+            # convertia la comprobacion en un sello de goma.
+            obra = resolve_project_id(valor)
+            if obra and obra not in encontradas:
+                encontradas.append(obra)
+
+    if not encontradas:
+        return None
+    if len(encontradas) > 1:
+        # Dos obras distintas en la misma peticion: no se elige, se niega.
+        logger.warning(f"[authz] peticion con obras en conflicto {encontradas}: {request.method} {request.path}")
+        return encontradas[0]
+    return encontradas[0]
 
 
 # Endpoints que operan sobre datos de UNA obra concreta (por eso deben poder
@@ -441,6 +466,8 @@ def _registrar_divergencia(path, metodo, abierto, negativa, user):
 def _abierto_por_prefijo(path, metodo):
     """Decision HEREDADA (por prefijo de path). Se conserva para el modo sombra."""
     if path in PUBLIC_ENDPOINTS:
+        return True
+    if metodo in _METODOS_LECTURA and path in PUBLIC_ENDPOINTS_LECTURA:
         return True
     if metodo == 'GET' and path == '/api/config/project':
         return True

@@ -1,0 +1,136 @@
+[07/09/2026 14:42:22] Job information:
+{
+  "CommandLine": [
+    "$(engine.path)\\\\accoreconsole.exe /i \"$(args[HostDwg].path)\" /al \"$(appbundles[AlignmentExtractorApp].path)\" /s \"$(settings[script].path)\""
+  ],
+  "Settings": {
+    "script": {
+      "value": "netload\n\"$(appbundles[AlignmentExtractorApp].path)\\\\Contents\\\\AlignmentExtractorApp.dll\"\nHelloWorld\nExtractSectionsJSON\n"
+    },
+    "dasOpenNetwork": {
+      "value": "true",
+      "isEnvironmentVariable": true
+    }
+  },
+  "Id": "ba42f029529b4ae5a7ec95915527bff7",
+  "ActivityId": "3FkEfzdEFMWEm7GBX6TwViAUGR0bQHhydG36781PQoBNvHAS.ExtractSectionsActivity+prod",
+  "EngineId": "Autodesk.AutoCAD_26_0!45",
+  "Apps": [
+    "3FkEfzdEFMWEm7GBX6TwViAUGR0bQHhydG36781PQoBNvHAS.AlignmentExtractorApp!1"
+  ],
+  "BoundArguments": {
+    "HostDwg": {
+      "localName": "HostDwg.dwg",
+      "url": "https://s3.amazonaws.com/Masked:4dtz+F6oRxGxWFnUUBc6xrLvU20=\"d0c3892f-92fe-48cf-998b-b853c5886a0b.dwg\"&response-content-type=application%2Foctet-stream&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENf%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJIMEYCIQC0w%2FTGLZJX2y1wLwuhGaLtsciSyMEB8072LqzLpYA1TQIhAN%2FNI%2Fd2MQKofvZWv3W9%2BnHeCqlIMO%2BKH7xWfRo6tiyhKsECCKD%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEQABoMNjA0NzMzMDA5NDAzIgzpiMIwNvB6wI07e0EqlQLR6nMMyJjXnGC%2BkK4JK733rjxbprcnGptvPCLtiRdPnN7EYmpyFUhklX8xO4QqgwOyi1SUFOhqs5TqD4y6uYeqElwzUbaUAFmPQvURoNo8Za6Q1sBourKIRChn6mlTuInNLFvRbW1HkkVe62kY4dtKcsv2WumJKy8YjZPz%2B0Q8lG1hVhDrMrvYYNfBXMvL%2B5h97CPOwnSM58k1ULJnsvPeUKJT7n2aRdjrSdOo1lEnsxOop3zVvu5Mr9fsD1VVqidgexB9nUlHqMwswla5boVCT95NABoa5WbUv5UYieoHqPU3OzoSJicetibHOhVZ7tT3ZQ5Eam%2FwAmHDkYjfDvy5inVngOwemvLLDHycR1G069C34Z0bMITkvtIGOpwBozwTEigURCY2xDheiOoFg9S21s7YcoLkuGjZkjePs1DsEQjnlW4chEXzfzNdQr4QyKZbQAXld3ekEYwg%2FeiHLLWa55pymT0dDNUmGbRKTu43F1rMuxRwMqbWqEbKmdF1Et6t9AXJsXUvesD2c5gbOV%2FRIOQmT4lUYJlwsKwvEvxl2LNv%2BcocpICVnJQZnGXf1DkkJDRjr9DdrYAy&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20260709T144220Z&X-Amz-SignedHeaders=host&X-Amz-Credential=ASIAYZTHFNX5TGPWDFQK%2F20260709%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Expires=3599&X-Amz-Signature=c58defcd295b0fe6650c177829267c4de0d0065218cc5272b3a53098091ba26e",
+      "verb": "get"
+    },
+    "Result": {
+      "localName": "section_result.json",
+      "url": "https://com-autodesk-oss-direct-upload.s3-accelerate.amazonaws.com/Masked:noDfH/mIS7Xbex0OrMRCC+hzXRw=",
+      "verb": "put"
+    }
+  },
+  "Quotas": {
+    "limitProcessingTimeSec": 3500,
+    "limitTotalUncompressedAppsSizeInMB": 500
+  }
+}
+[07/09/2026 14:42:23] Starting work item ba42f029529b4ae5a7ec95915527bff7
+[07/09/2026 14:42:23] Start download phase.
+[07/09/2026 14:42:23] Start downloading input: verb - 'Get', url - 'https://s3.amazonaws.com/com.autodesk.oss-persistent/df/c5/f8/87d334366768920c620586aa0e693f523a/wip.dm.prod?response-cache-control=private%3B must-revalidate%3B no-cache&response-content-disposition=attachment%3B filename%3D"d0c3892f-92fe-48cf-998b-b853c5886a0b.dwg"&response-content-type=application%2Foctet-stream&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENf%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJIMEYCIQC0w%2FTGLZJX2y1wLwuhGaLtsciSyMEB8072LqzLpYA1TQIhAN%2FNI%2Fd2MQKofvZWv3W9%2BnHeCqlIMO%2BKH7xWfRo6tiyhKsECCKD%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEQABoMNjA0NzMzMDA5NDAzIgzpiMIwNvB6wI07e0EqlQLR6nMMyJjXnGC%2BkK4JK733rjxbprcnGptvPCLtiRdPnN7EYmpyFUhklX8xO4QqgwOyi1SUFOhqs5TqD4y6uYeqElwzUbaUAFmPQvURoNo8Za6Q1sBourKIRChn6mlTuInNLFvRbW1HkkVe62kY4dtKcsv2WumJKy8YjZPz%2B0Q8lG1hVhDrMrvYYNfBXMvL%2B5h97CPOwnSM58k1ULJnsvPeUKJT7n2aRdjrSdOo1lEnsxOop3zVvu5Mr9fsD1VVqidgexB9nUlHqMwswla5boVCT95NABoa5WbUv5UYieoHqPU3OzoSJicetibHOhVZ7tT3ZQ5Eam%2FwAmHDkYjfDvy5inVngOwemvLLDHycR1G069C34Z0bMITkvtIGOpwBozwTEigURCY2xDheiOoFg9S21s7YcoLkuGjZkjePs1DsEQjnlW4chEXzfzNdQr4QyKZbQAXld3ekEYwg%2FeiHLLWa55pymT0dDNUmGbRKTu43F1rMuxRwMqbWqEbKmdF1Et6t9AXJsXUvesD2c5gbOV%2FRIOQmT4lUYJlwsKwvEvxl2LNv%2BcocpICVnJQZnGXf1DkkJDRjr9DdrYAy&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20260709T144220Z&X-Amz-SignedHeaders=host&X-Amz-Credential=ASIAYZTHFNX5TGPWDFQK%2F20260709%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Expires=3599&X-Amz-Signature=c58defcd295b0fe6650c177829267c4de0d0065218cc5272b3a53098091ba26e'
+[07/09/2026 14:42:29] End downloading file. Source=https://s3.amazonaws.com/com.autodesk.oss-persistent/df/c5/f8/87d334366768920c620586aa0e693f523a/wip.dm.prod?response-cache-control=private%3B must-revalidate%3B no-cache&response-content-disposition=attachment%3B filename%3D"d0c3892f-92fe-48cf-998b-b853c5886a0b.dwg"&response-content-type=application%2Foctet-stream&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENf%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJIMEYCIQC0w%2FTGLZJX2y1wLwuhGaLtsciSyMEB8072LqzLpYA1TQIhAN%2FNI%2Fd2MQKofvZWv3W9%2BnHeCqlIMO%2BKH7xWfRo6tiyhKsECCKD%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEQABoMNjA0NzMzMDA5NDAzIgzpiMIwNvB6wI07e0EqlQLR6nMMyJjXnGC%2BkK4JK733rjxbprcnGptvPCLtiRdPnN7EYmpyFUhklX8xO4QqgwOyi1SUFOhqs5TqD4y6uYeqElwzUbaUAFmPQvURoNo8Za6Q1sBourKIRChn6mlTuInNLFvRbW1HkkVe62kY4dtKcsv2WumJKy8YjZPz%2B0Q8lG1hVhDrMrvYYNfBXMvL%2B5h97CPOwnSM58k1ULJnsvPeUKJT7n2aRdjrSdOo1lEnsxOop3zVvu5Mr9fsD1VVqidgexB9nUlHqMwswla5boVCT95NABoa5WbUv5UYieoHqPU3OzoSJicetibHOhVZ7tT3ZQ5Eam%2FwAmHDkYjfDvy5inVngOwemvLLDHycR1G069C34Z0bMITkvtIGOpwBozwTEigURCY2xDheiOoFg9S21s7YcoLkuGjZkjePs1DsEQjnlW4chEXzfzNdQr4QyKZbQAXld3ekEYwg%2FeiHLLWa55pymT0dDNUmGbRKTu43F1rMuxRwMqbWqEbKmdF1Et6t9AXJsXUvesD2c5gbOV%2FRIOQmT4lUYJlwsKwvEvxl2LNv%2BcocpICVnJQZnGXf1DkkJDRjr9DdrYAy&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20260709T144220Z&X-Amz-SignedHeaders=host&X-Amz-Credential=ASIAYZTHFNX5TGPWDFQK%2F20260709%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Expires=3599&X-Amz-Signature=c58defcd295b0fe6650c177829267c4de0d0065218cc5272b3a53098091ba26e,LocalFile=C:\DARoot\Jobs\ba42f029529b4ae5a7ec95915527bff7\HostDwg.dwg,BytesDownloaded=411460808,Duration=5562ms
+[07/09/2026 14:42:29] End download phase successfully.
+[07/09/2026 14:42:29] Start preparing script and command line parameters.
+[07/09/2026 14:42:29] Command line: [ /i "C:\DARoot\Jobs\ba42f029529b4ae5a7ec95915527bff7\HostDwg.dwg" /al "C:\DARoot\Applications\e98ab4542a6212680355a76ce7a637bf.3FkEfzdEFMWEm7GBX6TwViAUGR0bQHhydG36781PQoBNvHAS.AlignmentExtractorApp[1].package" /s "C:\DARoot\Jobs\ba42f029529b4ae5a7ec95915527bff7\setting_script.scr"]
+[07/09/2026 14:42:29] End preparing script and command line parameters.
+[07/09/2026 14:42:30] Start script phase.
+[07/09/2026 14:42:30] Start AutoCAD Core Engine standard output dump.
+[07/09/2026 14:42:30] Redirect stdout (file: C:\DARoot\Jobs\ba42f029529b4ae5a7ec95915527bff7\tmp\accc48202).
+[07/09/2026 14:42:30] AcCoreConsole: StdOutConsoleMode: processed-output: disabled,auto
+[07/09/2026 14:42:30] AutoCAD Core Engine Console - Copyright 2026 Autodesk, Inc.  All rights reserved. (X.60.Z.30)
+[07/09/2026 14:42:30] Execution Path:
+[07/09/2026 14:42:30] C:\DARoot\AcesRoot\26.0\coreEngine\Exe\accoreconsole.exe
+[07/09/2026 14:42:30] Current Directory: C:\DARoot\Jobs\ba42f029529b4ae5a7ec95915527bff7
+[07/09/2026 14:42:30] Isolating to regkey=HKEY_CURRENT_USER\SOFTWARE\AppDataLow\Software\Autodesk\CoreUser\WorkItem_ba42f029529b4ae5a7ec95915527bff7, userDataFolder=C:\DARoot\Jobs\ba42f029529b4ae5a7ec95915527bff7\userdata.
+[07/09/2026 14:42:30] INFO: Isolation create time: 161 ms.
+[07/09/2026 14:42:30] Version Number: X.60.Z.30 (UNICODE)
+[07/09/2026 14:42:30] LogFilePath has been set to the working folder.
+[07/09/2026 14:42:31] Loading AEC Base...
+[07/09/2026 14:42:31] Loading AEC Base Extended...
+[07/09/2026 14:42:31] Loading AEC Core...
+[07/09/2026 14:42:31] Loading AECC Base...
+[07/09/2026 14:42:31] Loading Modeler DLLs.
+[07/09/2026 14:42:31] Loading AecCivilBase...
+[07/09/2026 14:42:32] Loading AECC QTO......
+[07/09/2026 14:42:32] Loading AECC Land...
+[07/09/2026 14:42:32] Loading AECC Base Core...
+[07/09/2026 14:42:32] Loading AECC Survey...
+[07/09/2026 14:42:33] Loading AECC Roadway...
+[07/09/2026 14:42:33] Loading AECC Pipe Part...
+[07/09/2026 14:42:33] Loading AECC Pipe Network...
+[07/09/2026 14:42:33] Loading AECC Pressure Pipes...
+[07/09/2026 14:42:33] Loading AECC Building Site...
+[07/09/2026 14:42:33] Loading AECC DwgIndxExtractor...
+[07/09/2026 14:42:33] Loading AECC Point Cloud...
+[07/09/2026 14:42:33] Loading AECC ETransmit...
+[07/09/2026 14:42:33] Loading AEC Project Base...
+[07/09/2026 14:42:33] Loading AEC Schedule...
+[07/09/2026 14:42:33] Loading AECC Plan Production...
+[07/09/2026 14:42:33] Loading AEC Architectural Base...
+[07/09/2026 14:42:33] Loading AECC Hydrology...
+[07/09/2026 14:42:33] Loading AECC Bridge...
+[07/09/2026 14:42:33] Loading AECC Rail...
+[07/09/2026 14:42:33] Loading AEC Area Base...
+[07/09/2026 14:42:33] Loading MEP Base...
+[07/09/2026 14:42:34] Loading AECC Drainage Design Base...
+[07/09/2026 14:42:34] Loading AECC Storm Water Control...
+[07/09/2026 14:42:34] Loading AECC Drainage Channel...
+[07/09/2026 14:42:34] Substituting [simplex.shx] for [Vanilla Extract].
+[07/09/2026 14:42:34] Regenerating model.
+[07/09/2026 14:42:40] AutoCAD menu utilities loaded.
+[07/09/2026 14:42:40] Command:
+[07/09/2026 14:42:40] Command: Enter BACKSPACE to interrupt script.
+[07/09/2026 14:42:40] Command:
+[07/09/2026 14:42:40] Command: netload
+[07/09/2026 14:42:40] Assembly file name: "C:\DARoot\Applications\e98ab4542a6212680355a76ce7a637bf.3FkEfzdEFMWEm7GBX6TwViAUGR0bQHhydG36781PQoBNvHAS.AlignmentExtractorApp[1].package\\Contents\\AlignmentExtractorApp.dll"
+[07/09/2026 14:42:40] --- PLUGIN INITIALIZING ---
+[07/09/2026 14:42:40] --- PLUGIN INITIALIZED SUCCESSFULLY ---
+[07/09/2026 14:42:40] Command: HelloWorld
+[07/09/2026 14:42:40] HELLO WORLD FROM C# APPBUNDLE!
+[07/09/2026 14:42:40] Command: ExtractSectionsJSON
+[07/09/2026 14:42:40] Extracting Civil 3D Sections (v2)...
+[07/09/2026 14:42:41] Loading AECC Mapcheck...
+[07/09/2026 14:42:41] Loading AeccDbMgd in ACES instance...
+[07/09/2026 14:42:41] [SEC] Run started
+[07/09/2026 14:42:41] [SEC] tx started
+[07/09/2026 14:42:41] [SEC] scanning 3 BTRs
+[07/09/2026 14:42:41] [SEC] scan end: 3830 ents, 9 vistas, 381 textos, 27 QTO
+[07/09/2026 14:42:41] [SEC] civilDoc access
+[07/09/2026 14:42:41] [SEC] 1 alignments
+[07/09/2026 14:42:41] [SEC] [1/1] S1_COL_JM start
+[07/09/2026 14:42:41] [SEC]   1 SLGs
+[07/09/2026 14:42:41] [SEC]   SL 5/9
+[07/09/2026 14:42:42] [v2] Estaciones: 9 | Warnings: 21
+[07/09/2026 14:42:42] Section extraction completed successfully.
+[07/09/2026 14:42:43] End AutoCAD Core Engine standard output dump.
+[07/09/2026 14:42:43] End script phase.
+[07/09/2026 14:42:43] Start upload phase.
+[07/09/2026 14:42:43] Uploading 'C:\DARoot\Jobs\ba42f029529b4ae5a7ec95915527bff7\section_result.json': verb - 'Put', url - 'https://com-autodesk-oss-direct-upload.s3-accelerate.amazonaws.com/13/8c/7c/35/bucket/visor-ecd-3fkefzdefmwem7gbx6twviaugr0bqhhydg36781pqobnvhas/signed-url-uploads/138c7c35-e657-47a9-b000-e72c8d6dbb65?partNumber=1&uploadId=o6fK.SzfoyqRm9QTjA_zCd5Ka5UbAjM7CSvIrz7xsxxlnvLVh7PR3nckysTb8our1YP5QYRkUGLxcQi0h0Azqb_03q.5j_FbxvlLmTAmRf4q752BCT3nWrdytZE03.icXsuBAEdHrPVi5MmskJFTyDIYWUn1skx4iDE31Ha5HsHYTXbWTxNDmQWUH1UpYj42&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENf%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIFfKOHUsbXyaybslLXDnlqFZwtCUnrphgttFSnBQZLsCAiEAjj5U%2F%2FhhGoQNdsv62%2B8XQxgkyKotf21%2BNx3Qa7m5IBwqwQIIoP%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARAAGgw2MDQ3MzMwMDk0MDMiDAeFYv3CjH2x7SutqiqVAtp2KGDNfq4schXfdhjqva2QTJ8L4gRS%2FzYCkTjt6R%2BNbvO9gbMT2njiDJbgrZTfN7YiM%2BolD2%2BycHL9f1vU33t3u3LXkWGk7vVMXMdAyI8fTvU82ED56qUeSh3pmkBWk495mubRv71JAz0GrJ3n%2FcZl5J6SVCb4QHZ%2FuofhslLYENltgKEWE9Twb2GhJqz9Z0POSDHO2ePOqZOEGiF7JexhrtOqBNBvscw43MdmCBUPKkKhLYYAB9WKib8ylzjATuUzSIu8KQtqSknmHNxTBq3%2BcP3oK12Q5fVqcKmN2zRzui5W7i%2BCYtMagvd3llJHyiqXm%2Fs9WVTrLGdOoMcbnOmWWmusbvBE6f%2BOSzBfGR8dyRw3AQww7%2BO%2B0gY6nQGcEcPPGLN%2BTe49Qh68cxgsEIoYRze5M2FFDCe661uI6KpIwXw4OsgIabVPBGDrtsE9xxFGoru4q%2Bh8UQYkQu8Z9vKHK6FCvzSDZFMqam2mk9OFXVxVlivTjlQAGBHXdVSFOkZhZY6TWoPRdIY3e2YFbXeuHaRkQi0C8Z0mmtNMvIgRZdi11pCLBp3tYsKLLZAKdxKYmcEUr%2B0pQEqR&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20260709T144221Z&X-Amz-SignedHeaders=host&X-Amz-Credential=ASIAYZTHFNX5Q7X5A6IZ%2F20260709%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Expires=3599&X-Amz-Signature=a9ee2af14c4e3a3b2cce34880493f6794578dc863b5e3f01b53e64718e47aca3'
+[07/09/2026 14:42:43] End upload phase successfully.
+[07/09/2026 14:42:43] Job finished with result Succeeded
+[07/09/2026 14:42:43] Job Status:
+{
+  "status": "success",
+  "reportUrl": "https://dasprod-store.s3.us-east-1.amazonaws.com/workItem/3FkEfzdEFMWEm7GBX6TwViAUGR0bQHhydG36781PQoBNvHAS/ba42f029529b4ae5a7ec95915527bff7/report?X-Amz-Expires=8100&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENf%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJIMEYCIQCqvalVd9OO4k06SLSMPT3XMHjOOuybE28zRqBFFFEUxAIhANDjVP9ZvO4Uniw%2F%2BJzTWCDVNWTmTro8%2BH9k5v3w%2BHn%2BKoQECKD%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEQBBoMMjIwNDczMTUyMzEwIgyH1aiO0Hghfl5M1Rcq2AMmPVtSC3LZa66dhJTFrdJSZi3YCfgfygyO%2FjrQ3iS7Ws2GDGR3YW1r0RWdSKXdJOrz55IOdfDF6DqrjFT%2BvoTCKHVoc5aptecq4bvYu9CgEZvZ99AR1ZokWdvfVT%2F%2BJPQyLJwmgeiZDwrAhAXzg9VwiNzo%2BwJP1QS3s%2Bm5tpCIk2%2FHQZkD4Nm%2F52YP1NbjASysXiGGiAcJt6vP0NeVU1CJkpX8%2BEKa4BeyZj2oGxo%2Fp5W%2FwckrU5zYZUH4XDVk7AUrC%2BdBTdoBPRPqblIFWSf1icfmzja50HwxCIvoBtEJxVx%2Fo%2BV83t11hcnqdjCsdFsB9jJgXNPayq9B3SjmWSrQci%2FQCdKb8e6ncrTCXqRlN3kztkANe544lGYsrZATLYMMBJC3PtuVeKqABwvrin5vDh4DZ8syQran9XWG1Rr9cGq1qyncFi42Oo3b5oQWIv7gBkQb7N4vNqaB4gNXZ9ZemlZIITyOxCgL7Bc%2FYMenjWYnFSY%2B6YnaAk4HchijUpnBCmoxac4moOIkmEOPrHFPW8%2FNEPcQICybFKhfBdnblVslvJ4S0XLFIVtJLDF2GMO5YygWQdMPoTm6Mh9rUtnBNtc6DyGRYMCCAXidDsrvJSkRVFUraKh7MO7evtIGOqAB6YakphToPkxHBGD7QazqQigBQUKfOj766qy%2B47iySZFRoVgu%2BAbxazX4tjsnF0NJB2NGelaMA%2BMt30bd6ZSNt7jnc0XLZVVRrHZbHXsxwjO0d1IHvoQoYRH%2BZzV%2F3JJJTNL%2F125lKBKQeyGonuX7yEQ22DlXbYtrzOLcSFuepiD8YB9O3mSA3FX54HBKHUm93Vb28sgqXtssnR%2FcvERBAQ%3D%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIATGVJZKM3IOAYJFUX%2F20260709%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260709T144222Z&X-Amz-SignedHeaders=host&X-Amz-Signature=e01667189601e228a62b96474fbba6d7257c8c564551cd34855140ba7ce1d6ac",
+  "activityId": "3FkEfzdEFMWEm7GBX6TwViAUGR0bQHhydG36781PQoBNvHAS.ExtractSectionsActivity+prod",
+  "stats": {
+    "timeQueued": "2026-07-09T14:42:22.7405611Z",
+    "timeDownloadStarted": "2026-07-09T14:42:22.8039777Z",
+    "timeInstructionsStarted": "2026-07-09T14:42:29.4702423Z",
+    "timeInstructionsEnded": "2026-07-09T14:42:43.1656276Z",
+    "timeUploadEnded": "2026-07-09T14:42:43.2645556Z",
+    "bytesDownloaded": 411460808,
+    "bytesUploaded": 289424
+  },
+  "id": "ba42f029529b4ae5a7ec95915527bff7"
+}

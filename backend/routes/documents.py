@@ -10,7 +10,7 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from flask import Blueprint, request, jsonify, redirect, Response
+from flask import Blueprint, request, jsonify, redirect, Response, g
 from politica import publico_en_lectura, requiere_rol
 from werkzeug.utils import secure_filename
 from gcs_manager import generate_signed_url, upload_file_to_gcs, delete_gcs_blob
@@ -25,24 +25,27 @@ from folder_permissions import check_folder_permission
 
 
 def _resolve_project_id(cursor, model_urn):
-    """Resuelve el project_id real desde model_urn/id/name sin usar ORs pesados."""
+    """Resuelve el project_id real desde model_urn/id/name.
+
+    UN SOLO RESOLUTOR EN TODO EL BACKEND. Este de aqui probaba tres cosas
+    (projects.model_urn, projects.id y projects.name) pero NO entendia la
+    convencion real de scope '<projects.id>_<FRENTE>' -- que es justo lo que
+    file_nodes guarda ('1_CANAL', '1_DRENAJE'). Con el control de acceso nuevo
+    eso devolvia None -> "sin acceso" -> 403 a TODO usuario no admin al abrir
+    cualquier documento de un frente. Dos resolutores con reglas distintas no
+    es un detalle: es que la mitad del backend opina una cosa y la otra mitad
+    otra.
+    """
+    from db import resolve_project_id as resolver_canonico
+    obra = resolver_canonico(model_urn)
+    if obra:
+        return obra
+
+    # Respaldo: lo que este resolutor sabia y el canonico no (busqueda directa
+    # por la columna model_urn de projects).
     cursor.execute("SELECT id FROM projects WHERE model_urn = %s LIMIT 1", (model_urn,))
     row = cursor.fetchone()
-    if row:
-        return row[0]
-
-    cursor.execute("SELECT id FROM projects WHERE id = %s LIMIT 1", (model_urn,))
-    row = cursor.fetchone()
-    if row:
-        return row[0]
-
-    project_name = model_urn.split('/')[-1] if '/' in model_urn else model_urn
-    cursor.execute("SELECT id FROM projects WHERE name = %s LIMIT 1", (project_name,))
-    row = cursor.fetchone()
-    if row:
-        return row[0]
-
-    return None
+    return row[0] if row else None
 
 
 # ── IN-MEMORY ACL CACHE (TTL 120s) ──────────────────────────────────
@@ -352,7 +355,15 @@ def get_document_by_id(node_id):
             
             if not row:
                 return jsonify({"success": False, "error": "Documento no encontrado"}), 404
-            
+
+            # Esta ruta devuelve una URL FIRMADA de descarga y se me quedo fuera
+            # cuando puse el control por obra en /view, /signed-url y /proxy. El
+            # node_id es un entero secuencial, asi que sin esto cualquier sesion
+            # recorre 1..N y se baja el CDE entero.
+            denegado = _acceso_al_recurso(node_id=node_id)
+            if denegado:
+                return denegado
+
             doc_data = {
                 "id": row[0],
                 "name": row[1],

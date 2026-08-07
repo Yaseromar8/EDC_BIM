@@ -118,6 +118,31 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // REVALIDAR LA SESIÓN AL ARRANCAR.
+  // La app se creía lo que hubiera en localStorage y no lo comprobaba nunca:
+  // un `visor_user` viejo dejaba la interfaz mintiendo (p. ej. un admin al que
+  // se le guardó mal el rol veía "Documentos - Solo administradores"), y un
+  // token caducado no se notaba hasta que algo fallaba con un mensaje raro.
+  // Ahora se pregunta al servidor quién eres: se refresca el rol —así los
+  // cambios de rol surten efecto— y si el token ya no vale, se cierra sesión
+  // limpiamente en vez de dejar media pantalla rota.
+  useEffect(() => {
+    if (!user) return;
+    if (new URLSearchParams(window.location.search).get('sso_ticket')) return;
+    let cancelado = false;
+    apiFetch(`${API}/api/auth/me`)
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error('sesión no válida'))))
+      .then(u => {
+        if (cancelado || !u?.id) return;
+        if (u.role !== user.role || u.email !== user.email) {
+          saveUser({ ...user, ...u });   // se conserva el token guardado
+        }
+      })
+      .catch(() => { if (!cancelado) logout(); });
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Share Route (pública: no requiere sesión) ──
   if (path.startsWith('/share/')) {
     const shareId = path.split('/share/')[1];

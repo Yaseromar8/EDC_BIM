@@ -14,15 +14,43 @@ import mailer
 auth_bp = Blueprint('auth', __name__)
 
 
+def _origenes_permitidos():
+    """Lista blanca de webs propias. Reutiliza CORS_ORIGINS, que ya las declara."""
+    crudo = os.getenv('CORS_ORIGINS', '') or ''
+    return {o.strip().rstrip('/') for o in crudo.split(',') if o.strip().startswith('http')}
+
+
 def _origen_del_cliente():
-    """De donde vino la peticion, para armar enlaces que apunten a la web
-    correcta (visor o portal de documentos) y no al backend."""
+    """A que web apuntan los enlaces de los correos (visor o portal de documentos).
+
+    SOLO se acepta el Origin si esta en la lista blanca. Derivarlo de la cabecera
+    sin comprobar era un agujero grave: un atacante hacia
+        POST /api/auth/forgot-password  {"email": "victima@obra.com"}
+        Origin: https://dominio-del-atacante
+    desde curl (no hay navegador, asi que CORS no interviene), y a la victima le
+    llegaba a su buzon REAL un correo nuestro con un boton hacia el dominio del
+    atacante. Al pulsarlo, el token de restablecimiento quedaba en los logs del
+    atacante, que se quedaba con la cuenta -- y como restablecer revoca todas las
+    sesiones, ademas echaba a la victima. Un solo intento bastaba: el limite de
+    5/hora no protege de nada aqui.
+    """
+    porDefecto = os.getenv('APP_URL', 'https://visor-ecd-frontend.onrender.com').rstrip('/')
     origen = (request.headers.get('Origin') or request.headers.get('Referer') or '').strip()
-    if origen.startswith('http'):
-        from urllib.parse import urlparse
-        u = urlparse(origen)
-        return f'{u.scheme}://{u.netloc}'
-    return os.getenv('APP_URL', 'https://visor-ecd-frontend.onrender.com').rstrip('/')
+    if not origen.startswith('http'):
+        return porDefecto
+    from urllib.parse import urlparse
+    u = urlparse(origen)
+    candidato = f'{u.scheme}://{u.netloc}'.rstrip('/')
+    permitidos = _origenes_permitidos()
+    if not permitidos:
+        # Sin CORS_ORIGINS configurado no hay lista blanca en la que confiar:
+        # se usa el destino fijo en vez de creerse la cabecera.
+        return porDefecto
+    if candidato in permitidos:
+        return candidato
+    logger_origen = f"origen no permitido en enlace de correo: {candidato}"
+    print(f"[auth] {logger_origen}")
+    return porDefecto
 
 
 def registrar_evento(evento, email=None, user_id=None, detalle=None):
@@ -836,6 +864,12 @@ def delete_job_title(job_id):
 
 @auth_bp.route('/api/projects/<project_id>/users', methods=['GET'])
 def get_project_users(project_id):
+    # El decorador @requiere_rol solo bloquea en modo estricto, y GET
+    # /api/projects* es publico por prefijo: sin este guard la membresia de la
+    # obra la lee cualquiera, incluido un anonimo.
+    denied = _require_admin("ver los accesos de una obra")
+    if denied:
+        return denied
     """Obtiene la lista de IDs de usuarios asignados a un proyecto"""
     try:
         with get_db_connection() as conn:

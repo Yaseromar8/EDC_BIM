@@ -589,6 +589,40 @@ function App() {
     setUser(userData);
   }, []);
 
+  // REVALIDAR LA SESIÓN AL ARRANCAR.
+  // El visor se creía el `visor_user` de localStorage y no lo comprobaba nunca.
+  // Un rol guardado mal o un token caducado dejaban la interfaz mintiendo (por
+  // ejemplo, escondiendo módulos a un admin) hasta que algo fallaba con un
+  // mensaje que no explicaba nada. Se le pregunta al servidor quién eres: así
+  // los cambios de rol surten efecto, y si el token ya no vale se cierra sesión
+  // en vez de dejar media pantalla rota.
+  useEffect(() => {
+    if (!user) return;
+    if (new URLSearchParams(window.location.search).get('sso_ticket')) return;
+    let cancelado = false;
+    apiFetch(`${BACKEND_URL}/api/auth/me`)
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error('sesión no válida'))))
+      .then(u => {
+        if (cancelado || !u?.id) return;
+        if (u.role !== user.role || u.email !== user.email) {
+          const fresco = { ...user, ...u };
+          localStorage.setItem('visor_user', JSON.stringify(fresco));
+          setUser(fresco);
+        }
+      })
+      .catch(() => {
+        if (cancelado) return;
+        // Limpieza explícita en vez de llamar a handleLogout, que se declara
+        // más abajo: así no se depende del orden de definición.
+        localStorage.removeItem('visor_user');
+        localStorage.removeItem('visor_session_token');
+        localStorage.removeItem('visor_selectedProject');
+        setUser(null);
+      });
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // SSO desde Docs: el URL contiene sólo un ticket efímero y de un único uso,
   // nunca el token de sesión reutilizable.
   useEffect(() => {

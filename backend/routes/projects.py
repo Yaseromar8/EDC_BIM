@@ -24,6 +24,22 @@ from db import get_db_connection
 
 projects_bp = Blueprint('projects', __name__)
 
+
+def _solo_admin(accion):
+    """Guard EFECTIVO de administrador.
+
+    El decorador @requiere_rol('admin') solo bloquea cuando AUTH_POLICY_MODE es
+    'estricto'; mientras la politica corre en sombra es puramente declarativo.
+    Estas rutas crean, renombran, repuntan y archivan obras, asi que no pueden
+    esperar a la activacion: el guard va tambien dentro de la vista.
+    """
+    user = getattr(g, 'current_user', None)
+    if not user:
+        return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
+    if user.get('role') != 'admin':
+        return jsonify({'error': f'Solo los administradores pueden {accion}.'}), 403
+    return None
+
 def ensure_projects_schema():
     """
     Crea las tablas de Hubs y Projects si no existen.
@@ -170,6 +186,9 @@ def list_hubs():
 @requiere_rol('admin')
 def create_hub():
     """Crear una nueva municipalidad/cuenta (Hub)."""
+    denegado = _solo_admin('crear portafolios')
+    if denegado:
+        return denegado
     data = request.get_json()
     if not data or 'name' not in data:
         return jsonify({"error": "name is required"}), 400
@@ -222,6 +241,13 @@ def list_all_projects():
                 WHERE p.status != 'archived'
             """
             params = []
+
+            # Anonimo: lista VACIA. Antes, con user_id None la condicion de
+            # abajo era falsa y la consulta salia SIN filtro, asi que un visitante
+            # sin sesion recibia el catalogo completo de obras con sus model_urn
+            # -- justo lo que el comentario de arriba decia estar evitando.
+            if not es_admin and not user_id:
+                return jsonify({"projects": []}), 200
 
             # Si no es admin, filtrar por los proyectos asignados en project_users
             if not es_admin and user_id:
@@ -283,6 +309,9 @@ def list_hub_projects(hub_id):
 @requiere_rol('admin')
 def create_hub_project(hub_id):
     """Crear un nuevo proyecto dentro de un hub."""
+    denegado = _solo_admin('crear obras')
+    if denegado:
+        return denegado
     data = request.get_json()
     if not data or 'name' not in data:
         return jsonify({"error": "name is required"}), 400
@@ -422,6 +451,9 @@ def join_project():
 @requiere_rol('admin')
 def update_project(project_id):
     """Actualiza metadatos del proyecto (ej: vincular model_urn de APS)."""
+    denegado = _solo_admin('modificar una obra')
+    if denegado:
+        return denegado
     data = request.get_json()
     if not data:
         return jsonify({"error": "No data"}), 400
@@ -453,6 +485,9 @@ def update_project(project_id):
 @requiere_rol('admin')
 def delete_project(project_id):
     """Archiva un proyecto (soft delete)."""
+    denegado = _solo_admin('archivar una obra')
+    if denegado:
+        return denegado
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
