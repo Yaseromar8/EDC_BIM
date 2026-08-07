@@ -277,6 +277,24 @@
     background: var(--cta-line);
 }
 
+/* Enlace de texto dentro del formulario: es un <button> de verdad, para que
+   reciba foco y responda a Enter, pero se lee como enlace. */
+.cta-enlace {
+    display: block;
+    width: 100%;
+    margin-top: 14px;
+    padding: 10px 0;
+    background: none;
+    border: none;
+    color: var(--cta-muted);
+    font-size: .88rem;
+    font-family: inherit;
+    text-align: center;
+    cursor: pointer;
+}
+
+.cta-enlace:hover { color: var(--cta-text); text-decoration: underline; }
+
 .cta-nota {
     margin: 24px 0 0;
     font-size: .85rem;

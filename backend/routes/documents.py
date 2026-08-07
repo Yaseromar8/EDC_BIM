@@ -539,8 +539,12 @@ def list_documents():
 
     from flask import g
     user = getattr(g, 'current_user', None)
-    if request.remote_addr == '127.0.0.1' and not user:
-        user = {'id': 'local-admin', 'role': 'admin', 'name': 'Profiler'}
+    # RETIRADO: aqui se fabricaba un admin ('local-admin') cuando la peticion
+    # venia de 127.0.0.1, para poder perfilar sin sesion. Es un backdoor: en
+    # Render la app corre detras de un proxy, y basta que remote_addr pase a ser
+    # el del proxy local -- o que alguien alcance el puerto desde el propio host --
+    # para que ese atajo conceda rol admin sin login. Un modo de desarrollo no se
+    # deduce de la IP; para eso ya esta ALLOW_DEMO_TOKEN, explicito y por entorno.
 
     if user and not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403

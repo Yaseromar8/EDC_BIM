@@ -196,7 +196,15 @@ const LoginScreen = ({ onLogin }) => {
     }, []);
 
     const mensajeDeError = (estado, datos) => {
-        if (estado === 0) return t.errRed;
+        if (estado === 0) {
+            // "Revisa tu conexión" es inútil cuando lo que pasa es que el
+            // backend local no está arrancado. En desarrollo se dice la verdad,
+            // con la dirección concreta; en producción no se enseñan URLs.
+            const esLocal = /localhost|127\.0\.0\.1|^http:\/\/\d+\.\d+\.\d+\.\d+/.test(BACKEND_URL);
+            return esLocal
+                ? `No hay respuesta en ${BACKEND_URL}. ¿Está arrancado el backend?`
+                : t.errRed;
+        }
         if (estado === 429) return t.errLimite;
         if (estado === 401) return t.errCreds;
         return datos.error || t.errCreds;
