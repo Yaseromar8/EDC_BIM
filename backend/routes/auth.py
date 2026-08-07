@@ -257,6 +257,7 @@ def create_handoff():
 
 
 @auth_bp.route('/api/auth/handoff/exchange', methods=['POST'])
+@publico(motivo='canjea un ticket de un solo uso y 60 s por una sesion: por diseño se llama SIN sesion')
 def exchange_handoff():
     """Canjea una única vez un ticket SSO por la sesión existente."""
     ticket = (request.get_json(silent=True) or {}).get('ticket')

@@ -524,6 +524,7 @@ def auth_login():
     return redirect(url)
 
 @app.route('/api/auth/aps/callback')
+@publico(motivo='lo invoca Autodesk tras el consentimiento; por definicion llega sin sesion. Pendiente: validar un state firmado, hoy acepta cualquier code')
 def auth_callback():
     code = request.args.get('code')
     if not code:
@@ -956,7 +957,10 @@ def get_inventory_schema():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/inventory', methods=['GET'])
-@publico_en_lectura(motivo='la vista compartida por enlace lo pide sin sesion y sin el no se aplica ningun color ni filtro en el modelo')
+# NOTA: la vista compartida por enlace pide esta ruta sin sesion y hoy recibe
+# 401, asi que en modo compartido no se aplican colores ni filtros. Abrirla
+# entera seria entregar el inventario de la obra a cualquiera: la solucion
+# correcta es acotarla al proyecto del enlace, no dejarla publica.
 def get_inventory():
     """
     Fase 3: API Endpoint para entregar el inventario inmutable y masivo al Frontend.
@@ -1147,7 +1151,6 @@ def civil_base_axis():
 
 
 @app.route('/api/inventory/version', methods=['GET'])
-@publico_en_lectura(motivo='huella de ~100 bytes que la vista compartida consulta antes del inventario para reutilizar su cache y no bajar 7 MB')
 def get_inventory_version():
     """
     Huella de versión del inventario (respuesta de ~100 bytes). El frontend la

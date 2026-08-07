@@ -194,9 +194,9 @@ _SIN_SESION_DEBEN_VIVIR = [
     ('GET', '/api/token'),                     # Viewer de Autodesk
     ('GET', '/api/config/project'),            # qué modelo carga el enlace
     ('GET', '/api/views/<view_id>'),           # la vista compartida en sí
-    ('GET', '/api/inventory'),                 # sin él no hay colores ni filtros
-    ('GET', '/api/inventory/version'),         # huella para reusar caché
     ('GET', '/api/docs/shared/<share_id>'),    # documento compartido por enlace
+    ('POST', '/api/auth/handoff/exchange'),    # canjea ticket POR una sesión
+    ('GET', '/api/auth/aps/callback'),         # lo invoca Autodesk, sin sesión
     ('POST', '/api/auth/login'),
     ('POST', '/api/auth/register'),
 ]
@@ -212,6 +212,8 @@ _SIN_SESION_DEBEN_CAER = [
     ('GET', '/api/hubs'),
     ('GET', '/api/auth/aps/login'),
     ('DELETE', '/api/users/<int:user_id>'),
+    ('GET', '/api/inventory'),                 # inventario de la obra: nunca anónimo
+    ('GET', '/api/inventory/version'),
 ]
 
 
