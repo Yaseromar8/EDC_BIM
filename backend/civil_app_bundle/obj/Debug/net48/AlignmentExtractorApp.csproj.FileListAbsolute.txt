@@ -1,4 +1,0 @@
-d:\VISOR_APS_TL\backend\civil_app_bundle\obj\Debug\net48\AlignmentExtractorApp.csproj.AssemblyReference.cache
-d:\VISOR_APS_TL\backend\civil_app_bundle\obj\Debug\net48\AlignmentExtractorApp.GeneratedMSBuildEditorConfig.editorconfig
-d:\VISOR_APS_TL\backend\civil_app_bundle\obj\Debug\net48\AlignmentExtractorApp.csproj.CoreCompileInputs.cache
-d:\VISOR_APS_TL\backend\civil_app_bundle\obj\Debug\net48\AlignmentExtractorApp.sourcelink.json

@@ -21,3 +21,29 @@ status.txt
 test_out.txt
 
 backend/uploads/documents/*.mp4
+
+# Entornos virtuales de Python (cualquier variante). Faltaba 'venv2' y por eso
+# se colaron 6.400 ficheros del entorno entero en un commit.
+backend/venv*/
+venv*/
+.venv/
+
+# Salidas de compilacion y artefactos pesados
+backend/civil_app_bundle/bin/
+backend/civil_app_bundle/obj/
+backend/civil_app_bundle/*.zip
+frontend-react/dist_apk/
+frontend-react/dist_field/
+frontend-react/dist_old/
+frontend-react/dist_check/
+frontend-docs/dist_check/
+revit-link-addin/*.zip
+
+# Informes y scratch de depuracion (se generan, no se versionan)
+backend/da_report*.txt
+backend/da_debug*.txt
+backend/error_log.txt
+backend/last_report.txt
+backend/grep_urn.txt
+backend/test_output*.txt
+backend/scratch_*.py
