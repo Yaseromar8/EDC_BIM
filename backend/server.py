@@ -1227,6 +1227,19 @@ def update_inventory():
         with get_db_connection() as conn:
              cursor = conn.cursor()
 
+             # Mismo agujero que tenia el lote: se escribia por external_id sin
+             # mirar de que obra es el elemento. Se comprueba ANTES de tocar nada.
+             _sesion = getattr(g, 'current_user', None)
+             if not _sesion:
+                  return jsonify({'error': 'Autenticación requerida'}), 401
+             if _sesion.get('role') != 'admin':
+                  cursor.execute(
+                      'SELECT 1 FROM inventory_assets ia WHERE ia.external_id = %s'
+                      ' AND ia.project_id IN (SELECT project_id FROM project_users WHERE user_id = %s)',
+                      (ext_id, _sesion.get('id')))
+                  if not cursor.fetchone():
+                       return jsonify({'error': 'Sin acceso a este elemento'}), 403
+
              if field_name == 'Name':
                   cursor.execute('UPDATE inventory_assets SET name = %s WHERE external_id = %s', (new_val, ext_id))
              elif field_name in base_cols:
@@ -1275,6 +1288,19 @@ def bulk_update_inventory():
         from db import get_db_connection
         import json as _json
 
+        # ACOTADO A LAS OBRAS DEL USUARIO. Esta escritura va por external_id y no
+        # llevaba NINGUNA referencia a la obra: alguien de una obra podia
+        # reescribir material, estado y vaciado de miles de elementos de otra con
+        # solo conocer sus external_id. El limite tiene que estar en el SQL,
+        # porque el cuerpo no dice de que obra es cada elemento.
+        _sesion = getattr(g, 'current_user', None)
+        if not _sesion:
+            return jsonify({'error': 'Autenticación requerida'}), 401
+        _es_admin = _sesion.get('role') == 'admin'
+        _mis_obras = ('' if _es_admin else
+                      ' AND ia.project_id IN (SELECT project_id FROM project_users WHERE user_id = %s)')
+        _p_obras = [] if _es_admin else [_sesion.get('id')]
+
         # Igual que el PATCH individual, pero en lote: escribe a asset_user_data.
         base_cols = {'Material': 'material', 'Status': 'status', 'Vaciado_Nro': 'vaciado_nro'}
 
@@ -1282,11 +1308,16 @@ def bulk_update_inventory():
             cursor = conn.cursor()
             cursor.execute("SET statement_timeout = '60000'")
 
+            # Solo los external_id que existen Y pertenecen a una obra del usuario.
+            permitidos = (' WHERE EXISTS (SELECT 1 FROM inventory_assets ia'
+                          ' WHERE ia.external_id = t.eid' + _mis_obras + ')')
+
             if field_name == 'Name':
                 # Name es nativo del modelo -> se mantiene en inventory_assets
                 cursor.execute(
-                    'UPDATE inventory_assets SET name = %s WHERE external_id = ANY(%s)',
-                    (field_value, external_ids)
+                    'UPDATE inventory_assets ia SET name = %s WHERE ia.external_id = ANY(%s)'
+                    + _mis_obras,
+                    (field_value, external_ids, *_p_obras)
                 )
                 updated = cursor.rowcount
             elif field_name in base_cols:
@@ -1295,23 +1326,26 @@ def bulk_update_inventory():
                     INSERT INTO asset_user_data (external_id, {col}, project_id, updated_at)
                     SELECT eid, %s, (SELECT ia.project_id FROM inventory_assets ia WHERE ia.external_id = t.eid LIMIT 1), NOW()
                     FROM (SELECT DISTINCT unnest(%s::text[]) AS eid) t
+                    {permitidos}
                     ON CONFLICT (external_id) DO UPDATE
                     SET {col} = EXCLUDED.{col},
                         project_id = COALESCE(asset_user_data.project_id, EXCLUDED.project_id),
                         updated_at = NOW()
-                ''', (field_value, external_ids))
+                ''', (field_value, external_ids, *_p_obras))
                 updated = cursor.rowcount
             else:
                 # Campo custom -> extras JSONB (familia z de Tandem)
-                cursor.execute('''
+                cursor.execute(f'''
                     INSERT INTO asset_user_data (external_id, extras, project_id, updated_at)
                     SELECT eid, jsonb_build_object(%s, %s::jsonb), (SELECT ia.project_id FROM inventory_assets ia WHERE ia.external_id = t.eid LIMIT 1), NOW()
                     FROM (SELECT DISTINCT unnest(%s::text[]) AS eid) t
+                    {permitidos}
                     ON CONFLICT (external_id) DO UPDATE
                     SET extras = asset_user_data.extras || jsonb_build_object(%s, %s::jsonb),
                         project_id = COALESCE(asset_user_data.project_id, EXCLUDED.project_id),
                         updated_at = NOW()
-                ''', (field_name, _json.dumps(field_value), external_ids, field_name, _json.dumps(field_value)))
+                ''', (field_name, _json.dumps(field_value), external_ids, *_p_obras,
+                      field_name, _json.dumps(field_value)))
                 updated = cursor.rowcount
 
             conn.commit()
