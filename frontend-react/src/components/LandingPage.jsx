@@ -18,7 +18,11 @@ const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window
     Hub     → tabla 'hubs'     (id, name, region)
     Project → tabla 'projects' (id, hub_id, name, model_urn, ...)
 */
-const LandingPage = ({ onSelectProject }) => {
+const LandingPage = ({ onSelectProject, user }) => {
+    // Quien no es admin no crea obras: el backend responde 403. Y quien acaba de
+    // registrarse no pertenece a ninguna, asi que el listado le llega vacio —
+    // necesita saber POR QUE, no una pantalla en blanco con un botón que falla.
+    const esAdmin = user?.role === 'admin';
     const [hubs, setHubs] = useState([]);
     const [projects, setProjects] = useState([]);
     const [activeHubId, setActiveHubId] = useState(null);  // null = "Todos"
@@ -418,12 +422,14 @@ const LandingPage = ({ onSelectProject }) => {
                         </div>
                     ))}
 
+                    {esAdmin && (
                     <button className="acc-add-hub-btn" onClick={() => setShowNewHubForm(true)}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                         </svg>
                         Nuevo Portafolio
                     </button>
+                    )}
                 </aside>
 
                 {/* ── Main Content ─────────────────────────────────────────── */}
@@ -437,6 +443,7 @@ const LandingPage = ({ onSelectProject }) => {
                                 {visibleProjects.length} proyecto{visibleProjects.length !== 1 ? 's' : ''} encontrado{visibleProjects.length !== 1 ? 's' : ''}
                             </span>
                         </div>
+                        {esAdmin && (
                         <button
                             className="acc-new-project-btn"
                             onClick={() => setShowNewProjForm(true)}
@@ -448,6 +455,7 @@ const LandingPage = ({ onSelectProject }) => {
                             </svg>
                             Nuevo Proyecto
                         </button>
+                        )}
                     </div>
 
                     {loading ? (
@@ -464,16 +472,20 @@ const LandingPage = ({ onSelectProject }) => {
                                     <line x1="9" y1="10" x2="9" y2="20" />
                                 </svg>
                             </div>
-                            <h3>Sin proyectos</h3>
+                            <h3>{!esAdmin && !searchQuery ? 'Todavía no tienes obras asignadas' : 'Sin proyectos'}</h3>
                             <p>
                                 {searchQuery ? 'No se encontraron resultados para tu búsqueda.' :
-                                    activeHubId ? 'Este portafolio no tiene proyectos aún.' :
-                                        'Crea un portafolio y luego un proyecto para comenzar.'}
+                                    !esAdmin ? 'Tu cuenta ya está creada y activa. Falta que el administrador de la obra te dé acceso; avísale con el correo con el que entraste.' :
+                                        activeHubId ? 'Este portafolio no tiene proyectos aún.' :
+                                            'Crea un portafolio y luego un proyecto para comenzar.'}
                             </p>
-                            {!searchQuery && (
+                            {!searchQuery && esAdmin && (
                                 <button className="acc-new-project-btn" onClick={() => setShowNewProjForm(true)} disabled={hubs.length === 0}>
                                     + Crear primer proyecto
                                 </button>
+                            )}
+                            {!searchQuery && !esAdmin && user?.email && (
+                                <p className="acc-empty-correo">{user.email}</p>
                             )}
                         </div>
                     ) : (

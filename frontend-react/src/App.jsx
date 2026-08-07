@@ -3787,7 +3787,7 @@ function App() {
   }
 
   if (!selectedProject && !isSharedMode) {
-    return <LandingPage onSelectProject={setSelectedProject} />;
+    return <LandingPage onSelectProject={setSelectedProject} user={user} />;
   }
 
   // Multi-tenant key: project.id is the unique scope for all data (like ACC project URN)
