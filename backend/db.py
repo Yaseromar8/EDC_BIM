@@ -793,21 +793,50 @@ def _load_project_resolver():
 
 def resolve_project_id(frente):
     """Resuelve un 'frente' (model_urn/app_project_id) a la obra canonica (projects.id).
-    Devuelve None si no se puede resolver. Nunca lanza."""
+    Devuelve None si no se puede resolver. Nunca lanza.
+
+    Dos correcciones importantes respecto de la version anterior:
+
+    1) LA REGLA DE PREFIJO ESTABA MUERTA. Hacia split('_', 1)[0], pero los ids
+       reales son 'b.proj_<slug>_<timestamp>' (routes/projects.py), que YA
+       contienen guiones bajos: para el scope '<projects.id>_<FRENTE>' devolvia
+       siempre 'b.proj', que no es ninguna obra. Ahora se busca el id de obra
+       MAS LARGO que sea prefijo del frente, que es lo que la convencion
+       '<id>_<FRENTE>' significa de verdad.
+
+    2) LO NO RECONOCIDO YA NO SE ATRIBUYE A LA OBRA POR DEFECTO. Antes, un
+       frente desconocido caia en m['default']; con una sola obra activa eso
+       hacia que TODO se resolviera por accidente a esa obra — y el dia que
+       entrara la segunda, la mitad del sistema cambiaria de comportamiento a la
+       vez. Devolver None es honesto: deja el hueco visible en los logs de authz
+       en vez de fabricar una respuesta plausible y equivocada.
+    """
     try:
         m = _load_project_resolver()
         if not frente or frente == 'global':
+            # 'global' es el namespace sin obra. Se mantiene el default (solo
+            # existe si hay UNA obra activa) por compatibilidad con los datos ya
+            # guardados ahi, pero es deuda: hay datos reales de obra viviendo en
+            # 'global' y habria que migrarlos a su obra.
             return m['default']
-        prefix = str(frente).split('_', 1)[0]
-        if prefix in m['by_id']:
-            return prefix
-        tail = str(frente).split('/')[-1]
+
+        texto = str(frente)
+
+        # Coincidencia exacta primero (el frente ES la obra).
+        if texto in m['by_id']:
+            return texto
+
+        # Prefijo mas largo: la convencion de scope es '<projects.id>_<FRENTE>'.
+        candidatos = [pid for pid in m['by_id'] if texto.startswith(pid + '_')]
+        if candidatos:
+            return max(candidatos, key=len)
+
+        tail = texto.split('/')[-1]
         if tail in m['by_name']:
             return m['by_name'][tail]
-        if frente in m['by_name']:
-            return m['by_name'][frente]
-        if frente in m['by_id']:
-            return frente
-        return m['default']
+        if texto in m['by_name']:
+            return m['by_name'][texto]
+
+        return None   # no resoluble: hueco visible, no adivinanza silenciosa
     except Exception:
         return None

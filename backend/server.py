@@ -18,7 +18,7 @@ if not _env_found:
     _parent_env = pathlib.Path(__file__).resolve().parent.parent / '.env'
     load_dotenv(_parent_env)
 
-from flask import Flask, jsonify, request, send_from_directory, redirect
+from flask import Flask, g, jsonify, request, send_from_directory, redirect
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import base64
@@ -1033,6 +1033,17 @@ def get_inventory():
             if project_id:
                 query += ' WHERE ia.project_id = %s'
                 params.append(project_id)
+            elif not model_urn or model_urn == 'global':
+                # SIN OBRA. Antes la consulta salia sin WHERE y devolvia el
+                # inventario COMPLETO de todas las obras -- metrados, materiales
+                # y estado de instalacion -- a cualquier sesion. Ahora se acota a
+                # las obras de las que el usuario es miembro; el admin sigue
+                # viendolo todo.
+                _sesion = getattr(g, 'current_user', None)
+                if _sesion and _sesion.get('role') != 'admin':
+                    query += (' WHERE ia.project_id IN'
+                              ' (SELECT project_id FROM project_users WHERE user_id = %s)')
+                    params.append(_sesion.get('id'))
             elif model_urn and model_urn != 'global':
                 # Filtrado por frente (model_urn): "1_CANAL", "1_DRENAJE", etc.
                 if '_' in model_urn:

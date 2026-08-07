@@ -69,7 +69,10 @@ PUBLIC_GET_PREFIXES = (
     '/api/projects',          # Proyectos de ACC (token 2-legged)
     '/api/build/',            # Subida/traduccion en ACC (token 2-legged)
     '/api/images/',           # Proxy de imagenes (token 2-legged)
-    '/api/documents/',        # Vinculacion de documentos de ACC (token 2-legged)
+    # '/api/documents/' NO va aqui. El prefijo se puso para la vinculacion de
+    # documentos de ACC con el token 2-legged, pero arrastraba tambien
+    # GET /api/documents/<id>, que devuelve una URL FIRMADA de descarga de
+    # cualquier nodo -- a un anonimo. Sus dos llamadores usan apiFetch.
     # ── Secure Share Engine: SOLO enlaces publicos por UUID ──────────────
     '/api/docs/shared/',      # Enlaces publicos a documentos por UUID
     '/api/views/',            # Vistas compartidas por UUID
@@ -272,23 +275,55 @@ def _user_in_project(user_id, project_id):
     return ok
 
 
+# Nombres bajo los que viaja la obra, en orden de preferencia. 'scope_urn' y
+# 'scope' son los que usan de verdad Civil y el 4D LOB, y faltaban: por eso
+# decenas de endpoints no resolvian obra y se colaban sin dejar ni un aviso.
+_CLAVES_OBRA = ('project_id', 'model_urn', 'scope_urn', 'scope', 'project', 'target_urn', 'urn')
+
+
+def _primer_valor(origen):
+    for clave in _CLAVES_OBRA:
+        valor = origen.get(clave)
+        if valor:
+            return clave, valor
+    return None, None
+
+
 def _request_project_id():
-    """Mejor esfuerzo: deduce la obra (projects.id) de la request. None si no se puede."""
+    """Mejor esfuerzo: deduce la obra (projects.id) de la request. None si no se puede.
+
+    Mira CUATRO fuentes. Antes solo leia args y el cuerpo JSON, y eso dejaba
+    fuera de la comprobacion, de un plumazo:
+      - los parametros de RUTA  -> GET /api/rfis/<model_urn>, /api/redlines/<model_urn>
+      - los formularios multipart -> POST /api/pins/upload, /api/project-pins/photo
+        (request.is_json es False en multipart, asi que ni se miraba el cuerpo)
+      - scope_urn / scope        -> todo Civil y el 4D LOB
+    """
     try:
         from db import resolve_project_id
     except Exception:
         return None
-    pid = request.args.get('project_id')
-    if pid:
-        return pid
-    frente = request.args.get('model_urn') or request.args.get('project')
-    if not frente and request.is_json:
-        body = request.get_json(silent=True) or {}
-        if isinstance(body, dict):
-            if body.get('project_id'):
-                return body.get('project_id')
-            frente = body.get('model_urn') or body.get('project') or body.get('target_urn')
-    return resolve_project_id(frente) if frente else None
+
+    origenes = [request.args, (request.view_args or {})]
+    if request.is_json:
+        cuerpo = request.get_json(silent=True)
+        if isinstance(cuerpo, dict):
+            origenes.append(cuerpo)
+    elif request.form:
+        origenes.append(request.form)
+
+    for origen in origenes:
+        clave, valor = _primer_valor(origen)
+        if not valor:
+            continue
+        if clave == 'project_id':
+            # Se VALIDA contra las obras reales en vez de devolverlo crudo: los
+            # frontends mandan tres cosas distintas en ese mismo nombre (el id de
+            # la obra, el id de proyecto de ACC y el scope con frente), y darlo
+            # por bueno convertia la comprobacion en un sello de goma.
+            return resolve_project_id(valor) or None
+        return resolve_project_id(valor)
+    return None
 
 
 # Endpoints que operan sobre datos de UNA obra concreta (por eso deben poder
@@ -296,10 +331,16 @@ def _request_project_id():
 # de autorizacion que hay que cerrar antes de activar ENFORCE. Los que NO estan
 # aqui (login, token, lista de usuarios, salud) son globales por diseno.
 _PROJECT_SCOPED_PREFIXES = (
-    '/api/docs', '/api/inventory', '/api/civil', '/api/lob4d', '/api/4d-lob',
+    '/api/docs', '/api/documents', '/api/inventory', '/api/civil',
+    # OJO: el 4D LOB se sirve en '/api/lob', no en '/api/lob4d' ni '/api/4d-lob'.
+    # Esos dos prefijos no casaban con NINGUNA ruta registrada, asi que el modulo
+    # entero quedaba fuera de la vigilancia y no aparecia ni en los avisos.
+    '/api/lob',
     '/api/rfis', '/api/redlines', '/api/partidas', '/api/presupuesto',
-    '/api/pins', '/api/project-pins', '/api/views', '/api/tracking',
+    '/api/pins', '/api/project-pins', '/api/views',
     '/api/attrs', '/api/transmittals', '/api/reviews', '/api/sets',
+    '/api/dashboards', '/api/geo', '/api/activity', '/api/schedule',
+    '/api/compare', '/api/element-docs',
 )
 
 
