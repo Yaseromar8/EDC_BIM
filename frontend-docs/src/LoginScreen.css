@@ -1,427 +1,321 @@
-/* ═══════════════════════════════════════════════════════════════════
-   LoginScreen.css — Stitch Design (Glassmorphism + Video Hero)
-   ═══════════════════════════════════════════════════════════════════ */
+/* Pantalla de acceso.
+   Decisión de diseño principal: el panel del formulario es SÓLIDO, no cristal.
+   El diseño anterior ponía texto casi negro (#1C1C1C) sobre un panel translúcido
+   al 1,5 % encima de un vídeo oscuro: el contraste dependía del fotograma, así
+   que era imposible de certificar y en la práctica ilegible. Con fondo sólido el
+   contraste es un número fijo (aquí ~16:1) y se sostiene con sol y casco. */
 
 :root {
-    --cubic-default: cubic-bezier(.23, 1, .32, 1);
-    --duration-default: 0.735s;
-    --color--red-accent: #E40001;
-    --color--primary: #E40001;
-    --color--dark: #1E2E2E;
-    --color--focus: #009999;
+    --cta-ink: #0B0F14;
+    --cta-surface: #131A22;
+    --cta-line: #263340;
+    --cta-line-fuerte: #3A4B5C;
+    --cta-text: #F2F5F8;
+    --cta-muted: #A8B3BF;
+    --cta-primary: #1473E6;
+    --cta-primary-alto: #2C87F5;
+    --cta-warn: #F5A524;
+    --cta-danger: #FF6B6B;
 }
 
-/* ── Base Reset ───────────────────────────────────────────────────── */
-.stitch-login {
-    font-family: "Inter", sans-serif;
-    background-color: #000;
-    color: var(--color--dark);
-    overflow-x: hidden;
-    height: 100vh;
-    width: 100vw;
+.cta-login {
+    display: flex;
+    /* dvh y no vh: en el WebView de Android vh ignora las barras del sistema y
+       el botón de Ingresar queda por debajo del borde visible. */
+    min-height: 100dvh;
+    background: var(--cta-ink);
+    color: var(--cta-text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ── Lado de la obra ─────────────────────────────────────────────────────── */
+.cta-obra {
     position: relative;
+    flex: 0 0 58%;
+    overflow: hidden;
+    background: #06090C;
 }
 
-.stitch-login a { text-decoration: none; color: inherit; }
-.stitch-login img, .stitch-login video { object-fit: cover; }
-
-/* ── Navigation Bar ───────────────────────────────────────────────── */
-.c-nav {
-    position: fixed;
-    top: 0;
-    left: 0;
+.cta-obra__video {
+    position: absolute;
+    inset: 0;
     width: 100%;
-    z-index: 1000;
-    padding: 1.5rem 3.5rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: white;
-    transition: background 0.3s ease;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 100%);
+    height: 100%;
+    object-fit: cover;
 }
 
-.c-brand {
+.cta-obra__velo {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(11, 15, 20, .30) 0%, rgba(11, 15, 20, .55) 55%, rgba(11, 15, 20, .92) 100%);
+}
+
+.cta-obra__pie {
+    position: absolute;
+    left: clamp(24px, 4vw, 56px);
+    bottom: clamp(24px, 4vw, 48px);
+    right: clamp(24px, 4vw, 56px);
+}
+
+.cta-obra__ficha {
+    margin: 10px 0 0;
+    font-size: .92rem;
+    color: var(--cta-muted);
+    letter-spacing: .01em;
+}
+
+/* ── Marca ───────────────────────────────────────────────────────────────── */
+.cta-marca {
     display: flex;
     align-items: center;
-    gap: 0.55rem;
+    gap: 11px;
+    color: var(--cta-text);
+}
+
+.cta-marca__glifo { flex-shrink: 0; opacity: .92; }
+
+.cta-marca__texto {
+    font-size: 1.6rem;
     font-weight: 800;
-    font-size: 1.05rem;
-    letter-spacing: 0.5px;
+    letter-spacing: .16em;
+    line-height: 1;
+}
+
+/* ── Panel del formulario ────────────────────────────────────────────────── */
+.cta-panel {
+    position: relative;
+    flex: 1 1 42%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(24px, 5vw, 56px);
+    background: var(--cta-ink);
+}
+
+.cta-panel__caja { width: 100%; max-width: 380px; }
+
+/* La marca del panel solo se ve cuando no hay vídeo (una columna). */
+.cta-panel__marca { display: none; margin-bottom: 28px; }
+
+.cta-bajada {
+    display: block;
+    margin-top: 8px;
+    font-size: .82rem;
+    color: var(--cta-muted);
+    letter-spacing: .04em;
+}
+
+.cta-titulo {
+    margin: 0 0 8px;
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -.01em;
+}
+
+.cta-sub {
+    margin: 0 0 26px;
+    font-size: .95rem;
+    line-height: 1.5;
+    color: var(--cta-muted);
+}
+
+/* ── Campos ──────────────────────────────────────────────────────────────── */
+.cta-campo { margin-bottom: 16px; }
+
+.cta-campo label {
+    display: block;
+    margin-bottom: 7px;
+    /* 0.85rem y color sólido: la versión anterior usaba 0.65rem al 70 % de
+       opacidad (10 px efectivos) — ilegible al sol. El color secundario nunca
+       se hace con opacity, porque entonces el contraste no es verificable. */
+    font-size: .85rem;
+    font-weight: 500;
+    color: var(--cta-muted);
+}
+
+.cta-campo input {
+    width: 100%;
+    /* 46 px de alto: por encima del mínimo táctil de 44 px con guantes. */
+    height: 46px;
+    padding: 0 14px;
+    box-sizing: border-box;
+    background: var(--cta-surface);
+    border: 1px solid var(--cta-line);
+    border-radius: 7px;
+    color: var(--cta-text);
+    font-size: 1rem;
+    font-family: inherit;
+    transition: border-color .15s, box-shadow .15s;
+}
+
+.cta-campo input::placeholder { color: #6B7784; }
+
+.cta-campo input:hover:not(:disabled) { border-color: var(--cta-line-fuerte); }
+
+.cta-campo input:focus {
+    outline: none;
+    border-color: var(--cta-primary);
+    box-shadow: 0 0 0 3px rgba(20, 115, 230, .25);
+}
+
+.cta-campo input:disabled { opacity: .6; cursor: not-allowed; }
+
+.cta-campo input:read-only {
+    color: var(--cta-muted);
+    background: #0F151C;
+    cursor: default;
+}
+
+.cta-campo__conBoton { position: relative; }
+.cta-campo__conBoton input { padding-right: 48px; }
+
+.cta-ojo {
+    position: absolute;
+    right: 1px;
+    top: 50%;
+    transform: translateY(-50%);
+    /* 44 px: mínimo táctil, y cabe dentro del campo de 46 px. */
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: var(--cta-muted);
+    cursor: pointer;
+}
+
+.cta-ojo:hover { color: var(--cta-text); }
+
+/* ── Avisos ──────────────────────────────────────────────────────────────── */
+.cta-avisos { min-height: 4px; }
+
+.cta-error,
+.cta-espera {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border-radius: 7px;
+    font-size: .88rem;
+    line-height: 1.45;
+}
+
+.cta-error {
+    background: rgba(255, 107, 107, .12);
+    border: 1px solid rgba(255, 107, 107, .35);
+    color: #FFC4C4;
+}
+
+.cta-espera {
+    background: rgba(245, 165, 36, .10);
+    border: 1px solid rgba(245, 165, 36, .32);
+    color: #FFDDA1;
+}
+
+/* ── Botones ─────────────────────────────────────────────────────────────── */
+.cta-enviar,
+.cta-google {
+    width: 100%;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    border-radius: 7px;
+    font-size: .97rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+}
+
+.cta-enviar {
+    margin-top: 6px;
+    background: var(--cta-primary);
+    border: 1px solid var(--cta-primary);
     color: #fff;
 }
 
-.c-brand span.c-brand-accent { color: #9bb2cc; font-weight: 600; }
+.cta-enviar:hover:not(:disabled) { background: var(--cta-primary-alto); }
+.cta-enviar:disabled { opacity: .65; cursor: default; }
 
-/* ── Language Dropdown ────────────────────────────────────────────── */
-.c-lang-dropdown { position: relative; display: inline-block; }
-
-.c-lang-trigger {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    padding: 0.5rem 0;
-    color: white;
-    background: none;
-    border: none;
+.cta-google {
+    margin-top: 4px;
+    background: var(--cta-surface);
+    border: 1px solid var(--cta-line);
+    color: var(--cta-text);
 }
 
-.c-lang-menu {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    border-radius: 1rem;
-    min-width: 160px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-    padding: 0.5rem;
-    display: none;
-    flex-direction: column;
-    margin-top: 0.5rem;
-    z-index: 1001;
-    overflow: hidden;
-}
-.c-lang-menu.is-active { display: flex; }
+.cta-google:hover:not(:disabled) { border-color: var(--cta-line-fuerte); }
 
-.c-lang-option {
-    padding: 0.6rem 0.8rem;
-    color: #1e2e2e;
-    font-size: 0.8rem;
-    font-weight: 500;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-radius: 0.5rem;
-    transition: background 0.2s;
-    cursor: pointer;
-    border: none;
-    background: none;
-    width: 100%;
-}
-.c-lang-option:hover { background: rgba(0,0,0,0.05); }
-.c-lang-option.is-selected { background: rgba(0,0,0,0.08); font-weight: 700; }
-
-/* ── Red CTA Button ───────────────────────────────────────────────── */
-.c-btn {
-    background-color: var(--color--red-accent);
-    color: white;
-    padding: 0.65rem 1.5rem;
-    border-radius: 100vw;
-    font-weight: 700;
-    text-transform: uppercase;
-    font-size: 0.7rem;
-    letter-spacing: 0.05em;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: transform 0.2s ease, background 0.2s ease;
-    white-space: nowrap;
-    cursor: pointer;
-    border: none;
-}
-.c-btn:hover { background-color: #B60000; transform: scale(1.02); }
-
-/* ── Hero Section ─────────────────────────────────────────────────── */
-.c-hero {
-    position: relative;
-    height: 100vh;
-    width: 100%;
-    overflow: hidden;
-    background: #000;
-}
-
-.c-hero_video {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    z-index: 0;
-}
-.c-hero_video video { width: 100%; height: 100%; object-fit: cover; }
-
-.c-hero_overlay {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.15);
-    z-index: 1;
-}
-
-.c-hero_content {
-    position: absolute;
-    z-index: 2;
-    inset: 0;
-    padding: 4rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-}
-
-/* ── Glassmorphism Cards ──────────────────────────────────────────── */
-.c-card {
-    background: rgba(255, 255, 255, 0.015);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    padding: 2rem;
-    border-radius: 2rem;
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    width: 380px;
-    height: 400px;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: flex-start;
-    box-sizing: border-box;
-    overflow: hidden;
-    flex-shrink: 0;
-    transition: all 0.4s var(--cubic-default);
-}
-
-.c-card--expanded {
-    width: 580px;
-    height: auto;
-    max-height: 85vh;
-    overflow-y: auto;
-    background: rgba(255, 255, 255, 0.05);
-}
-
-.c-hero_card { justify-content: center; }
-
-/* ── Login Card ───────────────────────────────────────────────────── */
-.c-login_card {
-    padding: 1.75rem 2rem;
-    height: 400px;
-    justify-content: center;
-    position: relative;
-}
-
-.c-login_card h2 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.25rem; }
-.c-login_card .subtitle { font-size: 0.75rem; margin-bottom: 1rem; opacity: 0.8; }
-.c-login_card .subtitle a,
-.c-login_card .subtitle button {
-    color: #0099ff; font-weight: 600; cursor: pointer;
-    background: none; border: none; padding: 0; font-size: inherit;
-}
-
-/* ── Input Fields ─────────────────────────────────────────────────── */
-.c-input_group { width: 100%; margin-bottom: 0.75rem; }
-
-.c-input_label {
-    display: block; font-size: 0.65rem;
-    margin-bottom: 0.3rem; opacity: 0.7;
-}
-
-.c-input_field {
-    width: 100%;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 0.4rem;
-    padding: 0.5rem 0.75rem;
-    color: #1C1C1C;
-    outline: none;
-    font-size: 0.8rem;
-    transition: border-color 0.2s, background 0.2s;
-}
-.c-input_field::placeholder { color: #1C1C1C; opacity: 0.6; }
-.c-input_field:focus { border-color: #007bff; background: rgba(255, 255, 255, 0.08); }
-
-/* ── Blue Button ──────────────────────────────────────────────────── */
-.c-btn-blue {
-    background-color: #007bff;
-    width: 100%;
-    padding: 0.65rem;
-    border-radius: 100vw;
-    color: white;
-    font-weight: 700;
-    text-align: center;
-    cursor: pointer;
-    margin-bottom: 0.75rem;
-    font-size: 0.75rem;
-    transition: transform 0.2s, background 0.2s;
-    border: none;
-}
-.c-btn-blue:hover { background-color: #0069d9; transform: translateY(-1px); }
-.c-btn-blue:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* ── Divider ──────────────────────────────────────────────────────── */
-.c-divider {
-    width: 100%;
-    display: flex; align-items: center; gap: 0.75rem;
-    margin-bottom: 0.75rem; opacity: 0.2;
-}
-.c-divider::before, .c-divider::after {
-    content: ""; flex: 1; height: 1px; background: white;
-}
-.c-divider span { font-size: 0.65rem; }
-
-/* ── Social Buttons ───────────────────────────────────────────────── */
-.c-social_btn {
-    width: 100%;
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 100vw;
-    padding: 0.5rem;
-    margin-bottom: 0.4rem;
-    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
-    font-size: 0.7rem;
-    cursor: pointer;
-    transition: background 0.2s;
-    color: white;
-}
-.c-social_btn:hover { background: rgba(255, 255, 255, 0.05); }
-
-/* ── Login Links ──────────────────────────────────────────────────── */
-.c-login_links { width: 100%; text-align: center; margin-top: 0.5rem; }
-.c-login_links a,
-.c-login_links button {
-    display: block; font-size: 0.65rem; color: #0099ff;
-    margin-bottom: 0.2rem; text-decoration: none;
-    background: none; border: none; cursor: pointer; width: 100%;
-}
-
-/* ── Typography ───────────────────────────────────────────────────── */
-.u-sub-small {
-    font-size: 0.55rem; text-transform: uppercase;
-    letter-spacing: 0.1em; margin-bottom: 0.5rem;
-    display: block; font-weight: 800; flex-shrink: 0; opacity: 0.8;
-}
-.u-heading-2 {
-    font-size: 2.5rem; line-height: 1; font-weight: 800;
-    margin-bottom: 1rem; letter-spacing: -0.01em;
-    display: block; width: 100%;
-}
-.c-card p {
-    font-size: 0.8rem; line-height: 1.4;
-    margin-bottom: 1.25rem; opacity: 0.8; width: 100%; font-weight: 400;
-}
-
-/* ── Scaling Content ──────────────────────────────────────────────── */
-.u-scaling-content {
-    width: 100%; display: flex; flex-direction: column;
-    height: 100%; justify-content: center;
-}
-
-/* ── Form Specific Styles (Demo Form) ─────────────────────────────── */
-.form-input {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 0.5rem;
-    padding: 0.6rem 1rem;
-    width: 100%;
-    height: 42px;
-    font-size: 0.8rem;
-    color: #1C1C1C;
-}
-.form-input::placeholder { color: #1C1C1C; opacity: 0.6; }
-
-.form-label {
-    display: block;
-    font-size: 0.65rem;
-    font-weight: 700;
-    margin-bottom: 0.35rem;
-    color: white;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-}
-.required-star { color: var(--color--red-accent); margin-left: 2px; }
-.error-text { color: #ff6b6b; font-size: 0.6rem; margin-top: 0.2rem; }
-
-/* ── Success State ────────────────────────────────────────────────── */
-.c-success-wrap {
-    text-align: center;
-    padding: 2rem 0;
-    width: 100%;
-}
-
-/* ── Error Display ────────────────────────────────────────────────── */
-.c-error-msg {
-    background: rgba(255, 50, 50, 0.15);
-    border: 1px solid rgba(255, 50, 50, 0.3);
-    color: #ff6b6b;
-    padding: 0.5rem 0.75rem;
-    border-radius: 0.4rem;
-    font-size: 0.7rem;
-    margin-bottom: 0.75rem;
-    width: 100%;
-}
-
-/* ── Back Button ──────────────────────────────────────────────────── */
-.c-back-btn {
-    display: flex; align-items: center; gap: 0.5rem;
-    cursor: pointer; margin-bottom: 1rem;
-    background: none; border: none; color: white;
-    opacity: 0.7; transition: opacity 0.2s;
-    font-size: 0.65rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.05em;
-    padding: 0;
-}
-.c-back-btn:hover { opacity: 1; }
-
-/* ── Close Button ─────────────────────────────────────────────────── */
-.c-close-btn {
-    position: absolute; top: 1.15rem; right: 1.25rem;
-    background: none; border: none;
-    color: rgba(255, 255, 255, 0.4);
-    cursor: pointer; padding: 0.5rem;
-    display: flex; align-items: center; justify-content: center;
-    transition: color 0.2s, transform 0.2s;
-    z-index: 10;
-}
-.c-close-btn:hover { color: white; transform: scale(1.1); }
-
-/* ── Spinner ──────────────────────────────────────────────────────── */
-.spinner {
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-top: 2px solid #fff;
+.cta-giro {
+    width: 15px;
+    height: 15px;
+    border: 2px solid rgba(255, 255, 255, .35);
+    border-top-color: #fff;
     border-radius: 50%;
-    width: 24px; height: 24px;
-    animation: stitch-spin 0.8s linear infinite;
-    margin: 0 auto;
-}
-@keyframes stitch-spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    animation: cta-girar .7s linear infinite;
 }
 
-/* ── Registration State ───────────────────────────────────────────── */
-#registrationState { padding: 0; }
-#registrationState h2 { font-size: 1.35rem; margin-top: 0.25rem; }
-#registrationState .subtitle { margin-bottom: 0.75rem; font-size: 0.7rem; }
-#registrationState .c-input_group { margin-bottom: 0.45rem; }
-#registrationState .c-input_label { font-size: 0.6rem; margin-bottom: 0.2rem; }
-#registrationState .c-input_field { padding: 0.4rem 0.65rem; font-size: 0.75rem; }
-#registrationState .c-btn-blue { margin-top: 0.25rem; margin-bottom: 0.25rem; padding: 0.55rem; }
-#registrationState .c-login_links { margin-top: 0.25rem; }
+@keyframes cta-girar { to { transform: rotate(360deg); } }
 
-/* ── Hidden ───────────────────────────────────────────────────────── */
-.is-hidden { display: none !important; }
-
-/* ── i18n Transitions ─────────────────────────────────────────────── */
-[data-i18n] { transition: opacity 0.2s ease; }
-
-/* ── Responsive ───────────────────────────────────────────────────── */
-@media (max-width: 1100px) {
-    .c-card { width: 320px; height: 350px; padding: 1.5rem; }
-    .c-card--expanded { width: 90%; height: auto; }
-    .u-heading-2 { font-size: 2rem; }
-    .c-nav { padding: 1rem 2rem; }
+.cta-separador {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 20px 0 14px;
+    color: var(--cta-muted);
+    font-size: .82rem;
 }
 
-@media (max-width: 920px) {
-    .c-hero_content {
-        flex-direction: column;
-        align-items: center;
-        gap: 1.5rem;
-        overflow-y: auto;
-        justify-content: flex-start;
-        padding-top: 5rem;
-    }
-    .c-card {
-        width: 100%; max-width: 360px;
-        height: auto; min-height: auto;
-    }
+.cta-separador::before,
+.cta-separador::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--cta-line);
+}
+
+.cta-nota {
+    margin: 24px 0 0;
+    font-size: .85rem;
+    line-height: 1.5;
+    color: var(--cta-muted);
+}
+
+.cta-idioma {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    min-height: 36px;
+    padding: 0 14px;
+    background: transparent;
+    border: 1px solid var(--cta-line);
+    border-radius: 6px;
+    color: var(--cta-muted);
+    font-size: .82rem;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.cta-idioma:hover { color: var(--cta-text); border-color: var(--cta-line-fuerte); }
+
+/* Foco visible en TODO lo interactivo. El diseño anterior no tenía una sola
+   regla de foco: navegar con teclado era ir a ciegas. */
+.cta-login :is(button, a, input):focus-visible {
+    outline: 2px solid var(--cta-primary-alto);
+    outline-offset: 2px;
+}
+
+/* ── Una columna: tablet vertical y APK ──────────────────────────────────── */
+@media (max-width: 1023px) {
+    .cta-obra { display: none; }   /* no se descargan 6,5 MB de vídeo en campo */
+    .cta-panel { flex: 1 1 100%; }
+    .cta-panel__marca { display: block; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cta-obra__video { display: none; }
+    .cta-giro { animation-duration: 2s; }
 }

@@ -133,12 +133,18 @@ def google_auth():
         # Verificar el token con Google
         try:
             idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), GOOGLE_CLIENT_ID)
-            
+
             # Datos del usuario desde Google
             email = idinfo['email']
             name = idinfo.get('name', 'Usuario Google')
             google_id = idinfo['sub'] # ID único de Google
-            
+
+            # Google afirma la identidad, pero solo si el propio Google verificó
+            # el correo. Sin este chequeo, un correo no verificado en el id_token
+            # bastaba para emparejar con una cuenta de la plataforma.
+            if not idinfo.get('email_verified'):
+                return jsonify({'error': 'Tu correo de Google no está verificado'}), 403
+
         except ValueError as e:
             print(f"[AUTH] Google token verification FAILED: {e}")
             print(f"[AUTH] Using Client ID: {GOOGLE_CLIENT_ID}")
@@ -172,25 +178,16 @@ def google_auth():
                     'session_token': create_session(user[0])
                 }), 200
             else:
-                # Usuario no existe, crear cuenta automáticamente (Registro rápido)
-                # Nota: Por defecto los dejamos sin empresa/cargo si es auto-registro, 
-                # o el admin puede completarlo luego.
-                cursor.execute('''
-                    INSERT INTO users (name, email, password_hash, role)
-                    VALUES (%s, %s, %s, %s) RETURNING id
-                ''', (name, email, f"google_{google_id}", 'user'))
-                new_id = cursor.fetchone()[0]
-                conn.commit()
-                
+                # SOLO POR INVITACION, igual que el registro con contraseña.
+                # Antes se auto-creaba cuenta para CUALQUIER titular de una
+                # cuenta Google valida para este client_id: una puerta abierta
+                # que se saltaba entera la politica de invitacion.
                 return jsonify({
-                    'id': new_id,
-                    'name': name,
-                    'email': email,
-                    'role': 'user',
-                    'is_new': True,
-                    'session_token': create_session(new_id)
-                }), 200
-                
+                    'error': 'Este correo no tiene acceso a la plataforma. '
+                             'Pide al administrador de la obra que te invite.',
+                    'code': 'NO_INVITADO'
+                }), 403
+
     except Exception as e:
         print(f"Error en Google Auth: {e}")
         return jsonify({'error': str(e)}), 500

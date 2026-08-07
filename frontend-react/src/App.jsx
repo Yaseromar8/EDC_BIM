@@ -559,17 +559,26 @@ console.log('[App] Version: 1.0.3 - Mobile Connection & UI Cleanup applied.');
 
 const ACC_PROJECT_ID = 'b.a7ce4d60-79f3-4dbf-b059-fefaf14f7b1d';
 
-// ─── DEMO TOGGLE: Auth Bypass ───────────────────────────────────────────────
-// Cuando BYPASS_AUTH = true, el visor NO muestra LoginScreen ni LandingPage.
-// La sesión se asume válida y el proyecto se recibe vía URL params
-// desde frontend-docs (Gateway Interceptor).
-// Cambiar a false para reactivar auth nativo.
-const BYPASS_AUTH = true;
+// ─── Auth Bypass (retirado) ─────────────────────────────────────────────────
+// Quedó en true de una demo antigua y su efecto real era dejar el visor SIN
+// botón de cerrar sesión (onLogout={null} más abajo): no había forma de salir
+// de la cuenta. El gate de login nunca dependió de esta constante — vive en
+// `!user && !_hasSession && !isSharedMode`.
+const BYPASS_AUTH = false;
 
 function App() {
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('visor_user');
-    return saved ? JSON.parse(saved) : null;
+    // Con try/catch: un visor_user corrupto lanzaba dentro del inicializador
+    // de useState y la app arrancaba en pantalla blanca, sin forma de llegar
+    // al login para arreglarlo.
+    try {
+      const saved = localStorage.getItem('visor_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      localStorage.removeItem('visor_user');
+      localStorage.removeItem('visor_session_token');
+      return null;
+    }
   });
 
   const handleLoginSuccess = useCallback((userData) => {
@@ -3029,7 +3038,7 @@ function App() {
 
   // Load Tracking Data on Mount or Project Change
   useEffect(() => {
-    if (!user && !BYPASS_AUTH) return; // Prevent fetching if not logged in (skip guard in demo mode)
+    if (!user && !isSharedMode) return; // sin sesión no se pide nada, salvo vista compartida
 
     const fetchTracking = async () => {
       try {
@@ -3136,7 +3145,7 @@ function App() {
     // Small delay to let tracking data load first
     setTimeout(resumePendingUploads, 2000);
 
-  }, [selectedProject]);
+  }, [selectedProject, user, isSharedMode]);
 
   useEffect(() => {
     const handleTooltipUpdate = (e) => {

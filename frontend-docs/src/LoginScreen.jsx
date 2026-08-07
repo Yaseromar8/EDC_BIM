@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './LoginScreen.css';
 import { Capacitor } from '@capacitor/core';
 
@@ -6,516 +6,344 @@ const BACKEND_URL = Capacitor.isNativePlatform()
     ? 'https://visor-ecd-backend.onrender.com'
     : (import.meta.env.VITE_BACKEND_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://visor-ecd-backend.onrender.com'));
 
-// ── VIDEO — Cambiar esta línea para usar tu propio video ─────────────────────
-// Obra real (dron, SEM 30): CANAL JESUS MARIA 0:00–0:10 · MAX_1346 2:25–2:35
-// · CANAL JESUS MARIA 3:50–4:05 —
-// del original 5.5K, reencodados a 1600×900 sin audio (~4 MB) y servidos desde
-// public/. El mismo archivo vive en frontend-react/public: si se cambia uno,
-// cambiar el otro para que ambas entradas se vean igual.
-const HERO_VIDEO_URL = "/login-obra.mp4";
-// Para otro video local: cópialo a public/ y pon "/mi_video.mp4"
+// ── IDENTIDAD ────────────────────────────────────────────────────────────────
+// El producto necesita nombre propio: la pantalla anterior mostraba literalmente
+// la marca de Revizto. Cambia estas dos líneas y cambia toda la identidad.
+const MARCA = 'COTA';
+const MARCA_BAJADA = 'Plataforma de obra';
 
-// ── Translations ─────────────────────────────────────────────────────────────
-const translations = {
-    en: {
-        btn_demo: "DEMO",
-        hero_sub: "AECO Collaboration Software",
-        hero_title: 'Your project.<br/>Made Right.',
-        hero_desc: "The leading 2D/3D platform to deliver complex projects with greater confidence and control.",
-        login_title: "Log in",
-        login_new_user: "Are you a new user?",
-        login_create_account: "Create an account",
-        login_email_label: "Email address",
-        login_continue: "Continue",
-        login_or: "or",
-        login_google: "Continue with Google",
-        login_apple: "Continue with Apple",
-        login_more_options: "More login options",
-        login_help: "Get help signing in",
-        login_back: "Back",
-        login_pass_title: "Enter Password",
-        login_btn: "Log In",
-        welcome_back: "Welcome back!",
-        redirecting: "Redirecting to your dashboard...",
-        reg_title: "Sign Up",
-        reg_already_user: "Already have an account?",
-        reg_login_link: "Log in",
-        reg_name_label: "Full Name",
-        reg_email_label: "Email address",
-        reg_pass_label: "Password",
-        reg_confirm_label: "Confirm Password",
-        reg_submit: "Sign Up",
-        reg_back: "Back to login",
-        reg_success_title: "Account created!",
-        reg_success_msg: "Check your email to verify your account and get started."
-    },
+// Vídeo de la obra real (dron, SEM 30), servido desde public/ y no desde un CDN
+// ajeno. Solo se carga en pantalla ancha: en la tablet de campo son 6,5 MB de
+// decodificación en cada arranque para algo que nadie mira.
+const VIDEO_OBRA = '/login-obra.mp4';
+const PIE_OBRA = 'Drenaje pluvial · Talara, Piura';
+
+// El backend en plan gratuito de Render se duerme: el primer arranque tarda
+// ~50 s. Pasado este umbral se explica en vez de dejar unos puntos suspensivos.
+const MS_AVISO_DESPERTANDO = 8000;
+
+const T = {
     es: {
-        btn_demo: "DEMO",
-        hero_sub: "Software de Colaboración AECO",
-        hero_title: 'Su proyecto.<br/>Bien hecho.',
-        hero_desc: "Plataforma 2D/3D para entregar proyectos complejos con mayor confianza y control.",
-        login_title: "Inicio de sesión",
-        login_new_user: "¿Eres un nuevo usuario?",
-        login_create_account: "Crear una cuenta",
-        login_email_label: "Correo electrónico",
-        login_continue: "Continuar",
-        login_or: "o",
-        login_google: "Continuar con Google",
-        login_apple: "Continuar con Apple",
-        login_more_options: "Más opciones",
-        login_help: "Ayuda para iniciar sesión",
-        login_back: "Volver",
-        login_pass_title: "Ingresar Contraseña",
-        login_btn: "Iniciar Sesión",
-        welcome_back: "¡Bienvenido de nuevo!",
-        redirecting: "Redirigiendo a su panel...",
-        reg_title: "Registrarse",
-        reg_already_user: "¿Ya tienes una cuenta?",
-        reg_login_link: "Iniciar sesión",
-        reg_name_label: "Nombre completo",
-        reg_email_label: "Correo electrónico",
-        reg_pass_label: "Contraseña",
-        reg_confirm_label: "Confirmar contraseña",
-        reg_submit: "Registrarse",
-        reg_back: "Volver al inicio",
-        reg_success_title: "¡Cuenta creada!",
-        reg_success_msg: "Revisa tu correo electrónico para verificar tu cuenta y comenzar."
+        titulo: 'Acceso a la plataforma',
+        sub: 'Ingresa con el correo con el que te invitaron a la obra.',
+        correo: 'Correo',
+        password: 'Contraseña',
+        ver: 'Mostrar contraseña',
+        ocultar: 'Ocultar contraseña',
+        entrar: 'Ingresar',
+        entrando: 'Verificando…',
+        despertando: 'El servidor estaba en reposo y está arrancando. Puede tardar hasta un minuto.',
+        sinAcceso: '¿No tienes acceso? Pide al administrador de la obra que te invite.',
+        errRed: 'No se pudo conectar con el servidor. Revisa tu conexión.',
+        errCreds: 'Correo o contraseña incorrectos.',
+        errLimite: 'Demasiados intentos. Espera un momento antes de volver a probar.',
+        google: 'Continuar con Google',
+        // Registro por invitación
+        regTitulo: 'Crea tu cuenta',
+        regSub: 'Te invitaron a la obra. Elige tu contraseña para entrar.',
+        nombre: 'Nombre y apellido',
+        repetir: 'Repite la contraseña',
+        crear: 'Crear cuenta',
+        creando: 'Creando…',
+        errDistintas: 'Las contraseñas no coinciden.',
+        errCorta: 'La contraseña debe tener al menos 8 caracteres.',
+        volver: 'Volver al acceso',
+        idioma: 'English',
     },
-    zh: {
-        btn_demo: "演示",
-        hero_sub: "AECO 协作软件",
-        hero_title: '您的项目，<br/>成就非凡。',
-        hero_desc: "领先的 2D/3D 平台，助力更自信、更高效地交付复杂项目。",
-        login_title: "登录",
-        login_new_user: "是新用户吗？",
-        login_create_account: "创建账户",
-        login_email_label: "电子邮件地址",
-        login_continue: "继续",
-        login_or: "或",
-        login_google: "通过 Google 继续",
-        login_apple: "通过 Apple 继续",
-        login_more_options: "更多登录选项",
-        login_help: "获取登录帮助",
-        login_back: "返回",
-        login_pass_title: "输入密码",
-        login_btn: "登录",
-        welcome_back: "欢迎回来！",
-        redirecting: "正在重定向到您的仪表板...",
-        reg_title: "注册",
-        reg_already_user: "已有账户？",
-        reg_login_link: "登录",
-        reg_name_label: "全名",
-        reg_email_label: "电子邮件地址",
-        reg_pass_label: "密码",
-        reg_confirm_label: "确认密码",
-        reg_submit: "注册",
-        reg_back: "返回登录",
-        reg_success_title: "账户已创建！",
-        reg_success_msg: "请检查您的电子邮件以验证您的账户。"
-    }
+    en: {
+        titulo: 'Sign in',
+        sub: 'Use the email you were invited with.',
+        correo: 'Email',
+        password: 'Password',
+        ver: 'Show password',
+        ocultar: 'Hide password',
+        entrar: 'Sign in',
+        entrando: 'Checking…',
+        despertando: 'The server was asleep and is starting up. This can take up to a minute.',
+        sinAcceso: 'No access? Ask the site administrator to invite you.',
+        errRed: 'Could not reach the server. Check your connection.',
+        errCreds: 'Wrong email or password.',
+        errLimite: 'Too many attempts. Please wait a moment before trying again.',
+        google: 'Continue with Google',
+        regTitulo: 'Create your account',
+        regSub: 'You were invited. Choose a password to get in.',
+        nombre: 'Full name',
+        repetir: 'Repeat password',
+        crear: 'Create account',
+        creando: 'Creating…',
+        errDistintas: 'Passwords do not match.',
+        errCorta: 'Password must be at least 8 characters.',
+        volver: 'Back to sign in',
+        idioma: 'Español',
+    },
 };
 
-// ── SVG Icons ────────────────────────────────────────────────────────────────
-const GoogleIcon = () => (
-    <svg height="14" viewBox="0 0 18 18" width="14">
-        <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4" />
-        <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853" />
-        <path d="M3.964 10.706c-.18-.54-.282-1.117-.282-1.706s.102-1.166.282-1.706V4.962H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#FBBC05" />
-        <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.443 2.048.957 4.962l3.007 2.332c.708-2.127 2.692-3.711 5.036-3.711z" fill="#EA4335" />
-    </svg>
-);
-const AppleIcon = () => (
-    <svg fill="white" height="14" viewBox="0 0 18 18" width="14">
-        <path d="M15.03 12.62c-.63 1.14-1.53 2.34-2.82 2.34-1.26 0-1.68-.81-3.21-.81-1.53 0-2.01.78-3.21.81-1.29.03-2.37-1.35-3-2.34-1.32-1.98-2.31-5.61-.96-7.83 1.23-2.01 3.24-2.16 4.32-2.16 1.05 0 2.04.66 2.67.66.63 0 1.86-.78 3.09-.66 1.26.12 2.31.6 3 1.5-2.58 1.47-2.16 4.86.51 5.82-.45 1.14-1.2 2.31-1.89 3.12zM11.16.27c0 1.29-.93 2.67-2.28 2.67-.18 0-.36-.03-.48-.06.06-1.53 1.17-2.88 2.31-2.88.15 0 .3.03.45.06v.21z" />
+/** Lee el correo del token de invitación para no obligar a teclearlo.
+ *  El token va FIRMADO, no cifrado: su contenido es público (y el correo ya lo
+ *  conoce quien recibió el enlace). La firma la valida el backend. */
+function correoDeInvitacion(token) {
+    try {
+        const payload = token.split('.')[0];
+        const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((payload.length + 3) % 4));
+        return JSON.parse(json)?.email || '';
+    } catch { return ''; }
+}
+
+const IconoOjo = ({ abierto }) => (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {abierto
+            ? <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></>
+            : <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></>}
     </svg>
 );
 
-// ═════════════════════════════════════════════════════════════════════════════
+const Marca = () => (
+    <div className="cta-marca">
+        {/* Mira topográfica: la identidad es tipográfica, el glifo solo acompaña. */}
+        <svg className="cta-marca__glifo" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.5" /><line x1="12" y1="1.5" x2="12" y2="7" />
+            <line x1="12" y1="17" x2="12" y2="22.5" /><line x1="1.5" y1="12" x2="7" y2="12" />
+            <line x1="17" y1="12" x2="22.5" y2="12" /><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+        </svg>
+        <span className="cta-marca__texto">{MARCA}</span>
+    </div>
+);
+
 const LoginScreen = ({ onLogin }) => {
-    // Language
-    const [lang, setLang] = useState('en');
-    const [langMenuOpen, setLangMenuOpen] = useState(false);
-    const t = translations[lang];
+    const [lang, setLang] = useState('es');
+    const t = T[lang];
 
-    // Left card: 'hero' | 'form' | 'success'
-    const [leftCardState, setLeftCardState] = useState('hero');
+    const invitacion = typeof window !== 'undefined'
+        ? (new URLSearchParams(window.location.search).get('invite') || '')
+        : '';
+    const modoRegistro = Boolean(invitacion);
 
-    // Right card: 'login' | 'password' | 'access' | 'registration' | 'regSuccess'
-    const [rightCardState, setRightCardState] = useState('login');
+    const [correo, setCorreo] = useState(() => (invitacion ? correoDeInvitacion(invitacion) : ''));
+    const [clave, setClave] = useState('');
+    const [verClave, setVerClave] = useState(false);
+    const [nombre, setNombre] = useState('');
+    const [clave2, setClave2] = useState('');
 
-    // Form fields
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [regName, setRegName] = useState('');
-    const [regEmail, setRegEmail] = useState('');
-    const [regPass, setRegPass] = useState('');
-    const [regConfirm, setRegConfirm] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [enviando, setEnviando] = useState(false);
+    const [despertando, setDespertando] = useState(false);
     const [error, setError] = useState('');
+    const [entrado, setEntrado] = useState(false);
 
-    const langMenuRef = useRef(null);
-    const passwordRef = useRef(null);
-
-    // Close lang menu on outside click
+    const temporizador = useRef(null);
+    const vivo = useRef(true);
     useEffect(() => {
-        const handler = () => setLangMenuOpen(false);
-        document.addEventListener('click', handler);
-        return () => document.removeEventListener('click', handler);
+        // Reafirmar en el montaje, no solo limpiar al desmontar: con StrictMode
+        // React monta, limpia y vuelve a montar, y sin esta línea `vivo` quedaba
+        // en false para siempre — el formulario se colgaba en "Verificando…"
+        // tras el primer error, sin volver a habilitarse nunca.
+        vivo.current = true;
+        return () => { vivo.current = false; clearTimeout(temporizador.current); };
     }, []);
 
-    // Focus password input
-    useEffect(() => {
-        if (rightCardState === 'password' && passwordRef.current) passwordRef.current.focus();
-    }, [rightCardState]);
+    // El <html lang> tiene que seguir al idioma o el lector de pantalla
+    // pronuncia el español con fonética inglesa.
+    useEffect(() => { document.documentElement.lang = lang; }, [lang]);
 
-    // Google Identity Services
-    useEffect(() => {
-        const handleGoogleResponse = async (response) => {
-            setLoading(true); setError('');
-            try {
-                const res = await fetch(`${BACKEND_URL}/api/auth/google`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: response.credential })
-                });
-                const data = await res.json();
-                if (res.ok) { setRightCardState('access'); setTimeout(() => onLogin(data), 2000); }
-                else setError(data.error || 'Error en autenticación con Google');
-            } catch { setError('Error de conexión'); }
-            finally { setLoading(false); }
-        };
-        if (window.google) {
-            window.google.accounts.id.initialize({
-                client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || "tu-cliente-id.apps.googleusercontent.com",
-                callback: handleGoogleResponse
-            });
-        }
-    }, [onLogin]);
-
-    const handleGoogleClick = () => {
-        if (window.google) window.google.accounts.id.prompt();
-        else setError('Google Login no disponible');
-    };
-
-    // ── Left card: Demo triggers ─────────────────────────────────
-    const showLeftState = (state) => setLeftCardState(state);
-
-    // ── Right card: Login flow ───────────────────────────────────
-    const handleContinue = () => { if (!email.trim()) return; setError(''); setRightCardState('password'); };
-
-    const handleLogin = async () => {
-        if (!password) return;
-        setLoading(true); setError('');
+    const pedir = useCallback(async (ruta, cuerpo) => {
+        setEnviando(true);
+        setError('');
+        setDespertando(false);
+        clearTimeout(temporizador.current);
+        temporizador.current = setTimeout(() => { if (vivo.current) setDespertando(true); }, MS_AVISO_DESPERTANDO);
         try {
-            const res = await fetch(`${BACKEND_URL}/api/auth/login`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: email.trim(), password })
+            const res = await fetch(`${BACKEND_URL}${ruta}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(cuerpo),
             });
-            const data = await res.json();
-            if (res.ok) { setRightCardState('access'); setTimeout(() => onLogin(data), 2000); }
-            else setError(data.error || 'Credenciales incorrectas');
-        } catch { setError(`Error de conexión (${BACKEND_URL})`); }
-        finally { setLoading(false); }
-    };
-
-    const handleRegister = async () => {
-        if (!regName.trim() || !regEmail.trim() || !regPass || !regConfirm) return;
-        if (regPass !== regConfirm) { setError('Passwords do not match'); return; }
-        setLoading(true); setError('');
-        try {
-            // invite_token: prueba de que la invitación la emitió el admin.
-            // Sin él, reclamar una cuenta pendiente bastaba con saber el correo.
-            const invite = new URLSearchParams(window.location.search).get('invite') || '';
-            const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: regName.trim(), email: regEmail.trim(), password: regPass, invite_token: invite })
-            });
-            const data = await res.json();
-            if (res.ok) {
-                // Auto login after reg
-                setRightCardState('access');
-                setTimeout(() => onLogin(data), 2000);
-            } else {
-                setError(data.error || 'Error al registrar');
-            }
-        } catch (err) {
-            setError('Error de conexión al registrar');
+            const datos = await res.json().catch(() => ({}));
+            return { ok: res.ok, estado: res.status, datos };
+        } catch {
+            return { ok: false, estado: 0, datos: {} };
         } finally {
-            setLoading(false);
+            clearTimeout(temporizador.current);
+            if (vivo.current) { setEnviando(false); setDespertando(false); }
+        }
+    }, []);
+
+    const mensajeDeError = (estado, datos) => {
+        if (estado === 0) return t.errRed;
+        if (estado === 429) return t.errLimite;
+        if (estado === 401) return t.errCreds;
+        return datos.error || t.errCreds;
+    };
+
+    const acceder = async (e) => {
+        e.preventDefault();
+        if (enviando || !correo.trim() || !clave) return;
+        const { ok, estado, datos } = await pedir('/api/auth/login', { email: correo.trim(), password: clave });
+        if (ok) {
+            setEntrado(true);      // sin espera artificial: se entra al terminar
+            onLogin(datos);
+        } else {
+            setError(mensajeDeError(estado, datos));
         }
     };
 
-    const handleDemoSubmit = (e) => { e.preventDefault(); showLeftState('success'); };
-    const onKey = (e, fn) => { if (e.key === 'Enter') fn(); };
+    const registrar = async (e) => {
+        e.preventDefault();
+        if (enviando || !nombre.trim() || !correo.trim() || !clave) return;
+        if (clave.length < 8) { setError(t.errCorta); return; }
+        if (clave !== clave2) { setError(t.errDistintas); return; }
+        const { ok, estado, datos } = await pedir('/api/auth/register', {
+            name: nombre.trim(), email: correo.trim(), password: clave, invite_token: invitacion,
+        });
+        if (ok) {
+            setEntrado(true);
+            onLogin(datos);
+        } else {
+            setError(estado === 0 ? t.errRed : (datos.error || t.errCreds));
+        }
+    };
 
-    const langLabels = [
-        { code: 'en', name: 'English', label: 'EN' },
-        { code: 'es', name: 'Español', label: 'ES' },
-        { code: 'zh', name: '简体中文', label: 'ZH' },
-    ];
+    // Google solo si de verdad está cargado. Sin red (APK en obra) el script no
+    // existe y el botón no debe aparecer prometiendo algo que no funciona.
+    const [hayGoogle, setHayGoogle] = useState(false);
+    useEffect(() => {
+        const idCliente = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+        if (!idCliente || !window.google?.accounts?.id) return;
+        window.google.accounts.id.initialize({
+            client_id: idCliente,
+            callback: async (respuesta) => {
+                const { ok, estado, datos } = await pedir('/api/auth/google', { token: respuesta.credential });
+                if (ok) { setEntrado(true); onLogin(datos); }
+                else setError(estado === 0 ? t.errRed : (datos.error || t.errCreds));
+            },
+        });
+        setHayGoogle(true);
+    }, [pedir, onLogin, t]);
 
-    // Computed: is left card expanded?
-    const isExpanded = leftCardState === 'form';
-    // Computed: should right card be hidden (when demo form is open)?
-    const rightCardStyle = isExpanded
-        ? { opacity: 0, pointerEvents: 'none' }
-        : { opacity: 1, pointerEvents: 'auto' };
+    const enviarTexto = modoRegistro
+        ? (enviando ? t.creando : t.crear)
+        : (enviando ? t.entrando : t.entrar);
 
     return (
-        <div className="stitch-login">
-            {/* ══ NAV ════════════════════════════════════════════════ */}
-            <nav className="c-nav">
-                <div className="c-brand">
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-label="ECD-VISIION">
-                        <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="#fff" />
-                        <path d="M7 8.5l5 8 5-8" stroke="#2b333d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <span>ECD<span className="c-brand-accent">-VISIION</span></span>
+        <div className="cta-login">
+            <section className="cta-obra" aria-hidden="true">
+                <video className="cta-obra__video" autoPlay muted loop playsInline preload="none">
+                    <source src={VIDEO_OBRA} type="video/mp4" />
+                </video>
+                <div className="cta-obra__velo" />
+                <div className="cta-obra__pie">
+                    <Marca />
+                    <p className="cta-obra__ficha">{PIE_OBRA}</p>
                 </div>
-                <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
-                    <div className="c-lang-dropdown" ref={langMenuRef}>
-                        <div className="c-lang-trigger" onClick={(e) => { e.stopPropagation(); setLangMenuOpen(!langMenuOpen); }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>language</span>
-                            <span id="currentLang">{lang.toUpperCase()}</span>
-                            <span className="material-symbols-outlined" style={{ fontSize: '1rem', opacity: 0.6 }}>keyboard_arrow_down</span>
+            </section>
+
+            <section className="cta-panel">
+                <button
+                    type="button"
+                    className="cta-idioma"
+                    onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
+                >{t.idioma}</button>
+
+                <div className="cta-panel__caja">
+                    <div className="cta-panel__marca"><Marca /><span className="cta-bajada">{MARCA_BAJADA}</span></div>
+
+                    <h1 className="cta-titulo">{modoRegistro ? t.regTitulo : t.titulo}</h1>
+                    <p className="cta-sub">{modoRegistro ? t.regSub : t.sub}</p>
+
+                    <form onSubmit={modoRegistro ? registrar : acceder} noValidate>
+                        {modoRegistro && (
+                            <div className="cta-campo">
+                                <label htmlFor="nombre">{t.nombre}</label>
+                                <input
+                                    id="nombre" name="name" type="text" autoComplete="name"
+                                    value={nombre} onChange={(e) => setNombre(e.target.value)}
+                                    disabled={enviando} required autoFocus
+                                />
+                            </div>
+                        )}
+
+                        <div className="cta-campo">
+                            <label htmlFor="correo">{t.correo}</label>
+                            <input
+                                id="correo" name="username" type="email"
+                                autoComplete="username" inputMode="email"
+                                autoCapitalize="off" autoCorrect="off" spellCheck="false"
+                                value={correo} onChange={(e) => setCorreo(e.target.value)}
+                                disabled={enviando}
+                                /* readOnly y no disabled: el correo de la invitación no
+                                   se teclea (evita erratas) pero el campo sigue contando
+                                   para que el gestor de contraseñas ofrezca guardarlo. */
+                                readOnly={modoRegistro}
+                                required autoFocus={!modoRegistro}
+                            />
                         </div>
-                        <div className={`c-lang-menu ${langMenuOpen ? 'is-active' : ''}`}>
-                            {langLabels.map(l => (
-                                <div
-                                    key={l.code}
-                                    className={`c-lang-option ${lang === l.code ? 'is-selected' : ''}`}
-                                    onClick={() => { setLang(l.code); setLangMenuOpen(false); }}
+
+                        <div className="cta-campo">
+                            <label htmlFor="clave">{t.password}</label>
+                            <div className="cta-campo__conBoton">
+                                <input
+                                    id="clave" name="password"
+                                    type={verClave ? 'text' : 'password'}
+                                    autoComplete={modoRegistro ? 'new-password' : 'current-password'}
+                                    value={clave} onChange={(e) => setClave(e.target.value)}
+                                    disabled={enviando} required
+                                />
+                                <button
+                                    type="button" className="cta-ojo"
+                                    onClick={() => setVerClave(!verClave)}
+                                    aria-label={verClave ? t.ocultar : t.ver}
+                                    aria-pressed={verClave}
+                                    tabIndex={0}
                                 >
-                                    <span>{l.name}</span>
-                                    <span style={{ color: 'rgb(152, 187, 187)', fontSize: '0.7rem', fontWeight: 700 }}>{l.label}</span>
-                                </div>
-                            ))}
+                                    <IconoOjo abierto={verClave} />
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                    <button className="c-btn" onClick={() => showLeftState('form')}>
-                        <span>{t.btn_demo}</span>
-                        <span className="material-symbols-outlined" style={{ fontSize: '1rem', border: '1.2px solid white', borderRadius: '50%', padding: '1px' }}>arrow_forward</span>
-                    </button>
+
+                        {modoRegistro && (
+                            <div className="cta-campo">
+                                <label htmlFor="clave2">{t.repetir}</label>
+                                <input
+                                    id="clave2" name="password_confirm" type={verClave ? 'text' : 'password'}
+                                    autoComplete="new-password"
+                                    value={clave2} onChange={(e) => setClave2(e.target.value)}
+                                    disabled={enviando} required
+                                />
+                            </div>
+                        )}
+
+                        {/* aria-live: el lector anuncia el error sin mover el foco */}
+                        <div className="cta-avisos" role="status" aria-live="polite">
+                            {error && <p className="cta-error">{error}</p>}
+                            {despertando && <p className="cta-espera">{t.despertando}</p>}
+                        </div>
+
+                        <button type="submit" className="cta-enviar" disabled={enviando || entrado}>
+                            {enviando && <span className="cta-giro" aria-hidden="true" />}
+                            {enviarTexto}
+                        </button>
+                    </form>
+
+                    {!modoRegistro && hayGoogle && (
+                        <>
+                            <div className="cta-separador"><span>o</span></div>
+                            <button
+                                type="button" className="cta-google"
+                                onClick={() => window.google.accounts.id.prompt()}
+                                disabled={enviando}
+                            >
+                                <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">
+                                    <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.8-.4-4H24v7.3h12.1c-.2 2-1.6 5-4.5 7l6.9 5.4c4.1-3.8 6.6-9.4 6.6-15.7z" />
+                                    <path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.4c-1.9 1.3-4.4 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-7.1 5.5C8.1 41.1 15.4 46 24 46z" />
+                                    <path fill="#FBBC05" d="M11.5 28.4c-.5-1.4-.7-2.9-.7-4.4s.3-3 .7-4.4l-7.1-5.5C2.9 17 2 20.4 2 24s.9 7 2.4 9.9l7.1-5.5z" />
+                                    <path fill="#EA4335" d="M24 10.5c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 4.4 29.9 2 24 2 15.4 2 8.1 6.9 4.4 14.1l7.1 5.5c1.8-5.3 6.7-9.1 12.5-9.1z" />
+                                </svg>
+                                {t.google}
+                            </button>
+                        </>
+                    )}
+
+                    <p className="cta-nota">{modoRegistro ? '' : t.sinAcceso}</p>
                 </div>
-            </nav>
-
-            {/* ══ HERO ═══════════════════════════════════════════════ */}
-            <header className="c-hero">
-                <div className="c-hero_video">
-                    <video autoPlay loop muted playsInline>
-                        <source src={HERO_VIDEO_URL} type="video/mp4" />
-                    </video>
-                </div>
-                <div className="c-hero_overlay" />
-                <div className="c-hero_content">
-
-                    {/* ── LEFT CARD (Hero / Form / Success) ─────── */}
-                    <div className={`c-card c-hero_card ${isExpanded ? 'c-card--expanded' : ''}`}>
-
-                        {/* Default Hero State */}
-                        {leftCardState === 'hero' && (
-                            <div className="u-scaling-content">
-                                <span className="u-sub-small">{t.hero_sub}</span>
-                                <h1 className="u-heading-2" dangerouslySetInnerHTML={{ __html: t.hero_title }} />
-                                <p>{t.hero_desc}</p>
-                                <button className="c-btn" style={{ width: 'fit-content' }} onClick={() => showLeftState('form')}>
-                                    <span>{t.btn_demo}</span>
-                                    <span className="material-symbols-outlined" style={{ fontSize: '1rem', border: '1.2px solid white', borderRadius: '50%', padding: '1px' }}>arrow_forward</span>
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Form State */}
-                        {leftCardState === 'form' && (
-                            <div className="w-full">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h2 className="text-xl font-bold tracking-tight">Request a Demo</h2>
-                                    <button className="opacity-50 hover:opacity-100" onClick={() => showLeftState('hero')}>
-                                        <span className="material-symbols-outlined">close</span>
-                                    </button>
-                                </div>
-                                <form className="space-y-4" onSubmit={handleDemoSubmit}>
-                                    <div className="space-y-1">
-                                        <label className="form-label">Request Information<span className="required-star">*</span></label>
-                                        <select className="form-input bg-black/20 focus:outline-none focus:border-cyan-400">
-                                            <option className="text-black">Request a Demo</option>
-                                            <option className="text-black">Request a Free Trial</option>
-                                        </select>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="form-label">First Name<span className="required-star">*</span></label>
-                                            <input className="form-input bg-black/20 focus:outline-none" required type="text" />
-                                        </div>
-                                        <div>
-                                            <label className="form-label">Last Name<span className="required-star">*</span></label>
-                                            <input className="form-input bg-black/20 focus:outline-none" required type="text" />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="form-label">Email<span className="required-star">*</span></label>
-                                        <input className="form-input bg-black/20 focus:outline-none" placeholder="work@company.com" required type="email" />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="form-label">Business Revenue<span className="required-star">*</span></label>
-                                            <select className="form-input bg-black/20">
-                                                <option className="text-black">100m - 500m</option>
-                                                <option className="text-black">$500m+</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="form-label">Job Title<span className="required-star">*</span></label>
-                                            <input className="form-input bg-black/20" required type="text" />
-                                        </div>
-                                    </div>
-                                    <div className="flex items-start gap-2 pt-2">
-                                        <input className="mt-1" id="marketing" required type="checkbox" />
-                                        <label className="text-[0.65rem] opacity-70" htmlFor="marketing">I agree to receive marketing communications from ECD-VISIION.</label>
-                                    </div>
-                                    <div className="pt-4">
-                                        <button className="c-btn w-full justify-center" type="submit">SUBMIT</button>
-                                    </div>
-                                </form>
-                            </div>
-                        )}
-
-                        {/* Success State */}
-                        {leftCardState === 'success' && (
-                            <div className="c-success-wrap">
-                                <span className="u-sub-small text-red-500 font-bold mb-4 block">THANK YOU!</span>
-                                <h2 className="text-3xl font-bold mb-4">Thank you for requesting a demo!</h2>
-                                <p className="text-sm opacity-80 leading-relaxed mb-8">Our team will be in touch shortly to learn more about your needs and set up a time to share how <b>ECD-VISIION</b> can help address them.</p>
-                                <button className="c-btn" onClick={() => showLeftState('hero')}>
-                                    <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>home</span>
-                                    <span>BACK TO HOME</span>
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* ── RIGHT CARD (Login / Password / Register) ── */}
-                    <div className="c-card c-login_card" style={{ ...rightCardStyle, transition: 'opacity 0.4s ease' }}>
-
-                        {/* Login State (Step 1) */}
-                        {rightCardState === 'login' && (
-                            <div className="u-scaling-content">
-                                <h2>{t.login_title}</h2>
-                                <div className="subtitle">
-                                    <span>{t.login_new_user} </span>
-                                    <a onClick={() => { setRightCardState('registration'); setError(''); }}>{t.login_create_account}</a>
-                                </div>
-                                {error && <div className="c-error-msg">{error}</div>}
-                                <div className="c-input_group">
-                                    <label className="c-input_label">{t.login_email_label}</label>
-                                    <input className="c-input_field" type="email" value={email}
-                                        onChange={e => setEmail(e.target.value)}
-                                        onKeyDown={e => onKey(e, handleContinue)} />
-                                </div>
-                                <div className="c-btn-blue" onClick={handleContinue}>{t.login_continue}</div>
-                                <div className="c-divider"><span>{t.login_or}</span></div>
-                                <button className="c-social_btn" onClick={handleGoogleClick}>
-                                    <GoogleIcon /><span>{t.login_google}</span>
-                                </button>
-                                <button className="c-social_btn">
-                                    <AppleIcon /><span>{t.login_apple}</span>
-                                </button>
-                                <div className="c-login_links">
-                                    <a href="#">{t.login_more_options}</a>
-                                    <a href="#">{t.login_help}</a>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Step 2: Password */}
-                        {rightCardState === 'password' && (
-                            <div className="u-scaling-content">
-                                <div className="flex items-center gap-2 mb-4 cursor-pointer hover:opacity-70 transition-opacity"
-                                    onClick={() => { setRightCardState('login'); setError(''); }}>
-                                    <span className="material-symbols-outlined text-sm">arrow_back</span>
-                                    <span className="text-[0.65rem] font-bold uppercase tracking-wider">{t.login_back}</span>
-                                </div>
-                                <h2>{t.login_pass_title}</h2>
-                                <div className="text-[0.75rem] opacity-60 mb-6 truncate">{email || 'user@example.com'}</div>
-                                {error && <div className="c-error-msg">{error}</div>}
-                                <div className="c-input_group">
-                                    <label className="c-input_label">{t.reg_pass_label}</label>
-                                    <input ref={passwordRef} className="c-input_field" type="password"
-                                        value={password} onChange={e => setPassword(e.target.value)}
-                                        onKeyDown={e => onKey(e, handleLogin)} />
-                                </div>
-                                <div className={`c-btn-blue mt-4 ${loading ? 'opacity-50' : ''}`}
-                                    onClick={loading ? undefined : handleLogin}>{loading ? '...' : t.login_btn}</div>
-                                <div className="c-login_links mt-4">
-                                    <a href="#">{t.login_help}</a>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Step 3: Access / Loading */}
-                        {rightCardState === 'access' && (
-                            <div className="u-scaling-content text-center">
-                                <div className="py-8">
-                                    <div className="spinner mb-6" />
-                                    <h3 className="text-xl font-bold mb-2">{t.welcome_back}</h3>
-                                    <p className="text-[0.7rem] opacity-70">{t.redirecting}</p>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Registration State */}
-                        {rightCardState === 'registration' && (
-                            <div className="u-scaling-content" id="registrationState">
-                                <button className="c-close-btn" onClick={() => { setRightCardState('login'); setError(''); }}>
-                                    <span className="material-symbols-outlined">close</span>
-                                </button>
-                                <div className="w-full">
-                                    <h2 className="mb-1">{t.reg_title}</h2>
-                                    <div className="subtitle">
-                                        <span>{t.reg_already_user} </span>
-                                        <a onClick={() => { setRightCardState('login'); setError(''); }}>{t.reg_login_link}</a>
-                                    </div>
-                                    {error && <div className="c-error-msg">{error}</div>}
-                                    <div className="c-input_group">
-                                        <label className="c-input_label">{t.reg_name_label}</label>
-                                        <input className="c-input_field" type="text" value={regName} onChange={e => setRegName(e.target.value)} />
-                                    </div>
-                                    <div className="c-input_group">
-                                        <label className="c-input_label">{t.reg_email_label}</label>
-                                        <input className="c-input_field" type="email" value={regEmail} onChange={e => setRegEmail(e.target.value)} />
-                                    </div>
-                                    <div className="c-input_group">
-                                        <label className="c-input_label">{t.reg_pass_label}</label>
-                                        <input className="c-input_field" type="password" value={regPass} onChange={e => setRegPass(e.target.value)} />
-                                    </div>
-                                    <div className="c-input_group">
-                                        <label className="c-input_label">{t.reg_confirm_label}</label>
-                                        <input className="c-input_field" type="password" value={regConfirm}
-                                            onChange={e => setRegConfirm(e.target.value)}
-                                            onKeyDown={e => onKey(e, handleRegister)} />
-                                    </div>
-                                    <div className={`c-btn-blue ${loading ? 'opacity-50' : ''}`}
-                                        onClick={loading ? undefined : handleRegister}>{loading ? '...' : t.reg_submit}</div>
-                                    <div className="c-login_links">
-                                        <a onClick={() => { setRightCardState('login'); setError(''); }}>{t.reg_back}</a>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Registration Success */}
-                        {rightCardState === 'regSuccess' && (
-                            <div className="u-scaling-content">
-                                <div className="text-center py-6">
-                                    <span className="material-symbols-outlined text-green-400 mb-4" style={{ fontSize: '3rem' }}>check_circle</span>
-                                    <h3 className="text-xl font-bold mb-2">{t.reg_success_title}</h3>
-                                    <p className="text-xs opacity-80 mb-6">{t.reg_success_msg}</p>
-                                    <div className="c-btn-blue" onClick={() => { setRightCardState('login'); setError(''); }}>{t.reg_back}</div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </header>
+            </section>
         </div>
     );
 };
