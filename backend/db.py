@@ -210,23 +210,40 @@ def ensure_file_nodes_table():
             cursor.execute(
                 "ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS nomenclatura_ok BOOLEAN;"
             )
-            # Los que estaban en cuarentena conservan esa informacion en la marca
-            # nueva antes de que el estado se normalice y se pierda.
-            cursor.execute("""
-                UPDATE file_nodes SET nomenclatura_ok = FALSE
-                 WHERE status = 'NON_CONFORMING' AND nomenclatura_ok IS NULL;
+            # La marca se DEDUCE DEL NOMBRE, no se copia del estado viejo. Copiarla
+            # de 'NON_CONFORMING' dejaba fuera a los ficheros mal nombrados que en
+            # su dia se renombraron: el renombrado les escribia 'ACTIVE' encima, asi
+            # que habian salido de la cuarentena sin cumplir nada y no volverian a
+            # aparecer. Este patron es el mismo que ISO_19650_REGEX en
+            # file_system_db.py:9; si se cambia alli, hay que cambiarlo aqui.
+            cursor.execute(r"""
+                UPDATE file_nodes
+                   SET nomenclatura_ok = (
+                        UPPER(regexp_replace(name, '[.][^.]*$', '')) ~
+                        '^[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[0-9]{4,6}$'
+                   )
+                 WHERE node_type = 'FILE' AND nomenclatura_ok IS NULL;
             """)
             # Y ahora el estado, sin tocar los que SI llegaron legitimamente a
             # Compartido, Publicado o Archivado.
+            #
+            # Ojo con las mayusculas: filtrar por UPPER(status) y NO reescribir el
+            # valor dejaba pasar una fila con 'shared' en minuscula (de alguno de
+            # los scripts sueltos que hay en backend/). Esa fila se quedaba tal cual
+            # y luego reventaba el candado, que compara sin UPPER. Aqui se
+            # reescriben TODAS a su forma canonica.
             cursor.execute("""
                 UPDATE file_nodes
                    SET status = CASE UPPER(COALESCE(status, ''))
-                                    WHEN 'REVIEW'   THEN 'SHARED'
-                                    WHEN 'APPROVED' THEN 'PUBLISHED'
+                                    WHEN 'SHARED'    THEN 'SHARED'
+                                    WHEN 'PUBLISHED' THEN 'PUBLISHED'
+                                    WHEN 'ARCHIVED'  THEN 'ARCHIVED'
+                                    WHEN 'REVIEW'    THEN 'SHARED'
+                                    WHEN 'APPROVED'  THEN 'PUBLISHED'
                                     ELSE 'WIP'
                                 END
                  WHERE status IS NULL
-                    OR UPPER(status) NOT IN ('WIP', 'SHARED', 'PUBLISHED', 'ARCHIVED');
+                    OR status NOT IN ('WIP', 'SHARED', 'PUBLISHED', 'ARCHIVED');
             """)
             cursor.execute("ALTER TABLE file_nodes ALTER COLUMN status SET DEFAULT 'WIP';")
 

@@ -157,6 +157,16 @@ def transicionar(cursor, model_urn, ids, nuevo, usuario, motivo_del_cambio=None,
         raise TransicionRechazada(
             f"Estado desconocido: {nuevo}. Validos: {', '.join(ESTADOS)}."
         )
+    # Publicar o archivar EXIGE que quien llama diga como se comprueba la
+    # autoridad. Declarar REQUIEREN_AUTORIDAD y no usarlo aqui seria repetir el
+    # fallo que veniamos a arreglar: en este mismo proyecto ya habia un
+    # @requiere_rol('admin') que no bloqueaba nada y daba sensacion de guardia.
+    # Sin forma de comprobar, no se publica.
+    if nuevo in REQUIEREN_AUTORIDAD and autorizar is None:
+        raise TransicionRechazada(
+            f"No se puede pasar a {ETIQUETAS[nuevo]} sin comprobar la autoridad "
+            f"de quien lo pide."
+        )
     ids = [str(i) for i in (ids or []) if i]
     if not ids:
         return {'cambiados': [], 'sin_cambio': []}
@@ -233,7 +243,8 @@ def camino_hasta(actual, destino):
     return None
 
 
-def transicionar_recorriendo(cursor, model_urn, ids, destino, usuario, motivo_del_cambio=None):
+def transicionar_recorriendo(cursor, model_urn, ids, destino, usuario,
+                             motivo_del_cambio=None, autorizar=None):
     """Lleva los documentos hasta el destino pasando por los estados intermedios.
 
     Solo para la aprobacion de revisiones. El cambio manual por lote usa
@@ -267,7 +278,8 @@ def transicionar_recorriendo(cursor, model_urn, ids, destino, usuario, motivo_de
                 f"{ETIQUETAS.get(origen, origen)} a {ETIQUETAS.get(destino, destino)}."
             )
         for paso in camino:
-            r = transicionar(cursor, model_urn, grupo, paso, usuario, motivo_del_cambio)
+            r = transicionar(cursor, model_urn, grupo, paso, usuario, motivo_del_cambio,
+                             autorizar=autorizar)
             pasos_dados.append(paso)
             cambiados.extend(r['cambiados'])
     return {'cambiados': cambiados, 'sin_cambio': [], 'pasos': pasos_dados}

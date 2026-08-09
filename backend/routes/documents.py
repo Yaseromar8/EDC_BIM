@@ -1796,6 +1796,10 @@ def search_docs():
 def get_deleted_docs():
     """Lista todos los elementos en la papelera del proyecto."""
     model_urn = request.args.get('model_urn', 'global')
+    # La papelera de una obra es su inventario documental reciente, con nombres.
+    from flask import g
+    if not verify_project_access(getattr(g, 'current_user', None), model_urn):
+        return jsonify({"success": False, "error": "Sin acceso a esta obra."}), 403
     try:
         from file_system_db import list_deleted_contents
         results = list_deleted_contents(model_urn)
@@ -2163,12 +2167,31 @@ def download_folder_urls():
         
     from flask import g, jsonify
     user = getattr(g, 'current_user', None)
-    
+    if not user:
+        return jsonify({"success": False, "error": "Autenticación requerida"}), 401
+
+    # La obra sale de la CARPETA pedida, no del ?model_urn que manda el cliente.
+    # Comprobando con el declarado, bastaba pedir (folder_id = carpeta de otra
+    # obra, model_urn = la mia) para llevarse un manifiesto de URLs firmadas de
+    # todo su contenido: la descarga se hace luego contra el almacenamiento, sin
+    # volver a pasar por aqui.
+    from db import get_db_connection
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT model_urn FROM file_nodes WHERE id = %s", (folder_id,))
+        fila = cur.fetchone()
+    if not fila:
+        return jsonify({"success": False, "error": "Carpeta no encontrada"}), 404
+    obra_real = fila[0]
+    if not verify_project_access(user, obra_real):
+        return jsonify({"success": False, "error": "Sin acceso a esta carpeta."}), 403
+    model_urn = obra_real
+
     # 1. Chequear permisos (mínimo view_download)
     from folder_permissions import check_folder_permission
     rbac = check_folder_permission(user, folder_id, model_urn, 'view_download', 'descargar_carpeta')
     if rbac: return rbac
-    
+
     from db import get_db_connection
     from gcs_manager import generate_signed_url
     
@@ -2236,13 +2259,19 @@ def get_quarantine_files():
         if not model_urn:
             return jsonify({'error': 'Falta model_urn'}), 400
 
-        from db import get_db_connection
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({'error': 'Database connect error'}), 500
+        # Devuelve nombres de plano y su clave de almacenamiento: se leia la
+        # cuarentena de cualquier obra cambiando el ?model_urn.
+        from flask import g
+        if not verify_project_access(getattr(g, 'current_user', None), model_urn):
+            return jsonify({'success': False, 'error': 'Sin acceso a esta obra.'}), 403
 
-        with conn.cursor() as cursor:
-            # Extraemos data básica sin CTE y sin updated_by para evitar errores de migración
+        # OJO: get_db_connection es un gestor de contexto. Llamarlo sin 'with'
+        # devolvia el gestor, no la conexion, asi que .cursor() reventaba y ESTA
+        # PANTALLA DEVOLVIA 500 SIEMPRE. Llevaba tiempo rota sin que se notara,
+        # porque el error solo se veia en la consola del navegador.
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
             cursor.execute("""
                 SELECT id, name, node_type as type, node_type, '' as path, gcs_urn,
                        size_bytes, mime_type, updated_at, status
@@ -2252,7 +2281,6 @@ def get_quarantine_files():
             """, (model_urn,))
             columns = [desc[0] for desc in cursor.description]
             quarantine_records = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        conn.close()
         return jsonify({
             'success': True,
             'count': len(quarantine_records),

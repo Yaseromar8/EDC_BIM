@@ -109,6 +109,11 @@ class CursorFalso:
 USUARIO = {'id': 7, 'email': 'ana@contratista.pe', 'role': 'admin'}
 
 
+def MANDA(_node_id):
+    """Autorizador de prueba: dice que si a todo."""
+    return True
+
+
 def test_transicionar_escribe_el_estado_nuevo():
     cur = CursorFalso([('a1', 'PLANO-01.pdf', 'ACTIVE')])
     r = ecd.transicionar(cur, 'obra/X', ['a1'], ecd.SHARED, USUARIO)
@@ -123,7 +128,7 @@ def test_una_transicion_invalida_no_cambia_NADA_del_lote():
         ('a2', 'dos.pdf', ecd.WIP),         # este no: WIP -> PUBLISHED
     ])
     with pytest.raises(ecd.TransicionRechazada) as e:
-        ecd.transicionar(cur, 'obra/X', ['a1', 'a2'], ecd.PUBLISHED, USUARIO)
+        ecd.transicionar(cur, 'obra/X', ['a1', 'a2'], ecd.PUBLISHED, USUARIO, autorizar=MANDA)
     assert 'dos.pdf' in e.value.motivo
     assert not cur.sql_de('UPDATE file_nodes')
 
@@ -240,9 +245,52 @@ def test_un_destino_inventado_no_tiene_camino():
 def test_recorrer_registra_cada_salto_por_separado():
     """El historial tiene que poder contar Borrador->Compartido->Publicado."""
     cur = CursorFalso([('a1', 'PLANO-01.pdf', 'ACTIVE')])
-    r = ecd.transicionar_recorriendo(cur, 'obra/X', ['a1'], ecd.PUBLISHED, USUARIO)
+    r = ecd.transicionar_recorriendo(cur, 'obra/X', ['a1'], ecd.PUBLISHED, USUARIO,
+                                     autorizar=MANDA)
     assert r['pasos'] == [ecd.SHARED, ecd.PUBLISHED]
     assert len(cur.sql_de('INSERT INTO activity_log')) == 2
+
+
+# ── Publicar exige comprobar autoridad. Sin excepciones ─────────────────────
+# En este mismo proyecto ya hubo un @requiere_rol('admin') que no bloqueaba nada
+# y daba sensacion de guardia. Declarar REQUIEREN_AUTORIDAD y no usarlo seria
+# exactamente el mismo fallo.
+
+def test_publicar_sin_forma_de_comprobar_autoridad_se_rechaza():
+    cur = CursorFalso([('a1', 'uno.pdf', ecd.SHARED)])
+    with pytest.raises(ecd.TransicionRechazada) as e:
+        ecd.transicionar(cur, 'obra/X', ['a1'], ecd.PUBLISHED, USUARIO)  # sin autorizar
+    assert 'autoridad' in e.value.motivo
+    assert not cur.sql_de('UPDATE file_nodes')
+
+
+def test_archivar_tambien_exige_comprobarla():
+    cur = CursorFalso([('a1', 'uno.pdf', ecd.PUBLISHED)])
+    with pytest.raises(ecd.TransicionRechazada):
+        ecd.transicionar(cur, 'obra/X', ['a1'], ecd.ARCHIVED, USUARIO)
+
+
+def test_compartir_no_la_exige():
+    """Compartir es trabajo normal del equipo; no debe pedir permiso de mando."""
+    cur = CursorFalso([('a1', 'uno.pdf', ecd.WIP)])
+    r = ecd.transicionar(cur, 'obra/X', ['a1'], ecd.SHARED, USUARIO)
+    assert r['cambiados'] == ['a1']
+
+
+def test_por_la_via_de_la_revision_tampoco_se_publica_sin_comprobarla():
+    """Era la puerta de atras: la aprobacion no comprobaba permiso ninguno."""
+    cur = CursorFalso([('a1', 'uno.pdf', ecd.WIP)])
+    with pytest.raises(ecd.TransicionRechazada) as e:
+        ecd.transicionar_recorriendo(cur, 'obra/X', ['a1'], ecd.PUBLISHED, USUARIO)
+    assert 'autoridad' in e.value.motivo
+
+
+def test_si_el_autorizador_dice_que_no_no_se_publica():
+    cur = CursorFalso([('a1', 'uno.pdf', ecd.SHARED)])
+    with pytest.raises(ecd.TransicionRechazada):
+        ecd.transicionar(cur, 'obra/X', ['a1'], ecd.PUBLISHED, USUARIO,
+                         autorizar=lambda _n: False)
+    assert not cur.sql_de('UPDATE file_nodes')
 
 
 def test_el_permiso_se_pregunta_por_CADA_documento():

@@ -40,6 +40,30 @@ def _user():
     return getattr(g, 'current_user', None) or {}
 
 
+def _puede_con_estos_documentos(user, model_urn, items, nivel, accion):
+    """Comprueba obra y permiso de carpeta sobre CADA documento de la revision.
+
+    Devuelve None si puede, o la respuesta de error. Aqui no habia ninguna
+    comprobacion: ni de obra ni de carpeta. Una revision es el camino por el que
+    un documento acaba publicado, asi que sin esto era la puerta de atras.
+    """
+    from routes.documents import verify_project_access
+    from folder_permissions import check_folder_permission
+
+    if not user:
+        return jsonify({"success": False, "error": "Autenticación requerida"}), 401
+    if not verify_project_access(user, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
+    for it in (items or []):
+        node_id = it.get('node_id') if isinstance(it, dict) else it
+        if not node_id:
+            continue
+        negado = check_folder_permission(user, node_id, model_urn, nivel, accion)
+        if negado:
+            return negado
+    return None
+
+
 def _row_to_dict(r):
     return {
         "id": r[0], "model_urn": r[1], "title": r[2], "items": r[3],
@@ -54,6 +78,11 @@ def list_reviews():
     model_urn = request.args.get('model_urn')
     if not model_urn:
         return jsonify({"success": False, "error": "Falta model_urn"}), 400
+    # Las revisiones de una obra dicen que planos hay y quien los aprueba: se
+    # leian cambiando el ?model_urn.
+    from routes.documents import verify_project_access
+    if not verify_project_access(_user(), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -74,10 +103,17 @@ def create_review():
     items, steps = d.get('items') or [], d.get('steps') or []
     if not d.get('model_urn') or not d.get('title') or not items or not steps:
         return jsonify({"success": False, "error": "Faltan model_urn/title/items/steps"}), 400
-    final_status = d.get('final_status', 'SHARED')
+    final_status = d.get('final_status', ecd.SHARED)
     if final_status not in FINAL_STATUSES:
         return jsonify({"success": False, "error": f"final_status debe ser {FINAL_STATUSES}"}), 400
     u = _user()
+    # Este modulo no comprobaba NADA: ni que la obra fuera tuya, ni que tuvieras
+    # permiso sobre los documentos. Cualquiera con sesion podia crear una revision
+    # sobre planos de otra obra, ponerse a si mismo de revisor y publicarlos.
+    negado = _puede_con_estos_documentos(u, d['model_urn'], items, 'edit',
+                                         'incluir documentos en una revisión')
+    if negado:
+        return negado
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -115,6 +151,10 @@ def act_on_review(rid):
             if not row:
                 return jsonify({"success": False, "error": "Revisión no encontrada"}), 404
             rev = _row_to_dict(row)
+            # La obra sale de la revision guardada, no de lo que mande el cliente.
+            from routes.documents import verify_project_access
+            if not verify_project_access(u, rev['model_urn']):
+                return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
             if rev['status'] != 'pending':
                 return jsonify({"success": False, "error": f"La revisión ya está {rev['status']}"}), 409
 
@@ -146,10 +186,23 @@ def act_on_review(rid):
                 cur.execute("UPDATE doc_reviews SET status='approved', history=%s WHERE id=%s",
                             (json.dumps(history), rid))
                 ids = [it.get('node_id') for it in rev['items'] if it.get('node_id')]
+                destino = ecd.normalizar(rev['final_status'])
+                # Publicar es un acto de autoridad tambien por esta via: quien
+                # aprueba el ultimo paso tiene que mandar de verdad sobre la
+                # carpeta del documento, no solo estar apuntado como revisor.
+                nivel = 'admin' if destino in ecd.REQUIEREN_AUTORIDAD else 'edit'
+                from folder_permissions import check_folder_permission
+
+                def _autorizado(node_id):
+                    return check_folder_permission(
+                        u, node_id, rev['model_urn'], nivel,
+                        f"aprobar como {ecd.ETIQUETAS.get(destino, destino)}") is None
+
                 try:
                     ecd.transicionar_recorriendo(
-                        cur, rev['model_urn'], ids, ecd.normalizar(rev['final_status']), u,
-                        motivo_del_cambio=f"revisión #{rid}: {rev['title']}")
+                        cur, rev['model_urn'], ids, destino, u,
+                        motivo_del_cambio=f"revisión #{rid}: {rev['title']}",
+                        autorizar=_autorizado)
                 except ecd.TransicionRechazada as rechazo:
                     conn.rollback()
                     return jsonify({"success": False, "error": rechazo.motivo}), 409
