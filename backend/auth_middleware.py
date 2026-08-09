@@ -105,6 +105,31 @@ def generate_session_token():
     return secrets.token_hex(32)  # 64-char hex string
 
 
+def _pimienta():
+    """Clave para hashear los tokens. Fuera de la base, a proposito."""
+    import os as _os
+    return (_os.getenv('SESSION_PEPPER') or _os.getenv('APP_SECRET')
+            or _os.getenv('DATABASE_URL') or 'sin-pimienta').encode()
+
+
+def hash_de_token(token):
+    """Huella del token de sesion, que es lo UNICO que se guarda.
+
+    Hasta ahora la tabla `sessions` guardaba el token EN CLARO: un volcado de la
+    base -- una copia de seguridad mal guardada, un acceso de lectura, una
+    captura de pantalla de un cliente SQL -- era un pase de sesion para todas las
+    cuentas a la vez, valido 7 dias.
+
+    No hace falta un KDF lento (scrypt, bcrypt): el token ya son 256 bits
+    aleatorios, no una contrasena que alguien pueda adivinar por fuerza bruta. Lo
+    que aporta la pimienta, que vive en el entorno y NO en la base, es que con el
+    volcado solo no se puedan recalcular las huellas.
+    """
+    import hashlib
+    import hmac
+    return hmac.new(_pimienta(), (token or '').encode(), hashlib.sha256).hexdigest()
+
+
 def create_session(user_id):
     """Create a new session in the database and return the token."""
     from db import get_db_connection
@@ -126,10 +151,11 @@ def create_session(user_id):
             ''')
             # Clean up expired sessions (housekeeping)
             cursor.execute("DELETE FROM sessions WHERE expires_at < NOW()")
-            # Insert new session
+            # La columna 'token' guarda la HUELLA, no el token. El token en claro
+            # solo existe en la respuesta al cliente y nunca toca la base.
             cursor.execute(
                 'INSERT INTO sessions (token, user_id, expires_at) VALUES (%s, %s, %s)',
-                (token, user_id, expires_at)
+                (hash_de_token(token), user_id, expires_at)
             )
             conn.commit()
         return token
@@ -138,11 +164,21 @@ def create_session(user_id):
         return None
 
 
-# ── IN-MEMORY SESSION CACHE (TTL 60s) ──────────────────────────────────
-# Elimina el roundtrip de ~600ms a Cloud SQL en cada request.
-# Peor caso: una sesión revocada tarda 60s en ser rechazada.
+# ── CACHE DE SESION EN MEMORIA ─────────────────────────────────────────
+# Existe para evitar un viaje de ~600 ms a la base en CADA peticion.
+#
+# El precio es el retraso de las revocaciones: la cache es POR WORKER, y
+# gunicorn corre con 4, asi que revocar una sesion (logout, expulsar a alguien,
+# cambiarle el rol, contener un incidente) tarda hasta un TTL completo en surtir
+# efecto en los otros tres. Con 60 s eso era un minuto largo justo cuando mas
+# prisa hay. Bajarlo a 15 s multiplica por 4 la ventana cerrada a cambio de
+# alguna consulta mas, que ademas suele venir de la propia cache.
+#
+# Para que la revocacion sea INMEDIATA en todos los workers hace falta estado
+# compartido (REDIS_URL, el mismo que usa el limitador). Mientras no lo haya,
+# 15 s es el compromiso honesto.
 _session_cache = {}  # token -> (user_dict, timestamp)
-_SESSION_CACHE_TTL = 60  # seconds
+_SESSION_CACHE_TTL = int(os.getenv('SESSION_CACHE_TTL', '15'))  # segundos
 
 # Los SPAs de Docs y Visor pueden estar en distintos orígenes. Un ticket
 # opaco, de un único uso y de 60 segundos evita exponer la sesión reutilizable
@@ -236,7 +272,7 @@ def validate_session(token):
                   -- sesiones, pero si esa revocacion fallara su token seguiria
                   -- sirviendo hasta 7 dias.
                   AND COALESCE(u.is_active, TRUE)
-            ''', (token,))
+            ''', (hash_de_token(token),))
             row = cursor.fetchone()
             if row:
                 user = {
@@ -273,7 +309,7 @@ def revoke_all_sessions(user_id, excepto=None):
             if excepto:
                 cursor.execute(
                     'UPDATE sessions SET is_active = FALSE WHERE user_id = %s AND token <> %s AND is_active = TRUE',
-                    (user_id, excepto)
+                    (user_id, hash_de_token(excepto))
                 )
             else:
                 cursor.execute(
@@ -296,7 +332,7 @@ def revoke_session(token):
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('UPDATE sessions SET is_active = FALSE WHERE token = %s', (token,))
+            cursor.execute('UPDATE sessions SET is_active = FALSE WHERE token = %s', (hash_de_token(token),))
             conn.commit()
             return True
     except Exception as e:

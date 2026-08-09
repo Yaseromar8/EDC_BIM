@@ -39,17 +39,20 @@ def main():
     # Get a real session token from the DB
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT token FROM sessions WHERE is_active = TRUE ORDER BY created_at DESC LIMIT 1")
-        row = cursor.fetchone()
+        # Ya NO se puede sacar un token usable de la base: la columna guarda la
+        # HUELLA, no el token. Que este script funcionara era, de hecho, el mismo
+        # problema que se queria cerrar -- cualquiera con lectura sobre la base
+        # se hacia con una sesion ajena. Para medir, pega aqui un token propio.
+        token = os.getenv('PROFILER_SESSION_TOKEN')
+        row = [token] if token else None
         if row:
-            token = row[0]
             for i in range(ITERATIONS):
                 ta = time.time()
                 user = validate_session(token)
                 tb = time.time()
                 print(f"   Iter {i+1}: {(tb-ta)*1000:.1f}ms -> user={user.get('name') if user else 'None'}")
         else:
-            print("   No active session found! Login first.")
+            print("   Define PROFILER_SESSION_TOKEN con un token propio para medir.")
             return
 
     # 3. resolve_path_to_node_id

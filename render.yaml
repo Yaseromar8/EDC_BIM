@@ -20,6 +20,14 @@ services:
       # Render la genera una vez y la mantiene estable entre despliegues.
       - key: APP_SECRET
         generateValue: true
+      # Pimienta con la que se hashean los tokens de sesion. Vive AQUI y no en la
+      # base: es lo que impide recalcular las huellas a partir de un volcado.
+      # Cambiarla invalida todas las sesiones (todos vuelven a entrar).
+      - key: SESSION_PEPPER
+        generateValue: true
+      # Cuanto tarda una revocacion en surtir efecto en los otros workers.
+      - key: SESSION_CACHE_TTL
+        value: 15
       # Correo transaccional (reset de contraseña, invitaciones). Sin la clave,
       # el backend NO se cae: registra el enlace en el log para envio manual.
       # Alta en resend.com, plan gratis 3.000 correos/mes.
