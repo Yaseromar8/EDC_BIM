@@ -61,9 +61,17 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
     # Modo ISO 19650 estricto (opt-in por entorno): los no-admin solo ven
     # documentos Compartido/Publicado. Los WIP son borradores internos del
     # equipo que produce y no deben exponerse hasta ser revisados/aprobados.
+    #
+    # CUIDADO AL ENCENDERLO. Medido sobre la base real: 3.035 de 3.036 documentos
+    # estan en Trabajo en curso, porque hasta ahora NADA los sacaba de ahi (la
+    # maquina de estados era inalcanzable) y porque la convencion de nombres que
+    # se exige no es la de esta obra. Encenderlo hoy deja el portal practicamente
+    # vacio para todo el que no sea admin. Primero hay que mover documentos a
+    # Compartido de verdad.
     import os as _os
+    import estados_ecd as _ecd
     strict_iso = _os.getenv('STRICT_ISO_VISIBILITY', 'false').lower() in ('true', '1', 'yes')
-    iso_visible = {'SHARED', 'PUBLISHED', 'ARCHIVED'}
+    iso_visible = {_ecd.SHARED, _ecd.PUBLISHED, _ecd.ARCHIVED}
     
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -162,7 +170,7 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                 folders.append(item)
             else:
                 # ISO estricto: ocultar WIP (y estados nulos) a los no-admin
-                iso_blocked = strict_iso and not is_admin and (r_status or 'WIP') not in iso_visible
+                iso_blocked = strict_iso and not is_admin and _ecd.normalizar(r_status) not in iso_visible
                 if has_access and not iso_blocked:  # Los archivos sin acceso/bloqueados se excluyen
                     item.update({
                         "size": r_size,
@@ -254,43 +262,85 @@ def ensure_project_root_node(model_urn):
         _root_cache[model_urn] = root_id
         return root_id
 
+def _registrar_vuelta_a_borrador(cursor, model_urn, node_id, nombre, anterior, version, autor):
+    """Deja constancia de que subir una version nueva retiro una aprobacion.
+
+    Sin esta linea, un documento publicado aparecia de pronto en borrador y no
+    habia forma de saber que lo movio ni cuando. Es justo la pregunta que hace un
+    auditor cuando algo que estaba publicado ya no lo esta.
+    """
+    import json as _json
+    import estados_ecd as ecd
+    try:
+        cursor.execute(
+            "INSERT INTO activity_log "
+            "(model_urn, action, entity_type, entity_id, entity_name, performed_by, details) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (model_urn, 'cambio_de_estado', 'file', str(node_id), nombre, autor,
+             _json.dumps({
+                 'estado_anterior': anterior,
+                 'estado_nuevo': ecd.WIP,
+                 'anterior_etiqueta': ecd.ETIQUETAS.get(anterior, anterior),
+                 'nuevo_etiqueta': ecd.ETIQUETAS[ecd.WIP],
+                 'motivo': f'se subio la version {version}: lo aprobado fue la anterior',
+             })),
+        )
+    except Exception as e:  # pragma: no cover - defensivo
+        print(f"[ESTADO] no se pudo registrar la vuelta a borrador de {nombre}: {e}")
+
+
 def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mime_type=None, created_by=None):
     """Inserta/Actualiza el Ítem y crea una nueva Versión histórica con Holding Area (Estilo APS)"""
     import re
     
-    status = 'ACTIVE'
-    # Aislar extensión (ej. '.pdf') para validar solo la estricta base del nombre ISO
+    import estados_ecd as ecd
+
+    # El fichero NACE en el estado inicial del ciclo de vida. Antes se le escribia
+    # 'ACTIVE', un valor que la maquina de estados no conoce, asi que el documento
+    # quedaba fuera del ciclo desde el primer segundo y ya no podia moverse.
+    #
+    # Que el nombre cumpla o no la convencion es OTRA cosa, y va en su propia
+    # marca: mezclarlas convertia el area de retencion en una trampa sin salida.
     base_name = filename.rsplit('.', 1)[0] if '.' in filename else filename
-    
-    if not re.match(ISO_19650_REGEX, base_name.upper()):
-        status = 'NON_CONFORMING' # Desvío al Área de Retención (Holding Area)
+    conforme = bool(re.match(ISO_19650_REGEX, base_name.upper()))
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        
+
         # 1. Buscar si el Ítem ya existe en la ubicación
         cursor.execute(
-            "SELECT id, version_number FROM file_nodes WHERE model_urn = %s AND parent_id IS NOT DISTINCT FROM %s AND name = %s AND node_type = 'FILE' AND is_deleted = FALSE",
+            "SELECT id, version_number, status FROM file_nodes WHERE model_urn = %s AND parent_id IS NOT DISTINCT FROM %s AND name = %s AND node_type = 'FILE' AND is_deleted = FALSE",
             (model_urn, parent_id, filename)
         )
         existing = cursor.fetchone()
-        
+
         if existing:
-            f_id, f_v = existing
+            f_id, f_v, estado_previo = existing
             new_v = f_v + 1
-            # Actualizar el Ítem (puntero rápido a la versión actual)
+            # Una version nueva vuelve a ser trabajo en curso: lo que se reviso y
+            # se aprobo fue la version anterior, no esta. Y como aqui se pierde la
+            # aprobacion de un documento que estaba compartido o publicado, queda
+            # constancia de por que.
+            anterior = ecd.normalizar(estado_previo)
+            if anterior != ecd.WIP:
+                _registrar_vuelta_a_borrador(cursor, model_urn, f_id, filename,
+                                             anterior, new_v, created_by)
             cursor.execute("""
-                UPDATE file_nodes 
-                SET gcs_urn = %s, version_number = %s, size_bytes = %s, mime_type = %s, updated_at = CURRENT_TIMESTAMP, created_by = %s, status = %s
+                UPDATE file_nodes
+                SET gcs_urn = %s, version_number = %s, size_bytes = %s, mime_type = %s,
+                    updated_at = CURRENT_TIMESTAMP, updated_by = %s, status = %s,
+                    nomenclatura_ok = %s
                 WHERE id = %s
-            """, (gcs_uuid, new_v, size_bytes, mime_type, created_by, status, f_id))
+            """, (gcs_uuid, new_v, size_bytes, mime_type, created_by, ecd.WIP,
+                  conforme, f_id))
         else:
             # Crear nuevo Ítem raíz
             cursor.execute("""
-                INSERT INTO file_nodes (model_urn, parent_id, node_type, name, size_bytes, gcs_urn, mime_type, created_by, version_number, status)
-                VALUES (%s, %s, 'FILE', %s, %s, %s, %s, %s, 1, %s)
+                INSERT INTO file_nodes (model_urn, parent_id, node_type, name, size_bytes, gcs_urn, mime_type, created_by, version_number, status, nomenclatura_ok)
+                VALUES (%s, %s, 'FILE', %s, %s, %s, %s, %s, 1, %s, %s)
                 RETURNING id
-            """, (model_urn, parent_id, filename, size_bytes, gcs_uuid, mime_type, created_by, status))
+            """, (model_urn, parent_id, filename, size_bytes, gcs_uuid, mime_type,
+                  created_by, ecd.WIP, conforme))
             f_id = cursor.fetchone()[0]
             new_v = 1
             

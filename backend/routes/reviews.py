@@ -8,10 +8,11 @@ import json
 import traceback
 from flask import Blueprint, request, jsonify, g
 from db import get_db_connection, log_activity
+import estados_ecd as ecd
 
 reviews_bp = Blueprint('reviews', __name__)
 
-FINAL_STATUSES = ('SHARED', 'PUBLISHED')
+FINAL_STATUSES = (ecd.SHARED, ecd.PUBLISHED)
 
 
 def ensure_reviews_table():
@@ -134,12 +135,24 @@ def act_on_review(rid):
                 cur.execute("UPDATE doc_reviews SET current_step=%s, history=%s WHERE id=%s",
                             (rev['current_step'] + 1, json.dumps(history), rid))
             else:
-                # Último paso aprobado: transicionar documentos al estado final
+                # Ultimo paso aprobado: los documentos avanzan al estado final.
+                #
+                # Esto era un UPDATE directo a file_nodes que se saltaba la maquina
+                # de estados entera: por aqui un documento pasaba a Publicado sin
+                # haber estado nunca Compartido, y el registro no decia de donde
+                # venia. Ahora va por la misma puerta que el resto
+                # (backend/estados_ecd.py), que valida el camino y deja UNA linea
+                # de auditoria por documento, con su nombre y su estado anterior.
                 cur.execute("UPDATE doc_reviews SET status='approved', history=%s WHERE id=%s",
                             (json.dumps(history), rid))
-                for it in rev['items']:
-                    cur.execute("UPDATE file_nodes SET status=%s, updated_at=CURRENT_TIMESTAMP WHERE id=%s AND model_urn=%s",
-                                (rev['final_status'], it.get('node_id'), rev['model_urn']))
+                ids = [it.get('node_id') for it in rev['items'] if it.get('node_id')]
+                try:
+                    ecd.transicionar_recorriendo(
+                        cur, rev['model_urn'], ids, ecd.normalizar(rev['final_status']), u,
+                        motivo_del_cambio=f"revisión #{rid}: {rev['title']}")
+                except ecd.TransicionRechazada as rechazo:
+                    conn.rollback()
+                    return jsonify({"success": False, "error": rechazo.motivo}), 409
             conn.commit()
 
         log_activity(rev['model_urn'], f'review_{action}', 'review', entity_id=str(rid),

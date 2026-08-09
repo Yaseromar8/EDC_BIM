@@ -5,6 +5,14 @@ import { renderFileIconSop } from '../../utils/fileIcons';
 import { apiFetch } from '../../utils/apiFetch';
 import { confirmAction } from '../../utils/confirm';
 
+// El estado del ciclo de vida es independiente de que el nombre cumpla o no.
+const ESTADO_LABEL = {
+  WIP: 'Trabajo en curso',
+  SHARED: 'Compartido',
+  PUBLISHED: 'Publicado',
+  ARCHIVED: 'Archivado',
+};
+
 export default function QuarantineTable({ projectPrefix, API, isAdmin, user }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,16 +42,45 @@ export default function QuarantineTable({ projectPrefix, API, isAdmin, user }) {
     // eslint-disable-next-line
   }, [projectPrefix]);
 
+  // Se sale de la cuarentena CORRIGIENDO EL NOMBRE, no cambiando de estado.
+  //
+  // Antes este boton mandaba un cambio de estado a WIP, y no funcionaba: la
+  // cuarentena vivia en la misma columna que el ciclo de vida, asi que el unico
+  // camino de salida real era borrar el archivo. Ahora la conformidad del nombre
+  // es una marca aparte y se recalcula al renombrar: si el nombre nuevo cumple la
+  // convencion, el documento sale de aqui solo, sin perder su punto del ciclo.
+  const corregirNombre = async (f) => {
+    const nuevo = window.prompt(
+      `Nombre que cumpla la convención del proyecto.\n\nActual: ${f.name}`,
+      f.name
+    );
+    if (!nuevo || nuevo.trim() === f.name) return;
+    try {
+      const res = await apiFetch(`${API}/api/docs/rename`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node_id: f.id, new_name: nuevo.trim(), model_urn: projectPrefix })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        toast.error(data.error || 'No se pudo renombrar');
+        return;
+      }
+      // Solo desaparece de la lista si de verdad dejo de estar en cuarentena.
+      await fetchQuarantineFiles();
+      toast.success('Nombre corregido');
+    } catch (err) {
+      toast.error('Error de red: ' + err.message);
+    }
+  };
+
   const handleAction = async (id, actionType) => {
     const payload = {
       items: [id],
       model_urn: projectPrefix,
-      action: actionType === 'rehabilitate' ? 'SET_STATUS' : 'DELETE',
+      action: 'DELETE',
       user: user?.name || user?.email || 'Admin'
     };
-    if (actionType === 'rehabilitate') {
-      payload.status = 'WIP'; // Enviar de vuelta a Borrador
-    }
 
     try {
       const res = await apiFetch(`${API}/api/docs/batch`, {
@@ -87,8 +124,9 @@ export default function QuarantineTable({ projectPrefix, API, isAdmin, user }) {
           <h2 style={{ fontSize: 22, fontWeight: 400, color: '#333', margin: 0 }}>Sala de Cuarentena (ISO 19650)</h2>
         </div>
         <p style={{ margin: 0, color: '#666', fontSize: 13, lineHeight: '1.5' }}>
-          Documentos en estado <strong>NON_CONFORMING</strong>. Estos archivos no cumplieron los criterios de validación o nomenclatura y se encuentran aislados del resto del CDE.
-          {isAdmin && " Como administrador, rige el destino de estos activos."}
+          Documentos cuyo <strong>nombre no sigue la convención</strong> del proyecto. Conservan su punto del ciclo de vida;
+          lo que les falta es el nombre. Se sale de aquí corrigiéndolo.
+          {isAdmin && " Como administrador puedes corregir el nombre o destruir el archivo."}
         </p>
       </div>
 
@@ -120,7 +158,14 @@ export default function QuarantineTable({ projectPrefix, API, isAdmin, user }) {
                       <span style={{ fontSize: 20 }}>{renderFileIconSop(f.name, false)}</span>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontSize: 14, fontWeight: 500, color: '#333' }}>{f.name}</span>
-                        <span style={{ fontSize: 11, color: '#ffb74d', fontWeight: 600 }}>NON_CONFORMING</span>
+                        <span style={{ fontSize: 11, color: '#ffb74d', fontWeight: 600 }}>
+                          Nombre fuera de convención
+                          {f.status && f.status !== 'WIP' && (
+                            <span style={{ color: '#666', fontWeight: 400 }}>
+                              {' · '}{ESTADO_LABEL[f.status] || f.status}
+                            </span>
+                          )}
+                        </span>
                       </div>
                     </div>
                   </td>
@@ -137,13 +182,13 @@ export default function QuarantineTable({ projectPrefix, API, isAdmin, user }) {
                   {isAdmin && (
                     <td style={{ padding: '12px 24px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-                        <button 
-                          onClick={() => handleAction(f.id, 'rehabilitate')}
-                          title="Rehabilitar a WIP"
+                        <button
+                          onClick={() => corregirNombre(f)}
+                          title="Corregir el nombre para que cumpla la convención"
                           style={{ background: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9', borderRadius: 4, padding: '6px 10px', fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                          Rehabilitar
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                          Corregir nombre
                         </button>
                         <button 
                           onClick={async () => {

@@ -196,6 +196,67 @@ def ensure_file_nodes_table():
             cursor.execute("ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS description TEXT;")
             cursor.execute("ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS current_version_id UUID;")
 
+            # ── 1.2 UN SOLO VOCABULARIO DE ESTADO ────────────────────────────
+            # Convivian cuatro en la misma columna: 'ACTIVE' (lo que escribia la
+            # subida), 'NON_CONFORMING' (nombre fuera de convencion), 'DRAFT' (el
+            # DEFAULT de la columna) y los cuatro del ciclo de vida, que eran los
+            # unicos que la maquina de transiciones entendia. Por eso la maquina
+            # era inalcanzable: no habia forma de mover un documento real.
+            #
+            # La conformidad del nombre NO es un punto del ciclo de vida -- un
+            # documento puede estar en borrador y ademas tener mal el nombre -- asi
+            # que se lleva a su propia marca. Ademas, mezclarlas convertia el area
+            # de retencion en una trampa: se entraba y solo se salia borrando.
+            cursor.execute(
+                "ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS nomenclatura_ok BOOLEAN;"
+            )
+            # Los que estaban en cuarentena conservan esa informacion en la marca
+            # nueva antes de que el estado se normalice y se pierda.
+            cursor.execute("""
+                UPDATE file_nodes SET nomenclatura_ok = FALSE
+                 WHERE status = 'NON_CONFORMING' AND nomenclatura_ok IS NULL;
+            """)
+            # Y ahora el estado, sin tocar los que SI llegaron legitimamente a
+            # Compartido, Publicado o Archivado.
+            cursor.execute("""
+                UPDATE file_nodes
+                   SET status = CASE UPPER(COALESCE(status, ''))
+                                    WHEN 'REVIEW'   THEN 'SHARED'
+                                    WHEN 'APPROVED' THEN 'PUBLISHED'
+                                    ELSE 'WIP'
+                                END
+                 WHERE status IS NULL
+                    OR UPPER(status) NOT IN ('WIP', 'SHARED', 'PUBLISHED', 'ARCHIVED');
+            """)
+            cursor.execute("ALTER TABLE file_nodes ALTER COLUMN status SET DEFAULT 'WIP';")
+
+            # ── El candado (CHECK) va APARTE y NO se pone solo ───────────────
+            # Aprendido a base de un susto: la primera version ponia el CHECK aqui
+            # mismo, al arrancar. Como las migraciones corren al levantar CUALQUIER
+            # backend contra esta base, el candado entro en produccion mientras el
+            # servidor desplegado seguia con el codigo viejo, que escribe 'ACTIVE'
+            # en cada subida y en cada renombrado. Es decir: la base habria
+            # empezado a rechazar las subidas del servidor en produccion.
+            #
+            # Un candado que cierra el esquema por delante del codigo que lo usa
+            # tiene que ser un acto deliberado, DESPUES de desplegar. De ahi la
+            # variable: se enciende cuando el codigo nuevo ya esta arriba.
+            # Ver docs/migrar-estados-del-ecd.md.
+            if os.getenv('ECD_CANDADO_ESTADOS', 'false').lower() in ('true', '1', 'yes'):
+                try:
+                    cursor.execute("SAVEPOINT candado_estado;")
+                    cursor.execute("""
+                        ALTER TABLE file_nodes ADD CONSTRAINT file_nodes_status_valido
+                        CHECK (status IN ('WIP', 'SHARED', 'PUBLISHED', 'ARCHIVED'));
+                    """)
+                    cursor.execute("RELEASE SAVEPOINT candado_estado;")
+                except Exception as e:
+                    cursor.execute("ROLLBACK TO SAVEPOINT candado_estado;")
+                    if 'already exists' not in str(e):
+                        logger.warning(
+                            f"No se pudo poner el candado de estados en file_nodes: {e}"
+                        )
+
             # ── 2. Indices para consultas frecuentes (CRITICO para escalar) ─
             # Sin estos indices, con 100.000 archivos las queries se vuelven lentas
             cursor.execute("""

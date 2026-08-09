@@ -1051,24 +1051,27 @@ def rename_document():
             if not target_node_id or not old_name:
                 return jsonify({"success": False, "error": "Item not found in specified location"}), 404
 
-            # --- ISO 19650 HOLDING AREA SANEAMIENTO ---
-            new_status = 'ACTIVE' # Por defecto para FOLDER o si ya pasa
-            
-            # if node_type == 'FILE':
-            #     base_name = new_name.rsplit('.', 1)[0] if '.' in new_name else new_name
-            #     if not re.match(ISO_19650_REGEX, base_name.upper()):
-            #         return jsonify({
-            #             "success": False, 
-            #             "error": "El nombre no cumple con el estándar ISO 19650 (Ej: PRJ-ORG-VOL-LVL-TYP-RL-0001)"
-            #         }), 400
-            
-            # EJECUTAR UPDATE APLICANDO EXTRACTO ISO
+            # --- CONFORMIDAD DEL NOMBRE (no es un estado del ciclo) ---
+            # Aqui habia un 'status = ACTIVE' fijo: renombrar un documento le
+            # pisaba el estado, asi que cambiarle una letra al nombre degradaba en
+            # silencio un documento ya aprobado. Renombrar cambia el NOMBRE; el
+            # punto del ciclo de vida solo lo mueve estados_ecd.transicionar().
+            #
+            # Lo que si se recalcula es si el nombre nuevo cumple la convencion, y
+            # eso vive en su propia marca. Por ahi sale un documento de la
+            # cuarentena: corrigiendole el nombre, sin tocar su estado.
+            conforme = None
+            if node_type == 'FILE':
+                base_name = new_name.rsplit('.', 1)[0] if '.' in new_name else new_name
+                conforme = bool(re.match(ISO_19650_REGEX, base_name.upper()))
+
             cursor.execute("""
-                UPDATE file_nodes 
-                SET name = %s, status = %s, updated_at = CURRENT_TIMESTAMP
+                UPDATE file_nodes
+                SET name = %s, nomenclatura_ok = %s, updated_at = CURRENT_TIMESTAMP,
+                    updated_by = %s
                 WHERE id = %s AND model_urn = %s AND is_deleted = FALSE
                 RETURNING id
-            """, (new_name, new_status, target_node_id, model_urn))
+            """, (new_name, conforme, _docs_actor(user), target_node_id, model_urn))
             updated = cursor.fetchone()
             conn.commit()
 
@@ -1665,73 +1668,44 @@ def batch_update():
     if not items:
         return jsonify({"success": True, "message": "No items to process"}), 200
 
-    # ── ISO 19650 STATUS ENGINE ──────────────────────────────────────────
-    VALID_STATUSES = {'WIP', 'SHARED', 'PUBLISHED', 'ARCHIVED'}
-    VALID_TRANSITIONS = {
-        'WIP':       {'SHARED'},              # Borrador → Compartido
-        'SHARED':    {'WIP', 'PUBLISHED'},     # Compartido → Publicado o devolver a WIP
-        'PUBLISHED': {'SHARED', 'ARCHIVED'},   # Publicado → Archivar o devolver a SHARED
-        'ARCHIVED':  {'PUBLISHED'},            # Archivo → Re-publicar (recuperar)
-    }
+    # El vocabulario y la maquina viven en backend/estados_ecd.py, que es la UNICA
+    # puerta que escribe la columna. Aqui estaban duplicados, y la aprobacion de
+    # una revision los ignoraba por completo con un UPDATE directo.
+    import estados_ecd as ecd
 
     try:
         from db import get_db_connection, log_activity
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            
+
             if action == 'SET_STATUS' and new_status:
-                if new_status not in VALID_STATUSES:
-                    return jsonify({"success": False, "error": f"Estado inválido: {new_status}. Válidos: {', '.join(VALID_STATUSES)}"}), 400
-                # ── RBAC: Solo admin puede aprobar a PUBLISHED o ARCHIVED ──
-                if new_status in ('PUBLISHED', 'ARCHIVED'):
-                    rbac_pub = check_folder_permission(user, req_node_id, model_urn, 'admin', f'aprobar documentos como {new_status}')
-                    if rbac_pub: return rbac_pub
+                if new_status not in ecd.ESTADOS:
+                    return jsonify({"success": False, "error": f"Estado inválido: {new_status}. Válidos: {', '.join(ecd.ESTADOS)}"}), 400
+                # Publicar o archivar es un acto de autoridad: uno dice "esto ya se
+                # puede usar en obra", el otro retira algo que estaba en uso.
+                nivel = 'admin' if new_status in ecd.REQUIEREN_AUTORIDAD else 'edit'
+                accion = (f'aprobar documentos como {ecd.ETIQUETAS.get(new_status, new_status)}'
+                          if new_status in ecd.REQUIEREN_AUTORIDAD else 'cambiar el estado')
+                # POR CADA documento, no solo por el primero de la lista: si no,
+                # con mando en una carpeta se movian documentos de cualquier otra
+                # metiendolos en la misma peticion.
+                def _autorizado(node_id):
+                    return check_folder_permission(user, node_id, model_urn, nivel, accion) is None
 
-                # Validar transiciones para cada item
-                cursor.execute("""
-                    SELECT id, status FROM file_nodes 
-                    WHERE id = ANY(%s) AND model_urn = %s
-                """, (items, model_urn))
-                current_items = cursor.fetchall()
-                
-                ERROR_MSGS = {
-                    ('WIP', 'PUBLISHED'): "No se puede publicar un documento que no ha pasado por el estado SHARED.",
-                    ('WIP', 'ARCHIVED'): "No se puede archivar un documento directamente desde estado WIP (Borrador).",
-                    ('SHARED', 'ARCHIVED'): "Un documento debe ser PUBLICADO antes de poder ser archivado.",
-                    ('PUBLISHED', 'WIP'): "Un documento publicado no puede volver a ser borrador. Envíelo a SHARED primero.",
-                    ('ARCHIVED', 'SHARED'): "Un documento archivado solo puede volver a estado PUBLISHED.",
-                    ('ARCHIVED', 'WIP'): "Un documento archivado no puede volver a Borrador de forma directa."
-                }
-                
-                valid_ids = []
-                for item_id, current_status in current_items:
-                    current = current_status or 'WIP'  # Default para items sin status
-                    allowed =VALID_TRANSITIONS.get(current, set())
-                    if new_status == current:
-                        continue  # Ya tiene ese estado, skip silencioso
-                        
-                    if new_status not in allowed:
-                        msg = ERROR_MSGS.get((current, new_status), f"Transición no permitida: de {current} a {new_status}.")
-                        return jsonify({"success": False, "error": msg}), 400
-                    
-                    valid_ids.append(str(item_id))
+                try:
+                    resultado = ecd.transicionar(cursor, model_urn, items, new_status, user,
+                                                 autorizar=_autorizado)
+                except ecd.TransicionRechazada as rechazo:
+                    conn.rollback()
+                    return jsonify({"success": False, "error": rechazo.motivo}), 400
+                conn.commit()
+                return jsonify({
+                    "success": True,
+                    "processed": len(resultado['cambiados']),
+                    "sin_cambio": len(resultado['sin_cambio']),
+                }), 200
 
-                if valid_ids:
-                    cursor.execute("""
-                        UPDATE file_nodes 
-                        SET status = %s, updated_at = CURRENT_TIMESTAMP
-                        WHERE id = ANY(%s) AND model_urn = %s
-                    """, (new_status, valid_ids, model_urn))
-                
-                log_activity(model_urn, 'batch_status', 'multiple', 
-                             entity_name=f"{len(valid_ids)} items", 
-                             performed_by=performed_by,
-                             details={
-                                 'new_status': new_status, 
-                                 'processed': len(valid_ids)
-                             })
-
-            elif action == 'DELETE':
+            if action == 'DELETE':
                 # Soft delete masivo
                 cursor.execute("""
                     UPDATE file_nodes 
@@ -2270,9 +2244,10 @@ def get_quarantine_files():
         with conn.cursor() as cursor:
             # Extraemos data básica sin CTE y sin updated_by para evitar errores de migración
             cursor.execute("""
-                SELECT id, name, node_type as type, node_type, '' as path, gcs_urn, size_bytes, mime_type, updated_at
+                SELECT id, name, node_type as type, node_type, '' as path, gcs_urn,
+                       size_bytes, mime_type, updated_at, status
                 FROM file_nodes
-                WHERE model_urn = %s AND status = 'NON_CONFORMING' AND is_deleted = FALSE
+                WHERE model_urn = %s AND nomenclatura_ok = FALSE AND is_deleted = FALSE
                 ORDER BY updated_at DESC
             """, (model_urn,))
             columns = [desc[0] for desc in cursor.description]
