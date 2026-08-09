@@ -81,7 +81,15 @@ class CursorFalso:
 
     def execute(self, sql, params=None):
         self.ejecutadas.append((' '.join(sql.split()), params))
-        if sql.strip().upper().startswith('SELECT'):
+        s = sql.upper()
+        # El catalogo de idoneidad y el historial de revisiones los sirve el
+        # modulo idoneidad; aqui solo hacen falta respuestas creibles.
+        if 'FROM IDONEIDAD_CATALOGO' in s:
+            import idoneidad as _idn
+            self._ultima = [(c, e, f) for c, e, f in _idn.CATALOGO_POR_DEFECTO]
+        elif 'CODIGO_REVISION FROM FILE_VERSIONS' in s:
+            self._ultima = []
+        elif sql.strip().upper().startswith('SELECT'):
             pedidos = set(params[0]) if params else set()
             self._ultima = [d for d in self.documentos if d[0] in pedidos]
         elif 'UPDATE file_nodes' in sql and 'status' in sql:
@@ -128,7 +136,8 @@ def test_una_transicion_invalida_no_cambia_NADA_del_lote():
         ('a2', 'dos.pdf', ecd.WIP),         # este no: WIP -> PUBLISHED
     ])
     with pytest.raises(ecd.TransicionRechazada) as e:
-        ecd.transicionar(cur, 'obra/X', ['a1', 'a2'], ecd.PUBLISHED, USUARIO, autorizar=MANDA)
+        ecd.transicionar(cur, 'obra/X', ['a1', 'a2'], ecd.PUBLISHED, USUARIO,
+                         autorizar=MANDA, codigo_idoneidad='A1')
     assert 'dos.pdf' in e.value.motivo
     assert not cur.sql_de('UPDATE file_nodes')
 
@@ -213,8 +222,19 @@ def test_no_hace_commit_ni_abre_conexion():
 def test_lista_vacia_no_hace_nada():
     cur = CursorFalso([])
     r = ecd.transicionar(cur, 'obra/X', [], ecd.SHARED, USUARIO)
-    assert r == {'cambiados': [], 'sin_cambio': []}
+    assert r == {'cambiados': [], 'sin_cambio': [], 'emisiones': {}}
     assert cur.ejecutadas == []
+
+
+def test_el_resultado_tiene_siempre_la_misma_forma():
+    """Que quien llama no tenga que defenderse de dos formas del mismo resultado."""
+    claves = {'cambiados', 'sin_cambio', 'emisiones'}
+    sin_nada = CursorFalso([])
+    ya_esta = CursorFalso([('a1', 'uno.pdf', ecd.SHARED)])
+    cambia = CursorFalso([('a1', 'uno.pdf', ecd.WIP)])
+    assert set(ecd.transicionar(sin_nada, 'obra/X', [], ecd.SHARED, USUARIO)) == claves
+    assert set(ecd.transicionar(ya_esta, 'obra/X', ['a1'], ecd.SHARED, USUARIO)) == claves
+    assert set(ecd.transicionar(cambia, 'obra/X', ['a1'], ecd.SHARED, USUARIO)) == claves
 
 
 def test_publicar_y_archivar_estan_marcados_como_actos_de_autoridad():
@@ -246,7 +266,7 @@ def test_recorrer_registra_cada_salto_por_separado():
     """El historial tiene que poder contar Borrador->Compartido->Publicado."""
     cur = CursorFalso([('a1', 'PLANO-01.pdf', 'ACTIVE')])
     r = ecd.transicionar_recorriendo(cur, 'obra/X', ['a1'], ecd.PUBLISHED, USUARIO,
-                                     autorizar=MANDA)
+                                     autorizar=MANDA, codigo_idoneidad='A1')
     assert r['pasos'] == [ecd.SHARED, ecd.PUBLISHED]
     assert len(cur.sql_de('INSERT INTO activity_log')) == 2
 
@@ -289,7 +309,7 @@ def test_si_el_autorizador_dice_que_no_no_se_publica():
     cur = CursorFalso([('a1', 'uno.pdf', ecd.SHARED)])
     with pytest.raises(ecd.TransicionRechazada):
         ecd.transicionar(cur, 'obra/X', ['a1'], ecd.PUBLISHED, USUARIO,
-                         autorizar=lambda _n: False)
+                         autorizar=lambda _n: False, codigo_idoneidad='A1')
     assert not cur.sql_de('UPDATE file_nodes')
 
 

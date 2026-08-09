@@ -86,7 +86,8 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                        fn.description, fn.mime_type, fn.created_at,
                        COALESCE(fn.updated_by, fn.created_by, 'Sistema') as u_by,
                        fp.permission_level,
-                       EXISTS(SELECT 1 FROM file_nodes c WHERE c.model_urn = fn.model_urn AND c.parent_id = fn.id AND c.is_deleted = FALSE) AS has_children
+                       EXISTS(SELECT 1 FROM file_nodes c WHERE c.model_urn = fn.model_urn AND c.parent_id = fn.id AND c.is_deleted = FALSE) AS has_children,
+                       fn.codigo_idoneidad, fn.codigo_revision, fn.nomenclatura_ok
                 FROM file_nodes fn
                 LEFT JOIN folder_permissions fp 
                     ON fn.id = fp.folder_node_id AND fp.user_id = %s
@@ -103,7 +104,8 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                        status, tags, metadata, description, mime_type, created_at, 
                        COALESCE(updated_by, created_by, 'Sistema') as u_by,
                        NULL as permission_level,
-                       EXISTS(SELECT 1 FROM file_nodes c WHERE c.model_urn = file_nodes.model_urn AND c.parent_id = file_nodes.id AND c.is_deleted = FALSE) AS has_children
+                       EXISTS(SELECT 1 FROM file_nodes c WHERE c.model_urn = file_nodes.model_urn AND c.parent_id = file_nodes.id AND c.is_deleted = FALSE) AS has_children,
+                       codigo_idoneidad, codigo_revision, nomenclatura_ok
                 FROM file_nodes 
                 WHERE model_urn = %s AND {parent_cond} AND is_deleted = FALSE
                 ORDER BY node_type DESC, name ASC
@@ -129,7 +131,9 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                 parent_eff = 'none'
 
         for row in rows:
-            r_id, r_name, r_type, r_size, r_version, r_updated, r_gcs, r_status, r_tags, r_metadata, r_description, r_mime, r_created, r_u_by, r_perm, r_has_children = row
+            (r_id, r_name, r_type, r_size, r_version, r_updated, r_gcs, r_status, r_tags,
+             r_metadata, r_description, r_mime, r_created, r_u_by, r_perm, r_has_children,
+             r_idoneidad, r_revision, r_nomenclatura) = row
             bp = base_path if base_path.endswith('/') else (base_path + '/' if base_path else '')
             full_name = f"{bp}{r_name}" + ("/" if r_type == 'FOLDER' else "")
             
@@ -176,6 +180,13 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                         "size": r_size,
                         "version": r_version,
                         "status": r_status,
+                        # La REVISION es la emision formal (P01, C01...); la
+                        # version es el contador de subidas. Y la IDONEIDAD dice
+                        # para que esta autorizado el documento, que es lo que
+                        # el estado por si solo no cuenta.
+                        "codigo_revision": r_revision,
+                        "codigo_idoneidad": r_idoneidad,
+                        "nomenclatura_ok": r_nomenclatura,
                         "tags": r_tags or [],
                         "metadata": r_metadata or {},
                         "custom_attributes": r_metadata or {},

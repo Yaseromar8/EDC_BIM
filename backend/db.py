@@ -247,6 +247,26 @@ def ensure_file_nodes_table():
             """)
             cursor.execute("ALTER TABLE file_nodes ALTER COLUMN status SET DEFAULT 'WIP';")
 
+            # ── 1.3 CON QUE AUTORIZACION SE EMITIO, Y COMO SE LLAMA ──────────
+            # El estado dice DONDE esta el documento; el codigo de idoneidad dice
+            # PARA QUE se puede usar. Sin el, un documento Publicado no distingue
+            # entre "apto para construir" y "solo para informacion".
+            #
+            # Van en la VERSION porque cada emision lleva la suya: asi se puede
+            # reconstruir con que autorizacion se entrego cada cosa y cuando. En
+            # file_nodes se guarda la de la version vigente, para poder listar y
+            # filtrar sin unir tablas.
+            for tabla in ('file_versions', 'file_nodes'):
+                cursor.execute(
+                    f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS codigo_idoneidad VARCHAR(10);")
+                cursor.execute(
+                    f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS codigo_revision VARCHAR(10);")
+            # Cuando se emitio esta version y quien la autorizo.
+            cursor.execute(
+                "ALTER TABLE file_versions ADD COLUMN IF NOT EXISTS emitida_en TIMESTAMP WITH TIME ZONE;")
+            cursor.execute(
+                "ALTER TABLE file_versions ADD COLUMN IF NOT EXISTS emitida_por VARCHAR(255);")
+
             # ── El candado (CHECK) va APARTE y NO se pone solo ───────────────
             # Aprendido a base de un susto: la primera version ponia el CHECK aqui
             # mismo, al arrancar. Como las migraciones corren al levantar CUALQUIER

@@ -31,20 +31,31 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCre
   const [users, setUsers] = useState([]);
   const [steps, setSteps] = useState([]);
   const [finalStatus, setFinalStatus] = useState('SHARED');
+  const [idoneidad, setIdoneidad] = useState('');
+  const [codigos, setCodigos] = useState([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
-    setTitle(''); setSteps([]); setFinalStatus('SHARED');
+    setTitle(''); setSteps([]); setFinalStatus('SHARED'); setIdoneidad('');
     apiFetch(`${API}/api/users`).then(r => r.json())
       .then(d => setUsers(d.users || d || [])).catch(() => setUsers([]));
-  }, [isOpen]);
+    // El catalogo de idoneidad es de la obra: lo que se audita es lo que diga
+    // el plan de ejecucion BIM del proyecto, no una lista fija del programa.
+    apiFetch(`${API}/api/docs/idoneidad?model_urn=${encodeURIComponent(projectPrefix)}`)
+      .then(r => r.json()).then(d => setCodigos(d.codigos || [])).catch(() => setCodigos([]));
+  }, [isOpen, projectPrefix]);
 
   if (!isOpen) return null;
 
   const submit = async () => {
     if (!title.trim()) { toast.error('Ponle un título a la revisión'); return; }
     if (!steps.length) { toast.error('Agrega al menos un revisor'); return; }
+    // Publicar exige decir para que queda autorizado. Se avisa AQUI y no al
+    // aprobar: enterarse cuando ya han firmado tres revisores es tarde.
+    if (finalStatus === 'PUBLISHED' && !idoneidad) {
+      toast.error('Elige para qué quedará autorizado al publicarse'); return;
+    }
     setSaving(true);
     try {
       const r = await apiFetch(`${API}/api/reviews`, {
@@ -52,7 +63,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCre
         body: JSON.stringify({
           model_urn: projectPrefix, title: title.trim(), items,
           steps: steps.map(s => ({ email: s.email, name: s.name })),
-          final_status: finalStatus, user: user?.name
+          final_status: finalStatus, codigo_idoneidad: idoneidad || undefined
         })
       });
       const d = await r.json();
@@ -121,6 +132,26 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCre
                 </label>
               ))}
             </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>
+              Al aprobarse, ¿para qué queda autorizado?
+            </label>
+            <select
+              value={idoneidad}
+              onChange={e => setIdoneidad(e.target.value)}
+              style={{ width: '100%', padding: '7px 9px', border: '1px solid #dcdcdc', borderRadius: 4, fontSize: 13 }}
+            >
+              <option value="">{finalStatus === 'PUBLISHED' ? '— Obligatorio al publicar —' : '— Sin especificar —'}</option>
+              {codigos.filter(c => c.familia === (finalStatus === 'PUBLISHED' ? 'publicado' : 'compartido')).map(c => (
+                <option key={c.codigo} value={c.codigo}>{c.codigo} · {c.etiqueta}</option>
+              ))}
+            </select>
+            <p style={{ margin: '6px 0 0', fontSize: 12, color: '#888', lineHeight: 1.5 }}>
+              El estado dice dónde está el documento; esto dice para qué puede usarse.
+              Un plano publicado «solo para información» no autoriza a construir.
+            </p>
           </div>
         </div>
         <div style={{ padding: '14px 20px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', gap: 10, background: '#fcfcfc' }}>

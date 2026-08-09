@@ -57,9 +57,16 @@ const ReviewStatusControl = ({ item, isAdmin, onStatusChange }) => {
           whiteSpace: 'nowrap',
           lineHeight: '20px',
         }}
-        title={isAdmin && transitions.length > 0 ? 'Clic para cambiar estado' : cfg.label}
+        title={item.codigo_idoneidad
+          ? `${cfg.label} · ${item.codigo_idoneidad} (para qué está autorizado)`
+          : (isAdmin && transitions.length > 0 ? 'Clic para cambiar estado' : cfg.label)}
       >
-        {cfg.label}{isAdmin && transitions.length > 0 ? ' ▾' : ''}
+        {cfg.label}
+        {/* El estado dice DÓNDE está; la idoneidad, PARA QUÉ sirve. Un documento
+            publicado puede ser "solo para información": construir con él sería
+            un error, y por eso el código va junto al estado y no escondido. */}
+        {item.codigo_idoneidad ? ` · ${item.codigo_idoneidad}` : ''}
+        {isAdmin && transitions.length > 0 ? ' ▾' : ''}
       </button>
       {showDrop && (
         <div
@@ -407,11 +414,17 @@ const TableRow = ({ index, style, data }) => {
         <>
           <div className="td-cell" style={{ width: columnWidths.version }}>
             {!isFolder && (
-              <button 
-                className="version-link-acc" 
+              <button
+                className="version-link-acc"
                 onClick={(e) => { e.stopPropagation(); onShowVersions(item, e); }}
+                title={item.codigo_revision
+                  ? `Revisión emitida ${item.codigo_revision} · subida V${item.version || 1}`
+                  : `Subida V${item.version || 1} — todavía sin emitir`}
               >
-                V{item.version || 1}
+                {/* La REVISIÓN es la emisión formal; la V es el contador de
+                    subidas. Corregir una errata sube la V y no la revisión, y
+                    confundirlas es lo que impedía decir "esta es la P02". */}
+                {item.codigo_revision || `V${item.version || 1}`}
               </button>
             )}
           </div>

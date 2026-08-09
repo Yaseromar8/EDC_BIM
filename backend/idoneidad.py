@@ -1,0 +1,169 @@
+"""Para que sirve cada version de un documento, y como se llama esa emision.
+
+EL HUECO QUE CIERRA
+-------------------
+La plataforma sabia DONDE estaba un documento (su punto del ciclo de vida) pero
+nunca PARA QUE se podia usar. Un documento marcado como Publicado no distinguia
+entre "apto para construir", "solo para informacion" y "para coordinacion". Y
+construir con un plano que solo era informativo es, en obra, un problema caro.
+
+Buscando 'idoneidad|suitability|revision_code' en todo el repositorio salian cero
+resultados: no era que estuviera mal, es que no existia.
+
+DOS DATOS DISTINTOS, Y LOS DOS FALTABAN
+---------------------------------------
+1. El CODIGO DE IDONEIDAD dice con que autorizacion se emite esta version.
+2. El CODIGO DE REVISION la identifica como emision formal (P01, P02, C01...).
+   No es el contador de subidas: hoy corregir una errata de maquetacion sube a V5
+   igual que emitir una revision contractual nueva, y ante "ensename la revision
+   P02 y cuando se emitio" no habia respuesta.
+
+Los dos van en la VERSION, no en el documento: cada emision lleva la suya, y por
+eso se puede reconstruir con que autorizacion se entrego cada cosa y cuando.
+
+SOBRE LOS CODIGOS
+-----------------
+El catalogo de abajo es el juego de codigos de uso corriente en un ECD, con
+descripciones NUESTRAS en castellano llano. Las definiciones normativas viven en
+la norma, que es de pago: esto no las reproduce ni las sustituye. Cada obra puede
+ajustar el catalogo a lo que diga su plan de ejecucion BIM, que es lo que se
+audita; por eso el catalogo se guarda por obra y es editable.
+"""
+
+from app_logging import get_logger
+
+logger = get_logger('idoneidad')
+
+# Familias. Lo que de verdad importa aqui es en que punto del ciclo se puede usar
+# cada una: los codigos de compartido NO valen para publicar y al reves.
+COMPARTIDO = 'compartido'
+PUBLICADO = 'publicado'
+
+CATALOGO_POR_DEFECTO = [
+    # codigo, etiqueta (nuestra), familia
+    ('S0', 'Trabajo en curso — no apto para compartir', COMPARTIDO),
+    ('S1', 'Para coordinación con otras disciplinas', COMPARTIDO),
+    ('S2', 'Solo para información', COMPARTIDO),
+    ('S3', 'Para revisión y comentarios', COMPARTIDO),
+    ('S4', 'Para aprobación de la fase', COMPARTIDO),
+    ('S6', 'Para aceptación del cliente', COMPARTIDO),
+    ('S7', 'Para aceptación como activo (operación)', COMPARTIDO),
+    ('A1', 'Autorizado para construcción', PUBLICADO),
+    ('A2', 'Autorizado para construcción con observaciones menores', PUBLICADO),
+    ('B1', 'Aceptado con comentarios — corregir y reemitir', PUBLICADO),
+    ('B2', 'Aceptado parcialmente — no construir lo observado', PUBLICADO),
+    ('CR', 'Solo como registro (as-built / expediente)', PUBLICADO),
+    ('PR', 'Publicado como referencia', PUBLICADO),
+]
+
+# Prefijos de revision: preliminar mientras se comparte, contractual al publicar.
+PREFIJO_POR_DESTINO = {'SHARED': 'P', 'PUBLISHED': 'C'}
+
+
+def asegurar_tabla(cursor):
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS idoneidad_catalogo (
+            model_urn  VARCHAR(255) NOT NULL,
+            codigo     VARCHAR(10)  NOT NULL,
+            etiqueta   TEXT         NOT NULL,
+            familia    VARCHAR(20)  NOT NULL,
+            activo     BOOLEAN      DEFAULT TRUE,
+            orden      INTEGER      DEFAULT 0,
+            PRIMARY KEY (model_urn, codigo)
+        )
+    """)
+
+
+def catalogo_de_obra(cursor, model_urn):
+    """Los codigos de esta obra. La primera vez siembra el juego por defecto."""
+    asegurar_tabla(cursor)
+    cursor.execute(
+        "SELECT codigo, etiqueta, familia FROM idoneidad_catalogo "
+        "WHERE model_urn = %s AND activo = TRUE ORDER BY orden, codigo",
+        (model_urn,),
+    )
+    filas = cursor.fetchall()
+    if filas:
+        return [{'codigo': c, 'etiqueta': e, 'familia': f} for c, e, f in filas]
+
+    for i, (codigo, etiqueta, familia) in enumerate(CATALOGO_POR_DEFECTO):
+        cursor.execute(
+            "INSERT INTO idoneidad_catalogo (model_urn, codigo, etiqueta, familia, orden) "
+            "VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+            (model_urn, codigo, etiqueta, familia, i),
+        )
+    return [{'codigo': c, 'etiqueta': e, 'familia': f}
+            for c, e, f in CATALOGO_POR_DEFECTO]
+
+
+def familia_de(cursor, model_urn, codigo):
+    """A que familia pertenece el codigo en ESTA obra, o None si no existe."""
+    if not codigo:
+        return None
+    for entrada in catalogo_de_obra(cursor, model_urn):
+        if entrada['codigo'].upper() == str(codigo).strip().upper():
+            return entrada['familia']
+    return None
+
+
+def validar_para(cursor, model_urn, codigo, destino):
+    """(vale, motivo). El motivo se le ensena al usuario tal cual.
+
+    La regla que importa: un codigo de la familia de compartido no autoriza a
+    publicar. Que un documento este Publicado no dice nada por si solo; lo que
+    dice para que sirve es esto.
+    """
+    if destino not in ('SHARED', 'PUBLISHED'):
+        return True, None   # volver a borrador o archivar no emite nada
+
+    if not codigo:
+        if destino == 'PUBLISHED':
+            return False, ("Falta el código de idoneidad: hay que decir para qué "
+                           "queda autorizado el documento antes de publicarlo.")
+        return True, None   # compartir sin codigo se tolera; publicar no
+
+    familia = familia_de(cursor, model_urn, codigo)
+    if familia is None:
+        return False, f"El código de idoneidad «{codigo}» no está en el catálogo de esta obra."
+
+    esperada = PUBLICADO if destino == 'PUBLISHED' else COMPARTIDO
+    if familia != esperada:
+        if destino == 'PUBLISHED':
+            return False, (f"«{codigo}» es un código para compartir, no autoriza a "
+                           f"publicar. Para publicar hace falta un código de la "
+                           f"familia de autorización (A…, B…, CR, PR).")
+        return False, (f"«{codigo}» es un código de publicación; para compartir "
+                       f"usa uno de la familia S…")
+    return True, None
+
+
+def _numero(codigo, prefijo):
+    if not codigo:
+        return 0
+    c = str(codigo).strip().upper()
+    if not c.startswith(prefijo):
+        return 0
+    resto = c[len(prefijo):]
+    return int(resto) if resto.isdigit() else 0
+
+
+def siguiente_revision(cursor, node_id, destino):
+    """El codigo de revision que toca para esta emision.
+
+    Preliminar (P01, P02...) mientras el documento se comparte; contractual
+    (C01, C02...) al publicarlo. Se calcula sobre TODAS las revisiones que ha
+    tenido el documento, no sobre la ultima, para que volver atras y reemitir no
+    reutilice un numero ya entregado: un codigo de revision que se repite deja de
+    identificar nada.
+    """
+    prefijo = PREFIJO_POR_DESTINO.get(destino)
+    if not prefijo:
+        return None
+    cursor.execute(
+        "SELECT codigo_revision FROM file_versions "
+        "WHERE file_node_id = %s AND codigo_revision IS NOT NULL",
+        (str(node_id),),
+    )
+    usados = [r[0] for r in cursor.fetchall()]
+    mayor = max([_numero(c, prefijo) for c in usados] or [0])
+    return f"{prefijo}{mayor + 1:02d}"

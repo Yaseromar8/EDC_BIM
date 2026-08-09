@@ -1694,7 +1694,8 @@ def batch_update():
 
                 try:
                     resultado = ecd.transicionar(cursor, model_urn, items, new_status, user,
-                                                 autorizar=_autorizado)
+                                                 autorizar=_autorizado,
+                                                 codigo_idoneidad=data.get('codigo_idoneidad'))
                 except ecd.TransicionRechazada as rechazo:
                     conn.rollback()
                     return jsonify({"success": False, "error": rechazo.motivo}), 400
@@ -1703,6 +1704,7 @@ def batch_update():
                     "success": True,
                     "processed": len(resultado['cambiados']),
                     "sin_cambio": len(resultado['sin_cambio']),
+                    "emisiones": resultado.get('emisiones') or {},
                 }), 200
 
             if action == 'DELETE':
@@ -2251,6 +2253,29 @@ def force_init_permissions():
             return jsonify({"success": True, "message": "Tabla creada exitosamente."}) 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+
+@documents_bp.route('/api/docs/idoneidad', methods=['GET'])
+def catalogo_de_idoneidad():
+    """Los códigos de idoneidad de esta obra: para qué puede autorizarse un documento.
+
+    Se siembra con el juego de uso corriente y es editable por obra, porque lo
+    que se audita es lo que diga el plan de ejecución BIM del proyecto.
+    """
+    model_urn = request.args.get('model_urn', 'global')
+    from flask import g
+    if not verify_project_access(getattr(g, 'current_user', None), model_urn):
+        return jsonify({"success": False, "error": "Sin acceso a esta obra."}), 403
+    try:
+        from db import get_db_connection
+        from idoneidad import catalogo_de_obra
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            codigos = catalogo_de_obra(cur, model_urn)
+            conn.commit()
+        return jsonify({"success": True, "codigos": codigos}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 @documents_bp.route('/api/docs/quarantine', methods=['GET'])
 def get_quarantine_files():

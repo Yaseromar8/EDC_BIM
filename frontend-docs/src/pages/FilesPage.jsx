@@ -18,6 +18,7 @@ import { API, getInitials, getAuthHeaders, formatSize, formatDate, DOCS_VISOR_SH
 import { renderFileIconSop } from '../utils/fileIcons';
 import { apiFetch } from '../utils/apiFetch';
 import { confirmAction } from '../utils/confirm';
+import { pedirIdoneidad } from '../utils/idoneidad';
 
 // ── Ligeros (siempre presentes en el flujo de Archivos) → carga inmediata ──
 import DeleteModal from '../components/modals/DeleteModal';
@@ -656,7 +657,29 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                       editingNodeId={fe.editingNodeId} setEditingNodeId={fe.setEditingNodeId} processingIds={fe.processingIds}
                       rightClickedId={fe.rightClickedId} startResizing={startResizing} setSelected={fe.setSelected}
                       renderFileIconSop={renderFileIconSop}
-                      onStatusChange={async (item, newStatus) => { fe.setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: newStatus } : f)); try { const res = await apiFetch(`${API}/api/docs/batch`, { method: 'POST', body: JSON.stringify({ items: [item.id], action: 'SET_STATUS', status: newStatus, model_urn: projectPrefix, user: user?.name }) }); if (!res.ok) { const err = await res.json().catch(() => ({})); toast.error(err.error || 'Error al cambiar estado'); fe.triggerRefresh(fe.currentPath); } } catch (e) { fe.triggerRefresh(fe.currentPath); } }}
+                      onStatusChange={async (item, newStatus) => {
+                        // Publicar exige decir PARA QUÉ queda autorizado el
+                        // documento: "Publicado" a secas no distingue apto para
+                        // construir de solo informativo, y con esa diferencia se
+                        // construye o no se construye.
+                        let codigo_idoneidad;
+                        if (newStatus === 'PUBLISHED') {
+                          codigo_idoneidad = await pedirIdoneidad(API, projectPrefix, newStatus);
+                          if (!codigo_idoneidad) return;   // se echó atrás
+                        }
+                        fe.setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: newStatus } : f));
+                        try {
+                          const res = await apiFetch(`${API}/api/docs/batch`, { method: 'POST', body: JSON.stringify({ items: [item.id], action: 'SET_STATUS', status: newStatus, model_urn: projectPrefix, codigo_idoneidad }) });
+                          const data = await res.json().catch(() => ({}));
+                          if (!res.ok || !data.success) {
+                            toast.error(data.error || 'Error al cambiar estado');
+                          } else {
+                            const sello = (data.emisiones || {})[item.id];
+                            if (sello?.revision) toast.success(`Emitido como ${sello.revision}${sello.idoneidad ? ' · ' + sello.idoneidad : ''}`);
+                          }
+                          fe.triggerRefresh(fe.currentPath);
+                        } catch (e) { fe.triggerRefresh(fe.currentPath); }
+                      }}
                     />
                 )}
               </div>

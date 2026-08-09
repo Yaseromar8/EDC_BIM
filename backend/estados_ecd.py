@@ -137,7 +137,7 @@ def _autor(usuario):
 
 
 def transicionar(cursor, model_urn, ids, nuevo, usuario, motivo_del_cambio=None,
-                 autorizar=None):
+                 autorizar=None, codigo_idoneidad=None):
     """Cambia el estado de uno o varios documentos. LA UNICA PUERTA.
 
     Trabaja sobre el cursor que le pasan, sin abrir conexion ni hacer commit: asi
@@ -167,9 +167,17 @@ def transicionar(cursor, model_urn, ids, nuevo, usuario, motivo_del_cambio=None,
             f"No se puede pasar a {ETIQUETAS[nuevo]} sin comprobar la autoridad "
             f"de quien lo pide."
         )
+    # Con que autorizacion se emite. Publicar sin decir para que sirve el
+    # documento es justo lo que un auditor no acepta: "Publicado" a secas no
+    # distingue apto para construir de solo informativo.
+    from idoneidad import validar_para, siguiente_revision
+    vale, motivo = validar_para(cursor, model_urn, codigo_idoneidad, nuevo)
+    if not vale:
+        raise TransicionRechazada(motivo)
+
     ids = [str(i) for i in (ids or []) if i]
     if not ids:
-        return {'cambiados': [], 'sin_cambio': []}
+        return {'cambiados': [], 'sin_cambio': [], 'emisiones': {}}
 
     cursor.execute(
         "SELECT id, name, status FROM file_nodes "
@@ -201,7 +209,10 @@ def transicionar(cursor, model_urn, ids, nuevo, usuario, motivo_del_cambio=None,
         cambiados.append((str(node_id), nombre, actual))
 
     if not cambiados:
-        return {'cambiados': [], 'sin_cambio': sin_cambio}
+        # Misma forma SIEMPRE. Devolver un diccionario con menos claves cuando no
+        # hay nada que cambiar obliga a quien llama a defenderse de dos formas
+        # distintas del mismo resultado, y ahi es donde se cuelan los fallos.
+        return {'cambiados': [], 'sin_cambio': sin_cambio, 'emisiones': {}}
 
     cursor.execute(
         "UPDATE file_nodes SET status = %s, updated_at = CURRENT_TIMESTAMP, updated_by = %s "
@@ -209,8 +220,41 @@ def transicionar(cursor, model_urn, ids, nuevo, usuario, motivo_del_cambio=None,
         (nuevo, _autor(usuario), [c[0] for c in cambiados], model_urn),
     )
 
-    _auditar(cursor, model_urn, cambiados, nuevo, usuario, motivo_del_cambio)
-    return {'cambiados': [c[0] for c in cambiados], 'sin_cambio': sin_cambio}
+    # Compartir y publicar son EMISIONES: llevan su codigo de revision, su
+    # idoneidad y su fecha, y quedan grabados en la VERSION concreta que se
+    # emitio. Volver a borrador o archivar no emite nada, y no marca.
+    emitidos = {}
+    if nuevo in ('SHARED', 'PUBLISHED'):
+        for node_id, _nombre, _anterior in cambiados:
+            emitidos[node_id] = _sellar_emision(
+                cursor, node_id, nuevo, codigo_idoneidad,
+                siguiente_revision(cursor, node_id, nuevo), _autor(usuario))
+
+    _auditar(cursor, model_urn, cambiados, nuevo, usuario, motivo_del_cambio, emitidos)
+    return {'cambiados': [c[0] for c in cambiados], 'sin_cambio': sin_cambio,
+            'emisiones': emitidos}
+
+
+def _sellar_emision(cursor, node_id, destino, codigo_idoneidad, codigo_revision, autor):
+    """Graba la idoneidad, la revision y la fecha en la version vigente."""
+    cursor.execute(
+        """UPDATE file_versions
+              SET codigo_idoneidad = %s, codigo_revision = %s,
+                  emitida_en = CURRENT_TIMESTAMP, emitida_por = %s
+            WHERE id = (
+                SELECT COALESCE(
+                    (SELECT current_version_id FROM file_nodes WHERE id = %s),
+                    (SELECT id FROM file_versions WHERE file_node_id = %s
+                      ORDER BY version_number DESC LIMIT 1)
+                ))""",
+        (codigo_idoneidad, codigo_revision, autor, str(node_id), str(node_id)),
+    )
+    # Y en el documento, la de su version vigente, para poder listar y filtrar.
+    cursor.execute(
+        "UPDATE file_nodes SET codigo_idoneidad = %s, codigo_revision = %s WHERE id = %s",
+        (codigo_idoneidad, codigo_revision, str(node_id)),
+    )
+    return {'idoneidad': codigo_idoneidad, 'revision': codigo_revision}
 
 
 def camino_hasta(actual, destino):
@@ -244,7 +288,8 @@ def camino_hasta(actual, destino):
 
 
 def transicionar_recorriendo(cursor, model_urn, ids, destino, usuario,
-                             motivo_del_cambio=None, autorizar=None):
+                             motivo_del_cambio=None, autorizar=None,
+                             codigo_idoneidad=None):
     """Lleva los documentos hasta el destino pasando por los estados intermedios.
 
     Solo para la aprobacion de revisiones. El cambio manual por lote usa
@@ -278,14 +323,19 @@ def transicionar_recorriendo(cursor, model_urn, ids, destino, usuario,
                 f"{ETIQUETAS.get(origen, origen)} a {ETIQUETAS.get(destino, destino)}."
             )
         for paso in camino:
+            # La idoneidad se aplica a la EMISION FINAL. Los pasos intermedios son
+            # el recorrido de la maquina, no una emision aparte: colarles el
+            # codigo de destino ahi fallaria (un codigo de publicacion no vale
+            # para compartir) y ademas mentiria sobre lo que se autorizo.
             r = transicionar(cursor, model_urn, grupo, paso, usuario, motivo_del_cambio,
-                             autorizar=autorizar)
+                             autorizar=autorizar,
+                             codigo_idoneidad=codigo_idoneidad if paso == destino else None)
             pasos_dados.append(paso)
             cambiados.extend(r['cambiados'])
     return {'cambiados': cambiados, 'sin_cambio': [], 'pasos': pasos_dados}
 
 
-def _auditar(cursor, model_urn, cambiados, nuevo, usuario, motivo_del_cambio):
+def _auditar(cursor, model_urn, cambiados, nuevo, usuario, motivo_del_cambio, emitidos=None):
     """Una linea POR DOCUMENTO, con su nombre y de que estado venia.
 
     Antes se escribia una sola linea agregada: "12 items -> PUBLISHED". Ante la
@@ -304,6 +354,12 @@ def _auditar(cursor, model_urn, cambiados, nuevo, usuario, motivo_del_cambio):
         }
         if motivo_del_cambio:
             detalle['motivo'] = motivo_del_cambio
+        sello = (emitidos or {}).get(node_id)
+        if sello:
+            # Con que autorizacion se emitio y con que numero de revision. Es lo
+            # que se le ensena a un auditor junto con la fecha y el autor.
+            detalle['codigo_idoneidad'] = sello.get('idoneidad')
+            detalle['codigo_revision'] = sello.get('revision')
         try:
             cursor.execute(
                 "INSERT INTO activity_log "

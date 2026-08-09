@@ -6,6 +6,7 @@ Al aprobar el último paso, los documentos transicionan al estado ISO final.
 """
 import json
 import traceback
+from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
 from db import get_db_connection, log_activity
 import estados_ecd as ecd
@@ -33,6 +34,11 @@ def ensure_reviews_table():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''')
         cur.execute('CREATE INDEX IF NOT EXISTS idx_doc_reviews_urn ON doc_reviews(model_urn)')
+        # Con que autorizacion queda emitido lo que se apruebe, y cuando se cerro
+        # la revision. Ante "cuando se aprobo este plano" no habia respuesta: el
+        # historial guardaba quien y en que paso, pero ninguna fecha.
+        cur.execute('ALTER TABLE doc_reviews ADD COLUMN IF NOT EXISTS codigo_idoneidad VARCHAR(10)')
+        cur.execute('ALTER TABLE doc_reviews ADD COLUMN IF NOT EXISTS cerrada_en TIMESTAMP WITH TIME ZONE')
         conn.commit()
 
 
@@ -69,7 +75,9 @@ def _row_to_dict(r):
         "id": r[0], "model_urn": r[1], "title": r[2], "items": r[3],
         "steps": r[4], "current_step": r[5], "status": r[6],
         "final_status": r[7], "history": r[8] or [],
-        "created_by": r[9], "created_at": r[10].isoformat() if r[10] else None
+        "created_by": r[9], "created_at": r[10].isoformat() if r[10] else None,
+        "codigo_idoneidad": r[11] if len(r) > 11 else None,
+        "cerrada_en": r[12].isoformat() if len(r) > 12 and r[12] else None,
     }
 
 
@@ -87,7 +95,8 @@ def list_reviews():
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("""SELECT id, model_urn, title, items, steps, current_step, status,
-                                  final_status, history, created_by, created_at
+                                  final_status, history, created_by, created_at,
+                                  codigo_idoneidad, cerrada_en
                            FROM doc_reviews WHERE model_urn = %s ORDER BY id DESC LIMIT 200""",
                         (model_urn,))
             data = [_row_to_dict(r) for r in cur.fetchall()]
@@ -117,11 +126,21 @@ def create_review():
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
-            cur.execute("""INSERT INTO doc_reviews (model_urn, title, items, steps, final_status, created_by, history)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+            # Se valida AL CREAR, no al aprobar: enterarse de que el código no
+            # sirve cuando ya han firmado tres revisores es tarde y humillante.
+            from idoneidad import validar_para
+            vale, motivo = validar_para(cur, d['model_urn'],
+                                        d.get('codigo_idoneidad'), final_status)
+            if not vale:
+                return jsonify({"success": False, "error": motivo}), 400
+            cur.execute("""INSERT INTO doc_reviews (model_urn, title, items, steps, final_status,
+                                                    created_by, history, codigo_idoneidad)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                         (d['model_urn'], d['title'], json.dumps(items), json.dumps(steps),
-                         final_status, u.get('name') or d.get('user'),
-                         json.dumps([{"event": "created", "by": u.get('name'), "at": None}])))
+                         final_status, u.get('email') or u.get('name'),
+                         json.dumps([{"event": "created", "by": u.get('email') or u.get('name'),
+                                      "at": datetime.now(timezone.utc).isoformat()}]),
+                         (d.get('codigo_idoneidad') or '').strip().upper() or None))
             rid = cur.fetchone()[0]
             conn.commit()
         log_activity(d['model_urn'], 'review_created', 'review', entity_id=str(rid),
@@ -145,7 +164,8 @@ def act_on_review(rid):
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("""SELECT id, model_urn, title, items, steps, current_step, status,
-                                  final_status, history, created_by, created_at
+                                  final_status, history, created_by, created_at,
+                                  codigo_idoneidad, cerrada_en
                            FROM doc_reviews WHERE id = %s FOR UPDATE""", (rid,))
             row = cur.fetchone()
             if not row:
@@ -164,8 +184,13 @@ def act_on_review(rid):
             if not is_reviewer and u.get('role') != 'admin':
                 return jsonify({"success": False, "error": f"Este paso corresponde a {step.get('name') or step.get('email')}"}), 403
 
+            # CON FECHA. Cada acto de aprobacion o rechazo tiene que quedar
+            # fechado: es la primera pregunta de una supervision, y hasta ahora la
+            # unica forma de reconstruirla era mirar la fila correlativa del
+            # registro de actividad y suponer.
             entry = {"event": action, "step": rev['current_step'],
-                     "by": u.get('name') or u.get('email'), "comment": comment}
+                     "by": u.get('email') or u.get('name'), "comment": comment,
+                     "at": datetime.now(timezone.utc).isoformat()}
             history = rev['history'] + [entry]
 
             if action == 'reject':
@@ -183,7 +208,8 @@ def act_on_review(rid):
                 # venia. Ahora va por la misma puerta que el resto
                 # (backend/estados_ecd.py), que valida el camino y deja UNA linea
                 # de auditoria por documento, con su nombre y su estado anterior.
-                cur.execute("UPDATE doc_reviews SET status='approved', history=%s WHERE id=%s",
+                cur.execute("UPDATE doc_reviews SET status='approved', history=%s, "
+                            "cerrada_en=CURRENT_TIMESTAMP WHERE id=%s",
                             (json.dumps(history), rid))
                 ids = [it.get('node_id') for it in rev['items'] if it.get('node_id')]
                 destino = ecd.normalizar(rev['final_status'])
@@ -202,7 +228,8 @@ def act_on_review(rid):
                     ecd.transicionar_recorriendo(
                         cur, rev['model_urn'], ids, destino, u,
                         motivo_del_cambio=f"revisión #{rid}: {rev['title']}",
-                        autorizar=_autorizado)
+                        autorizar=_autorizado,
+                        codigo_idoneidad=rev.get('codigo_idoneidad'))
                 except ecd.TransicionRechazada as rechazo:
                     conn.rollback()
                     return jsonify({"success": False, "error": rechazo.motivo}), 409
