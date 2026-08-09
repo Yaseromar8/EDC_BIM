@@ -877,9 +877,18 @@ from folder_permissions import init_folder_permissions_table
 from routes.documents import _ensure_share_revoked_column
 
 
+from esquema_base import ensure_esquema_base, ensure_columnas_pendientes
+
+
 def _run_schema_setup():
     import time as _t
     rutinas = [
+        # PRIMERO las tablas que ninguna otra rutina crea (projects, users,
+        # hubs, project_users, folder_permissions, sessions...). Sin ellas, todo
+        # lo que viene detras falla en cascada contra una base vacia, y durante
+        # mucho tiempo eso significo que la plataforma NO SE PODIA RECONSTRUIR
+        # aunque se tuvieran todas las copias. Ver backend/esquema_base.py.
+        ('esquema_base', ensure_esquema_base),
         ('file_nodes', ensure_file_nodes_table),
         ('ai_brain', ensure_ai_brain_schema),
         ('rfi', ensure_rfi_schema),
@@ -901,6 +910,9 @@ def _run_schema_setup():
         ('frentes', ensure_frentes_table),
         ('folder_permissions', init_folder_permissions_table),
         ('share_revoked', _ensure_share_revoked_column),
+        # AL FINAL: columnas sueltas que la base real tiene y que ninguna rutina
+        # crea. Van aqui porque necesitan que sus tablas ya existan.
+        ('columnas_pendientes', ensure_columnas_pendientes),
     ]
     inicio = _t.time()
     fallos = []
