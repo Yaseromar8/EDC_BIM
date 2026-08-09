@@ -93,6 +93,31 @@ function MenuItem({ icon, label, onClick, danger = false, divider = false }) {
   );
 }
 
+// Cuarentena y Papelera NO son sitios distintos: son formas de MIRAR los mismos
+// archivos. Tenerlas como secciones del menu principal las ponia al mismo nivel
+// que el arbol entero, y ademas obligaba a salir de Archivos para ver lo que
+// esta dentro de Archivos. Aqui son pestanas, como la papelera en ACC.
+function PestanasDeArchivos({ fe, isAdmin }) {
+  const activa = fe.isTrashMode ? 'papelera' : (fe.sidebarView === 'quarantine' ? 'cuarentena' : 'carpetas');
+  const pestanas = [
+    { id: 'carpetas', label: 'Carpetas', ir: () => { fe.setSidebarView('files'); fe.switchMode(false); } },
+    ...(isAdmin ? [{ id: 'cuarentena', label: 'Nombres fuera de convención', ir: () => { fe.switchMode(false); fe.setSidebarView('quarantine'); } }] : []),
+    { id: 'papelera', label: 'Papelera', ir: () => { fe.setSidebarView('files'); fe.switchMode(true); } },
+  ];
+  return (
+    <div style={{ display: 'flex', gap: 28, borderBottom: '1px solid #dcdcdc' }}>
+      {pestanas.map(t => (
+        <button key={t.id} onClick={t.ir}
+          style={{ paddingBottom: 8, paddingTop: 4, fontSize: 13, background: 'none', border: 'none', cursor: 'pointer',
+            borderBottom: activa === t.id ? '2px solid #5f7fa3' : '2px solid transparent',
+            color: activa === t.id ? '#5f7fa3' : '#666', fontWeight: activa === t.id ? 600 : 400 }}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function FilesPage({ project, user, onBack, onLogout, onBackToHub }) {
   // ═══════════════════════════════════════
   // HOOK ASSEMBLY (Zero logic — only wiring)
@@ -217,41 +242,54 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         <div style={{ width: globalSidebarWidth, flexShrink: 0, borderRight: '1px solid #dcdcdc', background: '#fff', display: 'flex', flexDirection: 'column' }}>
           <div style={{ flex: 1, overflowY: 'auto' }}>
             <ul style={{ listStyle: 'none', padding: '8px 0', margin: 0 }}>
+              {/* Tres bloques, no doce elementos planos. Medido sobre la obra real:
+                  Archivos tenia 2.831 registros y Revisiones, Transmittals y Conjuntos
+                  tenian UNO cada uno, y todos ocupaban el mismo peso visual. Quien
+                  entraba por primera vez no sabia por donde empezar y acababa usando
+                  solo Archivos.
+                  Cuarentena y Elementos suprimidos dejan de ser secciones: son formas
+                  de MIRAR los archivos, y viven como filtros dentro de Archivos. */}
               {[
-                { label: 'Archivos', mode: 'files', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5,5l2,2H20v12h-16V5H12.5 M13.17,3h-10.34A1.83,1.83,0,0,0,1,4.83v14.34A1.83,1.83,0,0,0,2.83,21h18.34A1.83,1.83,0,0,0,23,19.17V6.83A1.83,1.83,0,0,0,21.17,5H14.83Z"/></svg>, onClick: () => { fe.setSidebarView('files'); fe.switchMode(false); } },
-                { label: 'Red Line', mode: 'redlines', icon: <svg width="22" height="22" viewBox="0 0 24 24"><text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontWeight="bold" fontSize="14" fontFamily="sans-serif">RL</text></svg>, onClick: () => fe.setSidebarView('redlines') },
-                { label: 'Informes', mode: 'reports', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg>, onClick: () => fe.setSidebarView('reports') },
-                { label: 'Miembros', mode: 'members', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>, onClick: () => { fe.setSidebarView('members'); fe.setMembersLoading(true); apiFetch(`${API}/api/users`).then(r => r.json()).then(d => fe.setMembersList(d.users || d || [])).catch(() => { fe.setMembersList([]); toast.error('No se pudieron cargar los miembros.'); }).finally(() => fe.setMembersLoading(false)); } },
-                { label: 'Configuración', mode: 'settings', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>, onClick: () => fe.setSidebarView('settings') },
-                { label: 'Revisiones', mode: 'reviews', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>, onClick: () => fe.setSidebarView('reviews') },
-                { label: 'Transmittals', mode: 'transmittals', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>, onClick: () => fe.setSidebarView('transmittals') },
-                { label: 'Conjuntos', mode: 'sets', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>, onClick: () => fe.setSidebarView('sets') },
-                { label: 'Actividad', mode: 'activity', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>, onClick: () => fe.setSidebarView('activity') },
-                { label: 'Multimedia', mode: 'multimedia', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>, onClick: () => fe.setSidebarView('multimedia') },
-                // Sala de Cuarentena ISO 19650: solo admins (las acciones dentro son destructivas)
-                ...(isAdmin ? [{ label: 'Cuarentena', mode: 'quarantine', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>, onClick: () => fe.setSidebarView('quarantine') }] : []),
-              ].map((item, idx) => (
-                <li key={idx} style={{ marginBottom: 2 }}>
-                  <button onClick={() => { if (item.onClick) item.onClick(); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '8px 12px',
-                      background: fe.sidebarView === item.mode && !fe.isTrashMode ? '#eef2f7' : 'none', border: 'none',
-                      color: fe.sidebarView === item.mode && !fe.isTrashMode ? '#5f7fa3' : '#5f6368', fontSize: '13px',
-                      fontWeight: fe.sidebarView === item.mode && !fe.isTrashMode ? '500' : '400', borderRadius: '0 20px 20px 0', cursor: 'pointer' }}>
-                    {item.icon}
-                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
-                  </button>
+                { titulo: 'Obra', items: [
+                  { label: 'Archivos', mode: 'files', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5,5l2,2H20v12h-16V5H12.5 M13.17,3h-10.34A1.83,1.83,0,0,0,1,4.83v14.34A1.83,1.83,0,0,0,2.83,21h18.34A1.83,1.83,0,0,0,23,19.17V6.83A1.83,1.83,0,0,0,21.17,5H14.83Z"/></svg>, onClick: () => { fe.setSidebarView('files'); fe.switchMode(false); } },
+                  { label: 'Fotos de campo', mode: 'multimedia', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>, onClick: () => fe.setSidebarView('multimedia') },
+                  { label: 'Red Line', mode: 'redlines', icon: <svg width="22" height="22" viewBox="0 0 24 24"><text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontWeight="bold" fontSize="14" fontFamily="sans-serif">RL</text></svg>, onClick: () => fe.setSidebarView('redlines') },
+                  { label: 'Informes', mode: 'reports', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg>, onClick: () => fe.setSidebarView('reports') },
+                ]},
+                { titulo: 'Entregas', items: [
+                  { label: 'Revisiones', mode: 'reviews', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>, onClick: () => fe.setSidebarView('reviews') },
+                  { label: 'Transmittals', mode: 'transmittals', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>, onClick: () => fe.setSidebarView('transmittals') },
+                  { label: 'Conjuntos', mode: 'sets', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>, onClick: () => fe.setSidebarView('sets') },
+                ]},
+                { titulo: 'Administración', items: [
+                  { label: 'Miembros', mode: 'members', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>, onClick: () => { fe.setSidebarView('members'); fe.setMembersLoading(true); apiFetch(`${API}/api/users`).then(r => r.json()).then(d => fe.setMembersList(d.users || d || [])).catch(() => { fe.setMembersList([]); toast.error('No se pudieron cargar los miembros.'); }).finally(() => fe.setMembersLoading(false)); } },
+                  { label: 'Actividad', mode: 'activity', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>, onClick: () => fe.setSidebarView('activity') },
+                  { label: 'Configuración', mode: 'settings', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>, onClick: () => fe.setSidebarView('settings') },
+                ]},
+              ].map((grupo, gi) => (
+                <li key={grupo.titulo} style={{ marginBottom: gi < 2 ? 10 : 0 }}>
+                  {globalSidebarWidth > 100 && (
+                    <div style={{ padding: '8px 12px 4px', fontSize: 11, color: '#9aa0a6', letterSpacing: '0.04em' }}>
+                      {grupo.titulo}
+                    </div>
+                  )}
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {grupo.items.map((item) => (
+                      <li key={item.label} style={{ marginBottom: 2 }}>
+                        <button onClick={() => { if (item.onClick) item.onClick(); }}
+                          title={item.label}
+                          style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '8px 12px',
+                            background: fe.sidebarView === item.mode && !fe.isTrashMode ? '#eef2f7' : 'none', border: 'none',
+                            color: fe.sidebarView === item.mode && !fe.isTrashMode ? '#5f7fa3' : '#5f6368', fontSize: '13px',
+                            fontWeight: fe.sidebarView === item.mode && !fe.isTrashMode ? '500' : '400', borderRadius: '0 20px 20px 0', cursor: 'pointer' }}>
+                          {item.icon}
+                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 </li>
               ))}
-              <li style={{ marginBottom: 2 }}>
-                <button onClick={() => fe.switchMode(true)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '8px 12px',
-                    background: fe.isTrashMode ? '#eef2f7' : 'none', border: 'none',
-                    color: fe.isTrashMode ? '#5f7fa3' : '#5f6368', fontSize: '13px',
-                    fontWeight: fe.isTrashMode ? '500' : '400', cursor: 'pointer', borderRadius: '0 20px 20px 0', transition: 'background 0.2s' }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M11 15H5a2.25 2.25 0 0 1-2.25-2.25V5.72a.75.75,0,0,1 1.5 0v7.07a.74.74,0,0,0 .75.75h6a.74.74,0,0,0 .75-.75V5.72a.75.75,0,0,1 1.5 0v7.07A2.25 2.25 0 0 1 11 15Zm3-12h-3a2.26 2.26 0 0 0-2.24-2h-1.5A2.26 2.26 0 0 0 5 3H2a.75.75,0,0,0 0 1.5h12A.75.75,0,0,0,14 3Zm-3.75 8V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Zm-3 0V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Z"></path></svg>
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Elementos suprimidos</span>
-                </button>
-              </li>
             </ul>
           </div>
           <div className="sidebar-bottom" style={{ padding: '12px 16px', borderTop: '1px solid #eee' }}>
@@ -267,7 +305,13 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
         {/* QUARANTINE VIEW */}
         {fe.sidebarView === 'quarantine' && !fe.isTrashMode && (
-          <QuarantineTable projectPrefix={projectPrefix} API={API} isAdmin={isAdmin} user={user} />
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+            <div style={{ padding: '24px 24px 0' }}>
+              <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 16 }}>Archivos</div>
+              <PestanasDeArchivos fe={fe} isAdmin={isAdmin} />
+            </div>
+            <QuarantineTable projectPrefix={projectPrefix} API={API} isAdmin={isAdmin} user={user} />
+          </div>
         )}
 
         {/* ACTIVITY VIEW */}
@@ -372,19 +416,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         {fe.sidebarView === 'files' && (<>
           <header style={{ padding: '24px 24px 0 24px', flexShrink: 0 }}>
             <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 16 }}>{fe.isTrashMode ? 'Elementos suprimidos' : 'Archivos'}</div>
-            {!fe.isTrashMode && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #dcdcdc' }}>
-                <div style={{ display: 'flex', gap: 32 }}>
-                  <div style={{ paddingBottom: 8, fontSize: 13, borderBottom: '2px solid #5f7fa3', color: '#5f7fa3', fontWeight: 600 }}>Carpetas</div>
-                </div>
-                <div style={{ display: 'flex', gap: 20, paddingBottom: 8 }}>
-                   <button onClick={() => fe.switchMode(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer', padding: '4px 8px', borderRadius: 4 }}>
-                     <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11 15H5a2.25 2.25 0 0 1-2.25-2.25V5.72a.75.75,0,0,1 1.5 0v7.07a.74.74,0,0,0 .75.75h6a.74.74,0,0,0 .75-.75V5.72a.75.75,0,0,1 1.5 0v7.07A2.25 2.25 0 0 1 11 15Zm3-12h-3a2.26 2.26 0 0 0-2.24-2h-1.5A2.26 2.26 0 0 0 5 3H2a.75.75,0,0,0 0 1.5h12A.75.75,0,0,0,14 3Zm-3.75 8V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Zm-3 0V7.22a.75.75,0,0,0-1.5 0V11a.75.75,0,0,0 1.5 0Z"></path></svg>
-                     Elementos suprimidos
-                   </button>
-                </div>
-              </div>
-            )}
+            {!fe.isTrashMode && <PestanasDeArchivos fe={fe} isAdmin={isAdmin} />}
             {fe.isTrashMode && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #dcdcdc', paddingBottom: 8 }}>
                  <button onClick={() => fe.switchMode(false)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: '#666', fontSize: 13, cursor: 'pointer', padding: '4px 8px', borderRadius: 4 }}>
