@@ -25,6 +25,27 @@ from db import get_db_connection
 projects_bp = Blueprint('projects', __name__)
 
 
+def _auditar(evento, project_id, detalle=None):
+    """Deja rastro de QUIEN cambio QUE obra.
+
+    El 2026-08-07 alguien con sesion creo una obra y, cinco segundos despues,
+    renombro y archivo PQT8_TALARA. No se pudo saber quien: la auditoria solo
+    registraba entradas y salidas, no cambios sobre obras. Eso era el punto
+    ciego, y esto lo cierra. Nunca revienta la peticion por fallar.
+    """
+    try:
+        from routes.auth import registrar_evento
+        user = getattr(g, 'current_user', None)
+        registrar_evento(
+            evento,
+            email=(user or {}).get('email'),
+            user_id=(user or {}).get('id'),
+            detalle=f"obra={project_id}" + (f" · {detalle}" if detalle else ''),
+        )
+    except Exception as e:
+        print(f"[projects] no se pudo auditar {evento}: {e}")
+
+
 def _solo_admin(accion):
     """Guard EFECTIVO de administrador.
 
@@ -203,6 +224,7 @@ def create_hub():
                 ON CONFLICT (id) DO NOTHING
             """, (hub_id, data['name'], data.get('region'), data.get('logo_url')))
             conn.commit()
+        _auditar('portafolio_creado', hub_id, f"nombre='{data['name']}'")
         return jsonify({"id": hub_id, "name": data['name']}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -360,6 +382,7 @@ def create_hub_project(hub_id):
             except Exception as fe:
                 print(f"[projects] Warning: no se crearon carpetas raiz: {fe}")
 
+        _auditar('obra_creada', proj_id, f"nombre='{data['name']}' hub={hub_id}")
         # Retornar model_urn para que los frontends lo usen como fuente de verdad
         return jsonify({"id": proj_id, "hub_id": hub_id, "name": data['name'], "model_urn": data.get('model_urn', proj_id)}), 201
     except Exception as e:
@@ -440,8 +463,9 @@ def join_project():
                 ON CONFLICT DO NOTHING
             ''', (project_id, user_id))
             conn.commit()
-            
-            return jsonify({"success": True, "project_id": project_id, "project_name": project_name}), 200
+
+        _auditar('obra_ingreso_por_codigo', project_id, f"nombre='{project_name}'")
+        return jsonify({"success": True, "project_id": project_id, "project_name": project_name}), 200
             
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -460,6 +484,11 @@ def update_project(project_id):
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            # Se lee el estado ANTERIOR para poder registrar que cambio de que a
+            # que. Sin el valor previo, "alguien modifico la obra" no sirve para
+            # reconstruir nada.
+            cursor.execute("SELECT name, status, model_urn FROM projects WHERE id = %s", (project_id,))
+            _antes = cursor.fetchone() or (None, None, None)
             cursor.execute("""
                 UPDATE projects SET
                     name = COALESCE(%s, name),
@@ -476,6 +505,14 @@ def update_project(project_id):
                 project_id
             ))
             conn.commit()
+
+        cambios = []
+        for campo, previo, nuevo in (('nombre', _antes[0], data.get('name')),
+                                     ('estado', _antes[1], data.get('status')),
+                                     ('model_urn', _antes[2], data.get('model_urn'))):
+            if nuevo is not None and str(nuevo) != str(previo):
+                cambios.append(f"{campo}: '{previo}' -> '{nuevo}'")
+        _auditar('obra_modificada', project_id, ' · '.join(cambios) or 'sin cambios de fondo')
         return jsonify({"success": True}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -491,8 +528,11 @@ def delete_project(project_id):
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            cursor.execute("SELECT name FROM projects WHERE id = %s", (project_id,))
+            _nombre = (cursor.fetchone() or [None])[0]
             cursor.execute("UPDATE projects SET status = 'archived' WHERE id = %s", (project_id,))
             conn.commit()
+        _auditar('obra_archivada', project_id, f"nombre='{_nombre}'")
         return jsonify({"success": True}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500

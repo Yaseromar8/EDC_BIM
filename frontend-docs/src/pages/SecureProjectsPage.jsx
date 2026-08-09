@@ -172,6 +172,90 @@ function UsersTab() {
 }
 
 // ─── TAGS TAB ───
+function ActividadTab() {
+  const [eventos, setEventos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [filtro, setFiltro] = useState('');
+
+  useEffect(() => {
+    setCargando(true);
+    apiFetch(`${API}/api/auth/events?limite=200`)
+      .then(r => (r.ok ? r.json() : { eventos: [] }))
+      .then(d => setEventos(d.eventos || []))
+      .catch(() => setEventos([]))
+      .finally(() => setCargando(false));
+  }, []);
+
+  // Los eventos que cambian el estado de una obra se pintan distinto: son los
+  // que hay que poder encontrar de un vistazo cuando algo no cuadra.
+  const ESTADO = {
+    obra_creada: ['#f0b429', 'Obra creada'],
+    obra_archivada: ['#ff6b6b', 'Obra archivada'],
+    obra_modificada: ['#f0b429', 'Obra modificada'],
+    portafolio_creado: ['#f0b429', 'Portafolio creado'],
+    obra_ingreso_por_codigo: ['#f0b429', 'Ingreso por código'],
+    usuario_desactivado: ['#ff6b6b', 'Usuario desactivado'],
+    usuario_borrado: ['#ff6b6b', 'Usuario borrado'],
+    rol_cambiado: ['#ff6b6b', 'Rol cambiado'],
+    login_fallido: ['#9aa5b1', 'Intento fallido'],
+    login_desactivado: ['#ff6b6b', 'Entró cuenta desactivada'],
+    login_ok: ['#4caf7d', 'Entró'],
+  };
+
+  const visibles = eventos.filter(e => {
+    if (!filtro) return true;
+    const q = filtro.toLowerCase();
+    return [e.evento, e.email, e.ip, e.detalle].some(v => (v || '').toLowerCase().includes(q));
+  });
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+        <input
+          placeholder="Filtrar por correo, IP, obra o tipo de evento…"
+          value={filtro} onChange={e => setFiltro(e.target.value)}
+          style={{ flex: 1, maxWidth: 420 }}
+        />
+        <span style={{ fontSize: 12, color: '#777' }}>{visibles.length} de {eventos.length}</span>
+      </div>
+      {cargando ? <div className="loading"><div className="spinner" /><span>Cargando…</span></div> : (
+        <table className="data-table" style={{ background: '#fff', borderRadius: 6, overflow: 'hidden' }}>
+          <thead style={{ display: 'table-header-group' }}>
+            <tr>
+              <th style={{ width: '17%' }}>Cuándo</th>
+              <th style={{ width: '20%' }}>Qué pasó</th>
+              <th style={{ width: '25%' }}>Quién</th>
+              <th style={{ width: '13%' }}>Desde</th>
+              <th>Detalle</th>
+            </tr>
+          </thead>
+          <tbody style={{ display: 'table-row-group' }}>
+            {visibles.map((e, i) => {
+              const [color, etiqueta] = ESTADO[e.evento] || ['#9aa5b1', e.evento];
+              return (
+                <tr key={i}>
+                  <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                    {e.fecha ? new Date(e.fecha).toLocaleString('es-PE') : '—'}
+                  </td>
+                  <td><span style={{ color, fontWeight: 600, fontSize: 12.5 }}>{etiqueta}</span></td>
+                  <td style={{ fontSize: 12.5 }}>{e.email || (e.user_id ? `usuario ${e.user_id}` : '—')}</td>
+                  <td style={{ fontSize: 12, fontFamily: 'monospace', color: '#666' }}>{e.ip || '—'}</td>
+                  <td style={{ fontSize: 12, color: '#555' }}>{e.detalle || '—'}</td>
+                </tr>
+              );
+            })}
+            {!visibles.length && (
+              <tr><td colSpan={5} style={{ textAlign: 'center', color: '#777', padding: 24 }}>
+                Sin eventos registrados todavía.
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 function TagsTab() {
   const [companies, setCompanies] = useState([]);
   const [jobTitles, setJobTitles] = useState([]);
@@ -346,6 +430,7 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
           <span className={`tab ${activeTab === 'projects' ? 'active' : ''}`} onClick={() => setActiveTab('projects')}>Proyectos</span>
           {isAdmin && <span className={`tab ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>Usuarios</span>}
           {isAdmin && <span className={`tab ${activeTab === 'tags' ? 'active' : ''}`} onClick={() => setActiveTab('tags')}>Etiquetas</span>}
+          {isAdmin && <span className={`tab ${activeTab === 'actividad' ? 'active' : ''}`} onClick={() => setActiveTab('actividad')}>Actividad</span>}
         </div>
         {activeTab === 'projects' ? (
           <>
@@ -404,7 +489,7 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
                 </table>
               )}
           </>
-        ) : activeTab === 'users' ? (<UsersTab />) : (<TagsTab />)}
+        ) : activeTab === 'users' ? (<UsersTab />) : activeTab === 'actividad' ? (<ActividadTab />) : (<TagsTab />)}
       </div>
 
       {/* CREATE PROJECT MODAL */}

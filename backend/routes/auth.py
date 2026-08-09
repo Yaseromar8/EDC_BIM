@@ -745,6 +745,44 @@ def delete_user(user_id):
         return jsonify({'error': 'No se pudo completar la operación.'}), 500
 
 
+@auth_bp.route('/api/auth/events', methods=['GET'])
+@requiere_rol('admin')
+def listar_eventos():
+    """Registro de accesos y de cambios sobre obras. Solo administración.
+
+    Existe porque el 2026-08-07 alguien archivó una obra y no hubo forma de
+    saber quién: había que entrar a la base para mirarlo, y ni siquiera estaba
+    registrado. Ahora se ve desde la propia plataforma.
+    """
+    denied = _require_admin("ver el registro de accesos")
+    if denied:
+        return denied
+
+    limite = min(int(request.args.get('limite', 100) or 100), 500)
+    evento = (request.args.get('evento') or '').strip()
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            sql = ('SELECT creado_en, evento, email, user_id, ip, detalle'
+                   ' FROM auth_events')
+            params = []
+            if evento:
+                sql += ' WHERE evento = %s'
+                params.append(evento)
+            sql += ' ORDER BY creado_en DESC LIMIT %s'
+            params.append(limite)
+            cur.execute(sql, params)
+            eventos = [{
+                'fecha': r[0].isoformat() if r[0] else None,
+                'evento': r[1], 'email': r[2], 'user_id': r[3],
+                'ip': r[4], 'detalle': r[5],
+            } for r in cur.fetchall()]
+        return jsonify({'eventos': eventos}), 200
+    except Exception as e:
+        print(f"[auth] error leyendo eventos: {e}")
+        return jsonify({'error': 'No se pudo leer el registro.'}), 500
+
+
 @auth_bp.route('/api/users/<int:user_id>/role', methods=['PATCH'])
 @requiere_rol('admin')
 def cambiar_rol(user_id):
