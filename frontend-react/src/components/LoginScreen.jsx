@@ -242,9 +242,13 @@ const LoginScreen = ({ onLogin }) => {
         e.preventDefault();
         if (enviando || !correo.trim()) return;
         // La respuesta del servidor es CONSTANTE exista o no la cuenta, así que
-        // aquí tampoco se distingue: decirlo sería un buscador de correos.
-        await pedir('/api/auth/forgot-password', { email: correo.trim() });
-        setEnlaceEnviado(true);
+        // aquí tampoco se distingue: decirlo sería un buscador de correos. Pero
+        // un ERROR del servidor sí se distingue: antes se enseñaba "te llegará
+        // un enlace" incluso cuando la petición había fallado, y el usuario se
+        // quedaba esperando un correo que nunca se intentó mandar.
+        const { ok, estado, datos } = await pedir('/api/auth/forgot-password', { email: correo.trim() });
+        if (ok) { setEnlaceEnviado(true); return; }
+        setError(estado === 0 ? t.errRed : (datos.error || t.errCreds));
     };
 
     const guardarNuevaClave = async (e) => {

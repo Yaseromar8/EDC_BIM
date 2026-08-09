@@ -399,7 +399,15 @@ def forgot_password():
         return respuesta
 
     user_id, nombre = fila[0], fila[1]
-    token = emitir(PROPOSITO_RESET, {'uid': user_id, 'email': correo})
+    try:
+        token = emitir(PROPOSITO_RESET, {'uid': user_id, 'email': correo})
+    except Exception as e:
+        # Si no se puede ni firmar, el flujo entero es inservible. Se responde
+        # 500 A PROPOSITO: peor que no recibir el correo es que la pantalla diga
+        # que va en camino cuando ni siquiera se intento.
+        print(f"[auth] NO se pudo firmar el enlace de reset: {e}")
+        return jsonify({'error': 'No se pudo generar el enlace. Avisa al administrador.',
+                        'code': 'FIRMA_NO_DISPONIBLE'}), 500
     enlace = f"{_origen_del_cliente()}/?reset={token}"
 
     enviado, detalle = mailer.enviar(

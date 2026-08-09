@@ -49,17 +49,23 @@ def _secreto():
     directo = os.getenv('APP_SECRET', '').strip()
     if directo:
         return directo
-    # Respaldo: derivar de la cadena de conexion, que ya es secreta y es igual
-    # en los 4 workers y tras cada redespliegue. No es lo ideal (rota si rota la
-    # base), pero es estable y evita que un despliegue sin APP_SECRET emita
-    # tokens que se invalidan solos.
-    base = os.getenv('DATABASE_URL') or os.getenv('DB_URL') or ''
-    if not base:
+    # Respaldo: derivar de la configuracion de la base, que ya es secreta y es
+    # igual en los 4 workers y tras cada redespliegue.
+    #
+    # OJO CON LOS NOMBRES: este proyecto NO usa DATABASE_URL, usa DB_HOST/DB_NAME/
+    # DB_USER/DB_PASS (ver db.py). El respaldo miraba solo DATABASE_URL, asi que
+    # NUNCA entraba y sin APP_SECRET reventaba TODO lo firmado: reset de
+    # contrasena, invitaciones, permisos de fotos y el state de OAuth. Se
+    # descubrio porque un reset real no llegaba nunca.
+    partes = [os.getenv(v) or '' for v in
+              ('DATABASE_URL', 'DB_URL', 'DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS')]
+    base = '|'.join(partes)
+    if not any(partes):
         raise RuntimeError(
-            "No hay APP_SECRET ni DATABASE_URL: no se pueden firmar enlaces. "
-            "Define APP_SECRET en el entorno."
+            "No hay APP_SECRET ni configuracion de base de datos: no se pueden "
+            "firmar enlaces. Define APP_SECRET en el entorno."
         )
-    logger.warning("APP_SECRET no definido: firmando con clave derivada de DATABASE_URL. Define APP_SECRET.")
+    logger.warning("APP_SECRET no definido: firmando con clave derivada de la conexion. Define APP_SECRET.")
     return hashlib.sha256(f'enlaces-firmados|{base}'.encode()).hexdigest()
 
 
