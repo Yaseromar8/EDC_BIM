@@ -224,12 +224,19 @@ def act_on_review(rid):
                         u, node_id, rev['model_urn'], nivel,
                         f"aprobar como {ecd.ETIQUETAS.get(destino, destino)}") is None
 
+                # La idoneidad la fija la revision al crearse, pero quien aprueba
+                # puede indicarla si falta. Sin esto, las revisiones que YA estan
+                # en marcha con destino Publicado -- creadas antes de que existiera
+                # el campo -- no se podrian aprobar nunca: el codigo llegaria vacio
+                # y la puerta las rechazaria una y otra vez, sin salida.
+                idoneidad = (rev.get('codigo_idoneidad')
+                             or (d.get('codigo_idoneidad') or '').strip().upper() or None)
                 try:
                     ecd.transicionar_recorriendo(
                         cur, rev['model_urn'], ids, destino, u,
                         motivo_del_cambio=f"revisión #{rid}: {rev['title']}",
                         autorizar=_autorizado,
-                        codigo_idoneidad=rev.get('codigo_idoneidad'))
+                        codigo_idoneidad=idoneidad)
                 except ecd.TransicionRechazada as rechazo:
                     conn.rollback()
                     return jsonify({"success": False, "error": rechazo.motivo}), 409

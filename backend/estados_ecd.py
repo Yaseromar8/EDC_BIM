@@ -170,27 +170,45 @@ def transicionar(cursor, model_urn, ids, nuevo, usuario, motivo_del_cambio=None,
     # Con que autorizacion se emite. Publicar sin decir para que sirve el
     # documento es justo lo que un auditor no acepta: "Publicado" a secas no
     # distingue apto para construir de solo informativo.
-    from idoneidad import validar_para, siguiente_revision
+    from idoneidad import validar_para, siguiente_revision, canonico
     vale, motivo = validar_para(cursor, model_urn, codigo_idoneidad, nuevo)
     if not vale:
         raise TransicionRechazada(motivo)
+    # Se graba el codigo TAL COMO ESTA EN EL CATALOGO, no como llego por HTTP: la
+    # validacion tolera mayusculas y espacios, y si se sellara la cadena cruda un
+    # '  a1  ' quedaria guardado asi, fuera de cualquier filtro por 'A1'.
+    codigo_idoneidad = canonico(cursor, model_urn, codigo_idoneidad)
 
     ids = [str(i) for i in (ids or []) if i]
     if not ids:
         return {'cambiados': [], 'sin_cambio': [], 'emisiones': {}}
 
+    # Solo DOCUMENTOS. Una carpeta no se emite: no tiene versiones, asi que el
+    # sello no encontraba donde grabarse y el numero de revision salia siempre
+    # 'C01'. La interfaz no lo ofrece, pero la API si lo aceptaba.
     cursor.execute(
         "SELECT id, name, status FROM file_nodes "
-        "WHERE id = ANY(%s::uuid[]) AND model_urn = %s AND is_deleted = FALSE",
+        "WHERE id = ANY(%s::uuid[]) AND model_urn = %s AND is_deleted = FALSE "
+        "AND node_type = 'FILE'",
         (ids, model_urn),
     )
     filas = cursor.fetchall()
     encontrados = {str(f[0]) for f in filas}
     perdidos = [i for i in ids if i not in encontrados]
     if perdidos:
-        # Pedir documentos de otra obra no debe cambiar nada a medias.
+        # Pedir documentos de otra obra no debe cambiar nada a medias. Y hay que
+        # distinguir el motivo: decirle "no está en esta obra" a quien seleccionó
+        # una carpeta de SU obra manda a buscar el problema donde no está.
+        cursor.execute(
+            "SELECT count(*) FROM file_nodes WHERE id = ANY(%s::uuid[]) "
+            "AND model_urn = %s AND node_type = 'FOLDER'", (perdidos, model_urn))
+        carpetas = (cursor.fetchone() or [0])[0]
+        if carpetas:
+            raise TransicionRechazada(
+                "Las carpetas no se emiten: el estado y la idoneidad son de cada "
+                "documento. Selecciona los documentos.", documento=perdidos[0])
         raise TransicionRechazada(
-            f"{len(perdidos)} documento(s) no estan en esta obra.", documento=perdidos[0]
+            f"{len(perdidos)} documento(s) no están en esta obra.", documento=perdidos[0]
         )
 
     cambiados, sin_cambio = [], []
@@ -300,9 +318,13 @@ def transicionar_recorriendo(cursor, model_urn, ids, destino, usuario,
     if not ids:
         return {'cambiados': [], 'sin_cambio': [], 'pasos': []}
 
+    # Solo DOCUMENTOS. Una carpeta no se emite: no tiene versiones, asi que el
+    # sello no encontraba donde grabarse y el numero de revision salia siempre
+    # 'C01'. La interfaz no lo ofrece, pero la API si lo aceptaba.
     cursor.execute(
         "SELECT id, name, status FROM file_nodes "
-        "WHERE id = ANY(%s::uuid[]) AND model_urn = %s AND is_deleted = FALSE",
+        "WHERE id = ANY(%s::uuid[]) AND model_urn = %s AND is_deleted = FALSE "
+        "AND node_type = 'FILE'",
         (ids, model_urn),
     )
     filas = cursor.fetchall()

@@ -86,7 +86,7 @@ class CursorFalso:
         # modulo idoneidad; aqui solo hacen falta respuestas creibles.
         if 'FROM IDONEIDAD_CATALOGO' in s:
             import idoneidad as _idn
-            self._ultima = [(c, e, f) for c, e, f in _idn.CATALOGO_POR_DEFECTO]
+            self._ultima = [(c, e, f, True) for c, e, f in _idn.CATALOGO_POR_DEFECTO]
         elif 'CODIGO_REVISION FROM FILE_VERSIONS' in s:
             self._ultima = []
         elif sql.strip().upper().startswith('SELECT'):
@@ -338,3 +338,33 @@ def test_recorrer_no_lo_usa_el_cambio_manual():
     cur = CursorFalso([('a1', 'PLANO-01.pdf', ecd.WIP)])
     with pytest.raises(ecd.TransicionRechazada):
         ecd.transicionar(cur, 'obra/X', ['a1'], ecd.PUBLISHED, USUARIO)
+
+
+# ── Lo que el ataque encontró ───────────────────────────────────────────────
+
+def test_una_carpeta_no_se_emite():
+    """La interfaz no lo ofrece, pero la API sí lo aceptaba: una carpeta no tiene
+    versiones, así que el sello no encontraba dónde grabarse y el número de
+    revisión salía siempre 'C01', llamándose igual en cada publicación."""
+    class SoloCarpetas(CursorFalso):
+        def execute(self, sql, params=None):
+            super().execute(sql, params)
+            if 'count(*)' in sql and "node_type = 'FOLDER'" in sql:
+                self._ultima = [(1,)]
+
+    cur = SoloCarpetas([])   # el SELECT ya filtra node_type='FILE': no devuelve nada
+    with pytest.raises(ecd.TransicionRechazada) as e:
+        ecd.transicionar(cur, 'obra/X', ['una-carpeta'], ecd.SHARED, USUARIO)
+    assert "node_type = 'FILE'" in cur.sql_de('SELECT id, name, status')[0]
+    # Y el motivo tiene que decir la verdad: decirle "no esta en esta obra" a
+    # quien selecciono una carpeta de SU obra manda a buscar donde no es.
+    assert 'carpetas' in e.value.motivo.lower()
+
+
+def test_el_codigo_se_graba_normalizado():
+    """Lo que se sella tiene que ser el código del catálogo, no la cadena que
+    llegó por HTTP."""
+    cur = CursorFalso([('a1', 'PLANO-01.pdf', ecd.WIP)])
+    r = ecd.transicionar(cur, 'obra/X', ['a1'], ecd.SHARED, USUARIO,
+                         codigo_idoneidad='  s3  ')
+    assert r['emisiones']['a1']['idoneidad'] == 'S3'

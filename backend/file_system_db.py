@@ -341,11 +341,17 @@ def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mim
             if anterior != ecd.WIP:
                 _registrar_vuelta_a_borrador(cursor, model_urn, f_id, filename,
                                              anterior, new_v, created_by)
+            # Y se le CAEN la idoneidad y la revision. Son de la EMISION, no del
+            # documento: lo que se autorizo como «A1, apto para construccion» fue
+            # la version anterior. Si se quedaran pegadas, un fichero recien
+            # subido, sin revisar y sin aprobar, seguiria listandose como apto
+            # para construir -- exactamente el dano que esto viene a evitar.
             cursor.execute("""
                 UPDATE file_nodes
                 SET gcs_urn = %s, version_number = %s, size_bytes = %s, mime_type = %s,
                     updated_at = CURRENT_TIMESTAMP, updated_by = %s, status = %s,
-                    nomenclatura_ok = %s
+                    nomenclatura_ok = %s,
+                    codigo_idoneidad = NULL, codigo_revision = NULL
                 WHERE id = %s
             """, (gcs_uuid, new_v, size_bytes, mime_type, created_by, ecd.WIP,
                   conforme, f_id))

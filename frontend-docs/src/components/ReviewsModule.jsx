@@ -128,7 +128,12 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCre
             <div style={{ display: 'flex', gap: 14 }}>
               {[['SHARED', 'Compartido'], ['PUBLISHED', 'Publicado']].map(([v, l]) => (
                 <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                  <input type="radio" checked={finalStatus === v} onChange={() => setFinalStatus(v)} /> {l}
+                  {/* Al cambiar el destino se limpia el codigo: el desplegable
+                      se filtra por familia, asi que el codigo viejo desaparecia
+                      de las opciones pero seguia en el estado. El usuario veia un
+                      selector en blanco, pulsaba, y recibia un error del servidor
+                      que no cuadraba con lo que tenia delante. */}
+                  <input type="radio" checked={finalStatus === v} onChange={() => { setFinalStatus(v); setIdoneidad(''); }} /> {l}
                 </label>
               ))}
             </div>

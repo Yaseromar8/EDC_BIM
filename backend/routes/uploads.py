@@ -152,7 +152,10 @@ def init_upload():
         )
 
         # ── PERSIST SESSION IN DB ──
-        performed_by = data.get('user') or (user.get('name') if user else None)
+        # De la SESION, no del cuerpo. Estaba al reves: el campo 'user' de la
+        # peticion ganaba, y la sesion solo se usaba de respaldo, asi que
+        # cualquiera podia subir un fichero firmandolo con el nombre de otro.
+        performed_by = ((user.get('email') or user.get('name')) if user else None)
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""

@@ -30,9 +30,9 @@ class CursorFalso:
         self.ejecutadas.append((' '.join(sql.split()), params))
         s = sql.upper()
         if 'FROM IDONEIDAD_CATALOGO' in s:
-            self._ultima = self.catalogo if self.catalogo is not None else [
-                (c, e, f) for c, e, f in idn.CATALOGO_POR_DEFECTO
-            ]
+            base = self.catalogo if self.catalogo is not None else idn.CATALOGO_POR_DEFECTO
+            # (codigo, etiqueta, familia, activo)
+            self._ultima = [(c, e, f, True) for c, e, f in base]
         elif 'CODIGO_REVISION FROM FILE_VERSIONS' in s:
             self._ultima = [(r,) for r in self.revisiones]
         else:
@@ -176,3 +176,46 @@ def test_las_etiquetas_estan_en_castellano_llano():
         assert etiqueta == etiqueta.strip()
         for jerga in ('suitability', 'status code', 'WIP'):
             assert jerga not in etiqueta, codigo
+
+
+# ── Lo que el ataque encontró ───────────────────────────────────────────────
+
+def test_se_graba_el_codigo_DEL_CATALOGO_y_no_el_que_llego_por_HTTP():
+    """Se validaba tolerando mayúsculas y espacios pero se sellaba la cadena
+    cruda: un '  a1  ' quedaba guardado con los espacios y cualquier filtro por
+    'A1' dejaba ese documento fuera. Con relleno suficiente, además, reventaba
+    contra el VARCHAR(10) y la petición salía con 500."""
+    cur = CursorFalso()
+    assert idn.canonico(cur, 'obra/X', '  a1  ') == 'A1'
+    assert idn.canonico(cur, 'obra/X', 'a1') == 'A1'
+    assert idn.canonico(cur, 'obra/X', '          a1') == 'A1'
+
+
+def test_un_codigo_que_no_existe_no_tiene_forma_canonica():
+    cur = CursorFalso()
+    assert idn.canonico(cur, 'obra/X', 'Z9') is None
+    assert idn.canonico(cur, 'obra/X', None) is None
+
+
+def test_una_obra_que_desactiva_TODOS_sus_codigos_se_queda_sin_ninguno():
+    """Se miraba solo si había filas ACTIVAS: una obra que desactivara todo volvía
+    a ver los trece por defecto y podía publicar con un código que había retirado
+    a mano. Justo lo contrario de lo que promete el módulo."""
+    class CatalogoDesactivado(CursorFalso):
+        def execute(self, sql, params=None):
+            if 'FROM IDONEIDAD_CATALOGO' in sql.upper():
+                self._ultima = [(c, e, f, False) for c, e, f in idn.CATALOGO_POR_DEFECTO]
+            else:
+                self._ultima = []
+
+    cur = CatalogoDesactivado()
+    assert idn.catalogo_de_obra(cur, 'obra/X') == []
+    assert idn.validar_para(cur, 'obra/X', 'A1', 'PUBLISHED')[0] is False
+
+
+def test_la_familia_tampoco_distingue_mayusculas_ni_espacios():
+    """Una fila con 'Publicado ' dejaba el código inservible para los dos destinos
+    y lo hacía desaparecer del selector, sin ninguna pista de por qué."""
+    torcido = [('A1', 'Autorizado', ' Publicado ')]
+    cur = CursorFalso(catalogo=torcido)
+    assert idn.validar_para(cur, 'obra/X', 'A1', 'PUBLISHED')[0] is True

@@ -75,16 +75,24 @@ def asegurar_tabla(cursor):
 
 
 def catalogo_de_obra(cursor, model_urn):
-    """Los codigos de esta obra. La primera vez siembra el juego por defecto."""
+    """Los codigos de esta obra. La primera vez siembra el juego por defecto.
+
+    Distingue "esta obra no tiene catalogo todavia" de "su catalogo esta vacio a
+    proposito". Antes se miraba solo si habia filas ACTIVAS: una obra que
+    desactivara todos sus codigos volvia a ver los trece por defecto y podia
+    publicar con un codigo que habia retirado a mano, que es lo contrario de lo
+    que promete el modulo.
+    """
     asegurar_tabla(cursor)
     cursor.execute(
-        "SELECT codigo, etiqueta, familia FROM idoneidad_catalogo "
-        "WHERE model_urn = %s AND activo = TRUE ORDER BY orden, codigo",
+        "SELECT codigo, etiqueta, familia, activo FROM idoneidad_catalogo "
+        "WHERE model_urn = %s ORDER BY orden, codigo",
         (model_urn,),
     )
     filas = cursor.fetchall()
     if filas:
-        return [{'codigo': c, 'etiqueta': e, 'familia': f} for c, e, f in filas]
+        return [{'codigo': c, 'etiqueta': e, 'familia': f}
+                for c, e, f, activo in filas if activo]
 
     for i, (codigo, etiqueta, familia) in enumerate(CATALOGO_POR_DEFECTO):
         cursor.execute(
@@ -96,13 +104,36 @@ def catalogo_de_obra(cursor, model_urn):
             for c, e, f in CATALOGO_POR_DEFECTO]
 
 
+def canonico(cursor, model_urn, codigo):
+    """El codigo tal y como esta en el catalogo, o None si no esta.
+
+    Lo que se GRABA tiene que ser esto y no lo que llego por HTTP. Se validaba
+    tolerando mayusculas y espacios pero luego se sellaba la cadena cruda: un
+    '  a1  ' quedaba guardado con los espacios, cualquier filtro por 'A1' dejaba
+    ese documento fuera, y con relleno suficiente el UPDATE reventaba contra el
+    VARCHAR(10) y la peticion salia con un 500.
+    """
+    if not codigo:
+        return None
+    buscado = str(codigo).strip().upper()
+    for entrada in catalogo_de_obra(cursor, model_urn):
+        if entrada['codigo'].strip().upper() == buscado:
+            return entrada['codigo'].strip()
+    return None
+
+
 def familia_de(cursor, model_urn, codigo):
     """A que familia pertenece el codigo en ESTA obra, o None si no existe."""
     if not codigo:
         return None
+    buscado = str(codigo).strip().upper()
     for entrada in catalogo_de_obra(cursor, model_urn):
-        if entrada['codigo'].upper() == str(codigo).strip().upper():
-            return entrada['familia']
+        if entrada['codigo'].strip().upper() == buscado:
+            # La familia tambien se compara sin distinguir mayusculas ni espacios:
+            # una fila con 'Publicado ' dejaba el codigo inservible para los dos
+            # destinos y ademas lo hacia desaparecer del selector, sin ninguna
+            # pista de por que.
+            return str(entrada['familia'] or '').strip().lower()
     return None
 
 

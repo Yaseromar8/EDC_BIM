@@ -137,6 +137,21 @@ def _docs_actor(user, fallback=None):
     return fallback
 
 
+def _ip_del_cliente():
+    """La IP de quien pide, detras del proxy de Render.
+
+    Se guardaba la cabecera X-Forwarded-For entera y cruda. Esa cabecera trae la
+    cadena de proxies separada por comas y la puede rellenar quien llama, asi que
+    lo unico medianamente fiable es la PRIMERA entrada, y aun asi con reservas.
+    Guardar la cadena entera hacia ilegible el registro justo cuando mas falta
+    hace leerlo.
+    """
+    cadena = request.headers.get('X-Forwarded-For', '')
+    if cadena:
+        return cadena.split(',')[0].strip()[:64]
+    return request.remote_addr
+
+
 def _autor_verificado():
     """Quien firma una accion. Sale de la SESION, nunca del cuerpo de la peticion.
 
@@ -257,7 +272,8 @@ def _acceso_al_recurso(gcs_urn=None, node_id=None):
         if datos:
             recurso = str(datos.get('r') or '')
             if recurso and recurso in (str(gcs_urn or ''), str(node_id or '')):
-                _anotar_acceso(None, None, 'enlace firmado', gcs_urn, node_id)
+                _anotar_acceso(None, None, 'enlace firmado', gcs_urn, node_id,
+                               discriminante=firmado[-16:])
                 return None
         return jsonify({"success": False, "error": "Enlace caducado o inválido"}), 403
 
@@ -306,7 +322,7 @@ def _acceso_al_recurso(gcs_urn=None, node_id=None):
     return None
 
 
-def _anotar_acceso(user, ambito, via, gcs_urn, node_id):
+def _anotar_acceso(user, ambito, via, gcs_urn, node_id, discriminante=None):
     """Deja constancia de que se entrego el acceso a un documento.
 
     No habia ni una fila que dijera que alguien se habia llevado un plano, y es
@@ -317,7 +333,7 @@ def _anotar_acceso(user, ambito, via, gcs_urn, node_id):
     try:
         from registro_de_descargas import registrar
         registrar(user, ambito, via, gcs_urn=gcs_urn, node_id=node_id,
-                  ip=request.headers.get('X-Forwarded-For', request.remote_addr))
+                  ip=_ip_del_cliente(), discriminante=discriminante)
     except Exception:
         pass   # el registro nunca puede impedir que se abra un documento
 
@@ -2011,7 +2027,14 @@ def get_shared_document(share_id):
             
             if not gcs_urn:
                 return jsonify({"success": False, "error": "El archivo físico no existe"}), 404
-                
+
+            # El enlace público no dejaba NINGUNA línea en el registro: es el
+            # camino por el que un documento sale de la plataforma hacia fuera, y
+            # era justo el que no se veía. Cada uso queda anotado, con el id del
+            # enlace para distinguir quién lo usó de quién usó otro.
+            _anotar_acceso(None, None, f'enlace público {share_id}', gcs_urn, None,
+                           discriminante=str(share_id))
+
             signed_url = generate_signed_url(gcs_urn)
             
             return jsonify({

@@ -46,13 +46,39 @@ def olvidar():
 
 
 def _reciente(clave, ahora):
+    """Solo CONSULTA. No marca."""
     visto = _anotados.get(clave)
-    if visto is not None and (ahora - visto) < VENTANA:
-        return True
+    return visto is not None and (ahora - visto) < VENTANA
+
+
+def _anotar_freno(clave, ahora):
+    """Marca, y solo DESPUES de que la fila se haya escrito de verdad.
+
+    Marcarla antes de escribir hacia que un fallo de la base perdiera el acceso Y
+    ademas silenciara los cinco minutos siguientes: el peor de los dos mundos,
+    porque el hueco en el registro quedaba tapado.
+    """
     if len(_anotados) >= _ANOTADOS_MAX:
         _anotados.clear()
     _anotados[clave] = ahora
-    return False
+
+
+def _es_evidencia_de_campo(nombre):
+    """Fotos y videos de obra: NO se anotan.
+
+    Esto estaba mal razonado en la primera version. Se suponia que las fotos
+    vivian solo en photo_evidences y que por tanto quedaban fuera solas; pero en
+    esta obra las fotos de WhatsApp SI estan en file_nodes -- son 2.676 de 2.831
+    ficheros -- asi que el filtro no filtraba nada y el historial se habria
+    llenado de miniaturas. Mil lineas de fotos tapan la unica que importa, que es
+    quien se llevo el plano.
+
+    Si algun dia hace falta registrar tambien los accesos a las fotos, que sea una
+    decision explicita y con su propio sitio donde mirarlas, no mezcladas aqui.
+    """
+    from nomenclatura import EXENTAS_POR_DEFECTO
+    ext = nombre.rsplit('.', 1)[1].lower() if (nombre and '.' in nombre) else ''
+    return ext in set(EXENTAS_POR_DEFECTO)
 
 
 def _quien(user):
@@ -62,7 +88,8 @@ def _quien(user):
         f"usuario:{user.get('id')}" if user.get('id') else None)
 
 
-def registrar(user, ambito, via, gcs_urn=None, node_id=None, ip=None, ahora=None):
+def registrar(user, ambito, via, gcs_urn=None, node_id=None, ip=None, ahora=None,
+              discriminante=None):
     """Anota que se entrego el acceso a un documento. Nunca revienta al llamante.
 
     Un fallo aqui no puede tumbar la entrega del fichero: el registro es
@@ -71,7 +98,12 @@ def registrar(user, ambito, via, gcs_urn=None, node_id=None, ip=None, ahora=None
     """
     ahora = time.time() if ahora is None else ahora
     quien = _quien(user)
-    clave = (quien or 'enlace-firmado', str(node_id or gcs_urn or ''))
+    # El 'discriminante' separa accesos que no llevan persona identificada. Sin el,
+    # dos personas distintas abriendo el mismo documento por dos enlaces firmados
+    # distintos compartian clave y la segunda no quedaba registrada: el freno
+    # tapaba justo lo que hay que poder ver.
+    clave = (quien or f'enlace-firmado:{discriminante or ""}',
+             str(node_id or gcs_urn or ''))
     if _reciente(clave, ahora):
         return False
 
@@ -80,34 +112,45 @@ def registrar(user, ambito, via, gcs_urn=None, node_id=None, ip=None, ahora=None
         import json as _json
         with get_db_connection() as conn:
             cur = conn.cursor()
-            nombre = None
+            # De la misma consulta salen las TRES cosas que hacen falta: el
+            # nombre, el id del documento y la obra. Antes se pedia solo el
+            # nombre, y por eso la fila se escribia con entity_id vacio (el
+            # expediente del documento no la encontraba, porque busca por id) y
+            # con la obra en 'global' (el historial de la obra tampoco).
             if node_id:
-                cur.execute("SELECT name FROM file_nodes WHERE id = %s", (str(node_id),))
+                cur.execute("SELECT id, name, model_urn FROM file_nodes WHERE id = %s",
+                            (str(node_id),))
             elif gcs_urn:
                 cur.execute(
-                    "SELECT n.name FROM file_nodes n WHERE n.gcs_urn = %s "
+                    "SELECT n.id, n.name, n.model_urn FROM file_nodes n WHERE n.gcs_urn = %s "
                     "UNION ALL "
-                    "SELECT n.name FROM file_versions v JOIN file_nodes n ON n.id = v.file_node_id "
-                    "WHERE v.gcs_urn = %s LIMIT 1",
+                    "SELECT n.id, n.name, n.model_urn FROM file_versions v "
+                    "JOIN file_nodes n ON n.id = v.file_node_id WHERE v.gcs_urn = %s LIMIT 1",
                     (gcs_urn, gcs_urn))
             fila = cur.fetchone() if (node_id or gcs_urn) else None
-            nombre = fila[0] if fila else None
-            # Solo se registran documentos del arbol. Las miniaturas de las fotos
-            # de campo entran por la misma ruta y anotarlas convertiria el
-            # historial en ruido: mil lineas de fotos tapan la unica que importa.
-            if not nombre:
+            if not fila:
                 return False
+            doc_id, nombre, obra = str(fila[0]), fila[1], fila[2]
+
+            if _es_evidencia_de_campo(nombre):
+                # Se marca igualmente: la decision depende solo del nombre y no va
+                # a cambiar, y sin marcar un album de 200 miniaturas haria 200
+                # consultas a la base para acabar decidiendo lo mismo 200 veces.
+                _anotar_freno(clave, ahora)
+                return False
+
             cur.execute(
                 "INSERT INTO activity_log "
                 "(model_urn, action, entity_type, entity_id, entity_name, performed_by, details) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (ambito or 'global', 'acceso_a_documento', 'file',
-                 str(node_id) if node_id else None, nombre, quien,
+                (ambito or obra or 'global', 'acceso_a_documento', 'file',
+                 doc_id, nombre, quien,
                  _json.dumps({'via': via, 'ip': ip,
                               'nota': 'se entregó el acceso; la transferencia ocurre '
                                       'contra el almacenamiento'})),
             )
             conn.commit()
+        _anotar_freno(clave, ahora)
         return True
     except Exception as e:  # pragma: no cover - defensivo
         logger.warning(f"no se pudo registrar el acceso al documento: {e}")

@@ -40,7 +40,8 @@ class ConexionFalsa:
             self.insertados.append(params)
             self._ultima = []
         else:
-            self._ultima = [(self.nombre,)] if self.nombre else []
+            # (id, nombre, obra): de la misma consulta salen las tres cosas.
+            self._ultima = [('doc-1', self.nombre, 'obra/X')] if self.nombre else []
 
     def fetchone(self):
         return self._ultima[0] if self._ultima else None
@@ -163,3 +164,69 @@ def test_si_el_registro_falla_no_revienta_al_llamante(monkeypatch):
 
     _con(monkeypatch, ConexionRota())
     assert reg.registrar(USUARIO, 'obra/X', 'sesión', node_id='n1') is False
+
+
+# ── Lo que el ataque encontró: el filtro no filtraba ────────────────────────
+
+def test_una_foto_del_arbol_TAMPOCO_se_registra(monkeypatch):
+    """El razonamiento original estaba mal. Se supuso que las fotos vivían solo
+    en photo_evidences y quedaban fuera solas; pero en esta obra las fotos de
+    WhatsApp SÍ están en file_nodes (2.676 de 2.831), así que el filtro no
+    filtraba nada y el historial se habría llenado de miniaturas."""
+    c = _con(monkeypatch, ConexionFalsa(nombre='IMG-20260420-WA0031.jpg'))
+    assert reg.registrar(USUARIO, 'obra/X', 'sesión', node_id='n1') is False
+    assert c.insertados == []
+
+
+def test_un_video_de_obra_tampoco(monkeypatch):
+    c = _con(monkeypatch, ConexionFalsa(nombre='VID-20260101-WA0002.mp4'))
+    assert reg.registrar(USUARIO, 'obra/X', 'sesión', node_id='n1') is False
+
+
+def test_un_plano_si(monkeypatch):
+    c = _con(monkeypatch, ConexionFalsa(nombre='500125-SCL-OT-GEN-RFI-023.pdf'))
+    assert reg.registrar(USUARIO, 'obra/X', 'sesión', node_id='n1') is True
+
+
+def test_la_fila_lleva_el_id_del_documento(monkeypatch):
+    """Se escribía con entity_id vacío, así que el expediente del documento
+    —que busca por id— no encontraba ni uno de sus accesos."""
+    c = _con(monkeypatch, ConexionFalsa())
+    reg.registrar(USUARIO, None, 'sesión', gcs_urn='urn-de-un-plano')
+    assert c.insertados[0][3] == 'doc-1'
+
+
+def test_la_fila_lleva_la_obra_del_documento(monkeypatch):
+    """Se escribía 'global' en tres de los cuatro caminos, así que el acceso no
+    salía en el historial de la obra, que es donde se le busca."""
+    c = _con(monkeypatch, ConexionFalsa())
+    reg.registrar(USUARIO, None, 'sesión', node_id='n1')
+    assert c.insertados[0][0] == 'obra/X'
+
+
+def test_dos_enlaces_firmados_distintos_se_registran_los_dos(monkeypatch):
+    """Sin discriminante compartían clave de freno y la segunda persona no
+    quedaba registrada: el freno tapaba justo lo que hay que ver."""
+    c = _con(monkeypatch, ConexionFalsa())
+    reg.registrar(None, 'obra/X', 'enlace firmado', node_id='n1', ahora=1000, discriminante='aaa')
+    reg.registrar(None, 'obra/X', 'enlace firmado', node_id='n1', ahora=1000, discriminante='bbb')
+    assert len(c.insertados) == 2
+
+
+def test_si_falla_la_escritura_NO_se_silencian_los_5_minutos(monkeypatch):
+    """Marcar el freno antes de escribir perdía el acceso Y además tapaba el
+    hueco: el peor de los dos mundos."""
+    class ConexionIntermitente(ConexionFalsa):
+        def __init__(self):
+            super().__init__()
+            self.fallar = True
+
+        def execute(self, sql, params=None):
+            if 'INSERT INTO activity_log' in sql and self.fallar:
+                self.fallar = False
+                raise RuntimeError('base caída un momento')
+            super().execute(sql, params)
+
+    c = _con(monkeypatch, ConexionIntermitente())
+    assert reg.registrar(USUARIO, 'obra/X', 'sesión', node_id='n1', ahora=1000) is False
+    assert reg.registrar(USUARIO, 'obra/X', 'sesión', node_id='n1', ahora=1001) is True

@@ -141,8 +141,36 @@ def get_db_connection():
                 except Exception:
                     pass
 
+def _columnas_que_el_listado_necesita():
+    """Las columnas nuevas, ANTES y APARTE del resto del esquema.
+
+    El listado de carpetas ya pide codigo_idoneidad, codigo_revision y
+    nomenclatura_ok. Como todo el esquema maestro va en UNA transaccion, si algo
+    fallaba por el camino -- por ejemplo el lock_timeout de 5 s esperando a que
+    otro worker suelte file_nodes -- se deshacia entero, las columnas no
+    aparecian, y el portal se quedaba sin poder listar ni una carpeta.
+
+    Son cuatro ALTER baratos y idempotentes: van primero y con su propio commit,
+    de modo que lo demas puede fallar sin llevarse por delante lo basico.
+    """
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("ALTER TABLE IF EXISTS file_nodes "
+                        "ADD COLUMN IF NOT EXISTS nomenclatura_ok BOOLEAN;")
+            for tabla in ('file_nodes', 'file_versions'):
+                cur.execute(f"ALTER TABLE IF EXISTS {tabla} "
+                            f"ADD COLUMN IF NOT EXISTS codigo_idoneidad VARCHAR(10);")
+                cur.execute(f"ALTER TABLE IF EXISTS {tabla} "
+                            f"ADD COLUMN IF NOT EXISTS codigo_revision VARCHAR(10);")
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"no se pudieron asegurar las columnas del listado: {e}")
+
+
 def ensure_file_nodes_table():
     """Crea la tabla maestra de archivos/carpetas e indices de rendimiento."""
+    _columnas_que_el_listado_necesita()
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -609,7 +637,11 @@ def ensure_file_nodes_table():
             conn.commit()
             print("[DB] Tablas e indices maestros verificados/creados exitosamente.")
     except Exception as e:
+        # Y SE PROPAGA. Antes se tragaba aqui con un print, asi que el informe de
+        # arranque decia "0 fallos" aunque el esquema se hubiera quedado a medias:
+        # el sitio donde se mira si algo fue mal afirmaba que todo estaba bien.
         print(f"Error inicializando esquema maestro: {e}")
+        raise
 
 def ensure_ai_brain_schema():
     """Crea el esquema y las tablas para el Cerebro de IA y HITL."""
