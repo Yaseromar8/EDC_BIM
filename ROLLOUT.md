@@ -44,7 +44,7 @@ personalizados, conjuntos (sets), filtro por estado, **enlaces compartidos con e
 |---|---|---|
 | `ALLOW_DEMO_TOKEN` | **NO setear** (o `false`) | Mantiene cerrado el backdoor admin |
 | `ENFORCE_PROJECT_AUTHZ` | `false` al inicio → `true` tras verificar logs | Bloqueo real por proyecto |
-| `STRICT_ISO_VISIBILITY` | `false` al inicio → `true` cuando quieras modo ISO estricto | No-admins solo ven Compartido/Publicado |
+| `STRICT_ISO_VISIBILITY` | **`false`. NO lo enciendas todavía** (ver paso 10) | No-admins solo ven Compartido/Publicado |
 | `CORS_ORIGINS` | `https://<dominio-netlify-visor>,https://<dominio-netlify-docs>` | Restringe CORS |
 | `ADMIN_PASSWORD` | una contraseña fuerte | Seed de admin sin `admin123` |
 | `APS_CLIENT_SECRET` | **valor NUEVO rotado** (ver §3) | Secreto de Autodesk APS |
@@ -97,8 +97,20 @@ En **local**: `ALLOW_DEMO_TOKEN=true` en tu `.env` (NUNCA en Render).
 8. Buscar `[authz][log-only] ... SIN acceso a obra=...`:
    - Si NO aparece para usuarios legítimos → seguro activar el enforce.
 9. **Activar bloqueo real**: `ENFORCE_PROJECT_AUTHZ=true`. Re-verificar que tu cuenta entra.
-10. (Opcional) **Modo ISO estricto**: `STRICT_ISO_VISIBILITY=true` cuando el equipo
-    entienda que los no-admin dejarán de ver los WIP.
+10. **Modo ISO estricto: `STRICT_ISO_VISIBILITY=true` — HOY NO.**
+
+    > Es un interruptor cargado. Medido contra la base real: **3.035 de 3.036
+    > documentos están en Trabajo en curso**, porque hasta ahora nada los sacaba de
+    > ahí (la máquina de estados era inalcanzable) y porque la convención de
+    > nombres que se exige no es la de esta obra: de 2.831 ficheros la cumplen 2.
+    >
+    > Encenderlo ahora deja el portal **prácticamente vacío** para todo el que no
+    > sea admin: las carpetas siguen apareciendo, sin nada dentro. Parece un
+    > borrado masivo y no lo es.
+
+    Antes hay que: mover documentos a Compartido de verdad (ya se puede, ver
+    [docs/migrar-estados-del-ecd.md](docs/migrar-estados-del-ecd.md)) y calibrar la
+    convención de nombres por obra. Solo entonces tiene sentido este paso.
 
 ---
 
