@@ -217,6 +217,19 @@ def ensure_file_nodes_table():
                 ON file_nodes(model_urn, name, node_type)
                 WHERE is_deleted = FALSE;
             """)
+            # Busqueda por clave de almacenamiento: es lo que hace el control de
+            # acceso a los bytes en CADA peticion de imagen (backend/acceso_a_blobs.py),
+            # y un album de fotos las pide en rafaga. Sin indice, un barrido por
+            # tabla por cada miniatura.
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_file_nodes_gcs_urn ON file_nodes(gcs_urn);
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_file_versions_gcs_urn ON file_versions(gcs_urn);
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_file_versions_node ON file_versions(file_node_id);
+            """)
 
             # ── 2.0.1 SANEAR raíces duplicadas (PROJECT_ROOT) ────────────────
             # Una carrera al abrir Docs por primera vez podía crear DOS nodos

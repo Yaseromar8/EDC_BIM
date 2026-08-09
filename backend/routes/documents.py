@@ -253,26 +253,35 @@ def _acceso_al_recurso(gcs_urn=None, node_id=None):
     if user.get('role') == 'admin':
         return None
 
-    obra_real = None
+    # Se pregunta a TODAS las tablas que pueden poseer el objeto, no solo a
+    # file_nodes. Mirar solo file_nodes dejaba fuera las versiones ANTIGUAS (su
+    # clave sale de file_nodes al subir la siguiente), las fotos de campo y los
+    # adjuntos de los puntos de control, y el codigo antiguo remataba esos casos
+    # con un "return None" que PERMITIA. Ver backend/acceso_a_blobs.py.
+    from acceso_a_blobs import obra_del_blob, acceso_por_obra_id
     try:
         from db import get_db_connection
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            if node_id:
-                cursor.execute("SELECT model_urn FROM file_nodes WHERE id = %s", (node_id,))
-            elif gcs_urn:
-                cursor.execute("SELECT model_urn FROM file_nodes WHERE gcs_urn = %s LIMIT 1", (gcs_urn,))
-            else:
-                return None
-            fila = cursor.fetchone()
-            obra_real = fila[0] if fila else None
+            ambito, obra_id, origen = obra_del_blob(
+                cursor, gcs_urn=gcs_urn, node_id=node_id
+            )
+            # Duenos que solo guardan el id de obra (los puntos de control).
+            if not ambito and obra_id:
+                if acceso_por_obra_id(cursor, user, obra_id):
+                    return None
+                return jsonify({"success": False, "error": "Sin acceso a este documento"}), 403
     except Exception as e:
         print(f"[ACL] no se pudo resolver la obra del recurso: {e}")
         return jsonify({"success": False, "error": "No se pudo verificar el acceso"}), 503
 
-    if obra_real is None:
-        return None   # el fichero no esta en el arbol: no hay obra que proteger
-    if not verify_project_access(user, obra_real):
+    if not origen:
+        # Ninguna tabla reclama este objeto. Antes esto se permitia suponiendo
+        # que un objeto fuera del arbol no tenia obra que proteger; la suposicion
+        # era falsa y por ahi se bajaban las versiones antiguas de otras obras.
+        print(f"[ACL] objeto sin dueno, denegado: urn={gcs_urn} id={node_id}")
+        return jsonify({"success": False, "error": "Documento no encontrado"}), 404
+    if not verify_project_access(user, ambito):
         return jsonify({"success": False, "error": "Sin acceso a este documento"}), 403
     return None
 
@@ -671,9 +680,46 @@ def get_versions():
     if not file_id:
         return jsonify({"success": False, "error": "ID de archivo no proporcionado"}), 400
 
+    # Esta ruta devuelve la clave de almacenamiento de CADA version historica, es
+    # decir la llave para bajarse los bytes de todas ellas. No comprobaba nada: ni
+    # que la obra fuera tuya ni que tuvieras permiso sobre la carpeta.
+    #
+    # La obra se resuelve por el ID DEL FICHERO, nunca por el ?model_urn que manda
+    # el cliente, que es justo el parametro que elige el atacante.
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if not user:
+        return jsonify({"success": False, "error": "Autenticación requerida"}), 401
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT model_urn FROM file_nodes WHERE id = %s", (file_id,))
+            fila = cur.fetchone()
+    except Exception as e:
+        print(f"[ACL] versiones: no se pudo resolver la obra: {e}")
+        return jsonify({"success": False, "error": "No se pudo verificar el acceso"}), 503
+    if not fila:
+        return jsonify({"success": False, "error": "Documento no encontrado"}), 404
+    if not verify_project_access(user, fila[0]):
+        return jsonify({"success": False, "error": "Sin acceso a este documento"}), 403
+
+    rbac = check_folder_permission(user, file_id, fila[0], 'viewer',
+                                   'ver el historial de versiones')
+    if rbac:
+        return rbac
+
     try:
         from file_system_db import get_file_versions
-        versions = get_file_versions(model_urn, file_id)
+        # Con la obra REAL del fichero, no con la que declaro el cliente.
+        versions = get_file_versions(fila[0], file_id)
+        # La clave de almacenamiento es la llave para bajarse esa version. Quien
+        # solo tiene permiso de LEER ve el historial (cuantas versiones hay, quien
+        # y cuando), pero no se lleva las llaves.
+        puede_descargar = check_folder_permission(
+            user, file_id, fila[0], 'view_download', 'descargar') is None
+        if not puede_descargar:
+            versions = [{k: v for k, v in ver.items() if k != 'gcs_urn'} for ver in versions]
         return jsonify({"success": True, "versions": versions}), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -1497,6 +1543,12 @@ def get_activity_log():
     model_urn = request.args.get('model_urn', 'global')
     entity_name = request.args.get('entity_name') # Opcional: para ver historial de un archivo específico
     limit = min(int(request.args.get('limit', 50)), 200)
+
+    # El historial de una obra cuenta quien sube que y cuando, y con que nombres
+    # de fichero: cambiando el ?model_urn se leia el de cualquier otra obra.
+    from flask import g
+    if not verify_project_access(getattr(g, 'current_user', None), model_urn):
+        return jsonify({"success": False, "error": "Sin acceso a esta obra."}), 403
 
     try:
         from db import get_db_connection
