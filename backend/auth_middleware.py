@@ -52,6 +52,14 @@ PUBLIC_ENDPOINTS = {
 PUBLIC_ENDPOINTS_LECTURA = {
     '/api/companies',
     '/api/job_titles',
+    # Estas tres SIRVEN BYTES a etiquetas <img> y al lector de PDF, que no pueden
+    # mandar cabecera de autorizacion. El middleware las deja pasar y la puerta
+    # real es _acceso_al_recurso() dentro del handler, que es quien sabe DE QUE
+    # FICHERO se trata: exige sesion con acceso a esa obra, o un permiso firmado
+    # para ese fichero concreto. Fail-closed alli, no aqui.
+    '/api/docs/proxy',
+    '/api/docs/view',
+    '/api/docs/signed-url',
 }
 
 # Prefijos exentos de sesion para CUALQUIER metodo. Solo ficheros estaticos y

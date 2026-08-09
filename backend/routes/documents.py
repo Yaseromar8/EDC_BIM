@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from flask import Blueprint, request, jsonify, redirect, Response, g
+from enlaces_firmados import emitir, leer, PROPOSITO_RECURSO
 from politica import publico_en_lectura, requiere_rol
 from werkzeug.utils import secure_filename
 from gcs_manager import generate_signed_url, upload_file_to_gcs, delete_gcs_blob
@@ -233,6 +234,19 @@ def _acceso_al_recurso(gcs_urn=None, node_id=None):
 
     Devuelve None si se permite, o una respuesta de error.
     """
+    # Permiso firmado para ESTE fichero (?t=...). Es lo que usan las etiquetas
+    # <img> y el lector de PDF, que no pueden mandar cabecera. Abre un solo
+    # recurso y caduca en 24 h: si el enlace se comparte, se comparte la foto,
+    # no la cuenta.
+    firmado = request.args.get('t')
+    if firmado:
+        datos, _motivo = leer(PROPOSITO_RECURSO, firmado)
+        if datos:
+            recurso = str(datos.get('r') or '')
+            if recurso and recurso in (str(gcs_urn or ''), str(node_id or '')):
+                return None
+        return jsonify({"success": False, "error": "Enlace caducado o inválido"}), 403
+
     user = getattr(g, 'current_user', None)
     if not user:
         return jsonify({"success": False, "error": "Autenticación requerida"}), 401
@@ -263,7 +277,40 @@ def _acceso_al_recurso(gcs_urn=None, node_id=None):
     return None
 
 
+@documents_bp.route('/api/docs/asset-tokens', methods=['POST'])
+def emitir_permisos_de_lectura():
+    """Emite permisos de lectura de 24 h para ficheros concretos.
+
+    EN LOTE a proposito: un album de obra son decenas de fotos y una llamada por
+    cada una seria inaceptable en campo.
+
+    Es el reemplazo del '?session_token=' que se incrustaba en los permalinks:
+    aquello metia la sesion ENTERA -- reutilizable, de 7 dias y con todos los
+    permisos del usuario -- dentro de una URL que ademas se guardaba en la base
+    de datos y se compartia por WhatsApp. Quien recibiera la foto heredaba la
+    cuenta. Esto entrega, para cada fichero, un permiso que solo abre ESE fichero.
+    """
+    user = getattr(g, 'current_user', None)
+    if not user:
+        return jsonify({"success": False, "error": "Autenticación requerida"}), 401
+
+    cuerpo = request.get_json(silent=True) or {}
+    urns = [str(u) for u in (cuerpo.get('urns') or []) if u][:200]
+    if not urns:
+        return jsonify({"success": True, "tokens": {}}), 200
+
+    tokens = {}
+    for urn in urns:
+        # Se comprueba el acceso de verdad, uno por uno: emitir el permiso sin
+        # mirar convertiria este endpoint en la puerta trasera que evita todo lo
+        # demas.
+        if _acceso_al_recurso(gcs_urn=urn) is None:
+            tokens[urn] = emitir(PROPOSITO_RECURSO, {'r': urn})
+    return jsonify({"success": True, "tokens": tokens}), 200
+
+
 @documents_bp.route('/api/docs/view', methods=['GET'])
+@publico_en_lectura(motivo='sirve bytes a etiquetas <img> y a pdf.js, que no pueden mandar cabecera; la puerta real es _acceso_al_recurso() dentro, que exige sesion o un permiso firmado del fichero')
 def view_document():
     """Redirige a una URL firmada fresca. Acepta path o urn directamente."""
     path = request.args.get('path', '')
@@ -303,6 +350,7 @@ def view_document():
 
 
 @documents_bp.route('/api/docs/signed-url', methods=['GET'])
+@publico_en_lectura(motivo='sirve bytes a etiquetas <img> y a pdf.js, que no pueden mandar cabecera; la puerta real es _acceso_al_recurso() dentro, que exige sesion o un permiso firmado del fichero')
 def get_signed_url_json():
     """Retorna la URL firmada como JSON (útil para visores externos como Office)."""
     path = request.args.get('path', '')
@@ -443,6 +491,7 @@ def list_media_paginated():
 
 
 @documents_bp.route('/api/docs/proxy', methods=['GET', 'OPTIONS'])
+@publico_en_lectura(motivo='sirve bytes a etiquetas <img> y a pdf.js, que no pueden mandar cabecera; la puerta real es _acceso_al_recurso() dentro, que exige sesion o un permiso firmado del fichero')
 def proxy_document():
     """Sirve el documento directamente desde GCS para evitar problemas de CORS en el Viewer."""
     urn = request.args.get('urn', '')

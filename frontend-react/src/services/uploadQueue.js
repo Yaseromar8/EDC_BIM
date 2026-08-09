@@ -210,8 +210,11 @@ export async function processPendingUploads(onPhotoUploaded, getBackendUrl) {
             const confirmData = await confirmResp.json();
 
             if (confirmData.success) {
-                const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token') || '';
-                const permalinkUrl = `${BACKEND_URL}/api/docs/proxy?urn=${urlData.gcs_urn}&session_token=${token}`;
+                // SIN token en la URL: esta se GUARDA en la base y se comparte. Antes
+                // llevaba la sesion entera del que subia la foto, de 7 dias y
+                // reutilizable. El permiso de lectura se firma al mostrar (ver
+                // utils/permisosDeLectura).
+                const permalinkUrl = `${BACKEND_URL}/api/docs/proxy?urn=${urlData.gcs_urn}`;
 
                 // Notify the app that this photo is ready
                 if (onPhotoUploaded) {

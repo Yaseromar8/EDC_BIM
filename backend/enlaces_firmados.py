@@ -23,12 +23,19 @@ logger = get_logger('enlaces')
 PROPOSITO_INVITACION = 'invitacion-de-usuario'
 PROPOSITO_RESET = 'reset-de-password'
 PROPOSITO_VERIFICACION = 'verificacion-de-correo'
+PROPOSITO_RECURSO = 'lectura-de-un-recurso'
 
 # Caducidades por proposito, en segundos.
 CADUCIDAD = {
     PROPOSITO_INVITACION: 14 * 24 * 3600,   # 14 dias: el invitado puede tardar
     PROPOSITO_RESET: 3600,                  # 1 hora
     PROPOSITO_VERIFICACION: 24 * 3600,      # 1 dia
+    # Permiso de LECTURA de UN fichero concreto, para las etiquetas <img> y el
+    # lector de PDF, que no pueden mandar cabecera de autorizacion. Sustituye al
+    # '?session_token=' que se incrustaba en los permalinks de las fotos: aquello
+    # era la sesion ENTERA, reutilizable y de 7 dias, guardada en la base y
+    # compartida con quien recibiera la foto. Esto solo abre ese fichero y caduca.
+    PROPOSITO_RECURSO: 24 * 3600,
 }
 
 

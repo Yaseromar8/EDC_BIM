@@ -154,10 +154,10 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
             if (rawSrc.includes('localhost:3000') && !BACKEND_URL.includes('localhost:3000')) {
                 rawSrc = rawSrc.replace(/http:\/\/localhost:3000/g, BACKEND_URL);
             }
-            if (rawSrc.includes('/api/docs/proxy') && !rawSrc.includes('session_token=')) {
-                const tk = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token') || '';
-                rawSrc += (rawSrc.includes('?') ? '&' : '?') + `session_token=${tk}`;
-            }
+            // Se limpia el token de sesión que arrastran los permalinks viejos
+            // guardados en la base: no debe seguir circulando en el DOM ni en
+            // los enlaces que se comparten.
+            rawSrc = rawSrc.replace(/[?&]session_token=[^&]*/g, '');
         }
         return { ...p, src: rawSrc };
     }).sort((a, b) => {
@@ -165,6 +165,25 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
         const dateB = new Date(b.date || 0).getTime();
         return dateB - dateA;
     });
+
+    // Permiso de lectura por foto, firmado y de 24 h. Se pide EN LOTE al mostrar
+    // el álbum: una llamada por foto sería inaceptable en campo.
+    const [urlsFirmadas, setUrlsFirmadas] = useState({});
+    useEffect(() => {
+        const pendientes = sortedPhotos.map(p => p.src).filter(Boolean);
+        if (!pendientes.length) return;
+        let cancelado = false;
+        firmarUrls(BACKEND_URL, pendientes).then(firmadas => {
+            if (cancelado) return;
+            const mapa = {};
+            pendientes.forEach((original, i) => { mapa[original] = firmadas[i]; });
+            setUrlsFirmadas(prev => ({ ...prev, ...mapa }));
+        });
+        return () => { cancelado = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sortedPhotos.map(p => p.src).join('|')]);
+
+    const fotosVisibles = sortedPhotos.map(p => ({ ...p, src: urlsFirmadas[p.src] || p.src }));
 
     const setQuickFilter = (type) => {
         const today = new Date();
@@ -294,9 +313,11 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                     const completeData = await completeResp.json();
 
                     if (completeData.success) {
-                        // The URL is now fixed to be a proxy URL (or signed read URL)
-                        const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token') || '';
-                        const permalinkUrl = `${BACKEND_URL}/api/docs/proxy?urn=${urlData.gcs_urn}&session_token=${token}`;
+                        // SIN token en la URL: esta se GUARDA en la base y se comparte. Antes
+                        // llevaba la sesion entera del que subia la foto, de 7 dias y
+                        // reutilizable. El permiso de lectura se firma al mostrar (ver
+                        // utils/permisosDeLectura).
+                        const permalinkUrl = `${BACKEND_URL}/api/docs/proxy?urn=${urlData.gcs_urn}`;
 
                         if (onAddPhoto) {
                             onAddPhoto({
@@ -324,7 +345,7 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
         }
     };
 
-    const filteredPhotos = sortedPhotos.filter(photo => {
+    const filteredPhotos = fotosVisibles.filter(photo => {
         // 1. Filtro por tipo de medio
         const isVideo = isVideoFile(photo.src);
         if (mediaType === 'image' && isVideo) return false;
