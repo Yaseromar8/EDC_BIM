@@ -2,7 +2,7 @@ import os
 import json
 import time
 import re
-from flask import Blueprint, request, jsonify, send_from_directory
+from flask import Blueprint, request, jsonify, send_from_directory, g
 from werkzeug.utils import secure_filename
 from db import get_db_connection
 from gcs_manager import upload_file_to_gcs
@@ -283,6 +283,18 @@ def upload_pin_attachment():
 
 @pins_bp.route('/uploads/pins/<path:filename>')
 def serve_pin_file(filename):
+    from enlaces_firmados import leer, PROPOSITO_RECURSO
+    # Estos ficheros se sirven FUERA de /api/, donde ninguna politica los mira, y
+    # con nombres predecibles: los KML de la obra se guardan con su nombre
+    # original ('topografia.kml') y los adjuntos de pin con
+    # '<marca de tiempo>_<nombre>'. Adivinar uno era trivial. Se exige sesion, o
+    # un permiso firmado para ESE fichero (para etiquetas <img>, que no pueden
+    # mandar cabecera).
+    if not getattr(g, 'current_user', None):
+        _permiso = request.args.get('t')
+        _datos, _ = leer(PROPOSITO_RECURSO, _permiso) if _permiso else (None, None)
+        if not _datos or str(_datos.get('r') or '') != filename:
+            return jsonify({'error': 'Autenticación requerida'}), 401
     return send_from_directory(PINS_UPLOAD_FOLDER, filename)
 
 # Mantener por retrocompatibilidad de setup (no estricto si no usa ACC)

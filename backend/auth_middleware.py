@@ -36,7 +36,10 @@ PUBLIC_ENDPOINTS = {
     '/api/auth/handoff/exchange',
     '/api/auth/logout',
     '/api/auth/status',
-    '/api/auth/aps/login',
+    # '/api/auth/aps/login' NO va aqui: es quien EMPIEZA el flujo OAuth cuyo
+    # callback sobrescribe las credenciales ACC de toda la plataforma. Si queda
+    # abierto, cualquiera obtiene un 'state' valido y el state firmado no sirve
+    # de nada. Exige admin (ver el guard dentro de la vista).
     '/api/auth/aps/callback',
     '/api/token',           # Viewer token (Autodesk internal, not user-facing)
     # Quien ha olvidado su contraseña, por definicion, no puede autenticarse.
@@ -67,7 +70,9 @@ PUBLIC_ENDPOINTS_LECTURA = {
 PUBLIC_PREFIXES = (
     '/maps/',                 # Tiles de mapa estaticos
     '/docs/uploads/',         # Servido estatico de ficheros subidos
-    '/api/auth/aps/',         # Callbacks OAuth de APS
+    # Solo el CALLBACK, no todo '/api/auth/aps/': ese prefijo arrastraba tambien
+    # la ruta de inicio del flujo.
+    '/api/auth/aps/callback',
 )
 
 # ── Prefijos publicos SOLO PARA LECTURA (GET/HEAD) ─────────────────────────
@@ -551,11 +556,11 @@ def init_auth_middleware(app):
         path = request.path
         metodo = request.method
 
-        # Skip non-API routes
-        if not path.startswith('/api/'):
-            return None
-
         # ── 1. Identidad ──────────────────────────────────────────────────
+        # Se resuelve ANTES de descartar las rutas que no son /api/, porque los
+        # ficheros servidos estaticamente (/maps/uploads/, /uploads/pins/) tambien
+        # necesitan saber quien llama para decidir. Resolver la identidad nunca
+        # hace dano; lo que se salta abajo es la EXIGENCIA, no la lectura.
         # Se resuelve SIEMPRE que venga un token, incluso en rutas publicas.
         # Antes las rutas publicas retornaban antes de mirar la cabecera, asi
         # que g.current_user quedaba vacio y un endpoint publico-en-lectura no
@@ -570,6 +575,12 @@ def init_auth_middleware(app):
             user = validate_session(token)
         if user:
             g.current_user = user
+
+        # Fuera de /api/ el middleware no exige nada: son ficheros servidos
+        # estaticamente y cada uno decide en su propio handler, ya con la
+        # identidad resuelta arriba.
+        if not path.startswith('/api/'):
+            return None
 
         # ── 2. ¿Se permite? ───────────────────────────────────────────────
         abierto = _abierto_por_prefijo(path, metodo)

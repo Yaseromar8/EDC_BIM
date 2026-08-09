@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 import mimetypes
 import requests
+import secrets
 import urllib.parse
 import time
 import json
@@ -517,18 +518,38 @@ def auth_status():
 @app.route('/api/auth/aps/login')
 @requiere_rol('admin')  # su callback SOBRESCRIBE las credenciales ACC de toda la plataforma
 def auth_login():
+    from flask import g as _g
+    # Guard EFECTIVO: @requiere_rol solo bloquea en modo estricto, y esta ruta no
+    # puede esperar a la activacion. Es la que emite el 'state' firmado: si la
+    # puede llamar cualquiera, obtiene un state valido y el state deja de
+    # proteger nada.
+    _quien = getattr(_g, 'current_user', None)
+    if not _quien:
+        return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
+    if _quien.get('role') != 'admin':
+        return jsonify({'error': 'Solo un administrador puede conectar la cuenta de Autodesk.'}), 403
+
     client_id = os.getenv('APS_CLIENT_ID')
     redirect_uri = os.getenv('APS_REDIRECT_URI', 'http://localhost:3000/api/auth/aps/callback')
     # Scopes necesarios para ver y subir archivos
     scopes = 'data:read data:write data:create bucket:create bucket:read'
-    
-    # Construir URL de autorización
+
+    # 'state' FIRMADO: es la prueba de que este flujo lo empezamos nosotros.
+    # Autodesk nos lo devuelve tal cual en el callback. Sin el, el callback
+    # aceptaba cualquier 'code' -- y como al canjearlo SOBRESCRIBE las
+    # credenciales ACC de toda la plataforma, un tercero podia completar el flujo
+    # con SU cuenta de Autodesk y dejar el backend apuntando a la suya.
+    from enlaces_firmados import emitir, PROPOSITO_OAUTH_APS
+    quien = (getattr(_g, 'current_user', None) or {}).get('id')
+    estado = emitir(PROPOSITO_OAUTH_APS, {'uid': quien, 'n': secrets.token_urlsafe(12)})
+
     url = (
         f'https://developer.api.autodesk.com/authentication/v2/authorize'
         f'?response_type=code'
         f'&client_id={client_id}'
         f'&redirect_uri={urllib.parse.quote(redirect_uri)}'
         f'&scope={urllib.parse.quote(scopes)}'
+        f'&state={urllib.parse.quote(estado)}'
     )
     return redirect(url)
 
@@ -539,8 +560,17 @@ def auth_callback():
     if not code:
         return jsonify({'error': 'Falta code'}), 400
 
-    # Use the same redirect_uri as the login route
-    redirect_uri = os.getenv('APS_REDIRECT_URI', 'http://localhost:3000/api/auth/callback')
+    # Sin un 'state' que hayamos firmado nosotros, no se canjea nada: ese canje
+    # reemplaza las credenciales ACC de TODA la plataforma.
+    from enlaces_firmados import leer, PROPOSITO_OAUTH_APS
+    _estado, _motivo = leer(PROPOSITO_OAUTH_APS, request.args.get('state'))
+    if not _estado:
+        print(f"[auth] callback de APS con state invalido ({_motivo}) desde {request.remote_addr}")
+        return jsonify({'error': 'Flujo de autorización no válido. Inícialo desde la plataforma.'}), 403
+
+    # El MISMO redirect_uri que uso la ruta de login: si no coinciden, Autodesk
+    # rechaza el canje. El valor por defecto de aqui apuntaba a otra ruta.
+    redirect_uri = os.getenv('APS_REDIRECT_URI', 'http://localhost:3000/api/auth/aps/callback')
 
     payload = {
         'grant_type': 'authorization_code',
@@ -810,6 +840,18 @@ app.register_blueprint(geo_control_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
+    from enlaces_firmados import leer, PROPOSITO_RECURSO
+    # Estos ficheros se sirven FUERA de /api/, donde ninguna politica los mira, y
+    # con nombres predecibles: los KML de la obra se guardan con su nombre
+    # original ('topografia.kml') y los adjuntos de pin con
+    # '<marca de tiempo>_<nombre>'. Adivinar uno era trivial. Se exige sesion, o
+    # un permiso firmado para ESE fichero (para etiquetas <img>, que no pueden
+    # mandar cabecera).
+    if not getattr(g, 'current_user', None):
+        _permiso = request.args.get('t')
+        _datos, _ = leer(PROPOSITO_RECURSO, _permiso) if _permiso else (None, None)
+        if not _datos or str(_datos.get('r') or '') != filename:
+            return jsonify({'error': 'Autenticación requerida'}), 401
     return send_from_directory(MAP_UPLOAD_FOLDER, filename)
 
 
