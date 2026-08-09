@@ -296,16 +296,22 @@ def emitir_permisos_de_lectura():
 
     cuerpo = request.get_json(silent=True) or {}
     urns = [str(u) for u in (cuerpo.get('urns') or []) if u][:200]
-    if not urns:
+    # Los PDF y las miniaturas se piden por ?id=<nodo>, no por urn. Van aparte
+    # porque la comprobacion de acceso es distinta: una busca por gcs_urn y la
+    # otra por el id del nodo.
+    ids = [str(i) for i in (cuerpo.get('ids') or []) if i][:200]
+    if not urns and not ids:
         return jsonify({"success": True, "tokens": {}}), 200
 
     tokens = {}
+    # Se comprueba el acceso de verdad, uno por uno: emitir el permiso sin mirar
+    # convertiria este endpoint en la puerta trasera que evita todo lo demas.
     for urn in urns:
-        # Se comprueba el acceso de verdad, uno por uno: emitir el permiso sin
-        # mirar convertiria este endpoint en la puerta trasera que evita todo lo
-        # demas.
         if _acceso_al_recurso(gcs_urn=urn) is None:
             tokens[urn] = emitir(PROPOSITO_RECURSO, {'r': urn})
+    for nid in ids:
+        if _acceso_al_recurso(node_id=nid) is None:
+            tokens[nid] = emitir(PROPOSITO_RECURSO, {'r': nid})
     return jsonify({"success": True, "tokens": tokens}), 200
 
 

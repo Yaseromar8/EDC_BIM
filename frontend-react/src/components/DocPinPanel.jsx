@@ -3,6 +3,7 @@ import './DocPinPanel.css';
 import { apiFetch, getUploadAuthHeaders } from '../utils/apiFetch';
 import { Document, Page, pdfjs } from 'react-pdf';
 import PdfReader from './PdfReader';
+import { useUrlFirmada } from '../utils/permisosDeLectura';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -44,11 +45,12 @@ const PdfThumbnail = ({ url, docId }) => {
 
     // Usamos el proxy para cargar el PDF en la miniatura, evita redirects y CORS
     // Si no tenemos docId (nodeId), intentamos pasar el fullPath/fullName al proxy de todas formas
-    const proxyUrl = docId ? `${PROXY_API}?id=${docId}` : `${PROXY_API}?urn=${url}`;
-
-    useEffect(() => {
-        console.log(`[PdfThumbnail] Loading document ${docId}. Proxy: ${proxyUrl}`);
-    }, [docId, proxyUrl]);
+    // react-pdf descarga el fichero por su cuenta y NO manda cabecera de
+    // autorización: sin permiso firmado, la miniatura recibía 401 y no salía.
+    const proxyUrl = useUrlFirmada(
+        BACKEND_URL,
+        docId ? `${PROXY_API}?id=${docId}` : `${PROXY_API}?urn=${url}`
+    );
 
     return (
         <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: '#0a0a0c' }}>

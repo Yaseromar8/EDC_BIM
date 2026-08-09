@@ -3,6 +3,7 @@
 // navegación de páginas, rotación y descarga. Reemplaza el <iframe> crudo.
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import { useUrlFirmada } from '../utils/permisosDeLectura';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString();
 
@@ -40,7 +41,15 @@ function Thumb({ pdf, pageNum, active, onClick }) {
     );
 }
 
-export default function PdfReader({ url, fileName = 'documento.pdf' }) {
+const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://visor-ecd-backend.onrender.com'));
+
+export default function PdfReader({ url: urlPedida, fileName = 'documento.pdf' }) {
+    // pdf.js descarga el documento por su cuenta y NO manda cabecera de
+    // autorización, así que /api/docs/proxy le respondía 401 y el lector no
+    // abría nada. Se firma un permiso de lectura para ESE documento (24 h, solo
+    // ese fichero) y se le pasa la url ya firmada. Mientras llega es null, para
+    // que no intente cargar y se coma el 401.
+    const url = useUrlFirmada(BACKEND_URL, urlPedida);
     const wrapRef = useRef(null);
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
