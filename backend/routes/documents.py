@@ -1098,8 +1098,8 @@ def rename_document():
             # cuarentena: corrigiendole el nombre, sin tocar su estado.
             conforme = None
             if node_type == 'FILE':
-                base_name = new_name.rsplit('.', 1)[0] if '.' in new_name else new_name
-                conforme = bool(re.match(ISO_19650_REGEX, base_name.upper()))
+                from nomenclatura import evaluar_para
+                conforme = evaluar_para(cursor, model_urn, new_name)
 
             cursor.execute("""
                 UPDATE file_nodes
@@ -2289,6 +2289,46 @@ def force_init_permissions():
             return jsonify({"success": True, "message": "Tabla creada exitosamente."}) 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+
+@documents_bp.route('/api/docs/nomenclatura', methods=['GET', 'PUT'])
+def config_de_nomenclatura():
+    """La convención de nombres de esta obra: leerla y ajustarla.
+
+    Era una constante escrita a mano en el código, con siete campos y correlativo
+    de 4-6 dígitos, aplicada a TODO. De 2.831 ficheros la cumplían dos, porque el
+    94,5% del ECD son fotos de campo y a una foto no se le aplica la nomenclatura
+    de un plano. Ahora el patrón es de la obra y hay tipos exentos.
+    """
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    model_urn = (request.args.get('model_urn')
+                 or (request.get_json(silent=True) or {}).get('model_urn') or 'global')
+    if not verify_project_access(user, model_urn):
+        return jsonify({"success": False, "error": "Sin acceso a esta obra."}), 403
+    try:
+        from db import get_db_connection
+        from nomenclatura import config_de_obra, guardar_config
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            if request.method == 'GET':
+                cfg = config_de_obra(cur, model_urn)
+                conn.commit()
+                return jsonify({"success": True, "config": cfg}), 200
+
+            # Cambiar la convención de una obra es decisión de quien la dirige.
+            if not user or user.get('role') != 'admin':
+                return jsonify({"success": False,
+                                "error": "Solo un administrador cambia la convención de nombres."}), 403
+            d = request.get_json() or {}
+            cfg = guardar_config(cur, model_urn, patron=d.get('patron'),
+                                 exentas=d.get('exentas'), modo=d.get('modo'))
+            conn.commit()
+        return jsonify({"success": True, "config": cfg}), 200
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 @documents_bp.route('/api/docs/trazabilidad', methods=['GET'])
 def trazabilidad_de_documento():

@@ -216,14 +216,29 @@ def ensure_file_nodes_table():
             # que habian salido de la cuarentena sin cumplir nada y no volverian a
             # aparecer. Este patron es el mismo que ISO_19650_REGEX en
             # file_system_db.py:9; si se cambia alli, hay que cambiarlo aqui.
+            # A las fotos y videos de campo NO se les aplica la convencion de
+            # planos. Medido en la base real: el 94,5% del ECD son fotos llegadas
+            # por WhatsApp, y juzgarlas con la nomenclatura de un entregable metio
+            # 2.676 imagenes en cuarentena y dejo esa pantalla sin servir para
+            # nada. Quedan SIN EVALUAR (NULL), que no es lo mismo que mal
+            # nombradas. Ver backend/nomenclatura.py, donde la lista es por obra.
+            exentas = ('jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp',
+                       'tif', 'tiff', 'mp4', 'mov', '3gp', 'avi', 'm4v', 'webm',
+                       'ogg', 'mkv')
+            cursor.execute("""
+                UPDATE file_nodes SET nomenclatura_ok = NULL
+                 WHERE node_type = 'FILE' AND nomenclatura_ok IS NOT NULL
+                   AND lower(substring(name from '[^.]+$')) = ANY(%s);
+            """, (list(exentas),))
             cursor.execute(r"""
                 UPDATE file_nodes
                    SET nomenclatura_ok = (
                         UPPER(regexp_replace(name, '[.][^.]*$', '')) ~
                         '^[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[0-9]{4,6}$'
                    )
-                 WHERE node_type = 'FILE' AND nomenclatura_ok IS NULL;
-            """)
+                 WHERE node_type = 'FILE' AND nomenclatura_ok IS NULL
+                   AND lower(substring(name from '[^.]+$')) <> ALL(%s);
+            """, (list(exentas),))
             # Y ahora el estado, sin tocar los que SI llegaron legitimamente a
             # Compartido, Publicado o Archivado.
             #

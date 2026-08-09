@@ -312,11 +312,16 @@ def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mim
     #
     # Que el nombre cumpla o no la convencion es OTRA cosa, y va en su propia
     # marca: mezclarlas convertia el area de retencion en una trampa sin salida.
-    base_name = filename.rsplit('.', 1)[0] if '.' in filename else filename
-    conforme = bool(re.match(ISO_19650_REGEX, base_name.upper()))
+    #
+    # La convencion es DE LA OBRA y no se le aplica a las fotos de campo: juzgar
+    # una foto de una zanja con la nomenclatura de un plano fue lo que metio 2.676
+    # imagenes en cuarentena y dejo el area de retencion sin servir para nada.
+    # Ver backend/nomenclatura.py.
+    from nomenclatura import evaluar_para
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        conforme = evaluar_para(cursor, model_urn, filename)
 
         # 1. Buscar si el Ítem ya existe en la ubicación
         cursor.execute(
