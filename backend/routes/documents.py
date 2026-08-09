@@ -137,6 +137,19 @@ def _docs_actor(user, fallback=None):
     return fallback
 
 
+def _autor_verificado():
+    """Quien firma una accion. Sale de la SESION, nunca del cuerpo de la peticion.
+
+    El autor se tomaba de data.get('user'), es decir, de un campo que rellena el
+    cliente. Cualquiera con sesion valida podia borrar un plano firmando con el
+    nombre de otra persona mandando {"user": "Ing. Fulano"}. Un registro asi no
+    prueba nada, y era justo el registro con el que habia que investigar el
+    incidente de agosto.
+    """
+    from flask import g
+    return _docs_actor(getattr(g, 'current_user', None))
+
+
 def _parse_whatsapp_date(filename):
     match = WHATSAPP_FILENAME_RE.search(filename)
     if not match:
@@ -244,6 +257,7 @@ def _acceso_al_recurso(gcs_urn=None, node_id=None):
         if datos:
             recurso = str(datos.get('r') or '')
             if recurso and recurso in (str(gcs_urn or ''), str(node_id or '')):
+                _anotar_acceso(None, None, 'enlace firmado', gcs_urn, node_id)
                 return None
         return jsonify({"success": False, "error": "Enlace caducado o inválido"}), 403
 
@@ -251,6 +265,10 @@ def _acceso_al_recurso(gcs_urn=None, node_id=None):
     if not user:
         return jsonify({"success": False, "error": "Autenticación requerida"}), 401
     if user.get('role') == 'admin':
+        # Los administradores TAMBIEN quedan registrados. Un registro de accesos
+        # que se salta a quien mas puede no responde "quien tuvo acceso": deja
+        # justo el hueco por el que se colo el incidente de agosto.
+        _anotar_acceso(user, None, 'sesión (admin)', gcs_urn, node_id)
         return None
 
     # Se pregunta a TODAS las tablas que pueden poseer el objeto, no solo a
@@ -269,6 +287,7 @@ def _acceso_al_recurso(gcs_urn=None, node_id=None):
             # Duenos que solo guardan el id de obra (los puntos de control).
             if not ambito and obra_id:
                 if acceso_por_obra_id(cursor, user, obra_id):
+                    _anotar_acceso(user, None, 'sesión', gcs_urn, node_id)
                     return None
                 return jsonify({"success": False, "error": "Sin acceso a este documento"}), 403
     except Exception as e:
@@ -283,7 +302,24 @@ def _acceso_al_recurso(gcs_urn=None, node_id=None):
         return jsonify({"success": False, "error": "Documento no encontrado"}), 404
     if not verify_project_access(user, ambito):
         return jsonify({"success": False, "error": "Sin acceso a este documento"}), 403
+    _anotar_acceso(user, ambito, 'sesión', gcs_urn, node_id)
     return None
+
+
+def _anotar_acceso(user, ambito, via, gcs_urn, node_id):
+    """Deja constancia de que se entrego el acceso a un documento.
+
+    No habia ni una fila que dijera que alguien se habia llevado un plano, y es
+    lo primero que pide una supervision. Ver backend/registro_de_descargas.py:
+    lo que se registra es la ENTREGA DEL ACCESO, no la transferencia, porque los
+    bytes viajan despues contra el almacenamiento sin pasar por aqui.
+    """
+    try:
+        from registro_de_descargas import registrar
+        registrar(user, ambito, via, gcs_urn=gcs_urn, node_id=node_id,
+                  ip=request.headers.get('X-Forwarded-For', request.remote_addr))
+    except Exception:
+        pass   # el registro nunca puede impedir que se abra un documento
 
 
 @documents_bp.route('/api/docs/asset-tokens', methods=['POST'])
@@ -731,7 +767,7 @@ def promote_document_version():
     node_id = data.get('id')
     version_id = data.get('version_id')
     model_urn = data.get('model_urn', 'global')
-    performed_by = data.get('user')
+    performed_by = _autor_verificado()
 
     # Promocionar reescribe la versión actual del ítem: solo administradores
     from flask import g
@@ -760,7 +796,7 @@ def create_folder():
 
     folder_path = data['path']
     model_urn = data.get('model_urn', 'global')
-    performed_by = data.get('user', None)
+    performed_by = _autor_verificado()
 
     # ── TENANT ISOLATION ──
     from flask import g
@@ -822,7 +858,7 @@ def upload_document():
 
     folder_path = request.form.get('path', '')
     model_urn = request.form.get('model_urn', 'global')
-    performed_by = request.form.get('user', None)
+    performed_by = _autor_verificado()
     print(f"[Upload] Meta: path='{folder_path}', model_urn='{model_urn}', user='{performed_by}'")
 
     # ── TENANT ISOLATION ──
@@ -956,7 +992,7 @@ def delete_document():
     node_path = data['fullName']
     node_id = data.get('id')
     model_urn = data.get('model_urn', 'global')
-    performed_by = data.get('user', None)
+    performed_by = _autor_verificado()
 
     # ── TENANT ISOLATION: Verificar acceso al proyecto ──
     from flask import g
@@ -1031,7 +1067,7 @@ def rename_document():
                     return jsonify({"success": False, "error": "Invalid path"}), 400
                 old_name = parts[-1]
                 parent_path = '/'.join(parts[:-1])
-                parent_id = resolve_path_to_node_id(parent_path, model_urn, created_by=data.get('user')) if parent_path else None
+                parent_id = resolve_path_to_node_id(parent_path, model_urn, created_by=_autor_verificado()) if parent_path else None
                 
                 # Fetch node type and ID
                 if parent_id:
@@ -1077,7 +1113,7 @@ def rename_document():
 
         if updated:
             log_activity(model_urn, 'rename', 'file_or_folder',
-                         entity_name=new_name, performed_by=data.get('user'),
+                         entity_name=new_name, performed_by=_autor_verificado(),
                          details={'old_name': old_name, 'new_name': new_name})
             return jsonify({"success": True}), 200
 
@@ -1103,7 +1139,7 @@ def move_document():
     dest_path = data.get('destPath')
     
     model_urn = data.get('model_urn', 'global')
-    performed_by = data.get('user', None)
+    performed_by = _autor_verificado()
 
     # ── TENANT ISOLATION ──
     from flask import g
@@ -1246,14 +1282,14 @@ def confirm_upload():
     gcs_urn = data.get('gcs_urn')
     size_bytes = data.get('size_bytes', 0)
     mime_type = data.get('mime_type', 'application/octet-stream')
-    performed_by = data.get('user', None)
+    performed_by = _autor_verificado()
     custom_attributes = data.get('custom_attributes') or {}
     description = data.get('description')
 
     # ── TENANT ISOLATION ──
     from flask import g
     user = getattr(g, 'current_user', None)
-    performed_by = performed_by or _docs_actor(user)
+    performed_by = _autor_verificado()
     if user and not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
         
@@ -1493,7 +1529,7 @@ def start_whatsapp_multimedia_import():
 
     from flask import g
     user = getattr(g, 'current_user', None)
-    performed_by = data.get('user') or _docs_actor(user)
+    performed_by = _autor_verificado()
     if user and not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
 
@@ -1653,7 +1689,7 @@ def batch_update():
     action = data['action'] # 'SET_STATUS' | 'DELETE'
     new_status = data.get('status')
     model_urn = data.get('model_urn', 'global')
-    performed_by = data.get('user', None)
+    performed_by = _autor_verificado()
 
     # ── TENANT ISOLATION ──
     from flask import g
@@ -1737,7 +1773,7 @@ def update_node_description_route():
     node_id = data.get('node_id') or data.get('id')
     description = data.get('description')
     model_urn = data.get('model_urn', 'global')
-    performed_by = data.get('user', None)
+    performed_by = _autor_verificado()
 
     if not node_id:
         return jsonify({"success": False, "error": "node_id or id is required"}), 400
@@ -1817,7 +1853,7 @@ def restore_doc():
     data = request.get_json()
     node_id = data.get('id')
     model_urn = data.get('model_urn', 'global')
-    performed_by = data.get('user')
+    performed_by = _autor_verificado()
 
     if not node_id:
         return jsonify({"success": False, "error": "Missing ID"}), 400
@@ -1848,7 +1884,7 @@ def permanent_delete_doc():
     data = request.get_json()
     node_id = data.get('id')
     model_urn = data.get('model_urn', 'global')
-    performed_by = data.get('user')
+    performed_by = _autor_verificado()
 
     if not node_id:
         return jsonify({"success": False, "error": "Missing ID"}), 400
@@ -2253,6 +2289,60 @@ def force_init_permissions():
             return jsonify({"success": True, "message": "Tabla creada exitosamente."}) 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+
+@documents_bp.route('/api/docs/trazabilidad', methods=['GET'])
+def trazabilidad_de_documento():
+    """Todo lo que le ha pasado a UN documento: emisiones, cambios de estado y accesos.
+
+    Es el expediente que pide una supervisión sobre un plano concreto. Va por el
+    ID del documento y no por su nombre: el historial se indexaba por nombre, así
+    que renombrar un plano partía su historia en dos y la mitad se perdía.
+    """
+    node_id = request.args.get('id')
+    if not node_id:
+        return jsonify({"success": False, "error": "Falta el id del documento"}), 400
+    from flask import g
+    user = getattr(g, 'current_user', None)
+    if not user:
+        return jsonify({"success": False, "error": "Autenticación requerida"}), 401
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT model_urn, name, status, codigo_idoneidad, codigo_revision "
+                        "FROM file_nodes WHERE id = %s", (node_id,))
+            doc = cur.fetchone()
+            if not doc:
+                return jsonify({"success": False, "error": "Documento no encontrado"}), 404
+            # La obra sale del documento, no del parámetro que manda el cliente.
+            if not verify_project_access(user, doc[0]):
+                return jsonify({"success": False, "error": "Sin acceso a este documento"}), 403
+
+            cur.execute("""SELECT action, performed_by, details, created_at
+                             FROM activity_log
+                            WHERE entity_id = %s
+                            ORDER BY created_at DESC LIMIT 500""", (node_id,))
+            eventos = [{"accion": a, "por": p or "Sistema", "detalle": d or {},
+                        "cuando": c.isoformat() if c else None}
+                       for a, p, d, c in cur.fetchall()]
+
+            cur.execute("""SELECT version_number, codigo_revision, codigo_idoneidad,
+                                  emitida_en, emitida_por, created_at, created_by
+                             FROM file_versions WHERE file_node_id = %s
+                            ORDER BY version_number DESC""", (node_id,))
+            versiones = [{"version": v, "revision": r, "idoneidad": i,
+                          "emitida_en": e.isoformat() if e else None, "emitida_por": ep,
+                          "subida_en": c.isoformat() if c else None, "subida_por": cb}
+                         for v, r, i, e, ep, c, cb in cur.fetchall()]
+
+        return jsonify({"success": True,
+                        "documento": {"nombre": doc[1], "estado": doc[2],
+                                      "codigo_idoneidad": doc[3], "codigo_revision": doc[4]},
+                        "versiones": versiones,
+                        "eventos": eventos}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 @documents_bp.route('/api/docs/idoneidad', methods=['GET'])
 def catalogo_de_idoneidad():
