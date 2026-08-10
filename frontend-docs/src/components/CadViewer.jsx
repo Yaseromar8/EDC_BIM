@@ -69,6 +69,14 @@ export default function CadViewer({ file }) {
   const [phase, setPhase] = useState('preparando');   // preparando | traduciendo | listo | error
   const [progress, setProgress] = useState('');
   const [transcurrido, setTranscurrido] = useState(0);
+  const [puedeReintentar, setPuedeReintentar] = useState(false);
+  // Subirlo vuelve a lanzar el efecto de preparacion. Es la forma de
+  // reintentar sin duplicar la logica de arranque fuera del efecto.
+  const [intento, setIntento] = useState(0);
+  const [detalle, setDetalle] = useState('');
+  const [vistas, setVistas] = useState([]);
+  const [vistaActiva, setVistaActiva] = useState(null);
+  const documentoRef = useRef(null);
 
   // Un reloj que corre. Aunque Autodesk no de porcentaje durante el envio, ver
   // el tiempo avanzar es la diferencia entre "esta trabajando" y "se colgo".
@@ -122,8 +130,27 @@ export default function CadViewer({ file }) {
           `urn:${urn}`,
           (doc) => {
             if (cancelled) return;
-            const node = doc.getRoot().getDefaultGeometry();
+
+            // TODAS las vistas del modelo, no solo la primera. Un Revit trae
+            // dentro sus laminas y sus vistas 3D, y el visor cargaba la que
+            // Autodesk marca por defecto — que en un plano de obra suele ser la
+            // CARATULA. Se abria el modelo y lo que se veia era el membrete.
+            // ACC ofrece un selector; aqui no habia ninguno.
+            const raiz = doc.getRoot();
+            const todas = raiz.search({ type: 'geometry' }) || [];
+            documentoRef.current = doc;
+            setVistas(todas.map(v => ({
+              guid: v.data.guid,
+              nombre: v.data.name || 'Sin nombre',
+              tipo: v.data.role === '3d' ? '3D' : 'Lámina',
+            })));
+
+            // Se prefiere una vista 3D si la hay: es lo que se espera al abrir un
+            // modelo. Si el Revit no publica ninguna —pasa mas de lo que parece,
+            // depende de que vistas marque el modelador— se cae a la de siempre.
+            const node = todas.find(v => v.data.role === '3d') || raiz.getDefaultGeometry();
             if (!node) return fail('La traducción no produjo ninguna vista visible.');
+            setVistaActiva(node.data.guid);
             viewer.loadDocumentNode(doc, node).then(() => {
               if (cancelled) return;
               // Mismo sentido de scroll que el Visor 3D. El visor de Autodesk
@@ -156,7 +183,17 @@ export default function CadViewer({ file }) {
           return arrancar();
         }
         if (d.status === 'failed' || d.status === 'timeout') {
-          return fail('Autodesk no pudo traducir este dibujo: puede estar dañado o guardado en un formato que su traductor no admite.');
+          // El mensaje anterior acusaba SIEMPRE al archivo ("puede estar dañado"),
+          // y eso deja al usuario sin salida y buscando donde no es. Pasó de
+          // verdad con un Revit de 159 MB: Autodesk respondió "Tr worker fail to
+          // download", el fichero estaba intacto (mismo tamaño y misma firma que
+          // el original) y al reintentar tradujo sin tocar nada. Era un fallo
+          // suyo, transitorio.
+          setDetalle(d.detalle || '');
+          setPuedeReintentar(true);
+          return fail(d.detalle && /download|internal|timeout/i.test(d.detalle)
+            ? 'Autodesk no pudo procesarlo esta vez. Suele ser temporal: vuelve a intentarlo.'
+            : 'Autodesk no pudo traducir este dibujo: puede estar dañado o guardado en un formato que su traductor no admite.');
         }
         if (d.status === 'none') {
           // APS no tiene nada de este archivo: la subida no llegó a cuajar.
@@ -197,7 +234,7 @@ export default function CadViewer({ file }) {
       try { viewerRef.current?.finish(); } catch { /* el visor ya podría estar destruido */ }
       viewerRef.current = null;
     };
-  }, [file.id]);
+  }, [file.id, intento]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', background: '#2b2f36' }}>
@@ -220,6 +257,35 @@ export default function CadViewer({ file }) {
         </div>
       )}
 
+      {/* Selector de vista. Solo aparece si hay mas de una: en un plano suelto
+          estorbaria. */}
+      {phase === 'listo' && vistas.length > 1 && (
+        <select
+          value={vistaActiva || ''}
+          onChange={(e) => {
+            const v = vistas.find(x => x.guid === e.target.value);
+            const doc = documentoRef.current;
+            const viewer = viewerRef.current;
+            if (!v || !doc || !viewer) return;
+            const node = (doc.getRoot().search({ type: 'geometry' }) || [])
+              .find(n => n.data.guid === v.guid);
+            if (!node) return;
+            setVistaActiva(v.guid);
+            viewer.loadDocumentNode(doc, node);
+          }}
+          style={{
+            position: 'absolute', top: 12, left: 12, zIndex: 20, maxWidth: 380,
+            padding: '6px 10px', fontSize: 13, borderRadius: 5,
+            border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(28,32,38,0.94)',
+            color: '#dfe3e9', cursor: 'pointer',
+          }}
+        >
+          {vistas.map(v => (
+            <option key={v.guid} value={v.guid}>{v.tipo} · {v.nombre}</option>
+          ))}
+        </select>
+      )}
+
       {phase !== 'listo' && (
         <div style={{
           position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
@@ -232,6 +298,19 @@ export default function CadViewer({ file }) {
                 <circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12" y2="13" /><line x1="12" y1="16" x2="12" y2="16" />
               </svg>
               <div style={{ fontSize: 14, maxWidth: 460, lineHeight: 1.5 }}>{error}</div>
+              {detalle && (
+                <div style={{ fontSize: 12, color: '#8b939e', maxWidth: 460, fontFamily: 'monospace' }}>
+                  {detalle}
+                </div>
+              )}
+              {puedeReintentar && (
+                <button
+                  onClick={() => { setPuedeReintentar(false); setDetalle(''); setError(''); setTranscurrido(0); setPhase('preparando'); setIntento(n => n + 1); }}
+                  style={{ marginTop: 6, padding: '7px 18px', fontSize: 13, cursor: 'pointer',
+                           background: '#5f7fa3', color: '#fff', border: 'none', borderRadius: 5 }}>
+                  Volver a intentarlo
+                </button>
+              )}
               <a href={`${API}/api/docs/content/${file.id}`} download={file.name}
                  style={{ fontSize: 13, color: '#7fb3d5', marginTop: 4 }}>
                 Descargar el archivo original

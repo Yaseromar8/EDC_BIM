@@ -219,10 +219,16 @@ def _start_translation(token, urn, force=False, root_filename=None):
         },
     }
     if root_filename:
-        # El paquete es un ZIP: hay que decirle cual de los archivos manda.
-        # Los demas (ortofotos, xrefs) los resuelve el solo dentro del ZIP.
-        payload['input']['compressedUrn'] = True
-        payload['input']['rootFilename'] = root_filename
+        # SOLO si de verdad es un ZIP. 'compressedUrn' le dice a Autodesk "lo que
+        # te mande es un paquete: abrelo y busca dentro este archivo". Para un
+        # DWG que viaja con sus ortofotos es correcto; para un RVT suelto NO, y
+        # entonces Autodesk intenta descomprimir un fichero que no es un ZIP y
+        # responde 'Tr worker fail to download' — un mensaje que suena a problema
+        # de red y manda a buscar donde no es. Costo dos traducciones y una
+        # comparacion byte a byte del fichero descubrirlo.
+        if str(root_filename).lower().endswith('.zip'):
+            payload['input']['compressedUrn'] = True
+            payload['input']['rootFilename'] = root_filename
     cabeceras = {'Content-Type': 'application/json'}
     if force:
         cabeceras['x-ads-force'] = 'true'
@@ -451,6 +457,34 @@ def translate_cad():
 
     # Clave estable por version: re-traducir sobrescribe en vez de acumular.
     object_key = _object_key_for(node)
+
+    # ¿YA ESTA EL FICHERO EN AUTODESK? Antes no se preguntaba: se miraba solo el
+    # manifiesto, y si no habia manifiesto se volvia a subir TODO. Con un Revit de
+    # 159 MB eso son casi 400 segundos, el navegador se cansa antes y el usuario
+    # ve "no se pudo contactar con el servidor" — y al reintentar, vuelta a subir.
+    #
+    # El manifiesto y el objeto son dos cosas distintas: el fichero puede estar
+    # subido y la traduccion sin lanzar. Es exactamente el caso que se atascaba.
+    ya_subido = False
+    try:
+        det = requests.get(
+            '%s/oss/v2/buckets/%s/objects/%s/details' % (APS_BASE, bucket, object_key),
+            headers=_headers(token), timeout=30)
+        ya_subido = det.ok and (det.json().get('size') or 0) > 0
+    except Exception:
+        ya_subido = False
+
+    if ya_subido and not node.get('refs'):
+        print('[CAD] el fichero ya estaba en Autodesk: se lanza la traduccion sin volver a subir')
+        # Sin root_filename: este camino es para el fichero SUELTO, no para un
+        # paquete. Pasarlo aqui fue el error que hizo que Autodesk tratara un RVT
+        # de 159 MB como si fuera un ZIP.
+        ok, error = _start_translation(token, urn, force=forzar)
+        if error:
+            return jsonify({'success': False, 'error': error}), 502
+        _save_cad_meta(node, {'urn': urn, 'status': 'inprogress'})
+        return jsonify({'success': True, 'status': 'inprogress', 'urn': urn})
+
     raiz = None
     paquete = None
 
@@ -553,6 +587,13 @@ def cad_status():
         })
 
     payload = {'success': True, 'status': status, 'progress': progress, 'urn': urn}
+    if status in ('failed', 'timeout'):
+        # El motivo EXACTO de Autodesk. Sin esto, la pantalla acusaba siempre al
+        # archivo ("puede estar danado"), y hubo un caso real donde el fichero
+        # estaba intacto y el error decia 'Tr worker fail to download': un fallo
+        # suyo, transitorio, que al reintentar tradujo sin tocar nada. Acusar al
+        # archivo manda al usuario a buscar donde no es.
+        payload['detalle'] = _first_error(manifest) or ''
     if status == 'success' and cad.get('pkg_error'):
         payload['aviso'] = ('El plano se ve completo salvo la imagen adjunta, que '
                             'Autodesk no pudo procesar. Si la necesitas, subela en '
