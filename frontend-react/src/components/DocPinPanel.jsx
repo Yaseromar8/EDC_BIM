@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './DocPinPanel.css';
 import { apiFetch, getUploadAuthHeaders } from '../utils/apiFetch';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -226,19 +226,26 @@ const DocPinPanel = ({
     };
 
     // EFECTO: Análisis automático de títulos de planos faltantes
+    // Lo ya intentado, para NO repetirlo. Sin esto, un PDF cuyo analisis falla
+    // nunca guarda titulo, nunca sale del filtro de abajo, y se vuelve a pedir
+    // en cada pasada: un bucle de llamadas DE PAGO que no termina nunca.
+    const titulosIntentados = useRef(new Set());
+
     useEffect(() => {
         if (!pin?.docs || browsing) return;
 
         const docsToAnalyze = pin.docs.filter(d =>
             (d.type === 'pdf' || d.name?.toLowerCase().endsWith('.pdf')) &&
             !d.plano_titulo &&
-            d.nodeId
+            d.nodeId &&
+            !titulosIntentados.current.has(d.nodeId)
         );
 
         if (docsToAnalyze.length === 0) return;
 
         // Analizar solo de a uno para no saturar con 500s si hay errores de red/storage
         const doc = docsToAnalyze[0];
+        titulosIntentados.current.add(doc.nodeId);
 
         console.log(`[IA] Analizando título: ${doc.name}`);
         fetch(`${BACKEND_URL}/api/ai/analyze-title`, {
@@ -259,7 +266,16 @@ const DocPinPanel = ({
             })
             .catch(err => console.error("Error analizando título:", err));
 
-    }, [pin.id, pin.docs, onAttachDoc, browsing]);
+        // OJO CON ESTAS DEPENDENCIAS. Aqui estaba 'onAttachDoc', que App crea con
+        // una funcion flecha escrita en linea: es una funcion NUEVA en cada
+        // renderizado de App. Y App se renderiza mucho — tiene un latido cada 5
+        // segundos y varios sondeos. Resultado: este efecto se re-ejecutaba una y
+        // otra vez, y cada vuelta era una llamada de pago a Gemini.
+        //
+        // Hoy no explotaba porque la llamada usa fetch sin cabecera de sesion y
+        // /api/ai/* devuelve 401. Era una mina esperando a que alguien
+        // "arreglara" eso cambiando fetch por apiFetch.
+    }, [pin.id, pin.docs, browsing]);
 
     // Activa opacidad y la resetea tras 4 seg de inactividad
     const activateCmd = () => {

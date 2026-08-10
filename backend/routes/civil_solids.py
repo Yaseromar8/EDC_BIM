@@ -176,6 +176,17 @@ def civil_surfaces():
 
 @civil_solids_bp.route('/api/civil/extract-surfaces', methods=['POST'])
 def extract_surfaces_da():
+    # Lanzar un trabajo de Civil 3D en la nube se factura por MINUTOS DE MOTOR, y
+    # un trabajo atascado consume su tiempo maximo entero antes de rendirse. Esto
+    # no lo dispara cualquiera con sesion.
+    from flask import g as _g
+    _u = getattr(_g, 'current_user', None)
+    if not _u:
+        return jsonify({"error": "Autenticación requerida"}), 401
+    if _u.get('role') != 'admin':
+        return jsonify({"error": "Solo un administrador puede lanzar extracciones de Civil 3D."}), 403
+
+
     import base64 as _b64
     import json as _json
     import urllib.parse as _up

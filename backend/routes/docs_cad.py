@@ -120,8 +120,12 @@ def _upload_to_oss(token, bucket, object_key, source, size=None):
     if size:
         partes = max(1, (size + PART_SIZE - 1) // PART_SIZE)
 
+    # minutesExpiration=60, el maximo. Autodesk firma para DOS MINUTOS por
+    # defecto (se veia en la URL: X-Amz-Expires=119) y un modelo de obra no cabe
+    # en dos minutos: la URL caducaba a mitad de subida y el trozo moria con un
+    # EOF de SSL, que ademas no se parece en nada a "ha caducado".
     r = requests.get(
-        '%s/oss/v2/buckets/%s/objects/%s/signeds3upload?parts=%d'
+        '%s/oss/v2/buckets/%s/objects/%s/signeds3upload?parts=%d&minutesExpiration=60'
         % (APS_BASE, bucket, object_key, partes),
         headers=_headers(token), timeout=60)
     if not r.ok:
@@ -131,21 +135,37 @@ def _upload_to_oss(token, bucket, object_key, source, size=None):
     if not urls:
         return None, 'APS no devolvio URL de subida'
 
+    def _subir_trozo(url, datos, numero):
+        """Con reintentos. Un modelo de 300 MB cruzando la red de una obra se
+        corta: perder la subida entera por un corte de un trozo es tirar diez
+        minutos de espera del usuario."""
+        ultimo = None
+        for intento in range(3):
+            try:
+                put = requests.put(url, data=datos, timeout=1800)
+                if put.ok:
+                    return None
+                ultimo = 'Autodesk rechazo el bloque %d (%s)' % (numero, put.status_code)
+            except Exception as e:
+                ultimo = 'Se corto la conexion en el bloque %d: %s' % (numero, str(e)[:120])
+            time.sleep(2 * (intento + 1))
+        return ultimo
+
     if isinstance(source, (bytes, bytearray)):
         trozos = [source[i * PART_SIZE:(i + 1) * PART_SIZE] for i in range(len(urls))]
-        for url, trozo in zip(urls, trozos):
-            put = requests.put(url, data=trozo, timeout=1800)
-            if not put.ok:
-                return None, 'Fallo la subida a APS (%s)' % put.status_code
+        for i, (url, trozo) in enumerate(zip(urls, trozos), start=1):
+            fallo = _subir_trozo(url, trozo, i)
+            if fallo:
+                return None, fallo
     else:
         source.seek(0)
-        for url in urls:
+        for i, url in enumerate(urls, start=1):
             trozo = source.read(PART_SIZE)
             if not trozo:
                 break
-            put = requests.put(url, data=trozo, timeout=1800)
-            if not put.ok:
-                return None, 'Fallo la subida a APS (%s)' % put.status_code
+            fallo = _subir_trozo(url, trozo, i)
+            if fallo:
+                return None, fallo
 
     done = requests.post(
         '%s/oss/v2/buckets/%s/objects/%s/signeds3upload' % (APS_BASE, bucket, object_key),
@@ -397,7 +417,12 @@ def translate_cad():
     if not node['gcs_urn']:
         return jsonify({'success': False, 'error': 'El archivo no tiene contenido'}), 400
 
-    forzar = bool(data.get('force'))
+    # Forzar rehace la traduccion y la vuelve a cobrar aunque ya estuviera hecha.
+    # Venia del cliente sin mirar nada: bastaba mandar force=true en un bucle para
+    # gastar creditos a voluntad. Solo un administrador puede pedirlo.
+    from flask import g as _g
+    _u = getattr(_g, 'current_user', None)
+    forzar = bool(data.get('force')) and bool(_u and _u.get('role') == 'admin')
 
     token, error = get_internal_token()
     if error or not token:
@@ -443,13 +468,26 @@ def translate_cad():
         if error:
             return jsonify({'success': False, 'error': error}), 502
     else:
+        # A DISCO, no a memoria. Cargar un Revit de 300 MB entero en RAM, con
+        # varias peticiones a la vez y una instancia modesta, es como se queda
+        # sin memoria el backend. Los bytes solo se van a reenviar: no hace falta
+        # tenerlos todos a la vez.
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.cad')
         try:
-            content, _ctype = get_blob_data(node['gcs_urn'])
+            from gcs_manager import descargar_a_fichero
+            tam = descargar_a_fichero(node['gcs_urn'], tmp)
+            if not tam:
+                return jsonify({'success': False, 'error': 'El archivo esta vacio en GCS'}), 400
+            tmp.seek(0)
+            object_id, error = _upload_to_oss(token, bucket, object_key, tmp, size=tam)
         except Exception as e:
             return jsonify({'success': False, 'error': 'No se pudo leer de GCS: %s' % e}), 502
-        if not content:
-            return jsonify({'success': False, 'error': 'El archivo esta vacio en GCS'}), 400
-        object_id, error = _upload_to_oss(token, bucket, object_key, content)
+        finally:
+            try:
+                tmp.close()
+                os.unlink(tmp.name)
+            except Exception:
+                pass
         if error:
             return jsonify({'success': False, 'error': error}), 502
 

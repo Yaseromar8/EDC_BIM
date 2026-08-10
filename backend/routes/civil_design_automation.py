@@ -100,6 +100,17 @@ def extract_alignment():
     /api/civil/extract-curves es un alias explicito para la funcion de UI
     que extrae tangentes, arcos y espirales del alineamiento Civil 3D.
     """
+    # Lanzar un trabajo de Civil 3D en la nube se factura por MINUTOS DE MOTOR, y
+    # un trabajo atascado consume su tiempo maximo entero antes de rendirse. Esto
+    # no lo dispara cualquiera con sesion.
+    from flask import g as _g
+    _u = getattr(_g, 'current_user', None)
+    if not _u:
+        return jsonify({"error": "Autenticación requerida"}), 401
+    if _u.get('role') != 'admin':
+        return jsonify({"error": "Solo un administrador puede lanzar extracciones de Civil 3D."}), 403
+
+
     try:
         data = request.json
         urn = data.get('urn')
@@ -268,6 +279,17 @@ def extract_sections_test():
     Endpoint experimental aislado para probar la extracción de secciones transversales
     y volúmenes desde Civil 3D, sin afectar el pipeline de alineamientos principal.
     """
+    # Lanzar un trabajo de Civil 3D en la nube se factura por MINUTOS DE MOTOR, y
+    # un trabajo atascado consume su tiempo maximo entero antes de rendirse. Esto
+    # no lo dispara cualquiera con sesion.
+    from flask import g as _g
+    _u = getattr(_g, 'current_user', None)
+    if not _u:
+        return jsonify({"error": "Autenticación requerida"}), 401
+    if _u.get('role') != 'admin':
+        return jsonify({"error": "Solo un administrador puede lanzar extracciones de Civil 3D."}), 403
+
+
     try:
         data = request.json
         urn = data.get('urn')

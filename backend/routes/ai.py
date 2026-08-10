@@ -12,6 +12,8 @@ import traceback
 from google.cloud import discoveryengine_v1beta as discoveryengine
 import json
 import re
+
+from rate_limit import limite
 from skills.pdf_researcher import PDFResearcher
 
 
@@ -171,6 +173,7 @@ def _process_pdf(pdf_bytes: bytes) -> dict:
 
 # ─── Endpoint: Precarga (warmup) ──────────────────────────────────────────────
 @ai_bp.route('/api/ai/warmup', methods=['POST'])
+@limite('120 per hour')
 def warmup_document():
     """
     Descarga, analiza y cachea el PDF (texto o imágenes según tipo).
@@ -224,6 +227,7 @@ def warmup_document():
 
 # ─── Endpoint: Preguntar a Gemini ─────────────────────────────────────────────
 @ai_bp.route('/api/ai/ask', methods=['POST'])
+@limite('40 per hour')
 def ask_document():
     data = request.get_json()
     if not data:
@@ -396,6 +400,7 @@ def save_ai_feedback():
 
 
 @ai_bp.route('/api/ai/universal-search', methods=['POST'])
+@limite('40 per hour')
 def universal_search():
     """
     Realiza una búsqueda inteligente en todo el proyecto usando el motor RAG de Vertex AI.
@@ -644,6 +649,7 @@ Responde en ESPAÑOL:
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 @ai_bp.route('/api/ai/analyze-title', methods=['POST'])
+@limite('60 per hour')
 def analyze_drawing_title():
     """
     Analiza la primera página de un PDF para extraer el Título del Plano del membrete.
@@ -674,7 +680,12 @@ def analyze_drawing_title():
     try:
         # Usamos flash para que sea instantáneo
         ensure_vertex()
-        model = GenerativeModel("gemini-1.5-pro") # Trying pro for title analysis if available
+        # Flash, no pro. Esto lee un ROTULO: el numero y el titulo del cajetin de
+        # un plano. Es de las tareas mas sencillas que hay, y el modelo pro
+        # cuesta del orden de diez veces mas por la misma respuesta. El
+        # comentario que habia aqui decia "usamos flash" mientras el codigo
+        # pedia pro.
+        model = GenerativeModel("gemini-2.0-flash")
         
         # Descargamos solo para procesar la primera página
         pdf_bytes = _download_pdf(gcs_urn, bucket_name)
