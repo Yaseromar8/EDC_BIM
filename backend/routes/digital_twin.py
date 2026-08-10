@@ -660,6 +660,101 @@ def update_all_models():
     return jsonify({'results': results, 'summary': summary, 'config': config})
 
 
+# ─── SUBIDA DIRECTA DESDE EL NAVEGADOR ───────────────────────────────────────
+# Como lo hace Tandem: los bytes van del navegador A AMAZON, sin pasar por
+# nuestro backend.
+#
+# POR QUE IMPORTA AQUI, y no es una elegancia: el backend corre con 4 workers y
+# 2 hilos, o sea OCHO peticiones simultaneas para TODA la plataforma. Una subida
+# de 300 MB que atraviese el backend retiene uno de esos ocho hilos varios
+# minutos y ademas se lee entera en memoria. Dos o tres modelos a la vez y se
+# queda sin aire el portal entero: documentos, fotos de campo, LOB.
+#
+# Con la URL firmada, el backend solo hace dos llamadas cortas -- firmar y
+# cerrar -- y los megas viajan por su cuenta.
+
+@digital_twin_bp.route('/api/modelos/firmar-subida', methods=['POST'])
+def firmar_subida_de_modelo():
+    """Devuelve las URL firmadas para que el navegador suba el modelo a S3."""
+    from flask import g
+    from routes.docs_cad import PART_SIZE, APS_BASE, _headers
+    d = request.get_json() or {}
+    nombre = (d.get('filename') or '').strip()
+    try:
+        tamano = int(d.get('size') or 0)
+    except (TypeError, ValueError):
+        tamano = 0
+    if not nombre or tamano <= 0:
+        return jsonify({'error': 'Falta el nombre o el tamaño del archivo'}), 400
+
+    # Traducir un modelo cuesta creditos de la cuenta de Autodesk que paga el
+    # usuario. Esto no lo dispara cualquiera con sesion.
+    user = getattr(g, 'current_user', None)
+    if not user:
+        return jsonify({'error': 'Autenticación requerida'}), 401
+    if user.get('role') != 'admin':
+        return jsonify({'error': 'Solo un administrador puede publicar modelos al visor.'}), 403
+
+    token, error = get_internal_token()
+    if error or not token:
+        return jsonify({'error': 'Autenticación con Autodesk fallida', 'details': error}), 500
+    bucket = get_app_bucket_key()
+    if not ensure_bucket_exists(bucket, token):
+        return jsonify({'error': 'No se pudo preparar el almacén de Autodesk'}), 500
+
+    object_key = f"{int(time.time())}_{secure_filename(nombre)}"
+    partes = max(1, (tamano + PART_SIZE - 1) // PART_SIZE)
+    # 60 minutos, el maximo. El valor por defecto de Autodesk son DOS, y con eso
+    # una subida de obra caduca a mitad de camino.
+    r = requests.get(
+        f'{APS_BASE}/oss/v2/buckets/{bucket}/objects/{object_key}/signeds3upload'
+        f'?parts={partes}&minutesExpiration=60',
+        headers=_headers(token), timeout=60)
+    if not r.ok:
+        return jsonify({'error': f'Autodesk no dio la URL de subida: {r.text[:200]}'}), 502
+    info = r.json()
+    return jsonify({
+        'objectKey': object_key,
+        'uploadKey': info.get('uploadKey'),
+        'urls': info.get('urls') or [],
+        'partSize': PART_SIZE,
+    })
+
+
+@digital_twin_bp.route('/api/modelos/cerrar-subida', methods=['POST'])
+def cerrar_subida_de_modelo():
+    """Cierra la subida contra Autodesk y lanza la traducción."""
+    from flask import g
+    from routes.docs_cad import APS_BASE, _headers, _urn_of
+    d = request.get_json() or {}
+    object_key, upload_key = d.get('objectKey'), d.get('uploadKey')
+    if not object_key or not upload_key:
+        return jsonify({'error': 'Falta objectKey o uploadKey'}), 400
+
+    user = getattr(g, 'current_user', None)
+    if not user or user.get('role') != 'admin':
+        return jsonify({'error': 'Solo un administrador puede publicar modelos al visor.'}), 403
+
+    token, error = get_internal_token()
+    if error or not token:
+        return jsonify({'error': 'Autenticación con Autodesk fallida'}), 500
+    bucket = get_app_bucket_key()
+
+    # Este paso es OBLIGATORIO aunque el fichero haya ido en un solo trozo: hasta
+    # que no se cierra, para Autodesk el objeto no existe.
+    done = requests.post(
+        f'{APS_BASE}/oss/v2/buckets/{bucket}/objects/{object_key}/signeds3upload',
+        headers=_headers(token, {'Content-Type': 'application/json'}),
+        json={'uploadKey': upload_key}, timeout=300)
+    if not done.ok:
+        return jsonify({'error': f'Autodesk rechazó el cierre: {done.text[:200]}'}), 502
+
+    urn = _urn_of(done.json().get('objectId'))
+    lanzada = trigger_translation(urn, token, filename=d.get('filename') or object_key)
+    return jsonify({'status': 'uploaded', 'urn': urn,
+                    'translation_triggered': bool(lanzada)})
+
+
 @digital_twin_bp.route('/api/config/project/upload', methods=['POST'])
 def upload_local_model():
     try:

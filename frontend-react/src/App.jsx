@@ -2882,14 +2882,41 @@ function App() {
     setRelinkTargetModel(null);
     const report = (p, msg) => { try { onProgress?.(p, msg); } catch (e) { /* noop */ } };
 
-    // Fase 1: subir (el % de red se mapea a 0–60)
-    report(2, 'Subiendo archivo…');
-    const url = `${BACKEND_URL}/api/config/project/upload`;
-    const data = await uploadFile(file, url, {
-      onProgress: (p) => report(Math.round((p || 0) * 0.6), 'Subiendo archivo…'),
-      formData: { label, project: selectedProject.id }
+    // Fase 1: subir DIRECTO A AMAZON con URL firmada (el % de red va de 0 a 60).
+    //
+    // Los bytes ya no pasan por nuestro backend. No es una elegancia: el backend
+    // corre con 4 workers x 2 hilos, o sea OCHO peticiones simultáneas para toda
+    // la plataforma. Un modelo de 300 MB atravesándolo retenía uno de esos ocho
+    // hilos varios minutos y además se leía entero en memoria; dos o tres a la
+    // vez dejaban sin aire al portal, las fotos y el LOB. Ahora el backend solo
+    // firma y cierra, que son dos llamadas cortas.
+    report(2, 'Preparando la subida…');
+    const fRes0 = await apiFetch(`${BACKEND_URL}/api/modelos/firmar-subida`, {
+      method: 'POST',
+      body: JSON.stringify({ filename: file.name, size: file.size, project: selectedProject.id })
     });
-    if (!data?.urn) throw new Error(data?.error || 'El upload no devolvió URN.');
+    const firma = await fRes0.json().catch(() => ({}));
+    if (!fRes0.ok || !firma.urls?.length) {
+      throw new Error(firma.error || 'No se pudo preparar la subida.');
+    }
+
+    report(4, 'Subiendo archivo…');
+    const trozo = firma.partSize;
+    for (let i = 0; i < firma.urls.length; i++) {
+      const parte = file.slice(i * trozo, (i + 1) * trozo);
+      const put = await fetch(firma.urls[i], { method: 'PUT', body: parte });
+      if (!put.ok) throw new Error(`Falló la subida del bloque ${i + 1} de ${firma.urls.length}.`);
+      report(4 + Math.round(((i + 1) / firma.urls.length) * 56), 'Subiendo archivo…');
+    }
+
+    report(60, 'Cerrando la subida…');
+    const fRes1 = await apiFetch(`${BACKEND_URL}/api/modelos/cerrar-subida`, {
+      method: 'POST',
+      body: JSON.stringify({ objectKey: firma.objectKey, uploadKey: firma.uploadKey,
+                             filename: file.name, label, project: selectedProject.id })
+    });
+    const data = await fRes1.json().catch(() => ({}));
+    if (!fRes1.ok || !data?.urn) throw new Error(data?.error || 'El upload no devolvió URN.');
 
     // Fase 2: sondear traducción → finalize agrega el modelo y encola extracción
     report(62, 'Traduciendo en ACC…');
