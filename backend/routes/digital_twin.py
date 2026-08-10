@@ -151,14 +151,23 @@ def delete_model_from_db(urn, app_project_id=None):
 
 POINT_CLOUD_EXTENSIONS = {'.laz', '.las', '.e57', '.rcp', '.rcs', '.pts', '.ptx', '.xyz'}
 
-def trigger_translation(urn, token, filename=''):
-    """Triggers SVF translation for a given URN. Handles both BIM and point cloud files."""
+def trigger_translation(urn, token, filename='', forzar=False):
+    """Lanza la traduccion SVF de un URN. Vale para modelos y para nubes de puntos.
+
+    SIN forzar por defecto. 'x-ads-force' obliga a Autodesk a rehacer la
+    traduccion desde cero AUNQUE YA ESTUVIERA HECHA, y cada trabajo se cobra
+    (0,5 creditos un Revit o un IFC). Estaba puesto a 'true' fijo: cada reintento
+    del usuario, cada recarga de la pantalla que dispare esto, vuelve a pagar por
+    un trabajo que ya estaba pagado. Se fuerza solo cuando de verdad se quiere
+    rehacer.
+    """
     url = 'https://developer.api.autodesk.com/modelderivative/v2/designdata/job'
     headers = {
-        'Authorization': f'Bearer {token}', 
+        'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json',
-        'x-ads-force': 'true'
     }
+    if forzar:
+        headers['x-ads-force'] = 'true'
     
     # Detect file type by extension
     ext = os.path.splitext(filename.lower())[1] if filename else ''
@@ -673,20 +682,29 @@ def upload_local_model():
              return jsonify({'error': 'Could not create bucket'}), 500
         
         object_name = f"{int(time.time())}_{secure_filename(file.filename)}"
-        url = f'https://developer.api.autodesk.com/oss/v2/buckets/{bucket_key}/objects/{object_name}'
-        
-        file_content = file.read()
-        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/octet-stream'}
-        up_resp = requests.put(url, headers=headers, data=file_content)
-        
-        if not up_resp.ok:
-            return jsonify({'error': f"Upload failed: {up_resp.text}"}), 500
-            
-        object_data = up_resp.json()
-        object_id = object_data.get('objectId')
-        
-        urn_bytes = base64.urlsafe_b64encode(object_id.encode('utf-8'))
-        urn = urn_bytes.decode('utf-8').rstrip('=')
+
+        # ── POR QUE ESTO CAMBIO ──────────────────────────────────────────────
+        # Aqui habia un PUT directo a /oss/v2/buckets/{bucket}/objects/{objeto}
+        # con los bytes en el cuerpo. Autodesk RETIRO ese endpoint el 31 de
+        # diciembre de 2022: ya no se pasan binarios por su proxy. Desde
+        # entonces, subir un modelo desde el visor fallaba aqui.
+        #
+        # El camino correcto (pedir URL firmada de S3, subir a Amazon, y cerrar
+        # la subida contra APS) YA estaba escrito en este mismo repositorio, en
+        # routes/docs_cad.py, funcionando para los resultados de Civil 3D. Se
+        # reutiliza en vez de escribirlo por segunda vez: dos copias del mismo
+        # flujo es como se llego a tener una version viva y otra muerta.
+        from routes.docs_cad import _upload_to_oss, _urn_of
+
+        file.stream.seek(0, 2)
+        tamano = file.stream.tell()
+        file.stream.seek(0)
+        object_id, fallo = _upload_to_oss(token, bucket_key, object_name,
+                                          file.stream, size=tamano)
+        if fallo:
+            return jsonify({'error': f"Upload failed: {fallo}"}), 500
+
+        urn = _urn_of(object_id)
         
         translation_triggered = trigger_translation(urn, token, filename=file.filename)
 

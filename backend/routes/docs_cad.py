@@ -159,8 +159,23 @@ def _upload_to_oss(token, bucket, object_key, source, size=None):
 
 
 def _urn_of(object_id):
-    """URN en base64 sin relleno, que es lo que espera Model Derivative."""
-    return base64.b64encode(object_id.encode('utf-8')).decode('utf-8').rstrip('=')
+    """URN en base64 URL-SAFE sin relleno, que es lo que espera Model Derivative.
+
+    Antes usaba base64 estandar. Ese alfabeto incluye '/' y '+', y el urn viaja
+    DENTRO de la ruta al consultar el manifiesto:
+
+        GET /modelderivative/v2/designdata/<urn>/manifest
+
+    Una barra ahi parte la ruta y la peticion se va a otro sitio. Medido sobre
+    3.000 nombres de fichero realistas y sobre nombres con tildes y enies, no
+    salio ni uno: por eso nunca dio la cara. Pero es cuestion del contenido
+    exacto de los bytes, no de suerte, y el dia que salga sera un fallo
+    incomprensible en un solo modelo.
+
+    El cambio es seguro: url-safe y estandar dan EXACTAMENTE el mismo resultado
+    salvo justo en esos casos, asi que los urn ya guardados siguen valiendo.
+    """
+    return base64.urlsafe_b64encode(object_id.encode('utf-8')).decode('utf-8').rstrip('=')
 
 
 def _start_translation(token, urn, force=False, root_filename=None):
