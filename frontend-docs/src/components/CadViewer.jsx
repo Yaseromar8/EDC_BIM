@@ -46,11 +46,39 @@ function loadViewerScript() {
   return viewerScriptPromise;
 }
 
+// Autodesk devuelve el avance como texto ("35% complete", "complete"). Se saca
+// el numero para poder pintar una barra; si no hay numero, se devuelve null y se
+// vuelve al giro.
+function porcentajeDe(texto) {
+  if (!texto) return null;
+  if (/complete/i.test(texto) && !/\d/.test(texto)) return 100;
+  const m = String(texto).match(/(\d{1,3})\s*%/);
+  if (!m) return null;
+  return Math.min(100, Math.max(0, parseInt(m[1], 10)));
+}
+
+function formatoReloj(segundos) {
+  const m = Math.floor(segundos / 60);
+  const s = segundos % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 export default function CadViewer({ file }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
   const [phase, setPhase] = useState('preparando');   // preparando | traduciendo | listo | error
   const [progress, setProgress] = useState('');
+  const [transcurrido, setTranscurrido] = useState(0);
+
+  // Un reloj que corre. Aunque Autodesk no de porcentaje durante el envio, ver
+  // el tiempo avanzar es la diferencia entre "esta trabajando" y "se colgo".
+  useEffect(() => {
+    if (phase === 'listo' || phase === 'error') return undefined;
+    const t = setInterval(() => setTranscurrido(x => x + 1), 1000);
+    return () => clearInterval(t);
+  }, [phase]);
+
+  const pct = porcentajeDe(progress);
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
 
@@ -211,14 +239,27 @@ export default function CadViewer({ file }) {
             </>
           ) : (
             <>
-              <div className="adsk-spinner" />
+              {/* Un giro sin numeros no dice si avanza o si se colgo, y es lo que
+                  desespera al que espera. Aqui hay siempre algo que se mueve:
+                  durante el envio, el reloj y el tamano; durante la traduccion,
+                  el porcentaje real que da Autodesk. */}
+              {pct === null ? <div className="adsk-spinner" /> : (
+                <div style={{ width: 260, height: 6, background: '#3a3f47', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: '#7fb3d5', transition: 'width .4s' }} />
+                </div>
+              )}
               <div style={{ fontSize: 14 }}>
-                {phase === 'preparando' ? 'Preparando el archivo…' : 'Traduciendo el CAD…'}
-                {progress ? ` ${progress}` : ''}
+                {phase === 'preparando' ? 'Enviando el archivo a Autodesk…' : 'Traduciendo el modelo…'}
+                {pct !== null ? ` ${pct}%` : (progress ? ` ${progress}` : '')}
               </div>
-              <div style={{ fontSize: 12, color: '#98a1ad', maxWidth: 420, lineHeight: 1.5 }}>
-                La primera vez tarda unos minutos según el tamaño. Las siguientes
-                aperturas son inmediatas.
+              <div style={{ fontSize: 12, color: '#98a1ad', display: 'flex', gap: 14 }}>
+                <span>{formatoReloj(transcurrido)}</span>
+                {file?.size ? <span>{(file.size / 1048576).toFixed(0)} MB</span> : null}
+              </div>
+              <div style={{ fontSize: 12, color: '#98a1ad', maxWidth: 430, lineHeight: 1.5 }}>
+                {phase === 'preparando'
+                  ? 'Todavía no hay porcentaje: Autodesk no conoce el archivo hasta que termina el envío. Va por tamaño.'
+                  : 'La primera vez tarda unos minutos según el tamaño. Las siguientes aperturas son inmediatas.'}
               </div>
             </>
           )}
