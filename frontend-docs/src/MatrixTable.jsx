@@ -334,6 +334,20 @@ const TableRow = ({ index, style, data }) => {
             >
               {item.name || 'Sin nombre'}
             </span>
+            {/* Reservado para editar. Se ve en la fila, sin abrir nada: quien va a
+                trabajar en un documento tiene que enterarse ANTES de empezar, no
+                cuando ya ha invertido dos horas y le rechazan la subida. */}
+            {item.bloqueado_por && (
+              <span
+                title={`Reservado por ${item.bloqueado_por}` + (item.bloqueado_en ? ` desde el ${new Date(item.bloqueado_en).toLocaleDateString()}` : '')}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, color: '#b26a00', fontSize: 11 }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                {String(item.bloqueado_por).split('@')[0]}
+              </span>
+            )}
             {isAdmin && !isGrey && (
               <svg 
                 className="pencil-icon-acc name-pencil" 

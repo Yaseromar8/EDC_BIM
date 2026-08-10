@@ -87,7 +87,8 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                        COALESCE(fn.updated_by, fn.created_by, 'Sistema') as u_by,
                        fp.permission_level,
                        EXISTS(SELECT 1 FROM file_nodes c WHERE c.model_urn = fn.model_urn AND c.parent_id = fn.id AND c.is_deleted = FALSE) AS has_children,
-                       fn.codigo_idoneidad, fn.codigo_revision, fn.nomenclatura_ok
+                       fn.codigo_idoneidad, fn.codigo_revision, fn.nomenclatura_ok,
+                       fn.bloqueado_por, fn.bloqueado_en
                 FROM file_nodes fn
                 LEFT JOIN folder_permissions fp 
                     ON fn.id = fp.folder_node_id AND fp.user_id = %s
@@ -105,7 +106,8 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                        COALESCE(updated_by, created_by, 'Sistema') as u_by,
                        NULL as permission_level,
                        EXISTS(SELECT 1 FROM file_nodes c WHERE c.model_urn = file_nodes.model_urn AND c.parent_id = file_nodes.id AND c.is_deleted = FALSE) AS has_children,
-                       codigo_idoneidad, codigo_revision, nomenclatura_ok
+                       codigo_idoneidad, codigo_revision, nomenclatura_ok,
+                       bloqueado_por, bloqueado_en
                 FROM file_nodes 
                 WHERE model_urn = %s AND {parent_cond} AND is_deleted = FALSE
                 ORDER BY node_type DESC, name ASC
@@ -133,7 +135,8 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
         for row in rows:
             (r_id, r_name, r_type, r_size, r_version, r_updated, r_gcs, r_status, r_tags,
              r_metadata, r_description, r_mime, r_created, r_u_by, r_perm, r_has_children,
-             r_idoneidad, r_revision, r_nomenclatura) = row
+             r_idoneidad, r_revision, r_nomenclatura,
+             r_bloqueado_por, r_bloqueado_en) = row
             bp = base_path if base_path.endswith('/') else (base_path + '/' if base_path else '')
             full_name = f"{bp}{r_name}" + ("/" if r_type == 'FOLDER' else "")
             
@@ -187,6 +190,9 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                         "codigo_revision": r_revision,
                         "codigo_idoneidad": r_idoneidad,
                         "nomenclatura_ok": r_nomenclatura,
+                        # Quien lo tiene reservado para editar, si alguien lo tiene.
+                        "bloqueado_por": r_bloqueado_por,
+                        "bloqueado_en": r_bloqueado_en.isoformat() if r_bloqueado_en else None,
                         "tags": r_tags or [],
                         "metadata": r_metadata or {},
                         "custom_attributes": r_metadata or {},
@@ -332,6 +338,11 @@ def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mim
 
         if existing:
             f_id, f_v, estado_previo = existing
+            # Subir una version nueva sobre un documento que otro tiene reservado
+            # es justo la forma de perder trabajo que la reserva evita.
+            from bloqueo_de_edicion import comprobar_libre
+            comprobar_libre(cursor, f_id, {'email': created_by},
+                            'subir una versión nueva')
             new_v = f_v + 1
             # Una version nueva vuelve a ser trabajo en curso: lo que se reviso y
             # se aprobo fue la version anterior, no esta. Y como aqui se pierde la

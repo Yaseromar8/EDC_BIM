@@ -224,6 +224,14 @@ def transicionar(cursor, model_urn, ids, nuevo, usuario, motivo_del_cambio=None,
             raise TransicionRechazada(
                 f"No tienes permiso suficiente sobre «{nombre}».", documento=str(node_id)
             )
+        # Si otra persona lo tiene reservado para editarlo, cambiarle el estado
+        # por debajo seria exactamente lo que la reserva viene a evitar.
+        from bloqueo_de_edicion import comprobar_libre, DocumentoReservado
+        try:
+            comprobar_libre(cursor, node_id, usuario, 'cambiar el estado')
+        except DocumentoReservado as reservado:
+            raise TransicionRechazada(f"«{nombre}»: {reservado.motivo}",
+                                      documento=str(node_id))
         cambiados.append((str(node_id), nombre, actual))
 
     if not cambiados:

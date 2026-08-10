@@ -651,6 +651,10 @@ TABLAS = [
 # el destino no existian. Es el mismo problema que las tablas que faltaban, en
 # pequeno, y con el mismo efecto: la plataforma no se puede reproducir.
 COLUMNAS_PENDIENTES = [
+    # Reserva de edicion: quien tiene el documento cogido y desde cuando. Ver
+    # backend/bloqueo_de_edicion.py.
+    ('file_nodes', 'bloqueado_por', 'VARCHAR(255)'),
+    ('file_nodes', 'bloqueado_en', 'TIMESTAMP WITH TIME ZONE'),
     ('tracking_progress', 'fecha_actualizacion',
      'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP'),
     ('tracking_details', 'tracking_id', 'INTEGER'),

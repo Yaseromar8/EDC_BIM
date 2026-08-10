@@ -741,6 +741,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         projectPrefix={projectPrefix} isAdmin={isAdmin} onClose={() => vh.setTableShowVersions(false)} onPromote={vh.handlePromote} />
 
       <ContextMenu activeRowMenu={fe.activeRowMenu} menuRef={fe.menuRef} isAdmin={isAdmin} projectPrefix={projectPrefix}
+        user={user} onRefresh={() => fe.triggerRefresh(fe.currentPath)}
         onClose={() => { fe.setActiveRowMenu(null); fe.setRightClickedId(null); }}
         onCreateChild={(id) => fe.setCreatingChildParentId(id)}
         onOpenPermissions={(item) => fe.setPermissionsFolder(item)}

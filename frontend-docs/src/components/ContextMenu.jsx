@@ -6,12 +6,16 @@
 import React from 'react';
 import { downloadFolderAsZip } from '../utils/downloadUtils';
 import { API } from '../utils/helpers';
+import { apiFetch } from '../utils/apiFetch';
+import toast from 'react-hot-toast';
 
 export default function ContextMenu({
   activeRowMenu,
   menuRef,
   isAdmin,
   projectPrefix,
+  user,
+  onRefresh,
   // Action callbacks
   onClose,
   onCreateChild,
@@ -49,6 +53,30 @@ export default function ContextMenu({
         <button onClick={() => { onClose(); onOpenPermissions(item); }}>
           <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
           Configuración de permisos
+        </button>
+      )}
+      {item.node_type !== 'FOLDER' && (
+        <button onClick={async () => {
+          onClose();
+          const tengoYo = item.bloqueado_por && item.bloqueado_por === (user?.email || user?.name);
+          try {
+            const res = await apiFetch(`${API}/api/docs/reservar`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: item.id, model_urn: projectPrefix, liberar: !!item.bloqueado_por, forzar: !!item.bloqueado_por && !tengoYo })
+            });
+            const d = await res.json();
+            if (!d.success) { toast.error(d.error || 'No se pudo cambiar la reserva'); return; }
+            toast.success(item.bloqueado_por ? 'Reserva liberada' : 'Reservado para ti');
+            if (onRefresh) onRefresh();
+          } catch (e) { toast.error('Error de red'); }
+        }}>
+          <div className="menu-icon">
+            {item.bloqueado_por
+              ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+              : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>}
+          </div>
+          {item.bloqueado_por ? 'Liberar reserva' : 'Reservar para editar'}
         </button>
       )}
       {isAdmin && (

@@ -2313,6 +2313,45 @@ def force_init_permissions():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+@documents_bp.route('/api/docs/reservar', methods=['POST'])
+def reservar_documento():
+    """Reserva un documento mientras alguien lo edita (el «check out» de ACC).
+
+    No habia nada parecido: dos personas abrian el mismo Word y la segunda que
+    subia pisaba a la primera. El versionado no perdia el dato -- la version
+    anterior sobrevive -- pero si el TRABAJO de quien fue pisado.
+    """
+    from flask import g
+    from bloqueo_de_edicion import reservar, liberar, DocumentoReservado
+    d = request.get_json() or {}
+    node_id, model_urn = d.get('id'), d.get('model_urn', 'global')
+    soltar = bool(d.get('liberar'))
+    user = getattr(g, 'current_user', None)
+    if not node_id:
+        return jsonify({"success": False, "error": "Falta el documento"}), 400
+    if not verify_project_access(user, model_urn):
+        return jsonify({"success": False, "error": "Sin acceso a esta obra."}), 403
+    # Reservar es un acto de edicion: quien solo puede mirar no bloquea a nadie.
+    rbac = check_folder_permission(user, node_id, model_urn, 'edit',
+                                   'reservar documentos para editarlos')
+    if rbac:
+        return rbac
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            if soltar:
+                r = liberar(cur, model_urn, node_id, user, forzar=bool(d.get('forzar')))
+            else:
+                r = reservar(cur, model_urn, node_id, user)
+            conn.commit()
+        return jsonify({"success": True, **r}), 200
+    except DocumentoReservado as e:
+        return jsonify({"success": False, "error": e.motivo, "bloqueado_por": e.por}), 409
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @documents_bp.route('/api/docs/nomenclatura', methods=['GET', 'PUT'])
 def config_de_nomenclatura():
     """La convención de nombres de esta obra: leerla y ajustarla.
