@@ -82,13 +82,62 @@ VISUAL_DPI       = 150    # resolución del render (150 DPI = buena calidad / pe
 
 # ─── Helpers de caché ─────────────────────────────────────────────────────────
 
+def _asegurar_tabla_cache():
+    """Tabla de documentos ya preparados para la IA."""
+    from db import get_db_connection
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ia_documentos_preparados (
+                gcs_urn     TEXT PRIMARY KEY,
+                tipo        VARCHAR(10) NOT NULL,
+                texto       TEXT,
+                imagenes    BYTEA[],
+                paginas     INTEGER,
+                preparado   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+
 def _get_cached(full_path: str):
+    """Primero la memoria del proceso, luego la base.
+
+    La cache vivia SOLO en memoria de cada worker de gunicorn. Con 4 workers, el
+    mismo documento se preparaba hasta 4 veces -- cada una bajandose el PDF entero
+    de Cloud Storage -- y todo se perdia en cada redespliegue. Es la razon de que
+    el camino caro (mandar el PDF completo al modelo) fuera el habitual en vez de
+    la excepcion.
+    """
     with _cache_lock:
         entry = _pdf_cache.get(full_path)
         if entry and (time.time() - entry["ts"]) < PDF_CACHE_TTL:
             return entry
         if entry:
             del _pdf_cache[full_path]
+
+    try:
+        from db import get_db_connection
+        _asegurar_tabla_cache()
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT tipo, texto, imagenes, paginas FROM ia_documentos_preparados "
+                        "WHERE gcs_urn = %s", (full_path,))
+            fila = cur.fetchone()
+        if not fila:
+            return None
+        tipo, texto, imagenes, paginas = fila
+        entry = {"type": tipo, "pages": paginas or 0, "ts": time.time()}
+        if tipo == "text":
+            entry["text"] = texto or ""
+        else:
+            entry["images"] = [bytes(i) for i in (imagenes or [])]
+        with _cache_lock:
+            _pdf_cache[full_path] = entry      # y se sube a memoria para la proxima
+        print(f"[AI] documento ya preparado, recuperado de la base: {full_path}")
+        return entry
+    except Exception as e:
+        print(f"[AI] no se pudo leer la cache de la base: {e}")
         return None
 
 
@@ -96,6 +145,26 @@ def _set_cached(full_path: str, entry: dict):
     entry["ts"] = time.time()
     with _cache_lock:
         _pdf_cache[full_path] = entry
+
+    # Y a la base, para que sobreviva al redespliegue y lo compartan los workers.
+    try:
+        from db import get_db_connection
+        _asegurar_tabla_cache()
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO ia_documentos_preparados (gcs_urn, tipo, texto, imagenes, paginas)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (gcs_urn) DO UPDATE SET
+                    tipo = EXCLUDED.tipo, texto = EXCLUDED.texto,
+                    imagenes = EXCLUDED.imagenes, paginas = EXCLUDED.paginas,
+                    preparado = CURRENT_TIMESTAMP
+            """, (full_path, entry["type"], entry.get("text"),
+                  entry.get("images") or None, entry.get("pages", 0)))
+            conn.commit()
+    except Exception as e:
+        # Que falle la cache no puede impedir responder: se sigue con la memoria.
+        print(f"[AI] no se pudo guardar la cache en la base: {e}")
     doc_type = entry["type"]
     pages    = entry.get("pages", "?")
     if doc_type == "text":
@@ -329,23 +398,52 @@ Si hay tablas o datos importantes, extráelos claramente."""
         # ══════════════════════════════════════════════════════════════════
         else:
             print(f"[AI] 🐢 Camino 3: sin caché → PDF ({gcs_urn}) directo desde GCS")
-            pdf_uri  = f"gs://{bucket_name}/{gcs_urn}"
-            pdf_part = Part.from_uri(uri=pdf_uri, mime_type="application/pdf")
-            prompt   = f"""Eres un experto en ingeniería civil.
+
+            # CON TOPE. Este era el unico cargo sin techo de la plataforma: se
+            # mandaba el PDF ENTERO por su URI, y si el expediente tenia 400
+            # paginas iban las 400 en una sola llamada. Los otros dos caminos si
+            # recortaban (60.000 caracteres y 12 paginas); este no.
+            #
+            # Se recorta preparando el documento aqui mismo, que es lo que iba a
+            # hacer el hilo de fondo de todas formas. Asi la llamada va acotada Y
+            # la cache queda lista para la siguiente pregunta, en vez de bajar el
+            # fichero dos veces.
+            try:
+                pdf_bytes = _download_pdf(gcs_urn, bucket_name)
+                entry = _process_pdf(pdf_bytes)
+                _set_cached(gcs_urn, entry)
+                if entry["type"] == "text":
+                    doc_text = entry["text"][:60000]
+                    prompt = f"""Eres un experto en ingeniería civil.
+ETIQUETA MANUAL (Contexto experto): {doc_desc or 'Sin etiqueta'}
+DOCUMENTO:
+{doc_text}
+
+Responde en ESPAÑOL a: {question}"""
+                    response = model.generate_content(prompt)
+                else:
+                    parts = [Part.from_data(data=img, mime_type="image/png")
+                             for img in entry["images"][:MAX_VISUAL_PAGES]]
+                    parts.append(f"""Eres un experto en ingeniería civil.
+ETIQUETA MANUAL (Contexto experto): {doc_desc or 'Sin etiqueta'}
+Responde en ESPAÑOL a: {question}""")
+                    response = model.generate_content(parts)
+            except Exception as _e:
+                # Si no se puede preparar (formato raro, fichero enorme), se cae
+                # al PDF directo. Sigue sin tope, pero ahora es la excepcion y no
+                # el camino habitual.
+                print(f"[AI] no se pudo acotar el PDF, va entero: {_e}")
+                pdf_uri  = f"gs://{bucket_name}/{gcs_urn}"
+                pdf_part = Part.from_uri(uri=pdf_uri, mime_type="application/pdf")
+                prompt   = f"""Eres un experto en ingeniería civil.
 ETIQUETA MANUAL (Contexto experto): {doc_desc or 'Sin etiqueta'}
 Analiza el documento PDF y responde en ESPAÑOL: {question}"""
-            response = model.generate_content([pdf_part, prompt])
+                response = model.generate_content([pdf_part, prompt])
 
-            # Cachear en background para la próxima pregunta
-            if gcs_urn.lower().endswith('.pdf') or node_id:
-                def cache_bg():
-                    try:
-                        pdf_bytes = _download_pdf(gcs_urn, bucket_name)
-                        entry     = _process_pdf(pdf_bytes)
-                        _set_cached(gcs_urn, entry)
-                    except Exception as bg_err:
-                        print(f"[AI] Cache BG error: {bg_err}")
-                threading.Thread(target=cache_bg, daemon=True).start()
+            # Ya no hace falta cachear en un hilo aparte: el camino de arriba
+            # prepara el documento y lo guarda en cache antes de preguntar. Este
+            # hilo se bajaba el MISMO PDF de Cloud Storage por segunda vez para
+            # una sola pregunta.
 
         # Update buffer with final response
         if interaction_id:
@@ -398,6 +496,31 @@ def save_ai_feedback():
         print(f"[AI] Feedback Error: {e}")
         return jsonify({"error": str(e)}), 500
 
+
+# Verbos con los que la gente le habla al modelo 3D. Si la frase empieza por uno
+# de estos, es una orden; si no, es una pregunta sobre documentos. Reconocerlo con
+# reglas cuesta cero y acierta lo mismo que pagar una llamada al modelo, porque en
+# la practica el clasificador devolvia 'document_query' casi siempre.
+_VERBOS_DE_ORDEN = (
+    'aisla', 'aislar', 'oculta', 'ocultar', 'muestra', 'mostrar', 'ensena',
+    'enfoca', 'enfocar', 'centra', 'centrar', 'zoom', 'vuela', 'volar',
+    'colorea', 'colorear', 'pinta', 'pintar', 'selecciona', 'seleccionar',
+    'resalta', 'resaltar', 'filtra', 'filtrar', 've a', 'llevame', 'ir a',
+)
+
+
+def _parece_orden_al_modelo(texto):
+    """Devuelve el mando si la frase es una orden al visor, o None."""
+    if not texto:
+        return None
+    limpio = texto.strip().lower()
+    for acento, plano in (('á', 'a'), ('é', 'e'), ('í', 'i'), ('ó', 'o'), ('ú', 'u'), ('ñ', 'n')):
+        limpio = limpio.replace(acento, plano)
+    for verbo in _VERBOS_DE_ORDEN:
+        if limpio.startswith(verbo + ' ') or limpio == verbo:
+            objetivo = limpio[len(verbo):].strip(' :,.')
+            return {'intent': 'model_command', 'target': objetivo or texto.strip()}
+    return None
 
 @ai_bp.route('/api/ai/universal-search', methods=['POST'])
 @limite('40 per hour')
@@ -468,27 +591,20 @@ def universal_search():
 
     import traceback # Added import
     try:
-        # --- 1. INTENT ROUTING (Safe Path) ---
-        intent_data = {"intent": "document_query"} # Default to document_query
-        try:
-            # Use gemini-1.5-flash-002 but don't fail if model not found
-            ensure_vertex()
-            router_model = GenerativeModel("gemini-2.0-flash")
-            router_prompt = f"""
-            Eres un clasificador de intenciones para un Asistente de Ingeniería.
-            Pregunta: "{query}"
-            Responde ÚNICAMENTE en JSON: {{ "intent": "model_command" | "document_query", "target": "foco/objeto" }}
-            """
-            router_res = router_model.generate_content(router_prompt)
-            clean_json = router_res.text.strip()
-            if "```" in clean_json: clean_json = clean_json.split("```")[1].strip()
-            if clean_json.startswith("json"): clean_json = clean_json[4:].strip()
-            import json
-            intent_data = json.loads(clean_json)
-            if intent_data.get("intent") == "model_command":
-                return jsonify({"success": True, "intent": "model_command", "command": intent_data})
-        except Exception as router_err:
-            print(f"[AI] Router Error (Ignorado): {router_err}")
+        # --- 1. QUE QUIERE EL USUARIO: por reglas, no pagando al modelo ---
+        #
+        # Aqui habia una llamada a Gemini SOLO para clasificar la intencion, y
+        # eso duplicaba el coste de cada pregunta del buscador: una llamada para
+        # decidir, otra para responder. Y encima, si la clasificacion fallaba, el
+        # resultado se descartaba y se seguia con 'document_query' — o sea, se
+        # pagaba por decidir algo que ya estaba decidido por defecto.
+        #
+        # Lo que distingue una orden al modelo 3D de una pregunta documental es
+        # un puñado de verbos. Eso no necesita un modelo de lenguaje.
+        intent_data = {"intent": "document_query"}
+        orden = _parece_orden_al_modelo(query)
+        if orden:
+            return jsonify({"success": True, "intent": "model_command", "command": orden})
 
         # --- 2. CONTEXT PREPARATION (RAG) ---
         history = data.get('history', [])

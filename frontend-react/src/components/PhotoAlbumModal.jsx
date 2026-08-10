@@ -22,6 +22,17 @@ const FALLBACK_IMG = 'data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%
 // Botón compacto del lightbox (zoom +/-)
 const lbBtn = { width: 28, height: 28, borderRadius: '50%', background: 'transparent', border: 'none', color: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
+
+// Pide la version reducida de una foto servida por el proxy. El backend genera y
+// cachea la miniatura la primera vez (documents.py:601). Si la URL no es del
+// proxy, se devuelve tal cual.
+function conMiniatura(url, variante = 'thumb') {
+  if (!url || !String(url).includes('/proxy')) return url;
+  if (url.includes('thumb=') || url.includes('size=')) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return variante === 'thumb' ? `${url}${sep}thumb=1` : `${url}${sep}size=display`;
+}
+
 const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", photos = [], onAddPhoto, variant = 'modal', onDelete, onDeletePhoto, onUpdatePhoto, onRename, modelUrn = 'global', targetPath = '', projectPrefix = 'proyectos/' }) => {
     if (!isOpen) return null;
 
@@ -747,10 +758,25 @@ const PhotoAlbumModal = ({ isOpen, onClose, pinId, title = "Album de Fotos", pho
                                                     </div>
                                                 ) : (
                                                     <img
-                                                        src={photo.src}
+                                                        /* MINIATURA, no la foto original. El backend ya sabe
+                                                           hacerlas (~25 KB frente a ~370 KB de media) y el portal
+                                                           documental ya las pedia; esta cuadricula no, asi que
+                                                           bajaba la foto ENTERA para pintar un cuadradito. Medido
+                                                           sobre la obra: un album de 200 fotos pasa de 74 MB a
+                                                           unos 5 MB por apertura. En la APK, eso es el dato movil
+                                                           del que esta en obra. */
+                                                        src={conMiniatura(photo.src)}
                                                         alt={photo.desc}
+                                                        /* Y solo las que se ven. Sin esto se bajaban TODAS de
+                                                           golpe, tambien las que estaban fuera de pantalla. */
+                                                        loading="lazy"
+                                                        decoding="async"
                                                         onError={(e) => {
-                                                            if (e.target.src !== FALLBACK_IMG) {
+                                                            // Si la miniatura falla, la original antes que un hueco.
+                                                            if (e.target.dataset.reintento !== '1' && conMiniatura(photo.src) !== photo.src) {
+                                                                e.target.dataset.reintento = '1';
+                                                                e.target.src = photo.src;
+                                                            } else if (e.target.src !== FALLBACK_IMG) {
                                                                 e.target.src = FALLBACK_IMG;
                                                             }
                                                         }}
