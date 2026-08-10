@@ -198,7 +198,8 @@ def _urn_of(object_id):
     return base64.urlsafe_b64encode(object_id.encode('utf-8')).decode('utf-8').rstrip('=')
 
 
-def _start_translation(token, urn, force=False, root_filename=None):
+def _start_translation(token, urn, force=False, root_filename=None,
+                       master_views=False):
     """Lanza la traduccion a SVF2 (2D y 3D).
 
     SIN forzar por defecto. Con `x-ads-force` cada peticion rehace el trabajo
@@ -211,11 +212,33 @@ def _start_translation(token, urn, force=False, root_filename=None):
     rootFilename + compressedUrn irian aqui si algun dia se aceptan ZIP con
     referencias externas (xrefs de Civil). Por ahora, archivo suelto.
     """
+    formato = {'type': 'svf2', 'views': ['2d', '3d']}
+
+    # VISTA MAESTRA: solo si se PIDE, nunca por defecto.
+    #
+    # 'generateMasterViews' hace que Autodesk componga vistas 3D con toda la
+    # geometria del modelo aunque el Revit no publique ninguna. Es tentador
+    # encenderlo siempre —resuelve el "no se ve el 3D" de un plumazo— y se probo
+    # asi: un modelo que publicaba 2 laminas paso a mostrar 8 vistas, 6 de ellas
+    # vistas de fase internas (Existente, Derribado, Reposicion...) que el autor
+    # NO habia publicado.
+    #
+    # Y ahi esta el problema: un ECD tiene que ensenar lo que el modelo EMITE.
+    # Quien modela decide que se comparte; generar vistas por nuestra cuenta es
+    # ensenar algo que nadie aprobo, y en una obra con revisiones y codigos de
+    # idoneidad eso es justo lo contrario de lo que se persigue.
+    #
+    # Asi que queda como una accion explicita, para el caso en que alguien
+    # necesita ver la geometria de un modelo que no publica 3D y asume lo que
+    # eso significa.
+    if master_views and root_filename and str(root_filename).lower().endswith('.rvt'):
+        formato['advanced'] = {'generateMasterViews': True}
+
     payload = {
         'input': {'urn': urn},
         'output': {
             'destination': {'region': 'us'},
-            'formats': [{'type': 'svf2', 'views': ['2d', '3d']}],
+            'formats': [formato],
         },
     }
     if root_filename:
@@ -428,7 +451,12 @@ def translate_cad():
     # gastar creditos a voluntad. Solo un administrador puede pedirlo.
     from flask import g as _g
     _u = getattr(_g, 'current_user', None)
-    forzar = bool(data.get('force')) and bool(_u and _u.get('role') == 'admin')
+    es_admin = bool(_u and _u.get('role') == 'admin')
+    # 'force' rehace la traduccion desde cero y la vuelve a cobrar: mandarlo en un
+    # bucle es gastar creditos a voluntad. Como la vista 3D completa, solo admin.
+    forzar = bool(data.get('force')) and es_admin
+    # Peticion explicita de vista 3D completa (ver _start_translation).
+    master = bool(data.get('vista_3d_completa')) and es_admin
 
     token, error = get_internal_token()
     if error or not token:
@@ -479,7 +507,9 @@ def translate_cad():
         # Sin root_filename: este camino es para el fichero SUELTO, no para un
         # paquete. Pasarlo aqui fue el error que hizo que Autodesk tratara un RVT
         # de 159 MB como si fuera un ZIP.
-        ok, error = _start_translation(token, urn, force=forzar)
+        ok, error = _start_translation(token, urn, force=forzar or master,
+                                       root_filename=node.get('name'),
+                                       master_views=master)
         if error:
             return jsonify({'success': False, 'error': error}), 502
         _save_cad_meta(node, {'urn': urn, 'status': 'inprogress'})
@@ -533,7 +563,8 @@ def translate_cad():
                           'started_at': time.time(), 'object_key': object_key,
                           'refs': [r['name'] for r in node.get('refs') or []], 'error': None})
 
-    _job, error = _start_translation(token, urn, force=forzar, root_filename=raiz)
+    _job, error = _start_translation(token, urn, force=forzar, root_filename=raiz,
+                                     master_views=master)
     if error:
         _save_cad_meta(node, {'status': 'failed', 'error': error})
         return jsonify({'success': False, 'error': error}), 502
