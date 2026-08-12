@@ -307,7 +307,7 @@ export default function CadViewer({ file }) {
                 <button
                   onClick={() => { setPuedeReintentar(false); setDetalle(''); setError(''); setTranscurrido(0); setPhase('preparando'); setIntento(n => n + 1); }}
                   style={{ marginTop: 6, padding: '7px 18px', fontSize: 13, cursor: 'pointer',
-                           background: '#5f7fa3', color: '#fff', border: 'none', borderRadius: 5 }}>
+                           background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 5 }}>
                   Volver a intentarlo
                 </button>
               )}

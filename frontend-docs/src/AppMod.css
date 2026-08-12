@@ -1,12 +1,17 @@
 /* AppMod.css - Enterprise CDE Styles */
 
+/* Estas fichas --adsk-* eran una SEGUNDA paleta, con sus propios valores
+   copiados de la de index.css. Al haber dos, cambiar el tema en un sitio
+   dejaba la aplicación teñida a medias. Ahora son alias: apuntan a la paleta
+   de verdad y no guardan ningún color propio. No añadas valores literales
+   aquí — el tema vive en index.css. */
 :root {
-  --adsk-blue: #5f7fa3;
-  --adsk-dark-blue: #4d6a8f;
-  --adsk-bg-gray: #f5f5f5;
-  --adsk-border: #e0e0e0;
-  --adsk-text: #3c3c3c;
-  --adsk-text-light: #666;
+  --adsk-blue: var(--accent);
+  --adsk-dark-blue: var(--accent-hover);
+  --adsk-bg-gray: var(--bg-secondary);
+  --adsk-border: var(--border);
+  --adsk-text: var(--text-primary);
+  --adsk-text-light: var(--text-secondary);
 }
 
 .files-page-container {

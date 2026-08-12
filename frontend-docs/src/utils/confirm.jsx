@@ -66,7 +66,7 @@ export function ConfirmHost() {
     danger = false,
   } = state;
 
-  const accent = danger ? '#d32f2f' : '#5f7fa3';
+  const accent = danger ? '#d32f2f' : 'var(--accent)';
 
   return (
     <div

@@ -471,7 +471,7 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
                   <tbody>
                     {filtered.map(p => (
                       <tr key={p.id} onClick={() => onSelectProject(p)}>
-                        <td style={{ fontSize: 12, color: '#5f7fa3', fontWeight: 600 }}>{p.hub_name || 'Gral'}</td>
+                        <td style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>{p.hub_name || 'Gral'}</td>
                         <td><div className="project-name-main">{p.name}</div>{p.location && <div className="project-name-sub">{p.location}</div>}</td>
                         <td>{p.number || '—'}</td>
                         <td><span className="access-badge access-badge-docs">📁 Docs</span></td>

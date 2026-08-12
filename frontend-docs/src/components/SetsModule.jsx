@@ -73,7 +73,7 @@ export function AddToSetModal({ isOpen, onClose, items, projectPrefix, onAdded }
               onKeyDown={e => { if (e.key === 'Enter') createAndAdd(); }}
               style={{ flex: 1, padding: '8px 10px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, outline: 'none' }} />
             <button onClick={createAndAdd} disabled={saving}
-              style={{ padding: '8px 14px', background: '#5f7fa3', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Crear</button>
+              style={{ padding: '8px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Crear</button>
           </div>
         </div>
       </div>
@@ -131,7 +131,7 @@ export function SetsView({ projectPrefix, isAdmin }) {
           <div onClick={() => toggle(s)} style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" style={{ transform: expanded[s.id] ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}><polyline points="9 18 15 12 9 6"/></svg>
             <span style={{ fontSize: 14, fontWeight: 600, color: '#333', flex: 1 }}>{s.name}</span>
-            <span style={{ fontSize: 12, color: '#5f7fa3', fontWeight: 600 }}>{s.items_count} documento{s.items_count !== 1 ? 's' : ''}</span>
+            <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>{s.items_count} documento{s.items_count !== 1 ? 's' : ''}</span>
             <span style={{ fontSize: 11, color: '#aaa' }}>{s.created_by} · {formatDate(s.created_at)}</span>
             {isAdmin && (
               <button onClick={e => { e.stopPropagation(); removeSet(s); }} title="Eliminar conjunto"
@@ -144,8 +144,24 @@ export function SetsView({ projectPrefix, isAdmin }) {
                 <div style={{ padding: 16, fontSize: 12, color: '#999' }}>Conjunto vacío.</div>
               ) : expanded[s.id].map(it => (
                 <div key={it.node_id} style={{ padding: '8px 16px 8px 44px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #f7f7f7', fontSize: 13 }}>
-                  <span onClick={() => openDoc(it)} title="Abrir documento" style={{ flex: 1, color: '#5f7fa3', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name} ↗</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#555', background: '#f0f0f0', padding: '2px 8px', borderRadius: 10 }}>V{it.version_number || 1} congelada</span>
+                  <span onClick={() => openDoc(it)} title="Abrir documento" style={{ flex: 1, color: 'var(--accent)', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name} ↗</span>
+                  {/* «Congelada» sólo si de verdad lo está. Antes esta etiqueta lo
+                      decía siempre, pero sólo se guardaba el NÚMERO de versión y se
+                      abría el fichero vivo: bastaba con que alguien subiera una
+                      revisión para que la entrega enseñara otra cosa con el cartel
+                      puesto. Las filas anteriores al arreglo no tienen version_id y
+                      no hay forma de adivinarlo a posteriori: se dicen como son. */}
+                  {it.version_id ? (
+                    <span title="Se abre exactamente el contenido que tenía al añadirlo"
+                      style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', background: 'var(--bg-accent)', padding: '2px 8px', borderRadius: 10 }}>
+                      V{it.version_number || 1} congelada
+                    </span>
+                  ) : (
+                    <span title="Se añadió antes de que se guardara la referencia a la versión: abre el contenido actual del documento"
+                      style={{ fontSize: 11, fontWeight: 700, color: 'var(--warning)', background: 'var(--bg-warning)', padding: '2px 8px', borderRadius: 10 }}>
+                      V{it.version_number || 1} · sin congelar
+                    </span>
+                  )}
                   <span style={{ fontSize: 11, color: '#aaa' }}>{formatDate(it.added_at)}</span>
                   {isAdmin && (
                     <button onClick={() => removeItem(s, it)} style={{ background: 'none', border: 'none', color: '#bbb', cursor: 'pointer' }}>✕</button>

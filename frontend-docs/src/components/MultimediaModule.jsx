@@ -562,7 +562,7 @@ export default function MultimediaModule({ project, user }) {
           <span style={{ fontSize: 13, color: '#666' }}>{filteredPhotos.length} ítems</span>
           <button
             onClick={() => fileInputRef.current?.click()}
-            style={{ background: '#5f7fa3', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 4, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+            style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 4, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
           >
             Subir multimedia
           </button>
@@ -608,7 +608,7 @@ export default function MultimediaModule({ project, user }) {
                         <div className="mm-tile-desc" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 8px 6px', background: 'linear-gradient(transparent, rgba(0,0,0,0.7))', color: '#fff', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</div>
                       )}
                       {p.isUploading && (
-                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.7)', fontWeight: 600, color: '#5f7fa3', fontSize: 12 }}>Subiendo…</div>
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.7)', fontWeight: 600, color: 'var(--accent)', fontSize: 12 }}>Subiendo…</div>
                       )}
                     </div>
                   ))}
@@ -703,7 +703,7 @@ export default function MultimediaModule({ project, user }) {
                           placeholder="Añade una descripción…"
                           style={{ flex: 1, background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, color: '#fff', padding: '9px 12px', fontSize: 14, outline: 'none', textAlign: 'center' }}
                         />
-                        <button onClick={saveSelectedDescription} style={{ border: 'none', background: '#5f7fa3', color: '#fff', padding: '9px 14px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>Guardar</button>
+                        <button onClick={saveSelectedDescription} style={{ border: 'none', background: 'var(--accent)', color: '#fff', padding: '9px 14px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>Guardar</button>
                         <button onClick={() => { setEditingDescription(false); setDescriptionDraft(selectedPhoto.desc || ''); }} title="Cancelar" style={{ border: '1px solid rgba(255,255,255,0.25)', background: 'transparent', color: '#fff', width: 36, height: 36, borderRadius: 8, cursor: 'pointer', fontSize: 16 }}>×</button>
                       </div>
                     ) : (

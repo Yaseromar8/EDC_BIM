@@ -32,6 +32,8 @@ const REASON_TEXT = {
 export default function ViewerLabelsBar({ rightSlot = null }) {
     const [profileOn, setProfileOn] = useState(false);
     const [zonesOn, setZonesOn] = useState(false);
+    const [groupOn, setGroupOn] = useState(false);
+    const [groupCount, setGroupCount] = useState(0);
     const [excavOn, setExcavOn] = useState(false);
     const [ghostSecOn, setGhostSecOn] = useState(false); // holograma corte/relleno desde secciones
     // 'sections' = lámina del cadista lofteada · 'topo' = sólidos por
@@ -110,31 +112,47 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [predictDet]);
 
-    // RESUMEN: dónde está lo que falta. Ordenado por soles pendientes, no por
-    // código — el código te dice el orden del presupuesto, los soles te dicen
-    // qué mover primero.
+    // RESUMEN: dónde está lo que falta CONSTRUIR. Ordenado por soles pendientes,
+    // no por código — el código te dice el orden del presupuesto, los soles te
+    // dicen qué mover primero.
+    //
+    // Se mide contra lo ejecutado, no contra lo valorizado: una partida que ya
+    // está hecha y aún no se paga no es trabajo pendiente, es plata por cobrar,
+    // y mezclarlas mandaba a la cuadrilla a un frente que ya estaba terminado.
+    // El backend publica avance_ref (el % más fino que existe: tramo, si no
+    // partida, si no valorizado) y valor_tramo (lo que le toca a este tramo).
     const faltante = useMemo(() => {
         const ps = vista?.predictDet?.partidas;
         if (!ps?.length) return null;
         const total = ps.reduce((s, p) => s + (p.parcial || 0), 0);
         const filas = ps
-            .map(p => ({
-                id: p.id,
-                nombre: (p.nombre || '').replace(/^[\d.]+\s*-\s*/, ''),
-                pct: p.valorizado_pct ?? 0,
-                falta: (p.parcial || 0) * (1 - (p.valorizado_pct ?? 0) / 100),
-            }))
+            .map(p => {
+                const base = p.valor_tramo != null ? p.valor_tramo : (p.parcial || 0);
+                const pct = p.avance_ref != null ? p.avance_ref : (p.valorizado_pct ?? 0);
+                return {
+                    id: p.id,
+                    nombre: (p.nombre || '').replace(/^[\d.]+\s*-\s*/, ''),
+                    pct,
+                    base: p.avance_base,
+                    falta: base * (1 - pct / 100),
+                };
+            })
             .filter(f => f.falta > 1)
             .sort((a, b) => b.falta - a.falta);
+        // TODAS las que faltan, no las 5 más caras. Lo que el gerente pregunta
+        // parado frente al modelo es "¿qué falta aquí?", y una lista recortada a
+        // cinco con un "resto (12 partidas)" no responde eso. La lista completa
+        // cabe: son pocas por frente y el contenedor ya tiene scroll propio.
         const faltaTotal = filas.reduce((s, f) => s + f.falta, 0);
-        const top = filas.slice(0, 5);
-        const restoMonto = filas.slice(5).reduce((s, f) => s + f.falta, 0);
         return {
-            total, faltaTotal, top, restoMonto, restoN: Math.max(0, filas.length - 5),
-            maxFalta: top.length ? top[0].falta : 1,
+            total, faltaTotal, top: filas, restoMonto: 0, restoN: 0,
+            maxFalta: filas.length ? filas[0].falta : 1,
         };
     }, [vista?.predictDet]);
     const [verTodas, setVerTodas] = useState(false);
+    // qué etapa del expediente se está viendo. Arranca en ejecución porque es
+    // lo que se pregunta parado frente al modelo.
+    const [etapa, setEtapa] = useState('ejecucion');
 
     // ── Parámetros de la capa Ejecución (agrupación + avance) ───────────────
     // El inventario DSI trae varios candidatos ("01_02_DSI_Localizador",
@@ -234,6 +252,29 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
         return () => window.removeEventListener('lob-zone-labels-result', onResult);
     }, []);
 
+    // Agrupación: mismo aviso que SubZonas, diciendo qué parámetro falta cuando
+    // falta. La capa se apaga y lo dice en vez de agrupar por otra cosa.
+    useEffect(() => {
+        const onGroupResult = (e) => {
+            const d = e?.detail || {};
+            if (d.reason === 'ok') {
+                setGroupCount(d.zones || 0);
+                setToast({ ok: true, text: `${d.zones} grupo${d.zones === 1 ? '' : 's'} por Localizador` });
+            } else {
+                setGroupOn(false);
+                setGroupCount(0);
+                const txt = d.reason === 'sin-parametro' && d.faltan
+                    ? `Falta el parámetro ${d.faltan} en el modelo: no se puede agrupar.`
+                    : (REASON_TEXT[d.reason] || 'No se pudo agrupar por Localizador.');
+                setToast({ ok: false, text: txt });
+            }
+            if (toastTimer.current) clearTimeout(toastTimer.current);
+            toastTimer.current = setTimeout(() => setToast(null), 5000);
+        };
+        window.addEventListener('lob-group-labels-result', onGroupResult);
+        return () => window.removeEventListener('lob-group-labels-result', onGroupResult);
+    }, []);
+
     // Aviso del resultado de excavación fantasma (si no encontró el DWG de sólidos)
     useEffect(() => {
         const onExcav = (e) => {
@@ -306,7 +347,17 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
     const toggleZones = () => {
         const next = !zonesOn;
         setZonesOn(next);
+        // Excluyentes: comparten los mismos rótulos (ver setZoneLabelsVisible).
+        if (next && groupOn) setGroupOn(false);
         window.dispatchEvent(new CustomEvent('lob-zone-labels', { detail: { visible: next } }));
+    };
+    // Capa Agrupación: el mismo rótulo flotante que SubZonas, pero agrupando por
+    // Localizador (el campo con el que ya agrupa Ejecución).
+    const toggleGroup = () => {
+        const next = !groupOn;
+        setGroupOn(next);
+        if (next && zonesOn) setZonesOn(false);
+        window.dispatchEvent(new CustomEvent('lob-group-labels', { detail: { visible: next } }));
     };
     const toggleExcav = () => {
         const next = !excavOn;
@@ -379,6 +430,14 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
         </svg>
     );
 
+    // Dos conjuntos que se cruzan: el grupo es la intersección, que es justo lo
+    // que hace esta capa (coincidir en SubZona Y en Ubicación).
+    const GroupPairIcon = () => (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <circle cx="9" cy="12" r="6" /><circle cx="15" cy="12" r="6" />
+        </svg>
+    );
+
     // Fila de capa dentro de la columna (checkbox + icono + nombre)
     const LayerRow = ({ on, onClick, label, icon, color, trailing }) => (
         <button
@@ -434,6 +493,32 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
                         <span style={{ background: '#3AA0FF', color: '#fff', borderRadius: 8, fontSize: 9.5, fontWeight: 800, padding: '1px 6px', lineHeight: 1.3 }}>{activeLayers}</span>
                     )}
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: layersOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><polyline points="18 15 12 9 6 15" /></svg>
+                </button>
+
+                {/* Capa Agrupación — botón propio al costado de Capas, no dentro de
+                    la lista, porque es una vista de contraste de metrados y no una
+                    capa más del modelo. Reutiliza ENTERO el mecanismo de SubZonas
+                    (rótulo flotante, línea guía, aislar al pulsar); lo único que
+                    cambia es la clave: el PAR (SubZona + Ubicación). */}
+                <button
+                    type="button"
+                    onClick={toggleGroup}
+                    title="Agrupar por Localizador (01_02_DSI_Localizador), el mismo campo con el que agrupa la capa Ejecución."
+                    style={{
+                        position: 'absolute', left: '100%', marginLeft: 10, top: 0,
+                        display: 'inline-flex', alignItems: 'center', gap: 7, height: 26,
+                        background: groupOn ? 'rgba(67,179,204,0.20)' : 'transparent',
+                        border: `1px solid ${groupOn ? '#43b3cc' : 'rgba(255,255,255,0.22)'}`,
+                        color: groupOn ? '#9fe4f2' : '#d8d8d8',
+                        borderRadius: 6, padding: '0 11px', fontSize: 12, fontWeight: 700,
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                    }}
+                >
+                    <GroupPairIcon />
+                    Agrupación
+                    {groupOn && groupCount > 0 && (
+                        <span style={{ background: '#43b3cc', color: '#08222a', borderRadius: 8, fontSize: 9.5, fontWeight: 800, padding: '1px 6px', lineHeight: 1.3 }}>{groupCount}</span>
+                    )}
                 </button>
 
                 {layersOpen && (
@@ -736,29 +821,236 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
                     {vista.predict && (
                         <div style={{ marginTop: 11, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,.10)',
                                       minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ fontSize: 9, letterSpacing: '.18em', color: '#7c8798', textTransform: 'uppercase' }}>
-                                Expediente
+                            {/* El rótulo nombra la CALLE, no dice "expediente" a
+                                secas: sin eso el 75.84% de la calle y el 0% del
+                                tramo se leen como si midieran lo mismo. */}
+                            <div style={{ fontSize: 9, letterSpacing: '.14em', color: '#7c8798',
+                                          textTransform: 'uppercase', overflow: 'hidden',
+                                          textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                 title={vista.predict.calle || 'Expediente'}>
+                                {vista.predict.calle
+                                    ? `${vista.predict.calle_id} · ${vista.predict.calle}`
+                                    : 'Expediente'}
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
-                                <span style={{ fontSize: 19, fontWeight: 800, color: '#7dd3a8', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-                                    {vista.predict.valorizado_pct ?? '—'}%
-                                </span>
-                                <span style={{ fontSize: 10, color: '#9aa4b2' }}>valorizado</span>
-                                <span style={{ marginLeft: 'auto', fontSize: 10.5, color: '#8fa0b3', fontVariantNumeric: 'tabular-nums' }}>
-                                    {vista.predict.partidas} partidas · {soles(vista.predict.valor)}
-                                </span>
+
+                            {/* LAS TRES ETAPAS DEL EXPEDIENTE. Son pestañas y no
+                                secciones apiladas a propósito: el hover es un
+                                vistazo, no un legajo. Se ve una a la vez.
+                                El cierre contractual está deshabilitado mientras
+                                no haya as-built ni adicionales tramitados — un
+                                botón que abre una pantalla vacía miente. */}
+                            <div style={{ display: 'flex', gap: 3, marginTop: 8 }}>
+                                {[
+                                    { k: 'contractual', t: 'Contractual', c: '#9aa4b2', on: true },
+                                    { k: 'ejecucion', t: 'Ejecución', c: '#fbbf24', on: true },
+                                    { k: 'cierre', t: 'Cierre', c: '#7fc4d6', on: false },
+                                ].map(b => (
+                                    <button key={b.k} type="button" disabled={!b.on}
+                                        onClick={() => b.on && setEtapa(b.k)}
+                                        title={b.on ? '' : 'sin as-built ni adicionales cargados todavía'}
+                                        style={{
+                                            flex: 1, padding: '5px 4px', fontSize: 9.5, cursor: b.on ? 'pointer' : 'not-allowed',
+                                            border: 'none', borderRadius: 5, letterSpacing: '.06em',
+                                            textTransform: 'uppercase', fontWeight: 700,
+                                            background: etapa === b.k ? 'rgba(255,255,255,.10)' : 'transparent',
+                                            color: !b.on ? '#4d5560' : (etapa === b.k ? b.c : '#7c8798'),
+                                            opacity: b.on ? 1 : .5,
+                                        }}>
+                                        {b.t}
+                                    </button>
+                                ))}
                             </div>
-                            <div style={{ height: 4, background: 'rgba(255,255,255,.09)', borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
-                                <div style={{ width: `${Math.min(100, vista.predict.valorizado_pct || 0)}%`, height: '100%', background: '#3f9e73' }} />
-                            </div>
+                            {/* CONTRACTUAL — lo que se pactó. Va aparte de la
+                                ejecución porque son dos conversaciones distintas:
+                                una con el expediente y otra con la obra. */}
+                            {etapa === 'contractual' && (
+                                <div style={{ marginTop: 10 }}>
+                                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                                        <div>
+                                            <div style={{ fontSize: 9, letterSpacing: '.12em', color: '#7c8798', textTransform: 'uppercase' }}>Partidas</div>
+                                            <div style={{ fontSize: 17, fontWeight: 800, color: '#e6edf5', fontVariantNumeric: 'tabular-nums' }}>
+                                                {vista.predict.partidas}
+                                            </div>
+                                        </div>
+                                        {vista.predict.valor_tramo != null && (
+                                            <div>
+                                                <div style={{ fontSize: 9, letterSpacing: '.12em', color: '#7c8798', textTransform: 'uppercase' }}>Le toca a este tramo</div>
+                                                <div style={{ fontSize: 17, fontWeight: 800, color: '#e6edf5', fontVariantNumeric: 'tabular-nums' }}>
+                                                    {soles(vista.predict.valor_tramo)}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {vista.predict.compartidas > 0 && (
+                                            <div>
+                                                <div style={{ fontSize: 9, letterSpacing: '.12em', color: '#7c8798', textTransform: 'uppercase' }}>Compartidas</div>
+                                                <div style={{ fontSize: 17, fontWeight: 800, color: '#8fa0b3', fontVariantNumeric: 'tabular-nums' }}>
+                                                    {vista.predict.compartidas}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div style={{ marginTop: 10, fontSize: 10.5, color: '#8fa0b3', lineHeight: 1.5 }}>
+                                        Los planos y las especificaciones de este tramo aún no están
+                                        cargados en el grafo. El detalle por partida —precio unitario,
+                                        cuadrilla del ACU, normas citadas— está en PREDICT.
+                                    </div>
+                                </div>
+                            )}
+
+                            {etapa === 'ejecucion' && <>
+                            {/* EL METRADO CAMBIÓ — primero, porque cambia el alcance
+                                y sin eso los porcentajes de abajo se leen sobre una
+                                base equivocada. Sale del replanteo del RIBA y se
+                                cuenta en PARTIDAS: sumar m con m3 con kg no significa
+                                nada. Verde arriba del contrato, rojo por debajo. */}
+                            {(vista.predict.n_mayor > 0 || vista.predict.n_menor > 0) && (
+                                <div style={{ display: 'flex', gap: 14, marginTop: 8, alignItems: 'baseline' }}>
+                                    <span style={{ fontSize: 9, letterSpacing: '.14em', color: '#7c8798', textTransform: 'uppercase' }}>
+                                        Metrado
+                                    </span>
+                                    {vista.predict.n_mayor > 0 && (
+                                        <span style={{ fontSize: 11, color: '#7dd3a8', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}
+                                              title="partidas donde el replanteo midió MÁS que el contrato — va a adicional">
+                                            ▲ {vista.predict.n_mayor} mayor
+                                        </span>
+                                    )}
+                                    {vista.predict.n_menor > 0 && (
+                                        <span style={{ fontSize: 11, color: '#e0776a', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}
+                                              title="partidas donde el replanteo midió MENOS que el contrato — es deductivo, no se cobra">
+                                            ▼ {vista.predict.n_menor} menor
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* UNA SOLA BARRA, DOS TRAMOS. Antes había dos porcentajes
+                                compitiendo y el ejecutado ya incluía al valorizado, así
+                                que había que restar de cabeza. Aquí lo pagado y lo
+                                construido-sin-pagar se apilan: lo segundo es lo que se
+                                reclama, y se lee sin hacer ninguna cuenta. */}
+                            {(() => {
+                                const pag = vista.predict.valorizado_comp_pct ?? vista.predict.valorizado_pct;
+                                const con = vista.predict.ejecutado_pct;
+                                if (pag == null) return null;
+                                const conC = con == null ? null : Math.min(100, con);
+                                const sinPagar = conC == null ? 0 : Math.max(0, conC - pag);
+                                return (
+                                    <div style={{ marginTop: 9 }}>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: 21, fontWeight: 800, color: '#7dd3a8', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                                                {pag.toFixed(1)}%
+                                            </span>
+                                            <span style={{ fontSize: 10, color: '#9aa4b2' }}>valorizado</span>
+                                            {sinPagar > 0.05 && (
+                                                <>
+                                                    <span style={{ fontSize: 15, fontWeight: 800, color: '#fbbf24', lineHeight: 1, marginLeft: 4, fontVariantNumeric: 'tabular-nums' }}>
+                                                        +{sinPagar.toFixed(1)}%
+                                                    </span>
+                                                    <span style={{ fontSize: 10, color: '#9aa4b2' }}>ejecutado sin valorizar</span>
+                                                </>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', height: 7, background: 'rgba(255,255,255,.09)', borderRadius: 3, marginTop: 7, overflow: 'hidden' }}>
+                                            <div style={{ width: `${pag}%`, background: '#3f9e73' }} />
+                                            <div style={{ width: `${sinPagar}%`, background: '#c2963c' }} />
+                                        </div>
+                                        {con > 100.5 && (
+                                            <div style={{ marginTop: 5, fontSize: 9.5, color: '#7dd3a8' }}>
+                                                ▲ además hay mayor metrado: se ejecutó por encima del contrato
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            {/* EL CONTEO SALE DE LO CONSTRUIDO — es lo que se ve
+                                parado en la obra. Entre paréntesis, lo mismo por
+                                lo pagado: la diferencia es lo que hay que cobrar. */}
+                            {vista.predict.lista != null && (
+                                <div style={{ display: 'flex', gap: 14, marginTop: 11, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                                    {[
+                                        { n: vista.predict.lista, t: 'listas', c: '#7dd3a8' },
+                                        { n: vista.predict.proceso, t: 'en proceso', c: '#fbbf24' },
+                                        { n: vista.predict.falta, t: 'faltan', c: '#6b7684' },
+                                    ].map(k => (
+                                        <div key={k.t} style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                                            <span style={{ fontSize: 17, fontWeight: 800, color: k.c, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                                                {k.n}
+                                            </span>
+                                            <span style={{ fontSize: 9.5, color: '#7c8798', letterSpacing: '.05em' }}>{k.t}</span>
+                                        </div>
+                                    ))}
+                                    {/* cuánto del frente respalda la comparación de
+                                        arriba: por debajo del 90% el par de
+                                        porcentajes descansa en datos incompletos
+                                        y el lector tiene derecho a saberlo */}
+                                    <span style={{ marginLeft: 'auto', fontSize: 9.5, color: '#6b7684', fontVariantNumeric: 'tabular-nums' }}
+                                          title={vista.predict.cobertura_comp_pct != null
+                                              ? `los dos % se comparan sobre el ${vista.predict.cobertura_comp_pct}% del frente que tiene dato de campo`
+                                              : ''}>
+                                        construidas · {vista.predict.partidas} partidas
+                                        {vista.predict.cobertura_comp_pct != null
+                                          && vista.predict.cobertura_comp_pct < 99.5
+                                          && <span style={{ color: '#8a6a2f' }}> · {vista.predict.cobertura_comp_pct}% con dato</span>}
+                                    </span>
+                                </div>
+                            )}
+
+                            {/* ESTE TRAMO — el número que de verdad le pertenece.
+                                Su metrado por su precio, medido por el cronograma
+                                tramo por tramo. Va aparte y con su propio marco
+                                porque NO es comparable con el % de arriba: aquél
+                                es la calle entera, éste es el pedazo que estás
+                                señalando con el mouse. */}
+                            {vista.predict.valor_tramo != null && (
+                                <div style={{
+                                    marginTop: 11, padding: '9px 11px', borderRadius: 6,
+                                    background: 'rgba(45,143,165,0.10)',
+                                    border: '1px solid rgba(45,143,165,0.30)',
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+                                        <span style={{ fontSize: 9, letterSpacing: '.16em', color: '#7fc4d6', textTransform: 'uppercase', fontWeight: 700 }}>
+                                            Este tramo
+                                        </span>
+                                        <span style={{ marginLeft: 'auto', fontSize: 10, color: '#8fa0b3', fontVariantNumeric: 'tabular-nums' }}>
+                                            {vista.predict.con_tramo} de {vista.predict.partidas} partidas
+                                        </span>
+                                    </div>
+                                    {/* Sin porcentaje: los dos de arriba ya responden
+                                        "¿cuánto se hizo?". Repetirlo aquí sobre otro
+                                        subconjunto daba tres cifras parecidas y ninguna
+                                        clara. Lo que solo este bloque sabe es la PLATA
+                                        que le toca al tramo, y eso es lo que muestra. */}
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 7 }}>
+                                        <span style={{ fontSize: 20, fontWeight: 800, lineHeight: 1, color: '#b6c2d0', fontVariantNumeric: 'tabular-nums' }}>
+                                            {soles(vista.predict.valor_tramo)}
+                                        </span>
+                                        <span style={{ fontSize: 10, color: '#9aa4b2' }}>le toca a este tramo</span>
+                                    </div>
+                                    <div style={{ height: 4, background: 'rgba(255,255,255,.09)', borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
+                                        <div style={{ width: `${Math.min(100, vista.predict.ejecutado_tramo_pct || 0)}%`, height: '100%', background: '#2d8fa5' }} />
+                                    </div>
+                                    {vista.predict.falta_tramo_soles > 1 && (
+                                        <div style={{ marginTop: 6, fontSize: 10.5, color: '#8fa0b3' }}>
+                                            falta <span style={{ color: '#fbbf24', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                                                {soles(vista.predict.falta_tramo_soles)}</span> por construir aquí
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* FALTA — el número accionable. "67%" no dice qué hacer;
                                 "faltan S/ 315,601" sí. */}
                             {faltante && faltante.faltaTotal > 1 && (
                                 <div style={{ marginTop: 11, display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                                    <span style={{ fontSize: 9, letterSpacing: '.16em', color: '#7c8798', textTransform: 'uppercase' }}>Falta</span>
+                                    <span style={{ fontSize: 9, letterSpacing: '.16em', color: '#7c8798', textTransform: 'uppercase' }}>
+                                        Falta construir
+                                    </span>
                                     <span style={{ fontSize: 15, fontWeight: 800, color: '#fbbf24', fontVariantNumeric: 'tabular-nums' }}>
                                         {soles(faltante.faltaTotal)}
+                                    </span>
+                                    <span style={{ marginLeft: 'auto', fontSize: 9.5, color: '#7c8798', fontVariantNumeric: 'tabular-nums' }}>
+                                        {faltante.top.length} {faltante.top.length === 1 ? 'partida' : 'partidas'}
                                     </span>
                                 </div>
                             )}
@@ -783,12 +1075,6 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
                                             </div>
                                         </div>
                                     ))}
-                                    {faltante.restoN > 0 && (
-                                        <div style={{ display: 'flex', gap: 6, fontSize: 10, marginTop: 8, color: '#6b7684' }}>
-                                            <span style={{ flex: 1 }}>resto ({faltante.restoN} partidas)</span>
-                                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{soles(faltante.restoMonto)}</span>
-                                        </div>
-                                    )}
                                 </div>
                             )}
 
@@ -818,16 +1104,29 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
                                                     <span style={{ color: '#b6c2d0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                         {(p.nombre || '').replace(/^[\d.]+\s*-\s*/, '')}
                                                     </span>
+                                                    {/* el metrado cambió respecto al contrato: verde
+                                                        arriba, rojo abajo. Sale del replanteo del RIBA. */}
+                                                    {p.metrado_replanteo != null && p.metrado > 0 && (
+                                                        p.metrado_replanteo > p.metrado * 1.001 ? (
+                                                            <span style={{ flex: 'none', color: '#7dd3a8', fontSize: 9 }}
+                                                                  title={`replanteo ${p.metrado_replanteo} vs contrato ${p.metrado} ${p.unidad || ''} — mayor metrado`}>▲</span>
+                                                        ) : p.metrado_replanteo < p.metrado * 0.999 ? (
+                                                            <span style={{ flex: 'none', color: '#e0776a', fontSize: 9 }}
+                                                                  title={`replanteo ${p.metrado_replanteo} vs contrato ${p.metrado} ${p.unidad || ''} — menor metrado`}>▼</span>
+                                                        ) : null
+                                                    )}
                                                     <span style={{
                                                         marginLeft: 'auto', flex: 'none', fontVariantNumeric: 'tabular-nums',
-                                                        color: p.valorizado_pct >= 99.5 ? '#7dd3a8' : (p.valorizado_pct > 0 ? '#fbbf24' : '#6b7684'),
-                                                    }}>{(p.valorizado_pct ?? 0).toFixed(0)}%</span>
+                                                        color: (p.avance_ref ?? p.valorizado_pct) >= 99.5 ? '#7dd3a8'
+                                                             : ((p.avance_ref ?? p.valorizado_pct) > 0 ? '#fbbf24' : '#6b7684'),
+                                                    }}>{(p.avance_ref ?? p.valorizado_pct ?? 0).toFixed(0)}%</span>
                                                 </div>
                                             ))}
                                         </div>
                                     ))}
                                 </div>
                             )}
+                            </>}
                         </div>
                     )}
 

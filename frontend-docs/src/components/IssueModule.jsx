@@ -704,7 +704,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                       position: 'absolute', right: 0, top: 0, bottom: 0, width: 6,
                       cursor: 'col-resize', background: 'transparent',
                     }}
-                    onMouseOver={e => e.currentTarget.style.background = '#5f7fa3'}
+                    onMouseOver={e => e.currentTarget.style.background = 'var(--accent)'}
                     onMouseOut={e => e.currentTarget.style.background = 'transparent'}
                   />
                 </th>
@@ -930,7 +930,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                                 borderRadius: 4, padding: 2, transition: 'transform 0.15s, box-shadow 0.15s, background 0.15s',
                                 transform: isLoadingThis ? 'scale(0.85)' : 'scale(1)',
                                 background: isLoadingThis ? '#eef2f7' : 'transparent',
-                                boxShadow: isLoadingThis ? '0 0 0 2px #5f7fa3' : 'none',
+                                boxShadow: isLoadingThis ? '0 0 0 2px var(--accent)' : 'none',
                                 opacity: isLoadingThis ? 0.6 : 1,
                                 position: 'relative'
                               }}
@@ -945,7 +945,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                                   position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                                   background: 'rgba(255,255,255,0.7)', borderRadius: 4
                                 }}>
-                                  <span style={{ width: 14, height: 14, border: '2px solid #5f7fa3', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin-acc 0.6s linear infinite' }} />
+                                  <span style={{ width: 14, height: 14, border: '2px solid var(--accent)', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin-acc 0.6s linear infinite' }} />
                                 </span>
                               )}
                             </span>
@@ -1336,7 +1336,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                 <React.Fragment key={idx}>
                   <span
                     onClick={() => navigateBreadcrumb(idx)}
-                    style={{ cursor: 'pointer', color: idx === selectorPath.length - 1 ? '#333' : '#5f7fa3', fontWeight: idx === selectorPath.length - 1 ? 600 : 400 }}
+                    style={{ cursor: 'pointer', color: idx === selectorPath.length - 1 ? '#333' : 'var(--accent)', fontWeight: idx === selectorPath.length - 1 ? 600 : 400 }}
                   >
                     {crumb.name}
                   </span>

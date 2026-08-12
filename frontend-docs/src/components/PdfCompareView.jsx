@@ -149,8 +149,8 @@ export default function PdfCompareView({ fileName, versionA, versionB, projectPr
           </span>
 
           <div style={{ display: 'flex', gap: 2, marginLeft: 16, background: '#333', borderRadius: 6, padding: 2 }}>
-            <button onClick={() => setMode('overlay')} style={{ padding: '5px 12px', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600, background: mode === 'overlay' ? '#5f7fa3' : 'transparent', color: '#fff' }}>Superpuesto</button>
-            <button onClick={() => setMode('side')} style={{ padding: '5px 12px', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600, background: mode === 'side' ? '#5f7fa3' : 'transparent', color: '#fff' }}>Lado a lado</button>
+            <button onClick={() => setMode('overlay')} style={{ padding: '5px 12px', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600, background: mode === 'overlay' ? 'var(--accent)' : 'transparent', color: '#fff' }}>Superpuesto</button>
+            <button onClick={() => setMode('side')} style={{ padding: '5px 12px', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600, background: mode === 'side' ? 'var(--accent)' : 'transparent', color: '#fff' }}>Lado a lado</button>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16, fontSize: 13 }}>

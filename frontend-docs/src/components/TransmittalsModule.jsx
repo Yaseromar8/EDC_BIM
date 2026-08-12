@@ -35,12 +35,26 @@ export function TransmittalModal({ isOpen, onClose, items, projectPrefix, user, 
         method: 'POST',
         body: JSON.stringify({
           model_urn: projectPrefix, subject: subject.trim(), message: message.trim(),
-          recipients, items, user: user?.name
+          recipients, items
         })
       });
       const d = await r.json();
       if (!d.success) throw new Error(d.error);
-      toast.success(`Transmittal TR-${String(d.number).padStart(3, '0')} emitido`);
+      // El transmittal existe siempre; el aviso puede haber fallado. Decirlo, en
+      // vez de dar la entrega por hecha: quien cree que entrego y no entrego
+      // descubre el problema tarde y de la peor manera.
+      const tr = `TR-${String(d.number).padStart(3, '0')}`;
+      const avisados = d.avisados ?? 0;
+      const total = d.destinatarios ?? recipients.length;
+      if (avisados === total) {
+        toast.success(`${tr} emitido · avisados los ${total} destinatarios`);
+      } else if (avisados === 0) {
+        toast.error(`${tr} queda registrado, pero NO se pudo avisar a nadie. `
+          + `Avísales por tu cuenta.`, { duration: 9000 });
+      } else {
+        toast(`${tr} emitido · avisados ${avisados} de ${total}. `
+          + `A los demás no les llegó el correo.`, { icon: '⚠️', duration: 9000 });
+      }
       onCreated?.(); onClose();
     } catch (e) { toast.error(e.message || 'No se pudo emitir'); }
     finally { setSaving(false); }
@@ -70,7 +84,7 @@ export function TransmittalModal({ isOpen, onClose, items, projectPrefix, user, 
               {items.map(it => (
                 <div key={it.node_id} style={{ padding: '6px 10px', borderBottom: '1px solid #f5f5f5', display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</span>
-                  <span style={{ color: '#5f7fa3', fontWeight: 600 }}>V{it.version || 1}</span>
+                  <span style={{ color: 'var(--accent)', fontWeight: 600 }}>V{it.version || 1}</span>
                 </div>
               ))}
             </div>
@@ -95,7 +109,7 @@ export function TransmittalModal({ isOpen, onClose, items, projectPrefix, user, 
                 <div key={u.email} onClick={() => addRecipient(u.email, u.name)}
                   style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', borderBottom: '1px solid #f5f5f5' }}
                   onMouseOver={e => e.currentTarget.style.background = '#fffaf2'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
-                  <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#5f7fa3', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{getInitials(u.name || u.email)}</span>
+                  <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{getInitials(u.name || u.email)}</span>
                   <span style={{ fontSize: 12 }}>{u.name || '—'} <span style={{ color: '#999', fontSize: 11 }}>{u.email}</span></span>
                 </div>
               ))}
@@ -104,7 +118,7 @@ export function TransmittalModal({ isOpen, onClose, items, projectPrefix, user, 
         </div>
         <div style={{ padding: '14px 20px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', gap: 10, background: '#fcfcfc' }}>
           <button onClick={onClose} style={{ padding: '8px 16px', background: '#fff', border: '1px solid #dcdcdc', borderRadius: 4, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={submit} disabled={saving} style={{ padding: '8px 20px', background: '#5f7fa3', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+          <button onClick={submit} disabled={saving} style={{ padding: '8px 20px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Emitiendo…' : 'Emitir transmittal'}
           </button>
         </div>
@@ -115,11 +129,28 @@ export function TransmittalModal({ isOpen, onClose, items, projectPrefix, user, 
 
 export function TransmittalsView({ projectPrefix }) {
   const [list, setList] = useState(null);
+  const [acusando, setAcusando] = useState(null);
   useEffect(() => {
     apiFetch(`${API}/api/transmittals?model_urn=${encodeURIComponent(projectPrefix)}`)
       .then(r => r.json()).then(d => setList(d.success ? d.transmittals : []))
       .catch(() => setList([]));
   }, [projectPrefix]);
+
+  // Acusar recibo: el hecho que convierte "te lo mandé" en "lo recibiste". El
+  // servidor decide si puedes (destinatario o admin) y pone la fecha; aquí solo
+  // se refleja lo que respondió.
+  const acusar = async (t) => {
+    setAcusando(t.id);
+    try {
+      const r = await apiFetch(`${API}/api/transmittals/${t.id}/acuse`, { method: 'POST' });
+      const d = await r.json();
+      if (!d.success) throw new Error(d.error);
+      setList(prev => prev.map(x => x.id === t.id ? { ...x, acuses: d.acuses } : x));
+      toast.success(d.ya_estaba ? 'Ya habías acusado recibo' : 'Recibo acusado');
+    } catch (e) {
+      toast.error(e.message || 'No se pudo acusar recibo');
+    } finally { setAcusando(null); }
+  };
 
   return (
     <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
@@ -136,7 +167,7 @@ export function TransmittalsView({ projectPrefix }) {
       ) : list.map(t => (
         <div key={t.id} style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8, marginBottom: 12, padding: '14px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#fff', background: '#5f7fa3', padding: '2px 10px', borderRadius: 12 }}>TR-{String(t.number).padStart(3, '0')}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#fff', background: 'var(--accent)', padding: '2px 10px', borderRadius: 12 }}>TR-{String(t.number).padStart(3, '0')}</span>
             <span style={{ fontSize: 14, fontWeight: 600, color: '#333', flex: 1 }}>{t.subject}</span>
             <span style={{ fontSize: 11, color: '#aaa' }}>{t.created_by} · {formatDate(t.created_at)}</span>
           </div>
@@ -146,6 +177,29 @@ export function TransmittalsView({ projectPrefix }) {
           </div>
           <div style={{ fontSize: 12, color: '#777', marginTop: 4 }}>
             ✉ {t.recipients.map(r => r.name || r.email).join(', ')}
+          </div>
+          {/* El acuse de recibo separa "yo te lo mandé" de "tú lo recibiste".
+              Sin acuse, el registro prueba el envío y nada más — y lo que se
+              discute en obra es siempre lo segundo. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10,
+                        paddingTop: 10, borderTop: '1px solid var(--divider, #f0f0f0)' }}>
+            {(t.acuses || []).length > 0 ? (
+              <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}
+                title={t.acuses.map(a => `${a.por} · ${formatDate(a.en)}${a.via === 'admin' ? ' (registrado por administración)' : ''}`).join('\n')}>
+                ✓ Recibo acusado por {t.acuses.map(a => a.por).join(', ')}
+              </span>
+            ) : (
+              <>
+                <span style={{ fontSize: 12, color: 'var(--warning)' }}>Sin acuse de recibo</span>
+                <button onClick={() => acusar(t)} disabled={acusando === t.id}
+                  style={{ fontSize: 11, fontWeight: 600, padding: '4px 12px', cursor: 'pointer',
+                           background: 'transparent', color: 'var(--accent)',
+                           border: '1px solid var(--border-accent, #cbd2d9)', borderRadius: 4,
+                           opacity: acusando === t.id ? 0.6 : 1 }}>
+                  {acusando === t.id ? 'Registrando…' : 'Acusar recibo'}
+                </button>
+              </>
+            )}
           </div>
         </div>
       ))}

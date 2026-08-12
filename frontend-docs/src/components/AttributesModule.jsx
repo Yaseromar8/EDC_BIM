@@ -60,7 +60,7 @@ export function AttributesAdmin({ projectPrefix }) {
           <input value={options} onChange={e => setOptions(e.target.value)} placeholder="Opciones separadas por coma"
             style={{ flex: 1, minWidth: 180, padding: '7px 10px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, outline: 'none' }} />
         )}
-        <button onClick={add} style={{ padding: '7px 16px', background: '#5f7fa3', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Añadir</button>
+        <button onClick={add} style={{ padding: '7px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Añadir</button>
       </div>
     </div>
   );
@@ -136,7 +136,7 @@ export function AttributesPanel({ item, projectPrefix, isAdmin, onClose }) {
         {isAdmin && defs && defs.length > 0 && (
           <div style={{ padding: '12px 18px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <button onClick={onClose} style={{ padding: '7px 14px', background: '#fff', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-            <button onClick={save} disabled={saving} style={{ padding: '7px 18px', background: '#5f7fa3', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+            <button onClick={save} disabled={saving} style={{ padding: '7px 18px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Guardando…' : 'Guardar'}
             </button>
           </div>

@@ -54,9 +54,46 @@ export function iniciarPredict() {
                 _catalogo.set(g.codigo, {
                     codigo: g.codigo,
                     partidas: g.n_partidas,
-                    valor: g.valor,
-                    valorizado_pct: g.valorizado_pct,   // lo que ya te pagaron
+                    // la calle de la que cuelga: el panel la nombra para que el
+                    // % de arriba (la calle) no se lea como el de abajo (el tramo)
+                    calle_id: g.calle_id,
+                    calle: (g.calle_nombre || '').replace(/^[\d.]+\s*-\s*/, ''),
+                    // QUÉ ESTÁ Y QUÉ FALTA — conteos exactos, sin supuestos:
+                    // salen del valorizado, que es un hecho contractual firmado
+                    lista: g.n_lista,                   // te la pagaron entera
+                    proceso: g.n_proceso,               // empezada, no cerrada
+                    falta: g.n_falta,                   // sin valorizar aún
+                    falta_soles: g.falta_soles,
+                    // EL DATO BUENO — el metrado de ESTE tramo por su precio,
+                    // medido por el cronograma P6 tramo por tramo. No prorratea
+                    // nada. null donde P6 no desglosa esa partida (ahí manda el
+                    // número de la calle, que en las estructuras sí es exacto).
+                    valor_tramo: g.valor_tramo,
+                    ejecutado_tramo_pct: g.ejecutado_tramo_pct,
+                    falta_tramo_soles: g.falta_tramo_soles,
+                    con_tramo: g.n_con_tramo,
+                    // La plata separada a propósito: en drenaje una partida
+                    // ("excavación DN450 prof 1.51-2.00") cubre varios tramos.
+                    // Sumar su parcial íntegro a cada tramo infla el frente
+                    // hasta 4x. 'propio' es lo que sí es de este tramo.
+                    valor_propio: g.valor_propio,
+                    valor_compartido: g.valor_compartido,
+                    compartidas: g.n_compartidas,
+                    valor: g.valor,                     // total tocado (NO es "su" plata)
+                    valorizado_pct: g.valorizado_pct,   // lo que ya te pagaron (TODAS las partidas)
                     ejecutado_pct: g.ejecutado_pct,     // null = sin mapeo de campo
+                    // EL PAR COMPARABLE: los dos porcentajes sobre las MISMAS
+                    // partidas. El valorizado de arriba cubre todo el frente y
+                    // el ejecutado solo lo que tiene dato de campo; ponerlos uno
+                    // al lado del otro hacía ver sobrepago donde solo falta dato
+                    // (SP-SU-2 marcaba 50.9 vs 42.6 cuando era 41.5 vs 42.6).
+                    valorizado_comp_pct: g.valorizado_comp_pct,
+                    cobertura_comp_pct: g.cobertura_comp_pct,
+                    // El metrado cambió respecto al contrato. Se cuenta en
+                    // PARTIDAS y sale del replanteo del RIBA, no de derivarlo
+                    // del costo: sumar m con m3 con kg no significa nada.
+                    n_mayor: g.n_mayor,
+                    n_menor: g.n_menor,
                     origen: g.origen,
                 });
             }

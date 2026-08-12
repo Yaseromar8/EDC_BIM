@@ -26,6 +26,7 @@ export default function FolderNode({
   const menuRef = useRef(null);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const [guardando, setGuardando] = useState(false);
   const [isCreatingChild, setIsCreatingChild] = useState(false);
   const [newChildName, setNewChildName] = useState('');
 
@@ -38,6 +39,11 @@ export default function FolderNode({
     const newName = renameValue.trim();
     if (cacheMethods) cacheMethods.optimisticRename(folder.parentId || null, nodeId, newName);
     setIsRenaming(false);
+    // El árbol no daba NINGUNA señal mientras renombraba: el nombre cambiaba de
+    // golpe y no se sabía si el servidor lo había aceptado o si seguía en vuelo.
+    // La tabla de la derecha sí lo hace (processingIds), así que aquí se usa el
+    // mismo lenguaje: apagado y sin poder pulsar hasta que se confirme.
+    setGuardando(true);
     try {
       const res = await apiFetch(`${API}/api/docs/rename`, {
         method: 'POST', headers: getAuthHeaders(),
@@ -48,11 +54,14 @@ export default function FolderNode({
         if (onGlobalRefresh) onGlobalRefresh();
       } else {
         if (cacheMethods) cacheMethods.rollbackRename(folder.parentId || null, nodeId, folderNameStr);
-        const err = await res.json(); toast.error('Error al renombrar: ' + (err.error || 'Desconocido'));
+        const err = await res.json().catch(() => ({}));
+        toast.error('Error al renombrar: ' + (err.error || 'Desconocido'));
       }
     } catch (e) {
       if (cacheMethods) cacheMethods.rollbackRename(folder.parentId || null, nodeId, folderNameStr);
       toast.error('Error de conexión');
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -128,12 +137,18 @@ export default function FolderNode({
     <>
       <div
         className={`folder-tree-item ${isActive ? 'active' : ''} ${isChildrenActive ? 'child-active' : ''} ${nodeId === rightClickedId ? 'context-active' : ''}`}
-        style={{ paddingLeft: `${8 + (level * 28)}px`, color: isActive ? '#5f7fa3' : folder._syncing ? '#999' : '#3c3c3c' }}
+        style={{
+          paddingLeft: `${8 + (level * 28)}px`,
+          color: isActive ? 'var(--accent)' : (folder._syncing || guardando) ? 'var(--text-muted)' : 'var(--text-primary)',
+          opacity: guardando ? 0.55 : 1,
+          pointerEvents: guardando ? 'none' : 'auto',
+          transition: 'opacity 0.15s'
+        }}
         onClick={(e) => { e.stopPropagation(); onNavigate(folderFullName, folder.id); if (level === 0 && onReset) onReset(); }}
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); const item = { ...folder, type: 'folder', id: nodeId }; onRowMenu(item, e); }}
       >
         <div className="tree-toggle" onClick={handleToggle} style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (!loading && children && children.length === 0 && expanded) ? 0 : 1 }}>
-          {processingIds[nodeId] ? (
+          {processingIds[nodeId] || guardando ? (
             <div className="adsk-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
           ) : (
             loading && expanded && !children ? (

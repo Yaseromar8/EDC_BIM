@@ -289,6 +289,21 @@ export function useFileExplorer(project, user) {
     }
   };
 
+  // Quitar de la tabla lo que el servidor ya confirmó que se borró.
+  //
+  // EL PARPADEO QUE ESTO ARREGLA: las filas se ponían grises, terminaba el
+  // DELETE, el `finally` quitaba el gris -y las filas RECUPERABAN su color, como
+  // si no se hubiera borrado nada- y solo cuando llegaba el refresco, un segundo
+  // después, desaparecían. El refresco se lanzaba sin esperarlo, así que el
+  // `finally` siempre iba por delante. Se quitan aquí, y el refresco pasa a ser
+  // lo que es: una reconciliación de fondo, no lo que hace desaparecer la fila.
+  const quitarDeLaTabla = (ids) => {
+    const fuera = new Set(ids.filter(Boolean).map(String));
+    if (!fuera.size) return;
+    setFolders(prev => prev.filter(f => !fuera.has(String(f.id))));
+    setFiles(prev => prev.filter(f => !fuera.has(String(f.id))));
+  };
+
   const deleteSpecificItem = async (fullName, id) => {
     if (!isAdmin) return;
     if (!id || !fullName) return; // Validación básica, asegurar que tenemos data
@@ -299,6 +314,7 @@ export function useFileExplorer(project, user) {
         body: JSON.stringify({ fullName, id, model_urn: projectPrefix, user: user.name })
       });
       if (res.ok) {
+        quitarDeLaTabla([id]);
         if (cacheMethods && id) {
             const parentId = currentNodeId || null;
             cacheMethods.commitDelete(parentId, id);
@@ -309,8 +325,16 @@ export function useFileExplorer(project, user) {
           setCurrentPath(projectPrefix);
           setCurrentNodeId(null);
         }
+      } else {
+        // Un borrado que falla y no dice nada es peor que un error: el usuario
+        // cree que el clic no entró y lo vuelve a intentar.
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || 'No se pudo suprimir');
       }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      toast.error('Error de conexión al suprimir');
+    }
     finally {
       if (id) setProcessingIds(prev => { const n = { ...prev }; delete n[id]; return n; });
     }
@@ -407,6 +431,8 @@ export function useFileExplorer(project, user) {
         body: JSON.stringify({ items: itemIds, action: 'DELETE', model_urn: projectPrefix, user: user.name })
       });
       if (res.ok) {
+        // Fuera de la tabla YA, sin esperar al refresco (ver quitarDeLaTabla).
+        quitarDeLaTabla(itemIds);
         setSelected(new Set());
         setRefreshSignal(s => s + 1);
         if (cacheMethods && itemIds.length > 0) {
@@ -415,6 +441,13 @@ export function useFileExplorer(project, user) {
                 const parentId = currentNodeId || null;
                 cacheMethods.commitDelete(parentId, id);
             });
+        }
+        // El servidor ahora filtra por permiso de carpeta y puede borrar menos de
+        // lo pedido. Callarlo haria creer que se borro todo.
+        const d = await res.json().catch(() => ({}));
+        if (d.sin_permiso) {
+          toast(`${d.processed} suprimido(s). ${d.sin_permiso} sin permiso.`,
+                { icon: '⚠️', duration: 7000 });
         }
         triggerRefresh();
       } else {

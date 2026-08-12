@@ -8,7 +8,7 @@ import '../index.css';
 // Iconos de LÍNEA (sin emojis): mismo lenguaje visual que el resto de la app.
 const stroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
 const FolderIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" {...stroke} style={{ color: '#5f7fa3', flexShrink: 0 }}>
+  <svg width="16" height="16" viewBox="0 0 24 24" {...stroke} style={{ color: 'var(--accent)', flexShrink: 0 }}>
     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
   </svg>
 );

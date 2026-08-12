@@ -205,7 +205,6 @@ const TableRow = ({ index, style, data }) => {
    
   const startEditingName = (e) => {
     e.stopPropagation();
-    console.log('startEditingName for', item.id, item.name);
     let nameToEdit = item.name || '';
     if (!isFolder && nameToEdit.includes('.')) {
       const parts = nameToEdit.split('.');
@@ -228,11 +227,11 @@ const TableRow = ({ index, style, data }) => {
         color: isGrey ? '#999' : 'inherit',
         transition: 'all 0.4s ease'
       }}
-      onClick={() => {
-        // Clic en la fila = seleccionar (como ACC/Drive); doble clic = abrir
-        if (isGrey || isEditingName || isEditing) return;
-        toggle(item.fullName);
-      }}
+      // La fila no hace nada por sí sola. Abrir es de la columna Nombre y solo de
+      // ella (como ACC); seleccionar es de la casilla y solo de ella. Antes el clic
+      // de fila marcaba la casilla, y eso se pisaba con lo que el usuario iba a
+      // hacer de verdad: entrar en la carpeta. En una tabla donde "seleccionado"
+      // decide qué se borra y qué se desplaza, marcar sin querer sale caro.
       onDoubleClick={() => {
         if (isEditingName || isEditing) return;
         openItem();
@@ -257,9 +256,21 @@ const TableRow = ({ index, style, data }) => {
           onClick={(e) => e.stopPropagation()}
         />
       </div>
-      <div 
-        className="td-cell name-cell td-frozen-left name-cell-editable" 
-        style={{ width: columnWidths.name, left: columnWidths.checkbox }}
+      {/* TODA la columna Nombre abre, no solo el texto: el icono y el hueco a la
+          derecha del nombre también. Es lo que hace ACC, y evita el clic que no
+          pasa nada por haber caído dos píxeles al lado de la letra. El lápiz, la
+          casilla y la caja de edición paran la propagación por su cuenta. */}
+      <div
+        className="td-cell name-cell td-frozen-left name-cell-editable"
+        style={{
+          width: columnWidths.name,
+          left: columnWidths.checkbox,
+          cursor: (isGrey || isEditingName) ? 'default' : 'pointer'
+        }}
+        onClick={() => {
+          if (isGrey || isEditingName) return;
+          openItem();
+        }}
       >
         {processingIds[item.id] ? (
           <div className="adsk-spinner" style={{ width: 14, height: 14, borderWidth: 2, marginRight: 8 }} />
@@ -327,10 +338,6 @@ const TableRow = ({ index, style, data }) => {
                 textOverflow: 'ellipsis', 
                 whiteSpace: 'nowrap'
               }}
-              onClick={(e) => {
-                e.stopPropagation();
-                openItem();
-              }}
             >
               {item.name || 'Sin nombre'}
             </span>
@@ -352,8 +359,8 @@ const TableRow = ({ index, style, data }) => {
               <svg 
                 className="pencil-icon-acc name-pencil" 
                 onClick={startEditingName}
-                width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5f7fa3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
-                style={{ cursor: 'pointer' }}
+                width="14" height="14" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
+                style={{ cursor: 'pointer', stroke: 'var(--accent)' }}
               >
                 <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
               </svg>
@@ -415,7 +422,7 @@ const TableRow = ({ index, style, data }) => {
             <>
               <span className="description-text-value">{item.description || ''}</span>
               {isAdmin && !isGrey && (
-                <svg className="pencil-icon-acc" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5f7fa3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="pencil-icon-acc" width="14" height="14" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: 'var(--accent)' }}>
                   <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
                 </svg>
               )}

@@ -8,7 +8,7 @@ import React, { useState } from 'react';
 import { VISOR_URL } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 
-const ACCENT = '#5f7fa3';
+const ACCENT = 'var(--accent)';
 
 function ProductCard({ icon, title, onClick, locked = false, lockNote }) {
   const [hover, setHover] = useState(false);

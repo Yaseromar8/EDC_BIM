@@ -789,7 +789,7 @@ const PartidasModule = ({ project, API, user, isAdmin }) => {
                   <div
                     onMouseDown={(e) => onResizeStart(e, idx)}
                     style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 6, cursor: 'col-resize' }}
-                    onMouseOver={e => e.currentTarget.style.background = '#5f7fa3'}
+                    onMouseOver={e => e.currentTarget.style.background = 'var(--accent)'}
                     onMouseOut={e => e.currentTarget.style.background = 'transparent'}
                   />
                 </th>

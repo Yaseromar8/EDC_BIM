@@ -14,7 +14,7 @@ export default function DocQuickView({ file, projectPrefix, onClose }) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 12000, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ width: '92vw', height: '90vh', background: '#fff', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 50px rgba(0,0,0,0.4)' }}>
         <div style={{ height: 46, padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e5e5e5', flexShrink: 0 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: '#5f7fa3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--accent)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <a href={file.url} target="_blank" rel="noopener noreferrer" title="Descargar"
               style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 6, color: '#666', textDecoration: 'none' }}>
@@ -38,7 +38,7 @@ export default function DocQuickView({ file, projectPrefix, onClose }) {
           {!isPdf && !isImage && !isVideo && (
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, color: '#666', fontSize: 14 }}>
               Sin vista previa para este formato.
-              <a href={file.url} target="_blank" rel="noopener noreferrer" style={{ background: '#5f7fa3', color: '#fff', padding: '9px 20px', borderRadius: 6, textDecoration: 'none', fontWeight: 600, fontSize: 13 }}>Descargar archivo</a>
+              <a href={file.url} target="_blank" rel="noopener noreferrer" style={{ background: 'var(--accent)', color: '#fff', padding: '9px 20px', borderRadius: 6, textDecoration: 'none', fontWeight: 600, fontSize: 13 }}>Descargar archivo</a>
             </div>
           )}
         </div>

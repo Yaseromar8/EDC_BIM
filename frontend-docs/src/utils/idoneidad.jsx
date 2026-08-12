@@ -145,7 +145,7 @@ export function IdoneidadHost() {
             style={{
               padding: '7px 16px', fontSize: 13, fontWeight: 600,
               cursor: elegido ? 'pointer' : 'not-allowed',
-              background: elegido ? '#5f7fa3' : '#c7ced6', color: '#fff',
+              background: elegido ? 'var(--accent)' : '#c7ced6', color: '#fff',
               border: 'none', borderRadius: 5,
             }}
           >

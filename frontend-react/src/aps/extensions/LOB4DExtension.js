@@ -209,9 +209,17 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         // Toggle de rótulos flotantes por SubZona (desde la UI del visor)
         this.handleZoneLabels = (e) => {
             const on = e?.detail?.visible;
-            this.setZoneLabelsVisible(on !== false);
+            this.setZoneLabelsVisible(on !== false, 'subzona');
         };
         window.addEventListener('lob-zone-labels', this.handleZoneLabels);
+
+        // Capa Agrupación: los mismos rótulos, pero la clave es el PAR
+        // (SubZona + Ubicacion). Solo caen juntos los que coinciden en los dos.
+        this.handleGroupLabels = (e) => {
+            const on = e?.detail?.visible;
+            this.setZoneLabelsVisible(on !== false, 'grupo');
+        };
+        window.addEventListener('lob-group-labels', this.handleGroupLabels);
 
         // Toggle de excavación fantasma (DWG de sólidos → "ya no existe")
         this.handleGhostExcav = (e) => this.ghostExcavation(e?.detail?.visible !== false);
@@ -267,6 +275,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         window.removeEventListener('lob-derive-stations', this.handleDeriveStations);
         window.removeEventListener('lob-focus-elements', this.handleFocusElements);
         window.removeEventListener('lob-zone-labels', this.handleZoneLabels);
+        window.removeEventListener('lob-group-labels', this.handleGroupLabels);
         window.removeEventListener('lob-ghost-excavation', this.handleGhostExcav);
         window.removeEventListener('lob-pk-heatmap', this.handlePkHeatmap);
         window.removeEventListener('lob-zone-hover', this.handleZoneHover);
@@ -1655,24 +1664,48 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
 
     // Color de marca (teal de la interfaz), NO verde. Coherente con el acento
     // activo del panel de filtros (.tandem-cb-box.checked.active #2d8fa5).
-    createZoneLabel(text, worldPos, zone) {
+    createZoneLabel(text, worldPos, zone, worldBase = null) {
         const active = this._activeZone === zone;
         // Línea guía (SVG)
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('stroke', 'rgba(126,155,189,0.75)');
         line.setAttribute('stroke-width', '1');
-        line.setAttribute('stroke-dasharray', '3 2');
         this._zoneLeaderSvg.appendChild(line);
+        // Un ANILLO, no un punto relleno. Un punto opaco se lee como "aquí hay algo
+        // encima"; un anillo se lee como una chincheta clavada EN la pieza, que es
+        // lo que hace sentir que la etiqueta pertenece a ese volumen y no que está
+        // suelta por delante. El relleno oscuro le da el hueco del centro.
         const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        dot.setAttribute('r', '2.6');
-        dot.setAttribute('fill', '#7e9bbd');
+        dot.setAttribute('r', '3.4');
+        dot.setAttribute('fill', 'rgba(20,28,38,0.55)');
+        dot.setAttribute('stroke-width', '1.4');
         this._zoneLeaderSvg.appendChild(dot);
 
         // Píldora
         const el = document.createElement('div');
         el.className = 'lob-zone-label';
         el.style.cssText = this.zoneLabelStyle(active);
-        el.textContent = text;
+
+        const txt = document.createElement('span');
+        txt.textContent = text;
+        el.appendChild(txt);
+
+        // La × de salir del aislamiento. Solo se ve cuando este grupo ES el
+        // aislado: volver a pulsar la píldora también funcionaba, pero eso no se
+        // adivina, y estando aislado el resto de píldoras no está para recordarte
+        // cómo salir. Con la × la salida se ve.
+        const cerrar = document.createElement('span');
+        cerrar.className = 'lob-zone-close';
+        cerrar.textContent = '×';
+        cerrar.title = 'Salir y ver todo';
+        cerrar.style.cssText = 'margin-left:7px;font-size:14px;line-height:1;opacity:0.85;'
+            + 'display:none;cursor:pointer;font-weight:900;';
+        cerrar.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.clearZoneIsolation();
+        });
+        el.appendChild(cerrar);
+
         el.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -1681,34 +1714,64 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         this._zoneLabelGroup.appendChild(el);
 
         this._zoneLabelElements.push({
-            el, line, dot, zone,
+            el, line, dot, zone, cerrar,
             worldPos: worldPos.clone ? worldPos.clone() : worldPos,
+            worldBase: worldBase ? (worldBase.clone ? worldBase.clone() : worldBase) : null,
         });
     }
 
     zoneLabelStyle(active) {
-        const bg = active ? 'linear-gradient(180deg,#2d8fa5,#1f6f82)' : 'linear-gradient(180deg,#1c2733,#141c26)';
-        const border = active ? '#43b3cc' : 'rgba(126,155,189,0.55)';
-        const color = active ? '#eafcff' : '#cfe0f2';
-        return `position:absolute;color:${color};background:${bg};padding:4px 11px;border-radius:13px;border:1px solid ${border};font:700 12px Inter,Arial,sans-serif;white-space:nowrap;box-shadow:0 2px 9px rgba(0,0,0,0.4);transform:translate(-50%,-50%);letter-spacing:0.3px;cursor:pointer;pointer-events:auto;will-change:left,top,display;`;
+        // Con un grupo aislado, los DEMÁS rótulos se atenúan en vez de desaparecer:
+        // siguen diciendo dónde está el resto -que es la referencia que uno necesita
+        // para situarse- pero dejan de competir con el que estás mirando.
+        const atenuada = !!this._activeZone && !active;
+        // Colores planos, no gradientes: un panel de ingeniería es plano. El
+        // activo lleva el teal de marca sólido; el inactivo, un grafito frío casi
+        // opaco. Peso 600 en vez de 700 (menos "grito"), y una sombra más baja y
+        // difusa que asienta la píldora sobre el modelo en vez de despegarla.
+        const bg = active ? '#1f6f82' : 'rgba(24,32,42,0.92)';
+        const border = active ? '#3fa7bd' : 'rgba(126,155,189,0.28)';
+        const color = active ? '#eafcff' : '#c3d2e2';
+        const atenuar = atenuada ? 'opacity:0.28;' : '';
+        return `position:absolute;display:inline-flex;align-items:center;${atenuar}color:${color};background:${bg};padding:5px 12px;border-radius:7px;border:1px solid ${border};font:600 11.5px Inter,-apple-system,'Segoe UI',Arial,sans-serif;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,0.28);transform:translate(-50%,-50%);letter-spacing:0.2px;cursor:pointer;pointer-events:auto;will-change:left,top,display;transition:opacity .18s;backdrop-filter:blur(2px);`;
+    }
+
+    // La clave de un elemento. Es lo ÚNICO que cambia entre la capa SubZonas y la
+    // capa Agrupación: el resto del mecanismo -cajas envolventes, centroide,
+    // rótulo flotante, línea guía, aislar al pulsar- es el mismo.
+    claveDeAgrupacion(row, campo) {
+        if (!campo) return '';
+        let v = row[campo];
+        if (Array.isArray(v)) v = v.filter(Boolean).join(', ');
+        return (v === null || v === undefined) ? '' : String(v).trim();
     }
 
     reportZoneResult(count, reason, extra = {}) {
-        window.dispatchEvent(new CustomEvent('lob-zone-labels-result', { detail: { count, reason, ...extra } }));
+        const evento = this._labelMode === 'grupo' ? 'lob-group-labels-result' : 'lob-zone-labels-result';
+        window.dispatchEvent(new CustomEvent(evento, { detail: { count, reason, ...extra } }));
         return count;
     }
 
-    buildSubZoneLabels() {
+    buildSubZoneLabels(modo = 'subzona') {
         const THREE = window.THREE;
         const inv = window.postgresInventory;
+        this._labelMode = modo;
+        const esGrupo = modo === 'grupo';
+        const etiq = esGrupo ? 'Agrupación' : 'SubZonas';
         if (!THREE || !Array.isArray(inv) || !inv.length) {
-            console.warn('[LOB4D] SubZonas: sin postgresInventory cargado.');
+            console.warn(`[LOB4D] ${etiq}: sin postgresInventory cargado.`);
             return this.reportZoneResult(0, 'sin-inventario');
         }
-        const zoneKey = this.detectZoneKey(inv);
+        // Agrupación usa el LOCALIZADOR (01_02_DSI_Localizador), el mismo campo
+        // con el que ya agrupa la capa Ejecución — así que se reutiliza su
+        // detector, que busca ese nombre exacto y no tiene cadena de respaldo.
+        // Combinar SubZona + Ubicación se probó y quedó confuso; se retomará
+        // cuando esté claro cómo se comportan los casos reales.
+        const zoneKey = esGrupo ? this.detectHoverKey(inv) : this.detectZoneKey(inv);
         if (!zoneKey) {
-            console.warn('[LOB4D] SubZonas: no se detectó parámetro (SubZona/Zona) en el inventario.');
-            return this.reportZoneResult(0, 'sin-parametro');
+            console.warn(`[LOB4D] ${etiq}: no se detectó el parámetro de agrupación en el inventario.`);
+            return this.reportZoneResult(0, 'sin-parametro',
+                esGrupo ? { faltan: 'Localizador' } : {});
         }
 
         this.clearZoneLabels();
@@ -1720,13 +1783,11 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         // extId → zona (una vez)
         const extZone = new Map();
         for (const row of inv) {
-            let v = row[zoneKey];
-            if (Array.isArray(v)) v = v.filter(Boolean).join(', ');
-            v = (v === null || v === undefined) ? '' : String(v).trim();
+            const v = this.claveDeAgrupacion(row, zoneKey);
             if (v) extZone.set(row.dbId, v);
         }
         if (!extZone.size) {
-            console.warn(`[LOB4D] SubZonas: el parámetro ${zoneKey} existe pero está vacío en todos los elementos.`);
+            console.warn(`[LOB4D] ${etiq}: el parámetro ${zoneKey} existe pero está vacío en todos los elementos.`);
             return this.reportZoneResult(0, 'parametro-vacio', { key: zoneKey });
         }
 
@@ -1753,7 +1814,8 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
                 if (!has) return;
                 const center = box.getCenter(new THREE.Vector3());
                 let a = agg.get(zone);
-                if (!a) { a = { sum: new THREE.Vector3(), n: 0, top: -Infinity, bbox: new THREE.Box3(), byModel: new Map() }; agg.set(zone, a); }
+                if (!a) { a = { sum: new THREE.Vector3(), n: 0, top: -Infinity, bbox: new THREE.Box3(), byModel: new Map(), centers: [] }; agg.set(zone, a); }
+                a.centers.push(center);
                 a.sum.add(center);
                 a.n += 1;
                 if (box.max.z > a.top) a.top = box.max.z;
@@ -1769,15 +1831,37 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         agg.forEach((a, zone) => {
             if (!a.n) return;
             const c = a.sum.clone().multiplyScalar(1 / a.n);
-            c.z = a.top + 2; // elevar el rótulo sobre el elemento más alto de la zona
+            // DOS puntos, no uno.
+            //
+            // Antes el rótulo se anclaba en `top + 2` -justo encima del elemento más
+            // alto- y la línea guía salía de ahí: quedaba tan corta que no se veía, y
+            // la píldora parecía flotar sin pertenecer a nada. Ahora la línea ARRANCA
+            // EN LA BASE del grupo y sube hasta la píldora, que se queda por encima
+            // de su punto más alto. Así se lee de un vistazo a qué volumen pertenece
+            // la etiqueta, que es justo para lo que está.
+            // El anclaje va al ELEMENTO más cercano al centroide, no a ningún
+            // centro geométrico. Ya se probó dos veces lo otro: la cota mínima
+            // fallaba en piezas largas inclinadas, y el centro de la caja falla en
+            // grupos en L o escalonados (una gradería): ambos son puntos de una
+            // CAJA imaginaria, y la caja de un grupo no es el grupo. El centro del
+            // elemento más próximo al centroide es, por definición, una pieza
+            // construida: la chincheta queda clavada EN el grupo, siempre.
+            let base = a.centers[0];
+            let mejor = Infinity;
+            for (const p of a.centers) {
+                const d = p.distanceToSquared(c);
+                if (d < mejor) { mejor = d; base = p; }
+            }
+            const alto = c.clone();
+            alto.z = a.top + 2;         // por encima de lo más alto: aquí va la píldora
             this._zoneMembers.set(zone, { byModel: a.byModel, bbox: a.bbox });
-            this.createZoneLabel(zone, c, zone);
+            this.createZoneLabel(zone, alto, zone, base);
             created += 1;
         });
 
         this._zoneLabelsVisible = true;
         this.updateZoneLabels();
-        console.log(`[LOB4D] SubZonas rotuladas: ${created} zonas (parámetro "${zoneKey}"). extIds con zona: ${extZone.size}`);
+        console.log(`[LOB4D] ${etiq}: ${created} grupo(s) rotulados (parámetro "${zoneKey}"). Elementos con clave: ${extZone.size}`);
         if (!created) {
             // El parámetro tiene valores pero ningún elemento cruzó con geometría
             // del visor (mapeo rosetta o bounding boxes vacíos).
@@ -1806,23 +1890,53 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
                 continue;
             }
             const lx = s.x;
-            const ly = s.y - OFFSET; // píldora un poco arriba del anclaje
-            label.el.style.display = 'block';
+            const ly = s.y - OFFSET; // píldora un poco arriba del punto alto
+            label.el.style.display = 'inline-flex';
             label.el.style.left = `${lx}px`;
             label.el.style.top = `${ly}px`;
-            // línea guía: del anclaje real (dot) hasta la base de la píldora
+            // La × solo en el grupo que está aislado ahora mismo.
+            if (label.cerrar) {
+                label.cerrar.style.display = (this._activeZone === label.zone) ? 'inline' : 'none';
+            }
+            // Línea guía: arranca en la BASE del grupo (si la tenemos) y sube hasta
+            // la píldora, atravesando el volumen. Es lo que hace que la etiqueta se
+            // lea como "de este grupo" y no como una pegatina flotando encima.
+            const anclaje = label.worldBase ? this.viewer.worldToClient(label.worldBase) : s;
+            // El activo lleva trazo continuo y del color de la píldora; el resto,
+            // discontinuo y atenuado. Igual que los rótulos: siguen ahí de
+            // referencia, pero no compiten con el que estás mirando.
+            const activo = this._activeZone === label.zone;
+            const atenuado = !!this._activeZone && !activo;
+            const trazo = activo ? '#43b3cc' : '#7e9bbd';
+            const alfa = atenuado ? 0.28 : (activo ? 0.95 : 0.7);
             label.dot.style.display = 'block';
-            label.dot.setAttribute('cx', s.x);
-            label.dot.setAttribute('cy', s.y);
+            label.dot.setAttribute('cx', anclaje.x);
+            label.dot.setAttribute('cy', anclaje.y);
+            label.dot.setAttribute('stroke', trazo);
+            label.dot.setAttribute('opacity', alfa);
+            label.dot.setAttribute('r', activo ? '4.2' : '3.4');
             label.line.style.display = 'block';
-            label.line.setAttribute('x1', s.x);
-            label.line.setAttribute('y1', s.y);
+            label.line.setAttribute('x1', anclaje.x);
+            label.line.setAttribute('y1', anclaje.y);
             label.line.setAttribute('x2', lx);
             label.line.setAttribute('y2', ly + 9);
+            label.line.setAttribute('stroke', trazo);
+            label.line.setAttribute('opacity', alfa);
+            label.line.setAttribute('stroke-width', activo ? '1.6' : '1');
+            // Continua cuando es el activo: una línea sólida "sujeta"; una
+            // discontinua sugiere que solo apunta.
+            if (activo) label.line.removeAttribute('stroke-dasharray');
+            else label.line.setAttribute('stroke-dasharray', '3 3');
         }
     }
 
     clearZoneLabels() {
+        // Si se reconstruyen las etiquetas (cambio de capa, inventario nuevo),
+        // el resaltado viejo apuntaría a grupos que ya no existen: fuera con él,
+        // tanto el rayado (guardado para otra vez) como el teñido gris/teal.
+        this.clearZoneHatch();
+        this._limpiarTenido();
+        this._activeZone = null;
         if (this._zoneLabelElements) {
             for (const l of this._zoneLabelElements) {
                 try { l.el.remove(); l.line.remove(); l.dot.remove(); } catch { /* noop */ }
@@ -1831,10 +1945,15 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         this._zoneLabelElements = [];
     }
 
-    setZoneLabelsVisible(v) {
+    setZoneLabelsVisible(v, modo = 'subzona') {
         this._zoneLabelsVisible = v;
-        if (v && (!this._zoneLabelElements || !this._zoneLabelElements.length)) {
-            this.buildSubZoneLabels();
+        // SubZonas y Agrupación comparten los mismos rótulos, así que son
+        // excluyentes: encender una reconstruye y apaga la otra. Dejarlas
+        // convivir superpondría dos píldoras en el mismo punto del modelo.
+        const cambioDeModo = v && this._labelMode && this._labelMode !== modo;
+        if (v && (cambioDeModo || !this._zoneLabelElements || !this._zoneLabelElements.length)) {
+            if (this._activeZone) this.clearZoneIsolation();
+            this.buildSubZoneLabels(modo);
         } else {
             if (!v && this._activeZone) this.clearZoneIsolation(); // apagar libera el aislamiento
             this.updateZoneLabels();
@@ -2238,39 +2357,119 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         console.log(`[LOB4D] Heatmap PK: ${painted} franja(s) de ${widthMeters}m pintada(s).`);
     }
 
-    // Click en un rótulo de SubZona → aísla esa zona y encuadra (como Tandem).
-    // Volver a clickear la misma zona la libera.
+    // Click en un rótulo de grupo → RESALTAR ese grupo:
+    //   · el grupo elegido se tiñe de color,
+    //   · TODO lo demás pasa a gris apagado (no se oculta ni se pone fantasma).
+    // Es más legible que aislar: el resto sigue en su sitio, de referencia, pero
+    // en gris para que el grupo activo salte. Todo por setThemingColor, que es
+    // gratis (tiñe el dibujo que ya existe), así que aguanta a cualquier escala.
+    // Volver a pulsar el mismo grupo lo suelta.
     handleZoneClick(zone) {
         if (this._activeZone === zone) { this.clearZoneIsolation(); return; }
         const info = this._zoneMembers?.get(zone);
         if (!info) return;
         this._activeZone = zone;
+        this._limpiarTenido();   // quita cualquier resaltado anterior
 
-        try { this.viewer.setGhosting?.(true); } catch { /* noop */ }
+        const THREE = window.THREE;
         const models = this.viewer.impl?.modelQueue?.().getModels?.() || [this.viewer.model].filter(Boolean);
-        window._filterIsolationInProgress = true; // no dispares MASTER RESET del filtro
-        models.forEach((m) => {
-            const ids = info.byModel.get(m);
-            if (ids && ids.length) this.viewer.impl.visibilityManager.isolate(ids, m);
-            else this.viewer.impl.visibilityManager.isolate([-1], m); // fantasma
-        });
-        // Encuadre a la caja de la zona
-        try {
-            if (info.bbox && !info.bbox.isEmpty()) this.viewer.navigation.fitBounds(false, info.bbox);
-        } catch { /* noop */ }
-        this.viewer.impl.invalidate(true, true, true);
-        setTimeout(() => { window._filterIsolationInProgress = false; }, 300);
+        // EL RESTO: gris neutro frío CON MEZCLA (alfa 0.62). La cuarta componente
+        // mezcla el gris con el color ya sombreado de cada pieza -no la vuelve
+        // translúcida-, así que el claroscuro y las aristas sobreviven: se ve la
+        // forma, apagada. Un neutro ligeramente frío (más azul que verde) lee más
+        // "técnico" que un gris cálido; es un matiz, pero es de los que hacen que
+        // una interfaz parezca de ingeniería y no de maqueta.
+        const gris = new THREE.Vector4(0.60, 0.62, 0.66, 0.62);
 
+        // EL ELEGIDO: teal de la marca, pero TAMBIÉN mezclado (alfa 0.72), no
+        // plano. Un relleno opaco aplastaba la pieza a una mancha de color y le
+        // quitaba el volumen; con la mezcla el elemento conserva su sombreado y
+        // sus caras, y encima el color. Se resalta la PIEZA, no una silueta. El
+        // tono es el de la píldora (#2d8fa5) para que etiqueta y modelo se lean
+        // como una sola cosa.
+        const activo = new THREE.Vector4(0.18, 0.56, 0.65, 0.72);
+
+        // Coste CERO por escala: no se recorre nada elemento a elemento. Se tiñe
+        // el MODELO ENTERO de gris con una sola llamada recursiva (desde la raíz)
+        // y encima se tiñe el grupo de teal, también recursivo. setThemingColor
+        // no añade geometría: cambia el color del dibujo que ya existe, así que da
+        // igual que la obra tenga 14.000 elementos o 200.000.
+        this._modelosTenidos = models.slice();
+        for (const m of models) {
+            const tree = m.getInstanceTree?.();
+            const root = tree && (tree.getRootId ? tree.getRootId() : tree.nodeAccess?.rootId);
+            try {
+                if (root !== undefined && root !== null) {
+                    this.viewer.setThemingColor(root, gris, m, true);   // todo gris
+                }
+            } catch { /* noop */ }
+            const ids = info.byModel.get(m) || [];
+            for (const dbId of ids) {
+                try { this.viewer.setThemingColor(dbId, activo, m, true); } catch { /* noop */ }
+            }
+        }
+
+        // Encuadre SUAVE al grupo: la cámara se desliza hasta encuadrarlo en vez
+        // del salto seco de fitBounds. Conserva el ÁNGULO actual (solo se acerca y
+        // centra), que es lo que hace que no maree: girar la vista de golpe
+        // desorienta; acercarse en la misma dirección, no.
+        try { this._encuadrarSuave(info.bbox); } catch { /* noop */ }
+        this.viewer.impl.invalidate(true, true, true);
         this.refreshZoneLabelStyles();
+    }
+
+    _encuadrarSuave(bbox) {
+        const THREE = window.THREE;
+        const nav = this.viewer?.navigation;
+        if (!THREE || !nav || !bbox || bbox.isEmpty()) return;
+
+        const centro = bbox.getCenter(new THREE.Vector3());
+        const radio = 0.5 * bbox.getSize(new THREE.Vector3()).length();
+        const posIni = nav.getPosition().clone();
+        const objIni = nav.getTarget().clone();
+        let dir = posIni.clone().sub(objIni);
+        if (dir.length() < 1e-6) dir.set(0.3, -1, 0.6);
+        dir.normalize();
+
+        const fov = ((nav.getVerticalFov && nav.getVerticalFov()) || 45) * Math.PI / 180;
+        const dist = radio / Math.sin(Math.min(Math.max(fov / 2, 0.1), 1.4)) * 1.15;
+        const objFin = centro.clone();
+        const posFin = centro.clone().add(dir.multiplyScalar(dist));
+
+        // Cancelar cualquier animación anterior antes de arrancar otra.
+        this._animEncuadre = (this._animEncuadre || 0) + 1;
+        const miId = this._animEncuadre;
+        const t0 = window.performance.now();
+        const dur = 650;
+        const suave = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+
+        const paso = () => {
+            if (miId !== this._animEncuadre) return;   // otra animación tomó el relevo
+            const t = Math.min(1, (window.performance.now() - t0) / dur);
+            const e = suave(t);
+            const p = posIni.clone().lerp(posFin, e);
+            const g = objIni.clone().lerp(objFin, e);
+            try { nav.setView(p, g); } catch { /* noop */ }
+            this.viewer.impl.invalidate(true, true, false);
+            if (t < 1) requestAnimationFrame(paso);
+        };
+        requestAnimationFrame(paso);
+    }
+
+    // Quita TODO el teñido (gris del resto + teal del grupo) de una vez por modelo.
+    _limpiarTenido() {
+        const models = this._modelosTenidos
+            || this.viewer.impl?.modelQueue?.().getModels?.() || [this.viewer.model].filter(Boolean);
+        for (const m of models) {
+            try { this.viewer.clearThemingColors(m); } catch { /* noop */ }
+        }
+        this._modelosTenidos = null;
     }
 
     clearZoneIsolation() {
         this._activeZone = null;
-        const models = this.viewer.impl?.modelQueue?.().getModels?.() || [this.viewer.model].filter(Boolean);
-        window._filterIsolationInProgress = true;
-        models.forEach((m) => { try { this.viewer.impl.visibilityManager.isolate([], m); } catch { /* noop */ } });
+        this._limpiarTenido();
         this.viewer.impl.invalidate(true, true, true);
-        setTimeout(() => { window._filterIsolationInProgress = false; }, 300);
         this.refreshZoneLabelStyles();
     }
 
@@ -2280,6 +2479,267 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             l.el.style.cssText = this.zoneLabelStyle(this._activeZone === l.zone);
         }
         this.updateZoneLabels(); // re-posicionar (cssText borra left/top)
+    }
+
+    // ── Rayado estilo Tandem para el grupo AISLADO ──────────────────────────
+    // El efecto de la captura de Tandem: rayas diagonales amarillas sobre las
+    // caras visibles del grupo. No es un material nuevo sobre el modelo (eso es
+    // lo que en su día descartamos por caro): son MALLAS ESPEJO en una escena
+    // overlay que REUTILIZAN la geometría ya cargada de cada fragmento
+    // (getRenderProxy no copia nada) con un shader de rayas en espacio de
+    // pantalla. Coste real: un draw call por fragmento del grupo y cero
+    // geometría nueva. Por eso es viable para EL GRUPO ACTIVO y seguiría sin
+    // serlo para el modelo entero.
+
+    ensureHatchMaterial() {
+        if (this._hatchMaterial) return this._hatchMaterial;
+        const THREE = window.THREE;
+        this._hatchMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                // El teal del grupo activo, el mismo de la píldora y la línea guía.
+                //
+                // CON TIPO ('c' = color, 'f' = float), obligatorio: el three.js del
+                // visor de Autodesk es un r71 y, sin el tipo, NO SUBE el uniforme a
+                // la GPU — solo escupe "Unknown uniform type: undefined" en cada
+                // frame. El color quedaba en negro y el paso en 0 (→ NaN en el
+                // mod), así que "las rayas teal" se pintaron siempre NEGRAS y al
+                // final todo salía como una cobertura oscura. Tres iteraciones de
+                // ajustar colores y densidades eran esto.
+                // El amarillo de Tandem, pedido por el usuario viendo el grano fino
+                // (el teal de la píldora se probó primero y prefirió este).
+                uRaya: { type: 'c', value: new THREE.Color(0xdfd83a) },
+                uPaso: { type: 'f', value: 0.5 },   // separación entre rayas, en unidades del modelo
+            },
+            // Las rayas van pintadas SOBRE LA SUPERFICIE, en coordenadas de mundo,
+            // no en pantalla. La primera versión usaba gl_FragCoord: la trama se
+            // quedaba quieta en el monitor y el modelo giraba por debajo, así que
+            // las líneas "nadaban" sobre las caras y mareaban al orbitar. Un rayado
+            // de plano gira CON la pieza; eso exige calcularlo del punto 3D real.
+            vertexShader: [
+                'varying vec3 vW;',
+                'void main(){',
+                '  vec4 w = modelMatrix * vec4(position, 1.0);',
+                '  vW = w.xyz;',
+                '  gl_Position = projectionMatrix * viewMatrix * w;',
+                '}',
+            ].join('\n'),
+            // OJO: nada de poner '#extension' aquí dentro. Esa directiva tiene que
+            // ser lo PRIMERO del programa, y el visor antepone su propia cabecera
+            // (precision, uniforms) al fragmento: quedaba en medio, el shader no
+            // compilaba, y un shader roto no dibuja nada — las rayas desaparecieron
+            // por completo. La directiva la inyecta el material (derivatives=true)
+            // en el sitio correcto; en WebGL2, fwidth ya es del núcleo.
+            fragmentShader: [
+                'uniform vec3 uRaya;',
+                'uniform float uPaso;',
+                'varying vec3 vW;',
+                'void main(){',
+                // OPACO, no transparente. Antes esto era transparente y a doble
+                // cara: la GPU mezclaba cada píxel -incluidas las caras traseras y
+                // las tapadas- sobre 2,7 M de triángulos en cada frame, sin descarte
+                // por profundidad. Con el canal entero llenando la pantalla se
+                // sentía "muy pesado". Opaco = una escritura, descarte temprano de
+                // lo oculto, cero mezcla: es como Tandem lo hace ligero. A cambio,
+                // el cuerpo se repinta con un tono claro uniforme (el look Tandem),
+                // no queda el gris original.
+                //
+                // Sombra suave desde la normal de cara (derivadas del punto de
+                // mundo): da volumen sin necesitar el atributo normal del modelo.
+                '  vec3 N = normalize(cross(dFdx(vW), dFdy(vW)));',
+                '  float dif = 0.55 + 0.45 * abs(dot(N, normalize(vec3(0.35,0.45,0.82))));',
+                '  vec3 base = vec3(0.88, 0.89, 0.85) * dif;',   // claro neutro, apenas cálido
+                // Rayas: planos paralelos con normal (1,1,1), pintadas SOBRE la
+                // superficie (giran con la pieza). El paso se mide contra el píxel
+                // (fwidth) y se duplica si baja de ~5 px, así la trama es igual de
+                // fina de cerca que de lejos y nunca se funde en una mancha.
+                '  float s = (vW.x + vW.y + vW.z) * 0.57735;',
+                '  float w = fwidth(s);',
+                '  float paso = max(uPaso, 1e-4);',
+                '  float minPer = 5.0 * max(w, 1e-6);',
+                '  if (paso < minPer) { paso *= exp2(ceil(log2(minPer / paso))); }',
+                '  float d = mod(s, paso);',
+                '  float grosor = paso * 0.35;',
+                '  float line = 1.0 - smoothstep(grosor - w, grosor + w, d);',
+                '  gl_FragColor = vec4(mix(base, uRaya, line), 1.0);',
+                '}',
+            ].join('\n'),
+            // Opaco: descarte por profundidad, sin mezcla. La malla se dibuja
+            // ligeramente hacia la cámara para tapar el gris original del grupo
+            // (que sigue aislado debajo) sin pelearse a z con él.
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+            polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+            side: THREE.DoubleSide,
+        });
+        // fwidth() necesita las derivadas estándar. El three.js que trae el visor
+        // de Autodesk es antiguo y usa la bandera vieja (material.derivatives);
+        // las versiones modernas usan extensions.derivatives. Se ponen las dos:
+        // la que sobre se ignora, y en WebGL2 la propia directiva del shader es
+        // solo un aviso porque fwidth ya es parte del núcleo.
+        this._hatchMaterial.derivatives = true;
+        this._hatchMaterial.extensions = { derivatives: true };
+        return this._hatchMaterial;
+    }
+
+    // Triángulos de un grupo, YA en coordenadas de mundo, en un solo Float32Array
+    // (no indexado). Es la pieza que hace que el rayado no dependa del número de
+    // elementos: se leen las posiciones de cada fragmento de la geometría ya
+    // cargada (getRenderProxy, sin copiar el modelo), se transforman por su matriz
+    // y se vuelcan en un único buffer. Con eso el grupo entero se pinta con UN
+    // draw call, tenga 500 fragmentos o 30.000 — que es como ACC/Tandem aguantan
+    // sin sufrir: no duplican una malla por pieza.
+    _trianglesDelGrupo(info, maxVerts) {
+        const THREE = window.THREE;
+        const impl = this.viewer?.impl;
+        const partes = [];
+        let total = 0;
+        const p = new THREE.Vector3();
+
+        const leerFragmento = (proxy) => {
+            const g = proxy.geometry;
+            const m = proxy.matrixWorld;
+            if (!g) return null;
+            // Índices del triángulo (LMV suele traer ib; si no, secuencial).
+            const idx = g.ib
+                || (g.index && g.index.array)
+                || (g.attributes && g.attributes.index && g.attributes.index.array)
+                || null;
+            // Posiciones: geometría LMV interleaved (vb + vbstride) o atributo llano.
+            let leer;
+            if (g.vb && g.vbstride) {
+                const off = (g.attributes && g.attributes.position
+                    && (g.attributes.position.itemOffset || 0)) || 0;
+                const s = g.vbstride, vb = g.vb;
+                leer = (i) => p.set(vb[i * s + off], vb[i * s + off + 1], vb[i * s + off + 2]);
+            } else if (g.attributes && g.attributes.position && g.attributes.position.array) {
+                const arr = g.attributes.position.array;
+                leer = (i) => p.set(arr[i * 3], arr[i * 3 + 1], arr[i * 3 + 2]);
+            } else {
+                return null;
+            }
+            const n = idx ? idx.length : ((g.vb && g.vbstride) ? g.vb.length / g.vbstride
+                : (g.attributes.position.array.length / 3));
+            const out = new Float32Array(n * 3);
+            for (let k = 0; k < n; k++) {
+                leer(idx ? idx[k] : k);
+                p.applyMatrix4(m);
+                out[k * 3] = p.x; out[k * 3 + 1] = p.y; out[k * 3 + 2] = p.z;
+            }
+            return { out, n };
+        };
+
+        info.byModel.forEach((ids, model) => {
+            const tree = model.getInstanceTree?.();
+            if (!tree || total > maxVerts) return;
+            for (const dbId of ids) {
+                if (total > maxVerts) break;
+                tree.enumNodeFragments(dbId, (fragId) => {
+                    if (total > maxVerts) return;
+                    const proxy = impl.getRenderProxy(model, fragId);
+                    if (!proxy) return;
+                    const r = leerFragmento(proxy);
+                    if (!r || !r.n) return;
+                    partes.push(r.out);
+                    total += r.n;
+                }, true);
+            }
+        });
+
+        if (!total) return null;
+        if (total > maxVerts) return { over: true, total };
+        const merged = new Float32Array(total * 3);
+        let o = 0;
+        for (const a of partes) { merged.set(a, o); o += a.length; }
+        return { array: merged, count: total };
+    }
+
+    applyZoneHatch(zone) {
+        const THREE = window.THREE;
+        const impl = this.viewer?.impl;
+        const info = this._zoneMembers?.get(zone);
+        if (!THREE || !impl || !info) return;
+        this.clearZoneHatch();
+
+        if (!this._hatchOverlayReady) {
+            impl.createOverlayScene('lob-zone-hatch');
+            this._hatchOverlayReady = true;
+        }
+        const mat = this.ensureHatchMaterial();
+
+        // El paso base es MINÚSCULO a propósito, y quien manda es el ajuste por
+        // píxel del shader: el paso se duplica hasta medir al menos ~7 px, así
+        // que partiendo de una base pequeña la trama queda siempre entre 7 y
+        // 14 px en pantalla — hilos finos y densos como los de Tandem, a
+        // cualquier zoom, y pegados a la superficie.
+        const tam = info.bbox && !info.bbox.isEmpty()
+            ? info.bbox.getSize(new THREE.Vector3()).length() : 0;
+        mat.uniforms.uPaso.value = Math.max(tam / 2000, 0.005);
+
+        // CAMINO RÁPIDO: fundir el grupo en UNA malla (1 draw call). Solo es
+        // posible si la geometría sigue en memoria de CPU; LMV, para ahorrar RAM,
+        // sube muchos modelos a la GPU y libera esa copia — y entonces no hay
+        // vértices que leer. Por eso NO se puede confiar en este camino: se
+        // intenta, y si no hay datos se cae al camino que sí pinta.
+        // ADAPTABLE, por tamaño del grupo:
+        //   · grupo manejable  → RAYADO fundido en una malla (bonito y fluido).
+        //   · grupo gigante    → TEÑIDO plano con setThemingColor (gratis: no
+        //                         añade geometría, tiñe el dibujo que ya existe,
+        //                         que es como ACC/Tandem aguantan a cualquier
+        //                         escala). Pierde la trama, pero orbita instantáneo.
+        //
+        // El corte va en vértices: el rayado cuesta rasterizar la malla entera cada
+        // frame, y por encima de ~2,5 M eso se sentía "muy pesado" (el canal son
+        // 8 M). Por debajo, va suelto.
+        const HATCH_MAX_VERTS = 2500000;
+        const tris = this._trianglesDelGrupo(info, HATCH_MAX_VERTS);
+
+        if (tris && !tris.over && tris.count) {
+            const geom = new THREE.BufferGeometry();
+            geom.addAttribute('position', new THREE.BufferAttribute(tris.array, 3));
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.frustumCulled = false;
+            impl.addOverlay('lob-zone-hatch', mesh);
+            this._hatchMeshes = [mesh];
+            this._hatchGeom = geom;
+            impl.invalidate(false, false, true);
+            console.log(`[LOB4D] Rayado FUNDIDO: ${tris.count} vértices en 1 malla.`);
+            return;
+        }
+
+        // Grupo demasiado grande para rayar: teñido plano, coste cero.
+        const tinte = new THREE.Vector4(0.26, 0.70, 0.80, 1.0);   // teal de la píldora
+        this._hatchTintados = [];
+        info.byModel.forEach((ids, model) => {
+            for (const dbId of ids) {
+                try {
+                    this.viewer.setThemingColor(dbId, tinte, model, true);
+                    this._hatchTintados.push({ dbId, model });
+                } catch { /* noop */ }
+            }
+        });
+        impl.invalidate(false, false, true);
+        console.log(`[LOB4D] Grupo grande (${tris?.total || '?'} v): teñido plano (sin trama, fluido).`);
+    }
+
+    clearZoneHatch() {
+        const impl = this.viewer?.impl;
+        if (this._hatchMeshes?.length && impl) {
+            try { impl.clearOverlay('lob-zone-hatch'); } catch { /* noop */ }
+        }
+        this._hatchMeshes = [];
+        if (this._hatchGeom) {
+            try { this._hatchGeom.dispose(); } catch { /* noop */ }
+            this._hatchGeom = null;
+        }
+        // Quitar el teñido plano de los grupos grandes (la otra rama del adaptable).
+        if (this._hatchTintados?.length) {
+            for (const { dbId, model } of this._hatchTintados) {
+                try { this.viewer.setThemingColor(dbId, null, model); } catch { /* noop */ }
+            }
+            this._hatchTintados = [];
+        }
+        impl?.invalidate(false, false, true);
     }
 
     createTextSprite(text, options = {}) {

@@ -66,7 +66,7 @@ export default class ErrorBoundary extends React.Component {
           </button>
           <button
             onClick={() => window.location.reload()}
-            style={{ padding: '7px 14px', fontSize: 13, border: 'none', background: '#5f7fa3', color: '#fff', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}
+            style={{ padding: '7px 14px', fontSize: 13, border: 'none', background: 'var(--accent)', color: '#fff', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}
           >
             Recargar página
           </button>

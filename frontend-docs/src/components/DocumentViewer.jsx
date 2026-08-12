@@ -146,7 +146,7 @@ export default function DocumentViewer({
     <div className="file-viewer-overlay" style={isShared ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#fff' } : undefined}>
       <div className="file-viewer-header" style={isShared ? { padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e0e0e0', flexShrink: 0 } : undefined}>
         <div className="file-viewer-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 16, fontWeight: 500, color: '#5f7fa3', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--accent)', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {file.name}
           </span>
           
@@ -213,8 +213,8 @@ export default function DocumentViewer({
                               padding: '4px 8px', 
                               fontSize: 11, 
                               background: '#fff', 
-                              border: '1px solid #5f7fa3', 
-                              color: '#5f7fa3', 
+                              border: '1px solid var(--accent)', 
+                              color: 'var(--accent)', 
                               borderRadius: 2,
                               cursor: 'pointer'
                             }}
@@ -256,7 +256,7 @@ export default function DocumentViewer({
           if (!isShared && !['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext)) && loadingPreview) {
             return (
               <div role="status" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
-                <div className="spinner-acc" style={{ width: 40, height: 40, border: '3px solid #e5e7eb', borderTop: '3px solid #5f7fa3', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' }} />
+                <div className="spinner-acc" style={{ width: 40, height: 40, border: '3px solid #e5e7eb', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' }} />
                 <div style={{ fontSize: 14, color: '#666' }}>Preparando vista segura…</div>
               </div>
             );
@@ -267,7 +267,7 @@ export default function DocumentViewer({
               <div role="alert" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, color: '#5f6368' }}>
                 <div>No se pudo abrir la vista previa.</div>
                 <div style={{ fontSize: 12, color: '#8a9099' }}>{previewError}</div>
-                <button type="button" onClick={() => setPreviewRetry(value => value + 1)} style={{ padding: '8px 16px', background: '#5f7fa3', color: '#fff', border: 0, borderRadius: 4, cursor: 'pointer' }}>
+                <button type="button" onClick={() => setPreviewRetry(value => value + 1)} style={{ padding: '8px 16px', background: 'var(--accent)', color: '#fff', border: 0, borderRadius: 4, cursor: 'pointer' }}>
                   Reintentar
                 </button>
               </div>
@@ -298,7 +298,7 @@ export default function DocumentViewer({
             if (loadingOffice) {
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
-                  <div className="spinner-acc" style={{ width: 40, height: 40, border: '3px solid #f3f3f3', borderTop: '3px solid #5f7fa3', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' }}></div>
+                  <div className="spinner-acc" style={{ width: 40, height: 40, border: '3px solid #f3f3f3', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' }}></div>
                   <div style={{ fontSize: 14, color: '#666' }}>Cargando visor de Office...</div>
                 </div>
               );
@@ -307,7 +307,7 @@ export default function DocumentViewer({
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#666' }}>
                   <div style={{ fontSize: 14 }}>No se pudo cargar la vista previa de Office.</div>
-                  <button onClick={() => window.open(fileUrl, '_blank')} style={{ marginTop: 12, padding: '8px 16px', background: '#5f7fa3', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Descargar archivo</button>
+                  <button onClick={() => window.open(fileUrl, '_blank')} style={{ marginTop: 12, padding: '8px 16px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Descargar archivo</button>
                 </div>
               );
             }
@@ -325,7 +325,7 @@ export default function DocumentViewer({
                    <svg width="48" height="48" viewBox="0 0 24 24" fill="#5f6368"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
                  </div>
                  <p style={{ fontFamily: 'Inter', fontSize: 16, color: '#3c4043', fontWeight: 500 }}>No hay vista previa disponible</p>
-                 <a href={fileUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 24, background: '#5f7fa3', color: '#fff', padding: '10px 24px', borderRadius: 20, textDecoration: 'none', fontFamily: 'Inter', fontWeight: 500, fontSize: 14, transition: 'background 0.2s' }}>
+                 <a href={fileUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 24, background: 'var(--accent)', color: '#fff', padding: '10px 24px', borderRadius: 20, textDecoration: 'none', fontFamily: 'Inter', fontWeight: 500, fontSize: 14, transition: 'background 0.2s' }}>
                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                    Descargar Archivo
                  </a>

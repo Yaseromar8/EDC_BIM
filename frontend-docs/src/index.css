@@ -1,38 +1,115 @@
 /* ==========================================
    ECD-VISIION — GESTIÓN DOCUMENTAL
-   Tema propio · sobrio · minimalista
-   Acento slate #5f7fa3 / #7e9bbd (coherente con el visor 3D/5D)
+   Tema "Azul técnico" · profesional · sin decoración
+
+   LA REGLA: los grises hacen el 95% del trabajo. El azul aparece en tres
+   sitios y en ninguno más — la acción principal, dónde estás, y el foco del
+   teclado. El color semántico (rojo/verde/ámbar) sólo cuando hay un estado
+   que comunicar; nunca de adorno.
+
+   POR QUÉ CAMBIÓ: el tema anterior desaturaba TODO (--danger era un rosa
+   #bd8585, --success un salvia #7ea88f). Apagar los colores que deben avisar
+   no es sobriedad, es que un error deje de parecer un error. Y --text-muted
+   estaba a 2,60:1 de contraste sobre blanco, por debajo del 4,5:1 que exige
+   la WCAG AA: ilegible en una tablet a pleno sol, que es donde se usa esto.
+
+   Cada valor de texto de aquí abajo lleva su razón de contraste medida.
+   Si tocas uno, vuelve a medirlo.
    ========================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f9fafb;
-  --bg-tertiary: #f3f5f7;
-  --bg-hover: #f0f2f5;
-  --bg-active: #eef2f7;
-  /* Slate de selección muy claro */
-  --border: #e7e9ee;
-  /* Gris azulado ligero de bordes */
-  --border-hover: #cdd3dc;
-  --text-primary: #2b333d;
-  /* Pizarra oscura para texto, no negro puro */
-  --text-secondary: #6b7280;
-  --text-muted: #9aa1ab;
-  --accent: #5f7fa3;
-  /* Slate propio (acento principal) */
-  --accent-hover: #4d6a8f;
-  --accent-soft: #7e9bbd;
-  --header-dark: #2b333d;
-  --link: #5f7fa3;
-  --danger: #bd8585;
-  --success: #7ea88f;
-  --warning: #c2a878;
-  --orange: #5f7fa3;
-  /* Secundario unificado al acento (minimalista, sin naranja) */
+  /* ── Rampa de neutros ───────────────────────────────────────────────
+     Todo gris de la aplicación sale de aquí. Si necesitas un gris que no
+     está en esta lista, casi seguro que ya existe uno que hace ese papel. */
+  --neutral-0: #ffffff;
+  --neutral-25: #fbfcfd;
+  --neutral-50: #f8f9fa;
+  --neutral-100: #f1f3f5;
+  --neutral-200: #e3e6ea;
+  --neutral-300: #cbd2d9;
+  --neutral-400: #98a2ad;
+  --neutral-500: #667180;
+  --neutral-600: #4a5561;
+  --neutral-700: #343d47;
+  --neutral-800: #262e37;
+  --neutral-900: #1a2027;
+
+  /* ── Fondos ── */
+  --bg-primary: var(--neutral-0);
+  --bg-secondary: var(--neutral-50);
+  --bg-tertiary: var(--neutral-100);
+  --bg-hover: var(--neutral-100);
+  --bg-active: #eef3f9;
+  /* Azul muy claro: "estás aquí" */
+  --bg-selected: #eef3f9;
+  --overlay: rgba(26, 32, 39, 0.45);
+  /* Fondo de modal */
+
+  /* ── Bordes ── */
+  --border: var(--neutral-200);
+  --border-hover: var(--neutral-300);
+  --border-strong: var(--neutral-300);
+  --divider: var(--neutral-100);
+  /* Separador entre filas, más tenue que un borde */
+
+  /* ── Texto (con su contraste sobre blanco medido) ── */
+  --text-primary: var(--neutral-900);
+  /* 16,4:1 — AAA */
+  --text-secondary: var(--neutral-600);
+  /* 7,60:1 — AAA */
+  --text-muted: var(--neutral-500);
+  /* 4,95:1 sobre blanco, 4,70:1 sobre --bg-secondary — AA */
+  --text-disabled: var(--neutral-400);
+  /* 2,86:1 — NO usar para texto que haya que leer, sólo para deshabilitado */
+  --text-inverse: var(--neutral-0);
+
+  /* ── Acento: un solo azul, tres usos ── */
+  --accent: #1c4e80;
+  /* 8,57:1 sobre blanco — sirve de texto y de fondo de botón */
+  --accent-hover: #163f66;
+  --accent-soft: #4a7cb0;
+  --bg-accent: #eef3f9;
+  --border-accent: #b8cee4;
+  --text-on-accent: #ffffff;
+  --focus-ring: 0 0 0 3px rgba(28, 78, 128, 0.22);
+  --link: var(--accent);
+
+  /* ── Semántico: fuerte, y sólo cuando hay algo que decir ── */
+  --danger: #b3261e;
+  /* 6,54:1 */
+  --danger-hover: #8f1e17;
+  --bg-danger: #fdf0ef;
+  --border-danger: #eec6c3;
+  --success: #1e6b45;
+  /* 6,47:1 */
+  --bg-success: #eef8f3;
+  --border-success: #bfdfcf;
+  --warning: #8a5a00;
+  /* 5,93:1 */
+  --bg-warning: #fbf4e6;
+  --border-warning: #e6d3a8;
+
+  /* ── Estados ISO 19650 ────────────────────────────────────────────────
+     El color acompaña a la etiqueta (WIP/SHA/PUB/ARC), nunca la sustituye:
+     así sigue siendo legible para quien no distingue rojo y verde. */
+  --estado-wip: var(--neutral-500);
+  --bg-estado-wip: var(--neutral-100);
+  --estado-shared: var(--accent);
+  --bg-estado-shared: var(--bg-accent);
+  --estado-published: var(--success);
+  --bg-estado-published: var(--bg-success);
+  --estado-archived: var(--neutral-400);
+  --bg-estado-archived: var(--neutral-50);
+
+  --header-dark: var(--neutral-900);
+  --orange: var(--accent);
+  /* Alias histórico: no hay naranja en este tema */
+
   --radius: 4px;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow: 0 1px 2px rgba(26, 32, 39, 0.06);
+  --shadow-raised: 0 4px 12px rgba(26, 32, 39, 0.10);
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -311,7 +388,7 @@ body {
 
 .folder-tree-item.active {
   background: #eef2f7;
-  color: #5f7fa3;
+  color: var(--accent);
 }
 
 .folder-tree-item.child-active {
@@ -378,7 +455,7 @@ body {
 .inline-edit-box {
   display: flex;
   align-items: center;
-  border: 1px solid #5f7fa3;
+  border: 1px solid var(--accent);
   border-radius: 2px;
   background: #fff;
   height: 32px;
@@ -414,15 +491,15 @@ body {
 
 .inline-edit-box button.btn-cancel {
   border-color: #dcdcdc;
-  color: #5f7fa3;
+  color: var(--accent);
   background: #fff;
 }
 .inline-edit-box button.btn-cancel:hover { background: #f0f0f0; }
 
 .inline-edit-box button.btn-submit {
-  border-color: #5f7fa3;
+  border-color: var(--accent);
   color: #fff;
-  background: #5f7fa3;
+  background: var(--accent);
 }
 .inline-edit-box button.btn-submit:hover { background: #4d6a8f; }
 
@@ -497,7 +574,7 @@ body {
 .acc-top-strip {
   width: 100%;
   min-height: 3px;
-  background: #5f7fa3;
+  background: var(--accent);
 }
 
 .acc-top-header {
@@ -565,8 +642,8 @@ body {
 }
 
 .acc-tab.active {
-  color: #5f7fa3;
-  border-bottom-color: #5f7fa3;
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
 .acc-divider {
@@ -629,7 +706,7 @@ body {
 }
 
 .acc-resize-handle:hover .acc-resize-dots span {
-  background: #5f7fa3;
+  background: var(--accent);
 }
 
 .acc-data-panel {
@@ -806,7 +883,7 @@ body {
 }
 
 .row-context-menu button:hover .menu-icon {
-  color: #5f7fa3;
+  color: var(--accent);
 }
 
 .menu-divider {
@@ -830,7 +907,7 @@ body {
 
 .row-action-btn:hover {
   background: #eee;
-  color: #5f7fa3;
+  color: var(--accent);
 }
 
 .row-action-menu {
@@ -862,7 +939,7 @@ body {
 
 .row-action-menu button:hover {
   background: #f5f5f5;
-  color: #5f7fa3;
+  color: var(--accent);
 }
 
 .row-action-menu button.danger {
@@ -905,8 +982,8 @@ body {
 
 .acc-search-box:focus-within {
   background: #fff;
-  border-color: #5f7fa3;
-  box-shadow: 0 0 0 1px #5f7fa3;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .acc-search-box input {
@@ -947,7 +1024,7 @@ body {
 
 .acc-type-selector button.active {
   background: #ffffff;
-  color: #5f7fa3;
+  color: var(--accent);
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
@@ -975,7 +1052,7 @@ body {
 }
 
 .btn-primary {
-  background: #5f7fa3;
+  background: var(--accent);
   color: #fff;
 }
 
@@ -1084,7 +1161,7 @@ body {
 }
 .bc-item.link {
   cursor: pointer;
-  color: #5f7fa3;
+  color: var(--accent);
 }
 .bc-item.link:hover {
   text-decoration: underline;
@@ -1239,7 +1316,7 @@ body {
 }
 
 .resizer-acc:hover {
-  background: #5f7fa3;
+  background: var(--accent);
 }
 
 th {
@@ -1263,7 +1340,7 @@ th {
 }
 
 .user-cell .avatar {
-  background: #5f7fa3;
+  background: var(--accent);
   color: #fff;
   width: 22px;
   height: 22px;
@@ -1436,7 +1513,7 @@ th {
 }
 
 .acc-upload-dropzone.drag-over {
-  border-color: #5f7fa3;
+  border-color: var(--accent);
   background: #eef2f7;
 }
 
@@ -1465,7 +1542,7 @@ th {
 .acc-upload-file-icon {
   width: 32px;
   height: 32px;
-  background: #5f7fa3;
+  background: var(--accent);
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -1531,7 +1608,7 @@ th {
 
 .acc-progress-bar {
   height: 100%;
-  background: #5f7fa3;
+  background: var(--accent);
   transition: width 0.3s ease;
 }
 
@@ -1549,7 +1626,7 @@ th {
   left: 0;
   width: 40%;
   height: 100%;
-  background: #5f7fa3;
+  background: var(--accent);
   animation: acc-progress-slide 1.5s infinite ease-in-out;
 }
 
@@ -1567,7 +1644,7 @@ th {
 }
 
 .acc-btn-listo {
-  background: #5f7fa3;
+  background: var(--accent);
   color: #fff;
   border: none;
   padding: 8px 16px;
@@ -1660,7 +1737,7 @@ th {
   position: absolute;
   top: -2px;
   right: -2px;
-  background: #5f7fa3;
+  background: var(--accent);
   color: white;
   font-size: 10px;
   font-weight: bold;
@@ -1783,7 +1860,7 @@ th {
 
 .ai-msg.user {
   align-self: flex-end;
-  background: #5f7fa3;
+  background: var(--accent);
   color: #fff;
   border-bottom-right-radius: 2px;
 }
@@ -1821,13 +1898,13 @@ th {
 }
 
 .citation-btn span {
-  color: #5f7fa3;
+  color: var(--accent);
   font-weight: 600;
 }
 
 .citation-btn:hover {
   background: #f0f8ff;
-  border-color: #5f7fa3;
+  border-color: var(--accent);
   transform: translateX(4px);
 }
 
@@ -1848,7 +1925,7 @@ th {
 }
 
 .ai-send-btn {
-  background: #5f7fa3;
+  background: var(--accent);
   color: #fff;
   border: none;
   width: 36px;
@@ -1945,7 +2022,7 @@ th {
   height: 16px;
   flex-shrink: 0;
   margin: 0;
-  accent-color: var(--accent, #5f7fa3);
+  accent-color: var(--accent, var(--accent));
   cursor: pointer;
 }
 
@@ -1975,7 +2052,7 @@ th {
 
 .access-badge-docs {
   background: #eef2f7;
-  color: #5f7fa3;
+  color: var(--accent);
 }
 
 .access-badge-docs:hover {
@@ -2128,7 +2205,7 @@ th {
 }
 
 .adsk-input:focus {
-  border-color: #5f7fa3;
+  border-color: var(--accent);
   border-width: 2px;
   padding: 11px 13px;
 }
@@ -2172,7 +2249,7 @@ th {
 }
 
 .adsk-link a:hover {
-  color: #5f7fa3;
+  color: var(--accent);
 }
 
 /* ─── OTP DIGIT INPUTS ─── */
@@ -2194,7 +2271,7 @@ th {
 }
 
 .otp-box:focus {
-  border-color: #5f7fa3;
+  border-color: var(--accent);
   border-width: 2px;
 }
 
@@ -2355,7 +2432,7 @@ th {
   gap: 12px;
   font-size: 14px;
   font-weight: 500;
-  color: #5f7fa3;
+  color: var(--accent);
 }
 
 .file-viewer-version {
@@ -2534,7 +2611,7 @@ th {
 
 .agent-thinking-docs summary {
   font-size: 11px;
-  color: #5f7fa3;
+  color: var(--accent);
   font-weight: 600;
   cursor: pointer;
   list-style: none;
@@ -2591,7 +2668,7 @@ th {
 .citation-btn {
   background: #f4f6f9;
   border: 1px solid #d0e7ff;
-  color: #5f7fa3;
+  color: var(--accent);
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 11px;
@@ -2647,7 +2724,7 @@ th {
 }
 
 .ai-markdown-content blockquote {
-  border-left: 4px solid #5f7fa3;
+  border-left: 4px solid var(--accent);
   margin: 12px 0;
   padding-left: 12px;
   color: #555;
@@ -2670,7 +2747,7 @@ th {
   justify-content: center;
   min-width: 32px;
   text-align: center;
-  color: #5f7fa3;
+  color: var(--accent);
   cursor: pointer;
   font-weight: 600;
   font-size: 11px;
@@ -2679,7 +2756,7 @@ th {
 }
 
 .version-link-acc:hover {
-  border-color: #5f7fa3;
+  border-color: var(--accent);
   background: #f4f6f9;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
@@ -2705,8 +2782,8 @@ th {
 }
 
 .btn-v-action:hover {
-  border-color: #5f7fa3;
-  color: #5f7fa3;
+  border-color: var(--accent);
+  color: var(--accent);
   background: #f6fcff;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
@@ -2723,7 +2800,7 @@ th {
   border-radius: 3px;
 }
 .version-popover div::-webkit-scrollbar-thumb:hover {
-  background: #5f7fa3;
+  background: var(--accent);
 }
 
 /* ─── SIDE PANEL (ACC Style) ─── */
@@ -2934,8 +3011,8 @@ th {
 
 .toolbar-btn.active {
   background: #eef2f7;
-  color: #5f7fa3;
-  border-color: #5f7fa3;
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .toolbar-btn svg {
@@ -2991,7 +3068,7 @@ th {
 }
 
 .breadcrumb-module {
-  color: #5f7fa3;
+  color: var(--accent);
   font-weight: 500;
 }
 
@@ -3068,7 +3145,7 @@ th {
 }
 
 .share-input-acc:focus {
-  border: 2px solid #5f7fa3;
+  border: 2px solid var(--accent);
   padding: 11px 15px; /* Compensa el borde grosor */
 }
 
@@ -3079,7 +3156,7 @@ th {
   background: #fff;
   padding: 0 4px;
   font-size: 12px;
-  color: #5f7fa3;
+  color: var(--accent);
 }
 
 .share-result-item:hover {
@@ -3184,7 +3261,7 @@ th {
   border: 1px solid #747775;
   border-radius: 20px;
   padding: 8px 16px;
-  color: #5f7fa3;
+  color: var(--accent);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -3193,11 +3270,11 @@ th {
 
 .btn-copy-link:hover {
   background: #f4f6f9;
-  border-color: #5f7fa3;
+  border-color: var(--accent);
 }
 
 .btn-share-done {
-  background: #5f7fa3;
+  background: var(--accent);
   color: #fff;
   border: none;
   border-radius: 20px;
@@ -3228,7 +3305,7 @@ th {
 }
 
 .restore-btn-acc:hover {
-  color: #5f7fa3 !important;
+  color: var(--accent) !important;
 }
 
 /* ==========================================================================
@@ -3310,7 +3387,7 @@ th {
   width: 100%;
   height: 32px;
   padding: 0 8px;
-  border: 1px solid #5f7fa3;
+  border: 1px solid var(--accent);
   border-radius: 4px;
   outline: none;
   font-size: 13px;
@@ -3380,7 +3457,7 @@ th {
 }
 
 .breadcrumb-module {
-  color: #5f7fa3;
+  color: var(--accent);
   font-weight: 500;
 }
 
@@ -3543,7 +3620,7 @@ th {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #5f7fa3;
+  background: var(--accent);
   color: #fff;
   display: flex;
   align-items: center;
@@ -3592,11 +3669,11 @@ th {
 
 .acc-pill-bar.outline {
   background: transparent;
-  border: 1.5px solid #5f7fa3;
+  border: 1.5px solid var(--accent);
 }
 
 .acc-pill-bar.active {
-  background: #5f7fa3;
+  background: var(--accent);
   border: none;
 }
 
@@ -3834,7 +3911,7 @@ th {
 .gateway-card:hover {
   transform: translateY(-3px);
   box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-  border-color: #5f7fa3;
+  border-color: var(--accent);
 }
 
 .gateway-icon {
@@ -3847,10 +3924,10 @@ th {
   font-size: 24px;
   margin-bottom: 16px;
   background: #f0f7fb;
-  color: #5f7fa3;
+  color: var(--accent);
 }
 
-.gateway-card.canal:hover .gateway-icon { background: #5f7fa3; color: white; }
+.gateway-card.canal:hover .gateway-icon { background: var(--accent); color: white; }
 .gateway-card.drenaje:hover .gateway-icon { background: #10b981; color: white; }
 .gateway-card.infraworks:hover .gateway-icon { background: #8b5cf6; color: white; }
 
@@ -3873,7 +3950,7 @@ th {
   margin-top: 20px;
   display: flex;
   align-items: center;
-  color: #5f7fa3;
+  color: var(--accent);
   font-size: 13px;
   font-weight: 500;
   opacity: 0;

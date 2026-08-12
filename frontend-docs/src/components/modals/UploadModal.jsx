@@ -52,7 +52,7 @@ export default function UploadModal({
         <div style={{ maxHeight: 400, overflowY: 'auto' }}>
           <div style={{ padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f0f0f0' }}>
             <span style={{ fontSize: 12, color: '#333' }}>Total de {chunkedUpload.uploads.length} {chunkedUpload.uploads.length === 1 ? 'archivo' : 'archivos'}...</span>
-            <span style={{ fontSize: 12, color: '#5f7fa3', cursor: 'pointer', fontWeight: 600 }} onClick={() => { chunkedUpload.cancelAll(); onClose(); }}>Cancelar todo</span>
+            <span style={{ fontSize: 12, color: 'var(--accent)', cursor: 'pointer', fontWeight: 600 }} onClick={() => { chunkedUpload.cancelAll(); onClose(); }}>Cancelar todo</span>
           </div>
           {chunkedUpload.uploads.map(item => (
             <div key={item.id} style={{ padding: '12px', borderBottom: '1px solid #f9f9f9', display: 'flex', gap: 12 }}>
@@ -109,7 +109,7 @@ export default function UploadModal({
         </div>
         <div className="acc-upload-body" style={{ maxHeight: 600, overflowY: 'auto' }}>
           <div className="acc-upload-entry-section" style={{ marginBottom: 20 }}>
-            <button className="acc-upload-btn-secondary" style={{ width: '100%', border: '1px solid #5f7fa3', color: '#000', padding: '8px', marginBottom: 12, borderRadius: 2 }} onClick={() => fileRef.current.click()}>
+            <button className="acc-upload-btn-secondary" style={{ width: '100%', border: '1px solid var(--accent)', color: '#000', padding: '8px', marginBottom: 12, borderRadius: 2 }} onClick={() => fileRef.current.click()}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="#666"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
               Desde su equipo
             </button>
@@ -153,13 +153,13 @@ export default function UploadModal({
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               {(item.status === 'confirming' || item.status === 'init') && (
-                                <div className="acc-mini-spinner" style={{ width: 10, height: 10, border: '2px solid #5f7fa3', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1.5s linear infinite' }} />
+                                <div className="acc-mini-spinner" style={{ width: 10, height: 10, border: '2px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1.5s linear infinite' }} />
                               )}
                               <span style={{ fontSize: 11, color: '#666' }}>
                                 {uploadStatusLabel(item, formatSize)}
                               </span>
                             </div>
-                            {item.status === 'uploading' && <span style={{ fontSize: 11, color: '#5f7fa3', fontWeight: 600 }}>{item.progress}%</span>}
+                            {item.status === 'uploading' && <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>{item.progress}%</span>}
                           </div>
                           <div
                             className="acc-progress-container"
@@ -174,9 +174,9 @@ export default function UploadModal({
                             {item.status === 'init' ? (
                               <div className="acc-progress-bar indeterminate" style={{ height: '100%', borderRadius: 3 }} />
                             ) : item.status === 'confirming' ? (
-                              <div className="acc-progress-bar" style={{ width: '100%', height: '100%', borderRadius: 3, background: '#5f7fa3' }} />
+                              <div className="acc-progress-bar" style={{ width: '100%', height: '100%', borderRadius: 3, background: 'var(--accent)' }} />
                             ) : (
-                              <div className="acc-progress-bar" style={{ width: `${item.progress}%`, height: '100%', borderRadius: 3, transition: 'width 0.3s ease', background: item.status === 'paused' ? '#ff9800' : '#5f7fa3' }} />
+                              <div className="acc-progress-bar" style={{ width: `${item.progress}%`, height: '100%', borderRadius: 3, transition: 'width 0.3s ease', background: item.status === 'paused' ? '#ff9800' : 'var(--accent)' }} />
                             )}
                           </div>
                         </>
@@ -189,7 +189,7 @@ export default function UploadModal({
                       <button
                         type="button"
                         onClick={() => onOpenUploaded(item)}
-                        style={{ border: '1px solid #5f7fa3', borderRadius: 4, background: '#fff', color: '#456b95', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '5px 10px' }}
+                        style={{ border: '1px solid var(--accent)', borderRadius: 4, background: '#fff', color: '#456b95', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '5px 10px' }}
                       >
                         Abrir
                       </button>

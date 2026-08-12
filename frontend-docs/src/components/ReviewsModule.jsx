@@ -6,14 +6,29 @@ import { apiFetch } from '../utils/apiFetch';
 import DocQuickView from './DocQuickView';
 
 // Resuelve la URL firmada de un documento por su node_id y lo abre en el visor
+// Abre un documento de una entrega. Lo usan Revisiones Y Conjuntos, así que el
+// arreglo de aquí vale para los dos.
+//
+// Abre la VERSIÓN, no el documento. Antes pedía siempre por node_id, o sea «lo
+// que haya hoy en ese fichero»: bastaba con que alguien subiera una revisión
+// para que una entrega enseñara otra cosa —con la etiqueta «V3 congelada»
+// puesta— y para que un revisor mirara algo distinto de lo que se le mandó.
+// Los elementos guardados antes de este cambio no tienen version_id; para esos
+// se sigue abriendo lo vivo, porque no hay forma de saber qué había entonces.
 export function useDocPreview(projectPrefix) {
   const [preview, setPreview] = useState(null);
   const open = async (it) => {
     try {
-      const r = await apiFetch(`${API}/api/docs/signed-url?model_urn=${encodeURIComponent(projectPrefix)}&id=${encodeURIComponent(it.node_id)}`);
+      const porVersion = it.version_id
+        ? `&version_id=${encodeURIComponent(it.version_id)}`
+        : '';
+      const r = await apiFetch(`${API}/api/docs/signed-url?model_urn=${encodeURIComponent(projectPrefix)}&id=${encodeURIComponent(it.node_id)}${porVersion}`);
       const d = await r.json();
       if (!d.success || !d.url) throw new Error(d.error || 'No se pudo abrir');
-      setPreview({ name: it.name, url: d.url, nodeId: it.node_id });
+      const etiqueta = it.version_id
+        ? ` · v${it.version_number || it.version || '?'}`
+        : ' · versión actual';
+      setPreview({ name: (it.name || '') + etiqueta, url: d.url, nodeId: it.node_id });
     } catch (e) { toast.error(e.message || 'No se pudo abrir el documento'); }
   };
   return [preview, open, () => setPreview(null)];
@@ -94,7 +109,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCre
               {items.map(it => (
                 <div key={it.node_id} style={{ padding: '6px 10px', borderBottom: '1px solid #f5f5f5', display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</span>
-                  <span style={{ color: '#5f7fa3', fontWeight: 600 }}>V{it.version || 1}</span>
+                  <span style={{ color: 'var(--accent)', fontWeight: 600 }}>V{it.version || 1}</span>
                 </div>
               ))}
             </div>
@@ -116,7 +131,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCre
                 <div key={u.email} onClick={() => setSteps(prev => [...prev, { email: u.email, name: u.name }])}
                   style={{ padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', borderBottom: '1px solid #f5f5f5' }}
                   onMouseOver={e => e.currentTarget.style.background = '#f4f6f9'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
-                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: '#5f7fa3', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{getInitials(u.name || u.email)}</span>
+                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{getInitials(u.name || u.email)}</span>
                   <span>{u.name || '—'} <span style={{ color: '#999', fontSize: 11 }}>{u.email}</span></span>
                 </div>
               ))}
@@ -161,7 +176,7 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCre
         </div>
         <div style={{ padding: '14px 20px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', gap: 10, background: '#fcfcfc' }}>
           <button onClick={onClose} style={{ padding: '8px 16px', background: '#fff', border: '1px solid #dcdcdc', borderRadius: 4, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={submit} disabled={saving} style={{ padding: '8px 20px', background: '#5f7fa3', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+          <button onClick={submit} disabled={saving} style={{ padding: '8px 20px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Creando…' : 'Iniciar revisión'}
           </button>
         </div>
@@ -226,7 +241,7 @@ export function ReviewsView({ projectPrefix, user, isAdmin }) {
               <span>📄 {rev.items.length} documento{rev.items.length !== 1 ? 's' : ''}:</span>
               {rev.items.map(i => (
                 <button key={i.node_id} onClick={() => openDoc(i)} title="Abrir para revisar"
-                  style={{ background: '#f0f7fc', border: '1px solid #cfe7f5', color: '#5f7fa3', padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  style={{ background: '#f0f7fc', border: '1px solid #cfe7f5', color: 'var(--accent)', padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   {i.name} (V{i.version || 1}) ↗
                 </button>
               ))}
