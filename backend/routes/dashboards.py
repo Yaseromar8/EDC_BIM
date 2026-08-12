@@ -8,7 +8,10 @@ sin tocar la API). Mismos patrones que routes/link.py: auto-migración ligera
 y política de acceso por proyecto.
 """
 import json
+import logging
 from flask import Blueprint, request, jsonify, g
+
+logger = logging.getLogger(__name__)
 
 dashboards_bp = Blueprint('dashboards', __name__)
 
@@ -20,10 +23,15 @@ def _check_project_access(project):
     try:
         from routes.documents import verify_project_access
         user = getattr(g, 'current_user', None)
-        if user and not verify_project_access(user, project):
+        if not verify_project_access(user, project):
             return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
-    except Exception:
-        pass  # la verificación nunca debe tumbar la funcionalidad
+    except Exception as e:
+        # Fail-CLOSED. Antes era `pass`: un fallo cualquiera dentro de la
+        # comprobacion -una consulta caida, un dato raro- se tragaba la negativa y
+        # el acceso seguia adelante. Un guardia que se cae y deja la puerta abierta
+        # no es un guardia. Si no se puede comprobar, no se entra.
+        logger.error(f"authz dashboards: no se pudo comprobar el acceso a {project}: {e}")
+        return jsonify({"success": False, "error": "No se pudo verificar el acceso."}), 403
     return None
 
 

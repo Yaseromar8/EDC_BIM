@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 import mimetypes
 import re
 import time
@@ -15,6 +16,8 @@ from enlaces_firmados import emitir, leer, PROPOSITO_RECURSO
 from politica import publico_en_lectura, requiere_rol
 from werkzeug.utils import secure_filename
 from gcs_manager import generate_signed_url, upload_file_to_gcs, delete_gcs_blob
+
+logger = logging.getLogger(__name__)
 
 documents_bp = Blueprint('documents', __name__)
 print("[DEBUG] documents_bp loaded from routes/documents.py")
@@ -376,6 +379,36 @@ def emitir_permisos_de_lectura():
     return jsonify({"success": True, "tokens": tokens}), 200
 
 
+def _blob_de_la_version(version_id):
+    """El blob de UNA version concreta, no el del fichero vivo.
+
+    Es lo que permite que un transmittal o un conjunto enseñen de verdad lo que
+    se emitio. Hasta ahora guardaban el NUMERO («V3») y abrian por node_id, o
+    sea el contenido de hoy: la etiqueta «V3 congelada» dejaba de ser cierta en
+    cuanto alguien subia una revision nueva.
+
+    Devuelve (gcs_urn, node_id) o (None, None). El node_id se devuelve para que
+    el control de acceso pueda resolver la obra por el documento.
+    """
+    if not version_id:
+        return None, None
+    try:
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT v.gcs_urn, v.file_node_id FROM file_versions v "
+                "JOIN file_nodes n ON n.id = v.file_node_id "
+                "WHERE v.id = %s AND n.is_deleted = FALSE",
+                (version_id,))
+            row = cursor.fetchone()
+            if row:
+                return row[0], str(row[1])
+    except Exception as e:
+        print(f"[VERSION] no se pudo resolver la versión {version_id}: {e}")
+    return None, None
+
+
 @documents_bp.route('/api/docs/view', methods=['GET'])
 @publico_en_lectura(motivo='sirve bytes a etiquetas <img> y a pdf.js, que no pueden mandar cabecera; la puerta real es _acceso_al_recurso() dentro, que exige sesion o un permiso firmado del fichero')
 def view_document():
@@ -383,11 +416,15 @@ def view_document():
     path = request.args.get('path', '')
     urn = request.args.get('urn', '')
     node_id = request.args.get('id', '')
+    version_id = request.args.get('version_id', '')
     model_urn = request.args.get('model_urn', 'global')
-    
+
     gcs_urn = None
     if urn:
         gcs_urn = urn
+    elif version_id:
+        gcs_urn, _n = _blob_de_la_version(version_id)
+        node_id = node_id or (_n or '')
     elif node_id:
         try:
             from db import get_db_connection
@@ -423,11 +460,15 @@ def get_signed_url_json():
     path = request.args.get('path', '')
     urn = request.args.get('urn', '')
     node_id = request.args.get('id', '')
+    version_id = request.args.get('version_id', '')
     model_urn = request.args.get('model_urn', 'global')
-    
+
     gcs_urn = None
     if urn:
         gcs_urn = urn
+    elif version_id:
+        gcs_urn, _n = _blob_de_la_version(version_id)
+        node_id = node_id or (_n or '')
     elif node_id:
         try:
             from db import get_db_connection
@@ -657,6 +698,26 @@ def proxy_document():
         return "Error fetching document from storage", 502
 
 
+def _puede_descargar(user, parent_id, model_urn):
+    """¿Puede este usuario llevarse los BYTES de lo que hay en esta carpeta?
+
+    Se pregunta una sola vez por carpeta (no por fichero): el permiso se hereda
+    de la carpeta, asi que preguntarlo N veces daria lo mismo y costaria N
+    consultas en un listado de 2.457 fotos.
+    """
+    if not user:
+        return False                      # fail-closed
+    if user.get('role') == 'admin':
+        return True
+    try:
+        from folder_permissions import get_effective_permission, PERMISSION_LEVELS
+        eff = get_effective_permission(user.get('id'), parent_id, model_urn) or 'none'
+        return PERMISSION_LEVELS.get(eff, -1) >= PERMISSION_LEVELS['view_download']
+    except Exception as e:
+        logger.error(f"no se pudo decidir la descarga en {model_urn}: {e}")
+        return False                      # fail-closed
+
+
 @documents_bp.route('/api/docs/list', methods=['GET'])
 def list_documents():
     """Devuelve el inventario (archivos y carpetas logicas) desde PostgreSQL."""
@@ -673,7 +734,7 @@ def list_documents():
     # para que ese atajo conceda rol admin sin login. Un modo de desarrollo no se
     # deduce de la IP; para eso ya esta ALLOW_DEMO_TOKEN, explicito y por entorno.
 
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
 
     try:
@@ -712,9 +773,17 @@ def list_documents():
 
         contents = list_contents(parent_id, model_urn, path, user=user)
 
-        for f in contents['files']:
-            if f.get('gcs_urn'):
-                f['mediaLink'] = generate_signed_url(f['gcs_urn'])
+        # El enlace firmado SALE DE LA PLATAFORMA: funciona sin sesion, se puede
+        # reenviar por WhatsApp y no queda registrado en el log de descargas.
+        # Antes se emitia para todo fichero listado sin mirar permisos, asi que
+        # abrir una carpeta repartia una descarga de cada cosa que hubiera
+        # dentro. Medido en la base real: 11.238 enlaces entregados a usuarios
+        # sin derecho a descargar. Quien solo puede mirar sigue viendo y
+        # previsualizando por /api/docs/proxy, que si comprueba y si deja rastro.
+        if _puede_descargar(user, parent_id, model_urn):
+            for f in contents['files']:
+                if f.get('gcs_urn'):
+                    f['mediaLink'] = generate_signed_url(f['gcs_urn'])
 
         return jsonify({"success": True, "data": {**contents, "current_node_id": str(parent_id) if parent_id else None}}), 200
     except Exception as e:
@@ -817,7 +886,7 @@ def create_folder():
     # ── TENANT ISOLATION ──
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
         
     import os
@@ -828,7 +897,7 @@ def create_folder():
     parent_path = os.path.dirname(folder_path.rstrip('/'))
     parent_node_id = resolve_path_to_node_id(parent_path, model_urn, auto_create=False)
     
-    rbac = check_folder_permission(user, parent_node_id, model_urn, 'create_upload', 'crear carpetas')
+    rbac = check_folder_permission(user, parent_node_id, model_urn, 'edit', 'crear carpetas')
     if rbac: return rbac
 
     # ── VALIDACIONES ENTERPRISE (Estilo ACC / ISO 19650) ──
@@ -880,12 +949,12 @@ def upload_document():
     # ── TENANT ISOLATION ──
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
         
     from file_system_db import resolve_path_to_node_id
     parent_node_id = resolve_path_to_node_id(folder_path, model_urn, auto_create=False)
-    rbac = check_folder_permission(user, parent_node_id, model_urn, 'create_upload', 'subir archivos')
+    rbac = check_folder_permission(user, parent_node_id, model_urn, 'edit', 'subir archivos')
     if rbac: return rbac
 
     if folder_path and not folder_path.endswith('/'):
@@ -927,7 +996,7 @@ def upload_document():
         # ── 5. Registrar en PostgreSQL con metadatos completos ────────────────
         # ROLLBACK: Si la BD falla, borramos el blob de GCS para evitar huérfanos
         try:
-            create_file_record(
+            nodo_creado, _version_creada = create_file_record(
                 model_urn, parent_id, filename,
                 file_info['size_bytes'], gcs_uuid,
                 mime_type=file_info.get('mime_type'),
@@ -943,8 +1012,11 @@ def upload_document():
             raise db_error
 
         # ── 6. Auditoria ─────────────────────────────────────────────────────
+        # entity_id o el evento no existe para el expediente del documento:
+        # /api/docs/trazabilidad busca por entity_id, no por nombre.
         log_activity(
             model_urn, 'upload', 'file',
+            entity_id=str(nodo_creado) if nodo_creado else None,
             entity_name=f"{folder_path}{filename}",
             performed_by=performed_by,
             details={
@@ -1013,7 +1085,7 @@ def delete_document():
     # ── TENANT ISOLATION: Verificar acceso al proyecto ──
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
     rbac = check_folder_permission(user, node_id, model_urn, 'admin', 'eliminar archivos')
     if rbac: return rbac
@@ -1030,6 +1102,7 @@ def delete_document():
             success = soft_delete_node(target_id, model_urn, performed_by=performed_by)
             if success:
                 log_activity(model_urn, 'delete', 'file_or_folder',
+                             entity_id=str(target_id),
                              entity_name=node_path, performed_by=performed_by)
                 return jsonify({"success": True, "message": "Moved to Trash (soft delete)"}), 200
         return jsonify({"success": False, "error": "Node not found or already deleted"}), 404
@@ -1049,7 +1122,7 @@ def rename_document():
     # ── TENANT ISOLATION ──
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
     
     # ── Extraer node_id antes del RBAC check ──
@@ -1128,7 +1201,11 @@ def rename_document():
             conn.commit()
 
         if updated:
+            # El renombrado es el evento que MAS falta hace indexado por id: es
+            # justo el que parte la historia de un plano en dos si se busca por
+            # nombre, que era como se hacia antes.
             log_activity(model_urn, 'rename', 'file_or_folder',
+                         entity_id=str(updated[0]),
                          entity_name=new_name, performed_by=_autor_verificado(),
                          details={'old_name': old_name, 'new_name': new_name})
             return jsonify({"success": True}), 200
@@ -1160,7 +1237,7 @@ def move_document():
     # ── TENANT ISOLATION ──
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
     rbac = check_folder_permission(user, node_id, model_urn, 'edit', 'mover archivos')
     if rbac: return rbac
@@ -1273,10 +1350,21 @@ def get_upload_url():
     # ── TENANT ISOLATION ──
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
-    rbac = check_folder_permission(user, None, model_urn, 'create_upload', 'obtener URL de subida')
-    if rbac: return rbac
+    # La carpeta destino solo se comprueba SI el cliente la manda. Este endpoint
+    # no mete nada en la obra: firma una URL para escribir en un blob con nombre
+    # aleatorio, y ese blob no es un documento hasta /confirm-uploads, que si
+    # recibe la carpeta y exige 'edit' sobre ella. Exigir aqui un nivel sobre una
+    # carpeta que no se conoce (antes: node_id=None) denegaria a cualquiera que
+    # no sea administrador global, porque sin nodo la herencia no tiene por donde
+    # subir y cae al rol global, que para 'user' es 'none'.
+    parent_node_id = data.get('parent_node_id') or data.get('parentId')
+    if parent_node_id:
+        rbac = check_folder_permission(user, parent_node_id, model_urn, 'edit',
+                                       'subir a esta carpeta')
+        if rbac:
+            return rbac
 
     import uuid
     gcs_urn = str(uuid.uuid4())
@@ -1306,12 +1394,12 @@ def confirm_upload():
     from flask import g
     user = getattr(g, 'current_user', None)
     performed_by = _autor_verificado()
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
         
     from file_system_db import resolve_path_to_node_id
     parent_node_id = resolve_path_to_node_id(folder_path, model_urn, auto_create=False)
-    rbac = check_folder_permission(user, parent_node_id, model_urn, 'create_upload', 'confirmar subidas')
+    rbac = check_folder_permission(user, parent_node_id, model_urn, 'edit', 'confirmar subidas')
     if rbac: return rbac
 
     if folder_path and not folder_path.endswith('/'):
@@ -1338,6 +1426,7 @@ def confirm_upload():
 
         node_path = (folder_path + filename) if folder_path else filename
         log_activity(model_urn, 'upload_file', 'file',
+                     entity_id=str(file_id) if file_id else None,
                      entity_name=node_path, performed_by=performed_by)
 
         # Pre-generar la miniatura EN SEGUNDO PLANO (solo imágenes) para que
@@ -1511,7 +1600,7 @@ def preview_whatsapp_multimedia_import():
 
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
 
     try:
@@ -1546,12 +1635,12 @@ def start_whatsapp_multimedia_import():
     from flask import g
     user = getattr(g, 'current_user', None)
     performed_by = _autor_verificado()
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
 
     from file_system_db import resolve_path_to_node_id
     parent_node_id = resolve_path_to_node_id(WHATSAPP_IMPORT_FOLDER, model_urn, auto_create=False)
-    rbac = check_folder_permission(user, parent_node_id, model_urn, 'create_upload', 'importar multimedia historica')
+    rbac = check_folder_permission(user, parent_node_id, model_urn, 'edit', 'importar multimedia historica')
     if rbac:
         return rbac
 
@@ -1646,7 +1735,7 @@ def search_documents():
     # ── TENANT ISOLATION ──
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
     
     if not query or len(query) < 2:
@@ -1710,7 +1799,7 @@ def batch_update():
     # ── TENANT ISOLATION ──
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
         
     req_node_id = items[0] if items else None
@@ -1760,20 +1849,77 @@ def batch_update():
                 }), 200
 
             if action == 'DELETE':
+                # POR CADA documento, no solo por el primero de la lista. El
+                # guardia de arriba mira items[0]: bastaba con poner delante uno
+                # de tu carpeta para arrastrar en la misma peticion documentos de
+                # cualquier otra. Y el borrado de uno en uno exige 'admin'
+                # (:1056), asi que la via masiva era ademas la mas laxa de las
+                # dos. Se filtra y se borra solo lo que se puede.
+                # El administrador global pasa siempre (folder_permissions.py:99),
+                # asi que se resuelve UNA vez con la conexion que ya tenemos abierta
+                # en vez de preguntarlo por cada documento.
+                #
+                # Medido contra la base real: cada check_folder_permission cuesta
+                # ~0,5 s porque abre SU PROPIA conexion a Cloud SQL, y 2,6 s para un
+                # no-admin, que ademas recorre el arbol de carpetas hacia arriba.
+                # Sin esto, suprimir 20 documentos eran diez segundos de reloj
+                # mirando una rueda, y la version anterior de este codigo -que solo
+                # miraba items[0]- era instantanea. Arreglar la seguridad no puede
+                # costar eso.
+                cursor.execute("SELECT role FROM users WHERE id = %s", ((user or {}).get('id'),))
+                _rol = cursor.fetchone()
+                if _rol and _rol[0] == 'admin':
+                    permitidos = list(items)
+                else:
+                    permitidos = [nid for nid in items
+                                  if check_folder_permission(user, nid, model_urn, 'admin',
+                                                             'suprimir documentos') is None]
+                denegados = len(items) - len(permitidos)
+                if not permitidos:
+                    conn.rollback()
+                    return jsonify({
+                        "success": False,
+                        "error": "No tienes permiso para suprimir ninguno de los "
+                                 "documentos seleccionados."}), 403
+
                 # Soft delete masivo
                 cursor.execute("""
-                    UPDATE file_nodes 
+                    UPDATE file_nodes
                     SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ANY(%s::uuid[]) AND model_urn = %s
-                """, (items, model_urn))
-                
-                log_activity(model_urn, 'batch_delete', 'multiple', 
-                             entity_name=f"{len(items)} items", 
+                """, (permitidos, model_urn))
+
+                log_activity(model_urn, 'batch_delete', 'multiple',
+                             entity_name=f"{len(permitidos)} items",
                              performed_by=performed_by,
-                             details={'item_count': len(items)})
-            
+                             details={'item_count': len(permitidos),
+                                      'sin_permiso': denegados})
+
+                # Ademas del resumen, un evento POR documento. El expediente de
+                # cada plano tiene que decir que se suprimio, y
+                # /api/docs/trazabilidad busca por entity_id: sin esto un borrado
+                # en lote desaparece de la historia de los documentos que borro,
+                # que es justo lo que preguntaria una supervision.
+                # Se inserta con el cursor YA ABIERTO y de una sola vez, no con
+                # log_activity en un bucle: esa funcion pide una conexion nueva
+                # por llamada y aqui serian una por documento (~0,5 s cada una).
+                if permitidos:
+                    cursor.execute("""
+                        INSERT INTO activity_log
+                            (model_urn, action, entity_type, entity_id, performed_by, details)
+                        SELECT %s, 'delete', 'file_or_folder', x, %s, %s::jsonb
+                          FROM unnest(%s::text[]) AS x
+                    """, (model_urn, performed_by,
+                          json.dumps({'via': 'batch_delete'}),
+                          [str(i) for i in permitidos]))
+
+                conn.commit()
+                # Callar los denegados haria creer que se borro todo. Se dice.
+                return jsonify({"success": True, "processed": len(permitidos),
+                                "sin_permiso": denegados}), 200
+
             conn.commit()
-            
+
         return jsonify({"success": True, "processed": len(items)}), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -1793,6 +1939,19 @@ def update_node_description_route():
 
     if not node_id:
         return jsonify({"success": False, "error": "node_id or id is required"}), 400
+
+    # Este handler no comprobaba NADA: ni obra, ni carpeta, ni siquiera que el
+    # nodo existiera en el proyecto que dice el cliente. Con una sesion valida se
+    # podia reescribir la descripcion de cualquier documento de cualquier obra
+    # mandando su node_id. Lo unico que lo tapaba era que el blueprint exige
+    # sesion, y eso no distingue entre obras.
+    from flask import g
+    _u = getattr(g, 'current_user', None)
+    if not verify_project_access(_u, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
+    rbac = check_folder_permission(_u, node_id, model_urn, 'edit', 'cambiar la descripción')
+    if rbac:
+        return rbac
 
     try:
         from db import get_db_connection, log_activity
@@ -1830,14 +1989,27 @@ def update_node_description_route():
 
 @documents_bp.route('/api/docs/search', methods=['POST'])
 def search_docs():
-    """Búsqueda global por nombre o descripción."""
-    data = request.get_json()
+    """Búsqueda global por nombre o descripción.
+
+    OJO: hoy no la llama nadie del portal (el buscador usa la hermana GET). Se
+    conserva por si hay clientes externos, pero NO puede quedarse sin guardia:
+    se fiaba del model_urn que mandara el cliente y devolvia el inventario
+    entero de la obra pedida -incluido el gcs_urn de cada fichero, que es la
+    clave del objeto en el almacen- a cualquiera con una sesion valida, fuera
+    o no de esa obra.
+    """
+    data = request.get_json() or {}
     model_urn = str(data.get('model_urn', 'global'))
     query = data.get('query', '')
-    
+
+    # ── TENANT ISOLATION ──
+    from flask import g
+    if not verify_project_access(getattr(g, 'current_user', None), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
+
     if not query:
         return jsonify([])
-        
+
     try:
         from file_system_db import search_nodes
         results = search_nodes(model_urn, query)
@@ -1877,7 +2049,7 @@ def restore_doc():
     # ── TENANT ISOLATION + RBAC (mismo nivel que eliminar) ──
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
     rbac = check_folder_permission(user, node_id, model_urn, 'admin', 'restaurar elementos')
     if rbac: return rbac
@@ -1964,7 +2136,7 @@ def share_document():
     #    exigir acceso al proyecto y permiso de edición sobre el nodo ──
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
     rbac = check_folder_permission(user, node_id, model_urn, 'edit', 'compartir documentos')
     if rbac: return rbac
@@ -2069,7 +2241,7 @@ def list_shares():
     model_urn = request.args.get('model_urn', 'global')
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
     try:
         from db import get_db_connection
@@ -2104,7 +2276,7 @@ def revoke_share(share_id):
     model_urn = data.get('model_urn', 'global')
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
     try:
         from db import get_db_connection
@@ -2130,7 +2302,7 @@ def get_folder_permissions_endpoint():
         
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso al proyecto."}), 403
         
     # Solo administradores pueden ver la tabla de permisos
@@ -2201,7 +2373,7 @@ def remove_folder_permission_endpoint():
         
     from flask import g
     user = getattr(g, 'current_user', None)
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso al proyecto."}), 403
         
     from folder_permissions import check_folder_permission, remove_folder_permission

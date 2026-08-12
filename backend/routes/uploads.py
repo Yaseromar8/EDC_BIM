@@ -58,14 +58,14 @@ def init_upload():
 
     # ── TENANT ISOLATION ──
     from routes.documents import verify_project_access
-    if user and not verify_project_access(user, model_urn):
+    if not verify_project_access(user, model_urn):
         return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
 
     # ── RBAC CHECK ──
     from folder_permissions import check_folder_permission
     from file_system_db import resolve_path_to_node_id
     parent_node_id = resolve_path_to_node_id(folder_path, model_urn, auto_create=False) if folder_path else None
-    rbac = check_folder_permission(user, parent_node_id, model_urn, 'create_upload', 'subir archivos')
+    rbac = check_folder_permission(user, parent_node_id, model_urn, 'edit', 'subir archivos')
     if rbac:
         return rbac
 
@@ -300,8 +300,11 @@ def complete_upload():
 
         # Audit log
         node_path = (folder_path + filename) if folder_path else filename
+        # entity_id: sin el, la subida por trozos no aparece en el expediente del
+        # documento (/api/docs/trazabilidad busca por id, no por nombre).
         log_activity(
             model_urn, 'upload_file', 'file',
+            entity_id=str(node_id) if node_id else None,
             entity_name=node_path,
             performed_by=created_by,
             details={

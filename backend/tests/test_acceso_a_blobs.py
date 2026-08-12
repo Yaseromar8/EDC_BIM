@@ -180,3 +180,63 @@ def test_el_admin_entra_y_el_socio_solo_en_su_obra():
 def test_sin_obra_no_se_concede_nada():
     cur = CursorFalso(respuesta=(1,))
     assert acceso_a_blobs.acceso_por_obra_id(cur, {'role': 'admin'}, None) is False
+
+
+# ── El node_id no puede avalar a un objeto que no es suyo ───────────────────
+#
+# EL ATAQUE QUE ESTOS TESTS FIJAN
+# -------------------------------
+# proxy_document() acepta ?urn= y ?id= a la vez: coge los bytes del `urn` pero
+# preguntaba por el permiso del `id`. Como obra_del_blob salia por el atajo del
+# node_id sin volver a mirar el gcs_urn, bastaba con
+#
+#     /api/docs/proxy?urn=<objeto de OTRA obra>&id=<nodo de la MIA>
+#
+# para que el guardia respondiera "es tuyo" y se sirvieran los bytes ajenos.
+# El node_id solo vale como aval si ESE nodo es el dueno del objeto pedido.
+
+def test_node_id_ajeno_no_avala_un_objeto_de_otra_obra():
+    def responder(sql, params):
+        if 'information_schema.tables' in sql:
+            return None
+        if 'FROM file_nodes WHERE id' in sql:
+            # mi nodo, de MI obra, pero su objeto es OTRO
+            return [('proyectos/MI_OBRA', 'urn-de-mi-nodo')]
+        # el objeto pedido pertenece a la obra ajena
+        return [('proyectos/OTRA_OBRA', None, 'file_versions')]
+
+    cur = CursorFalso(respuesta=responder)
+    ambito, _obra, origen = acceso_a_blobs.obra_del_blob(
+        cur, gcs_urn='urn-de-otra-obra', node_id='nodo-mio')
+
+    assert ambito != 'proyectos/MI_OBRA', (
+        'el guardia acepto mi nodo como aval de un objeto que no es suyo')
+    assert ambito == 'proyectos/OTRA_OBRA'
+
+
+def test_node_id_si_avala_su_propio_objeto():
+    """El camino legitimo sigue funcionando: mismo nodo, mismo objeto."""
+    def responder(sql, params):
+        if 'information_schema.tables' in sql:
+            return None
+        if 'FROM file_nodes WHERE id' in sql:
+            return [('proyectos/MI_OBRA', 'urn-de-mi-nodo')]
+        return []
+
+    cur = CursorFalso(respuesta=responder)
+    ambito, _obra, origen = acceso_a_blobs.obra_del_blob(
+        cur, gcs_urn='urn-de-mi-nodo', node_id='nodo-mio')
+    assert (ambito, origen) == ('proyectos/MI_OBRA', 'file_nodes')
+
+
+def test_node_id_solo_sin_urn_sigue_resolviendo():
+    """Sin gcs_urn no hay nada que contrastar: se conserva el atajo de siempre."""
+    def responder(sql, params):
+        if 'information_schema.tables' in sql:
+            return None
+        if 'FROM file_nodes WHERE id' in sql:
+            return [('proyectos/MI_OBRA', 'urn-de-mi-nodo')]
+        return []
+
+    cur = CursorFalso(respuesta=responder)
+    assert acceso_a_blobs.obra_del_blob(cur, node_id='nodo-mio')[0] == 'proyectos/MI_OBRA'

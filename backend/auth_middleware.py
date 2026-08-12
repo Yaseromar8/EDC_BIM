@@ -463,6 +463,17 @@ _PROJECT_SCOPED_PREFIXES = (
     '/api/attrs', '/api/transmittals', '/api/reviews', '/api/sets',
     '/api/dashboards', '/api/geo', '/api/activity', '/api/schedule',
     '/api/compare', '/api/element-docs',
+    # Faltaban TODOS estos: se localizaron comparando la lista con las rutas
+    # realmente registradas en backend/routes, no de memoria. Cada uno maneja
+    # datos de una obra (usa model_urn o project_id), asi que hasta ahora
+    # quedaban fuera de la vigilancia y ni siquiera aparecian en los avisos de
+    # hueco. '/api/uploads' es el mas serio: por ahi entran los ficheros.
+    '/api/uploads', '/api/ai', '/api/audit', '/api/config', '/api/frentes',
+    '/api/link', '/api/model', '/api/modelos', '/api/pdf',
+    # NO se incluyen a proposito: '/api/debug', '/api/diag', '/api/layers' y
+    # '/api/maps' no manejan datos de obra; '/api/projects' y '/api/hubs' son
+    # justamente los que LISTAN obras y tienen que poder responder sin una
+    # obra concreta en la peticion.
 )
 
 

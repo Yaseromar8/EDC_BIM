@@ -133,15 +133,24 @@ def obra_del_blob(cursor, gcs_urn=None, node_id=None):
       origen  -- la tabla que lo reconocio, o '' si NINGUNA. Ese '' es la senal
                  de denegar: un objeto que nadie reclama no se sirve.
     """
-    # Por id de nodo la respuesta es directa y no hace falta barrer nada.
+    # Por id de nodo la respuesta es directa y no hace falta barrer nada, PERO
+    # solo si ese nodo es de verdad el dueno del objeto que se esta pidiendo.
+    # Las rutas que sirven bytes aceptan ?urn= y ?id= a la vez: cogen los bytes
+    # del urn y preguntaban por el permiso del id. Como aqui se salia por el
+    # atajo sin volver a mirar el gcs_urn, bastaba con
+    #     /api/docs/proxy?urn=<objeto de OTRA obra>&id=<nodo de la MIA>
+    # para que el guardia contestara "es tuyo" y se sirvieran bytes ajenos.
+    # Cuando el nodo no reclama ese objeto, no se deniega a lo bruto: se sigue
+    # abajo y decide el DUENO REAL del objeto, que es la respuesta correcta.
     if node_id:
         cursor.execute(
-            "SELECT model_urn FROM file_nodes WHERE id = %s", (str(node_id),)
+            "SELECT model_urn, gcs_urn FROM file_nodes WHERE id = %s", (str(node_id),)
         )
         fila = cursor.fetchone()
-        if fila:
+        if fila and (not gcs_urn or fila[1] == gcs_urn):
             return fila[0], None, 'file_nodes'
-        return None, None, ''
+        if not gcs_urn:
+            return None, None, ''
 
     urn = str(gcs_urn or '')
     if not urn:

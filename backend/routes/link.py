@@ -11,8 +11,11 @@ traduccion SVF2 los preserva), asi que el plugin resuelve directo con
 Document.GetElement(uniqueId). No hay tablas de mapeo.
 """
 import json
+import logging
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
+
+logger = logging.getLogger(__name__)
 
 link_bp = Blueprint('link', __name__)
 
@@ -25,10 +28,13 @@ def _check_project_access(project):
     try:
         from routes.documents import verify_project_access
         user = getattr(g, 'current_user', None)
-        if user and not verify_project_access(user, project):
+        if not verify_project_access(user, project):
             return jsonify({"success": False, "error": "No tienes acceso a este proyecto."}), 403
-    except Exception:
-        pass  # la verificación nunca debe tumbar el canal
+    except Exception as e:
+        # Fail-CLOSED, igual que en dashboards.py. Antes un fallo dentro de la
+        # comprobacion dejaba pasar; el canal con Revit no vale una puerta abierta.
+        logger.error(f"authz link: no se pudo comprobar el acceso a {project}: {e}")
+        return jsonify({"success": False, "error": "No se pudo verificar el acceso."}), 403
     return None
 
 _TABLES_READY = False
