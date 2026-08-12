@@ -632,21 +632,39 @@ def manage_users():
         try:
             with get_db_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute('''
-                    SELECT u.id, u.name, u.email, u.role, u.created_at,
-                           c.name as company_name, j.name as job_title_name
-                    FROM users u
-                    LEFT JOIN companies c ON u.company_id = c.id
-                    LEFT JOIN job_titles j ON u.job_title_id = j.id
-                    ORDER BY u.created_at DESC
-                ''')
-                rows = cursor.fetchall()
                 # El padron completo (correo, empresa, cargo, rol) es una lista
                 # de objetivos de phishing dirigido. Solo el admin lo ve entero;
                 # el resto recibe lo justo para elegir destinatarios en
                 # transmittals y revisiones.
                 sesion = getattr(g, 'current_user', None)
                 es_admin = bool(sesion and sesion.get('role') == 'admin')
+                _uid = (sesion or {}).get('id')
+
+                _COLUMNAS = '''
+                    SELECT u.id, u.name, u.email, u.role, u.created_at,
+                           c.name as company_name, j.name as job_title_name
+                    FROM users u
+                    LEFT JOIN companies c ON u.company_id = c.id
+                    LEFT JOIN job_titles j ON u.job_title_id = j.id
+                '''
+                if es_admin:
+                    cursor.execute(_COLUMNAS + ' ORDER BY u.created_at DESC')
+                elif _uid:
+                    # Solo las personas con las que se comparte alguna obra. Los
+                    # campos sensibles ya estaban limitados al admin, pero el
+                    # NOMBRE de todas las personas de todas las obras si salia, y
+                    # eso ya dice quien trabaja con quien y en que: en una obra
+                    # publica con varias empresas, es informacion.
+                    cursor.execute(_COLUMNAS + '''
+                        WHERE u.id = %s OR u.id IN (
+                            SELECT pu.user_id FROM project_users pu
+                             WHERE pu.project_id IN (
+                                 SELECT project_id FROM project_users WHERE user_id = %s))
+                        ORDER BY u.created_at DESC
+                    ''', (_uid, _uid))
+                else:
+                    cursor.execute(_COLUMNAS + ' WHERE FALSE')   # sin sesion, nadie
+                rows = cursor.fetchall()
                 users = []
                 for r in rows:
                     if es_admin:

@@ -2564,6 +2564,48 @@ def config_de_nomenclatura():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@documents_bp.route('/api/docs/indice-expediente', methods=['GET'])
+def indice_del_expediente():
+    """La relacion de todo lo entregado de una obra, en una tabla.
+
+    ?formato=xlsx devuelve la hoja de calculo; sin parametro, JSON para pantalla.
+    ?estados=TODOS incluye tambien el trabajo en curso (foto interna, no de entrega).
+
+    Es lo primero que pide una supervision y la respuesta a "¿como saco mi
+    expediente si me voy de tu plataforma?". Por eso la hoja no lleva formulas ni
+    macros: tiene que abrirse en cualquier sitio y sin esta plataforma.
+    """
+    model_urn = request.args.get('model_urn', 'global')
+    user = getattr(g, 'current_user', None)
+    if not verify_project_access(user, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
+    estados = 'TODOS' if request.args.get('estados') == 'TODOS' else None
+    try:
+        import indice_expediente as ie
+        from db import get_db_connection, log_activity
+        with get_db_connection() as conn:
+            filas = ie.filas_del_indice(conn.cursor(), model_urn, estados=estados)
+
+        if request.args.get('formato') == 'xlsx':
+            quien = (user or {}).get('name') or (user or {}).get('email')
+            datos = ie.a_excel(filas, model_urn, generado_por=quien, estados=estados)
+            # Sacar el expediente entero es un acto que deja rastro: es
+            # exactamente lo que se querria poder demostrar despues.
+            log_activity(model_urn, 'export_indice_expediente', 'project',
+                         entity_name=f"{len(filas)} documentos", performed_by=quien)
+            marca = datetime.now().strftime('%Y%m%d')
+            nombre = f"indice-expediente-{model_urn.split('/')[-1]}-{marca}.xlsx"
+            return Response(
+                datos,
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                headers={'Content-Disposition': f'attachment; filename="{nombre}"'})
+
+        return jsonify({"success": True, "resumen": ie.resumen(filas), "documentos": filas}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @documents_bp.route('/api/docs/trazabilidad', methods=['GET'])
 def trazabilidad_de_documento():
     """Todo lo que le ha pasado a UN documento: emisiones, cambios de estado y accesos.
