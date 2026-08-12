@@ -333,3 +333,20 @@ def rename_gcs_blob(old_name, new_name):
         print(f"Error renombrando en GCS: {str(e)}")
         return False
 
+
+def descargar_a_fichero(blob_name, destino):
+    """Baja un objeto a un fichero en disco, sin pasarlo por memoria.
+
+    get_blob_data() hace download_as_bytes(), que carga el objeto ENTERO en RAM.
+    Para un PDF da igual; para un Revit de 300 MB, en una instancia modesta y con
+    varias peticiones a la vez, es la forma de quedarse sin memoria. Cuando lo
+    unico que se va a hacer con los bytes es reenviarlos, no hace falta tenerlos
+    todos a la vez.
+    """
+    import os as _os
+    bucket_name = _os.environ.get("GCS_BUCKET_NAME")
+    client = get_storage_client()
+    blob = client.bucket(bucket_name).blob(blob_name)
+    blob.download_to_file(destino)
+    destino.flush()
+    return destino.tell()

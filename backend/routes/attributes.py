@@ -13,6 +13,40 @@ attributes_bp = Blueprint('attributes', __name__)
 VALID_TYPES = ('text', 'number', 'date', 'select')
 
 
+def _u():
+    return getattr(g, 'current_user', None)
+
+
+def _hay_acceso(model_urn):
+    from routes.documents import verify_project_access
+    return verify_project_access(_u(), model_urn)
+
+
+def _obra_del_nodo(node_id):
+    """La obra de un documento sale del documento, no de la petición.
+
+    Los dos endpoints de valores solo reciben node_id, así que no había obra que
+    comprobar y no comprobaban ninguna: con una sesión válida se podían leer y
+    reescribir los atributos de cualquier documento de cualquier obra.
+    """
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT model_urn FROM file_nodes WHERE id = %s", (str(node_id),))
+        fila = cur.fetchone()
+    return fila[0] if fila else None
+
+
+def _guardia_del_nodo(node_id, nivel, accion):
+    """Devuelve None si se puede seguir, o la respuesta de error."""
+    from folder_permissions import check_folder_permission
+    obra = _obra_del_nodo(node_id)
+    if not obra:
+        return jsonify({"success": False, "error": "El documento no existe."}), 404
+    if not _hay_acceso(obra):
+        return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
+    return check_folder_permission(_u(), node_id, obra, nivel, accion)
+
+
 def ensure_attributes_tables():
     with get_db_connection() as conn:
         cur = conn.cursor()
@@ -102,6 +136,9 @@ def get_values():
     node_id = request.args.get('node_id')
     if not node_id:
         return jsonify({"success": False, "error": "Falta node_id"}), 400
+    negado = _guardia_del_nodo(node_id, 'viewer', 'ver los atributos')
+    if negado:
+        return negado
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -118,6 +155,9 @@ def set_values():
     node_id, values = d.get('node_id'), d.get('values') or {}
     if not node_id:
         return jsonify({"success": False, "error": "Falta node_id"}), 400
+    negado = _guardia_del_nodo(node_id, 'edit', 'cambiar los atributos')
+    if negado:
+        return negado
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()

@@ -213,6 +213,33 @@ def act_on_review(rid):
                             (json.dumps(history), rid))
                 ids = [it.get('node_id') for it in rev['items'] if it.get('node_id')]
                 destino = ecd.normalizar(rev['final_status'])
+
+                # ¿Sigue siendo la misma versión que se mandó a revisar?
+                # Antes se aprobaba el node_id a secas, así que se sellaba «apto
+                # para construcción» sobre lo que hubiera subido en ese momento,
+                # que podía no ser lo que nadie miró. Sólo se puede comprobar en
+                # las revisiones creadas ya con version_id; las anteriores pasan
+                # (no hay con qué compararlas) y eso queda dicho aquí a propósito.
+                cambiados = []
+                for it in rev['items']:
+                    esperada = it.get('version_id')
+                    if not esperada or not it.get('node_id'):
+                        continue
+                    cur.execute("SELECT current_version_id, name, version_number "
+                                "FROM file_nodes WHERE id = %s", (it['node_id'],))
+                    fila = cur.fetchone()
+                    if fila and fila[0] and str(fila[0]) != str(esperada):
+                        cambiados.append(f"{fila[1] or it.get('name')} (ahora v{fila[2]})")
+                if cambiados:
+                    conn.rollback()
+                    return jsonify({
+                        "success": False,
+                        "error": ("No se puede aprobar: alguien subió una versión nueva "
+                                  "después de mandar esto a revisión, así que se estaría "
+                                  "aprobando algo que nadie revisó. Cambió: "
+                                  + ", ".join(cambiados[:5])
+                                  + (" …" if len(cambiados) > 5 else "")
+                                  + ". Vuelve a mandarlo a revisión.")}), 409
                 # Publicar es un acto de autoridad tambien por esta via: quien
                 # aprueba el ultimo paso tiene que mandar de verdad sobre la
                 # carpeta del documento, no solo estar apuntado como revisor.

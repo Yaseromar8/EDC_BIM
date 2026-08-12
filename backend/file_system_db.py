@@ -88,7 +88,7 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                        fp.permission_level,
                        EXISTS(SELECT 1 FROM file_nodes c WHERE c.model_urn = fn.model_urn AND c.parent_id = fn.id AND c.is_deleted = FALSE) AS has_children,
                        fn.codigo_idoneidad, fn.codigo_revision, fn.nomenclatura_ok,
-                       fn.bloqueado_por, fn.bloqueado_en
+                       fn.bloqueado_por, fn.bloqueado_en, fn.current_version_id
                 FROM file_nodes fn
                 LEFT JOIN folder_permissions fp 
                     ON fn.id = fp.folder_node_id AND fp.user_id = %s
@@ -107,8 +107,8 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                        NULL as permission_level,
                        EXISTS(SELECT 1 FROM file_nodes c WHERE c.model_urn = file_nodes.model_urn AND c.parent_id = file_nodes.id AND c.is_deleted = FALSE) AS has_children,
                        codigo_idoneidad, codigo_revision, nomenclatura_ok,
-                       bloqueado_por, bloqueado_en
-                FROM file_nodes 
+                       bloqueado_por, bloqueado_en, current_version_id
+                FROM file_nodes
                 WHERE model_urn = %s AND {parent_cond} AND is_deleted = FALSE
                 ORDER BY node_type DESC, name ASC
             """
@@ -136,7 +136,7 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
             (r_id, r_name, r_type, r_size, r_version, r_updated, r_gcs, r_status, r_tags,
              r_metadata, r_description, r_mime, r_created, r_u_by, r_perm, r_has_children,
              r_idoneidad, r_revision, r_nomenclatura,
-             r_bloqueado_por, r_bloqueado_en) = row
+             r_bloqueado_por, r_bloqueado_en, r_version_id) = row
             bp = base_path if base_path.endswith('/') else (base_path + '/' if base_path else '')
             full_name = f"{bp}{r_name}" + ("/" if r_type == 'FOLDER' else "")
             
@@ -182,6 +182,12 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
                     item.update({
                         "size": r_size,
                         "version": r_version,
+                        # El NUMERO de version ("3") no identifica nada: manana
+                        # puede haber otra 3 si alguien promociona. version_id
+                        # SI apunta a un contenido concreto, y es lo que tienen
+                        # que guardar revisiones, transmittals y conjuntos para
+                        # que «V3 congelada» deje de ser una etiqueta bonita.
+                        "version_id": str(r_version_id) if r_version_id else None,
                         "status": r_status,
                         # La REVISION es la emision formal (P01, C01...); la
                         # version es el contador de subidas. Y la IDONEIDAD dice
@@ -279,12 +285,17 @@ def ensure_project_root_node(model_urn):
         _root_cache[model_urn] = root_id
         return root_id
 
-def _registrar_vuelta_a_borrador(cursor, model_urn, node_id, nombre, anterior, version, autor):
-    """Deja constancia de que subir una version nueva retiro una aprobacion.
+def _registrar_vuelta_a_borrador(cursor, model_urn, node_id, nombre, anterior, version, autor,
+                                 motivo=None):
+    """Deja constancia de que cambiar el contenido de un documento retiro una aprobacion.
 
     Sin esta linea, un documento publicado aparecia de pronto en borrador y no
     habia forma de saber que lo movio ni cuando. Es justo la pregunta que hace un
     auditor cuando algo que estaba publicado ya no lo esta.
+
+    `motivo` se puede dar hecho porque hay DOS formas de cambiar el contenido de un
+    documento: subir una version nueva y promocionar una antigua. La segunda tambien
+    retira la aprobacion, y el auditor merece leer cual de las dos fue.
     """
     import json as _json
     import estados_ecd as ecd
@@ -299,7 +310,7 @@ def _registrar_vuelta_a_borrador(cursor, model_urn, node_id, nombre, anterior, v
                  'estado_nuevo': ecd.WIP,
                  'anterior_etiqueta': ecd.ETIQUETAS.get(anterior, anterior),
                  'nuevo_etiqueta': ecd.ETIQUETAS[ecd.WIP],
-                 'motivo': f'se subio la version {version}: lo aprobado fue la anterior',
+                 'motivo': motivo or f'se subio la version {version}: lo aprobado fue la anterior',
              })),
         )
     except Exception as e:  # pragma: no cover - defensivo
@@ -774,44 +785,93 @@ def get_file_versions(model_urn, file_node_id):
         return []
 
 def promote_version(model_urn, node_id, version_id, performed_by=None):
+    """Promociona una version antigua a 'Actual' (estilo ACC): crea una version
+    NUEVA cuyo contenido es el de la version elegida.
+
+    EL FALLO QUE ESTO ARREGLA
+    -------------------------
+    Esta funcion cambiaba los bytes del documento y no tocaba nada mas. Un plano
+    PUBLICADO con «A1 / C01» grabado seguia diciendo PUBLICADO y «A1 / C01»
+    cuando su contenido ya era otro. Es exactamente el dano que create_file_record
+    evita al subir una version (ver su comentario): un fichero sin revisar
+    listandose como apto para construir.
+
+    Y envenenaba de rebote a los tres modulos de Entregas, que apuntan al
+    documento y no a la version: el transmittal seguia diciendo «V3», el conjunto
+    seguia diciendo «V3 congelada», y la revision aprobada apuntaba a un contenido
+    que habia cambiado sin enterarse.
+
+    Promocionar es cambiar el contenido. Por tanto hace lo mismo que subir:
+      · respeta la reserva de edicion de otro,
+      · devuelve el documento a WIP,
+      · le quita la idoneidad y la revision, que son de la EMISION y no del fichero,
+      · y deja constancia de por que se retiro la aprobacion.
+
+    Ademas: el `model_urn` que llega es el que manda el cliente. La obra se
+    resuelve por el ID del documento, y si no coinciden no se promociona nada.
     """
-    Promociona una versión antigua a 'Actual' (Estilo ACC).
-    Crea una NUEVA versión con el contenido de la versión seleccionada.
-    """
+    import estados_ecd as ecd
+    from bloqueo_de_edicion import comprobar_libre
+
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        
-        # 1. Obtener datos de la versión a promocionar
+
+        # 1. El documento, y la obra de VERDAD (la suya, no la que diga el cliente).
         cursor.execute("""
-            SELECT gcs_urn, size_bytes, mime_type, metadata
+            SELECT version_number, status, name, model_urn
+            FROM file_nodes
+            WHERE id = %s AND COALESCE(is_deleted, false) = false
+        """, (node_id,))
+        nodo = cursor.fetchone()
+        if not nodo:
+            return False
+        current_v_num, estado_previo, nombre, obra_real = nodo
+        if model_urn and model_urn != 'global' and obra_real != model_urn:
+            print(f"[PROMOVER] {node_id} es de {obra_real}, no de {model_urn}: no se toca")
+            return False
+
+        # 2. Reservado por otro = no se le cambia el contenido por debajo.
+        comprobar_libre(cursor, node_id, {'email': performed_by},
+                        'promocionar una versión anterior')
+
+        # 3. Datos de la version a promocionar. Tiene que ser de ESTE documento.
+        cursor.execute("""
+            SELECT gcs_urn, size_bytes, mime_type, metadata, version_number
             FROM file_versions
             WHERE id = %s AND file_node_id = %s
         """, (version_id, node_id))
         source_v = cursor.fetchone()
-        if not source_v: return False
-        
-        gcs_urn, size, mime, meta = source_v
-        
-        # 2. Obtener el número de la última versión del ítem
-        cursor.execute("SELECT version_number FROM file_nodes WHERE id = %s", (node_id,))
-        current_v_num = cursor.fetchone()[0]
+        if not source_v:
+            return False
+        gcs_urn, size, mime, meta, v_origen = source_v
+
         new_v_num = current_v_num + 1
-        
-        # 3. Crear el nuevo registro de versión
+
+        # 4. Crear el nuevo registro de version.
         cursor.execute("""
             INSERT INTO file_versions (file_node_id, version_number, gcs_urn, size_bytes, mime_type, created_by, metadata)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (node_id, new_v_num, gcs_urn, size, mime, performed_by, meta))
         new_v_id = cursor.fetchone()[0]
-        
-        # 4. Actualizar el ítem principal
+
+        # 5. Si venia aprobado, queda dicho que esta promocion retiro la aprobacion.
+        anterior = ecd.normalizar(estado_previo)
+        if anterior != ecd.WIP:
+            _registrar_vuelta_a_borrador(
+                cursor, obra_real, node_id, nombre, anterior, new_v_num, performed_by,
+                motivo=(f'se promociono la versión {v_origen} como {new_v_num}: '
+                        f'lo aprobado fue otro contenido'))
+
+        # 6. El item principal: contenido nuevo, y con el el estado y el sello caen.
         cursor.execute("""
             UPDATE file_nodes
-            SET version_number = %s, gcs_urn = %s, size_bytes = %s, current_version_id = %s, updated_at = CURRENT_TIMESTAMP, created_by = %s
+            SET version_number = %s, gcs_urn = %s, size_bytes = %s, current_version_id = %s,
+                updated_at = CURRENT_TIMESTAMP, updated_by = %s,
+                status = %s, codigo_idoneidad = NULL, codigo_revision = NULL
             WHERE id = %s
-        """, (new_v_num, gcs_urn, size, new_v_id, performed_by, node_id))
-        
+        """, (new_v_num, gcs_urn, size, new_v_id, performed_by, ecd.WIP, node_id))
+
         conn.commit()
         return True
 def update_node_description(model_urn, node_id, description):

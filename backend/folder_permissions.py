@@ -179,8 +179,22 @@ def check_folder_permission(user, node_id, model_urn, required_level, action_nam
     user_id = user.get('id')
     effective = get_effective_permission(user_id, node_id, model_urn)
     effective_level = PERMISSION_LEVELS.get(effective, 0)
-    required = PERMISSION_LEVELS.get(required_level, 0)
-    
+
+    # UN NIVEL QUE NO EXISTE DENIEGA. Antes se puntuaba 0, y 0 es 'viewer': un
+    # nombre mal escrito no daba error, degradaba el guardia al nivel mas bajo
+    # sin decir nada. Paso de verdad: seis rutas de subida pedian
+    # 'create_upload', que nunca estuvo en PERMISSION_LEVELS, asi que subir
+    # ficheros y crear carpetas exigian lo mismo que mirarlos. No se noto porque
+    # los cinco usuarios de la obra son administradores y el admin corta antes.
+    if required_level not in PERMISSION_LEVELS:
+        print(f"[PERMISOS] nivel desconocido '{required_level}' para {action_name}: se deniega")
+        return jsonify({
+            "success": False,
+            "error": f"Acceso denegado: el nivel exigido para {action_name} no está definido.",
+        }), 403
+
+    required = PERMISSION_LEVELS[required_level]
+
     if effective_level < required:
         label = PERMISSION_LABELS.get(required_level, required_level)
         return jsonify({
