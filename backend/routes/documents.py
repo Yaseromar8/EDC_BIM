@@ -2564,6 +2564,115 @@ def config_de_nomenclatura():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@documents_bp.route('/api/docs/sensibilidad', methods=['GET'])
+def leer_sensibilidad():
+    """El triaje de seguridad de la obra y su catálogo de niveles (ISO 19650-5)."""
+    model_urn = request.args.get('model_urn', 'global')
+    if not verify_project_access(getattr(g, 'current_user', None), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
+    try:
+        import sensibilidad as sens
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            catalogo = sens.catalogo_de_obra(cur, model_urn)
+            triaje = sens.triaje_de_obra(cur, model_urn)
+            conn.commit()
+        return jsonify({"success": True, "triaje": triaje, "catalogo": catalogo,
+                        "sin_evaluar": triaje is None}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@documents_bp.route('/api/docs/sensibilidad/triaje', methods=['POST'])
+@requiere_rol('admin')
+def guardar_triaje_de_seguridad():
+    """Registra el triaje de seguridad de la obra.
+
+    Solo administrador, y con guardia EFECTIVO dentro de la vista: el decorador
+    no bloquea mientras la política corre en sombra, y decidir que una obra no
+    necesita medidas de seguridad no es algo que pueda hacer cualquiera.
+    """
+    u = getattr(g, 'current_user', None)
+    if not u:
+        return jsonify({"success": False, "error": "Autenticación requerida."}), 401
+    if u.get('role') != 'admin':
+        return jsonify({"success": False,
+                        "error": "Solo un administrador puede registrar el triaje."}), 403
+    d = request.get_json() or {}
+    model_urn = d.get('model_urn')
+    if not model_urn or not verify_project_access(u, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
+    try:
+        import sensibilidad as sens
+        from db import get_db_connection, log_activity
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            sens.guardar_triaje(cur, model_urn,
+                                requiere_enfoque=bool(d.get('requiere_enfoque')),
+                                justificacion=d.get('justificacion'),
+                                evaluado_por=u.get('name') or u.get('email'),
+                                revisar_en=d.get('revisar_en') or None)
+            conn.commit()
+            triaje = sens.triaje_de_obra(cur, model_urn)
+        log_activity(model_urn, 'triaje_seguridad', 'project',
+                     entity_name=('requiere enfoque' if d.get('requiere_enfoque')
+                                  else 'sin medidas especiales'),
+                     performed_by=u.get('name') or u.get('email'))
+        return jsonify({"success": True, "triaje": triaje}), 200
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@documents_bp.route('/api/docs/sensibilidad/nivel', methods=['PUT'])
+def marcar_sensibilidad():
+    """Pone el nivel de sensibilidad a un documento o a una CARPETA.
+
+    En una carpeta vale para todo lo que cuelgue de ella: clasificar 282 planos
+    de uno en uno no lo hace nadie, y una clasificación que nadie rellena es peor
+    que no tenerla. Hace falta permiso de edición sobre el nodo, el mismo que
+    para cualquier otro cambio sobre él.
+    """
+    d = request.get_json() or {}
+    node_id, model_urn, nivel = d.get('id'), d.get('model_urn'), d.get('nivel')
+    if not node_id or not model_urn:
+        return jsonify({"success": False, "error": "Faltan id y model_urn."}), 400
+    u = getattr(g, 'current_user', None)
+    if not verify_project_access(u, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
+    rbac = check_folder_permission(u, node_id, model_urn, 'edit', 'clasificar documentos')
+    if rbac:
+        return rbac
+    try:
+        import sensibilidad as sens
+        from db import get_db_connection, log_activity
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            # nivel=None despeja la marca y devuelve el nodo a heredar del padre.
+            if nivel is not None:
+                validos = {n['codigo'] for n in sens.catalogo_de_obra(cur, model_urn)}
+                if nivel not in validos:
+                    return jsonify({"success": False,
+                                    "error": f"«{nivel}» no está en el catálogo de esta obra."}), 400
+            cur.execute("UPDATE file_nodes SET sensibilidad = %s WHERE id = %s AND model_urn = %s",
+                        (nivel, str(node_id), model_urn))
+            if not cur.rowcount:
+                return jsonify({"success": False, "error": "El documento no existe."}), 404
+            conn.commit()
+            efectivo = sens.nivel_efectivo(cur, node_id, model_urn)
+        log_activity(model_urn, 'clasificar_sensibilidad', 'file_or_folder',
+                     entity_id=str(node_id), entity_name=str(nivel or 'heredado'),
+                     performed_by=(u or {}).get('name') or (u or {}).get('email'))
+        return jsonify({"success": True, "nivel": nivel, "nivel_efectivo": efectivo}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @documents_bp.route('/api/docs/indice-expediente', methods=['GET'])
 def indice_del_expediente():
     """La relacion de todo lo entregado de una obra, en una tabla.
