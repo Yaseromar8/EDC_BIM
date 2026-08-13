@@ -337,6 +337,14 @@ def ensure_file_nodes_table():
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_file_versions_sha256 ON file_versions(sha256);")
 
+            # ── 1.5 LA CADENA DEL REGISTRO DE ACTIVIDAD ─────────────────────
+            # Cada evento lleva la huella del anterior: alterar o borrar uno del
+            # medio rompe la cadena y se puede senalar donde. No lo hace
+            # inmutable -- ver auditoria_encadenada.py -- pero convierte una
+            # manipulacion silenciosa en una manipulacion visible.
+            import auditoria_encadenada as _cadena
+            _cadena.asegurar_columnas(cursor)
+
             # ── El candado (CHECK) va APARTE y NO se pone solo ───────────────
             # Aprendido a base de un susto: la primera version ponia el CHECK aqui
             # mismo, al arrancar. Como las migraciones corren al levantar CUALQUIER
@@ -744,13 +752,40 @@ def log_activity(model_urn, action, entity_type, entity_id=None, entity_name=Non
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            detalles = _json.dumps(details or {})
             cursor.execute("""
                 INSERT INTO activity_log (model_urn, action, entity_type, entity_id, entity_name, performed_by, details)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, created_at
             """, (
                 model_urn, action, entity_type, entity_id, entity_name,
-                performed_by, _json.dumps(details or {})
+                performed_by, detalles
             ))
+            fila_id, cuando = cursor.fetchone()
+
+            # ── Encadenado con el evento anterior ────────────────────────────
+            # Cada fila lleva la huella de la que la precede, de modo que alterar
+            # o borrar una del medio rompe la cadena a partir de ahi y se puede
+            # senalar donde. Da DETECTABILIDAD, no inmutabilidad: quien pueda
+            # escribir en la tabla puede recalcular la cadena entera. Ver
+            # backend/auditoria_encadenada.py.
+            #
+            # Va dentro de la MISMA transaccion que el INSERT: si se sellara
+            # despues, entre el commit y el sellado habria un hueco en el que la
+            # fila existe sin huella, que es justo cuando alguien la borraria.
+            try:
+                import auditoria_encadenada as cadena
+                cursor.execute("SELECT to_regclass('public.activity_log')")
+                cadena.encadenar(cursor, fila_id, {
+                    'model_urn': model_urn, 'action': action, 'entity_type': entity_type,
+                    'entity_id': entity_id, 'entity_name': entity_name,
+                    'performed_by': performed_by,
+                    'details': _json.loads(detalles), 'created_at': cuando})
+            except Exception as _e:
+                # El evento queda registrado aunque no se pueda sellar. Aparecera
+                # como 'sin_sellar' en la verificacion, que es lo honesto.
+                print(f"[ActivityLog] no se pudo encadenar: {_e}")
+
             conn.commit()
     except Exception as e:
         # No romper la operacion principal si el log falla
