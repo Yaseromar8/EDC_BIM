@@ -1,6 +1,7 @@
 from esquema_congelado import solo_con_ddl
 import os
 import json
+import secrets
 import time
 import traceback
 from flask import Blueprint, request, jsonify
@@ -164,7 +165,13 @@ def save_view():
         return jsonify({'error': 'Missing name or state'}), 400
 
     new_view = {
-        'id': str(int(time.time() * 1000)),
+        # El identificador ES la credencial: GET /api/views/<id> es publico, asi
+        # que quien acierte el numero ve la vista. Antes era la hora en
+        # milisegundos -- 13 cifras derivadas del reloj -- de modo que quien
+        # supiera aproximadamente cuando se creo recorria un rango estrecho hasta
+        # dar con ella. Comprobado: un anonimo, sin cabecera ninguna, sacaba el
+        # nombre, la obra y el estado de camara de una vista ajena.
+        'id': secrets.token_urlsafe(24),
         'name': data['name'],
         'viewerState': data['viewerState'],
         'filterState': data.get('filterState', {}),

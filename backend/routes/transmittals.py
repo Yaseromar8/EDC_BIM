@@ -8,6 +8,7 @@ import json
 import traceback
 from flask import Blueprint, request, jsonify, g
 from db import get_db_connection, log_activity
+from rate_limit import limite
 
 transmittals_bp = Blueprint('transmittals', __name__)
 
@@ -56,20 +57,30 @@ def _avisar_a_los_destinatarios(numero, asunto, mensaje, destinatarios, items, e
     porque el proveedor de correo tuvo un mal dia- seria peor. Lo que no vale es
     lo que habia antes: decir que se emitio sin haber avisado a nadie.
     """
+    import html as _html
     import mailer
+
+    # Todo lo que viene de fuera se escapa ANTES de entrar en el HTML.
+    #
+    # Sin esto, el mensaje libre y el nombre del documento se concatenaban en
+    # crudo, y el resultado era un enviador de correo autenticado, con la marca
+    # y el remitente verificado de la plataforma, en el que el emisor elegia el
+    # HTML. Comprobado: un mensaje con <a href="https://cobro-falso...">
+    # Regularice aqui</a> salia tal cual hacia el buzon del destinatario.
+    esc = lambda v: _html.escape(str(v), quote=True)
 
     lineas = ''.join(
         '<li>%s <b>%s</b></li>' % (
-            str(it.get('name', '?'))[:120],
-            ('v%s' % it['version']) if it.get('version') is not None else '')
+            esc(it.get('name', '?'))[:120],
+            ('v%s' % esc(it['version'])) if it.get('version') is not None else '')
         for it in (items or [])[:60])
     if len(items or []) > 60:
         lineas += '<li>… y %d más</li>' % (len(items) - 60)
 
     cuerpo = (
         '<p>%s te ha emitido formalmente %d documento(s) en el transmittal '
-        '<b>TR-%03d</b>.</p>' % (emisor or 'Alguien', len(items or []), numero)
-        + ('<p>%s</p>' % mensaje if mensaje else '')
+        '<b>TR-%03d</b>.</p>' % (esc(emisor or 'Alguien'), len(items or []), numero)
+        + ('<p>%s</p>' % esc(mensaje) if mensaje else '')
         + '<ul>%s</ul>' % lineas
         + '<p style="color:#4a5561">Este correo es el acuse de emisión. '
           'Los documentos se abren desde la plataforma.</p>')
@@ -121,6 +132,7 @@ def list_transmittals():
 
 
 @transmittals_bp.route('/api/transmittals', methods=['POST'])
+@limite("20 per hour")
 def create_transmittal():
     d = request.get_json() or {}
     if not d.get('model_urn') or not d.get('subject') or not d.get('items') or not d.get('recipients'):

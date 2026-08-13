@@ -256,6 +256,18 @@ def upload_pin_attachment():
     pin_id = request.form.get('pinId')
     project_id = request.form.get('projectId', 'global')
 
+    # Nada de esto se comprobaba: entraba cualquier fichero, de cualquier tamano
+    # y de cualquier tipo, a un endpoint con sesion pero sin mas control.
+    from file_validator import validate_file
+    veredicto = validate_file(file)
+    if not veredicto.get('valid'):
+        return jsonify({'error': veredicto.get('error', 'Fichero no admitido')}), 400
+
+    # Y el projectId entraba SIN SANEAR en el nombre del objeto. Llega del
+    # formulario, asi que un valor como '../otra-obra' escribia fuera del prefijo
+    # de su obra. secure_filename tambien sobre el, no solo sobre el fichero.
+    project_id = secure_filename(str(project_id)) or 'global'
+
     filename = secure_filename(f"{int(time.time())}_{file.filename}")
     gcs_urn = f"multi-tenant/{project_id}/pin_attachments/{filename}"
     
