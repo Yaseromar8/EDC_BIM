@@ -72,3 +72,47 @@ regresión + despliegue + verificación en producción + evidencia.
 | GPS en el EXIF de las fotos | **VERIFICADO**: 6 de 6 muestreadas llevan GPS dentro del JPEG |
 | Si el segundo repo público contiene el secreto | **VERIFICADO**: los 8 ficheros están en ambos remotos |
 | Si el `.env` de Render tenía el `APS_CLIENT_SECRET` publicado | **VERIFICADO**: ya estaba rotado antes del 13-ago |
+
+
+---
+
+## Segunda pasada · 13-ago-2026 (tarde)
+
+Barrido de las 16 áreas del mandato con auditores independientes, contra el código
+real y ejecutando. Devolvió **37 hallazgos críticos**, de los cuales **25 eran cierres
+falsos míos**. Lo que sigue es lo verificado y lo corregido en esta pasada.
+
+### Cierres que yo había dado por buenos y no lo eran
+
+| ID | Lo que dije | Lo que era | Estado ahora |
+|---|---|---|---|
+| **N9/N10/N11** | «guion corregido» | los ficheros `01/02_ownership*.sql` **nunca se tocaron**: seguían empezando con 34 `ALTER SEQUENCE` sobre secuencias dependientes, así que abortaban en la primera sentencia y no hacían nada. Anotar la lección en la matriz no es aplicarla al fichero | **CERRADO** de verdad en `7230cc8`, con 8 pruebas |
+| **C8** | «21 guardias + prueba permanente» | IDOR demostrado en 11 familias de rutas, con escritura y borrado. La prueba de cobertura **no leía `server.py`** (24 rutas sin barrer) y exigía que el cuerpo mencionara ciertas palabras (49 rutas sin barrer). Medida real: 177 rutas de obra, no 144 | **MITIGADO**, `7863800` + `fbd8699` |
+| **C3** | «alterar el registro se detecta» | borrar el **final** no se detectaba, y con la identidad separada el evento **se perdía entero** | **MITIGADO**, `185e024` |
+| **C6** | «huella por versión» | 2 de las 4 vías de subida no sellaban, incluida la de URL firmada, que es la que usa el portal | **MITIGADO**, `6e2fb23` |
+| **N5** | «CERRADO» | cierre falso: la comprobación no importaba la aplicación. Ver N18 | corregido en la pasada anterior |
+| **N15** | «retirados y vetados» | el commit del borrado **nunca se empujó**, y eran **11** guiones, no 7 | **CERRADO**, `adfd627`, verificado contra `origin/main` |
+
+### Hallazgos nuevos de esta pasada
+
+| ID | Hallazgo | Estado | Evidencia |
+|---|---|---|---|
+| **N19** | El `APS_CLIENT_SECRET` **en uso** es byte a byte el publicado en dos repositorios públicos | **ABIERTO — acción del propietario** | huella `7c5d9582a625` del valor de `.env` = blob `ffa9d177`, presente en `21ee971` y `fd9d4dd`, ancestros de `origin/main`. La matriz lo daba por rotado: era falso. **Rotar en el portal de Autodesk** |
+| **N20** | El entorno local opera **Autodesk APS de producción** con permiso de escritura y borrado | **ABIERTO** | importando `server.py` se obtiene token con `data:write`, `bucket:delete`, `code:all` y se listan 3 buckets OSS reales con 700,7 MB de RVT/DWG. La separación dev/prod solo cubría base y bucket |
+| **N21** | IDOR generalizado: lectura **y escritura** en 11 familias de rutas de una obra ajena | **CERRADO** | `PATCH /api/rfis/<id obra B>` → 200 con usuario de la obra A, confirmado releyendo Postgres. Causa raíz: `resolve_project_id` no entendía `model_urn`, así que la obra salía `None` y la comprobación ni se ejecutaba |
+| **N22** | Con la identidad separada, el registro de auditoría **pierde el evento entero** | **CERRADO** | 66 filas antes, 66 después: el `UPDATE` de sellado denegado abortaba la transacción y se llevaba el `INSERT`. Habría apagado la auditoría el día de la migración |
+| **N23** | Borrar el **final** del registro no se detectaba | **CERRADO** | 8 filas selladas, borrada la 8ª → `integra=True`. Ahora hay ancla del extremo |
+| **N24** | La huella dependía de la **zona horaria de la sesión** | **CERRADO** | `created_at` es `timestamptz` y se serializaba con `str()`: falsos «huella no coincide» al cambiar de zona |
+| **N25** | El enlace de restablecimiento se escribía **entero en el log** | **CERRADO** | y como en producción falta `RESEND_API_KEY`, ese era el camino **normal**: todos los enlaces emitidos han quedado escritos |
+| **N26** | Dos rutas de auditoría declaradas `rol:admin` no bloqueaban a nadie | **CERRADO** | la política corre en modo sombra; `/api/audit/snapshot` devolvía 200 con la instantánea de una obra ajena a un usuario normal |
+| **N27** | Dos endpoints de diagnóstico servían datos de **todas** las obras | **CERRADO** | `/api/diag/inventory-sample` y `/api/debug/photos`, este último bajando bytes del almacén. Retirados |
+| **N28** | `/api/docs/dev/wipe` hacía `TRUNCATE` de `activity_log` | **CERRADO** | doblemente protegido, no explotable, pero un ECD no puede tener un botón HTTP que borra su propia auditoría |
+| **N29** | La prueba de cobertura de autorización **mentía** | **CERRADO** | no leía `server.py` y su detector exigía palabras literales. Reescrita: 177 rutas, 30 excepciones declaradas una a una |
+
+### Lo que sigue sin verificar
+
+- **El bootstrap del esquema**: se afirma que construye 79 de 88 tablas desde una base vacía,
+  y por tanto que la restauración no funciona. **No he podido comprobarlo**: `ecd_app` no puede
+  crear bases en local, que es lo correcto. Pendiente de una base vacía.
+- **Área 13 (seguridad web/API)**: el auditor se quedó sin cuota. Es la única de las 16 sin barrer.
+- Los otros ~20 hallazgos críticos del barrido, pendientes de verificación adversarial.
