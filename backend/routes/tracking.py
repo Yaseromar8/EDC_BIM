@@ -6,6 +6,7 @@ from flask import Blueprint, request, jsonify
 from db import get_db_connection, resolve_project_id
 from datetime import datetime
 from gcs_manager import generate_signed_url
+from perimetro_de_obra import guardia_de_obra
 
 tracking_bp = Blueprint('tracking', __name__)
 
@@ -290,6 +291,15 @@ def huerfanas_a_purgar(huerfanas, trae_fotos, purga_activa=None, tope=None):
 @tracking_bp.route('/api/project-pins', methods=['GET'])
 def get_tracking():
     model_urn = request.args.get('model_urn', 'global')
+    # Solo se comprueba si viene una obra de verdad. El valor por defecto
+    # 'global' es el espacio sin obra, y ahi viven datos reales de obra que
+    # nadie ha migrado todavia (esta anotado en db.py como deuda): bloquearlo
+    # aqui dejaria de funcionar seguimiento que hoy se usa. El agujero de
+    # 'global' se cierra migrando esos datos, no negando el acceso a ciegas.
+    if model_urn and model_urn != 'global':
+        negativa = guardia_de_obra(model_urn, 'consultar el seguimiento')
+        if negativa:
+            return negativa
     data = get_tracking_data(model_urn)
     return jsonify(data)
 
@@ -299,7 +309,14 @@ def update_tracking():
     try:
         new_data = request.json
         model_urn = request.args.get('model_urn', 'global')
-        
+        # Este es el manejador que REESCRIBE el seguimiento entero de la obra:
+        # avance, pines, fotos, partes. Sin comprobacion, cualquiera con sesion
+        # sobrescribia el de otra obra. Sobre 'global', lo mismo que arriba.
+        if model_urn and model_urn != 'global':
+            negativa = guardia_de_obra(model_urn, 'reescribir el seguimiento de la obra')
+            if negativa:
+                return negativa
+
         if not new_data:
             return jsonify({"error": "No data provided"}), 400
         
@@ -475,17 +492,29 @@ def add_photo_to_pin():
         
         pin_id = request.form.get('pinId')
         model_urn = request.form.get('model_urn', 'global')
-        
+        if model_urn and model_urn != 'global':
+            negativa = guardia_de_obra(model_urn, 'subir una fotografía de obra')
+            if negativa:
+                return negativa
+
         if 'file' not in request.files or not pin_id:
             return jsonify({"error": "Falta 'file' o 'pinId'"}), 400
             
         file = request.files['file']
         if file.filename == '':
             return jsonify({"error": "Archivo vacio"}), 400
-            
+
+        # Ni tipo, ni tamano, ni extension se miraban. Y las fotos de obra llevan
+        # GPS en el EXIF, asi que esto es ademas una entrada de datos personales.
+        from file_validator import validate_file
+        veredicto = validate_file(file)
+        if not veredicto.get('valid'):
+            return jsonify({"error": veredicto.get('error', 'Fichero no admitido')}), 400
+
         # 1. Subir a GCS
         filename = secure_filename(f"{int(time.time())}_{file.filename}")
-        gcs_uuid = f"multi-tenant/{model_urn}/tracking_photos/{filename}"
+        # El model_urn entra en la ruta del objeto y llega del formulario.
+        gcs_uuid = f"multi-tenant/{secure_filename(str(model_urn)) or 'global'}/tracking_photos/{filename}"
         gcs_url = upload_file_to_gcs(file, gcs_uuid)
         
         if not gcs_url:
@@ -510,6 +539,15 @@ def add_photo_to_pin():
 @tracking_bp.route('/api/project-pins/daily-reports', methods=['GET'])
 def list_daily_reports():
     model_urn = request.args.get('model_urn', 'global')
+    # Solo se comprueba si viene una obra de verdad. El valor por defecto
+    # 'global' es el espacio sin obra, y ahi viven datos reales de obra que
+    # nadie ha migrado todavia (esta anotado en db.py como deuda): bloquearlo
+    # aqui dejaria de funcionar seguimiento que hoy se usa. El agujero de
+    # 'global' se cierra migrando esos datos, no negando el acceso a ciegas.
+    if model_urn and model_urn != 'global':
+        negativa = guardia_de_obra(model_urn, 'listar los partes diarios')
+        if negativa:
+            return negativa
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -536,6 +574,15 @@ def list_daily_reports():
 def save_daily_report():
     data = request.json
     model_urn = data.get('model_urn', 'global')
+    # Solo se comprueba si viene una obra de verdad. El valor por defecto
+    # 'global' es el espacio sin obra, y ahi viven datos reales de obra que
+    # nadie ha migrado todavia (esta anotado en db.py como deuda): bloquearlo
+    # aqui dejaria de funcionar seguimiento que hoy se usa. El agujero de
+    # 'global' se cierra migrando esos datos, no negando el acceso a ciegas.
+    if model_urn and model_urn != 'global':
+        negativa = guardia_de_obra(model_urn, 'guardar un parte diario')
+        if negativa:
+            return negativa
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
