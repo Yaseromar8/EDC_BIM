@@ -986,7 +986,15 @@ def upload_document():
         # Formato: multi-tenant/{project_id}/{timestamp}_{uuid8}_{filename}
         gcs_uuid = f"multi-tenant/{model_urn}/{int(time.time())}_{uuid.uuid4().hex[:8]}_{filename}"
 
-        # ── 4. Subir blob fisico a GCS ────────────────────────────────────────
+        # ── 4. Huella del contenido, ANTES de subirlo ─────────────────────────
+        # Se calcula sobre el flujo que se va a subir, y huella_de_flujo lo deja
+        # rebobinado. Si se hiciera despues habria que descargarlo de vuelta, y
+        # entonces la huella seria del objeto almacenado y no de lo que envio el
+        # usuario: dejaria de servir para detectar una sustitucion en el camino.
+        import integridad
+        sha = integridad.huella_de_flujo(file)
+
+        # ── 5. Subir blob fisico a GCS ────────────────────────────────────────
         print(f"[Upload] Attempting GCS upload to: {gcs_uuid}")
         gcs_url = upload_file_to_gcs(file, gcs_uuid)
         if not gcs_url:
@@ -1001,7 +1009,8 @@ def upload_document():
                 model_urn, parent_id, filename,
                 file_info['size_bytes'], gcs_uuid,
                 mime_type=file_info.get('mime_type'),
-                created_by=performed_by
+                created_by=performed_by,
+                sha256=sha
             )
         except Exception as db_error:
             print(f"[Upload] DB FAILED after GCS success. Rolling back blob: {gcs_uuid}")
@@ -2563,6 +2572,71 @@ def config_de_nomenclatura():
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@documents_bp.route('/api/docs/integridad', methods=['GET'])
+def integridad_de_obra():
+    """Cobertura de huellas de una obra: de cuántos documentos se puede demostrar algo.
+
+    La respuesta honesta a "¿podéis demostrar que este es el fichero aprobado?" no
+    es sí o no: es "de estos sí y de estos no". Este endpoint da esa cuenta.
+    """
+    model_urn = request.args.get('model_urn', 'global')
+    if not verify_project_access(getattr(g, 'current_user', None), model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
+    try:
+        import integridad
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            datos = integridad.resumen_de_obra(conn.cursor(), model_urn)
+        return jsonify({"success": True, "integridad": datos}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@documents_bp.route('/api/docs/integridad/comprobar', methods=['POST'])
+def comprobar_integridad():
+    """¿El fichero que me enseñan es el que se aprobó?
+
+    Se sube el fichero a comprobar, se calcula su huella y se compara con la
+    anotada en esa versión. NO se almacena nada: el fichero se lee para calcular y
+    se descarta. Es la comprobación que hace un auditor, y por eso devuelve además
+    con qué código de idoneidad y qué revisión se emitió esa versión.
+    """
+    version_id = request.form.get('version_id') or (request.get_json(silent=True) or {}).get('version_id')
+    fichero = request.files.get('file')
+    if not version_id or not fichero:
+        return jsonify({"success": False, "error": "Hacen falta version_id y el fichero."}), 400
+    u = getattr(g, 'current_user', None)
+    if not u:
+        return jsonify({"success": False, "error": "Autenticación requerida."}), 401
+    try:
+        import integridad
+        from db import get_db_connection, log_activity
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            # La versión pertenece a una obra: sin esa comprobación, cualquiera
+            # con sesión podría sondear versiones de obras ajenas.
+            cur.execute("""SELECT fn.model_urn, fn.id, fn.name FROM file_versions fv
+                             JOIN file_nodes fn ON fn.id = fv.file_node_id
+                            WHERE fv.id = %s""", (str(version_id),))
+            fila = cur.fetchone()
+            if not fila:
+                return jsonify({"success": False, "error": "La versión no existe."}), 404
+            obra, node_id, nombre = fila
+            if not verify_project_access(u, obra):
+                return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
+            sha = integridad.huella_de_flujo(fichero)
+            veredicto, ficha = integridad.comprobar(cur, version_id, sha)
+        log_activity(obra, 'comprobacion_integridad', 'file', entity_id=str(node_id),
+                     entity_name=nombre, performed_by=u.get('name') or u.get('email'),
+                     details={'veredicto': veredicto, 'version_id': str(version_id)})
+        return jsonify({"success": True, "veredicto": veredicto, "documento": nombre,
+                        "detalle": ficha}), 200
+    except Exception as e:
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 

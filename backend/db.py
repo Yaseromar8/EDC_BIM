@@ -313,6 +313,30 @@ def ensure_file_nodes_table():
             cursor.execute(
                 "ALTER TABLE file_versions ADD COLUMN IF NOT EXISTS emitida_por VARCHAR(255);")
 
+            # ── 1.4 LA HUELLA DEL CONTENIDO ─────────────────────────────────
+            # Sin esto no se puede sostener "este es exactamente el fichero que se
+            # aprobo el dia X y no se ha modificado despues". Se sabia el tamano y
+            # la fecha, que no prueban nada: dos ficheros distintos pueden pesar
+            # igual, y la fecha la escribe quien sube.
+            #
+            # Va en la VERSION, no en el documento, y por el mismo motivo que la
+            # idoneidad: cada emision tiene su contenido, y lo que se aprueba es
+            # una emision concreta. Al sellar una version (estados_ecd) la huella
+            # ya esta puesta, asi que la aprobacion queda atada al contenido sin
+            # ningun paso extra.
+            #
+            # SHA-256 y no MD5: el objeto de GCS ya trae md5, pero MD5 admite
+            # colisiones construidas a proposito. Para una huella que ha de servir
+            # ante un auditor eso lo descalifica.
+            cursor.execute(
+                "ALTER TABLE file_versions ADD COLUMN IF NOT EXISTS sha256 CHAR(64);")
+            cursor.execute(
+                "ALTER TABLE file_versions ADD COLUMN IF NOT EXISTS huella_en TIMESTAMP WITH TIME ZONE;")
+            # Buscar por huella permite responder "¿tenemos este fichero?" a partir
+            # del fichero, que es como llega la pregunta en una comprobacion.
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_file_versions_sha256 ON file_versions(sha256);")
+
             # ── El candado (CHECK) va APARTE y NO se pone solo ───────────────
             # Aprendido a base de un susto: la primera version ponia el CHECK aqui
             # mismo, al arrancar. Como las migraciones corren al levantar CUALQUIER

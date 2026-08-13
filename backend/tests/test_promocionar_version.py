@@ -57,8 +57,12 @@ class Cursor:
                 if self.existe_nodo else None
         elif su.startswith('SELECT BLOQUEADO_POR, BLOQUEADO_EN'):
             self._ultima = (self.reservado_por, None)
+        # La 6a columna es el sha256 de la version origen. Al promocionar se COPIA:
+        # se reutiliza el mismo objeto del almacen, luego el contenido es identico.
+        # Sin copiarla, promocionar perderia la huella y con ella la prueba de que
+        # ese fichero es el que se aprobo.
         elif su.startswith('SELECT GCS_URN, SIZE_BYTES, MIME_TYPE, METADATA, VERSION_NUMBER'):
-            self._ultima = ('gcs/abc-de-la-v2', 1024, 'application/pdf', None, 2) \
+            self._ultima = ('gcs/abc-de-la-v2', 1024, 'application/pdf', None, 2, 'a' * 64) \
                 if self.version_es_suya else None
         elif su.startswith('INSERT INTO FILE_VERSIONS'):
             self._ultima = ('ver-nueva',)
@@ -244,3 +248,18 @@ def test_el_que_promociona_queda_como_quien_actualizo(promover):
     llamar(quien=LUIS)
     assert 'updated_by' in cur.update_del_nodo[0]
     assert LUIS in cur.update_del_nodo[1]
+
+
+def test_promocionar_conserva_la_huella_del_contenido(promover):
+    """Promocionar reutiliza el MISMO objeto: la huella tiene que viajar con el.
+
+    Si no se copiara, promocionar una version aprobada produciria una version sin
+    huella, y con ella se perderia la unica prueba de que ese fichero es el que se
+    autorizo. El contenido no ha cambiado; la prueba tampoco debe desaparecer.
+    """
+    llamar, cur = promover(estado='PUBLISHED')
+    assert llamar() is True
+    insert = cur.de('INSERT INTO file_versions')
+    assert insert, 'no se creo la version'
+    _sql, params = insert[0]
+    assert 'a' * 64 in params, 'la huella de la version origen no se copio'

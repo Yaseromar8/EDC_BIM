@@ -288,6 +288,28 @@ def complete_upload():
             created_by=created_by
         )
 
+        # ── Huella del contenido, en segundo plano ────────────────────────────
+        # En esta ruta el cliente envia los trozos DIRECTO a Cloud Storage: el
+        # backend no ve ni un byte, asi que la unica forma de calcular la huella es
+        # leer el objeto de vuelta. Va en un hilo aparte porque aqui pasan planos de
+        # 272 MB y esta peticion solo confirma el final de la subida: bloquearla
+        # mientras se descarga el fichero convertiria una respuesta instantanea en
+        # un minuto de espera.
+        #
+        # Si el sellado falla, la version se queda sin huella y eso aparece en la
+        # cobertura de integridad. Preferible a fingir que todo esta sellado.
+        try:
+            from file_system_db import gcs_executor
+            import integridad
+            with get_db_connection() as _c:
+                _cur = _c.cursor()
+                _cur.execute("SELECT current_version_id FROM file_nodes WHERE id = %s", (node_id,))
+                _fila = _cur.fetchone()
+            if _fila and _fila[0]:
+                gcs_executor.submit(integridad.sellar_desde_almacen, _fila[0], gcs_urn)
+        except Exception as _e:
+            print(f"[uploads] no se pudo lanzar el sellado de integridad: {_e}")
+
         # Mark session as completed
         with get_db_connection() as conn:
             cursor = conn.cursor()

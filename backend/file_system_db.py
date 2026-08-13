@@ -319,7 +319,8 @@ def _registrar_vuelta_a_borrador(cursor, model_urn, node_id, nombre, anterior, v
         print(f"[ESTADO] no se pudo registrar la vuelta a borrador de {nombre}: {e}")
 
 
-def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mime_type=None, created_by=None):
+def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mime_type=None,
+                       created_by=None, sha256=None):
     """Inserta/Actualiza el Ítem y crea una nueva Versión histórica con Holding Area (Estilo APS)"""
     import re
     
@@ -391,11 +392,16 @@ def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mim
             new_v = 1
             
         # 2. Registrar la Versión HISTÓRICA en la tabla de versiones
+        # La huella del contenido va AQUI, en la version, no en el documento: lo
+        # que se aprueba es una emision concreta, y sin atarla a su contenido no
+        # se puede sostener despues que el fichero es el que se autorizo.
         cursor.execute("""
-            INSERT INTO file_versions (file_node_id, version_number, gcs_urn, size_bytes, mime_type, created_by)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO file_versions (file_node_id, version_number, gcs_urn, size_bytes,
+                                       mime_type, created_by, sha256, huella_en)
+            VALUES (%s, %s, %s, %s, %s, %s, %s,
+                    CASE WHEN %s IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END)
             RETURNING id
-        """, (f_id, new_v, gcs_uuid, size_bytes, mime_type, created_by))
+        """, (f_id, new_v, gcs_uuid, size_bytes, mime_type, created_by, sha256, sha256))
         v_id = cursor.fetchone()[0]
         
         # 3. Vincular el Ítem principal a su registro de versión actual
@@ -838,23 +844,25 @@ def promote_version(model_urn, node_id, version_id, performed_by=None):
 
         # 3. Datos de la version a promocionar. Tiene que ser de ESTE documento.
         cursor.execute("""
-            SELECT gcs_urn, size_bytes, mime_type, metadata, version_number
+            SELECT gcs_urn, size_bytes, mime_type, metadata, version_number, sha256
             FROM file_versions
             WHERE id = %s AND file_node_id = %s
         """, (version_id, node_id))
         source_v = cursor.fetchone()
         if not source_v:
             return False
-        gcs_urn, size, mime, meta, v_origen = source_v
+        gcs_urn, size, mime, meta, v_origen, sha_origen = source_v
 
         new_v_num = current_v_num + 1
 
         # 4. Crear el nuevo registro de version.
         cursor.execute("""
-            INSERT INTO file_versions (file_node_id, version_number, gcs_urn, size_bytes, mime_type, created_by, metadata)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO file_versions (file_node_id, version_number, gcs_urn, size_bytes,
+                                       mime_type, created_by, metadata, sha256, huella_en)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
+                    CASE WHEN %s IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END)
             RETURNING id
-        """, (node_id, new_v_num, gcs_urn, size, mime, performed_by, meta))
+        """, (node_id, new_v_num, gcs_urn, size, mime, performed_by, meta, sha_origen, sha_origen))
         new_v_id = cursor.fetchone()[0]
 
         # 5. Si venia aprobado, queda dicho que esta promocion retiro la aprobacion.
