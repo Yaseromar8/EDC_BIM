@@ -258,6 +258,35 @@ def get_tracking_data(model_urn='global'):
         traceback.print_exc()
     return data
 
+def huerfanas_a_purgar(huerfanas, trae_fotos, purga_activa=None, tope=None):
+    """Que fotos se pueden purgar de verdad, y por que no se purga el resto.
+
+    Devuelve (lista, motivo). Si la lista viene vacia, `motivo` explica por que,
+    y ese texto se imprime: un recolector que calla cuando decide no borrar es
+    indistinguible de uno roto -- que es exactamente lo que paso aqui durante
+    meses.
+    """
+    if purga_activa is None:
+        purga_activa = os.getenv('PURGA_FOTOS_HUERFANAS', 'false').strip().lower() == 'true'
+    if tope is None:
+        tope = int(os.getenv('TOPE_PURGA_FOTOS', '25'))
+
+    # Ni marcadores de subida en curso ni ficheros que viven fuera del ECD.
+    candidatas = sorted(p for p in huerfanas
+                        if p and 'Subiendo' not in p and not str(p).startswith('http'))
+    if not candidatas:
+        return [], None
+    if not purga_activa:
+        return [], (f'{len(candidatas)} fotos quedarian huerfanas; purga apagada '
+                    f'(PURGA_FOTOS_HUERFANAS=false). No se toca nada.')
+    if not trae_fotos:
+        return [], 'la sincronizacion no trae "fotos": no se purga nada.'
+    if len(candidatas) > tope:
+        return [], (f'{len(candidatas)} huerfanas supera el tope de {tope}: parece una '
+                    f'sincronizacion incompleta, no una intencion. No se borra nada.')
+    return candidatas, None
+
+
 @tracking_bp.route('/api/project-pins', methods=['GET'])
 def get_tracking():
     model_urn = request.args.get('model_urn', 'global')
@@ -288,17 +317,42 @@ def update_tracking():
                     if ph.get("fullPath"): new_photos.add(ph["fullPath"])
                     
             orphans = old_photos - new_photos
-            if orphans:
-                from file_system_db import soft_delete_node
+            # ── RECOLECTOR DE FOTOS HUERFANAS ─────────────────────────────
+            # Tenia dos defectos que se tapaban entre si:
+            #
+            #  1. llamaba `soft_delete_node(model_urn, orphan_path)` cuando la
+            #     firma es `(node_id, model_urn)`. Ademas `orphan_path` es una
+            #     RUTA, no un id. El UPDATE buscaba `WHERE id = <urn del modelo>`
+            #     y no encontraba nada: no borraba absolutamente nada.
+            #  2. aun asi escribia 'delete_orphan_photo' en el registro de
+            #     actividad. El expediente afirmaba borrados que nunca
+            #     ocurrieron -- justo lo que la auditoria tiene que poder negar.
+            #
+            # El segundo es el grave, y se arregla siempre: solo se anota lo que
+            # de verdad paso. El primero se arregla, pero la purga queda APAGADA
+            # por defecto, porque encenderla cambia el comportamiento real de hoy
+            # (no borra nada) por uno que borra, y una sincronizacion parcial del
+            # cliente -- una lista `fotos` vacia por un fallo de red -- convertiria
+            # TODAS las fotografias de la obra en huerfanas de golpe. De ahi
+            # tambien el tope: una purga masiva desde una sincronizacion es un
+            # fallo del cliente, no una intencion del usuario.
+            a_purgar, motivo = huerfanas_a_purgar(orphans, trae_fotos='fotos' in new_data)
+            if motivo:
+                print(f'[Recolector] {motivo}')
+            if a_purgar:
+                from file_system_db import soft_delete_node, resolve_path_to_node_id
                 from db import log_activity
-                print(f"[Garbage Collector] Purgando {len(orphans)} fotos huérfanas de GCS/ECD: {orphans}")
-                for orphan_path in orphans:
-                    # Avoid deleting if it's external or a local placeholder
-                    if orphan_path and "Subiendo" not in orphan_path and not orphan_path.startswith("http"):
-                        soft_delete_node(model_urn, orphan_path)
-                        log_activity(model_urn, 'delete_orphan_photo', 'file', entity_name=orphan_path, performed_by='TrackingSync')
+                for orphan_path in a_purgar:
+                    node_id = resolve_path_to_node_id(orphan_path, model_urn, auto_create=False)
+                    if not node_id:
+                        print(f"[Recolector] sin nodo para {orphan_path}: no se anota nada")
+                        continue
+                    if soft_delete_node(node_id, model_urn, performed_by='TrackingSync',
+                                        reason='foto retirada del panel de seguimiento'):
+                        log_activity(model_urn, 'delete_orphan_photo', 'file',
+                                     entity_name=orphan_path, performed_by='TrackingSync')
         except Exception as gc_err:
-            print(f"[Garbage Collector] Error: {gc_err}")
+            print(f"[Recolector] Error: {gc_err}")
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
