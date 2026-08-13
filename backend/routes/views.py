@@ -1,3 +1,4 @@
+from esquema_congelado import solo_con_ddl
 import os
 import json
 import time
@@ -11,6 +12,7 @@ views_bp = Blueprint('views', __name__)
 views_bp = Blueprint('views', __name__)
 
 
+@solo_con_ddl
 def ensure_saved_views_table():
     """Creates the saved_views table in PostgreSQL if it doesn't exist."""
     try:

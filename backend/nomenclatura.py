@@ -32,6 +32,7 @@ QUE CAMBIA
 3. Hay dos modos: aviso (se marca, no se aisla) y estricto. Se arranca en aviso,
    porque encender el estricto sobre un ECD sin calibrar deja el portal vacio.
 """
+from esquema_congelado import solo_con_ddl
 
 import re
 
@@ -54,6 +55,7 @@ AVISO = 'aviso'
 ESTRICTO = 'estricto'
 
 
+@solo_con_ddl
 def asegurar_tabla(cursor):
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS nomenclatura_config (

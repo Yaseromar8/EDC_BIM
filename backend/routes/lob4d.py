@@ -1,5 +1,6 @@
 """Versioned and auditable data API for the 4D LOB workspace."""
 from __future__ import annotations
+from esquema_congelado import solo_con_ddl
 
 import io
 import json
@@ -27,6 +28,7 @@ from lob4d_engine import (
 lob4d_bp = Blueprint('lob4d', __name__)
 
 
+@solo_con_ddl
 def ensure_lob4d_tables():
     """Compatibility check. The enterprise schema is owned by Alembic 0003."""
     try:

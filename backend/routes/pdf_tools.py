@@ -3,6 +3,7 @@
 Las geometrías se guardan en coordenadas del espacio PDF (puntos, origen
 abajo-izquierda) para que sean independientes del zoom/rotación del visor.
 """
+from esquema_congelado import solo_con_ddl
 import json
 import traceback
 from flask import Blueprint, request, jsonify, g
@@ -11,6 +12,7 @@ from db import get_db_connection
 pdf_tools_bp = Blueprint('pdf_tools', __name__)
 
 
+@solo_con_ddl
 def ensure_pdf_tools_tables():
     with get_db_connection() as conn:
         cur = conn.cursor()

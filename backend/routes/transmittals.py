@@ -3,6 +3,7 @@
 Registro INMUTABLE de qué documentos (y en qué versión) se emitieron,
 a quién, cuándo y por quién. No hay update ni delete: es evidencia contractual.
 """
+from esquema_congelado import solo_con_ddl
 import json
 import traceback
 from flask import Blueprint, request, jsonify, g
@@ -17,6 +18,7 @@ def _hay_acceso(model_urn):
     return verify_project_access(getattr(g, 'current_user', None), model_urn)
 
 
+@solo_con_ddl
 def ensure_transmittals_table():
     with get_db_connection() as conn:
         cur = conn.cursor()

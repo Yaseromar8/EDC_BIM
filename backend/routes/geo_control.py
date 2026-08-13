@@ -7,6 +7,7 @@
 # pares de correspondencia (clic en el modelo ↔ coordenada UTM) y se guarda
 # como transformación Helmert 2D + cota, con su residual: los datos del
 # proyecto viven en la plataforma, jamás incrustados en un APK.
+from esquema_congelado import solo_con_ddl
 import json
 from flask import Blueprint, request, jsonify
 from db import get_db_connection
@@ -14,6 +15,7 @@ from db import get_db_connection
 geo_control_bp = Blueprint('geo_control', __name__)
 
 
+@solo_con_ddl
 def ensure_geo_tables():
     try:
         with get_db_connection() as conn:

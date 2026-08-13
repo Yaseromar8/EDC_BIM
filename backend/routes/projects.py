@@ -14,6 +14,7 @@ Endpoints:
   GET  /api/projects/:project_id          -> Get project details
   PUT  /api/projects/:project_id          -> Update project metadata
 """
+from esquema_congelado import solo_con_ddl
 import os
 import json
 import re
@@ -61,6 +62,7 @@ def _solo_admin(accion):
         return jsonify({'error': f'Solo los administradores pueden {accion}.'}), 403
     return None
 
+@solo_con_ddl
 def ensure_projects_schema():
     """
     Crea las tablas de Hubs y Projects si no existen.

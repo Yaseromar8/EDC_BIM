@@ -1,3 +1,4 @@
+from esquema_congelado import solo_con_ddl
 import os
 import time
 import uuid
@@ -484,6 +485,7 @@ def _civil_scope_from_args():
     return scope or None
 
 
+@solo_con_ddl
 def _ensure_scoped_civil_table(cur, table_name):
     cur.execute(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS scope_urn TEXT")
     cur.execute(f"""
@@ -521,6 +523,7 @@ def _ensure_scoped_civil_table(cur, table_name):
     cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_scope ON {table_name}(scope_urn, urn)")
 
 
+@solo_con_ddl
 def ensure_civil_alignments_table():
     try:
         from db import get_db_connection

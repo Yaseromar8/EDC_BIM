@@ -3,6 +3,7 @@
 Definiciones a nivel proyecto (Disciplina, Código de plano, ...) y valores
 por documento. Tipos: text, number, date, select (con opciones).
 """
+from esquema_congelado import solo_con_ddl
 import json
 import traceback
 from flask import Blueprint, request, jsonify, g
@@ -47,6 +48,7 @@ def _guardia_del_nodo(node_id, nivel, accion):
     return check_folder_permission(_u(), node_id, obra, nivel, accion)
 
 
+@solo_con_ddl
 def ensure_attributes_tables():
     with get_db_connection() as conn:
         cur = conn.cursor()

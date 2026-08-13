@@ -10,6 +10,7 @@ Identidades: los externalIds del visor SON los UniqueId de Revit (la
 traduccion SVF2 los preserva), asi que el plugin resuelve directo con
 Document.GetElement(uniqueId). No hay tablas de mapeo.
 """
+from esquema_congelado import solo_con_ddl
 import json
 import logging
 from datetime import datetime, timezone
@@ -40,6 +41,7 @@ def _check_project_access(project):
 _TABLES_READY = False
 
 
+@solo_con_ddl
 def _ensure_tables():
     """Auto-migracion ligera (mismo patron CREATE IF NOT EXISTS del resto del backend)."""
     global _TABLES_READY

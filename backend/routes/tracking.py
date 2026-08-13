@@ -1,3 +1,4 @@
+from esquema_congelado import solo_con_ddl
 import os
 import json
 import traceback
@@ -8,6 +9,7 @@ from gcs_manager import generate_signed_url
 
 tracking_bp = Blueprint('tracking', __name__)
 
+@solo_con_ddl
 def ensure_tracking_pins_table():
     """Crea o actualiza las tablas de tracking para soportar Multi-Tenant (model_urn)"""
     try:

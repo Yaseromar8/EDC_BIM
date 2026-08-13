@@ -29,6 +29,7 @@ la norma, que es de pago: esto no las reproduce ni las sustituye. Cada obra pued
 ajustar el catalogo a lo que diga su plan de ejecucion BIM, que es lo que se
 audita; por eso el catalogo se guarda por obra y es editable.
 """
+from esquema_congelado import solo_con_ddl
 
 from app_logging import get_logger
 
@@ -60,6 +61,7 @@ CATALOGO_POR_DEFECTO = [
 PREFIJO_POR_DESTINO = {'SHARED': 'P', 'PUBLISHED': 'C'}
 
 
+@solo_con_ddl
 def asegurar_tabla(cursor):
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS idoneidad_catalogo (

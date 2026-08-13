@@ -1,3 +1,4 @@
+from esquema_congelado import solo_con_ddl
 import os
 from datetime import datetime
 from flask import Blueprint, request, jsonify, g
@@ -88,6 +89,7 @@ def _require_admin(accion="esta acción"):
         return jsonify({'error': f'Solo los administradores pueden {accion}.'}), 403
     return None
 
+@solo_con_ddl
 def ensure_users_tables():
     """Crea las tablas de usuarios y la relación con proyectos si no existen"""
     try:

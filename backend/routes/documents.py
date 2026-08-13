@@ -1,3 +1,4 @@
+from esquema_congelado import solo_con_ddl
 import os
 import json
 import logging
@@ -2223,6 +2224,7 @@ def get_shared_document(share_id):
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+@solo_con_ddl
 def _ensure_share_revoked_column():
     """Añade la columna 'revoked' a document_shares si falta (idempotente)."""
     try:

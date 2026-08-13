@@ -21,6 +21,7 @@ Datos de entrada (persistidos):
   - civil_surfaces.data.surfaces    → triángulos TIN (bundle v7, recortados)
   - civil_alignments                → eje (marco s/offset)
 """
+from esquema_congelado import solo_con_ddl
 import math
 import time as _time
 
@@ -100,6 +101,7 @@ class _Tin:
 
 # ── Persistencia de superficies extraídas ───────────────────────────────────
 
+@solo_con_ddl
 def ensure_civil_surfaces_table():
     from db import get_db_connection
     with get_db_connection() as conn:

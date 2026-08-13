@@ -1,3 +1,4 @@
+from esquema_congelado import solo_con_ddl
 import os
 import json
 import time
@@ -12,6 +13,7 @@ pins_bp = Blueprint('pins', __name__)
 PINS_UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads', 'pins')
 os.makedirs(PINS_UPLOAD_FOLDER, exist_ok=True)
 
+@solo_con_ddl
 def ensure_pins_table():
     """Asegura que la tabla control_pins soporte multi-tenant."""
     try:

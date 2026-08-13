@@ -1,3 +1,4 @@
+from esquema_congelado import solo_con_ddl
 import os
 import urllib.parse
 import time
@@ -30,6 +31,7 @@ def _is_model_translated(urn, token):
     except Exception:
         return True
 
+@solo_con_ddl
 def ensure_model_config_table():
     """Creates the model_config table in PostgreSQL if it doesn't exist."""
     try:
@@ -909,6 +911,7 @@ def finalize_local_upload():
 # Un frente es solo un scope "{base_project_id}_{front_id}" — todo lo demás
 # (config, inventario, tracking, LOB) ya se aísla por ese id.
 
+@solo_con_ddl
 def ensure_frentes_table():
     try:
         from db import get_db_connection

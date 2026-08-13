@@ -7,6 +7,7 @@ el backend (el frontend es dueño del esquema; 'version' interna permite migrar
 sin tocar la API). Mismos patrones que routes/link.py: auto-migración ligera
 y política de acceso por proyecto.
 """
+from esquema_congelado import solo_con_ddl
 import json
 import logging
 from flask import Blueprint, request, jsonify, g
@@ -35,6 +36,7 @@ def _check_project_access(project):
     return None
 
 
+@solo_con_ddl
 def _ensure_tables():
     global _TABLES_READY
     if _TABLES_READY:

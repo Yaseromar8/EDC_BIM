@@ -4,6 +4,7 @@ Una revisión congela una lista de documentos (con su versión) y una secuencia
 de revisores. Cada paso aprueba o rechaza con comentario (trazable en history).
 Al aprobar el último paso, los documentos transicionan al estado ISO final.
 """
+from esquema_congelado import solo_con_ddl
 import json
 import traceback
 from datetime import datetime, timezone
@@ -16,6 +17,7 @@ reviews_bp = Blueprint('reviews', __name__)
 FINAL_STATUSES = (ecd.SHARED, ecd.PUBLISHED)
 
 
+@solo_con_ddl
 def ensure_reviews_table():
     with get_db_connection() as conn:
         cur = conn.cursor()

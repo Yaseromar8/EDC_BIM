@@ -4,6 +4,7 @@ Un set agrupa documentos con su versión CONGELADA al momento de añadirlos:
 la foto exacta de una entrega ("Entrega 30%", "Rev B"), aunque los archivos
 sigan evolucionando después.
 """
+from esquema_congelado import solo_con_ddl
 import traceback
 from flask import Blueprint, request, jsonify, g
 from db import get_db_connection, log_activity
@@ -11,6 +12,7 @@ from db import get_db_connection, log_activity
 sets_bp = Blueprint('sets', __name__)
 
 
+@solo_con_ddl
 def ensure_sets_tables():
     with get_db_connection() as conn:
         cur = conn.cursor()

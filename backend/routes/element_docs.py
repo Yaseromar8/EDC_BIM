@@ -4,6 +4,7 @@ Reemplaza el endpoint inexistente '/api/docs/mutate-bind' que dejaba roto el
 panel Docs del visor. Se ancla al external_id (estable entre versiones del
 modelo), coherente con el resto del inventario en PostgreSQL.
 """
+from esquema_congelado import solo_con_ddl
 import traceback
 from flask import Blueprint, request, jsonify, g
 from db import get_db_connection
@@ -11,6 +12,7 @@ from db import get_db_connection
 element_docs_bp = Blueprint('element_docs', __name__)
 
 
+@solo_con_ddl
 def ensure_element_docs_table():
     with get_db_connection() as conn:
         cur = conn.cursor()

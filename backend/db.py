@@ -1,3 +1,4 @@
+from esquema_congelado import solo_con_ddl
 import os
 import psycopg2
 from psycopg2 import pool, extras
@@ -168,6 +169,7 @@ def _columnas_que_el_listado_necesita():
         logger.warning(f"no se pudieron asegurar las columnas del listado: {e}")
 
 
+@solo_con_ddl
 def ensure_file_nodes_table():
     """Crea la tabla maestra de archivos/carpetas e indices de rendimiento."""
     _columnas_que_el_listado_necesita()
@@ -643,6 +645,7 @@ def ensure_file_nodes_table():
         print(f"Error inicializando esquema maestro: {e}")
         raise
 
+@solo_con_ddl
 def ensure_ai_brain_schema():
     """Crea el esquema y las tablas para el Cerebro de IA y HITL."""
     try:
@@ -728,6 +731,7 @@ def log_activity(model_urn, action, entity_type, entity_id=None, entity_name=Non
         # No romper la operacion principal si el log falla
         print(f"[ActivityLog] Warning: no se pudo registrar actividad: {e}")
 
+@solo_con_ddl
 def ensure_rfi_schema():
     """Crea la tabla principal para el modulo de Requerimiento de Informacion (RFI)."""
     try:
@@ -764,6 +768,7 @@ def ensure_rfi_schema():
     except Exception as e:
         print(f"Error inicializando esquema RFI: {e}")
 
+@solo_con_ddl
 def ensure_redline_schema():
     """Crea la tabla principal para el modulo de Red Lines."""
     try:
@@ -798,6 +803,7 @@ def ensure_redline_schema():
     except Exception as e:
         print(f"Error inicializando esquema Red Lines: {e}")
 
+@solo_con_ddl
 def ensure_partidas_schema():
     """Crea la tabla principal para el modulo de Partidas / Metrados."""
     try:
@@ -835,6 +841,7 @@ def ensure_partidas_schema():
         print(f"Error inicializando esquema Partidas: {e}")
 
 
+@solo_con_ddl
 def ensure_asset_user_data_table():
     """Familia de datos de USUARIO, separada del inventario nativo de Revit.
 
@@ -889,6 +896,7 @@ PROJECT_SCOPED_TABLES = [
 ]
 
 
+@solo_con_ddl
 def ensure_project_identity_columns():
     """Agrega project_id TEXT (+ indice) a todas las tablas de datos.
 

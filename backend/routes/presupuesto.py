@@ -5,6 +5,7 @@ GET  /api/presupuesto/<model_urn>              -> Árbol completo del presupuest
 POST /api/presupuesto/import                   -> Importar Excel del presupuesto
 POST /api/presupuesto/import-json              -> Importar desde JSON (fallback)
 """
+from esquema_congelado import solo_con_ddl
 from flask import Blueprint, jsonify, request
 from db import get_db_connection, resolve_project_id
 import json
@@ -36,6 +37,7 @@ CREATE INDEX IF NOT EXISTS idx_presupuesto_parent ON presupuesto_maestro(parent_
 CREATE INDEX IF NOT EXISTS idx_presupuesto_item ON presupuesto_maestro(item);
 """
 
+@solo_con_ddl
 def ensure_presupuesto_schema():
     """Crea la tabla presupuesto_maestro si no existe."""
     try:

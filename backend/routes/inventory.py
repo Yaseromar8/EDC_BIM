@@ -1,3 +1,4 @@
+from esquema_congelado import solo_con_ddl
 import os
 import json
 import threading
@@ -21,6 +22,7 @@ _EXTRACTING_KEYS = set()
 _EXTRACTING_LOCK = _threading.Lock()
 
 
+@solo_con_ddl
 def ensure_inventory_identity():
     """Migra inventory_assets a identidad (model_urn, external_id) -> un elemento
     es una sola fila por frente, así un duplicado es IMPOSIBLE por diseño (lo
@@ -51,6 +53,7 @@ def ensure_inventory_identity():
     except Exception as e:
         print(f"[migracion] ensure_inventory_identity: {e}")
 
+@solo_con_ddl
 def ensure_extraction_jobs_table():
     """Estado de jobs en Postgres: visible entre workers de gunicorn y persistente
     si un worker se reinicia (la memoria por-proceso no basta en produccion)."""

@@ -29,6 +29,7 @@ del esquema depende de ellas.
 Se mantiene a mano: si anades una tabla, ponla tambien aqui, o volveras a tener
 una plataforma que no se puede reconstruir.
 """
+from esquema_congelado import solo_con_ddl
 
 from app_logging import get_logger
 
@@ -662,6 +663,7 @@ COLUMNAS_PENDIENTES = [
 ]
 
 
+@solo_con_ddl
 def ensure_columnas_pendientes():
     """Anade las columnas sueltas que faltan. Va AL FINAL del arranque, cuando las
     tablas que las llevan ya existen."""
@@ -680,6 +682,7 @@ def ensure_columnas_pendientes():
         conn.commit()
 
 
+@solo_con_ddl
 def ensure_esquema_base():
     """Crea las tablas que ninguna otra rutina crea. Idempotente."""
     from db import get_db_connection

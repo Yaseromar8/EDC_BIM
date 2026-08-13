@@ -1,3 +1,4 @@
+from esquema_congelado import solo_con_ddl
 import os
 import uuid
 import time
@@ -214,6 +215,7 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
 _root_cache = {}  # model_urn -> root_id
 
 
+@solo_con_ddl
 def ensure_project_root_node(model_urn):
     """
     Asegura que exista un nodo raíz real ('Archivos de proyecto') para el proyecto dado.

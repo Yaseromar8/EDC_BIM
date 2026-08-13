@@ -35,6 +35,7 @@ partida: cada obra ajusta su catalogo a lo que diga su plan de ejecucion BIM y s
 evaluacion de sensibilidad, que es lo que se audita. Por eso el catalogo se guarda
 POR OBRA y es editable, igual que el de idoneidad y el de nomenclatura.
 """
+from esquema_congelado import solo_con_ddl
 
 from app_logging import get_logger
 
@@ -57,6 +58,7 @@ NIVELES_POR_DEFECTO = [
 NIVEL_SIN_EVALUAR = 'N1'
 
 
+@solo_con_ddl
 def asegurar_tablas(cursor):
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS sensibilidad_catalogo (
