@@ -1,0 +1,40 @@
+EVIDENCIA DE REVOCACION DE CREDENCIAL EXPUESTA
+=============================================================
+Hallazgo 0.1 - Credencial PostgreSQL publicada en repositorio publico
+
+fecha de la comprobacion : 2026-08-13 11:51:31 UTC
+instancia                : pqt-08-talara (Cloud SQL, PostgreSQL 18)
+servidor                 : 34.86.206.187:5432
+base                     : postgres
+usuario                  : postgres
+
+CREDENCIAL PROBADA
+La contrasena NO se introdujo a mano: se leyo literalmente del fichero
+backend/scratch.py, que es uno de los siete ficheros donde estaba escrita
+y que esta presente en la rama desplegada de dos repositorios PUBLICOS de
+GitHub desde el commit 9be32b6 (27-may-2026).
+
+huella SHA-256 (12 car.) : 81b6c3709537
+  Esta huella permite comprobar, contra el fichero publicado, que lo que se
+  probo fue exactamente la credencial expuesta, sin volver a escribirla.
+
+RESULTADO
+RECHAZADA POR EL SERVIDOR
+connection to server at "34.86.206.187", port 5432 failed: FATAL:  password authentication failed for user "postgres"
+
+ESTADO DEL SERVICIO TRAS LA ROTACION
+  GET /api/health      -> HTTP 200
+  GET /api/companies   -> HTTP 200 con datos reales de la base
+  GET /api/job_titles  -> HTTP 200
+  GET /api/docs/list sin sesion -> HTTP 401 (correcto)
+  POST login con credencial falsa -> HTTP 401 (correcto)
+
+  El startCommand del servicio encadena 'alembic upgrade head && gunicorn',
+  de modo que un HTTP 200 demuestra que la conexion a la base se establecio
+  con la credencial NUEVA durante el arranque.
+
+ALCANCE DE ESTA EVIDENCIA
+Demuestra que la credencial publicada ya no da acceso. NO demuestra que la
+base este a salvo de un administrador: la contrasena nueva sigue siendo la de
+un rol propietario de las 87 tablas y miembro de cloudsqlsuperuser. La
+separacion de identidades (ecd_app / ecd_migrator) sigue pendiente.
