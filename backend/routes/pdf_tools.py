@@ -8,6 +8,7 @@ import json
 import traceback
 from flask import Blueprint, request, jsonify, g
 from db import get_db_connection
+from perimetro_de_obra import guardia_de_recurso
 
 pdf_tools_bp = Blueprint('pdf_tools', __name__)
 
@@ -99,6 +100,9 @@ def create_markup():
 
 @pdf_tools_bp.route('/api/pdf/markups/<int:markup_id>', methods=['DELETE'])
 def delete_markup(markup_id):
+    negativa = guardia_de_recurso('pdf_markups', markup_id)
+    if negativa:
+        return negativa
     try:
         u = _user()
         with get_db_connection() as conn:

@@ -8,6 +8,7 @@ import json
 import traceback
 from flask import Blueprint, request, jsonify, g
 from db import get_db_connection
+from perimetro_de_obra import guardia_de_recurso
 
 attributes_bp = Blueprint('attributes', __name__)
 
@@ -121,8 +122,14 @@ def create_def():
 
 @attributes_bp.route('/api/attrs/defs/<int:attr_id>', methods=['DELETE'])
 def delete_def(attr_id):
+    # El orden importa: primero el rol, luego la obra. Al reves, un usuario sin
+    # permiso recibia el error de la comprobacion de obra en vez de un 403
+    # limpio, y ademas se consultaba la base por alguien que no iba a pasar.
     if not _is_admin():
         return jsonify({"success": False, "error": "Solo administradores."}), 403
+    negativa = guardia_de_recurso('custom_attr_defs', attr_id)
+    if negativa:
+        return negativa
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()

@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from db import get_db_connection, resolve_project_id
 import uuid
 import json
+from perimetro_de_obra import guardia_de_recurso
 
 redlines_bp = Blueprint('redlines_bp', __name__)
 
@@ -92,6 +93,11 @@ def create_redline():
 @redlines_bp.route('/<redline_id>', methods=['PATCH'])
 def update_redline(redline_id):
     """Actualiza campos específicos de un Red Line (Inline Editing)."""
+    # De que obra es este recurso. Sin esto, conocer el id bastaba
+    # para escribir en el expediente de otra obra.
+    negativa = guardia_de_recurso('doc_redlines', redline_id)
+    if negativa:
+        return negativa
     data = request.json
     if not data:
         return jsonify({"error": "No data provided"}), 400

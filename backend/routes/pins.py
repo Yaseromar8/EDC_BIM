@@ -7,6 +7,7 @@ from flask import Blueprint, request, jsonify, send_from_directory, g
 from werkzeug.utils import secure_filename
 from db import get_db_connection
 from gcs_manager import upload_file_to_gcs
+from perimetro_de_obra import guardia_de_recurso
 
 pins_bp = Blueprint('pins', __name__)
 
@@ -159,6 +160,11 @@ def create_pin():
 
 @pins_bp.route('/api/pins/<pin_id>', methods=['PUT'])
 def update_pin(pin_id):
+    # De que obra es este recurso. Sin esto, conocer el id bastaba
+    # para escribir en el expediente de otra obra.
+    negativa = guardia_de_recurso('control_pins', pin_id)
+    if negativa:
+        return negativa
     data = request.get_json()
     print(f"[PINS] PUT /api/pins/{pin_id} - Data: {json.dumps(data)}")
     
@@ -219,6 +225,11 @@ def update_pin(pin_id):
 
 @pins_bp.route('/api/pins/<pin_id>', methods=['DELETE'])
 def delete_pin(pin_id):
+    # De que obra es este recurso. Sin esto, conocer el id bastaba
+    # para escribir en el expediente de otra obra.
+    negativa = guardia_de_recurso('control_pins', pin_id)
+    if negativa:
+        return negativa
     print(f"[PINS] DELETE /api/pins/{pin_id}")
     try:
         with get_db_connection() as conn:

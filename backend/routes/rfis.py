@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from db import get_db_connection, resolve_project_id
 import uuid
 import json
+from perimetro_de_obra import guardia_de_recurso
 
 rfis_bp = Blueprint('rfis_bp', __name__)
 
@@ -93,6 +94,11 @@ def create_rfi():
 @rfis_bp.route('/<rfi_id>', methods=['PATCH'])
 def update_rfi(rfi_id):
     """Actualiza campos específicos de un RFI (Inline Editing)."""
+    # De que obra es este recurso. Sin esto, conocer el id bastaba
+    # para escribir en el expediente de otra obra.
+    negativa = guardia_de_recurso('doc_rfis', rfi_id)
+    if negativa:
+        return negativa
     data = request.json
     if not data:
         return jsonify({"error": "No data provided"}), 400

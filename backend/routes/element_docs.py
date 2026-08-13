@@ -8,6 +8,7 @@ from esquema_congelado import solo_con_ddl
 import traceback
 from flask import Blueprint, request, jsonify, g
 from db import get_db_connection
+from perimetro_de_obra import guardia_de_recurso
 
 element_docs_bp = Blueprint('element_docs', __name__)
 
@@ -76,6 +77,11 @@ def add_element_doc():
 
 @element_docs_bp.route('/api/element-docs/<int:doc_id>', methods=['DELETE'])
 def delete_element_doc(doc_id):
+    # De que obra es este recurso. Sin esto, conocer el id bastaba
+    # para escribir en el expediente de otra obra.
+    negativa = guardia_de_recurso('element_docs', doc_id)
+    if negativa:
+        return negativa
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()

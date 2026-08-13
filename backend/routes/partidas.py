@@ -19,6 +19,7 @@ def _filtro_de_obra(cursor):
             ' (SELECT project_id FROM project_users WHERE user_id = %s))'), [user.get('id')]
 
 import json
+from perimetro_de_obra import guardia_de_recurso
 
 partidas_bp = Blueprint('partidas_bp', __name__)
 
@@ -150,6 +151,11 @@ def create_partidas_batch():
 @partidas_bp.route('/<partida_id>', methods=['PATCH'])
 def update_partida(partida_id):
     """Actualiza campos específicos de una partida (Inline Editing)."""
+    # De que obra es este recurso. Sin esto, conocer el id bastaba
+    # para escribir en el expediente de otra obra.
+    negativa = guardia_de_recurso('doc_partidas', partida_id)
+    if negativa:
+        return negativa
     data = request.json
     if not data:
         return jsonify({"error": "No data provided"}), 400
@@ -193,6 +199,11 @@ def update_partida(partida_id):
 @partidas_bp.route('/<partida_id>', methods=['DELETE'])
 def delete_partida(partida_id):
     """Elimina una partida."""
+    # De que obra es este recurso. Sin esto, conocer el id bastaba
+    # para escribir en el expediente de otra obra.
+    negativa = guardia_de_recurso('doc_partidas', partida_id)
+    if negativa:
+        return negativa
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()

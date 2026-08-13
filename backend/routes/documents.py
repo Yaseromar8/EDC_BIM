@@ -1052,33 +1052,17 @@ def upload_document():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@documents_bp.route('/api/docs/dev/wipe', methods=['POST'])
-def dev_wipe_ecd():
-    """DESTRUCTIVE: Wipe entire ECD. Protected by env flag + admin role."""
-    # ── GATE 1: Environment flag must be explicitly set ──
-    import os
-    if os.environ.get('ALLOW_DEV_WIPE') != 'true':
-        return jsonify({"success": False, "error": "Endpoint disabled. Set ALLOW_DEV_WIPE=true to enable."}), 403
-
-    # ── GATE 2: Must be authenticated admin ──
-    from flask import g
-    user = getattr(g, 'current_user', None)
-    if not user or user.get('role') != 'admin':
-        return jsonify({"success": False, "error": "Admin role required for destructive operations."}), 403
-
-    try:
-        from db import get_db_connection
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('TRUNCATE TABLE file_nodes CASCADE;')
-            cursor.execute('TRUNCATE TABLE activity_log CASCADE;')
-            conn.commit()
-        print(f"[WIPE] ECD wiped by {user.get('email', 'unknown')}")
-        return jsonify({"success": True, "message": "ECD Wiped"})
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"success": False, "error": str(e)}), 500
+# AQUI VIVIA /api/docs/dev/wipe, retirado el 13-ago-2026.
+#
+# Hacia TRUNCATE de file_nodes y de activity_log. Estaba doblemente protegido
+# (ALLOW_DEV_WIPE=true + rol admin), asi que no era explotable, pero un ECD no
+# puede tener un boton HTTP que borra su propio registro de auditoria: es lo
+# contrario de lo que persigue todo el trabajo de trazabilidad, y basta con que
+# alguien ponga la variable "un momento, para probar" para perder el rastro
+# entero sin dejar rastro de haberlo perdido.
+#
+# Para vaciar una base de desarrollo se usa un guion local con la identidad de
+# migracion, no una ruta del producto.
 
 @documents_bp.route('/api/docs/delete', methods=['DELETE'])
 def delete_document():
