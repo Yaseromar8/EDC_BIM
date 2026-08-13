@@ -753,38 +753,45 @@ def log_activity(model_urn, action, entity_type, entity_id=None, entity_name=Non
         with get_db_connection() as conn:
             cursor = conn.cursor()
             detalles = _json.dumps(details or {})
-            cursor.execute("""
-                INSERT INTO activity_log (model_urn, action, entity_type, entity_id, entity_name, performed_by, details)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                RETURNING id, created_at
-            """, (
-                model_urn, action, entity_type, entity_id, entity_name,
-                performed_by, detalles
-            ))
-            fila_id, cuando = cursor.fetchone()
 
-            # ── Encadenado con el evento anterior ────────────────────────────
-            # Cada fila lleva la huella de la que la precede, de modo que alterar
-            # o borrar una del medio rompe la cadena a partir de ahi y se puede
-            # senalar donde. Da DETECTABILIDAD, no inmutabilidad: quien pueda
-            # escribir en la tabla puede recalcular la cadena entera. Ver
-            # backend/auditoria_encadenada.py.
-            #
-            # Va dentro de la MISMA transaccion que el INSERT: si se sellara
-            # despues, entre el commit y el sellado habria un hueco en el que la
-            # fila existe sin huella, que es justo cuando alguien la borraria.
+            # La fecha se fija AQUI, no en la base, porque entra en la huella y
+            # hay que conocerla antes de insertar. Ver sello_para_insercion.
+            import datetime as _dt
+            cuando = _dt.datetime.now(_dt.timezone.utc)
+            contenido = {
+                'model_urn': model_urn, 'action': action, 'entity_type': entity_type,
+                'entity_id': entity_id, 'entity_name': entity_name,
+                'performed_by': performed_by,
+                'details': _json.loads(detalles), 'created_at': cuando,
+            }
+            hash_anterior = h = None
             try:
                 import auditoria_encadenada as cadena
-                cursor.execute("SELECT to_regclass('public.activity_log')")
-                cadena.encadenar(cursor, fila_id, {
-                    'model_urn': model_urn, 'action': action, 'entity_type': entity_type,
-                    'entity_id': entity_id, 'entity_name': entity_name,
-                    'performed_by': performed_by,
-                    'details': _json.loads(detalles), 'created_at': cuando})
+                hash_anterior, h = cadena.sello_para_insercion(cursor, contenido)
             except Exception as _e:
-                # El evento queda registrado aunque no se pueda sellar. Aparecera
-                # como 'sin_sellar' en la verificacion, que es lo honesto.
-                print(f"[ActivityLog] no se pudo encadenar: {_e}")
+                # Sin sello el evento se registra igual y saldra como
+                # 'sin_sellar' en la verificacion, que es lo honesto. Lo que NO
+                # puede pasar es que el evento se pierda: eso es lo que ocurria
+                # cuando el sellado era un UPDATE posterior.
+                print(f"[activity_log] sin sello: {_e}")
+
+            cursor.execute("""
+                INSERT INTO activity_log (model_urn, action, entity_type, entity_id,
+                                          entity_name, performed_by, details,
+                                          created_at, hash_anterior, hash)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                model_urn, action, entity_type, entity_id, entity_name,
+                performed_by, detalles, cuando, hash_anterior, h
+            ))
+            fila_id = cursor.fetchone()[0]
+
+            # El encadenado ya se hizo ARRIBA, dentro del propio INSERT.
+            # Aqui vivia un segundo sellado por UPDATE que, con la identidad de
+            # aplicacion separada, no solo fallaba: abortaba la transaccion y se
+            # llevaba el INSERT por delante. El evento no quedaba sin sellar,
+            # desaparecia.
 
             conn.commit()
     except Exception as e:

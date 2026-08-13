@@ -112,3 +112,65 @@ def test_la_huella_depende_de_la_anterior():
     """Si no dependiera, reordenar el registro no se notaria."""
     c = _fila(1)
     assert cadena.huella_de_fila('a' * 64, c) != cadena.huella_de_fila('b' * 64, c)
+
+
+# ── El extremo de la cadena ────────────────────────────────────────────────
+# Medido el 13-ago-2026: la cadena detecta que falta una fila porque la
+# SIGUIENTE apunta a ella. La ultima no tiene siguiente, asi que borrar el final
+# no se notaba -- y borrando de atras hacia delante se podia vaciar el registro
+# entero sin que verificar() dijera nada. Es justo lo que haria quien quisiera
+# borrar su propio rastro, porque su rastro es lo ultimo que hay.
+
+
+class CursorConAncla(CursorCadena):
+    """Ademas del recorrido, responde a las consultas del extremo."""
+
+    def execute(self, sql, params=None):
+        s = ' '.join(sql.split())
+        if 'ORDER BY id DESC LIMIT 1' in s:
+            sellada = [f for f in self.filas if f[3]]
+            self._ultima = [(sellada[-1][0], sellada[-1][3])] if sellada else []
+        elif 'count(*)' in s:
+            self._ultima = [(len([f for f in self.filas if f[3]]),)]
+        elif 'WHERE id = %s' in s:
+            fila = [f for f in self.filas if f[0] == params[0]]
+            self._ultima = [(fila[0][3],)] if fila else []
+        else:
+            super().execute(sql, params)
+
+
+def test_borrar_el_final_del_registro_se_detecta_con_ancla():
+    cur = CursorConAncla(_cadena_sana(4))
+    ancla = cadena.ancla_actual(cur)
+    assert ancla['id'] == 4
+
+    cur.filas = cur.filas[:-1]                 # se borra el ultimo evento
+    sin_ancla = cadena.verificar(cur)
+    con_ancla = cadena.verificar(cur, ancla=ancla)
+
+    assert sin_ancla['integra'] is True, 'asi era antes: el truncado de cola no se veia'
+    assert con_ancla['integra'] is False
+    assert con_ancla['roturas'][0]['motivo'] == 'cola truncada'
+
+
+def test_vaciar_el_registro_de_atras_hacia_delante_se_detecta():
+    """El caso que de verdad importa: no una fila, TODAS."""
+    cur = CursorConAncla(_cadena_sana(5))
+    ancla = cadena.ancla_actual(cur)
+    cur.filas = []
+    assert cadena.verificar(cur, ancla=ancla)['integra'] is False
+
+
+def test_reescribir_el_final_tambien_se_detecta():
+    cur = CursorConAncla(_cadena_sana(3))
+    ancla = cadena.ancla_actual(cur)
+    fid, c, ha, _h = cur.filas[-1]
+    cur.filas[-1] = (fid, c, ha, 'f' * 64)     # misma fila, otra huella
+    res = cadena.verificar(cur, ancla=ancla)
+    assert any(r['motivo'] == 'cola reescrita' for r in res['roturas'])
+
+
+def test_sin_ancla_la_verificacion_se_comporta_como_antes():
+    """El ancla es opcional: quien no la tenga no ve peor de lo que veia."""
+    cur = CursorConAncla(_cadena_sana(3))
+    assert cadena.verificar(cur)['integra'] is True

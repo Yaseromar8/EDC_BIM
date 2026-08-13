@@ -44,6 +44,7 @@ al mismo sitio, dejando una bifurcacion que parece una manipulacion. El cerrojo
 de aviso (advisory lock) serializa solo el calculo de la cadena, no la tabla.
 """
 
+import datetime
 import hashlib
 import json
 
@@ -61,18 +62,42 @@ CERROJO = 0x0EC0_A0D1
 GENESIS = '0' * 64
 
 
-def _canonico(fila):
+def _texto(valor):
+    """Como se escribe cada valor dentro del texto canonico.
+
+    Las fechas se escriben SIEMPRE en UTC con microsegundos. Antes se usaba
+    str(), y como created_at lleva zona horaria, el texto dependia de la zona de
+    la SESION de PostgreSQL: la misma fila sellada por un proceso y verificada
+    por otro con otra zona daba "huella no coincide" sin que nadie la hubiera
+    tocado. Un detector de alteraciones que da falsos positivos se desactiva a
+    los dos dias, y entonces ya no detecta nada.
+    """
+    if isinstance(valor, datetime.datetime):
+        v = valor
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=datetime.timezone.utc)
+        return v.astimezone(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f+00:00')
+    return str(valor)
+
+
+def _canonico(fila, forma='utc'):
     """El texto exacto sobre el que se calcula la huella de una fila.
 
     Ordenado y sin espacios variables: si el texto cambiara segun como se
     serialice, la verificacion daria roturas falsas y el control se volveria
     inservible a los dos dias.
+
+    `forma='heredada'` reproduce el texto de antes del 13-ago-2026, para poder
+    verificar las filas que se sellaron con aquella regla sin marcarlas como
+    rotas. No se usa para sellar nada nuevo.
     """
-    return json.dumps(fila, sort_keys=True, separators=(',', ':'), default=str)
+    conversor = str if forma == 'heredada' else _texto
+    return json.dumps(fila, sort_keys=True, separators=(',', ':'), default=conversor)
 
 
-def huella_de_fila(hash_anterior, fila):
-    return hashlib.sha256((str(hash_anterior or GENESIS) + _canonico(fila)).encode()).hexdigest()
+def huella_de_fila(hash_anterior, fila, forma='utc'):
+    return hashlib.sha256(
+        (str(hash_anterior or GENESIS) + _canonico(fila, forma)).encode()).hexdigest()
 
 
 def asegurar_columnas(cursor):
@@ -80,6 +105,45 @@ def asegurar_columnas(cursor):
     cursor.execute("ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS hash_anterior CHAR(64)")
     cursor.execute("ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS hash CHAR(64)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_activity_log_hash ON activity_log(hash)")
+
+
+def sello_para_insercion(cursor, contenido):
+    """Calcula (hash_anterior, hash) ANTES de insertar la fila.
+
+    POR QUE EXISTE, Y POR QUE ES LO QUE HAY QUE USAR
+    ------------------------------------------------
+    `encadenar()` sella con un UPDATE despues del INSERT. Eso obliga a la
+    aplicacion a tener permiso de UPDATE sobre activity_log -- justo el permiso
+    que la separacion de identidades le quita, y con razon: quien pueda
+    actualizar el registro puede reescribir el pasado.
+
+    Y no fallaba de forma elegante. Medido el 13-ago-2026 contra la base local ya
+    separada, registrando un evento por la via normal de la aplicacion:
+
+        WARNING [auditoria] no se pudo encadenar el evento 183:
+                permiso denegado a la tabla activity_log
+        filas ANTES: 66    filas DESPUES: 66
+
+    El evento no quedaba "sin sellar": DESAPARECIA. En PostgreSQL una sentencia
+    que falla aborta la transaccion entera, asi que el UPDATE denegado se llevaba
+    por delante el INSERT. El try/except de Python atrapaba la excepcion pero no
+    podia desabortar la transaccion. El comentario de `encadenar` prometia que
+    nunca se perderia un evento por fallar el sellado, y era exactamente lo que
+    pasaba.
+
+    Sellando antes de insertar no hace falta UPDATE: la huella entra en el propio
+    INSERT. La aplicacion solo necesita INSERT y SELECT, que es lo que debe tener.
+
+    El cerrojo consultivo sigue siendo necesario y ahora abarca desde la lectura
+    del ultimo sello hasta el INSERT del que lo usa, porque va en la misma
+    transaccion: dos eventos simultaneos no pueden encadenar del mismo predecesor.
+    """
+    cursor.execute("SELECT pg_advisory_xact_lock(%s)", (CERROJO,))
+    cursor.execute("SELECT hash FROM activity_log WHERE hash IS NOT NULL "
+                   " ORDER BY id DESC LIMIT 1")
+    prev = cursor.fetchone()
+    hash_anterior = prev[0] if prev else GENESIS
+    return hash_anterior, huella_de_fila(hash_anterior, contenido)
 
 
 def encadenar(cursor, fila_id, contenido):
@@ -107,7 +171,24 @@ def encadenar(cursor, fila_id, contenido):
         return None
 
 
-def verificar(cursor, desde_id=None, limite=None):
+def ancla_actual(cursor):
+    """El extremo de la cadena hoy: hasta donde llega y con que huella termina.
+
+    Se publica FUERA de la base -- fichero firmado, bucket con retencion, correo
+    al responsable -- y se le pasa a verificar() la proxima vez. Guardarla en la
+    misma base no protege de nada: quien pueda borrar el final puede borrar
+    tambien el ancla.
+    """
+    cursor.execute("SELECT id, hash FROM activity_log WHERE hash IS NOT NULL "
+                   " ORDER BY id DESC LIMIT 1")
+    fila = cursor.fetchone()
+    if not fila:
+        return None
+    cursor.execute("SELECT count(*) FROM activity_log WHERE hash IS NOT NULL")
+    return {'id': fila[0], 'hash': fila[1], 'selladas': cursor.fetchone()[0]}
+
+
+def verificar(cursor, desde_id=None, limite=None, ancla=None):
     """Recorre la cadena y devuelve donde se rompe, si es que se rompe.
 
     Devuelve un diccionario con:
@@ -116,10 +197,23 @@ def verificar(cursor, desde_id=None, limite=None):
       roturas        lista de {id, motivo}
       integra        True si no hay ninguna rotura
 
-    Tres motivos posibles de rotura, y son distintos:
+    Cinco motivos posibles de rotura, y son distintos:
       'huella no coincide'  el CONTENIDO de la fila cambio despues de sellarla
       'eslabon roto'        la fila anterior no es la que dice ser: falta alguna
       'sin huella'          se inserto salteando el sellado
+      'cola truncada'       borraron el FINAL del registro
+      'cola reescrita'      el final esta donde estaba, pero ya no es el mismo
+
+    POR QUE HACE FALTA EL ANCLA
+    ---------------------------
+    La cadena detecta que falta una fila porque la SIGUIENTE apunta a ella. La
+    ultima no tiene siguiente. Medido: con ocho filas selladas, borrar la octava
+    dejaba integra=True, y borrando de atras hacia delante se podia vaciar el
+    registro entero sin que nada lo notara -- justo lo que haria alguien que
+    quisiera borrar su rastro, porque su rastro es lo ultimo que hay.
+
+    El ancla cierra ese extremo: se guarda fuera de la base hasta donde llegaba
+    la cadena, y al verificar se comprueba que sigue llegando al menos hasta ahi.
     """
     sql = ("SELECT id, model_urn, action, entity_type, entity_id, entity_name, "
            "       performed_by, details, created_at, hash_anterior, hash "
@@ -147,11 +241,26 @@ def verificar(cursor, desde_id=None, limite=None):
         if esperado is not None and h_ant != esperado:
             roturas.append({'id': fid, 'motivo': 'eslabon roto',
                             'detalle': 'apunta a una fila anterior que no es la que le precede'})
-        if huella_de_fila(h_ant, contenido) != h:
+        # Se prueba la forma actual y, si no cuadra, la heredada: las filas
+        # selladas antes del 13-ago-2026 usaban str() para las fechas. Marcar
+        # como rotas 1.755 filas que nadie toco convertiria el informe en ruido.
+        if (huella_de_fila(h_ant, contenido) != h
+                and huella_de_fila(h_ant, contenido, 'heredada') != h):
             roturas.append({'id': fid, 'motivo': 'huella no coincide',
                             'detalle': 'el contenido de esta fila cambio despues de sellarse'})
         esperado = h
         revisadas += 1
+    # ── El extremo ──
+    if ancla:
+        cursor.execute("SELECT hash FROM activity_log WHERE id = %s", (ancla['id'],))
+        fila = cursor.fetchone()
+        if not fila:
+            roturas.append({'id': ancla['id'], 'motivo': 'cola truncada',
+                            'detalle': 'la cadena llegaba hasta aqui y esta fila ya no esta'})
+        elif fila[0] != ancla['hash']:
+            roturas.append({'id': ancla['id'], 'motivo': 'cola reescrita',
+                            'detalle': 'la fila del extremo existe pero su huella cambio'})
+
     return {'revisadas': revisadas, 'sin_sellar': sin_sellar,
             'roturas': roturas, 'integra': not roturas}
 
