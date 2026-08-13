@@ -38,13 +38,31 @@ def enviar(destino, asunto, titulo, cuerpo, enlace=None, texto_boton='Abrir'):
     html = _plantilla(titulo, cuerpo, enlace, texto_boton)
 
     if not RESEND_API_KEY:
-        # Sin clave: no se pierde la operacion, se registra para intervencion
-        # manual. El enlace NO se considera secreto frente al propio admin.
+        # AQUI SE ESCRIBIA EL ENLACE ENTERO EN EL LOG.
+        #
+        # El razonamiento era "el enlace no es secreto frente al propio admin".
+        # Es falso: ese enlace lleva dentro el token de restablecimiento, que da
+        # la cuenta a quien lo abra -- y ademas revoca las sesiones de la
+        # victima. Los registros de Render los ve cualquiera con acceso al
+        # panel, se conservan, y se pueden reenviar a terceros. Peor todavia:
+        # en produccion NO hay RESEND_API_KEY, asi que este era el camino
+        # normal, no el excepcional, y todos los enlaces de restablecimiento
+        # emitidos han pasado por aqui.
+        #
+        # Se registra lo necesario para saber que ocurrio -- a quien iba y una
+        # huella corta del token, para poder correlacionarlo -- y nada con lo
+        # que se pueda entrar. Si hace falta ayudar a alguien, se emite un
+        # enlace nuevo; no se rescata este del log.
+        huella = ''
+        if enlace:
+            import hashlib
+            huella = ' token_fp=' + hashlib.sha256(enlace.encode()).hexdigest()[:8]
         logger.warning(
             f"Correo NO enviado (falta RESEND_API_KEY). destino={destino} asunto={asunto}"
-            + (f" enlace={enlace}" if enlace else '')
+            + huella
         )
         return False, 'correo no configurado'
+
 
     try:
         r = requests.post(

@@ -227,9 +227,30 @@ def compare_snapshots(before, after):
 _snapshots = {}
 
 
+def _solo_admin():
+    """Guardia efectiva dentro de la vista.
+
+    Estas dos rutas estaban declaradas como rol:admin, pero la politica corre en
+    MODO SOMBRA -- registra y no bloquea -- asi que la declaracion no impedia
+    nada. Comprobado con una sesion de rol 'user': /api/audit/snapshot devolvia
+    200 con la instantanea completa de una obra ajena. Un guard no puede dar por
+    hecho que otra capa ya comprobo.
+    """
+    from flask import g
+    u = getattr(g, 'current_user', None)
+    if not u:
+        return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
+    if u.get('role') != 'admin':
+        return jsonify({'error': 'Solo los administradores pueden usar la auditoría.'}), 403
+    return None
+
+
 @audit_bp.route('/api/audit/snapshot', methods=['GET'])
 def take_snapshot():
     """Captura un snapshot del estado actual. Usar antes del relink."""
+    negativa = _solo_admin()
+    if negativa:
+        return negativa
     project_id = request.args.get('project')
     if not project_id:
         return jsonify({"error": "Falta parámetro 'project'"}), 400
@@ -268,6 +289,9 @@ def take_snapshot():
 @audit_bp.route('/api/audit/compare', methods=['GET'])
 def compare_after_relink():
     """Compara el estado actual vs el snapshot guardado. Usar después del relink."""
+    negativa = _solo_admin()
+    if negativa:
+        return negativa
     project_id = request.args.get('project')
     if not project_id:
         return jsonify({"error": "Falta parámetro 'project'"}), 400

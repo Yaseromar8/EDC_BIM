@@ -779,12 +779,10 @@ from routes.ai import ai_bp
 from routes.schedule import schedule_bp
 from routes.uploads import uploads_bp
 from routes.inventory import inventory_bp
-from routes.diagnostics import diag_bp
 from routes.audit import audit_bp
 from routes.rfis import rfis_bp
 from routes.redlines import redlines_bp
 from routes.partidas import partidas_bp
-from routes.photo_diag import photo_diag_bp
 from routes.presupuesto import presupuesto_bp
 from routes.compare import compare_bp
 from routes.link import link_bp
@@ -801,7 +799,6 @@ app.register_blueprint(civil_solids_bp)
 app.register_blueprint(docs_cad_bp)   # ver DWG/Civil/IFC dentro de Documentos
 app.register_blueprint(civil_da_bp)
 app.register_blueprint(audit_bp)
-app.register_blueprint(diag_bp)
 app.register_blueprint(maps_bp)
 app.register_blueprint(views_bp)
 app.register_blueprint(pins_bp)
@@ -816,7 +813,6 @@ app.register_blueprint(inventory_bp)
 app.register_blueprint(rfis_bp, url_prefix='/api/rfis')
 app.register_blueprint(redlines_bp, url_prefix='/api/redlines')
 app.register_blueprint(partidas_bp, url_prefix='/api/partidas')
-app.register_blueprint(photo_diag_bp)
 app.register_blueprint(presupuesto_bp, url_prefix='/api/presupuesto')
 app.register_blueprint(compare_bp)
 from routes.pdf_tools import pdf_tools_bp, ensure_pdf_tools_tables

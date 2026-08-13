@@ -205,7 +205,7 @@ POLITICAS_POR_BLUEPRINT = {
     'redlines_bp': _SESION, 'geo_control': _SESION, 'pdf_tools': _SESION,
     'auth': _SESION, 'projects': _SESION,
     # Herramientas de mantenimiento: solo administracion
-    'audit': _ADMIN, 'diagnostics': _ADMIN, 'photo_diag': _ADMIN,
+    'audit': _ADMIN,   # 'diagnostics' y 'photo_diag' se retiraron: eran de diagnostico temporal
 }
 
 
