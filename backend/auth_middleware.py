@@ -393,7 +393,14 @@ def _user_in_project(user_id, project_id):
 # Nombres bajo los que viaja la obra, en orden de preferencia. 'scope_urn' y
 # 'scope' son los que usan de verdad Civil y el 4D LOB, y faltaban: por eso
 # decenas de endpoints no resolvian obra y se colaban sin dejar ni un aviso.
-_CLAVES_OBRA = ('project_id', 'model_urn', 'scope_urn', 'scope', 'project', 'target_urn', 'urn')
+_CLAVES_OBRA = ('project_id', 'model_urn', 'scope_urn', 'scope', 'project', 'target_urn', 'urn',
+                # Variantes que usan de verdad las rutas, medidas sobre las 87 que
+                # manejan datos de obra sin guardia propia. 'projectId' en
+                # camelCase lo mandan cinco rutas desde el frontend, y sin esta
+                # linea ninguna de las cinco resolvia obra: se colaban por el
+                # hueco sin dejar siquiera un aviso.
+                'projectId', 'base_project_id', 'acc_project_id',
+                'source_urn', 'model_id', 'oldUrn', 'newModel')
 
 
 def _primer_valor(origen):

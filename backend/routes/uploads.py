@@ -267,6 +267,16 @@ def complete_upload():
         s_id, model_urn, filename, size_bytes, gcs_urn, \
             folder_path, created_by, status, mime_type, parent_node_id = session
 
+        # ── TENANT ISOLATION ──────────────────────────────────────────────────
+        # La obra se lee de la SESION DE SUBIDA, no de la peticion, asi que el
+        # control central del middleware no puede resolverla: para el, esta ruta
+        # solo recibe un uploadId. Sin esta comprobacion, quien conociera o
+        # adivinara un uploadId ajeno cerraba la subida de otra obra y creaba ahi
+        # el documento, con su nombre y su contenido.
+        from routes.documents import verify_project_access
+        if not verify_project_access(_get_user(), model_urn):
+            return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
+
         if status == 'completed':
             return jsonify({"success": True, "message": "Already completed"}), 200
         if status in ('cancelled', 'expired'):
