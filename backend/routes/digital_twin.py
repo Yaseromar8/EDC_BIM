@@ -928,6 +928,10 @@ def ensure_frentes_table():
                     created_at      TIMESTAMP DEFAULT NOW(),
                     UNIQUE (base_project_id, front_id)
                 )""")
+            # front_type vivia en un ALTER dentro del handler GET: cada peticion de
+            # lectura ejecutaba DDL. Su sitio es aqui, que corre una sola vez en el
+            # arranque del esquema y no en el camino HTTP.
+            cur.execute("ALTER TABLE project_frentes ADD COLUMN IF NOT EXISTS front_type TEXT")
 
             # SEED ÚNICO: los 3 frentes que antes estaban hardcodeados se migran
             # a datos SOLO para los proyectos existentes en este momento (con
@@ -1004,7 +1008,6 @@ def project_frentes():
                 return jsonify({'error': 'Falta base'}), 400
             with get_db_connection() as conn:
                 cur = conn.cursor()
-                cur.execute("ALTER TABLE project_frentes ADD COLUMN IF NOT EXISTS front_type TEXT")
                 conn.commit()
                 cur.execute("""
                     SELECT front_id, name, description, icon, front_type FROM project_frentes
@@ -1063,7 +1066,6 @@ def project_frentes():
 
         with get_db_connection() as conn:
             cur = conn.cursor()
-            cur.execute("ALTER TABLE project_frentes ADD COLUMN IF NOT EXISTS front_type TEXT")
             cur.execute("""
                 INSERT INTO project_frentes (base_project_id, front_id, name, description, icon, front_type)
                 VALUES (%s, %s, %s, %s, %s, %s)

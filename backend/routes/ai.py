@@ -1,3 +1,4 @@
+from esquema_congelado import solo_con_ddl
 import os
 import io
 import time
@@ -82,6 +83,7 @@ VISUAL_DPI       = 150    # resolución del render (150 DPI = buena calidad / pe
 
 # ─── Helpers de caché ─────────────────────────────────────────────────────────
 
+@solo_con_ddl
 def _asegurar_tabla_cache():
     """Tabla de documentos ya preparados para la IA."""
     from db import get_db_connection
