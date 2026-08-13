@@ -992,12 +992,34 @@ _project_resolver_cache = {'map': None, 'ts': 0}
 _PROJECT_RESOLVER_TTL = 300  # 5 min
 
 
+def _variantes_de_urn(valor):
+    """Formas en que el mismo modelo llega escrito desde los clientes.
+
+    El mismo URN viaja con y sin sufijo de version, y a veces en base64 con el
+    alfabeto seguro para URL (- _) en vez del estandar (+ /). Compararlos en
+    crudo hacia que el mismo modelo resolviera unas veces si y otras no, que es
+    peor que no resolver nunca: da una falsa sensacion de control.
+    """
+    if not valor:
+        return ()
+    v = str(valor).strip()
+    if not v:
+        return ()
+    salida = {v}
+    base = v.split('?')[0]
+    salida.add(base)
+    salida.add(base.rstrip('='))
+    salida.add(base.replace('-', '+').replace('_', '/'))
+    salida.add(base.replace('+', '-').replace('/', '_'))
+    return tuple(x for x in salida if x)
+
+
 def _load_project_resolver():
     import time as _time
     now = _time.time()
     if _project_resolver_cache['map'] is not None and now - _project_resolver_cache['ts'] < _PROJECT_RESOLVER_TTL:
         return _project_resolver_cache['map']
-    by_id, by_name, active = {}, {}, []
+    by_id, by_name, by_urn, active = {}, {}, {}, []
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -1008,10 +1030,36 @@ def _load_project_resolver():
                     by_name[name] = pid
                 if status == 'active':
                     active.append(pid)
+
+            # ── El mapa que faltaba: URN DEL MODELO -> OBRA ──────────────
+            # Sin esto el resolutor no entendia el identificador con el que se
+            # direcciona CASI TODO el sistema, asi que devolvia None para
+            # cualquier model_urn y el control central de obra no llegaba a
+            # comprobar nada. Medido: un usuario de la obra A leia y ESCRIBIA
+            # en 11 familias de rutas de la obra B, y encender
+            # ENFORCE_PROJECT_AUTHZ no lo impedia.
+            #
+            # SOLO se lee model_config, que es el REGISTRO de modelos por obra.
+            # Deliberadamente NO se deducen obras de las tablas de datos
+            # (inventory_assets, doc_partidas, tracking_pins...): quien pueda
+            # escribir una fila ahi elegiria a que obra pertenece su peticion,
+            # y la comprobacion de acceso se decidiria con datos que controla
+            # el atacante.
+            cur.execute("SELECT to_regclass('public.model_config')")
+            if cur.fetchone()[0]:
+                cur.execute("SELECT urn, model_id, app_project_id, project_id FROM model_config")
+                for urn, model_id, app_pid, acc_pid in cur.fetchall():
+                    obra = app_pid if app_pid in by_id else None
+                    if not obra:
+                        continue
+                    for clave in (urn, model_id, acc_pid):
+                        for variante in _variantes_de_urn(clave):
+                            by_urn[variante] = obra
     except Exception as e:
         print(f"[DB] resolve_project_id: no se pudo cargar projects: {e}")
-        return _project_resolver_cache['map'] or {'by_id': {}, 'by_name': {}, 'default': None}
-    resolved = {'by_id': by_id, 'by_name': by_name, 'default': active[0] if len(active) == 1 else None}
+        return _project_resolver_cache['map'] or {'by_id': {}, 'by_name': {}, 'by_urn': {}, 'default': None}
+    resolved = {'by_id': by_id, 'by_name': by_name, 'by_urn': by_urn,
+                'default': active[0] if len(active) == 1 else None}
     _project_resolver_cache['map'] = resolved
     _project_resolver_cache['ts'] = now
     return resolved
@@ -1051,6 +1099,12 @@ def resolve_project_id(frente):
         # Coincidencia exacta primero (el frente ES la obra).
         if texto in m['by_id']:
             return texto
+
+        # El frente es un modelo registrado: se traduce por el registro.
+        mapa_urn = m.get('by_urn') or {}
+        for variante in _variantes_de_urn(texto):
+            if variante in mapa_urn:
+                return mapa_urn[variante]
 
         # Prefijo mas largo: la convencion de scope es '<projects.id>_<FRENTE>'.
         candidatos = [pid for pid in m['by_id'] if texto.startswith(pid + '_')]

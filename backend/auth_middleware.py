@@ -466,6 +466,22 @@ def _request_project_id():
 # resolver el proyecto). Si uno de estos no resuelve el proyecto, es un HUECO
 # de autorizacion que hay que cerrar antes de activar ENFORCE. Los que NO estan
 # aqui (login, token, lista de usuarios, salud) son globales por diseno.
+# Rutas bajo un prefijo de obra que, aun asi, NO hablan de una obra concreta:
+# listados, catalogos y creacion (donde la obra todavia no existe). Cada una
+# lleva su motivo escrito. Esta lista solo puede ENCOGER: cada entrada es una
+# peticion que, con el control encendido, pasa sin saber de que obra es.
+_SIN_OBRA_JUSTIFICADO = {
+    '/api/projects': 'lista y crea obras; filtra por pertenencia dentro de la vista',
+    '/api/docs/global-search': 'busca en las obras del usuario; filtra por pertenencia',
+    '/api/inventory/schema': 'catalogo de campos, igual para todas las obras',
+}
+
+
+def _sin_obra_justificado(path):
+    """¿Es una de las rutas que legitimamente no habla de UNA obra?"""
+    return path.rstrip('/') in _SIN_OBRA_JUSTIFICADO
+
+
 _PROJECT_SCOPED_PREFIXES = (
     '/api/docs', '/api/documents', '/api/inventory', '/api/civil',
     # OJO: el 4D LOB se sirve en '/api/lob', no en '/api/lob4d' ni '/api/4d-lob'.
@@ -645,9 +661,26 @@ def init_auth_middleware(app):
                         return jsonify({'error': 'Sin acceso a este proyecto', 'code': 'PROJECT_FORBIDDEN'}), 403
                     logger.info(f"[authz log-only] BLOQUEARIA: user={user.get('id')} obra={pid} {request.method} {path}")
                 elif not pid and _is_project_scoped(path):
-                    # HUECO: endpoint que SI maneja datos de una obra pero no se
-                    # pudo deducir cual → bajo ENFORCE hoy se COLARIA. Se avisa
-                    # para cerrarlo (agregar el identificador de obra a la ruta).
+                    # HUECO: endpoint que SI maneja datos de una obra y no se
+                    # pudo deducir cual.
+                    #
+                    # Esto ANTES solo se anotaba, incluso con ENFORCE encendido,
+                    # y ahi estaba el agujero de verdad: bastaba direccionar la
+                    # peticion con un identificador que el resolutor no supiera
+                    # traducir para saltarse la comprobacion entera. Se midio: un
+                    # usuario de la obra A leyendo y ESCRIBIENDO en 11 familias
+                    # de rutas de la obra B, con ENFORCE_PROJECT_AUTHZ=true.
+                    #
+                    # Ahora, bajo ENFORCE, NO PASA. Que el sistema no sepa de que
+                    # obra es una peticion no puede resolverse dandola por buena.
+                    # Con ENFORCE apagado se sigue anotando y nada cambia, que es
+                    # el comportamiento de hoy en produccion.
+                    if ENFORCE_PROJECT_AUTHZ and not _sin_obra_justificado(path):
+                        logger.warning(f"[authz BLOQUEADO-HUECO] proyecto indeterminable: "
+                                       f"{request.method} {path} (user={user.get('id')})")
+                        return jsonify({
+                            'error': 'No se pudo determinar a que obra pertenece esta peticion.',
+                            'code': 'PROJECT_UNRESOLVED'}), 403
                     logger.warning(f"[authz HUECO] proyecto indeterminable en endpoint con datos de obra: {request.method} {path} (user={user.get('id')})")
         except Exception as e:
             logger.error(f"authz error (fail-open): {e}")  # nunca bloquear por bug del authz
