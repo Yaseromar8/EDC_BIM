@@ -20,6 +20,7 @@ def _filtro_de_obra(cursor):
 
 import json
 from perimetro_de_obra import guardia_de_recurso
+from perimetro_de_obra import guardia_de_obra
 
 partidas_bp = Blueprint('partidas_bp', __name__)
 
@@ -106,6 +107,9 @@ def create_partidas_batch():
     """Inserta múltiples partidas desde un array (Excel import)."""
     data = request.json
     model_urn = data.get('model_urn')
+    negativa = guardia_de_obra(model_urn, 'crear partidas en lote')
+    if negativa:
+        return negativa
     partidas = data.get('partidas', [])
     created_by = data.get('created_by', 'Sistema')
 
@@ -223,6 +227,9 @@ def delete_partida(partida_id):
 @partidas_bp.route('/all/<path:model_urn>', methods=['DELETE'])
 def delete_all_partidas(model_urn):
     """Elimina todas las partidas de un proyecto."""
+    negativa = guardia_de_obra(model_urn, 'borrar todas las partidas')
+    if negativa:
+        return negativa
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()

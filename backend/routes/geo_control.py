@@ -11,6 +11,7 @@ from esquema_congelado import solo_con_ddl
 import json
 from flask import Blueprint, request, jsonify
 from db import get_db_connection
+from perimetro_de_obra import guardia_de_obra
 
 geo_control_bp = Blueprint('geo_control', __name__)
 
@@ -62,6 +63,9 @@ except Exception:
 @geo_control_bp.route('/api/geo/control-points', methods=['GET'])
 def listar_puntos():
     project_id = request.args.get('project')
+    negativa = guardia_de_obra(project_id, 'listar puntos de control')
+    if negativa:
+        return negativa
     if not project_id:
         return jsonify({"error": "project es obligatorio"}), 400
     try:
@@ -89,6 +93,9 @@ def cargar_puntos():
     Upsert por (project, punto_id): recargar el CSV corregido nunca duplica."""
     data = request.get_json(silent=True) or {}
     project_id = data.get('project')
+    negativa = guardia_de_obra(project_id, 'cargar puntos de control')
+    if negativa:
+        return negativa
     puntos = data.get('puntos') or []
     if not project_id or not puntos:
         return jsonify({"error": "project y puntos son obligatorios"}), 400
@@ -122,6 +129,9 @@ def cargar_puntos():
 @geo_control_bp.route('/api/geo/control-points/<punto_id>', methods=['DELETE'])
 def borrar_punto(punto_id):
     project_id = request.args.get('project')
+    negativa = guardia_de_obra(project_id, 'borrar un punto de control')
+    if negativa:
+        return negativa
     if not project_id:
         return jsonify({"error": "project es obligatorio"}), 400
     try:
@@ -140,6 +150,9 @@ def borrar_punto(punto_id):
 @geo_control_bp.route('/api/geo/georef', methods=['GET'])
 def leer_georef():
     project_id = request.args.get('project')
+    negativa = guardia_de_obra(project_id, 'leer la georreferencia')
+    if negativa:
+        return negativa
     urn = request.args.get('urn')
     if not project_id or not urn:
         return jsonify({"error": "project y urn son obligatorios"}), 400
@@ -165,6 +178,9 @@ def leer_georef():
 def borrar_georef():
     """Quita el amarre de un modelo (p.ej. limpiar un ensayo de oficina)."""
     project_id = request.args.get('project')
+    negativa = guardia_de_obra(project_id, 'borrar la georreferencia')
+    if negativa:
+        return negativa
     urn = request.args.get('urn')
     if not project_id or not urn:
         return jsonify({"error": "project y urn son obligatorios"}), 400
@@ -189,6 +205,9 @@ def guardar_georef():
     de los pares sin volver a clicar nada."""
     data = request.get_json(silent=True) or {}
     project_id = data.get('project')
+    negativa = guardia_de_obra(project_id, 'guardar la georreferencia')
+    if negativa:
+        return negativa
     urn = data.get('urn')
     if not project_id or not urn:
         return jsonify({"error": "project y urn son obligatorios"}), 400

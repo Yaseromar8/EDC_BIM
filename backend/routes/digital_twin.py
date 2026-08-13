@@ -13,6 +13,7 @@ from politica import publico_en_lectura
 from werkzeug.utils import secure_filename
 from aps import get_internal_token
 from routes.inventory import sanitize_urn
+from perimetro_de_obra import guardia_de_obra
 
 digital_twin_bp = Blueprint('digital_twin', __name__)
 
@@ -975,6 +976,9 @@ def delete_project_frente():
     try:
         data = request.get_json() or {}
         base = data.get('base_project_id')
+        negativa = guardia_de_obra(base, 'borrar la tarjeta de un frente')
+        if negativa:
+            return negativa
         front_id = (data.get('front_id') or '').strip().upper()
         if not base or not front_id:
             return jsonify({'error': 'Faltan base_project_id o front_id'}), 400
@@ -1006,6 +1010,9 @@ def project_frentes():
             base = request.args.get('base')
             if not base:
                 return jsonify({'error': 'Falta base'}), 400
+            negativa = guardia_de_obra(base, 'listar los frentes de la obra')
+            if negativa:
+                return negativa
             with get_db_connection() as conn:
                 cur = conn.cursor()
                 conn.commit()
@@ -1055,6 +1062,9 @@ def project_frentes():
         name = (data.get('name') or '').strip()
         if not base or not name:
             return jsonify({'error': 'Faltan base_project_id o name'}), 400
+        negativa = guardia_de_obra(base, 'crear un frente')
+        if negativa:
+            return negativa
 
         # front_id: slug en mayúsculas, solo A-Z0-9_ (es parte del scope de datos)
         import re as _re

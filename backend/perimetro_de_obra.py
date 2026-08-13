@@ -116,6 +116,42 @@ def obra_del_recurso(cursor, tabla, valor_id):
     return resolve_project_id(fila[0])
 
 
+def guardia_de_obra(valor_obra, accion='esta operación'):
+    """None si se puede seguir; (respuesta, codigo) si hay que cortar.
+
+    Para los manejadores que reciben la obra DIRECTAMENTE (?model_urn=, project_id
+    en el cuerpo, en la ruta...). Es defensa en profundidad: el control central
+    del middleware ya deberia haber cortado, pero hoy ese control depende de una
+    variable de entorno, y la separacion entre obras no puede colgar de una
+    variable. Medido el 13-ago-2026: con el control apagado -- que es como esta
+    produccion -- un usuario ajeno falsificaba puntos de control geodesico,
+    vaciaba el presupuesto de otra obra y borraba sus frentes.
+
+    Se llama DESPUES de comprobar el rol, si la ruta comprueba rol: asi quien no
+    tiene permiso recibe un 403 limpio en vez del error de esta comprobacion.
+    """
+    usuario = getattr(g, 'current_user', None)
+    if not usuario:
+        return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
+    if usuario.get('role') == 'admin':
+        return None
+
+    from db import resolve_project_id
+    obra = resolve_project_id(valor_obra) if valor_obra else None
+    if not obra:
+        # No saber de que obra es una peticion que escribe no puede resolverse
+        # dandola por buena.
+        logger.warning(f'[perimetro] obra indeterminable en {accion}: {valor_obra!r}')
+        return jsonify({'error': 'No se pudo determinar a qué obra pertenece esta petición.',
+                        'code': 'PROJECT_UNRESOLVED'}), 403
+
+    from auth_middleware import _user_in_project
+    if not _user_in_project(usuario.get('id'), obra):
+        logger.warning(f'[perimetro BLOQUEADO] user={usuario.get("id")} obra={obra} {accion}')
+        return jsonify({'error': 'Sin acceso a este proyecto', 'code': 'PROJECT_FORBIDDEN'}), 403
+    return None
+
+
 def guardia_de_recurso(tabla, valor_id):
     """None si se puede seguir; (respuesta, codigo) si hay que cortar.
 
