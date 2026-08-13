@@ -116,3 +116,29 @@ falsos míos**. Lo que sigue es lo verificado y lo corregido en esta pasada.
   crear bases en local, que es lo correcto. Pendiente de una base vacía.
 - **Área 13 (seguridad web/API)**: el auditor se quedó sin cuota. Es la única de las 16 sin barrer.
 - Los otros ~20 hallazgos críticos del barrido, pendientes de verificación adversarial.
+
+
+### Área 13 y flujo ECD · lo encontrado y cerrado
+
+| ID | Hallazgo | Estado | Nota |
+|---|---|---|---|
+| **N31** | Promocionar una versión daba **500 siempre** contra Postgres real | **CERRADO** | `can't adapt type 'dict'`. Las 12 pruebas de promoción no lo veían por ser sin base de datos: una suite verde no dice nada de lo que hace la base |
+| **N32** | Los **cambios de estado** quedaban fuera de la cadena de auditoría | **CERRADO** | 19 filas `cambio_de_estado`, 0 selladas. Son las filas más probatorias del expediente |
+| **N33** | Encender `ENFORCE_PROJECT_AUTHZ` **cortaba el camino a Publicado** | **CERRADO** | `POST /api/reviews/<id>/act` → `PROJECT_UNRESOLVED`. Consecuencia de mi propio cierre en falso; ahora el middleware resuelve la obra desde el recurso |
+| **N34** | Subir un fichero sobre un documento **ARCHIVADO lo desarchivaba** | **CERRADO** | `UPDATE` directo a WIP, transición que la máquina prohíbe expresamente |
+| **N35** | El identificador de una vista compartida era **la hora en milisegundos** | **CERRADO** | y `GET /api/views/<id>` es público: un anónimo sacaba nombre, obra y cámara de una vista ajena |
+| **N36** | El correo de transmittal: **HTML sin escapar + destinatario libre** | **CERRADO** | un enviador con la marca y el remitente verificado de la plataforma hacia cualquier buzón |
+| **N37** | `/api/pins/upload` no validaba nada y metía el `projectId` **sin sanear** en la ruta del objeto | **CERRADO** | `../otra-obra` escribía fuera del prefijo propio |
+| **N38** | La puerta única de estados **aguanta** | **NO APLICA — refutado** | rechazó los cuatro ataques: saltarse un estado, retroceder de PUBLISHED, publicar sin idoneidad y publicar sin aprobador. Es la primera parte del sistema que resiste una prueba adversarial completa |
+
+### Sigue abierto del área 13 y del flujo (sin arreglar todavía)
+
+- El número de revisión preliminar **se reutiliza** (`P01` dos veces): publicar sobrescribe la
+  emisión anterior en la misma fila. Necesita tabla de emisiones.
+- El transmittal **acepta documentos que no existen** y borradores en WIP.
+- El modo «estricto» de nomenclatura es **configuración muerta**.
+- El autor de una revisión **puede ser su propio y único revisor**.
+- `indice_expediente` pierde la carpeta de primer nivel en la columna «Ubicación en el ECD».
+- El catálogo de idoneidad se documenta editable y solo tiene `GET`.
+- **30 manejadores de escritura** siguen sin guardia propia: hoy la separación entre obras
+  cuelga entera de una variable de entorno.
