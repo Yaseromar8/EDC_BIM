@@ -381,3 +381,22 @@ def test_el_codigo_se_graba_normalizado():
     r = ecd.transicionar(cur, 'obra/X', ['a1'], ecd.SHARED, USUARIO,
                          codigo_idoneidad='  s3  ')
     assert r['emisiones']['a1']['idoneidad'] == 'S3'
+
+
+def test_un_documento_archivado_no_se_desarchiva_subiendole_un_fichero():
+    """Medido en el recorrido ECD: create_file_record hacia ARCHIVED -> WIP con
+    un UPDATE directo, una transicion que la propia maquina prohibe y que tiene
+    hasta mensaje escrito. Archivar es un acto formal del expediente; deshacerlo
+    por la puerta de atras lo vacia de sentido."""
+    import io
+    import os
+    backend = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    fuente = io.open(os.path.join(backend, 'file_system_db.py'), encoding='utf-8').read()
+    cuerpo = fuente[fuente.index('def create_file_record('):]
+    cuerpo = cuerpo[:cuerpo.index('\ndef ', 10)]
+    assert 'ecd.ARCHIVED' in cuerpo, 'create_file_record no mira si venia archivado'
+    assert 'TransicionRechazada' in cuerpo, 'y tiene que rechazarlo, no seguir'
+
+
+def test_la_maquina_sigue_prohibiendo_archivado_a_borrador():
+    assert ecd.WIP not in ecd.TRANSICIONES[ecd.ARCHIVED]

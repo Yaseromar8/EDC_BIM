@@ -364,6 +364,19 @@ def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mim
             # aprobacion de un documento que estaba compartido o publicado, queda
             # constancia de por que.
             anterior = ecd.normalizar(estado_previo)
+
+            # Un documento ARCHIVADO no se desarchiva subiendole un fichero.
+            # Aqui se le hacia un UPDATE directo a WIP, y la maquina de estados
+            # prohibe expresamente esa transicion -- tiene hasta un mensaje
+            # escrito para el usuario. Archivar es un acto formal del expediente;
+            # deshacerlo por la puerta de atras, sin exigir autoridad y sin pasar
+            # por la puerta unica, vacia de sentido el archivo.
+            if anterior == ecd.ARCHIVED:
+                raise ecd.TransicionRechazada(
+                    'Este documento está archivado. Para subir una versión nueva '
+                    'hay que sacarlo del archivo primero, y eso es un acto '
+                    'formal: no se hace subiendo un fichero encima.')
+
             if anterior != ecd.WIP:
                 _registrar_vuelta_a_borrador(cursor, model_urn, f_id, filename,
                                              anterior, new_v, created_by)
