@@ -1199,7 +1199,11 @@ def civil_base_axis():
         scope = request.args.get('scope', 'global')
         with get_db_connection() as conn:
             cur = conn.cursor()
-            cur.execute('''CREATE TABLE IF NOT EXISTS civil_base_axis (
+            # DDL dentro de un handler HTTP: cada peticion a esta ruta creaba la
+            # tabla. Se condiciona al interruptor; su sitio es el arranque.
+            from esquema_congelado import ddl_permitido
+            if ddl_permitido():
+                cur.execute('''CREATE TABLE IF NOT EXISTS civil_base_axis (
                 scope TEXT PRIMARY KEY,
                 pin JSONB,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

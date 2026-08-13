@@ -3,6 +3,7 @@ Auth Middleware for VISOR_APS_TL
 Protects all /api/* endpoints by validating session tokens.
 Public endpoints (login, register, google-auth) are whitelisted.
 """
+from esquema_congelado import solo_con_ddl
 
 import os
 import secrets
@@ -144,16 +145,21 @@ def create_session(user_id):
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            # Ensure sessions table exists
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS sessions (
-                    token VARCHAR(128) PRIMARY KEY,
-                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    expires_at TIMESTAMP NOT NULL,
-                    is_active BOOLEAN DEFAULT TRUE
-                )
-            ''')
+            # Esta tabla se creaba EN CADA INICIO DE SESION. Era el camino mas
+            # caliente del sistema ejecutando DDL, y obligaba a que la identidad de
+            # la aplicacion pudiera crear tablas solo para poder dejar entrar a
+            # alguien. Su sitio es el arranque del esquema (esquema_base), no aqui.
+            from esquema_congelado import ddl_permitido
+            if ddl_permitido():
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS sessions (
+                        token VARCHAR(128) PRIMARY KEY,
+                        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                        created_at TIMESTAMP DEFAULT NOW(),
+                        expires_at TIMESTAMP NOT NULL,
+                        is_active BOOLEAN DEFAULT TRUE
+                    )
+                ''')
             # Clean up expired sessions (housekeeping)
             cursor.execute("DELETE FROM sessions WHERE expires_at < NOW()")
             # La columna 'token' guarda la HUELLA, no el token. El token en claro
@@ -191,6 +197,7 @@ _SESSION_CACHE_TTL = int(os.getenv('SESSION_CACHE_TTL', '15'))  # segundos
 # memoria de proceso no funcionaba con varios workers.
 
 
+@solo_con_ddl
 def _asegurar_tabla_tickets(cursor):
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS handoff_tickets (

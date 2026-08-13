@@ -4,6 +4,7 @@ Módulo de Permisos por Carpeta — Estilo ACC / ISO 19650
 Implementa los 6 niveles oficiales de Autodesk Construction Cloud
 con herencia estricta padre→hijo y fallback al RBAC global.
 """
+from esquema_congelado import solo_con_ddl
 
 from db import get_db_connection
 
@@ -34,6 +35,7 @@ GLOBAL_ROLE_TO_PERMISSION = {
     'admin':  'admin',
 }
 
+@solo_con_ddl
 def init_folder_permissions_table():
     """Crea la tabla folder_permissions si no existe (auto-migración)."""
     try:

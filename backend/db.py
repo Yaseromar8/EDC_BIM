@@ -142,6 +142,7 @@ def get_db_connection():
                 except Exception:
                     pass
 
+@solo_con_ddl
 def _columnas_que_el_listado_necesita():
     """Las columnas nuevas, ANTES y APARTE del resto del esquema.
 
