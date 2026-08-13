@@ -25,17 +25,39 @@ BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROJECT_ID = "correos-gmail-425301"
 LOCATION   = "us-central1"
 
+# ── Credenciales de la IA, SOLO para la IA ────────────────────────────────
+# Esto ponia gcp_sa.json en GOOGLE_APPLICATION_CREDENTIALS, que es una variable
+# de TODO el proceso. Como server.py importa este modulo al arrancar, cualquier
+# otra parte del backend heredaba esas credenciales -- entre ellas
+# gcs_manager.get_storage_client(), que las lee de ahi.
+#
+# El efecto medido el 13-ago-2026: el .env local apuntaba a proposito a un
+# fichero inexistente para que el entorno de desarrollo NO pudiera tocar el
+# almacen de produccion, y al importar la aplicacion la variable volvia a
+# apuntar a la clave real. storage.Client() se autenticaba como
+# visor-backend@... y el bucket de produccion quedaba escribible desde local.
+# La comprobacion que dio N5 por cerrado se hizo con un guion suelto que no
+# importaba la aplicacion, y por eso no lo vio.
+#
+# Ahora las credenciales se cargan en un objeto y se le pasan a Vertex a mano.
+# Nada mas en el proceso las hereda.
+_CREDENCIALES_IA = None
 for path in [
     os.path.join(BASE_DIR, "gcp_sa.json"),
     os.path.join(BASE_DIR, "backend", "gcp_sa.json"),
-    "c:/Users/omars/OneDrive/Desktop/VISOR_APS_TL/backend/gcp_sa.json"
 ]:
     if os.path.exists(path):
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path
-        print(f"[AI] Credenciales: {path}")
+        try:
+            from google.oauth2 import service_account
+            _CREDENCIALES_IA = service_account.Credentials.from_service_account_file(path)
+            print(f"[AI] Credenciales cargadas solo para IA desde {os.path.basename(path)}")
+        except Exception as _e:
+            print(f"[AI] no se pudieron leer las credenciales: {_e}")
         break
 else:
-    print("[AI] ⚠️ CRÍTICO: No se encontró gcp_sa.json")
+    # No es critico: en produccion no existe el fichero y Vertex cae a las
+    # credenciales por defecto del entorno, que es el comportamiento esperado.
+    print("[AI] sin gcp_sa.json: Vertex usara las credenciales del entorno")
 
 # Vertex se inicializa PEREZOSAMENTE, en la primera peticion de IA que lo
 # necesite — NUNCA al importar el modulo.
@@ -57,7 +79,8 @@ def ensure_vertex():
     if _vertex_ready:
         return True
     try:
-        vertexai.init(project=PROJECT_ID, location=LOCATION)
+        vertexai.init(project=PROJECT_ID, location=LOCATION,
+                      credentials=_CREDENCIALES_IA)
         _vertex_ready = True
         print(f"[AI] Vertex AI inicializado en {LOCATION}")
     except Exception as e:
