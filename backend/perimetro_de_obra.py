@@ -46,7 +46,56 @@ RECURSOS = {
     'pdf_markups':       ('id', 'model_urn'),
     'custom_attr_defs':  ('id', 'model_urn'),
     'saved_views':       ('id', 'model_urn'),
+    'doc_reviews':       ('id', 'model_urn'),
+    'transmittals':      ('id', 'model_urn'),
+    'doc_sets':          ('id', 'model_urn'),
 }
+
+
+# Rutas que reciben el ID DE UN RECURSO y no la obra. El middleware no puede
+# adivinar de que obra son sin consultar la base; aqui se le dice donde mirar.
+#
+# Sin esto, encender ENFORCE_PROJECT_AUTHZ las bloqueaba TODAS con
+# PROJECT_UNRESOLVED -- incluida POST /api/reviews/<id>/act, es decir, el camino
+# a Publicado. Medido: encender el control cortaba el flujo ECD.
+# nombre de la vista -> (tabla, nombre del parametro de ruta)
+RUTAS_POR_RECURSO = {
+    'update_rfi':         ('doc_rfis', 'rfi_id'),
+    'update_redline':     ('doc_redlines', 'redline_id'),
+    'update_partida':     ('doc_partidas', 'partida_id'),
+    'delete_partida':     ('doc_partidas', 'partida_id'),
+    'delete_element_doc': ('element_docs', 'doc_id'),
+    'update_pin':         ('control_pins', 'pin_id'),
+    'delete_pin':         ('control_pins', 'pin_id'),
+    'delete_def':         ('custom_attr_defs', 'attr_id'),
+    'delete_markup':      ('pdf_markups', 'markup_id'),
+    'act_on_review':      ('doc_reviews', 'rid'),
+    'delete_set':         ('doc_sets', 'set_id'),
+    'get_set_items':      ('doc_sets', 'set_id'),
+    'add_set_items':      ('doc_sets', 'set_id'),
+    'remove_set_item':    ('doc_sets', 'set_id'),
+    'acusar_recibo':      ('transmittals', 'tid'),
+}
+
+
+def obra_de_la_peticion(nombre_vista, view_args):
+    """La obra de una peticion dirigida por id de recurso. None si no aplica."""
+    if not nombre_vista or not view_args:
+        return None
+    corto = nombre_vista.rsplit('.', 1)[-1]
+    if corto not in RUTAS_POR_RECURSO:
+        return None
+    tabla, param = RUTAS_POR_RECURSO[corto]
+    valor = view_args.get(param)
+    if valor is None:
+        return None
+    from db import get_db_connection
+    try:
+        with get_db_connection() as conn:
+            return obra_del_recurso(conn.cursor(), tabla, valor)
+    except Exception as e:
+        logger.warning(f'no se pudo resolver la obra de {corto}: {e}')
+        return None
 
 
 def obra_del_recurso(cursor, tabla, valor_id):

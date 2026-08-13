@@ -4,6 +4,7 @@ import uuid
 import time
 from concurrent.futures import ThreadPoolExecutor
 from db import get_db_connection
+from psycopg2.extras import Json as _Json
 
 # --- ISO 19650 Naming Standard Constants ---
 # [PROJECT]-[ORIGINATOR]-[VOLUME]-[LEVEL]-[TYPE]-[ROLE]-[NUMBER]
@@ -885,7 +886,14 @@ def promote_version(model_urn, node_id, version_id, performed_by=None):
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
                     CASE WHEN %s IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END)
             RETURNING id
-        """, (node_id, new_v_num, gcs_urn, size, mime, performed_by, meta, sha_origen, sha_origen))
+        """, (node_id, new_v_num, gcs_urn, size, mime, performed_by,
+              # Json(): metadata es jsonb y psycopg2 no sabe adaptar un dict a
+              # pelo. Sin esto, promocionar una version daba SIEMPRE 500
+              # ("can't adapt type 'dict'") contra PostgreSQL real. Las doce
+              # pruebas de promocion no lo veian porque son sin base de datos:
+              # el cursor de mentira se traga cualquier cosa.
+              _Json(meta) if isinstance(meta, dict) else meta,
+              sha_origen, sha_origen))
         new_v_id = cursor.fetchone()[0]
 
         # 5. Si venia aprobado, queda dicho que esta promocion retiro la aprobacion.

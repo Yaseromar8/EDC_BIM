@@ -391,12 +391,34 @@ def _auditar(cursor, model_urn, cambiados, nuevo, usuario, motivo_del_cambio, em
             detalle['codigo_idoneidad'] = sello.get('idoneidad')
             detalle['codigo_revision'] = sello.get('revision')
         try:
+            # El cambio de estado va ENCADENADO como cualquier otro evento.
+            # Estas filas -- quien publico que plano, y cuando -- son las mas
+            # probatorias del expediente, y hasta hoy eran justo las que no
+            # entraban en la cadena: se insertaban a mano aqui, salteando
+            # log_activity. Medido tras un recorrido ECD completo:
+            # 19 filas 'cambio_de_estado', 0 selladas.
+            import datetime as _dt
+            cuando = _dt.datetime.now(_dt.timezone.utc)
+            contenido = {
+                'model_urn': model_urn, 'action': 'cambio_de_estado',
+                'entity_type': 'file', 'entity_id': str(node_id),
+                'entity_name': nombre, 'performed_by': autor,
+                'details': detalle, 'created_at': cuando,
+            }
+            hash_anterior = h = None
+            try:
+                import auditoria_encadenada as _cadena
+                hash_anterior, h = _cadena.sello_para_insercion(cursor, contenido)
+            except Exception as _e:
+                print(f"[estados_ecd] cambio de estado sin sello: {_e}")
+
             cursor.execute(
                 "INSERT INTO activity_log "
-                "(model_urn, action, entity_type, entity_id, entity_name, performed_by, details) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                "(model_urn, action, entity_type, entity_id, entity_name, performed_by, "
+                " details, created_at, hash_anterior, hash) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (model_urn, 'cambio_de_estado', 'file', str(node_id), nombre,
-                 autor, _json.dumps(detalle)),
+                 autor, _json.dumps(detalle), cuando, hash_anterior, h),
             )
         except Exception as e:  # pragma: no cover - defensivo
             # Si no se puede dejar constancia, no se hace el cambio: un ECD sin

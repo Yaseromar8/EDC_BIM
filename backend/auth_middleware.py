@@ -454,6 +454,15 @@ def _request_project_id():
                 encontradas.append(obra)
 
     if not encontradas:
+        # Ultima via: rutas que reciben el ID DE UN RECURSO y no la obra. La
+        # obra esta en la propia fila y solo se sabe consultandola.
+        try:
+            from perimetro_de_obra import obra_de_la_peticion
+            obra = obra_de_la_peticion(request.endpoint, request.view_args)
+            if obra:
+                return obra
+        except Exception as e:
+            logger.warning(f'[authz] no se pudo resolver por recurso: {e}')
         return None
     if len(encontradas) > 1:
         # Dos obras distintas en la misma peticion: no se elige, se niega.

@@ -168,7 +168,12 @@ def test_las_rutas_por_id_de_recurso_llevan_guardia():
                 if j < len(lineas) and re.match(r'^@', lineas[j]):
                     break
             toca_obra = any(re.search(r'\b' + t + r'\b', cuerpo) for t in pm.RECURSOS)
-            if toca_obra and 'guardia_de_recurso' not in cuerpo:
+            # Vale cualquier guardia que resuelva la obra del recurso, no solo
+            # la generica: sets.py ya tenia la suya y funciona.
+            otras = ('_guardia_del_conjunto', '_guardia_del_nodo', '_acceso_al_recurso',
+                     'obra_del_blob', '_obra_del_conjunto')
+            tiene = 'guardia_de_recurso' in cuerpo or any(o in cuerpo for o in otras)
+            if toca_obra and not tiene:
                 sin_guardia.append(f'{nombre}  {url}')
             i = j
     assert not sin_guardia, ('rutas que reciben el id de un recurso de obra y no '
