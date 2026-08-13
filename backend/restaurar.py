@@ -7,9 +7,16 @@ correrlo EN FRIO, con prisa y con gente esperando.
 COMO SE RESTAURA, DE PRINCIPIO A FIN
 ------------------------------------
 1. Crear una base vacia (en Cloud SQL o donde sea).
-2. Apuntar el backend a ella y arrancarlo UNA vez: la aplicacion crea sola todas
-   las tablas e indices. En esta plataforma el esquema es codigo, asi que no hay
-   que restaurar esquema, solo datos.
+2. Construir el esquema:  python bootstrap_esquema.py
+   (En esta plataforma el esquema es codigo, asi que no hay que restaurar
+   esquema, solo datos.)
+
+   OJO: antes bastaba con arrancar el backend una vez, porque la aplicacion
+   creaba las tablas sola al arrancar. Desde que existe DDL_EN_CALIENTE=false
+   -- que es lo que impide que la aplicacion pueda alterar el esquema en
+   caliente -- eso ya NO ocurre, y arrancar contra una base vacia deja la
+   restauracion a medias sin decir nada. El bootstrap es ahora el paso
+   explicito.
 3. Correr este guion contra esa base.
 4. Poner los secretos (APP_SECRET, SESSION_PEPPER, credenciales de Google). Sin
    ellos la base restaurada arranca pero no sirve: los enlaces firmados y las

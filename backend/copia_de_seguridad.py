@@ -7,11 +7,13 @@ que depende de que alguien instale algo el dia de la urgencia no es una copia.
 Esto usa COPY de Postgres a traves de psycopg2, que ya es una dependencia de la
 aplicacion: funciona en cualquier sitio donde funcione el backend.
 
-Se puede permitir porque en esta plataforma EL ESQUEMA ES CODIGO: las tablas las
-crea la propia aplicacion al arrancar (ensure_file_nodes_table y compania). Asi
-que la copia solo tiene que llevar los DATOS, y restaurar es: base vacia ->
-arrancar el backend una vez -> cargar los datos. Menos piezas, menos formas de
-que falle.
+Se puede permitir porque en esta plataforma EL ESQUEMA ES CODIGO: lo construye
+bootstrap_esquema.py de una pasada. Asi que la copia solo tiene que llevar los
+DATOS, y restaurar es: base vacia -> python bootstrap_esquema.py -> cargar los
+datos. Menos piezas, menos formas de que falle.
+
+(Antes el esquema lo creaba la aplicacion sola al arrancar. Con
+DDL_EN_CALIENTE=false ya no puede, y por eso el bootstrap es un paso explicito.)
 
 LO QUE ESTA COPIA **NO** CUBRE
 ------------------------------

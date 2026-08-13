@@ -25,7 +25,9 @@ Medido en la base real antes de migrar: **2.831** en `NON_CONFORMING`, **200** e
 
 ## Qué hace la migración
 
-Corre sola al arrancar el backend (`ensure_file_nodes_table`), y es idempotente:
+Vive en `ensure_file_nodes_table` y es idempotente. **Ya no corre sola al arrancar**: desde
+que existe `DDL_EN_CALIENTE=false`, la aplicación no altera el esquema en caliente, así que
+esta migración se ejecuta con `python bootstrap_esquema.py`.
 
 1. Añade `file_nodes.nomenclatura_ok BOOLEAN`.
 2. Marca `nomenclatura_ok = FALSE` en lo que estaba en `NON_CONFORMING`, **antes**
