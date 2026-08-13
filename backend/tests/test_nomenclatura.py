@@ -128,3 +128,71 @@ def test_los_planos_y_modelos_NO_estan_exentos():
     """Son entregables: ahí la convención sí tiene que aplicarse."""
     for ext in ('pdf', 'dwg', 'rvt', 'ifc', 'docx'):
         assert ext not in nom.EXENTAS_POR_DEFECTO
+
+
+# ── Cambiar la convencion tiene que recalcular lo ya marcado ────────────────
+#
+# EL FALLO QUE ESTOS TESTS FIJAN
+# ------------------------------
+# guardar_config escribia el patron nuevo y dejaba intacta la marca
+# nomenclatura_ok de cada fichero, calculada con el patron VIEJO. El 12-ago-2026,
+# al calibrar PQT8_TALARA con su MIDP, la Sala de Cuarentena siguio senalando 51
+# de 52 documentos como mal nombrados cuando ya cumplian. Es la pantalla que se
+# ensena para demostrar que hay control: mintiendo, hace justo lo contrario.
+
+class _CursorRecalculo:
+    """Cursor de mentira que guarda lo que se escribe, para poder comprobarlo."""
+
+    def __init__(self, ficheros):
+        # ficheros: [(id, nombre, marca_actual)]
+        self.ficheros = ficheros
+        self.escrituras = []          # [(veredicto, [ids])]
+        self._ultima = []
+
+    def execute(self, sql, params=None):
+        if 'SELECT id, name, nomenclatura_ok' in sql:
+            self._ultima = self.ficheros
+        elif 'UPDATE file_nodes SET nomenclatura_ok' in sql:
+            self.escrituras.append((params[0], list(params[1])))
+            self._ultima = []
+        else:
+            self._ultima = []
+
+    def fetchall(self):
+        return self._ultima or []
+
+    def fetchone(self):
+        return self._ultima[0] if self._ultima else None
+
+
+def test_recalcular_corrige_las_marcas_viejas():
+    cfg = {'patron': r'^BUENO-\d+$', 'exentas': ['jpg'], 'modo': 'aviso'}
+    # los tres estaban marcados como NO conformes con el patron anterior
+    ficheros = [('id1', 'BUENO-001.pdf', False),
+                ('id2', 'BUENO-002.pdf', False),
+                ('id3', 'CUALQUIERCOSA.pdf', False),
+                ('id4', 'foto.jpg', False)]
+    cur = _CursorRecalculo(ficheros)
+    cambiadas = nom.recalcular_obra(cur, 'obra', cfg)
+
+    escrito = {v: ids for v, ids in cur.escrituras}
+    assert sorted(escrito[True]) == ['id1', 'id2']   # ahora si cumplen
+    assert escrito[False] == ['id3']                 # este sigue mal, y es cierto
+    assert escrito[None] == ['id4']                  # exento por extension
+    assert cambiadas == 3                            # id3 ya estaba en False
+
+
+def test_recalcular_no_toca_nada_si_ya_estaba_bien():
+    cfg = {'patron': r'^BUENO-\d+$', 'exentas': [], 'modo': 'aviso'}
+    cur = _CursorRecalculo([('id1', 'BUENO-001.pdf', True),
+                            ('id2', 'MALO.pdf', False)])
+    assert nom.recalcular_obra(cur, 'obra', cfg) == 0
+
+
+def test_recalcular_escribe_en_bloque_y_no_uno_por_fichero():
+    """Con 2.824 documentos, un UPDATE por cada uno son 2.824 viajes a la base."""
+    cfg = {'patron': r'^BUENO-\d+$', 'exentas': [], 'modo': 'aviso'}
+    muchos = [(f'id{i}', f'BUENO-{i:03d}.pdf', False) for i in range(500)]
+    cur = _CursorRecalculo(muchos)
+    nom.recalcular_obra(cur, 'obra', cfg)
+    assert len(cur.escrituras) <= 3, 'debe escribir por cubos, no por fichero'

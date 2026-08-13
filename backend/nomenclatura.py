@@ -108,7 +108,51 @@ def guardar_config(cursor, model_urn, patron=None, exentas=None, modo=None):
         "ON CONFLICT (model_urn) DO UPDATE SET patron = EXCLUDED.patron, "
         "exentas = EXCLUDED.exentas, modo = EXCLUDED.modo, actualizado = CURRENT_TIMESTAMP",
         (model_urn, nuevo_patron, nuevas_exentas, nuevo_modo))
-    return {'patron': nuevo_patron, 'exentas': nuevas_exentas, 'modo': nuevo_modo}
+
+    # Cambiar la convencion SIN recalcular deja la pantalla de cuarentena mintiendo:
+    # la marca de cada fichero se quedo con el patron viejo. Paso de verdad el
+    # 12-ago-2026 al calibrar PQT8_TALARA con su MIDP: 51 de 52 documentos seguian
+    # senalados como mal nombrados cuando ya cumplian. Y la cuarentena es justo la
+    # pantalla que se ensena para demostrar que hay control.
+    recalculadas = recalcular_obra(cursor, model_urn,
+                                   {'patron': nuevo_patron, 'exentas': nuevas_exentas,
+                                    'modo': nuevo_modo})
+    return {'patron': nuevo_patron, 'exentas': nuevas_exentas, 'modo': nuevo_modo,
+            'recalculadas': recalculadas}
+
+
+def recalcular_obra(cursor, model_urn, config=None):
+    """Vuelve a evaluar TODOS los ficheros de una obra con la convencion vigente.
+
+    Devuelve cuantos cambiaron de marca. Se evalua en Python y se escribe en TRES
+    sentencias -conformes, no conformes y exentos- en vez de una por fichero: con
+    2.824 documentos, un UPDATE por cada uno son 2.824 viajes a la base.
+    """
+    config = config or config_de_obra(cursor, model_urn)
+    cursor.execute("""SELECT id, name, nomenclatura_ok FROM file_nodes
+                       WHERE model_urn = %s AND node_type = 'FILE'
+                         AND COALESCE(is_deleted, FALSE) = FALSE""", (model_urn,))
+    filas = cursor.fetchall()
+
+    cubos = {True: [], False: [], None: []}
+    cambiadas = 0
+    for nid, nombre, marca_actual in filas:
+        veredicto = evaluar(config, nombre)
+        cubos[veredicto].append(str(nid))
+        if veredicto != marca_actual:
+            cambiadas += 1
+
+    for veredicto, ids in cubos.items():
+        if not ids:
+            continue
+        cursor.execute("""UPDATE file_nodes SET nomenclatura_ok = %s
+                           WHERE id = ANY(%s::uuid[])""", (veredicto, ids))
+
+    if cambiadas:
+        logger.info(f"nomenclatura: {model_urn} recalculada, {cambiadas} marcas cambiadas "
+                    f"({len(cubos[True])} cumplen, {len(cubos[False])} no, "
+                    f"{len(cubos[None])} exentos)")
+    return cambiadas
 
 
 def _extension(nombre):
