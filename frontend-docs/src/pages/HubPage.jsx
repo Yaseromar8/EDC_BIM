@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import { VISOR_URL } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
+import SegundoFactorPanel from '../components/SegundoFactorPanel';
 
 const ACCENT = 'var(--accent)';
 
@@ -48,6 +49,7 @@ function ProductCard({ icon, title, onClick, locked = false, lockNote }) {
 }
 
 export default function HubPage({ user, onChooseDocs, onLogout }) {
+  const [verSeguridad, setVerSeguridad] = useState(false);
   const isAdmin = (user?.role || '').toLowerCase() === 'admin';
 
   const rawName = String(user?.name || user?.username || user?.email || '').trim();
@@ -80,10 +82,17 @@ export default function HubPage({ user, onChooseDocs, onLogout }) {
           </svg>
           ECD<span style={{ color: '#79818d', fontWeight: 400 }}>&nbsp;Vision</span>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+        <button onClick={() => setVerSeguridad(true)} style={{ background: 'none', border: 'none', color: '#79818d', fontSize: 13, cursor: 'pointer', padding: 0 }}>
+          Seguridad
+        </button>
         <button onClick={onLogout} style={{ background: 'none', border: 'none', color: '#79818d', fontSize: 13, cursor: 'pointer', padding: 0 }}>
           Cerrar sesión
         </button>
+        </div>
       </header>
+
+      {verSeguridad && <SegundoFactorPanel onClose={() => setVerSeguridad(false)} />}
 
       <main style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 24px 64px', overflow: 'hidden' }}>
 

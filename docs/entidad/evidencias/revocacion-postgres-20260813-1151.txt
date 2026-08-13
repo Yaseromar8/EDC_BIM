@@ -4,7 +4,7 @@ Hallazgo 0.1 - Credencial PostgreSQL publicada en repositorio publico
 
 fecha de la comprobacion : 2026-08-13 11:51:31 UTC
 instancia                : pqt-08-talara (Cloud SQL, PostgreSQL 18)
-servidor                 : 34.86.206.187:5432
+servidor                 : 34.86.x.x:5432   (host enmascarado a proposito)
 base                     : postgres
 usuario                  : postgres
 
@@ -20,7 +20,7 @@ huella SHA-256 (12 car.) : 81b6c3709537
 
 RESULTADO
 RECHAZADA POR EL SERVIDOR
-connection to server at "34.86.206.187", port 5432 failed: FATAL:  password authentication failed for user "postgres"
+connection to server at "34.86.x.x", port 5432 failed: FATAL:  password authentication failed for user "postgres"
 
 ESTADO DEL SERVICIO TRAS LA ROTACION
   GET /api/health      -> HTTP 200

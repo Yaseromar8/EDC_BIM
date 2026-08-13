@@ -337,3 +337,12 @@
     .cta-obra__video { display: none; }
     .cta-giro { animation-duration: 2s; }
 }
+
+/* Pista bajo el campo del codigo de verificacion en dos pasos. Discreta: es
+   ayuda para quien perdio el telefono, no un aviso. */
+.cta-pista {
+    margin: 6px 0 0;
+    font-size: .78rem;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, .55);
+}

@@ -55,11 +55,28 @@ const T = {
         creando: 'Creando…',
         errDistintas: 'Las contraseñas no coinciden.',
         errCorta: 'La contraseña debe tener al menos 8 caracteres.',
+        // Segundo factor
+        dfaTitulo: 'Verificación en dos pasos',
+        dfaSub: 'Escribe el código de 6 cifras de tu aplicación de autenticación.',
+        dfaCodigo: 'Código',
+        dfaEntrar: 'Verificar',
+        dfaVerificando: 'Verificando…',
+        dfaAyuda: 'Si perdiste el teléfono, usa uno de tus códigos de recuperación.',
+        dfaErr: 'El código no es válido o ha caducado. Vuelve a intentarlo.',
+        dfaObligatorio: 'Esta cuenta necesita verificación en dos pasos para entrar. Pide al administrador que la active.',
         volver: 'Volver al acceso',
         idioma: 'English',
     },
     en: {
         titulo: 'Sign in',
+        dfaTitulo: 'Two-step verification',
+        dfaSub: 'Enter the 6-digit code from your authenticator app.',
+        dfaCodigo: 'Code',
+        dfaEntrar: 'Verify',
+        dfaVerificando: 'Checking…',
+        dfaAyuda: 'Lost your phone? Use one of your recovery codes.',
+        dfaErr: 'That code is not valid or has expired. Try again.',
+        dfaObligatorio: 'This account needs two-step verification to sign in. Ask the administrator to enable it.',
         sub: 'Use the email you were invited with.',
         correo: 'Email',
         password: 'Password',
@@ -141,6 +158,11 @@ const LoginScreen = ({ onLogin }) => {
     // alguien olvidaba su contraseña, no había NINGUNA forma de recuperarla.
     const [pidiendoEnlace, setPidiendoEnlace] = useState(false);
     const [enlaceEnviado, setEnlaceEnviado] = useState(false);
+    // Segundo factor: la contraseña correcta ya no entra sola. El servidor
+    // devuelve un desafío firmado y de vida corta que se canjea con el código.
+    const [desafio2fa, setDesafio2fa] = useState('');
+    const [codigo2fa, setCodigo2fa] = useState('');
+    const modo2fa = Boolean(desafio2fa);
     const modoRegistro = Boolean(invitacion);
     const modoNuevaClave = Boolean(tokenReset);
     const modoRecuperar = pidiendoEnlace && !modoRegistro && !modoNuevaClave;
@@ -214,11 +236,40 @@ const LoginScreen = ({ onLogin }) => {
         e.preventDefault();
         if (enviando || !correo.trim() || !clave) return;
         const { ok, estado, datos } = await pedir('/api/auth/login', { email: correo.trim(), password: clave });
-        if (ok) {
+        if (ok && datos.requiere_2fa) {
+            // NO se entra: la contraseña solo ha ganado el derecho a que le
+            // pidan el código. Se limpia la clave para no dejarla en memoria
+            // más de lo necesario.
+            setClave('');
+            setError('');
+            setDesafio2fa(datos.desafio);
+        } else if (ok) {
             setEntrado(true);      // sin espera artificial: se entra al terminar
             onLogin(datos);
+        } else if (estado === 403 && datos?.code === 'SEGUNDO_FACTOR_OBLIGATORIO') {
+            setError(t.dfaObligatorio);
         } else {
             setError(mensajeDeError(estado, datos));
+        }
+    };
+
+    const verificarCodigo = async (e) => {
+        e.preventDefault();
+        if (enviando || !codigo2fa.trim()) return;
+        const { ok, estado, datos } = await pedir('/api/auth/2fa/verify', {
+            desafio: desafio2fa, codigo: codigo2fa.trim(),
+        });
+        if (ok) {
+            setEntrado(true);
+            onLogin(datos);
+        } else if (estado === 0) {
+            setError(t.errRed);
+        } else {
+            // Si el desafío caducó hay que volver a empezar por la contraseña:
+            // dejar el formulario del código sería pedir algo que ya no sirve.
+            setCodigo2fa('');
+            if (datos?.code === 'el enlace ha caducado') setDesafio2fa('');
+            setError(t.dfaErr);
         }
     };
 
@@ -285,29 +336,33 @@ const LoginScreen = ({ onLogin }) => {
         setHayGoogle(true);
     }, [pedir, onLogin, t]);
 
-    const enviarTexto = modoRegistro ? (enviando ? t.creando : t.crear)
+    const enviarTexto = modo2fa ? (enviando ? t.dfaVerificando : t.dfaEntrar)
+        : modoRegistro ? (enviando ? t.creando : t.crear)
         : modoRecuperar ? (enviando ? t.recEnviando : t.recEnviar)
         : modoNuevaClave ? (enviando ? t.creando : t.nuevaGuardar)
         : (enviando ? t.entrando : t.entrar);
 
-    const alEnviar = modoRegistro ? registrar
+    const alEnviar = modo2fa ? verificarCodigo
+        : modoRegistro ? registrar
         : modoRecuperar ? pedirEnlace
         : modoNuevaClave ? guardarNuevaClave
         : acceder;
 
-    const titulo = modoRegistro ? t.regTitulo
+    const titulo = modo2fa ? t.dfaTitulo
+        : modoRegistro ? t.regTitulo
         : modoRecuperar ? t.recTitulo
         : modoNuevaClave ? t.nuevaTitulo
         : t.titulo;
 
-    const subtitulo = modoRegistro ? t.regSub
+    const subtitulo = modo2fa ? t.dfaSub
+        : modoRegistro ? t.regSub
         : modoRecuperar ? t.recSub
         : modoNuevaClave ? t.nuevaSub
         : t.sub;
 
     // Campos visibles por modo
     const pideNombre = modoRegistro;
-    const pideClave = !modoRecuperar;
+    const pideClave = !modoRecuperar && !modo2fa;
     const pideRepetir = modoRegistro || modoNuevaClave;
     const correoBloqueado = modoRegistro || modoNuevaClave;
 
@@ -358,6 +413,7 @@ const LoginScreen = ({ onLogin }) => {
                             </div>
                         )}
 
+                        {!modo2fa && (
                         <div className="cta-campo">
                             <label htmlFor="correo">{t.correo}</label>
                             <input
@@ -373,6 +429,24 @@ const LoginScreen = ({ onLogin }) => {
                                 required autoFocus={!correoBloqueado}
                             />
                         </div>
+                        )}
+
+                        {modo2fa && (
+                        <div className="cta-campo">
+                            <label htmlFor="codigo2fa">{t.dfaCodigo}</label>
+                            <input
+                                id="codigo2fa" name="one-time-code"
+                                type="text" inputMode="numeric"
+                                /* autoComplete one-time-code: el teclado del móvil
+                                   ofrece pegar el código sin salir de la pantalla. */
+                                autoComplete="one-time-code"
+                                autoCapitalize="off" autoCorrect="off" spellCheck="false"
+                                value={codigo2fa} onChange={(e) => setCodigo2fa(e.target.value)}
+                                disabled={enviando} required autoFocus
+                            />
+                            <p className="cta-pista">{t.dfaAyuda}</p>
+                        </div>
+                        )}
 
                         {pideClave && (
                         <div className="cta-campo">
@@ -424,7 +498,12 @@ const LoginScreen = ({ onLogin }) => {
 
                         {/* Recuperar la contraseña: hasta ahora no existía
                             ninguna vía y cada olvido acababa en la base de datos. */}
-                        {!modoRegistro && !modoNuevaClave && (
+                        {modo2fa ? (
+                            <button
+                                type="button" className="cta-enlace"
+                                onClick={() => { setError(''); setCodigo2fa(''); setDesafio2fa(''); }}
+                            >{t.volver}</button>
+                        ) : !modoRegistro && !modoNuevaClave && (
                             <button
                                 type="button" className="cta-enlace"
                                 onClick={() => { setError(''); setPidiendoEnlace(!pidiendoEnlace); }}
@@ -433,7 +512,7 @@ const LoginScreen = ({ onLogin }) => {
                     </form>
                     )}
 
-                    {!modoRegistro && !modoRecuperar && !modoNuevaClave && !enlaceEnviado && hayGoogle && (
+                    {!modo2fa && !modoRegistro && !modoRecuperar && !modoNuevaClave && !enlaceEnviado && hayGoogle && (
                         <>
                             <div className="cta-separador"><span>o</span></div>
                             <button

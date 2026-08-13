@@ -63,3 +63,15 @@ backend/civil_app_bundle/test_workitem.py
 backend/civil_app_bundle/trigger_extraction.py
 backend/civil_app_bundle/test_output2.txt
 backend/forge-civil3d-properties/
+fix_documents.py
+
+# Guiones de mantenimiento con datos de conexion escritos dentro.
+# Los siete que habia (scratch, clean_*, diagnose_*, test_full_flow) llevaban
+# el host y la contrasena de PRODUCCION en la primera linea, y son el camino
+# por el que se modifico el registro de auditoria sin pasar por la aplicacion.
+# Se retiraron el 13-ago-2026. Si hace falta una herramienta de mantenimiento,
+# va en backend/herramientas/ y lee la conexion del entorno, nunca del codigo.
+backend/scratch*.py
+backend/clean_*.py
+backend/diagnose_*.py
+backend/test_full_flow.py

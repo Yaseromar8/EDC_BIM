@@ -115,6 +115,7 @@ def _rutinas():
         ('nomenclatura', _tabla_nomenclatura),
         ('sensibilidad', _tablas_sensibilidad),
         ('idoneidad', _tabla_idoneidad),
+        ('segundo_factor', _columnas_segundo_factor),
         # ── AL FINAL: columnas sueltas que necesitan sus tablas creadas ──
         ('columnas_pendientes', ensure_columnas_pendientes),
     ]
@@ -141,6 +142,14 @@ def _tabla_idoneidad():
     from db import get_db_connection
     with get_db_connection() as conn:
         idoneidad.asegurar_tabla(conn.cursor())
+        conn.commit()
+
+
+def _columnas_segundo_factor():
+    import segundo_factor
+    from db import get_db_connection
+    with get_db_connection() as conn:
+        segundo_factor.asegurar_columnas(conn.cursor())
         conn.commit()
 
 

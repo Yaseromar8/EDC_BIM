@@ -25,6 +25,7 @@ PROPOSITO_RESET = 'reset-de-password'
 PROPOSITO_VERIFICACION = 'verificacion-de-correo'
 PROPOSITO_RECURSO = 'lectura-de-un-recurso'
 PROPOSITO_OAUTH_APS = 'estado-oauth-autodesk'
+PROPOSITO_2FA = 'desafio-segundo-factor'
 
 # Caducidades por proposito, en segundos.
 CADUCIDAD = {
@@ -37,6 +38,11 @@ CADUCIDAD = {
     # era la sesion ENTERA, reutilizable y de 7 dias, guardada en la base y
     # compartida con quien recibiera la foto. Esto solo abre ese fichero y caduca.
     PROPOSITO_RECURSO: 24 * 3600,
+    # El desafio del segundo factor: se emite cuando la contrasena es correcta
+    # y se canjea presentando el codigo. Cinco minutos, que es de sobra para
+    # sacar el telefono y teclear seis cifras. Alargarlo dejaria abierta una
+    # ventana en la que basta la contrasena robada para volver a intentarlo.
+    PROPOSITO_2FA: 300,
     # El 'state' de OAuth: prueba de que el flujo lo empezamos NOSOTROS. Corto a
     # proposito, porque entre pulsar "conectar" y volver de Autodesk pasan
     # segundos, no horas.

@@ -8,7 +8,7 @@ from db import get_db_connection
 from auth_middleware import (create_session, revoke_session, revoke_all_sessions,
                              create_handoff_ticket, consume_handoff_ticket)
 from rate_limit import limite, clave_por_correo
-from enlaces_firmados import emitir, leer, PROPOSITO_INVITACION, PROPOSITO_RESET
+from enlaces_firmados import emitir, leer, PROPOSITO_INVITACION, PROPOSITO_RESET, PROPOSITO_2FA
 from password_policy import validar as validar_password
 import mailer
 
@@ -313,6 +313,51 @@ def login():
                     # Decir "tu cuenta esta desactivada" confirmaria que existe.
                     registrar_evento('login_desactivado', email=email, user_id=user[0])
                     return jsonify({'error': 'Correo o contraseña incorrectos'}), 401
+                # ── SEGUNDO FACTOR ────────────────────────────────────────────
+                # Si la cuenta lo tiene activado, la contrasena correcta NO da
+                # sesion todavia: da un desafio de un solo uso que se canjea en
+                # /api/auth/2fa/verify presentando el codigo.
+                #
+                # Se emite ANTES de registrar 'login_ok' y antes de crear sesion:
+                # una contrasena acertada sin segundo factor no es un inicio de
+                # sesion, y anotarlo como tal falsearia el registro.
+                try:
+                    cursor.execute('SELECT COALESCE(totp_activo, FALSE) FROM users WHERE id = %s',
+                                   (user[0],))
+                    _fila = cursor.fetchone()
+                    _tiene_2fa = bool(_fila and _fila[0])
+                except Exception:
+                    # Si la columna aun no existe (base sin migrar), se sigue como
+                    # antes. Fallar aqui dejaria a todo el mundo sin poder entrar.
+                    # El rollback es obligatorio: en PostgreSQL una sentencia que
+                    # falla deja la transaccion abortada, y sin el se caerian todas
+                    # las siguientes de este mismo login.
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    _tiene_2fa = False
+                if _tiene_2fa:
+                    from enlaces_firmados import emitir
+                    registrar_evento('login_pide_2fa', email=email, user_id=user[0])
+                    return jsonify({
+                        'requiere_2fa': True,
+                        'desafio': emitir(PROPOSITO_2FA, {'uid': user[0]}),
+                    }), 200
+
+                # A quien se le exige el segundo factor y no lo tiene puesto, se
+                # le avisa. Con EXIGIR_2FA_ESTRICTO=true ademas se le cierra la
+                # puerta: es el interruptor que la entidad enciende DESPUES de dar
+                # de alta a sus administradores, no antes (encenderlo antes deja a
+                # todo el mundo fuera de su propio sistema).
+                import segundo_factor as _dfa
+                _pendiente = _dfa.exigido_para(user[4])
+                if _pendiente and os.getenv('EXIGIR_2FA_ESTRICTO', 'false').lower() == 'true':
+                    registrar_evento('login_bloqueado_sin_2fa', email=email, user_id=user[0])
+                    return jsonify({
+                        'error': 'Esta cuenta debe tener segundo factor para entrar.',
+                        'code': 'SEGUNDO_FACTOR_OBLIGATORIO'}), 403
+
                 registrar_evento('login_ok', email=email, user_id=user[0])
                 try:
                     cursor.execute('UPDATE users SET last_login_at = NOW() WHERE id = %s', (user[0],))
@@ -326,7 +371,8 @@ def login():
                     'role': user[4],
                     'company': user[5],
                     'job_title': user[6],
-                    'session_token': create_session(user[0])
+                    'session_token': create_session(user[0]),
+                    'segundo_factor_pendiente': _pendiente,
                 }), 200
             else:
                 registrar_evento('login_fallido', email=email,
@@ -981,3 +1027,198 @@ def update_project_users(project_id):
             return jsonify({'success': True}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# =========================================================================
+#  SEGUNDO FACTOR (TOTP)  ·  BASELINE 0 · C9
+# =========================================================================
+#  La contrasena era lo unico que separaba a un atacante de la cuenta que puede
+#  archivar obras y borrar documentos. El ciclo es:
+#      /setup       genera el secreto y devuelve la URI del QR (aun NO activa)
+#      /activar     exige un codigo valido y entonces si lo activa
+#      /verify      canjea el desafio del login por una sesion
+#      /desactivar  exige codigo: robar la sesion no basta para quitarlo
+#
+#  El secreto se guarda en claro a proposito: TOTP lo necesita para calcular el
+#  codigo, no admite hash. Por eso esto NO sustituye a separar las identidades
+#  de base de datos: quien entre por debajo de la aplicacion no pasa por aqui.
+
+
+@auth_bp.route('/api/auth/2fa/setup', methods=['POST'])
+def dfa_setup():
+    """Genera un secreto y devuelve la URI del QR. NO lo activa todavia."""
+    import segundo_factor as dfa
+    u = getattr(g, 'current_user', None)
+    if not u:
+        return jsonify({'error': 'Autenticación requerida'}), 401
+    try:
+        secreto = dfa.secreto_nuevo()
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            # Solo se pisa el secreto si el 2FA NO esta activo: si lo estuviera,
+            # esta seria la forma de anularlo desde una sesion robada.
+            cur.execute('UPDATE users SET totp_secreto = %s WHERE id = %s'
+                        '   AND COALESCE(totp_activo, FALSE) = FALSE', (secreto, u['id']))
+            if not cur.rowcount:
+                return jsonify({'error': 'El segundo factor ya está activo. '
+                                         'Desactívalo antes de volver a darlo de alta.'}), 409
+            conn.commit()
+        registrar_evento('2fa_setup', email=u.get('email'), user_id=u['id'])
+        return jsonify({'secreto': secreto,
+                        'uri': dfa.uri_de_provisionamiento(secreto, u.get('email') or '')}), 200
+    except Exception as e:
+        print(f'[2fa] setup: {e}')
+        return jsonify({'error': 'No se pudo iniciar el alta del segundo factor.'}), 500
+
+
+@auth_bp.route('/api/auth/2fa/activar', methods=['POST'])
+@limite("10 per minute")
+def dfa_activar():
+    """Activa el segundo factor tras comprobar un codigo. Devuelve los de recuperacion."""
+    import segundo_factor as dfa
+    u = getattr(g, 'current_user', None)
+    if not u:
+        return jsonify({'error': 'Autenticación requerida'}), 401
+    codigo_dado = (request.get_json() or {}).get('codigo')
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT totp_secreto, COALESCE(totp_activo, FALSE)'
+                        '  FROM users WHERE id = %s', (u['id'],))
+            fila = cur.fetchone()
+            if not fila or not fila[0]:
+                return jsonify({'error': 'Primero hay que generar el secreto.'}), 400
+            if fila[1]:
+                return jsonify({'error': 'El segundo factor ya está activo.'}), 409
+            if not dfa.comprobar(fila[0], codigo_dado):
+                registrar_evento('2fa_activacion_fallida', email=u.get('email'), user_id=u['id'])
+                return jsonify({'error': 'El código no es válido.'}), 400
+
+            cur.execute('UPDATE users SET totp_activo = TRUE, totp_activado_en = NOW()'
+                        '  WHERE id = %s', (u['id'],))
+            # Los de recuperacion se muestran UNA vez y se guardan hasheados. Sin
+            # ellos, perder el telefono seria perder la unica cuenta administradora.
+            cur.execute('DELETE FROM totp_recuperacion WHERE user_id = %s', (u['id'],))
+            codigos = dfa.codigos_de_recuperacion()
+            for c in codigos:
+                cur.execute('INSERT INTO totp_recuperacion (user_id, huella) VALUES (%s, %s)',
+                            (u['id'], dfa.huella_de_codigo(c)))
+            conn.commit()
+        registrar_evento('2fa_activado', email=u.get('email'), user_id=u['id'])
+        return jsonify({'activo': True, 'codigos_de_recuperacion': codigos,
+                        'aviso': 'Guárdalos ahora: no se vuelven a mostrar.'}), 200
+    except Exception as e:
+        print(f'[2fa] activar: {e}')
+        return jsonify({'error': 'No se pudo activar el segundo factor.'}), 500
+
+
+@auth_bp.route('/api/auth/2fa/verify', methods=['POST'])
+@publico(motivo='se llama entre la contraseña y la sesion: por diseño aun no hay sesion')
+@limite("10 per minute")
+def dfa_verify():
+    """Canjea el desafio del login por una sesion, presentando el codigo."""
+    import segundo_factor as dfa
+    d = request.get_json() or {}
+    datos, motivo = leer(PROPOSITO_2FA, d.get('desafio'))
+    if not datos:
+        return jsonify({'error': 'El desafío no es válido o ha caducado.', 'code': motivo}), 401
+    uid = datos.get('uid')
+    codigo_dado = (d.get('codigo') or '').strip()
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT u.id, u.name, u.email, u.role, c.name, j.name, u.totp_secreto'
+                        '  FROM users u'
+                        '  LEFT JOIN companies c ON u.company_id = c.id'
+                        '  LEFT JOIN job_titles j ON u.job_title_id = j.id'
+                        ' WHERE u.id = %s AND COALESCE(u.is_active, TRUE)', (uid,))
+            fila = cur.fetchone()
+            if not fila:
+                return jsonify({'error': 'El desafío no es válido.'}), 401
+
+            valido = dfa.comprobar(fila[6], codigo_dado)
+            if not valido and codigo_dado:
+                # Codigo de recuperacion: de un solo uso. Se marca usado DENTRO de la
+                # misma sentencia, para que dos intentos a la vez no canjeen el mismo.
+                cur.execute('UPDATE totp_recuperacion SET usado_en = NOW()'
+                            ' WHERE id = (SELECT id FROM totp_recuperacion'
+                            '              WHERE user_id = %s AND huella = %s'
+                            '                AND usado_en IS NULL LIMIT 1)'
+                            ' RETURNING id', (uid, dfa.huella_de_codigo(codigo_dado)))
+                if cur.fetchone():
+                    valido = True
+                    conn.commit()
+                    registrar_evento('2fa_codigo_recuperacion', email=fila[2], user_id=uid)
+
+            if not valido:
+                registrar_evento('2fa_fallido', email=fila[2], user_id=uid)
+                return jsonify({'error': 'El código no es válido.'}), 401
+
+            cur.execute('UPDATE users SET last_login_at = NOW() WHERE id = %s', (uid,))
+            conn.commit()
+        registrar_evento('login_ok', email=fila[2], user_id=uid, detalle='con segundo factor')
+        return jsonify({'id': fila[0], 'name': fila[1], 'email': fila[2], 'role': fila[3],
+                        'company': fila[4], 'job_title': fila[5],
+                        'session_token': create_session(uid)}), 200
+    except Exception as e:
+        print(f'[2fa] verify: {e}')
+        return jsonify({'error': 'No se pudo completar el inicio de sesión.'}), 500
+
+
+@auth_bp.route('/api/auth/2fa/desactivar', methods=['POST'])
+@limite("10 per minute")
+def dfa_desactivar():
+    """Quita el segundo factor. EXIGE un codigo valido: no basta con tener la sesion.
+
+    Si bastara la sesion, robar una cookie permitiria desactivar el 2FA y dejar la
+    cuenta con solo contrasena, que es exactamente lo que el 2FA venia a evitar.
+    """
+    import segundo_factor as dfa
+    u = getattr(g, 'current_user', None)
+    if not u:
+        return jsonify({'error': 'Autenticación requerida'}), 401
+    codigo_dado = (request.get_json() or {}).get('codigo')
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT totp_secreto, COALESCE(totp_activo, FALSE)'
+                        '  FROM users WHERE id = %s', (u['id'],))
+            fila = cur.fetchone()
+            if not fila or not fila[1]:
+                return jsonify({'error': 'El segundo factor no está activo.'}), 400
+            if not dfa.comprobar(fila[0], codigo_dado):
+                registrar_evento('2fa_desactivacion_fallida', email=u.get('email'), user_id=u['id'])
+                return jsonify({'error': 'El código no es válido.'}), 400
+            cur.execute('UPDATE users SET totp_activo = FALSE, totp_secreto = NULL,'
+                        '       totp_activado_en = NULL WHERE id = %s', (u['id'],))
+            cur.execute('DELETE FROM totp_recuperacion WHERE user_id = %s', (u['id'],))
+            conn.commit()
+        registrar_evento('2fa_desactivado', email=u.get('email'), user_id=u['id'])
+        return jsonify({'activo': False}), 200
+    except Exception as e:
+        print(f'[2fa] desactivar: {e}')
+        return jsonify({'error': 'No se pudo desactivar el segundo factor.'}), 500
+
+
+@auth_bp.route('/api/auth/2fa/estado', methods=['GET'])
+def dfa_estado():
+    """Si tengo el segundo factor activo, y si me lo exigen."""
+    import segundo_factor as dfa
+    u = getattr(g, 'current_user', None)
+    if not u:
+        return jsonify({'error': 'Autenticación requerida'}), 401
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT COALESCE(totp_activo, FALSE), totp_activado_en,'
+                        '       (SELECT count(*) FROM totp_recuperacion'
+                        '         WHERE user_id = %s AND usado_en IS NULL)'
+                        '  FROM users WHERE id = %s', (u['id'], u['id']))
+            activo, desde, quedan = cur.fetchone()
+        return jsonify({'activo': bool(activo),
+                        'activado_en': desde.isoformat() if desde else None,
+                        'codigos_de_recuperacion_sin_usar': quedan,
+                        'exigido': dfa.exigido_para(u.get('role'))}), 200
+    except Exception as e:
+        print(f'[2fa] estado: {e}')
+        return jsonify({'error': 'No se pudo consultar el estado.'}), 500

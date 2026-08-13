@@ -1,0 +1,11 @@
+ESTADO DE PRODUCCION ANTES DEL DESPLIEGUE
+=========================================
+fecha: 2026-08-13 13:32:10 UTC
+commit desplegado: 9e7fb24
+commit a desplegar: 9f207ce
+commits de diferencia: 31
+
+salud y humo previos:
+  /api/health          HTTP 000
+  /api/companies       HTTP 200
+  /api/job_titles      HTTP 200
