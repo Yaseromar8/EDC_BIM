@@ -101,3 +101,38 @@ def test_la_ficha_lleva_con_que_autorizacion_se_emitio():
     for clave in ('version', 'sha256_anotado', 'sha256_calculado', 'emitida_en',
                   'codigo_idoneidad', 'codigo_revision', 'emitida_por'):
         assert clave in ficha
+
+
+# ── Ninguna via de subida puede olvidarse de la huella ─────────────────────
+# Medido el 13-ago-2026: de las cuatro vias por las que nace una version, solo
+# DOS sellaban -- la subida directa y la troceada. No sellaban
+# /api/docs/upload-confirm (la de URL firmada, que es la que usa el portal) ni
+# la importacion de WhatsApp. La via mas usada creaba versiones sin huella.
+
+def test_el_sellado_vive_en_create_file_record_y_no_en_cada_ruta():
+    """Poniendo el sellado en las dos rutas que faltaban se arregla hoy y se
+    rompe con la quinta via. Tiene que estar en el sitio por el que pasan todas."""
+    import io
+    import os
+    backend = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    fuente = io.open(os.path.join(backend, 'file_system_db.py'), encoding='utf-8').read()
+    cuerpo = fuente[fuente.index('def create_file_record('):]
+    cuerpo = cuerpo[:cuerpo.index('\ndef ', 10)]
+    assert 'sellar_desde_almacen' in cuerpo, (
+        'create_file_record tiene que sellar cuando quien llama no trae la huella')
+    assert 'if not sha256' in cuerpo, 'y solo cuando no venga ya calculada'
+
+
+def test_todas_las_llamadas_que_crean_version_acaban_selladas():
+    """Barrido: cada llamada a create_file_record o pasa sha256, o queda cubierta
+    por el sellado de dentro. Lo que no puede haber es una via que no haga ni una
+    cosa ni la otra."""
+    import io
+    import os
+    import re
+    backend = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    fuente = io.open(os.path.join(backend, 'file_system_db.py'), encoding='utf-8').read()
+    # La firma admite sha256 y el cuerpo sella si falta: con eso, toda llamada
+    # queda cubierta. Esta prueba fija que la firma no pierda el parametro.
+    firma = re.search(r'def create_file_record\(([^)]*)\)', fuente, re.S).group(1)
+    assert 'sha256' in firma

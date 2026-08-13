@@ -408,6 +408,29 @@ def create_file_record(model_urn, parent_id, filename, size_bytes, gcs_uuid, mim
         cursor.execute("UPDATE file_nodes SET current_version_id = %s WHERE id = %s", (v_id, f_id))
         
         conn.commit()
+
+    # 4. Si quien llamo no traia la huella, se calcula leyendo el objeto.
+    #
+    # POR QUE AQUI Y NO EN CADA RUTA
+    # Habia cuatro vias por las que nace una version y solo DOS sellaban:
+    # la subida directa (que ve los bytes) y la troceada (que los lee de vuelta).
+    # No sellaban ni /api/docs/upload-confirm -- la de URL firmada, que es la que
+    # usa el portal -- ni la importacion de WhatsApp. Es decir: la via mas usada
+    # creaba versiones sin huella, y C6 quedaba cojo justo donde mas se usa.
+    # Poniendolo en las dos rutas que faltaban se arregla hoy y se vuelve a
+    # romper con la quinta via. Aqui no: pase por donde pase, la version acaba
+    # sellada o queda contada como sin sellar, que es lo honesto.
+    if not sha256 and gcs_uuid:
+        try:
+            import os as _os
+            if _os.getenv('GCS_BUCKET_NAME'):
+                import integridad
+                # En segundo plano: leer de vuelta un plano de 272 MB no puede
+                # bloquear la respuesta de una subida.
+                gcs_executor.submit(integridad.sellar_desde_almacen, v_id, gcs_uuid)
+        except Exception as _e:
+            print(f"[file_system_db] no se pudo lanzar el sellado de {v_id}: {_e}")
+
     return f_id, new_v
 
 def find_node_by_gcs_urn(model_urn, gcs_urn):
