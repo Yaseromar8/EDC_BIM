@@ -58,6 +58,14 @@ CABECERAS = {
     'estado': ('código de estado', 'codigo de estado'),
     'revision': ('revisión', 'revision'),
     'identificador': ('identificación del contenedor', 'identificacion del contenedor'),
+    # Lo que convierte el plan en un plan: QUIEN y PARA CUANDO. Sin fecha no hay
+    # "vencido", y sin vencido esto es un inventario, no un plan de entrega.
+    # El TIDP los trae siempre; el MIDP, segun como lo haya montado la obra.
+    'responsable': ('responsable', 'equipo responsable', 'tarea', 'equipo de tarea',
+                    'task team', 'autor'),
+    'fecha': ('fecha de entrega', 'fecha comprometida', 'fecha', 'entrega',
+              'fecha de emisión', 'fecha de emision'),
+    'hito': ('hito', 'milestone', 'etapa', 'fase de entrega'),
 }
 
 

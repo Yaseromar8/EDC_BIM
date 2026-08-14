@@ -179,16 +179,36 @@ def _estado_de(fecha_comprometida, file_node_id, estado_doc, hoy=None):
 
 
 def listar(cursor, model_urn, tipo=None, hoy=None):
-    """El plan de la obra, con el estado de cada compromiso."""
-    sql = """
-        SELECT p.id, p.tipo, p.identificador, p.titulo, p.disciplina, p.volumen,
-               p.formato, p.idoneidad_prevista, p.revision_prevista, p.responsable,
-               p.fecha_comprometida, p.hito, p.file_node_id,
-               n.name, n.status, n.codigo_idoneidad, n.codigo_revision
-          FROM plan_entregas p
-          LEFT JOIN file_nodes n ON n.id = p.file_node_id AND NOT n.is_deleted
-         WHERE p.model_urn = %s
+    """El plan de la obra, con el estado de cada compromiso.
+
+    Funciona AUNQUE no exista el arbol documental. Es lo normal, no una rareza:
+    el plan se carga al principio de la obra, cuando todavia no hay ni un
+    documento -- y en una base donde el gestor documental no se ha usado nunca,
+    file_nodes ni siquiera existe. Que el plan reventara por eso seria justo lo
+    contrario de "el compromiso va antes que el fichero".
     """
+    cursor.execute("SELECT to_regclass('public.file_nodes')")
+    hay_documentos = bool(cursor.fetchone()[0])
+
+    if hay_documentos:
+        sql = """
+            SELECT p.id, p.tipo, p.identificador, p.titulo, p.disciplina, p.volumen,
+                   p.formato, p.idoneidad_prevista, p.revision_prevista, p.responsable,
+                   p.fecha_comprometida, p.hito, p.file_node_id,
+                   n.name, n.status, n.codigo_idoneidad, n.codigo_revision
+              FROM plan_entregas p
+              LEFT JOIN file_nodes n ON n.id = p.file_node_id AND NOT n.is_deleted
+             WHERE p.model_urn = %s
+        """
+    else:
+        sql = """
+            SELECT p.id, p.tipo, p.identificador, p.titulo, p.disciplina, p.volumen,
+                   p.formato, p.idoneidad_prevista, p.revision_prevista, p.responsable,
+                   p.fecha_comprometida, p.hito, p.file_node_id,
+                   NULL, NULL, NULL, NULL
+              FROM plan_entregas p
+             WHERE p.model_urn = %s
+        """
     params = [model_urn]
     if tipo:
         sql += ' AND p.tipo = %s'
