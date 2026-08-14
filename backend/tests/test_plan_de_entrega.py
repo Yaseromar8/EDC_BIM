@@ -40,7 +40,11 @@ class CursorFalso:
         s = ' '.join(sql.split())
         self.ejecutadas.append((s, params))
         self._r = []
-        if s.startswith('SELECT p.id, p.tipo'):
+        if 'to_regclass' in s:
+            # listar() pregunta si existe el arbol documental antes de decidir
+            # si hace el JOIN. Aqui se dice que SI, que es el caso con datos.
+            self._r = [('file_nodes',)]
+        elif s.startswith('SELECT p.id, p.tipo'):
             self._r = [(
                 f['id'], f.get('tipo', 'MIDP'), f['identificador'], f.get('titulo'),
                 f.get('disciplina'), f.get('volumen'), f.get('formato'),
