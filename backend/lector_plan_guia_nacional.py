@@ -48,6 +48,11 @@ CAMPOS_BASE = {
     'formato': ('formato o extensión', 'formato o extension'),
     'escala': ('escala',),
     'identificador': ('identificación del contenedor', 'identificacion del contenedor'),
+    # El «cómo» de la entrega, que la primera versión leía y tiraba: sin esto el
+    # plan es una lista de códigos y no dice a nadie qué tiene que producir.
+    'formato_lamina': ('formato de tamaño de lámina', 'formato de tamano de lamina'),
+    'paquete_trabajo': ('paquete de trabajo',),
+    'predecesores': ('predecesores',),
 }
 PARTES_CODIGO = {
     'proyecto': ('código de proyecto', 'codigo de proyecto'),
@@ -61,13 +66,29 @@ PARTES_CODIGO = {
     'estado': ('código de estado', 'codigo de estado'),
     'revision': ('revisión', 'revision'),
 }
+# El LOIN se declara POR ETAPA: el mismo contenedor se entrega con LOD 200 en
+# una etapa y LOD 300 en la siguiente. Por eso vive aquí y no en CAMPOS_BASE.
 CAMPOS_ETAPA = {
     'responsable': ('parte responsable',),
     'lod': ('lod',),
     'loi': ('loi',),
+    'documentacion': ('documentación asociada', 'documentacion asociada'),
     'produccion': ('tiempo estimado',),
     'fecha': ('fecha de entrega',),
 }
+
+# «loi» esta DENTRO de «loin», y la plantilla tiene las dos cabeceras: «LOIN»
+# agrupando en la fila de arriba, y «LOD | LOI | Documentacion asociada» debajo.
+# Buscando por «contiene», el LOI se enganchaba a la columna del LOIN -- que es
+# la del LOD -- y el plan declaraba LOI 300 en vez de 3. Un nivel de informacion
+# alfanumerica equivocado no chirria a la vista: se cuela.
+EXACTOS = {'lod', 'loi'}
+
+
+def _casa(texto, campo, claves):
+    if campo in EXACTOS:
+        return texto in claves
+    return any(k in texto for k in claves)
 
 
 def _txt(ws, r, c):
@@ -127,7 +148,7 @@ def _localizar(ws, filas_cabecera=10):
             if not t:
                 continue
             for campo, claves in CAMPOS_ETAPA.items():
-                if campo not in col_etapa[etapa_actual] and any(k in t for k in claves):
+                if campo not in col_etapa[etapa_actual] and _casa(t, campo, claves):
                     col_etapa[etapa_actual][campo] = c
 
     return col_base, col_etapa, fila_ident + 2
@@ -194,6 +215,8 @@ def leer(ruta):
                     e['fecha'] = _fecha_cruda(ws, r, (col_etapa.get(etapa) or {}).get('fecha'))
                     e['lod'] = val.get('lod') or None
                     e['loi'] = val.get('loi') or None
+                    e['documentacion'] = val.get('documentacion') or None
+                    e['produccion'] = val.get('produccion') or None
                     e['de_rango'] = uno != ident
                     salida.append(e)
     wb.close()

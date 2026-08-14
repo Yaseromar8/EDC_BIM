@@ -52,6 +52,13 @@ class CursorFalso:
                 f.get('responsable'), f.get('fecha'), f.get('hito'),
                 f.get('node_id'), f.get('doc_nombre'), f.get('doc_estado'),
                 f.get('doc_idoneidad'), f.get('doc_revision'),
+                # El COMO: descripcion, escala, lamina, LOD, LOI, documentacion,
+                # predecesores, paquete, y las piezas del codigo.
+                f.get('descripcion'), f.get('escala'), f.get('formato_lamina'),
+                f.get('lod'), f.get('loi'), f.get('documentacion_asociada'),
+                f.get('predecesores'), f.get('paquete_trabajo'),
+                f.get('proyecto'), f.get('originador'), f.get('nivel'),
+                f.get('tipo_doc'), f.get('numeracion'),
             ) for f in self.filas]
 
     def fetchall(self):
@@ -62,8 +69,10 @@ class CursorFalso:
 
 
 def _fila(**kw):
-    base = {'id': 1, 'identificador': '500125-PQ08-DRE-PLA-0010', 'titulo': 'Planta',
-            'disciplina': 'DRE'}
+    # Codigo bien formado (7 partes) y coherente con la disciplina: asi el ruido
+    # de los avisos de nomenclatura no se cuela en las pruebas que miran otra cosa.
+    base = {'id': 1, 'identificador': '500125-CSSP001-000-XX-DR-TP-000800',
+            'titulo': 'Planta', 'disciplina': 'TP'}
     base.update(kw)
     return base
 
@@ -180,6 +189,105 @@ def test_un_plan_vacio_no_divide_entre_cero():
     assert plan.resumen(CursorFalso([]), 'obra/X')['porcentaje_entregado'] == 0.0
 
 
+# ── El plan tiene que decir QUE se entrega y COMO ──────────────────────────
+
+def test_la_idoneidad_distingue_compartido_de_autorizado():
+    """Con un S3 no se construye. Meterlo en el mismo saco que un A1 borra la
+    unica distincion que le importa al que va a ejecutar en obra."""
+    assert plan.familia_idoneidad('S3') == 'compartido'
+    assert plan.familia_idoneidad('A1') == 'autorizado'
+    assert plan.familia_idoneidad('B1') == 'autorizado'
+    assert plan.familia_idoneidad('CR') == 'registro'
+    assert plan.familia_idoneidad('HD') == 'fuera de vocabulario'
+    assert plan.familia_idoneidad('') is None
+
+
+def test_los_requisitos_recogen_el_LOIN_el_formato_y_la_escala():
+    """El «como» de la entrega: sin esto el plan es una lista de codigos."""
+    cur = CursorFalso([
+        _fila(id=1, formato='.ifc', escala='Sin escala', lod='300', loi='3',
+              idoneidad_prevista='S3', responsable='Ana', hito='Etapa RIBA 4',
+              fecha=MANANA, proyecto='500125', numeracion='001008'),
+        _fila(id=2, formato='.ifc', escala='1:100', lod='300', loi='3',
+              idoneidad_prevista='S3', responsable='Ana', hito='Etapa RIBA 4',
+              fecha=MANANA, proyecto='500125', numeracion='001009'),
+    ])
+    r = plan.requisitos(cur, 'obra/X', hoy=HOY)
+    assert r['formatos'] == [{'valor': '.ifc', 'n': 2}]
+    assert r['loin'] == [{'lod': '300', 'loi': '3', 'n': 2}]
+    assert {e['valor'] for e in r['escalas']} == {'Sin escala', '1:100'}
+    assert r['hitos'][0]['hito'] == 'Etapa RIBA 4'
+    assert r['hitos'][0]['total'] == 2
+    assert r['nomenclatura']['ejemplo']
+
+
+def test_avisa_si_el_plan_no_compromete_nada_como_autorizado():
+    """Un plan entero en familia S no entrega nada apto para construir. Es un
+    agujero del plan, y es mejor verlo ahora que el dia de la entrega."""
+    cur = CursorFalso([_fila(idoneidad_prevista='S3', fecha=MANANA, responsable='Ana',
+                             lod='300', loi='3')])
+    textos = ' '.join(a['texto'] for a in plan.requisitos(cur, 'obra/X', hoy=HOY)['avisos'])
+    assert 'autorizada' in textos
+
+    cur = CursorFalso([_fila(idoneidad_prevista='A1', fecha=MANANA, responsable='Ana',
+                             lod='300', loi='3')])
+    textos = ' '.join(a['texto'] for a in plan.requisitos(cur, 'obra/X', hoy=HOY)['avisos'])
+    assert 'autorizada' not in textos
+
+
+def test_avisa_de_los_codigos_que_no_siguen_la_nomenclatura():
+    """En el MIDP real hay codigos a los que les falta el volumen
+    («500125-CSSP001-XX-RP-TP-001008», 6 partes en vez de 7). Un fichero
+    entregado con ese nombre no casara NUNCA con su compromiso, y el plan se
+    quedaria diciendo «sin cotejar» para siempre sin que nadie sepa por que."""
+    cur = CursorFalso([_fila(identificador='500125-CSSP001-XX-RP-TP-001008',
+                             disciplina='TP', fecha=MANANA, responsable='Ana',
+                             lod='300', loi='3', idoneidad_prevista='A1')])
+    r = plan.requisitos(cur, 'obra/X', hoy=HOY)
+    assert r['codigos_mal_formados'] == 1
+    assert any('nomenclatura' in a['texto'] for a in r['avisos'])
+
+
+def test_avisa_si_el_codigo_y_la_disciplina_declarada_no_concuerdan():
+    """El codigo dice HD y la columna dice TP. Uno de los dos esta mal, y elegir
+    en silencio cual vale seria inventarse el dato."""
+    cur = CursorFalso([_fila(identificador='500125-CSSP001-000-XX-DR-HD-000800',
+                             disciplina='TP', fecha=MANANA, responsable='Ana',
+                             lod='300', loi='3', idoneidad_prevista='A1')])
+    r = plan.requisitos(cur, 'obra/X', hoy=HOY)
+    assert r['codigos_discrepantes'] == 1
+    assert r['codigos_mal_formados'] == 0
+
+
+def test_un_codigo_bien_formado_no_genera_aviso():
+    cur = CursorFalso([_fila(identificador='500125-CSSP001-000-XX-DR-TP-000800',
+                             disciplina='TP', fecha=MANANA, responsable='Ana',
+                             lod='300', loi='3', idoneidad_prevista='A1')])
+    r = plan.requisitos(cur, 'obra/X', hoy=HOY)
+    assert r['codigos_mal_formados'] == 0 and r['codigos_discrepantes'] == 0
+    assert not r['avisos']
+
+
+def test_avisa_de_los_contenedores_sin_responsable_y_sin_LOIN():
+    cur = CursorFalso([_fila(id=1, idoneidad_prevista='A1', fecha=MANANA),
+                       _fila(id=2, idoneidad_prevista='A1', fecha=MANANA,
+                             responsable='Ana', lod='300', loi='3')])
+    avisos = ' '.join(a['texto'] for a in plan.requisitos(cur, 'obra/X', hoy=HOY)['avisos'])
+    assert 'responsable' in avisos
+    assert 'LOD/LOI' in avisos
+
+
+def test_un_codigo_de_idoneidad_inventado_se_marca_como_error():
+    """En el MIDP real hay dos contenedores con «HD» en la casilla de idoneidad.
+    Es un codigo de disciplina colado donde no va, y callarlo deja el plan con
+    dos entregables cuyo estado no significa nada."""
+    cur = CursorFalso([_fila(idoneidad_prevista='HD', fecha=MANANA,
+                             responsable='Ana', lod='300', loi='3')])
+    r = plan.requisitos(cur, 'obra/X', hoy=HOY)
+    errores = [a for a in r['avisos'] if a['nivel'] == 'error']
+    assert any('idoneidad' in e['texto'] and 'HD' in e['texto'] for e in errores)
+
+
 # ── Reglas de la importacion y del vinculo ─────────────────────────────────
 
 def test_reimportar_el_plan_no_puede_deshacer_los_vinculos():
@@ -190,11 +298,38 @@ def test_reimportar_el_plan_no_puede_deshacer_los_vinculos():
     ruta = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         'plan_de_entrega.py')
     fuente = io.open(ruta, encoding='utf-8').read()
-    conflicto = fuente[fuente.index('ON CONFLICT (model_urn, tipo, identificador)'):]
+    conflicto = fuente[fuente.index('ON CONFLICT ON CONSTRAINT'):]
     conflicto = conflicto[:conflicto.index('RETURNING')]
     for prohibido in ('file_node_id', 'vinculado_en', 'vinculado_por'):
         assert prohibido not in conflicto, (
             f'la reimportacion pisa {prohibido}: perderia los vinculos ya hechos')
+
+
+def test_el_mismo_contenedor_en_dos_etapas_son_DOS_compromisos():
+    """El MIDP entrega el mismo contenedor en RIBA 3B y en RIBA 4, con fechas y
+    LOIN distintos. Si la clave no lleva la etapa, la segunda entrega machaca a
+    la primera: el TIDP de PQT8 leia 622 filas y guardaba 512."""
+    import io
+    import os
+    ruta = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'plan_de_entrega.py')
+    fuente = io.open(ruta, encoding='utf-8').read()
+    cuerpo = fuente[fuente.index('def asegurar_tablas'):fuente.index('def _fecha')]
+    assert 'UNIQUE (model_urn, tipo, identificador, hito)' in cuerpo, (
+        'la clave del compromiso tiene que incluir la etapa')
+
+
+def test_el_identificador_no_puede_llevar_pegada_la_etapa():
+    """Es el nombre ISO del contenedor y hay que poder cotejarlo contra el
+    nombre del fichero. La primera version le pegaba « · Etapa RIBA X» para
+    fabricar unicidad, y con eso ninguna sugerencia de vinculo casaba nunca."""
+    import io
+    import os
+    ruta = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'routes', 'plan_entregas.py')
+    fuente = io.open(ruta, encoding='utf-8').read()
+    assert " · " not in fuente.split('def vincular_compromiso')[0], (
+        'la importacion no puede ensuciar el identificador con la etapa')
 
 
 def test_no_se_puede_atar_un_compromiso_a_un_documento_de_otra_obra():

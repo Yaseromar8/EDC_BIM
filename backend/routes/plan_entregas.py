@@ -35,7 +35,11 @@ def listar_plan():
             cur = conn.cursor()
             filas = plan.listar(cur, model_urn, tipo)
             resumen = plan.resumen(cur, model_urn, tipo)
-        return jsonify({'plan': filas, 'resumen': resumen}), 200
+            # Los requisitos son la mitad del plan: sin ellos la pantalla es
+            # una lista de codigos que no dice a nadie que tiene que producir.
+            requisitos = plan.requisitos(cur, model_urn, tipo)
+        return jsonify({'plan': filas, 'resumen': resumen,
+                        'requisitos': requisitos}), 200
     except Exception as e:
         print(f'[plan] listar: {e}')
         return jsonify({'error': 'No se pudo leer el plan de entrega.'}), 500
@@ -72,8 +76,22 @@ def importar_plan():
             fichero.save(tmp.name)
             ruta = tmp.name
 
-        from cotejar_midp import leer_midp
-        entregables = leer_midp(ruta)
+        # El lector de la plantilla de la Guia Nacional va PRIMERO, y no es un
+        # detalle: el generico coge la primera «Fecha de Entrega», que en esta
+        # plantilla es la de RIBA 3A y esta vacia -- el plan entraria entero sin
+        # fechas -- y ademas no expande los rangos «004120@004145», con lo que
+        # 36 filas del TIDP de PQT8 comprometerian 36 documentos en vez de 311.
+        # El plan que cargaba este boton NO era el que dice el Excel.
+        entregables = []
+        try:
+            from lector_plan_guia_nacional import leer as leer_guia
+            entregables = leer_guia(ruta)
+        except Exception as err:
+            print(f'[plan] lector de la Guia Nacional no aplico: {err}')
+        if not entregables:
+            # Otras obras traen su MIDP en formatos mas sencillos.
+            from cotejar_midp import leer_midp
+            entregables = leer_midp(ruta)
         if not entregables:
             return jsonify({
                 'error': 'No se reconocio ninguna fila. El fichero tiene que llevar la '
