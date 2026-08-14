@@ -33,6 +33,14 @@ MAX_IDS = 20000  # techo de ids por lista (los ids son livianos, ~40 bytes c/u)
 #   und/u/pza->1 (conteo). Igual que el motor 5D del frontend.
 _DSI_COD = re.compile(r'DSI_CodigoDePartida(\d)\s*$')
 _DSI_MET = re.compile(r'DSI_Metrado(\d)\s*$')
+# Metrado POR ELEMENTO, sin slot. El esquema por slots supone que existe un
+# Metrado{n} junto a cada CodigoDePartida{n}, y en esta obra NO existe: medido
+# el 13-ago-2026 sobre el inventario real hay 30.008 CodigoDePartida{n} y 29.845
+# Unidad{n}, pero CERO Metrado{n}. Lo que los modeladores SI rellenaron es
+# 02_06_DSI_MetradoElemento (7.599 elementos con valor). Sin esto, el comparador
+# se iba siempre al medible nativo y, cuando no lo resolvia, dejaba el metrado
+# en 0,0: la tabla de diff 5D decia "no cambio nada" donde si habia cambiado.
+_DSI_MET_ELEM = re.compile(r'DSI_MetradoElemento\s*$')
 _DSI_UNI = re.compile(r'DSI_Unidad(\d)\s*$')
 # Medibles nativos en ingles y espanol (Revit ES usa Volumen/Área/Longitud)
 _NATIVE = re.compile(r'\b(Volume|Volumen|Area|Área|Length|Longitud)\s*$', re.IGNORECASE)
@@ -55,6 +63,7 @@ def _pivot_dsi_rows(rows):
     Pura (testeable sin BD). Empareja por slot y aplica fallback nativo por unidad."""
     slots = {}
     natives = {}
+    met_elem = {}      # metrado por elemento, sin slot
     for ext, key, val in rows:
         key = key or ''
         m = _DSI_COD.search(key)
@@ -68,6 +77,11 @@ def _pivot_dsi_rows(rows):
         m = _DSI_UNI.search(key)
         if m:
             slots.setdefault(ext, {}).setdefault(m.group(1), {})['uni'] = val
+            continue
+        if _DSI_MET_ELEM.search(key):
+            f = _to_float(val)
+            if f is not None:
+                met_elem[ext] = f
             continue
         m = _NATIVE.search(key)
         if m:
@@ -87,6 +101,11 @@ def _pivot_dsi_rows(rows):
             if not cod:
                 continue
             met = _to_float(kv.get('met'))
+            if met is None:
+                # Antes del medible nativo, el metrado que el modelador escribio
+                # para ESTE elemento. Es un dato puesto a mano y manda sobre uno
+                # deducido de la geometria.
+                met = met_elem.get(ext)
             if met is None:
                 uni = str(kv.get('uni') or '').strip().lower()
                 if uni in COUNT_UNITS:
@@ -410,7 +429,7 @@ def compare_metrados():
                                               THEN g.value ELSE '{{}}'::jsonb END) kv
                     WHERE {cond}
                       AND (kv.key ~ 'DSI_CodigoDePartida[0-9]\\s*$'
-                           OR kv.key ~ 'DSI_Metrado[0-9]\\s*$'
+                           OR kv.key ~ 'DSI_Metrado([0-9]|Elemento)\\s*$'
                            OR kv.key ~ 'DSI_Unidad[0-9]\\s*$'
                            OR kv.key ~* '(Volume|Volumen|Area|Área|Length|Longitud)\\s*$')
                 """, params)
@@ -501,7 +520,7 @@ def compare_element_metrados():
                     WHERE {cond}
                       AND ia.external_id = %s
                       AND (kv.key ~ 'DSI_CodigoDePartida[0-9]\\s*$'
-                           OR kv.key ~ 'DSI_Metrado[0-9]\\s*$'
+                           OR kv.key ~ 'DSI_Metrado([0-9]|Elemento)\\s*$'
                            OR kv.key ~ 'DSI_Unidad[0-9]\\s*$'
                            OR kv.key ~* '(Volume|Volumen|Area|Ãrea|Length|Longitud)\\s*$')
                 """, params + [ext_id])

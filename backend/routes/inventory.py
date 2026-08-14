@@ -491,6 +491,34 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
                 names_by_id[oid] = oname
         
         import copy
+
+        def _aplanar(v):
+            """Un parametro tiene UN valor. Si APS devuelve varios, se elige.
+
+            Cuando la misma propiedad existe en la instancia y en el tipo, la API
+            de propiedades devuelve una LISTA, y esto la guardaba tal cual. En la
+            base acababa como el texto '["ACERO CORRUGADO", ""]' y todo el que
+            leyera ese campo veia una cadena con corchetes en vez del valor.
+
+            Medido el 13-ago-2026 sobre 2.399.600 valores del inventario real:
+            582.567 (24,3%) estaban guardados asi. De ellos, 131.180 llevaban
+            dato DENTRO -- material, autor, cliente, fecha de emision del
+            proyecto -- y se estaban perdiendo. Los otros 451.387 eran listas de
+            cadenas vacias, que es otra cosa: ahi el parametro simplemente no
+            esta relleno en el modelo, y aplanar lo deja en vacio, que es lo
+            honesto.
+
+            Se queda el PRIMER valor no vacio: en la practica es el de la
+            instancia, que manda sobre el del tipo.
+            """
+            if not isinstance(v, (list, tuple)):
+                return v
+            for x in v:
+                s = str(x).strip() if x is not None else ''
+                if s and s != 'None':
+                    return x
+            return ''
+
         def deep_merge(target, source):
             for k, v in source.items():
                 if isinstance(v, dict):
@@ -498,6 +526,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
                         target[k] = {}
                     deep_merge(target[k], v)
                 else:
+                    v = _aplanar(v)
                     val_src = str(v).strip() if v is not None else ''
                     if val_src != '' and val_src != 'None':
                         target[k] = copy.deepcopy(v)
