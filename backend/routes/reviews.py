@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
 from db import get_db_connection, log_activity
 import estados_ecd as ecd
+from perimetro_de_obra import guardia_de_obra
 
 reviews_bp = Blueprint('reviews', __name__)
 
@@ -111,6 +112,9 @@ def list_reviews():
 @reviews_bp.route('/api/reviews', methods=['POST'])
 def create_review():
     d = request.get_json() or {}
+    negativa = guardia_de_obra(d.get('model_urn'), 'crear una revision')
+    if negativa:
+        return negativa
     items, steps = d.get('items') or [], d.get('steps') or []
     if not d.get('model_urn') or not d.get('title') or not items or not steps:
         return jsonify({"success": False, "error": "Faltan model_urn/title/items/steps"}), 400

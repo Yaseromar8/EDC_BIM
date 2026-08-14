@@ -8,6 +8,7 @@ from werkzeug.utils import secure_filename
 from db import get_db_connection
 from gcs_manager import upload_file_to_gcs
 from perimetro_de_obra import guardia_de_recurso
+from perimetro_de_obra import guardia_de_obra
 
 pins_bp = Blueprint('pins', __name__)
 
@@ -142,6 +143,9 @@ def create_pin():
             data['name'] = pin_name
 
     project_id = data.get('projectId')
+    negativa = guardia_de_obra(project_id, 'crear un punto de control')
+    if negativa:
+        return negativa
     external_id = data.get('externalId') or data.get('external_id')  # ancla estable al elemento
 
     try:

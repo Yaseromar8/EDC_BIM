@@ -10,6 +10,7 @@ from flask import Blueprint, jsonify, request
 from db import get_db_connection, resolve_project_id
 import json
 import os
+from perimetro_de_obra import guardia_de_obra
 
 presupuesto_bp = Blueprint('presupuesto_bp', __name__)
 
@@ -96,6 +97,9 @@ def import_presupuesto_excel():
     """Importa el presupuesto desde un archivo Excel subido."""
     data = request.get_json() or {}
     model_urn = data.get('model_urn')
+    negativa = guardia_de_obra(model_urn, 'importar el presupuesto')
+    if negativa:
+        return negativa
     if not model_urn:
         return jsonify({"error": "model_urn es obligatorio"}), 400
     
@@ -127,6 +131,9 @@ def import_presupuesto_json():
     """Importa el presupuesto desde el JSON pre-generado."""
     data = request.get_json() or {}
     model_urn = data.get('model_urn')
+    negativa = guardia_de_obra(model_urn, 'importar el presupuesto')
+    if negativa:
+        return negativa
     if not model_urn:
         return jsonify({"error": "model_urn es obligatorio"}), 400
     

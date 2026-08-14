@@ -334,6 +334,11 @@ def add_model_route():
     config = get_project_config_internal()
 
     app_project_id = data.get('project') # "DRENAJE_URBANO" or "CANAL"
+    # El frente ("1_DRENAJE") resuelve a su obra por la convencion
+    # "<projects.id>_<FRENTE>", asi que el guardia lo entiende igual.
+    negativa = guardia_de_obra(app_project_id, 'vincular un modelo a la obra')
+    if negativa:
+        return negativa
     name = data.get('name')
     print(f"\n[DIAG-ADD] project={app_project_id}, name={name}, urn=...{str(data.get('urn',''))[-20:]}")
 
@@ -387,7 +392,10 @@ def update_model_link():
         return jsonify({'error': 'Missing URN'}), 400
     
     app_project_id = data.get('project')
-    
+    negativa = guardia_de_obra(app_project_id, 'cambiar el vinculo de un modelo')
+    if negativa:
+        return negativa
+
     config = get_project_config_internal()
     model = next((m for m in config.get('models', []) if m['urn'] == data['urn'] and m.get('appProjectId') == app_project_id), None)
     
@@ -558,6 +566,11 @@ def update_all_models():
     app_project_id = data.get('project')
     if not app_project_id:
         return jsonify({'error': 'Missing project'}), 400
+    # Este endpoint dispara extracciones contra la API de Autodesk para TODOS
+    # los modelos del frente: sin guardia, un ajeno consume creditos de la obra.
+    negativa = guardia_de_obra(app_project_id, 'actualizar todos los modelos del frente')
+    if negativa:
+        return negativa
 
     token, error = get_internal_token()
     if error or not token:
@@ -1105,6 +1118,9 @@ def purge_inventory_source():
         target = data.get('project')
         if not source_urn or not target:
             return jsonify({'error': 'Faltan source_urn o project'}), 400
+        negativa = guardia_de_obra(target, 'purgar el inventario de un modelo')
+        if negativa:
+            return negativa
 
         config = get_project_config_internal()
         linked = any(m.get('urn') == source_urn and m.get('appProjectId') == target
@@ -1134,6 +1150,9 @@ def remove_model_route():
     data = request.json
     urn = data.get('urn')
     app_project_id = data.get('project')
+    negativa = guardia_de_obra(app_project_id, 'desvincular un modelo de la obra')
+    if negativa:
+        return negativa
     print(f"\n[DIAG-REMOVE] project={app_project_id}, urn=...{str(urn or '')[-20:]}")
 
     config = get_project_config_internal()
@@ -1199,6 +1218,9 @@ def relink_model_route():
 
     if not target_id or not new_data:
         return jsonify({"error": "Missing targetId or newModel data"}), 400
+    negativa = guardia_de_obra(app_project_id, 'reapuntar un modelo a otro archivo')
+    if negativa:
+        return negativa
 
     # SEGURIDAD TRANSACCIONAL (Fase 6): el relink apunta a OTRO archivo (otro base_urn),
     # así que la limpieza por linaje de la extracción no cubre la data vieja.

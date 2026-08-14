@@ -25,7 +25,12 @@ GUARDIAS = ('verify_project_access', 'check_folder_permission', '_hay_acceso', '
             '_require_admin', '_check_project_access', '_guardia_del_conjunto',
             '_guardia_del_nodo', '_acceso_al_recurso', 'acceso_por_obra_id',
             'get_effective_permission', 'requiere_rol', '_obra_del_conjunto', 'obra_del_blob',
-            'guardia_de_recurso', 'guardia_de_obra', '_filtro_de_obra', '_is_admin')
+            'guardia_de_recurso', 'guardia_de_obra', '_filtro_de_obra', '_is_admin',
+            # LOB 4D tiene la suya propia desde antes, y funciona: comprueba
+            # project_users y levanta PermissionError, que los manejadores
+            # convierten en 403. No reconocerla inflaba la cuenta de deuda con
+            # nueve endpoints que SI estaban protegidos.
+            '_assert_project_access')
 
 CLAVES = ('model_urn', 'project_id', 'projectId', 'scope_urn', 'base_project_id',
           'project', 'urn')
@@ -65,7 +70,7 @@ def _sin_guardia():
 
 
 # Cifra medida hoy, DESPUES de la primera tanda de guardias. Solo puede bajar.
-TOPE = 32
+TOPE = 17
 
 
 def test_la_defensa_en_profundidad_no_retrocede():

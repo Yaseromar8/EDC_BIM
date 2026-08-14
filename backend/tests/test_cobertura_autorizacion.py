@@ -43,7 +43,8 @@ GUARDIAS = ('verify_project_access', 'check_folder_permission', '_hay_acceso', '
             '_require_admin', '_check_project_access', '_guardia_del_conjunto',
             '_guardia_del_nodo', '_acceso_al_recurso', 'acceso_por_obra_id',
             'get_effective_permission', 'requiere_rol', '_obra_del_conjunto', 'obra_del_blob',
-            'guardia_de_recurso', '_filtro_de_obra', '_is_admin')
+            'guardia_de_recurso', 'guardia_de_obra', '_filtro_de_obra', '_is_admin',
+            '_assert_project_access')
 
 # Tablas cuyo contenido pertenece a UNA obra. Medidas contra el esquema real:
 # son las que tienen model_urn, project_id, scope_urn o app_project_id.
@@ -69,6 +70,11 @@ PARAM = re.compile(r'<(?:\w+:)?(\w+)>')
 # su motivo. Esta lista solo puede ENCOGER: si crece, es que se ha anadido un
 # endpoint sin decidir como se protege.
 SIN_CUBRIR = {
+    # Las cuatro rutas de 4D LOB lineal que figuraban aqui como PENDIENTE
+    # llevaban guardia desde el principio: _assert_project_access, que comprueba
+    # project_users y responde 403. No estaba en la lista GUARDIAS, asi que el
+    # detector las contaba como deuda. La deuda era del detector.
+
     # No manejan datos de obra: el detector las marca por consultar users/projects.
     ('routes/auth.py', '/api/auth/google'): 'ruta de autenticacion, no toca datos de obra',
     ('routes/auth.py', '/api/auth/forgot-password'): 'ruta de autenticacion, no toca datos de obra',
@@ -91,10 +97,6 @@ SIN_CUBRIR = {
     ('routes/compare.py', '/api/compare/metrados'): 'PENDIENTE: comparacion de metrados',
     ('routes/digital_twin.py', '/api/modelos/firmar-subida'): 'exige rol admin dentro de la vista; traducir cuesta creditos de Autodesk',
     ('routes/element_docs.py', '/api/element-docs'): 'PENDIENTE: acotar por la obra del elemento',
-    ('routes/lob4d_linear.py', '/api/lob/linear/state'): 'PENDIENTE: 4D LOB lineal',
-    ('routes/lob4d_linear.py', '/api/lob/linear/bootstrap'): 'PENDIENTE: 4D LOB lineal',
-    ('routes/lob4d_linear.py', '/api/lob/linear/scenarios'): 'PENDIENTE: 4D LOB lineal',
-    ('routes/lob4d_linear.py', '/api/lob/linear/progress'): 'PENDIENTE: 4D LOB lineal',
     ('routes/pdf_tools.py', '/api/pdf/markups'): 'PENDIENTE: marcas sobre PDF',
     ('routes/uploads.py', '/api/uploads/<upload_id>'): 'PENDIENTE: acotar por la obra de la subida',
     ('routes/uploads.py', '/api/uploads/progress'): 'PENDIENTE: acotar por la obra de la subida',
