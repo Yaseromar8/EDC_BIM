@@ -70,7 +70,7 @@ def _sin_guardia():
 
 
 # Cifra medida hoy, DESPUES de la primera tanda de guardias. Solo puede bajar.
-TOPE = 17
+TOPE = 11
 
 
 def test_la_defensa_en_profundidad_no_retrocede():

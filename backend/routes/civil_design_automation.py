@@ -4,6 +4,7 @@ import time
 import uuid
 import requests
 from flask import Blueprint, request, jsonify, send_file, Response
+from perimetro_de_obra import guardia_de_obra
 
 civil_da_bp = Blueprint('civil_da_bp', __name__)
 
@@ -718,6 +719,12 @@ def civil_sections():
         urn = payload.get('urn')
         data = payload.get('data')
         scope_urn = _civil_scope_from_payload(payload)
+        # Los ejes y las secciones son la geometria con la que despues se
+        # replantea en campo. Reemplazarlos en la obra de otro no es un dato mas.
+        if scope_urn and scope_urn != 'global':
+            negativa = guardia_de_obra(scope_urn, 'guardar geometria de Civil 3D')
+            if negativa:
+                return negativa
         if not urn or data is None:
             return jsonify({'error': 'Faltan urn o data'}), 400
         # Contrato canónico: clasificar cada shape UNA vez al guardar
@@ -811,6 +818,12 @@ def civil_alignments():
         urn = payload.get('urn')
         data = payload.get('data')
         scope_urn = _civil_scope_from_payload(payload)
+        # Los ejes y las secciones son la geometria con la que despues se
+        # replantea en campo. Reemplazarlos en la obra de otro no es un dato mas.
+        if scope_urn and scope_urn != 'global':
+            negativa = guardia_de_obra(scope_urn, 'guardar geometria de Civil 3D')
+            if negativa:
+                return negativa
         if not urn or data is None:
             return jsonify({'error': 'Faltan urn o data'}), 400
         with get_db_connection() as conn:

@@ -49,6 +49,9 @@ RECURSOS = {
     'doc_reviews':       ('id', 'model_urn'),
     'transmittals':      ('id', 'model_urn'),
     'doc_sets':          ('id', 'model_urn'),
+    # El documento en si. Comprobar contra el NODO es mas fuerte que fiarse del
+    # model_urn que manda el cliente: el nodo dice de que obra es de verdad.
+    'file_nodes':        ('id', 'model_urn'),
 }
 
 

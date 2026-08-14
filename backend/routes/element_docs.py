@@ -8,7 +8,7 @@ from esquema_congelado import solo_con_ddl
 import traceback
 from flask import Blueprint, request, jsonify, g
 from db import get_db_connection
-from perimetro_de_obra import guardia_de_recurso
+from perimetro_de_obra import guardia_de_recurso, guardia_de_obra
 
 element_docs_bp = Blueprint('element_docs', __name__)
 
@@ -60,6 +60,9 @@ def add_element_doc():
     d = request.get_json() or {}
     if not d.get('external_id') or not d.get('url'):
         return jsonify({"success": False, "error": "Faltan external_id/url"}), 400
+    negativa = guardia_de_obra(d.get('model_urn'), 'vincular un documento a un elemento')
+    if negativa:
+        return negativa
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()

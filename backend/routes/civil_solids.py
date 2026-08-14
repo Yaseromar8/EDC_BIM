@@ -31,6 +31,7 @@ from routes.civil_ghost import (
     _normalize_stations, _normalize_alignments, _axis_polyline, _align_id,
     _frame_at, _material_key, _pretty_label, _build_kind_mesh, KIND_PATTERNS,
 )
+from perimetro_de_obra import guardia_de_obra
 
 civil_solids_bp = Blueprint('civil_solids_bp', __name__)
 
@@ -156,6 +157,12 @@ def civil_surfaces():
         scope_urn = payload.get('scope_urn') or payload.get('model_urn') or 'global'
         if not urn or data is None:
             return jsonify({'error': 'Faltan urn o data'}), 400
+        # Las superficies alimentan los volumenes de corte y relleno. Quien las
+        # reemplaza cambia el movimiento de tierras que se valoriza.
+        if scope_urn and scope_urn != 'global':
+            negativa = guardia_de_obra(scope_urn, 'guardar las superficies del frente')
+            if negativa:
+                return negativa
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("""

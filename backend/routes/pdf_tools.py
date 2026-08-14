@@ -82,6 +82,11 @@ def create_markup():
     required = ('node_id', 'model_urn', 'page', 'kind', 'geometry')
     if any(k not in d for k in required):
         return jsonify({"success": False, "error": f"Faltan campos {required}"}), 400
+    # Se comprueba contra el NODO del documento, no contra el model_urn del
+    # cuerpo: el model_urn lo elige quien llama, el nodo dice de que obra es.
+    negativa = guardia_de_recurso('file_nodes', d['node_id'])
+    if negativa:
+        return negativa
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -143,6 +148,11 @@ def set_calibration():
     d = request.get_json() or {}
     if any(k not in d for k in ('node_id', 'page', 'units_per_pdf')):
         return jsonify({"success": False, "error": "Faltan node_id/page/units_per_pdf"}), 400
+    # La calibracion decide a cuantos metros equivale un pixel del plano: con
+    # ella se miden longitudes. No puede ajustarla quien no es de la obra.
+    negativa = guardia_de_recurso('file_nodes', d['node_id'])
+    if negativa:
+        return negativa
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
