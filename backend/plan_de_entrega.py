@@ -35,16 +35,31 @@ from esquema_congelado import solo_con_ddl
 # Estados derivados. NO se guardan: se calculan al leer, porque dependen de la
 # fecha de hoy y del estado del documento vinculado. Un estado guardado se
 # queda viejo en cuanto pasa la medianoche y nadie lo recalcula.
-COMPROMETIDO = 'comprometido'   # en el plan, sin documento todavía
+COMPROMETIDO = 'comprometido'   # en el plan, sin cotejar, y el plazo no ha llegado
 VINCULADO = 'vinculado'         # tiene documento, aún no publicado
 ENTREGADO = 'entregado'         # documento publicado
-VENCIDO = 'vencido'             # pasó la fecha y no hay documento
+VENCIDO = 'vencido'             # el PLAZO se cumplió y sigue sin cotejar
 
+# El matiz de VENCIDO no es cosmético, y la primera versión lo tenía mal.
+#
+# Que un compromiso no tenga documento vinculado en el ECD NO significa que no
+# se haya entregado: significa que el ECD no lo sabe. Vincular es un trabajo
+# manual que puede no haberse hecho todavía -- de hecho, al importar un plan por
+# primera vez no se ha hecho para NINGUNA fila. Con el texto anterior
+# ("Vencido / vencidos sin entregar") la pantalla afirmaba que la obra había
+# incumplido 1.108 entregas cuando lo único cierto era que nadie había cotejado
+# aún. Eso es una acusación, y encima falsa, en una pantalla que se lleva a una
+# reunión con el cliente.
+#
+# Lo único que el sistema sabe con certeza es el CALENDARIO. Por eso el estado
+# se llama "plazo vencido" y no "no entregado", y por eso resumen() publica
+# aparte cuántos compromisos están cotejados: sin cotejo, el porcentaje de
+# entrega no mide la obra, mide nuestro propio trabajo de vinculación.
 ETIQUETAS = {
     COMPROMETIDO: 'Comprometido',
     VINCULADO: 'Vinculado',
     ENTREGADO: 'Entregado',
-    VENCIDO: 'Vencido',
+    VENCIDO: 'Plazo vencido',
 }
 
 
@@ -172,6 +187,8 @@ def _estado_de(fecha_comprometida, file_node_id, estado_doc, hoy=None):
         # 'PUBLISHED' es lo unico que cuenta como entregado de verdad: un
         # documento compartido todavia esta en revision.
         return ENTREGADO if (estado_doc or '').upper() == 'PUBLISHED' else VINCULADO
+    # Sin documento vinculado no se puede afirmar nada sobre la entrega: solo
+    # sobre el plazo, que es lo que dice el calendario.
     hoy = hoy or datetime.date.today()
     if fecha_comprometida and fecha_comprometida < hoy:
         return VENCIDO
@@ -247,12 +264,19 @@ def resumen(cursor, model_urn, tipo=None, hoy=None):
     for f in filas:
         cuenta[f['estado']] += 1
     total = len(filas)
+    # Cotejados = los que tienen documento atado. Es la cifra que dice si el
+    # resto de números significan algo: con 0 cotejados, "0% entregado" habla de
+    # nuestro trabajo de vinculación, no de lo que la obra entregó.
+    cotejados = cuenta[VINCULADO] + cuenta[ENTREGADO]
     return {
         'total': total,
         'por_estado': cuenta,
         'entregados': cuenta[ENTREGADO],
         'porcentaje_entregado': round(100.0 * cuenta[ENTREGADO] / total, 1) if total else 0.0,
         'vencidos': cuenta[VENCIDO],
+        'cotejados': cotejados,
+        'sin_cotejar': total - cotejados,
+        'plan_sin_cotejar': cotejados == 0 and total > 0,
     }
 
 

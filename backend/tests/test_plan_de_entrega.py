@@ -75,10 +75,43 @@ def test_sin_documento_y_con_fecha_futura_esta_comprometido():
     assert plan.listar(cur, 'obra/X', hoy=HOY)[0]['estado'] == plan.COMPROMETIDO
 
 
-def test_sin_documento_y_con_la_fecha_pasada_esta_vencido():
+def test_sin_documento_y_con_la_fecha_pasada_el_PLAZO_esta_vencido():
     """Es la fila que hay que llevar a la reunion."""
     cur = CursorFalso([_fila(fecha=AYER)])
     assert plan.listar(cur, 'obra/X', hoy=HOY)[0]['estado'] == plan.VENCIDO
+
+
+def test_el_plazo_vencido_NO_se_puede_llamar_no_entregado():
+    """La primera version escribia "Vencido" y "vencidos sin entregar", y con eso
+    la pantalla acusaba a la obra de haber incumplido 1.108 entregas cuando lo
+    unico cierto era que nadie habia cotejado todavia. Falta de documento
+    vinculado != falta de entrega. Lo unico que consta es el calendario."""
+    assert plan.ETIQUETAS[plan.VENCIDO] == 'Plazo vencido'
+    for etiqueta in plan.ETIQUETAS.values():
+        assert 'entrega' not in etiqueta.lower() or etiqueta == 'Entregado', (
+            'una etiqueta de estado no puede afirmar nada sobre la entrega sin '
+            'documento que lo respalde')
+
+
+def test_un_plan_recien_importado_se_declara_sin_cotejar():
+    """Con cero vinculos, el porcentaje de entrega no mide la obra: mide nuestro
+    propio trabajo de vinculacion. La pantalla tiene que poder decirlo."""
+    r = plan.resumen(CursorFalso([_fila(id=1, fecha=AYER), _fila(id=2, fecha=AYER)]),
+                     'obra/X', hoy=HOY)
+    assert r['plan_sin_cotejar'] is True
+    assert r['cotejados'] == 0 and r['sin_cotejar'] == 2
+
+    # En cuanto hay UN cotejo, las cifras vuelven a hablar de la obra.
+    r = plan.resumen(CursorFalso([_fila(id=1, fecha=AYER),
+                                  _fila(id=2, node_id='a', doc_estado='PUBLISHED')]),
+                     'obra/X', hoy=HOY)
+    assert r['plan_sin_cotejar'] is False
+    assert r['cotejados'] == 1
+
+
+def test_un_plan_vacio_no_se_declara_sin_cotejar():
+    """Sin filas no hay nada que cotejar: el aviso sobraria."""
+    assert plan.resumen(CursorFalso([]), 'obra/X')['plan_sin_cotejar'] is False
 
 
 def test_con_documento_compartido_esta_vinculado_pero_NO_entregado():

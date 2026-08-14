@@ -138,15 +138,35 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
       {r && (
         <div style={{ display: 'flex', gap: 10, margin: '18px 0 6px', flexWrap: 'wrap' }}>
           <Cifra n={r.total} texto="comprometidos en el plan" />
+          <Cifra n={r.cotejados ?? 0} texto="cotejados con un documento" />
           <Cifra n={r.entregados} texto="entregados y publicados" color="var(--success)" />
-          <Cifra n={`${r.porcentaje_entregado}%`} texto="del plan entregado" />
-          <Cifra n={r.vencidos} texto="vencidos sin entregar" color="var(--danger)" resaltado={r.vencidos > 0} />
+          <Cifra n={r.vencidos} texto="con el plazo cumplido" color="var(--danger)"
+                 resaltado={r.vencidos > 0 && !r.plan_sin_cotejar} />
         </div>
       )}
 
       {/* Vacio y error NO son lo mismo. Enseñar "no hay plan cargado" cuando lo
           que pasa es "no pude leerlo" manda a buscar donde no es -- el mismo
           defecto que el "no hay documentos" del explorador. */}
+      {/* Sin un solo documento cotejado, estas cifras hablan de NUESTRO trabajo de
+          vinculacion, no de lo que la obra entrego. Decirlo en la propia pantalla
+          es lo que impide que se lea al reves en una reunion con el cliente. */}
+      {r?.plan_sin_cotejar && (
+        <div style={{
+          margin: '10px 0 4px', padding: '11px 14px', borderRadius: 9,
+          background: 'var(--bg-warning)', border: '1px solid var(--border-warning)',
+        }}>
+          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--warning)', fontWeight: 600 }}>
+            Ningún compromiso está todavía cotejado con un documento del ECD.
+          </p>
+          <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            «Plazo cumplido» quiere decir que la fecha pasó, <strong>no</strong> que no se
+            haya entregado: eso el ECD todavía no lo sabe. El plan está cargado; el
+            cotejo con los documentos es el paso siguiente.
+          </p>
+        </div>
+      )}
+
       {datos?.error && (
         <div style={{
           marginTop: 20, padding: '14px 16px', borderRadius: 10,
