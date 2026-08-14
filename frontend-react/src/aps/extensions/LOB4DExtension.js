@@ -1,3 +1,24 @@
+// Valores que significan EJECUTADO.
+//
+// Los parametros Si/No de Revit se exportan en el idioma de la plantilla, y el
+// inventario real de esta obra trae 'Yes' y 'No' en INGLES. La comprobacion
+// anterior era ['1','si','sí','true','x'] -- sin 'yes' -- asi que 6.195
+// elementos marcados como ejecutados contaban como NO hechos, y la capa
+// Ejecucion mostraba 0% en TODAS las zonas.
+//
+// Medido el 13-ago-2026 sobre los 14.229 elementos que tienen el parametro:
+//     'no' 8.034     'yes' 6.195     (ningun otro valor)
+// Con el arreglo:  CNL_SANTA RITA 92,9% · DSP_SANTA RITA 87,4% · CNL_POLITECNICO 19,7%
+//
+// Se enumera lo que SI cuenta en vez de descartar lo que no: un valor
+// inesperado tiene que salir como "no ejecutado", nunca como ejecutado. Un
+// avance inflado acaba en una valorizacion equivocada.
+const EJECUTADO_SI = new Set([
+    '1', 'x',
+    'si', 'sí', 'yes', 'y', 'true', 'verdadero',
+    'ejecutado', 'hecho', 'done', 'completado',
+]);
+
 export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
     constructor(viewer, options) {
         super(viewer, options);
@@ -2031,7 +2052,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             g.total += 1;
 
             const ejecRaw = kEjec ? norm(row[kEjec]).toLowerCase() : '';
-            const isDone = ejecRaw === '1' || ejecRaw === 'si' || ejecRaw === 'sí' || ejecRaw === 'true' || ejecRaw === 'x';
+            const isDone = EJECUTADO_SI.has(ejecRaw);
             if (isDone) g.done += 1;
 
             // Resolver dbId del visor AQUÍ (una sola vez por elemento), en
