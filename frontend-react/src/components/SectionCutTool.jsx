@@ -38,6 +38,33 @@ const getFaceHit = (viewer, clientX, clientY) => {
   } catch { return null; }
 };
 
+// Radio en unidades del modelo para que algo se vea de `px` pixeles en pantalla
+// a la distancia a la que esta la camara ahora mismo.
+//
+// Es la unica forma de que un marcador funcione igual en un buzon de 60 cm y en
+// un canal de 2 km: lo que importa es lo que ve el ojo, no las unidades del
+// modelo.
+const radioEnPantalla = (viewer, point, px = 26) => {
+  const POR_DEFECTO = 0.25;
+  try {
+    const cam = viewer.impl?.camera;
+    const alto = viewer.impl?.canvas?.clientHeight || viewer.container?.clientHeight;
+    if (!cam || !alto) return POR_DEFECTO;
+    const dist = cam.position.distanceTo(point);
+    if (!isFinite(dist) || dist <= 0) return POR_DEFECTO;
+    if (cam.isPerspective !== false && cam.fov) {
+      // Altura del plano visible a esa distancia, repartida entre los pixeles.
+      const alturaMundo = 2 * dist * Math.tan((cam.fov * Math.PI / 180) / 2);
+      return Math.max(alturaMundo * (px / alto), 1e-4);
+    }
+    // Camara ortografica: el tamano no depende de la distancia.
+    const alturaMundo = Math.abs((cam.top ?? 1) - (cam.bottom ?? -1)) / (cam.zoom || 1);
+    return Math.max(alturaMundo * (px / alto), 1e-4);
+  } catch {
+    return POR_DEFECTO;
+  }
+};
+
 // Marca visual de la cara tocada: disco orientado por la normal. Confirma
 // DÓNDE se va a apoyar el plano antes de cortar.
 const showPickMarker = (viewer, point, normal) => {
@@ -47,12 +74,14 @@ const showPickMarker = (viewer, point, normal) => {
     if (!viewer.impl.overlayScenes || !viewer.impl.overlayScenes[PICK_OVERLAY]) {
       viewer.impl.createOverlayScene(PICK_OVERLAY);
     }
-    let span = 100;
-    try {
-      const bb = viewer.model.getBoundingBox();
-      span = Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z) || 100;
-    } catch { /* tamaño por defecto */ }
-    const r = Math.max(span * 0.004, 0.08);
+    // El radio se calcula para que el disco se vea SIEMPRE del mismo tamaño en
+    // pantalla (~26 px), no en proporcion al modelo.
+    //
+    // Antes salia de la caja del modelo completo: r = span * 0.004. En una obra
+    // lineal de kilometros -- o con un solo elemento perdido lejos, que estira
+    // la caja -- ese 0,4% son METROS de radio, y el marcador acababa tapando
+    // media pantalla en vez de senalar la cara tocada.
+    const r = radioEnPantalla(viewer, point, 26);
     const mesh = new THREE.Mesh(
       new THREE.CircleGeometry(r, 28),
       new THREE.MeshBasicMaterial({
@@ -67,11 +96,21 @@ const showPickMarker = (viewer, point, normal) => {
     }
     viewer.impl.addOverlay(PICK_OVERLAY, mesh);
     viewer.impl.invalidate(false, false, true);
+
+    // El marcador confirma DONDE se va a apoyar el plano; una vez visto, sobra.
+    // Antes se quedaba en pantalla hasta salir del modo corte, encima de todo
+    // (depthTest desactivado), y acababa estorbando justo lo que se queria
+    // mirar. Se retira solo.
+    try {
+      clearTimeout(viewer.__pickMarkerTimer);
+      viewer.__pickMarkerTimer = setTimeout(() => clearPickMarker(viewer), 1400);
+    } catch { /* sin temporizador: se ira al salir del modo */ }
   } catch { /* sin overlay: la herramienta sigue funcionando */ }
 };
 
 const clearPickMarker = (viewer) => {
   try {
+    clearTimeout(viewer?.__pickMarkerTimer);
     if (viewer?.impl?.overlayScenes && viewer.impl.overlayScenes[PICK_OVERLAY]) {
       viewer.impl.clearOverlay(PICK_OVERLAY);
       viewer.impl.invalidate(false, false, true);
