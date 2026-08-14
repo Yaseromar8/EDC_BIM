@@ -18,11 +18,14 @@ import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 
+// Los colores salen del sistema del portal, que ya tiene el contraste medido.
+// Inventarlos a mano fue el error de la primera version: quedaron pensados para
+// tema oscuro sobre un portal claro, y la tabla no se leia.
 const COLOR = {
-  comprometido: { fondo: 'rgba(120,140,175,0.14)', borde: 'rgba(120,140,175,0.4)', texto: '#a8b4c8' },
-  vinculado:    { fondo: 'rgba(245,165,36,0.12)',  borde: 'rgba(245,165,36,0.4)',  texto: '#f5a524' },
-  entregado:    { fondo: 'rgba(46,160,67,0.14)',   borde: 'rgba(46,160,67,0.45)',  texto: '#3fb950' },
-  vencido:      { fondo: 'rgba(255,107,107,0.14)', borde: 'rgba(255,107,107,0.45)', texto: '#ff8585' },
+  comprometido: { fondo: 'var(--neutral-100)', borde: 'var(--border)',         texto: 'var(--text-secondary)' },
+  vinculado:    { fondo: 'var(--bg-warning)',  borde: 'var(--border-warning)', texto: 'var(--warning)' },
+  entregado:    { fondo: 'var(--bg-success)',  borde: 'var(--border-success)', texto: 'var(--success)' },
+  vencido:      { fondo: 'var(--bg-danger)',   borde: 'var(--border-danger)',  texto: 'var(--danger)' },
 };
 
 function Chip({ estado, etiqueta }) {
@@ -40,11 +43,11 @@ function Cifra({ n, texto, color, resaltado }) {
   return (
     <div style={{
       flex: '1 1 130px', padding: '13px 15px', borderRadius: 10,
-      background: resaltado ? 'rgba(255,107,107,0.08)' : 'rgba(255,255,255,0.03)',
-      border: `1px solid ${resaltado ? 'rgba(255,107,107,0.35)' : 'rgba(255,255,255,0.08)'}`,
+      background: resaltado ? 'var(--bg-danger)' : 'var(--bg-secondary)',
+      border: `1px solid ${resaltado ? 'var(--border-danger)' : 'var(--border)'}`,
     }}>
-      <div style={{ fontSize: 26, fontWeight: 700, color: color || '#e9ecf1', lineHeight: 1.1 }}>{n}</div>
-      <div style={{ fontSize: 11.5, color: '#8b94a1', marginTop: 3 }}>{texto}</div>
+      <div style={{ fontSize: 26, fontWeight: 700, color: color || 'var(--text-primary)', lineHeight: 1.1 }}>{n}</div>
+      <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 3 }}>{texto}</div>
     </div>
   );
 }
@@ -102,11 +105,11 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
   const r = datos?.resumen;
 
   return (
-    <div style={{ padding: '18px 22px', color: '#e9ecf1', overflow: 'auto', height: '100%' }}>
+    <div style={{ padding: '18px 22px', color: 'var(--text-primary)', overflow: 'auto', height: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 16 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>Plan de entrega de información</h2>
-          <p style={{ margin: '4px 0 0', fontSize: 12.5, color: '#8b94a1', maxWidth: 640 }}>
+          <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--text-secondary)', maxWidth: 640 }}>
             Lo que la obra se comprometió a entregar (MIDP/TIDP), y qué parte está
             entregada de verdad en el ECD. Un compromiso existe aunque todavía no
             exista el documento.
@@ -120,7 +123,8 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
               <button key={t} disabled={subiendo}
                       onClick={() => { if (ficheroRef.current) { ficheroRef.current.dataset.tipo = t; ficheroRef.current.click(); } }}
                       style={{
-                        background: 'var(--accent)', border: 'none', borderRadius: 7, color: '#fff',
+                        background: 'var(--accent)', border: 'none', borderRadius: 7,
+                        color: 'var(--text-on-accent)',
                         padding: '8px 14px', fontSize: 12.5, fontWeight: 600,
                         cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1,
                       }}>
@@ -134,21 +138,39 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
       {r && (
         <div style={{ display: 'flex', gap: 10, margin: '18px 0 6px', flexWrap: 'wrap' }}>
           <Cifra n={r.total} texto="comprometidos en el plan" />
-          <Cifra n={r.entregados} texto="entregados y publicados" color="#3fb950" />
+          <Cifra n={r.entregados} texto="entregados y publicados" color="var(--success)" />
           <Cifra n={`${r.porcentaje_entregado}%`} texto="del plan entregado" />
-          <Cifra n={r.vencidos} texto="vencidos sin entregar" color="#ff8585" resaltado={r.vencidos > 0} />
+          <Cifra n={r.vencidos} texto="vencidos sin entregar" color="var(--danger)" resaltado={r.vencidos > 0} />
         </div>
       )}
 
-      {datos && !datos.plan.length && (
+      {/* Vacio y error NO son lo mismo. Enseñar "no hay plan cargado" cuando lo
+          que pasa es "no pude leerlo" manda a buscar donde no es -- el mismo
+          defecto que el "no hay documentos" del explorador. */}
+      {datos?.error && (
+        <div style={{
+          marginTop: 20, padding: '14px 16px', borderRadius: 10,
+          background: 'var(--bg-danger)', border: '1px solid var(--border-danger)',
+        }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--danger)', fontWeight: 600 }}>
+            {datos.error}
+          </p>
+          <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+            El plan puede estar cargado: lo que ha fallado es leerlo. Si acabas de
+            actualizar el servidor, reinícialo y vuelve a probar.
+          </p>
+        </div>
+      )}
+
+      {datos && !datos.error && !datos.plan.length && (
         <div style={{
           marginTop: 20, padding: 20, borderRadius: 10, textAlign: 'center',
-          background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.12)',
+          background: 'var(--bg-secondary)', border: '1px dashed var(--border-strong)',
         }}>
-          <p style={{ margin: 0, fontSize: 13.5, color: '#cfd6e0' }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-primary)' }}>
             Esta obra todavía no tiene plan de entrega cargado.
           </p>
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: '#79818d' }}>
+          <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
             {isAdmin ? 'Importa el Excel del MIDP o del TIDP con el botón de arriba.'
                      : 'Pide al administrador de la obra que importe el MIDP.'}
           </p>
@@ -161,48 +183,50 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
             <input value={filtro} onChange={e => setFiltro(e.target.value)}
                    placeholder="Buscar por código, título, disciplina o responsable…"
                    style={{
-                     flex: '1 1 280px', background: '#0b0d10', color: '#e9ecf1',
-                     border: '1px solid rgba(255,255,255,0.14)', borderRadius: 7,
+                     flex: '1 1 280px', background: 'var(--bg-primary)',
+                     color: 'var(--text-primary)',
+                     border: '1px solid var(--border)', borderRadius: 7,
                      padding: '8px 11px', fontSize: 13,
                    }} />
             <select value={tipo} onChange={e => setTipo(e.target.value)}
                     style={{
-                      background: '#0b0d10', color: '#e9ecf1', fontSize: 13,
-                      border: '1px solid rgba(255,255,255,0.14)', borderRadius: 7, padding: '8px 10px',
+                      background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 13,
+                      border: '1px solid var(--border)', borderRadius: 7, padding: '8px 10px',
                     }}>
               <option value="">MIDP y TIDP</option>
               <option value="MIDP">Solo MIDP</option>
               <option value="TIDP">Solo TIDP</option>
             </select>
-            <label style={{ fontSize: 12.5, color: '#cfd6e0', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <label style={{ fontSize: 12.5, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
               <input type="checkbox" checked={soloPendientes}
                      onChange={e => setSoloPendientes(e.target.checked)} />
               Solo lo que falta
             </label>
-            <span style={{ fontSize: 12, color: '#79818d', marginLeft: 'auto' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>
               {filas.length} de {datos.plan.length}
             </span>
           </div>
 
-          <div style={{ overflowX: 'auto', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 9 }}>
+          <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 9 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 860 }}>
               <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.04)', textAlign: 'left' }}>
+                <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left' }}>
                   {['Código', 'Título', 'Disc.', 'Idoneidad', 'Rev.', 'Compromiso',
                     'Estado', 'Documento', 'Cumple'].map(h => (
-                    <th key={h} style={{ padding: '9px 11px', fontWeight: 600, color: '#a8b4c8',
-                                         borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    <th key={h} style={{ padding: '9px 11px', fontWeight: 600,
+                                         color: 'var(--text-secondary)',
+                                         borderBottom: '1px solid var(--border)',
                                          whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filas.map(f => (
-                  <tr key={f.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <tr key={f.id} style={{ borderBottom: '1px solid var(--divider)' }}>
                     <td style={{ padding: '8px 11px', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                       {f.identificador}
                       {f.tipo === 'TIDP' && (
-                        <span style={{ marginLeft: 6, fontSize: 10, color: '#79818d' }}>TIDP</span>
+                        <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text-muted)' }}>TIDP</span>
                       )}
                     </td>
                     <td style={{ padding: '8px 11px', maxWidth: 300 }}>{f.titulo || '—'}</td>
@@ -215,14 +239,15 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
                     <td style={{ padding: '8px 11px' }}>
                       <Chip estado={f.estado} etiqueta={f.estado_etiqueta} />
                     </td>
-                    <td style={{ padding: '8px 11px', color: f.documento ? '#cfd6e0' : '#5a626e' }}>
+                    <td style={{ padding: '8px 11px',
+                                 color: f.documento ? 'var(--text-primary)' : 'var(--text-muted)' }}>
                       {f.documento ? f.documento.nombre : 'sin vincular'}
                     </td>
                     <td style={{ padding: '8px 11px', textAlign: 'center' }}>
                       {f.cumple_idoneidad === null ? '—'
                         : f.cumple_idoneidad
-                          ? <span style={{ color: '#3fb950' }}>sí</span>
-                          : <span style={{ color: '#ff8585' }}
+                          ? <span style={{ color: 'var(--success)', fontWeight: 600 }}>sí</span>
+                          : <span style={{ color: 'var(--danger)', fontWeight: 600 }}
                                   title={`Se comprometió ${f.idoneidad_prevista} y se entregó ${f.documento?.idoneidad || '—'}`}>
                               no
                             </span>}
@@ -235,9 +260,6 @@ export function PlanEntregaView({ projectPrefix, isAdmin }) {
         </>
       )}
 
-      {datos?.error && (
-        <p style={{ marginTop: 14, fontSize: 12.5, color: '#ff8585' }}>{datos.error}</p>
-      )}
     </div>
   );
 }
