@@ -819,8 +819,10 @@ from routes.pdf_tools import pdf_tools_bp, ensure_pdf_tools_tables
 app.register_blueprint(pdf_tools_bp)
 from routes.reviews import reviews_bp, ensure_reviews_table
 app.register_blueprint(reviews_bp)
+from routes.plan_entregas import plan_bp
 from routes.transmittals import transmittals_bp, ensure_transmittals_table
 app.register_blueprint(transmittals_bp)
+app.register_blueprint(plan_bp)
 from routes.attributes import attributes_bp, ensure_attributes_tables
 app.register_blueprint(attributes_bp)
 from routes.sets import sets_bp, ensure_sets_tables

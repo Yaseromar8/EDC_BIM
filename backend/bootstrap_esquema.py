@@ -116,6 +116,7 @@ def _rutinas():
         ('sensibilidad', _tablas_sensibilidad),
         ('idoneidad', _tabla_idoneidad),
         ('segundo_factor', _columnas_segundo_factor),
+        ('plan_de_entrega', _tabla_plan_de_entrega),
         # ── AL FINAL: columnas sueltas que necesitan sus tablas creadas ──
         ('columnas_pendientes', ensure_columnas_pendientes),
     ]
@@ -142,6 +143,14 @@ def _tabla_idoneidad():
     from db import get_db_connection
     with get_db_connection() as conn:
         idoneidad.asegurar_tabla(conn.cursor())
+        conn.commit()
+
+
+def _tabla_plan_de_entrega():
+    import plan_de_entrega
+    from db import get_db_connection
+    with get_db_connection() as conn:
+        plan_de_entrega.asegurar_tablas(conn.cursor())
         conn.commit()
 
 
