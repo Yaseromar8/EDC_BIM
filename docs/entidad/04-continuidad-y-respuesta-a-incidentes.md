@@ -158,6 +158,30 @@ usuario o la Entidad. No hay alerta automatica.
 Entidad dentro de 1 hora, con: hora de inicio, alcance, si hay o no perdida de datos, y
 hora estimada de restablecimiento.
 
+**Sobre reconstruir el esquema (medido el 15-ago-2026).** Hasta esa fecha este plan daba
+por hecho que, con una copia de los datos, el esquema se podia levantar con
+`python bootstrap_esquema.py`. Se comprobo y **no era cierto**: una linea mal colocada
+—un `ALTER TABLE activity_log` cien lineas antes de que esa misma funcion creara
+`activity_log`— abortaba la construccion sobre una base vacia y dejaba sin crear el
+arbol documental entero: `file_nodes`, `file_versions`, `activity_log`,
+`document_shares`, `upload_sessions`, `app_tokens` y `project_settings`. Sobre una base
+que ya tiene datos no se nota, porque las tablas existen de antes; solo aparece cuando
+de verdad hace falta.
+
+Corregido y verificado: **38 de 38 rutinas, 87 tablas**. Evidencia en
+`evidencias/reconstruccion-20260815.txt`, con el metodo y sus limites escritos.
+
+Lo que esto **si** permite decir: el esquema se reconstruye. Lo que **no**:
+
+- no demuestra que una restauracion real funcione — eso exige una base vacia de verdad,
+  la identidad `ecd_migrator` y restaurar una copia. Sigue **[PENDIENTE]**, y es del
+  propietario de la cuenta;
+- no dice nada de las copias de Cloud SQL ni del versionado del bucket, que siguen sin
+  comprobar;
+- y sobre todo: **un esquema sin copia de los bytes no restaura un expediente**. Mientras
+  la seccion 4.3 siga diciendo que no existe copia de los objetos, esto solo adelanta una
+  parte del camino.
+
 ### 4.3 Falla B — Bucket de Google Cloud Storage inaccesible o perdido
 
 Este escenario tiene dos formas muy distintas y conviene no confundirlas.

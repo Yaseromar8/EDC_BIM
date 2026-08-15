@@ -144,6 +144,15 @@ falsos míos**. Lo que sigue es lo verificado y lo corregido en esta pasada.
 | **N52** | `indice_expediente` mandaba a una carpeta **que no existe** | **CERRADO** `dfe1fb0` | quitaba siempre el primer tramo de la ruta: un documento de «01. PLANOS/DRENAJE» salía listado en «DRENAJE». Es el documento que se entrega para que otro **encuentre** los ficheros |
 | **N53** | El catálogo de idoneidad se documentaba **editable** y no lo es | **MITIGADO** `dfe1fb0` | la tabla existe y se lee por obra; escribirla no se puede (ni función ni ruta, solo `GET`). Decirlo como si funcionara es peor que no tenerlo — misma familia que N51. Corregida la afirmación; **queda como deuda declarada** hasta que haya escritura y pantalla |
 
+### Áreas 14, 15 y 16 · 15-ago-2026
+
+| ID | Hallazgo | Estado | Evidencia |
+|---|---|---|---|
+| **N2** | El esquema **no se podía reconstruir desde cero** | **CERRADO** `0289af3` | `ensure_file_nodes_table` hacía `ALTER TABLE activity_log` cien líneas antes de crear esa tabla: sobre una base vacía abortaba y dejaba sin crear el árbol documental entero. Antes 33/37 rutinas y 13 tablas sin crear; ahora **38/38 y 87 tablas**. Manifiesto versionado + 4 pruebas de orden. `evidencias/reconstruccion-20260815.txt` |
+| **N54** | *(área 15)* El **GPS viajaba dentro** de cada foto de obra | **MITIGADO** `ff89f0d` | 6 de 6 muestreadas lo llevaban, y no lo usa nadie. Ahora se extrae a la base —donde el perímetro manda y donde sirve— y se quita del fichero que se reparte. Residual: **las fotos ya subidas siguen con su EXIF**; limpiarlas exige acceso al bucket (del propietario) |
+| **N55** | *(área 14)* `puede_salir_del_ecd` **no la llamaba nadie** | **CERRADO** `30a7173` | existía y estaba documentada como «la consulta única», y solo la invocaban sus pruebas. Tercera vez que aparece el patrón (tras el `@requiere_rol` y el modo estricto). Aplicada en enlaces públicos (estricta: sin triaje se deniega) y en transmittals (proporcionada: la clasificación manda cuando existe, para no parar las entregas) |
+| **N56** | *(área 16)* El plan de continuidad **daba por hecho** que el esquema se levantaba | **CERRADO** `0289af3` | no era cierto (N2). Corregido en `04-continuidad`, con lo que la verificación **no** demuestra: ni restauración real, ni copias de Cloud SQL, ni versionado del bucket. Un esquema sin copia de los bytes no restaura un expediente |
+
 ### Sigue abierto del área 13 y del flujo
 
 - El catálogo de idoneidad **no se puede editar** (N53): una obra cuyo BEP use otros
