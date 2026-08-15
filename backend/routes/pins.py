@@ -260,6 +260,17 @@ def upload_pin_attachment():
     pin_id = request.form.get('pinId')
     project_id = request.form.get('projectId', 'global')
 
+    # El fichero acaba en el prefijo de la obra que diga el formulario. Sanear
+    # el valor evita salirse del prefijo (N37) pero NO evita escribir dentro del
+    # prefijo de una obra ajena: para eso hay que comprobar la obra.
+    # 'global' es el adjunto sin obra y no se puede comprobar contra ninguna,
+    # asi que se le exige obra explicita.
+    if not project_id or project_id == 'global':
+        return jsonify({'error': 'Falta la obra a la que pertenece el adjunto.'}), 400
+    negativa = guardia_de_obra(project_id, 'adjuntar un fichero a una chincheta')
+    if negativa:
+        return negativa
+
     # Nada de esto se comprobaba: entraba cualquier fichero, de cualquier tamano
     # y de cualquier tipo, a un endpoint con sesion pero sin mas control.
     from file_validator import validate_file

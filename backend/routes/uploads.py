@@ -15,6 +15,7 @@ import os
 import uuid
 import time
 from flask import Blueprint, request, jsonify, g
+from perimetro_de_obra import guardia_de_recurso
 from werkzeug.utils import secure_filename
 
 uploads_bp = Blueprint('uploads', __name__)
@@ -199,6 +200,11 @@ def get_upload_status(upload_id):
     Returns the current state of an upload session.
     Queries GCS to determine how many bytes have been received.
     """
+    # Devuelve nombre de fichero, carpeta y ruta del objeto: conocer un id de
+    # sesion ajeno era ver que esta subiendo otra obra y donde lo deja.
+    negativa = guardia_de_recurso('upload_sessions', upload_id)
+    if negativa:
+        return negativa
     from db import get_db_connection
     try:
         with get_db_connection() as conn:
@@ -372,6 +378,11 @@ def complete_upload():
 @uploads_bp.route('/api/uploads/<upload_id>', methods=['DELETE'])
 def cancel_upload(upload_id):
     """Cancel an active upload session and clean up GCS partial blob."""
+    # Cancela y BORRA el objeto parcial del almacen. Con un id de sesion ajeno
+    # se tumbaba la subida de otra obra a media carga.
+    negativa = guardia_de_recurso('upload_sessions', upload_id)
+    if negativa:
+        return negativa
     from db import get_db_connection
     
     try:
@@ -472,6 +483,10 @@ def update_progress():
 
     if not upload_id:
         return jsonify({"success": False}), 400
+
+    negativa = guardia_de_recurso('upload_sessions', upload_id)
+    if negativa:
+        return negativa
 
     from db import get_db_connection
     try:

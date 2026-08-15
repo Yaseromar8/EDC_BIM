@@ -44,7 +44,10 @@ GUARDIAS = ('verify_project_access', 'check_folder_permission', '_hay_acceso', '
             '_guardia_del_nodo', '_acceso_al_recurso', 'acceso_por_obra_id',
             'get_effective_permission', 'requiere_rol', '_obra_del_conjunto', 'obra_del_blob',
             'guardia_de_recurso', 'guardia_de_obra', '_filtro_de_obra', '_is_admin',
-            '_assert_project_access')
+            '_assert_project_access',
+            # La guardia del DOCUMENTO, para los manejadores que reciben un
+            # fichero (id de nodo o ruta del objeto) en vez de una obra.
+            'guardia_del_documento')
 
 # Tablas cuyo contenido pertenece a UNA obra. Medidas contra el esquema real:
 # son las que tienen model_urn, project_id, scope_urn o app_project_id.
@@ -81,16 +84,14 @@ SIN_CUBRIR = {
     # Por diseno no pueden acotarse a UNA obra: son las que listan o dan acceso.
     ('routes/projects.py', '/api/projects'): 'LISTA obras; filtra por project_users y devuelve vacio al anonimo',
     ('routes/projects.py', '/api/hubs/<hub_id>/projects'): 'lista obras de un hub; mismo filtro por pertenencia',
-    ('routes/projects.py', '/api/projects/join'): 'canjea un codigo de invitacion; aun no hay obra',
+    ('routes/projects.py', '/api/projects/join'): 'canjea un codigo de invitacion; aun no hay obra. Protegida con limite de intentos y codigo de `secrets` de 8 caracteres',
     ('server.py', '/api/inventory/schema'): 'catalogo de campos, igual para todas las obras',
     ('routes/documents.py', '/api/docs/shared/<share_id>'): 'enlace compartido: el permiso lo da el propio share, no la pertenencia',
-    ('routes/ai.py', '/api/ai/warmup'): 'calienta el modelo, no lee datos',
     ('routes/pins.py', '/uploads/pins/<path:filename>'): 'exige sesion o permiso firmado del fichero, pero no acota por obra',
     # PENDIENTE: reciben un identificador cuya obra hay que deducir consultando
     # la base. Deuda declarada, no excusa.
-    ('routes/ai.py', '/api/ai/analyze-title'): 'PENDIENTE: deducir la obra del documento',
     ('routes/civil_solids.py', '/api/civil/extract-surfaces'): 'PENDIENTE: deducir la obra del modelo',
-    ('routes/compare.py', '/api/compare/cleanup'): 'PENDIENTE: limpieza de comparacion',
+    ('routes/compare.py', '/api/compare/cleanup'): 'borra solo el ambito temporal fijo __cmp__, que no es de ninguna obra. Residual: es compartido, y un usuario puede tirar la comparacion en curso de otro',
     ('routes/compare.py', '/api/compare/diff'): 'PENDIENTE: comparacion de versiones',
     ('routes/compare.py', '/api/compare/element'): 'PENDIENTE: comparacion de elemento',
     ('routes/compare.py', '/api/compare/element-metrados'): 'PENDIENTE: comparacion de metrados',
@@ -98,11 +99,8 @@ SIN_CUBRIR = {
     ('routes/digital_twin.py', '/api/modelos/firmar-subida'): 'exige rol admin dentro de la vista; traducir cuesta creditos de Autodesk',
     ('routes/element_docs.py', '/api/element-docs'): 'PENDIENTE: acotar por la obra del elemento',
     ('routes/pdf_tools.py', '/api/pdf/markups'): 'PENDIENTE: marcas sobre PDF',
-    ('routes/uploads.py', '/api/uploads/<upload_id>'): 'PENDIENTE: acotar por la obra de la subida',
-    ('routes/uploads.py', '/api/uploads/progress'): 'PENDIENTE: acotar por la obra de la subida',
-    ('routes/uploads.py', '/api/uploads/status/<upload_id>'): 'PENDIENTE: entrega el destino de escritura; acotar por obra',
-    ('server.py', '/api/inventory'): 'PENDIENTE: el urn resuelve, pero conviene guardia propia',
-    ('server.py', '/api/inventory/bulk'): 'PENDIENTE: el urn resuelve, pero conviene guardia propia',
+    ('server.py', '/api/inventory'): 'va por external_id, no por obra: el limite esta en el propio SQL contra project_users',
+    ('server.py', '/api/inventory/bulk'): 'va por external_id, no por obra: el limite esta en el propio SQL contra project_users',
     ('server.py', '/maps/uploads/<path:filename>'): 'PENDIENTE: sirve ficheros de mapa por nombre',
 }
 

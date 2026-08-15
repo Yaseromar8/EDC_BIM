@@ -52,6 +52,12 @@ RECURSOS = {
     # El documento en si. Comprobar contra el NODO es mas fuerte que fiarse del
     # model_urn que manda el cliente: el nodo dice de que obra es de verdad.
     'file_nodes':        ('id', 'model_urn'),
+    # La sesion de subida troceada. Sin esto, conocer un id de sesion bastaba
+    # para cancelar la subida de otra obra a media carga, o para falsear su
+    # progreso.
+    'upload_sessions':   ('id', 'model_urn'),
+    # El buffer de correcciones de la IA. Lleva la obra de la consulta original.
+    'ai_brain.feedback_buffer': ('id', 'model_urn'),
 }
 
 
@@ -151,6 +157,64 @@ def guardia_de_obra(valor_obra, accion='esta operación'):
     from auth_middleware import _user_in_project
     if not _user_in_project(usuario.get('id'), obra):
         logger.warning(f'[perimetro BLOQUEADO] user={usuario.get("id")} obra={obra} {accion}')
+        return jsonify({'error': 'Sin acceso a este proyecto', 'code': 'PROJECT_FORBIDDEN'}), 403
+    return None
+
+
+def obra_del_documento(cursor, node_id=None, gcs_urn=None):
+    """De que obra es un documento, por id de nodo o por ruta del objeto."""
+    if node_id:
+        cursor.execute('SELECT model_urn FROM file_nodes WHERE id::text = %s',
+                       (str(node_id),))
+    elif gcs_urn:
+        cursor.execute('SELECT model_urn FROM file_nodes WHERE gcs_urn = %s '
+                       'AND NOT is_deleted LIMIT 1', (str(gcs_urn),))
+    else:
+        return None
+    fila = cursor.fetchone()
+    if not fila or not fila[0]:
+        return None
+    from db import resolve_project_id
+    return resolve_project_id(fila[0])
+
+
+def guardia_del_documento(node_id=None, gcs_urn=None, accion='abrir este documento'):
+    """None si se puede seguir; (respuesta, codigo) si hay que cortar.
+
+    Para los manejadores que reciben un DOCUMENTO -- por id de nodo o por la
+    ruta del objeto en el almacen -- y no la obra. Es el caso de la IA: se le
+    pasa un `nodeId` y se descarga el PDF, se lee y se resume. Sin esta
+    comprobacion bastaba conocer el id de un nodo ajeno para que la propia
+    plataforma te leyera un documento de otra obra en voz alta: una fuga de
+    bytes por una puerta distinta de la de descarga.
+
+    Fail-closed: si la ruta del objeto no corresponde a ningun nodo vivo, se
+    corta. Un objeto del almacen sin nodo no se puede atribuir a una obra, y no
+    saber de quien es no puede resolverse dandolo por bueno.
+    """
+    usuario = getattr(g, 'current_user', None)
+    if not usuario:
+        return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
+    if usuario.get('role') == 'admin':
+        return None
+    if not node_id and not gcs_urn:
+        return jsonify({'error': 'Falta el documento sobre el que operar.'}), 400
+
+    from db import get_db_connection
+    try:
+        with get_db_connection() as conn:
+            obra = obra_del_documento(conn.cursor(), node_id, gcs_urn)
+    except Exception as e:
+        logger.error(f'perimetro documento {node_id or gcs_urn}: {e}')
+        return jsonify({'error': 'No se pudo comprobar el acceso al documento.'}), 503
+
+    if obra is None:
+        return jsonify({'error': 'No encontrado'}), 404
+
+    from auth_middleware import _user_in_project
+    if not _user_in_project(usuario.get('id'), obra):
+        logger.warning(f'[perimetro BLOQUEADO] user={usuario.get("id")} '
+                       f'documento={node_id or gcs_urn} obra={obra} {accion}')
         return jsonify({'error': 'Sin acceso a este proyecto', 'code': 'PROJECT_FORBIDDEN'}), 403
     return None
 

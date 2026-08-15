@@ -20,6 +20,7 @@ import json
 import re
 import time
 from flask import Blueprint, request, jsonify, g
+from rate_limit import limite
 from politica import requiere_rol
 from db import get_db_connection
 
@@ -153,10 +154,9 @@ def ensure_projects_schema():
             # --- AUTO-RELLENAR invite_code ---
             cursor.execute("SELECT id FROM projects WHERE invite_code IS NULL")
             null_projects = cursor.fetchall()
-            import random, string
             for row in null_projects:
                 p_id = row[0]
-                code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                code = _codigo_de_invitacion()
                 try:
                     # En caso exótico de colisión el try/except salva el loop
                     cursor.execute("UPDATE projects SET invite_code = %s WHERE id = %s", (code, p_id))
@@ -341,8 +341,7 @@ def create_hub_project(hub_id):
         return jsonify({"error": "name is required"}), 400
 
     proj_id = f"b.proj_{re.sub(r'[^a-z0-9]', '_', data['name'].lower())}_{int(time.time()) % 100000}"
-    import random, string
-    invite_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    invite_code = _codigo_de_invitacion()
     
     try:
         with get_db_connection() as conn:
@@ -429,7 +428,26 @@ def get_project(project_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def _codigo_de_invitacion(largo=8):
+    """La llave de auto-inscripcion a una obra. Con `secrets`, no con `random`.
+
+    `random.choices` usa Mersenne Twister: no es criptografico y su estado se
+    puede reconstruir observando salidas suficientes. Para un color de grafico
+    da igual; para lo unico que hace falta saber para meterse en una obra, no.
+    Y de 6 a 8 caracteres: 36^8 son 2,8 billones en vez de 2.180 millones.
+
+    Los codigos YA emitidos siguen valiendo -- no se invalidan solos -- pero
+    son de 6 caracteres y de `random`. Rotarlos es decision del propietario:
+    romperia las invitaciones repartidas.
+    """
+    import secrets
+    import string
+    alfabeto = string.ascii_uppercase + string.digits
+    return ''.join(secrets.choice(alfabeto) for _ in range(largo))
+
+
 @projects_bp.route('/api/projects/join', methods=['POST'])
+@limite('10 per hour')
 def join_project():
     """Unirse a un proyecto usando su invite_code."""
     data = request.get_json() or {}

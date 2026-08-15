@@ -1195,6 +1195,32 @@ def civil_base_axis():
         from db import get_db_connection
         import json as _json
         scope = request.args.get('scope', 'global')
+
+        # El «scope» ya era la obra, pero sin comprobarla: conocer el scope de
+        # otra obra bastaba para cambiarle el eje que se dibuja solo al abrir el
+        # visor a TODOS sus usuarios.
+        #
+        # Y ademas los dos sitios que llaman a esto mandaban valores DISTINTOS
+        # para la misma obra -- la lectura el id de proyecto y la escritura el
+        # URN del modelo -- asi que el pin se guardaba bajo una clave que nadie
+        # leia. «Fijar para todos los usuarios» no llegaba a nadie: lo unico que
+        # lo sostenia era el localStorage de quien lo fijaba. Resolver la obra
+        # arregla las dos cosas de una vez, y sin tocar el visor.
+        from db import resolve_project_id
+        from perimetro_de_obra import guardia_de_obra
+        obra = resolve_project_id(scope) if scope and scope != 'global' else None
+        if request.method == 'PUT':
+            if not obra:
+                return jsonify({'error': 'Falta la obra sobre la que fijar el eje base.'}), 400
+            negativa = guardia_de_obra(obra, 'fijar el eje base de la obra')
+            if negativa:
+                return negativa
+        elif obra:
+            negativa = guardia_de_obra(obra, 'consultar el eje base de la obra')
+            if negativa:
+                return negativa
+        clave = obra or scope
+
         with get_db_connection() as conn:
             cur = conn.cursor()
             # DDL dentro de un handler HTTP: cada peticion a esta ruta creaba la
@@ -1207,19 +1233,19 @@ def civil_base_axis():
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             )''')
             if request.method == 'GET':
-                cur.execute('SELECT pin FROM civil_base_axis WHERE scope = %s', (scope,))
+                cur.execute('SELECT pin FROM civil_base_axis WHERE scope = %s', (clave,))
                 row = cur.fetchone()
                 conn.commit()
                 return jsonify({'pin': row[0] if row else None}), 200
             data = request.json or {}
             pin = data.get('pin')
             if pin is None:
-                cur.execute('DELETE FROM civil_base_axis WHERE scope = %s', (scope,))
+                cur.execute('DELETE FROM civil_base_axis WHERE scope = %s', (clave,))
             else:
                 cur.execute('''INSERT INTO civil_base_axis (scope, pin, updated_at)
                     VALUES (%s, %s::jsonb, NOW())
                     ON CONFLICT (scope) DO UPDATE SET pin = EXCLUDED.pin, updated_at = NOW()''',
-                    (scope, _json.dumps(pin)))
+                    (clave, _json.dumps(pin)))
             conn.commit()
             return jsonify({'status': 'ok'}), 200
     except Exception as e:

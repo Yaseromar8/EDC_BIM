@@ -15,6 +15,7 @@ import json
 import re
 
 from rate_limit import limite
+from perimetro_de_obra import guardia_de_obra, guardia_de_recurso, guardia_del_documento
 from skills.pdf_researcher import PDFResearcher
 
 
@@ -281,6 +282,13 @@ def warmup_document():
     if not (full_path or node_id) or not bucket_name:
         return jsonify({"error": "Falta identificador o GCS_BUCKET_NAME"}), 400
 
+    # Esto DESCARGA el PDF del almacen. Sin comprobar de que obra es el
+    # documento, bastaba conocer un id de nodo ajeno para que la plataforma se
+    # bajara y cacheara un documento de otra obra.
+    negativa = guardia_del_documento(node_id, full_path, 'precalentar este documento')
+    if negativa:
+        return negativa
+
     # Si tenemos node_id, resolvemos el URN real (robusto contra tildes/rutas)
     gcs_urn = full_path
     if node_id:
@@ -334,6 +342,13 @@ def ask_document():
 
     if not question:
         return jsonify({"error": "Falta pregunta"}), 400
+
+    # La IA lee el documento y lo resume. Preguntar por un documento de otra
+    # obra era leerlo: la fuga de bytes no necesita el boton de descarga.
+    if full_path or node_id:
+        negativa = guardia_del_documento(node_id, full_path, 'preguntar sobre este documento')
+        if negativa:
+            return negativa
 
     # Si no se provee un documento específico, redirigimos a la lógica de búsqueda universal
     if not (full_path or node_id):
@@ -500,6 +515,12 @@ def save_ai_feedback():
     
     if not interaction_id or not human_correction:
         return jsonify({"error": "Falta interaction_id o human_correction"}), 400
+
+    # La correccion humana entrena al modelo. Sin guardia, cualquiera podia
+    # reescribir la respuesta que la IA da en una obra ajena.
+    negativa = guardia_de_recurso('ai_brain.feedback_buffer', interaction_id)
+    if negativa:
+        return negativa
         
     try:
         from db import get_db_connection
@@ -640,6 +661,14 @@ def universal_search():
         # model_urn fallback al inicio para consultas DB (En Talara es '1')
         model_urn = data.get('model_urn') or "1"
         if model_urn == "global_pqt8": model_urn = "1" # Mapping user friendly urn to db urn
+
+        # El buscador universal lista y lee documentos de la obra que le digan.
+        # Y si no le dicen ninguna, cae por defecto en la obra '1' -- o sea, un
+        # usuario de otra obra que preguntara sin indicar cual recibia contenido
+        # de Talara. La obra se comprueba SIEMPRE, tambien la de por defecto.
+        negativa = guardia_de_obra(model_urn, 'buscar en los documentos de esta obra')
+        if negativa:
+            return negativa
         
         folder_context = "No detectada"
         matches_context = ""
@@ -803,6 +832,10 @@ def analyze_drawing_title():
 
     if not full_path or not bucket_name:
         return jsonify({"error": "Falta información (fullPath/bucket)"}), 400
+
+    negativa = guardia_del_documento(node_id, full_path, 'leer el membrete de este plano')
+    if negativa:
+        return negativa
 
     # Resolución robusta por ID
     gcs_urn = full_path
