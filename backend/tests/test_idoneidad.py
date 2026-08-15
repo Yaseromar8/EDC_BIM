@@ -20,9 +20,15 @@ import idoneidad as idn
 class CursorFalso:
     """Devuelve el catálogo por defecto y recuerda las revisiones ya usadas."""
 
-    def __init__(self, revisiones_usadas=None, catalogo=None):
+    def __init__(self, revisiones_usadas=None, catalogo=None, emisiones=None,
+                 hay_registro_de_emisiones=True):
         self.revisiones = revisiones_usadas or []
         self.catalogo = catalogo
+        # El registro de emisiones: la fuente buena. Las columnas de file_versions
+        # solo conservan la ULTIMA emision de cada version, asi que un codigo
+        # pisado por una emision posterior solo aparece aqui.
+        self.emisiones = emisiones or []
+        self.hay_registro = hay_registro_de_emisiones
         self._ultima = []
         self.ejecutadas = []
 
@@ -33,6 +39,10 @@ class CursorFalso:
             base = self.catalogo if self.catalogo is not None else idn.CATALOGO_POR_DEFECTO
             # (codigo, etiqueta, familia, activo)
             self._ultima = [(c, e, f, True) for c, e, f in base]
+        elif 'TO_REGCLASS' in s:
+            self._ultima = [('file_emisiones',)] if self.hay_registro else [(None,)]
+        elif 'CODIGO_REVISION FROM FILE_EMISIONES' in s:
+            self._ultima = [(r,) for r in self.emisiones]
         elif 'CODIGO_REVISION FROM FILE_VERSIONS' in s:
             self._ultima = [(r,) for r in self.revisiones]
         else:

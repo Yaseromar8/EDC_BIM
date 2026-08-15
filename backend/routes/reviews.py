@@ -109,6 +109,45 @@ def list_reviews():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def _revision_independiente(user, steps):
+    """None si la revision tiene al menos un ojo ajeno; (respuesta, codigo) si no.
+
+    POR QUE ES UNA REGLA Y NO UNA RECOMENDACION
+    -------------------------------------------
+    Una revision cuyo unico revisor es quien la crea no revisa nada: es una
+    firma delante del espejo. Y en este sistema no es un detalle de proceso,
+    porque la revision es el camino a PUBLICADO -- el estado con el que se
+    construye. Sin esta comprobacion, cualquiera con permiso de edicion sobre
+    sus propios documentos se los aprobaba a si mismo y quedaba en el
+    expediente como material autorizado, con historial y fechas de aprobacion
+    que parecen los de una revision de verdad. Eso es peor que no tener
+    revision: tiene su apariencia.
+
+    La regla es la minima que sostiene el control: el autor NO puede ser el
+    unico. Puede estar entre los revisores -- en un equipo pequeño el autor
+    conoce el documento y su firma vale -- pero tiene que haber alguien mas.
+    Prohibirle aparecer del todo seria mas estricto de lo que pide ISO 19650-2
+    y bloquearia a equipos de dos personas sin ganar nada.
+    """
+    correo = (user.get('email') or '').strip().lower()
+    nombre = (user.get('name') or '').strip().lower()
+
+    def es_el_autor(paso):
+        c = (paso.get('email') or '').strip().lower()
+        n = (paso.get('name') or '').strip().lower()
+        return (correo and c == correo) or (nombre and n == nombre)
+
+    ajenos = [p for p in steps if not es_el_autor(p)]
+    if ajenos:
+        return None
+    return jsonify({
+        "success": False,
+        "error": "Una revisión necesita al menos un revisor distinto de quien la "
+                 "crea. Puedes estar entre los revisores, pero no ser el único.",
+        "code": "REVISION_SIN_INDEPENDENCIA",
+    }), 400
+
+
 @reviews_bp.route('/api/reviews', methods=['POST'])
 def create_review():
     d = request.get_json() or {}
@@ -127,6 +166,9 @@ def create_review():
     # sobre planos de otra obra, ponerse a si mismo de revisor y publicarlos.
     negado = _puede_con_estos_documentos(u, d['model_urn'], items, 'edit',
                                          'incluir documentos en una revisión')
+    if negado:
+        return negado
+    negado = _revision_independiente(u, steps)
     if negado:
         return negado
     try:

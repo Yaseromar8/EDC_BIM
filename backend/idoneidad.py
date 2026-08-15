@@ -192,11 +192,33 @@ def siguiente_revision(cursor, node_id, destino):
     prefijo = PREFIJO_POR_DESTINO.get(destino)
     if not prefijo:
         return None
+
+    # Se cuenta sobre el REGISTRO DE EMISIONES, no sobre la columna de la
+    # version. La columna guarda solo la ultima emision de cada version: al
+    # publicar un fichero que ya se habia compartido, la nueva pisaba a la vieja
+    # y el codigo anterior se volvia invisible. Con eso, el siguiente calculo
+    # devolvia un numero YA ENTREGADO -- P01 dos veces, con contenidos distintos.
+    # Un codigo de revision que se repite deja de identificar nada, y es
+    # exactamente el dato que se mira en una reclamacion.
+    #
+    # Se leen las dos fuentes y se toma el mayor: el registro es la buena, y las
+    # columnas conservan el historial anterior a que el registro existiera. Sin
+    # esa union, el primer documento emitido tras el cambio volveria a P01.
+    usados = []
+    cursor.execute("SELECT to_regclass('public.file_emisiones')")
+    hay_registro = cursor.fetchone()
+    if hay_registro and hay_registro[0]:
+        cursor.execute(
+            "SELECT codigo_revision FROM file_emisiones "
+            "WHERE file_node_id = %s AND codigo_revision IS NOT NULL",
+            (str(node_id),),
+        )
+        usados += [r[0] for r in cursor.fetchall()]
     cursor.execute(
         "SELECT codigo_revision FROM file_versions "
         "WHERE file_node_id = %s AND codigo_revision IS NOT NULL",
         (str(node_id),),
     )
-    usados = [r[0] for r in cursor.fetchall()]
+    usados += [r[0] for r in cursor.fetchall()]
     mayor = max([_numero(c, prefijo) for c in usados] or [0])
     return f"{prefijo}{mayor + 1:02d}"

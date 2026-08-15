@@ -261,8 +261,97 @@ def transicionar(cursor, model_urn, ids, nuevo, usuario, motivo_del_cambio=None,
             'emisiones': emitidos}
 
 
+def asegurar_tabla_emisiones(cursor):
+    """El registro de EMISIONES. Una fila por cada vez que un contenedor sale.
+
+    POR QUE HACIA FALTA UNA TABLA
+    -----------------------------
+    Hasta ahora la emision se grababa haciendo UPDATE sobre la fila de la
+    version: idoneidad, revision, quien y cuando, encima de lo que hubiera. Pero
+    el MISMO fichero se emite varias veces -- se comparte como S3 para revision
+    y semanas despues se publica como A1 -- y la segunda emision pisaba a la
+    primera. No la matizaba: la borraba. Quien compartio, que dia y con que
+    idoneidad dejaba de existir en el expediente.
+
+    Y de rebote se rompia la numeracion. `siguiente_revision` cuenta los codigos
+    ya usados leyendo `file_versions.codigo_revision`, que solo conserva el
+    ultimo: los pisados se volvian invisibles y el numero se reutilizaba. Un
+    P01 que sale dos veces con contenidos distintos deja de identificar nada, y
+    en una reclamacion es exactamente el dato que se mira.
+
+    Aqui no se actualiza nunca una fila: cada emision se añade. Es un registro,
+    no un estado.
+    """
+    cursor.execute(Q_CREATE_EMISIONES)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_emisiones_nodo "
+                   "ON file_emisiones (file_node_id, emitida_en DESC)")
+
+
+Q_CREATE_EMISIONES = """
+    CREATE TABLE IF NOT EXISTS file_emisiones (
+        id               SERIAL PRIMARY KEY,
+        file_node_id     UUID NOT NULL,
+        file_version_id  UUID,
+        model_urn        TEXT,
+        destino          VARCHAR(16) NOT NULL,
+        codigo_idoneidad VARCHAR(10),
+        codigo_revision  VARCHAR(10),
+        emitida_por      TEXT,
+        emitida_en       TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    )
+"""
+
+
+def _insertar_emision(cursor, node_id, destino, codigo_idoneidad, codigo_revision, autor):
+    """Una fila nueva en el registro de emisiones. Nunca actualiza ninguna."""
+    cursor.execute('SAVEPOINT antes_de_emitir')
+    cursor.execute(
+        """INSERT INTO file_emisiones
+               (file_node_id, file_version_id, model_urn, destino,
+                codigo_idoneidad, codigo_revision, emitida_por)
+           SELECT %s,
+                  COALESCE(fn.current_version_id,
+                           (SELECT id FROM file_versions WHERE file_node_id = %s
+                             ORDER BY version_number DESC LIMIT 1)),
+                  fn.model_urn, %s, %s, %s, %s
+             FROM file_nodes fn WHERE fn.id = %s""",
+        (str(node_id), str(node_id), destino, codigo_idoneidad, codigo_revision,
+         autor, str(node_id)),
+    )
+    cursor.execute('RELEASE SAVEPOINT antes_de_emitir')
+
+
 def _sellar_emision(cursor, node_id, destino, codigo_idoneidad, codigo_revision, autor):
-    """Graba la idoneidad, la revision y la fecha en la version vigente."""
+    """Anota la emision en el registro y deja el sello en la version vigente.
+
+    Las dos cosas, y no una: el registro es la memoria (nunca se pisa) y las
+    columnas de la version y del documento son el «ahora mismo», que es lo que
+    se lista y se filtra en pantalla.
+    """
+    # La memoria PRIMERO. Emitir sin dejar constancia de la emision es
+    # exactamente el fallo que esto viene a arreglar, asi que si no se puede
+    # anotar, no se emite.
+    #
+    # La tabla puede no existir todavia en una base que venga de antes: se crea
+    # al vuelo la primera vez, si a este proceso se le permite tocar el esquema.
+    # No se deja pasar en silencio -- eso reconstruiria el agujero -- pero
+    # tampoco se tumba una publicacion por una tabla que sabemos crear.
+    import logging
+    registro = logging.getLogger(__name__)
+    try:
+        _insertar_emision(cursor, node_id, destino, codigo_idoneidad,
+                          codigo_revision, autor)
+    except Exception as e:
+        from esquema_congelado import ddl_permitido
+        if not ddl_permitido():
+            registro.error(f'no se pudo anotar la emision de {node_id}: {e}')
+            raise
+        registro.warning(f'creando file_emisiones al vuelo: {e}')
+        cursor.execute('ROLLBACK TO SAVEPOINT antes_de_emitir')
+        asegurar_tabla_emisiones(cursor)
+        _insertar_emision(cursor, node_id, destino, codigo_idoneidad,
+                          codigo_revision, autor)
+
     cursor.execute(
         """UPDATE file_versions
               SET codigo_idoneidad = %s, codigo_revision = %s,
