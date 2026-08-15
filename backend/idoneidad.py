@@ -25,9 +25,17 @@ SOBRE LOS CODIGOS
 -----------------
 El catalogo de abajo es el juego de codigos de uso corriente en un ECD, con
 descripciones NUESTRAS en castellano llano. Las definiciones normativas viven en
-la norma, que es de pago: esto no las reproduce ni las sustituye. Cada obra puede
-ajustar el catalogo a lo que diga su plan de ejecucion BIM, que es lo que se
-audita; por eso el catalogo se guarda por obra y es editable.
+la norma, que es de pago: esto no las reproduce ni las sustituye. El catalogo se guarda POR OBRA porque lo que se audita es el plan de ejecucion
+BIM de cada una, y no todas usan el mismo juego de codigos.
+
+PERO HOY NO SE PUEDE EDITAR. La tabla existe y se lee por obra, y no hay ninguna
+via para escribirla: ni funcion en este modulo ni ruta en la API -- solo un GET
+en /api/docs/idoneidad. Una obra cuyo BEP use otros codigos no puede reflejarlo,
+y se queda con el catalogo por defecto de abajo.
+
+Esto estaba escrito aqui como si ya funcionara («es editable»), que es peor que
+no tenerlo: quien lee el modulo da por hecho un control que no existe. Queda
+declarado como lo que es -- deuda -- hasta que haya escritura y pantalla.
 """
 from esquema_congelado import solo_con_ddl
 

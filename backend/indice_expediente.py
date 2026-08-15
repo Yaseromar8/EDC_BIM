@@ -86,18 +86,37 @@ def filas_del_indice(cursor, model_urn, estados=None):
            """ + filtro_estado + """
          ORDER BY r.ruta ASC, fn.name ASC
     """, [model_urn, model_urn, model_urn] + params_estado)
+    crudas = cursor.fetchall()
+
+    # ¿La obra cuelga de UNA raiz interna, o los nodos de primer nivel son ya las
+    # carpetas de verdad? De eso depende si el primer tramo de la ruta sobra.
+    #
+    # Antes se quitaba SIEMPRE, dando por hecho que hay una raiz sintetica. En un
+    # arbol sin ella, eso se comia la carpeta de primer nivel: un documento de
+    # «01. PLANOS/DRENAJE» salia listado en «DRENAJE», y el indice del expediente
+    # es justo el documento que se entrega para que otro encuentre los ficheros.
+    # Mandar a alguien a una carpeta que no existe es peor que no decirle nada.
+    cursor.execute(
+        "SELECT count(*) FROM file_nodes WHERE parent_id IS NULL AND model_urn = %s "
+        "AND node_type = 'FOLDER' AND COALESCE(is_deleted, FALSE) = FALSE",
+        (model_urn,))
+    raices = (cursor.fetchone() or [0])[0]
+    hay_raiz_unica = raices == 1
 
     filas = []
     for (nombre, ruta, estado, idoneidad, revision, version,
-         emitida_en, emitida_por, subida_en, subida_por, nom_ok, tam) in cursor.fetchall():
+         emitida_en, emitida_por, subida_en, subida_por, nom_ok, tam) in crudas:
+        # El ultimo tramo es el propio fichero: la columna dice DONDE esta, no
+        # como se llama, que ya va en su columna.
+        carpetas = (ruta or '').split('/')[:-1]
+        if hay_raiz_unica and carpetas:
+            carpetas = carpetas[1:]
         filas.append({
             # El codigo es el nombre sin extension: en esta convencion el nombre
             # del fichero ES el identificador del contenedor de informacion.
             'codigo': (nombre or '').rsplit('.', 1)[0],
             'nombre': nombre,
-            # La ruta que se guarda empieza por la raiz interna del arbol, que al
-            # usuario no le dice nada. Se quita para que la columna sea legible.
-            'ruta': '/'.join((ruta or '').split('/')[1:-1]),
+            'ruta': '/'.join(carpetas),
             'estado': estado,
             'idoneidad': idoneidad,
             'revision': revision,

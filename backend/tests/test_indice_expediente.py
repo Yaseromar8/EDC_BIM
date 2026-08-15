@@ -58,3 +58,65 @@ def test_la_hoja_no_lleva_formulas_ni_macros():
         for c in fila:
             assert not (isinstance(c.value, str) and c.value.startswith('=')), c.value
     assert not getattr(wb, 'vba_archive', None)
+
+
+# ── La columna «Ubicacion en el ECD» ──────────────────────────────────────
+#
+# El indice del expediente es el documento que se entrega para que OTRO
+# encuentre los ficheros. Se quitaba siempre el primer tramo de la ruta, dando
+# por hecho que el arbol cuelga de una raiz interna. En un arbol sin ella eso se
+# comia la carpeta de primer nivel: un documento de «01. PLANOS/DRENAJE» salia
+# listado en «DRENAJE». Mandar a alguien a una carpeta que no existe es peor que
+# no decirle nada.
+
+class CursorDeArbol:
+    """Devuelve las filas del indice y cuantas raices tiene la obra."""
+
+    def __init__(self, filas, raices):
+        self.filas = filas
+        self.raices = raices
+        self._r = []
+        self._modo = None
+
+    def execute(self, sql, params=None):
+        if 'count(*)' in sql.lower():
+            self._modo = 'raices'
+        else:
+            self._modo = 'filas'
+
+    def fetchall(self):
+        return [(nombre, ruta, 'PUBLISHED', 'A1', 'C01', 1,
+                 None, None, None, None, True, 1048576)
+                for nombre, ruta in self.filas]
+
+    def fetchone(self):
+        return (self.raices,)
+
+
+def _ruta_de(filas, raices):
+    cur = CursorDeArbol(filas, raices)
+    return [f['ruta'] for f in ie.filas_del_indice(cur, 'obra/X')]
+
+
+def test_con_raiz_unica_se_quita_la_raiz_pero_no_la_carpeta():
+    """El nombre del contenedor raiz no le dice nada a quien lee el indice."""
+    filas = [('PL-001.pdf', 'PQT8_TALARA/01. PLANOS/DRENAJE/PL-001.pdf')]
+    assert _ruta_de(filas, raices=1) == ['01. PLANOS/DRENAJE']
+
+
+def test_sin_raiz_unica_la_carpeta_de_primer_nivel_se_conserva():
+    """Este era el fallo: '01. PLANOS' desaparecia de la ubicacion."""
+    filas = [('PL-001.pdf', '01. PLANOS/DRENAJE/PL-001.pdf')]
+    assert _ruta_de(filas, raices=3) == ['01. PLANOS/DRENAJE']
+
+
+def test_un_documento_en_la_propia_raiz_no_inventa_carpeta():
+    filas = [('PL-001.pdf', 'PQT8_TALARA/PL-001.pdf')]
+    assert _ruta_de(filas, raices=1) == ['']
+
+
+def test_el_nombre_del_fichero_nunca_va_en_la_ubicacion():
+    """Va en su columna. Repetirlo en la ubicacion hace creer que hay una
+    carpeta con ese nombre."""
+    filas = [('PL-001.pdf', '01. PLANOS/PL-001.pdf')]
+    assert 'PL-001.pdf' not in _ruta_de(filas, raices=2)[0]
