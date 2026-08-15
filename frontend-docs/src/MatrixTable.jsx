@@ -1,14 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
+import { ESTADOS } from './utils/estadosECD';
 
 // ── ISO 19650 Document Lifecycle ──────────────────────────────────────────
-const STATUS_CONFIG = {
-  WIP:       { label: 'WIP',        color: '#6b7280', bg: '#f3f4f6' },
-  SHARED:    { label: 'Compartido', color: '#2563eb', bg: '#dbeafe' },
-  PUBLISHED: { label: 'Publicado',  color: '#16a34a', bg: '#dcfce7' },
-  ARCHIVED:  { label: 'Archivado',  color: '#d97706', bg: '#fef3c7' },
-};
+//
+// Los colores NO se definen aqui. En un ECD el color significa: quien aprende
+// en esta tabla que verde = publicado tiene que encontrarse lo mismo en todas
+// las pantallas. Definirlos en cada modulo hace que la misma cosa se vea
+// distinta segun donde se mire, y entonces el color deja de querer decir nada.
+//
+// Antes esto llevaba cuatro hexadecimales a mano, fuera del sistema de color
+// del portal y sin contraste medido. Ahora sale de `utils/estadosECD`, que es
+// el unico sitio donde vive el vocabulario visual del expediente.
+const STATUS_CONFIG = Object.fromEntries(
+  Object.entries(ESTADOS).map(([codigo, e]) => [
+    codigo, { label: e.etiqueta, color: e.texto, bg: e.fondo, borde: e.borde },
+  ]),
+);
 
 const VALID_TRANSITIONS = {
   WIP:       ['SHARED'],
