@@ -1,0 +1,73 @@
+RECONSTRUCCION DEL ESQUEMA DESDE CERO · 15-ago-2026 · hallazgo N2
+=================================================================
+
+LA PREGUNTA
+  «Si hoy se pierde la base, ¿se puede volver a levantar el ECD?»
+  Un expediente del que no se puede demostrar que se restaura no esta
+  respaldado: esta guardado, que no es lo mismo.
+
+COMO SE MIDIO, Y POR QUE ASI
+  `ecd_app` no puede crear bases NI esquemas -- y esta bien que no pueda: es la
+  separacion de identidades que se persigue. Asi que el esquema se reconstruye
+  en `pg_temp`, el espacio temporal de la sesion, con `search_path` SIN 'public'
+  detras para que CREATE TABLE IF NOT EXISTS no vea las tablas ya existentes.
+  Al cerrar la conexion desaparece entero.
+
+  Limite honesto: lo que en el codigo este cableado a 'public.' sigue viendo las
+  tablas reales. No es una base vacia de verdad; es lo mas cerca que se llega
+  sin permisos que la aplicacion no debe tener.
+
+  Y un aviso sobre el propio metodo: el primer montaje ignoraba los `commit`
+  para poder revertir al final. Eso rompio los savepoints de `esquema_base` y
+  dio 2 tablas creadas de 79. Habria firmado un desastre que no existia. Las
+  tablas temporales ya desaparecen solas: no hacia falta ignorar nada.
+
+RESULTADO
+
+  ANTES    33 de 37 rutinas sin error · 35 tablas ·  13 sin crear
+  DESPUES  38 de 38 rutinas sin error · 87 tablas ·   4 sin crear
+
+  Las 4 que quedan son del esquema `ai_brain` y NO son un fallo del codigo:
+  crearlo exige CREATE SCHEMA, permiso que el usuario con el que mido no tiene.
+  El bootstrap real corre como `ecd_migrator`.
+
+LA CAUSA: UNA LINEA MAL PUESTA
+  Dentro de `ensure_file_nodes_table`, la seccion «1.5» llamaba a
+  `auditoria_encadenada.asegurar_columnas()`, que hace
+
+      ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS hash_anterior CHAR(64)
+
+  CIEN LINEAS ANTES de que esa misma funcion creara `activity_log` (seccion 3).
+  Sobre una base con datos no se nota: la tabla existe de antes. Sobre una base
+  vacia el ALTER revienta, se lleva la transaccion entera, y la funcion no llega
+  a crear NADA:
+
+      file_nodes · file_versions · activity_log · document_shares
+      upload_sessions · app_tokens · project_settings
+
+  Es decir: el arbol documental del ECD no se podia construir desde cero. Nueve
+  de las trece tablas que faltaban venian de esa sola linea.
+
+DOS COSAS MAS QUE SALIERON
+  · `ensure_project_identity_columns` corria ANTES que `tracking_pins` y creaba
+    un indice sobre una tabla que aun no existia. La rutina se traga el error,
+    asi que el indice simplemente no aparecia y nadie se enteraba. Movida al
+    final: lo que toca tablas ajenas no puede ir antes que quien las crea.
+  · `civil_base_axis` solo se creaba dentro del manejador HTTP. Una base
+    restaurada no tenia la tabla hasta que alguien abria el visor y fijaba un
+    eje -- y con el DDL en caliente apagado, nunca. Enchufada al arranque.
+
+QUE QUEDA FIJADO
+  · `esquema_manifiesto.txt`: las 87 tablas que deja un bootstrap, generado
+    midiendo la reconstruccion, no escrito a mano;
+  · 4 pruebas que fijan el orden y comparan lo que el codigo declara contra ese
+    manifiesto. Una familia de tablas nueva que nadie enchufe al arranque rompe
+    la prueba, en vez de descubrirse el dia de la restauracion.
+
+LO QUE ESTO **NO** DEMUESTRA
+  · que una restauracion REAL funcione: eso exige una base vacia de verdad, con
+    `ecd_migrator`, y restaurar una copia. Es del propietario;
+  · nada sobre las copias de Cloud SQL ni sobre el versionado del bucket, que
+    siguen sin verificar (C7);
+  · que los DATOS se recuperen. Esto es el esquema. Un esquema sin copia de los
+    bytes no restaura un expediente.

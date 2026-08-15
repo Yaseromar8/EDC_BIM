@@ -88,7 +88,6 @@ def _rutinas():
         ('partidas', ensure_partidas_schema),
         ('presupuesto', ensure_presupuesto_schema),
         ('asset_user_data', ensure_asset_user_data_table),
-        ('project_identity', ensure_project_identity_columns),
         ('pdf_tools', ensure_pdf_tools_tables),
         ('reviews', ensure_reviews_table),
         ('transmittals', ensure_transmittals_table),
@@ -118,7 +117,13 @@ def _rutinas():
         ('segundo_factor', _columnas_segundo_factor),
         ('plan_de_entrega', _tabla_plan_de_entrega),
         ('emisiones', _tabla_emisiones),
+        ('eje_base', _tabla_eje_base),
         # ── AL FINAL: columnas sueltas que necesitan sus tablas creadas ──
+        # `project_identity` estaba arriba, antes que `tracking_pins`, y su
+        # indice sobre esa tabla se perdia en silencio (la rutina se traga el
+        # error). Lo que anade columnas e indices a tablas AJENAS va al final,
+        # por definicion: no puede correr antes que quien las crea.
+        ('project_identity', ensure_project_identity_columns),
         ('columnas_pendientes', ensure_columnas_pendientes),
     ]
 
@@ -144,6 +149,23 @@ def _tabla_idoneidad():
     from db import get_db_connection
     with get_db_connection() as conn:
         idoneidad.asegurar_tabla(conn.cursor())
+        conn.commit()
+
+
+def _tabla_eje_base():
+    """El eje base por frente. Su DDL vivia SOLO dentro del manejador HTTP, asi
+    que una base restaurada no tenia la tabla hasta que alguien abria el visor y
+    fijaba un eje -- y con el DDL en caliente apagado, nunca."""
+    from db import get_db_connection
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute('''CREATE TABLE IF NOT EXISTS civil_base_axis (
+            scope TEXT PRIMARY KEY,
+            pin JSONB,
+            model_urn TEXT,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )''')
+        cur.execute('ALTER TABLE civil_base_axis ADD COLUMN IF NOT EXISTS model_urn TEXT')
         conn.commit()
 
 

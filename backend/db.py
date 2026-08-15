@@ -337,14 +337,6 @@ def ensure_file_nodes_table():
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_file_versions_sha256 ON file_versions(sha256);")
 
-            # ── 1.5 LA CADENA DEL REGISTRO DE ACTIVIDAD ─────────────────────
-            # Cada evento lleva la huella del anterior: alterar o borrar uno del
-            # medio rompe la cadena y se puede senalar donde. No lo hace
-            # inmutable -- ver auditoria_encadenada.py -- pero convierte una
-            # manipulacion silenciosa en una manipulacion visible.
-            import auditoria_encadenada as _cadena
-            _cadena.asegurar_columnas(cursor)
-
             # ── El candado (CHECK) va APARTE y NO se pone solo ───────────────
             # Aprendido a base de un susto: la primera version ponia el CHECK aqui
             # mismo, al arrancar. Como las migraciones corren al levantar CUALQUIER
@@ -472,6 +464,26 @@ def ensure_file_nodes_table():
                 CREATE INDEX IF NOT EXISTS idx_activity_log_model_urn
                 ON activity_log(model_urn, created_at DESC);
             """)
+
+            # ── 3.1 LA CADENA DEL REGISTRO DE ACTIVIDAD ─────────────────────
+            # Cada evento lleva la huella del anterior: alterar o borrar uno del
+            # medio rompe la cadena y se puede senalar donde. No lo hace
+            # inmutable -- ver auditoria_encadenada.py -- pero convierte una
+            # manipulacion silenciosa en una manipulacion visible.
+            #
+            # VA AQUI, Y NO ANTES. Estaba en la seccion 1.5, o sea ANTES de que
+            # esta misma funcion creara activity_log 100 lineas mas abajo. Sobre
+            # una base que ya tiene datos no se nota -- la tabla existe de antes --
+            # pero sobre una base VACIA el ALTER revienta, se lleva la transaccion
+            # entera y la funcion no llega a crear nada: ni file_nodes, ni
+            # file_versions, ni el propio activity_log, ni document_shares, ni
+            # upload_sessions, ni app_tokens, ni project_settings.
+            #
+            # O sea: el arbol documental del ECD no se podia construir desde cero.
+            # Medido el 15-ago-2026 reconstruyendo el esquema en un espacio vacio:
+            # 13 tablas no aparecian, y 9 de ellas por esta sola linea mal puesta.
+            import auditoria_encadenada as _cadena
+            _cadena.asegurar_columnas(cursor)
 
             # ── 4. APS Tokens Storage (PROFESSIONAL / SCALABLE) ────────────
             # Mueve tokens.json a la DB para evitar perdidas en reinicios del pod
