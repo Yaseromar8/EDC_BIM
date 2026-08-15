@@ -317,5 +317,112 @@ Lo que sí puedo afirmar, con la evidencia de §11 detrás:
 > **La aplicación está técnicamente en condiciones mucho mejores que el 12-ago-2026, y lo que
 > queda abierto está identificado, medido y escrito — no oculto.**
 
+---
+
+# ADENDA · 14 y 15 de agosto de 2026
+
+Este anexo se añade sin tocar nada de lo anterior. Lo que decía el informe el 13-ago sigue
+escrito tal cual, incluidos los puntos donde me equivoqué.
+
+## A.1 · Un patrón que apareció cuatro veces
+
+Cuatro controles estaban **escritos, documentados y sin ejecutarse**:
+
+| Control | Lo que prometía | Lo que hacía |
+|---|---|---|
+| `@requiere_rol('admin')` | bloquear a quien no es administrador | nada — la política corre en modo sombra |
+| Modo «estricto» de nomenclatura | aislar lo que no cumple el patrón | nada — se guardaba y nadie lo leía |
+| `puede_salir_del_ecd` | «la consulta única» antes de emitir enlaces | nada — solo la llamaban sus propias pruebas |
+| Catálogo de idoneidad «editable» | ajustarlo al plan de ejecución BIM de la obra | nada — no había ninguna vía de escritura |
+
+Los cuatro están cerrados. Merecen figurar juntos porque el fallo no es de código sino de
+método: **el sistema se describía a sí mismo por lo que pretendía, no por lo que hacía**. Una
+auditoría que lea el código y crea sus comentarios llegaría a conclusiones falsas — y yo mismo
+di por cerrados 25 hallazgos que no lo estaban.
+
+La contramedida no es documentar mejor: es que **cada control tenga una prueba que falle si
+deja de invocarse**. Todos los cierres de estos dos días la llevan.
+
+## A.2 · Lo cerrado
+
+**Aislamiento entre obras (C8).** De 11 manejadores de escritura sin guardia propia a **0 sin
+justificar**, con 4 excepciones escritas una a una. Lo más grave: `/api/ai/ask` recibía un
+identificador de nodo, **descargaba el PDF y lo resumía sin comprobar de qué obra era** — y tres
+de las cuatro puertas de la IA aceptaban además la ruta del objeto en crudo. La fuga de bytes no
+necesita el botón de descarga. `/api/ai/universal-search` sin obra caía por defecto en Talara.
+
+**Expediente (área 13 y flujo ECD).** Sin hallazgos abiertos:
+
+- el autor de una revisión podía ser su **único** revisor, dejando material «autorizado» con
+  historial y fechas que *parecen* los de una revisión de verdad;
+- publicar **borraba** la emisión anterior (`UPDATE` sobre la fila de la versión), y con ella
+  quién compartió, qué día y con qué idoneidad; de rebote `P01` se reutilizaba;
+- un transmittal podía certificar una entrega que **no ocurrió** — documentos inexistentes, de
+  otra obra, o borradores;
+- el índice del expediente mandaba a **carpetas que no existen**.
+
+**Reconstrucción (N57/N2).** El esquema **no se podía construir desde cero**: dentro de
+`ensure_file_nodes_table`, un `ALTER TABLE activity_log` cien líneas antes de que esa misma
+función creara `activity_log`. Sobre una base con datos no se nota; sobre una vacía se lleva por
+delante `file_nodes`, `file_versions`, `activity_log`, `document_shares`, `upload_sessions`,
+`app_tokens` y `project_settings`.
+
+**No era teórico: ya había pasado.** La base local del usuario tenía exactamente esas siete
+tablas ausentes — su ECD no podía guardar ni un documento y llevaba así desde que se creó.
+
+Medido: **antes 33 de 37 rutinas y 13 tablas sin crear; ahora 38 de 38 y 87 tablas**. Y el
+despliegue ya no construye el esquema en caliente: `start` encadena
+`bootstrap_esquema.py && gunicorn`.
+
+**Datos personales (área 15).** El GPS deja de viajar dentro de cada foto de obra: se extrae a la
+base, donde el perímetro manda, y se quita del fichero que se reparte.
+
+## A.3 · Ahora se puede demostrar qué versión está desplegada
+
+Hasta el 15-ago no se podía: el middleware responde **401 a todo** lo no autenticado, también a
+una ruta inventada, así que sondear si existe un endpoint nuevo no distingue «no ha desplegado»
+de «no existe». La única prueba era el panel de Render, que es el acuse de otro.
+
+El latido publica ahora el commit. Ocho despliegues verificados así los días 14 y 15.
+
+## A.4 · Correcciones a lo que yo mismo había escrito
+
+- **N42 era falso.** Afirmé que el pin del eje base «nunca llegó a funcionar» porque lectura y
+  escritura usaban claves distintas. Leí mal una prop del visor: es el mismo valor. **Refutado.**
+- **Reutilicé el identificador `N2`** para un hallazgo distinto, mezclando dos cosas y haciendo
+  parecer cerrado uno que seguía abierto. Renumerado a N57.
+- **La matriz decía «30 manejadores sin guardia».** Medidos eran **11**. Inflar la deuda también
+  es no saber dónde se está.
+- **Iba a fundir dos frentes de la misma obra** al añadir la guardia del eje base: `1_CANAL` y
+  `1_DRENAJE` habrían compartido fila y uno habría borrado al otro, en silencio. Detectado
+  comprobando el efecto sobre los datos reales antes de subir.
+- **Iba a poner el paso de migración en un `prestart`**, que yarn 2+ no ejecuta: habría
+  desplegado justo el patrón de §A.1 — un control que parece estar y no está.
+
+## A.5 · Lo que sigue sin poder afirmarse
+
+Sin cambios respecto a §14: **no**. Y ahora con dos matices más:
+
+- que el esquema se reconstruya **no demuestra que una restauración funcione**. Eso exige una base
+  vacía de verdad, la identidad de migración y restaurar una copia. Y sobre todo: **un esquema sin
+  copia de los bytes no restaura un expediente** — mientras C7 siga abierto, esto adelanta media
+  parte del camino;
+- las huellas retroactivas de C6, cuando se ejecuten, **valdrán desde el día que se pongan**. Una
+  huella calculada hoy demuestra lo que el fichero es hoy, no que sea el que se aprobó. Por eso
+  quedan marcadas como retroactivas: sin esa marca, una auditoría las trataría como evidencia y
+  no lo son.
+
+## A.6 · Cifras
+
+674 pruebas · 27 commits en dos días · producción verificada por su propio latido.
+
+Las variables de Render, la rotación del secreto de Autodesk, el versionado del bucket y el
+modelo de titularidad **siguen siendo del propietario**, y sin ellos varios de estos cierres son
+media solución: el paso de migración funciona, pero mientras `DDL_EN_CALIENTE` no esté en `false`
+la aplicación conserva permiso para tocar el esquema en caliente.
+
+
+---
+
 No me autodeclaro certificado, ni conforme a ninguna ISO, ni conforme a Plan BIM Perú. La auditoría
 posterior debe hacerse desde cero y no dar por buena ninguna conclusión de este documento.
