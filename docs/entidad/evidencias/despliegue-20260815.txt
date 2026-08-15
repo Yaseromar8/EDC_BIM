@@ -1,0 +1,43 @@
+DESPLIEGUE 15-ago-2026 · visor-ecd-backend
+==========================================
+
+Empujado:  65816ac..86667f4  (17 commits)
+Servicio:  https://visor-ecd-backend.onrender.com
+Rama:      main
+
+QUE ENTRA
+  · perimetro del documento: la IA deja de leer documentos de otra obra
+  · eje base por frente, con la obra comprobada
+  · subidas troceadas y adjuntos de chincheta acotados a su obra
+  · codigo de invitacion con `secrets` + limite de intentos
+  · plan de entrega (MIDP/TIDP) como dato del ECD
+  · el latido dice que version esta sirviendo
+
+COMPROBACION (y por que antes no valia)
+  Hasta hoy no habia forma de demostrar desde fuera que un despliegue habia
+  entrado: el middleware responde 401 a todo lo que no lleva sesion, tambien a
+  una ruta que no existe. Medido:
+
+      GET /api/esta-ruta-no-existe-nunca  -> 401
+      GET /api/plan?model_urn=x           -> 401
+
+  Iguales. Sondear si existe un endpoint nuevo no distinguia "todavia no ha
+  desplegado" de "no existe", y la unica prueba era el panel de Render.
+
+  Ahora el latido publica el commit. Respuesta de produccion:
+
+      {"rama":"main","service":"visor-ecd-backend","status":"ok",
+       "version":"86667f4ba68c"}
+
+  86667f4 es el ultimo commit empujado: el codigo desplegado es el que dice el
+  repositorio. Ocho latidos consecutivos, los ocho ok/86667f4.
+
+LO QUE ESTO **NO** DEMUESTRA
+  · que las guardias nuevas bloqueen EN PRODUCCION: eso exige dos sesiones de
+    obras distintas contra el servicio real, y no tengo credenciales. Estan
+    demostradas en local con pruebas negativas (403 por nodo y por ruta del
+    objeto, 404 sin nodo, 401 sin sesion, 503 con la base caida);
+  · que las variables que faltan en Render se hayan puesto: APP_SECRET,
+    SESSION_PEPPER, CORS_ORIGINS, DDL_EN_CALIENTE, ENFORCE_PROJECT_AUTHZ
+    siguen sin verificar y son del propietario;
+  · nada sobre el APS_CLIENT_SECRET, que sigue publicado y vigente (N19).
