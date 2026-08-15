@@ -1,4 +1,5 @@
 from esquema_congelado import solo_con_ddl
+import io
 import os
 import json
 import traceback
@@ -74,6 +75,14 @@ def ensure_tracking_pins_table():
             ''')
             cursor.execute("ALTER TABLE photo_evidences ADD COLUMN IF NOT EXISTS model_urn VARCHAR(255) DEFAULT 'global'")
             cursor.execute("ALTER TABLE photo_evidences ADD COLUMN IF NOT EXISTS gcs_urn TEXT")
+            # Lo que venia dentro del JPEG y ahora vive aqui, donde el perimetro
+            # de obra manda. Ver privacidad_imagen.py: el dato no se tira -- una
+            # foto situada vale para relacionarla con una progresiva -- pero deja
+            # de viajar pegado al fichero que se comparte y se descarga.
+            for columna in ('latitud DOUBLE PRECISION', 'longitud DOUBLE PRECISION',
+                            'tomada_en TEXT', 'dispositivo TEXT',
+                            'exif_limpiado BOOLEAN DEFAULT FALSE'):
+                cursor.execute('ALTER TABLE photo_evidences ADD COLUMN IF NOT EXISTS ' + columna)
  
             # 3. Tabla de Partes Diarios (PRO EXECUTION)
             cursor.execute('''
@@ -511,7 +520,20 @@ def add_photo_to_pin():
         if not veredicto.get('valid'):
             return jsonify({"error": veredicto.get('error', 'Fichero no admitido')}), 400
 
-        # 1. Subir a GCS
+        # 1. Quitarle el GPS ANTES de subirla, y guardarlo aparte.
+        #
+        # Va aqui y no despues: si se subiera primero, el fichero con
+        # coordenadas ya estaria en el almacen y en el historial de versiones, y
+        # limpiarlo despues no lo quita de donde ya fue.
+        import privacidad_imagen
+        datos_originales = file.read()
+        datos_limpios, metadatos = privacidad_imagen.limpiar(
+            datos_originales, file.filename or '')
+        se_limpio = datos_limpios is not datos_originales
+        file.stream = io.BytesIO(datos_limpios)
+        file.stream.seek(0)
+
+        # 2. Subir a GCS
         filename = secure_filename(f"{int(time.time())}_{file.filename}")
         # El model_urn entra en la ruta del objeto y llega del formulario.
         gcs_uuid = f"multi-tenant/{secure_filename(str(model_urn)) or 'global'}/tracking_photos/{filename}"
@@ -524,9 +546,17 @@ def add_photo_to_pin():
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO photo_evidences (pin_id, gcs_url, filename, model_urn, gcs_urn, project_id)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            ''', (pin_id, gcs_url, filename, model_urn, gcs_uuid, resolve_project_id(model_urn)))
+                INSERT INTO photo_evidences (pin_id, gcs_url, filename, model_urn, gcs_urn,
+                                             project_id, latitud, longitud, tomada_en,
+                                             dispositivo, exif_limpiado)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (pin_id, gcs_url, filename, model_urn, gcs_uuid,
+                  resolve_project_id(model_urn),
+                  metadatos.get('latitud'), metadatos.get('longitud'),
+                  metadatos.get('tomada_en'),
+                  ' '.join(x for x in (metadatos.get('dispositivo_marca'),
+                                       metadatos.get('dispositivo_modelo')) if x) or None,
+                  se_limpio))
             conn.commit()
             
         # Devolver data sincronizada
