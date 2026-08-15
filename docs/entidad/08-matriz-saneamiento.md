@@ -140,5 +140,21 @@ falsos míos**. Lo que sigue es lo verificado y lo corregido en esta pasada.
 - El autor de una revisión **puede ser su propio y único revisor**.
 - `indice_expediente` pierde la carpeta de primer nivel en la columna «Ubicación en el ECD».
 - El catálogo de idoneidad se documenta editable y solo tiene `GET`.
-- **30 manejadores de escritura** siguen sin guardia propia: hoy la separación entre obras
-  cuelga entera de una variable de entorno.
+- ~~**30 manejadores de escritura** siguen sin guardia propia~~ → **CERRADO** `60d84a1`, 15-ago.
+  Medidos de verdad quedaban **11**, no 30. De esos: 2 eran falso positivo del detector
+  (el inventario ya se acota en su propio SQL), 1 es correcto por diseño (`/api/projects/join`
+  es la puerta de entrada a una obra) y **8 eran deuda real**. Hoy son **0 sin justificar**,
+  con las 4 excepciones escritas una a una y una prueba que exige que sigan existiendo.
+
+### Hallazgos de la tercera pasada · 15-ago-2026
+
+| ID | Hallazgo | Estado | Evidencia |
+|---|---|---|---|
+| **N39** | La IA leía documentos de **otra obra**: `/api/ai/ask` recibía un `nodeId`, descargaba el PDF y lo resumía sin comprobar la obra | **CERRADO** | también `warmup` (que además lo cacheaba) y `analyze-title`. Tres de las cuatro puertas aceptaban la **ruta del objeto en crudo**, así que no hacía falta ningún identificador nuestro. La fuga de bytes no necesita el botón de descarga. `guardia_del_documento` resuelve la obra desde `file_nodes`, no desde el `model_urn` que manda el cliente. 10 pruebas negativas |
+| **N40** | `/api/ai/universal-search` sin `model_urn` caía por defecto en la obra `'1'` | **CERRADO** | un usuario de otra obra que preguntara sin decir cuál recibía contenido de Talara |
+| **N41** | `civil_base_axis` se indexaba **solo por `scope`**, sin obra | **CERRADO** | conocer el scope ajeno bastaba para cambiarle a otra obra el eje que se dibuja solo al abrir el visor, para todos sus usuarios |
+| **N42** | Y ese mismo pin **nunca llegó a funcionar**: lectura y escritura usaban claves distintas | **CERRADO** | la lectura manda `selectedProject.id` y la escritura `activeModelUrn`. «Fijar para TODOS los usuarios» no llegaba a nadie: lo sostenía el `localStorage` de quien lo fijaba. Resolver la obra arregla permiso y discrepancia a la vez |
+| **N43** | Con un id de sesión de subida ajeno se veía, falseaba y **tumbaba** la subida de otra obra | **CERRADO** | `/api/uploads/status`, `/progress` y `DELETE`: el cancelado borra además el objeto parcial del almacén |
+| **N44** | Los adjuntos de chincheta escribían **dentro del prefijo de una obra ajena** | **CERRADO** | sanear el `projectId` (N37) evitaba salirse del prefijo, no escribir en el de otro |
+| **N45** | El código de invitación se generaba con `random` y unirse no tenía límite de intentos | **MITIGADO** | Mersenne Twister no es criptográfico. Ahora `secrets` y 8 caracteres (36⁸ en vez de 36⁶), con 10 intentos/hora. Residual: **los códigos ya repartidos siguen siendo de 6 y de `random`** — rotarlos rompe invitaciones y es decisión del propietario |
+| **N46** | La suite de pruebas dependía de que hubiera **un servidor encendido** | **CERRADO** | cinco guiones `test_*.py` en la raíz de `backend/` son sondas que piden a `localhost:3000` al importarse: con el servidor parado reventaban la recolección entera antes de ejecutar una sola prueba. `testpaths = tests` |
