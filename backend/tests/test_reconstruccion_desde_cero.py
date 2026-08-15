@@ -112,3 +112,40 @@ def test_el_bootstrap_cubre_las_tablas_que_el_codigo_sabe_crear():
         'estas tablas no las construye el bootstrap, asi que una base '
         'restaurada se queda sin ellas hasta que alguien entre por su ruta: '
         + ', '.join(huerfanas))
+
+
+# ── El codigo de salida del guion ─────────────────────────────────────────
+#
+# De el depende que un despliegue siga adelante o se pare, asi que tiene que
+# mirar lo correcto. Y la ayuda del guion promete «codigo 1 si algo falta»:
+# devolver siempre 0 convertia `--verificar` en un adorno que ademas tranquiliza.
+
+def test_la_comprobacion_devuelve_codigo_segun_lo_que_encuentra():
+    fuente = _fuente('bootstrap_esquema.py')
+    main = fuente[fuente.index("if __name__ == '__main__':"):]
+    assert 'SystemExit(0 if completo else 1)' in main, (
+        '--verificar tiene que devolver 1 cuando falta algo, como promete su ayuda')
+
+
+def test_el_codigo_de_salida_mira_el_RESULTADO_y_no_los_fallos():
+    """Con las identidades separadas, `ecd_app` no es dueña de todas las tablas
+    y sus ALTER son rechazados: medido en local, 8 «fallos» con el esquema
+    COMPLETO (87 de 87). Si el codigo mirara los fallos, este guion tumbaria
+    cada despliegue justo cuando la separacion empiece a funcionar.
+
+    Y al reves seria peor: dar por bueno un esquema incompleto porque ninguna
+    rutina «fallo» es como se llego a N57."""
+    fuente = _fuente('bootstrap_esquema.py')
+    main = fuente[fuente.index("if __name__ == '__main__':"):]
+    assert 'SystemExit(1 if (fallos or not completo) else 0)' not in main
+    assert main.count('SystemExit(0 if completo else 1)') == 2
+
+
+def test_la_comprobacion_compara_con_nombre_y_no_cuenta():
+    """Contar engaña: 81 tablas suena a completo y puede faltar justo
+    `file_nodes`, que es lo unico que importa. Paso de verdad: la version que
+    contaba imprimia «resolve_folder_path: FALTA» y devolvia 0."""
+    fuente = _fuente('bootstrap_esquema.py')
+    cuerpo = fuente[fuente.index('def verificar'):fuente.index("if __name__")]
+    assert '_manifiesto()' in cuerpo
+    assert 'esperadas - presentes' in cuerpo

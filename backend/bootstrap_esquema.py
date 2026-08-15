@@ -216,12 +216,30 @@ def construir():
     return fallos
 
 
-def verificar():
-    """Comprueba que el esquema esta completo y que la app NO necesita DDL.
+def _manifiesto():
+    """Las tablas que un bootstrap completo deja construidas."""
+    import io as _io
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        'esquema_manifiesto.txt')
+    try:
+        return {l.strip().lower() for l in _io.open(ruta, encoding='utf-8')
+                if l.strip() and not l.startswith('#')}
+    except OSError:
+        return set()
 
-    No se fia de que las rutinas 'no fallaran': cuenta los objetos que de verdad
+
+def verificar():
+    """Comprueba que el esquema esta completo. Devuelve (completo, faltan).
+
+    No se fia de que las rutinas 'no fallaran': mira los objetos que de verdad
     quedaron en la base. Una rutina puede tragarse su propia excepcion y dejar la
-    tabla sin crear, y eso solo se ve contando.
+    tabla sin crear, y eso solo se ve mirando.
+
+    Y no cuenta: COMPARA CON NOMBRE contra `esquema_manifiesto.txt`. Contar
+    engaña -- 81 tablas suena a completo y puede faltar justo `file_nodes`, que
+    es lo unico que importa. La primera version contaba, e imprimia
+    «resolve_folder_path: FALTA» mientras devolvia codigo 0: una comprobacion que
+    siempre dice que si no es una comprobacion.
     """
     import db as _db
     if getattr(_db, 'db_pool', None) is None:
@@ -229,17 +247,31 @@ def verificar():
     from db import get_db_connection
     with get_db_connection() as conn:
         cur = conn.cursor()
-        cur.execute("""SELECT count(*) FROM pg_tables WHERE schemaname IN ('public','ai_brain')""")
-        tablas = cur.fetchone()[0]
+        cur.execute("""SELECT tablename FROM pg_tables
+                        WHERE schemaname IN ('public','ai_brain')""")
+        presentes = {r[0].lower() for r in cur.fetchall()}
+        tablas = len(presentes)
         cur.execute("""SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
                         WHERE n.nspname='public' AND p.proname='resolve_folder_path'""")
         funcion = cur.fetchone()[0]
         cur.execute("""SELECT count(*) FROM pg_extension WHERE extname='pgcrypto'""")
         ext = cur.fetchone()[0]
+    esperadas = _manifiesto()
+    faltan = sorted(esperadas - presentes) if esperadas else []
+
     print('tablas en public+ai_brain      : %d' % tablas)
     print('funcion resolve_folder_path    : %s' % ('presente' if funcion else 'FALTA'))
     print('extension pgcrypto             : %s' % ('presente' if ext else 'FALTA'))
-    return tablas, funcion, ext
+    if esperadas:
+        print('tablas del manifiesto           : %d de %d'
+              % (len(esperadas) - len(faltan), len(esperadas)))
+    if faltan:
+        print('')
+        print('FALTAN %d TABLAS:' % len(faltan))
+        for n in faltan:
+            print('   ·', n)
+    completo = not faltan and bool(funcion) and bool(ext)
+    return completo, faltan
 
 
 if __name__ == '__main__':
@@ -248,10 +280,35 @@ if __name__ == '__main__':
                     help='solo comprobar, sin construir')
     a = ap.parse_args()
     if a.verificar:
-        verificar()
-        raise SystemExit(0)
+        completo, _faltan = verificar()
+        # Lo que el propio guion promete en su ayuda: codigo 1 si algo falta.
+        # Devolver siempre 0 convertia esto en un adorno -- y si alguien lo
+        # enchufa a un despliegue o a integracion continua, en un adorno que
+        # ademas da tranquilidad falsa.
+        raise SystemExit(0 if completo else 1)
     print('BOOTSTRAP DEL ESQUEMA · destino: %s' % os.getenv('DB_HOST'))
     fallos = construir()
     print()
-    verificar()
-    raise SystemExit(1 if fallos else 0)
+    completo, _faltan = verificar()
+
+    # LO QUE DECIDE EL CODIGO DE SALIDA ES EL RESULTADO, NO EL PROCESO.
+    #
+    # Una rutina puede fallar por algo CORRECTO: con las identidades separadas,
+    # `ecd_app` no es dueña de todas las tablas y sus ALTER son rechazados. Eso
+    # es exactamente lo que se persigue, y medido en local da 8 «fallos» con el
+    # esquema COMPLETO (87 de 87). Si el codigo de salida mirara los fallos, este
+    # guion tumbaria cada despliegue justo cuando la separacion empiece a
+    # funcionar -- castigando la correccion.
+    #
+    # Al reves tambien seria malo: dar por bueno un esquema incompleto porque
+    # ninguna rutina «fallo» es como se llego al agujero de N57, donde una
+    # funcion se tragaba su error y dejaba sin crear medio ECD.
+    #
+    # Asi que la pregunta es una sola: ¿ESTA EL ESQUEMA COMPLETO? Los fallos se
+    # imprimen siempre, uno a uno, para que se puedan leer en el log.
+    if fallos and completo:
+        print('')
+        print('%d rutina(s) fallaron pero el esquema quedo COMPLETO.' % len(fallos))
+        print('Normalmente significa que esta identidad no es dueña de esas '
+              'tablas, que es lo correcto. Revisa las lineas FALLO de arriba.')
+    raise SystemExit(0 if completo else 1)
