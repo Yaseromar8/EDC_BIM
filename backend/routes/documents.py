@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from flask import Blueprint, request, jsonify, redirect, Response, g
+from perimetro_de_obra import guardia_de_obra
 from enlaces_firmados import emitir, leer, PROPOSITO_RECURSO
 from politica import publico_en_lectura, requiere_rol
 from werkzeug.utils import secure_filename
@@ -2858,8 +2859,8 @@ def trazabilidad_de_documento():
 def catalogo_de_idoneidad():
     """Los códigos de idoneidad de esta obra: para qué puede autorizarse un documento.
 
-    Se siembra con el juego de uso corriente y es editable por obra, porque lo
-    que se audita es lo que diga el plan de ejecución BIM del proyecto.
+    Se siembra con el juego de uso corriente y es editable por obra (PUT, abajo),
+    porque lo que se audita es lo que diga el plan de ejecución BIM del proyecto.
     """
     model_urn = request.args.get('model_urn', 'global')
     from flask import g
@@ -2871,9 +2872,72 @@ def catalogo_de_idoneidad():
         with get_db_connection() as conn:
             cur = conn.cursor()
             codigos = catalogo_de_obra(cur, model_urn)
+            # El catalogo COMPLETO -- incluidos los desactivados -- solo para
+            # quien puede editarlo: la pantalla necesita ver los apagados para
+            # poder volver a encenderlos, pero al resto del equipo enseñarle
+            # codigos que ya no se ofrecen solo confunde.
+            u = getattr(g, 'current_user', None) or {}
+            completo = None
+            if u.get('role') == 'admin':
+                from idoneidad import asegurar_tabla
+                asegurar_tabla(cur)
+                cur.execute(
+                    "SELECT codigo, etiqueta, familia, activo FROM idoneidad_catalogo "
+                    "WHERE model_urn = %s ORDER BY orden, codigo", (model_urn,))
+                completo = [{"codigo": c, "etiqueta": e, "familia": f, "activo": a}
+                            for c, e, f, a in cur.fetchall()]
             conn.commit()
-        return jsonify({"success": True, "codigos": codigos}), 200
+        return jsonify({"success": True, "codigos": codigos,
+                        "catalogo_completo": completo,
+                        "editable": bool(completo is not None)}), 200
     except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@documents_bp.route('/api/docs/idoneidad', methods=['PUT'])
+def guardar_catalogo_de_idoneidad():
+    """Reescribe el catalogo de idoneidad de una obra.
+
+    Durante un tiempo el modulo se documento como «editable por obra» y no habia
+    ninguna via para escribirlo: solo este GET. Un control que se describe y no
+    existe es peor que no tenerlo, porque quien lo lee da por hecho que esta.
+
+    Es de administrador de la obra, y no por jerarquia: el catalogo es el
+    vocabulario con el que el expediente dice para que sirve cada documento.
+    Cambiarlo cambia el significado de lo que se entrega.
+    """
+    from flask import g
+    d = request.get_json() or {}
+    model_urn = d.get('model_urn')
+    negativa = guardia_de_obra(model_urn, 'editar el catálogo de idoneidad')
+    if negativa:
+        return negativa
+    u = getattr(g, 'current_user', None) or {}
+    if u.get('role') != 'admin':
+        return jsonify({"success": False,
+                        "error": "Solo un administrador de la obra puede cambiar "
+                                 "el catálogo de idoneidad."}), 403
+    try:
+        from db import get_db_connection
+        from idoneidad import guardar_catalogo
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            try:
+                codigos, avisos = guardar_catalogo(
+                    cur, model_urn, d.get('codigos'),
+                    autor=u.get('email') or u.get('name'))
+            except ValueError as mal:
+                # Las reglas del catalogo son del usuario, no fallos del sistema:
+                # se devuelven tal cual, que para eso estan escritas en castellano.
+                conn.rollback()
+                return jsonify({"success": False, "error": str(mal)}), 400
+            conn.commit()
+        log_activity(model_urn, 'catalogo_idoneidad_editado', 'catalogo',
+                     performed_by=u.get('name') or u.get('email'),
+                     details={'codigos': len(codigos), 'avisos': avisos})
+        return jsonify({"success": True, "codigos": codigos, "avisos": avisos}), 200
+    except Exception as e:
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 

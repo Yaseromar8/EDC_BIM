@@ -28,14 +28,15 @@ descripciones NUESTRAS en castellano llano. Las definiciones normativas viven en
 la norma, que es de pago: esto no las reproduce ni las sustituye. El catalogo se guarda POR OBRA porque lo que se audita es el plan de ejecucion
 BIM de cada una, y no todas usan el mismo juego de codigos.
 
-PERO HOY NO SE PUEDE EDITAR. La tabla existe y se lee por obra, y no hay ninguna
-via para escribirla: ni funcion en este modulo ni ruta en la API -- solo un GET
-en /api/docs/idoneidad. Una obra cuyo BEP use otros codigos no puede reflejarlo,
-y se queda con el catalogo por defecto de abajo.
+Y SE PUEDE EDITAR DE VERDAD (desde el 15-ago-2026). Durante un tiempo esto se
+documento como editable sin serlo: la tabla se leia por obra y no habia NINGUNA
+via para escribirla. Ahora `guardar_catalogo()` la reescribe, con dos reglas que
+no son opcionales:
 
-Esto estaba escrito aqui como si ya funcionara («es editable»), que es peor que
-no tenerlo: quien lee el modulo da por hecho un control que no existe. Queda
-declarado como lo que es -- deuda -- hasta que haya escritura y pantalla.
+  · un codigo YA USADO no se borra, se desactiva. Borrarlo dejaria documentos
+    sellados con una idoneidad que no significa nada;
+  · a un codigo ya usado no se le cambia la familia. Eso reescribiria el
+    significado de lo que ya se entrego con el.
 """
 from esquema_congelado import solo_con_ddl
 
@@ -112,6 +113,136 @@ def catalogo_de_obra(cursor, model_urn):
         )
     return [{'codigo': c, 'etiqueta': e, 'familia': f}
             for c, e, f in CATALOGO_POR_DEFECTO]
+
+
+def codigos_en_uso(cursor, model_urn):
+    """Los codigos que ya estan escritos en el expediente de esta obra.
+
+    Se mira en las CUATRO tablas donde se graba una idoneidad. Mirando solo una,
+    un codigo podria borrarse del catalogo estando en uso en otra, y los
+    documentos sellados con el se quedarian con una idoneidad que no significa
+    nada: ni se puede mostrar, ni se puede saber si permitia construir.
+    """
+    usados = set()
+    consultas = [
+        ("SELECT DISTINCT codigo_idoneidad FROM file_nodes "
+         "WHERE model_urn = %s AND codigo_idoneidad IS NOT NULL"),
+        ("SELECT DISTINCT codigo_idoneidad FROM doc_reviews "
+         "WHERE model_urn = %s AND codigo_idoneidad IS NOT NULL"),
+        ("SELECT DISTINCT codigo_idoneidad FROM file_emisiones "
+         "WHERE model_urn = %s AND codigo_idoneidad IS NOT NULL"),
+        # file_versions no lleva obra: se llega por el nodo.
+        ("SELECT DISTINCT v.codigo_idoneidad FROM file_versions v "
+         "JOIN file_nodes n ON n.id = v.file_node_id "
+         "WHERE n.model_urn = %s AND v.codigo_idoneidad IS NOT NULL"),
+    ]
+    for sql in consultas:
+        cursor.execute(sql, (model_urn,))
+        usados.update(f[0].strip().upper() for f in cursor.fetchall() if f[0])
+    return usados
+
+
+def guardar_catalogo(cursor, model_urn, entradas, autor=None):
+    """Reescribe el catalogo de idoneidad de una obra. Devuelve (catalogo, avisos).
+
+    POR QUE ESTO NO ES UN CRUD NORMAL
+    ---------------------------------
+    El catalogo no es una lista de opciones: es el vocabulario con el que el
+    expediente dice para que sirve cada documento. Cambiarlo a la ligera
+    reescribe el significado de lo ya entregado.
+
+    Dos reglas, y las dos salen del mismo sitio:
+
+      · un codigo YA USADO no se borra. Se puede desactivar -- deja de ofrecerse
+        para emisiones nuevas -- pero la fila se queda, porque hay documentos
+        sellados con el y sin la fila su idoneidad no significa nada;
+
+      · a un codigo ya usado no se le cambia la FAMILIA. Mover un codigo de
+        «publicado» a «compartido» convierte retroactivamente en no autorizado
+        todo lo que se publico con el. La etiqueta si se puede corregir: aclarar
+        como se lee un codigo no cambia lo que autorizo en su dia.
+
+    Un catalogo sin ningun codigo de publicacion activo NO se rechaza -- puede
+    ser una obra que todavia no publica -- pero se avisa, porque mientras siga
+    asi nadie podra pasar un documento a Publicado. Es reversible editandolo otra
+    vez, asi que avisar es proporcionado; bloquear seria decidir por la obra.
+    """
+    asegurar_tabla(cursor)
+    if not isinstance(entradas, list) or not entradas:
+        raise ValueError('El catálogo no puede quedarse vacío.')
+
+    limpias, vistos = [], set()
+    for i, e in enumerate(entradas):
+        codigo = str((e or {}).get('codigo') or '').strip().upper()
+        etiqueta = str((e or {}).get('etiqueta') or '').strip()
+        familia = str((e or {}).get('familia') or '').strip().lower()
+        if not codigo:
+            raise ValueError('Hay una fila sin código.')
+        if len(codigo) > 10:
+            raise ValueError('El código «%s» pasa de 10 caracteres.' % codigo)
+        if codigo in vistos:
+            raise ValueError('El código «%s» está repetido.' % codigo)
+        if not etiqueta:
+            raise ValueError('El código «%s» no tiene descripción. Un código sin '
+                             'explicación obliga a cada uno a suponer qué '
+                             'significa.' % codigo)
+        if familia not in (COMPARTIDO, PUBLICADO):
+            raise ValueError('La familia de «%s» tiene que ser «%s» o «%s».'
+                             % (codigo, COMPARTIDO, PUBLICADO))
+        vistos.add(codigo)
+        limpias.append({'codigo': codigo, 'etiqueta': etiqueta, 'familia': familia,
+                        'activo': bool((e or {}).get('activo', True)), 'orden': i})
+
+    en_uso = codigos_en_uso(cursor, model_urn)
+
+    cursor.execute('SELECT codigo, familia FROM idoneidad_catalogo WHERE model_urn = %s',
+                   (model_urn,))
+    antes = {c: f for c, f in cursor.fetchall()}
+
+    desaparecidos = sorted(c for c in en_uso if c in antes and c not in vistos)
+    if desaparecidos:
+        raise ValueError(
+            'No se pueden quitar códigos que ya están usados en el expediente: %s. '
+            'Desactívalos en vez de borrarlos: dejan de ofrecerse para emisiones '
+            'nuevas y los documentos que los llevan siguen significando algo.'
+            % ', '.join(desaparecidos))
+
+    cambian_familia = sorted(e['codigo'] for e in limpias
+                             if e['codigo'] in en_uso and e['codigo'] in antes
+                             and antes[e['codigo']] != e['familia'])
+    if cambian_familia:
+        raise ValueError(
+            'No se puede cambiar la familia de un código ya usado: %s. Movería de '
+            'sitio lo que ya se entregó con él. Crea un código nuevo.'
+            % ', '.join(cambian_familia))
+
+    cursor.execute('DELETE FROM idoneidad_catalogo WHERE model_urn = %s', (model_urn,))
+    for e in limpias:
+        cursor.execute(
+            'INSERT INTO idoneidad_catalogo (model_urn, codigo, etiqueta, familia, '
+            'activo, orden) VALUES (%s, %s, %s, %s, %s, %s)',
+            (model_urn, e['codigo'], e['etiqueta'], e['familia'], e['activo'],
+             e['orden']))
+
+    avisos = []
+    activos = [e for e in limpias if e['activo']]
+    if not any(e['familia'] == PUBLICADO for e in activos):
+        avisos.append('No queda ningún código de publicación activo: mientras siga '
+                      'así, no se podrá pasar ningún documento a Publicado.')
+    if not any(e['familia'] == COMPARTIDO for e in activos):
+        avisos.append('No queda ningún código para compartir activo: no se podrá '
+                      'compartir nada para revisión.')
+    apagados = {e['codigo'] for e in limpias if not e['activo']}
+    inactivos_en_uso = sorted(c for c in en_uso if c in apagados)
+    if inactivos_en_uso:
+        avisos.append('Estos códigos siguen usados en el expediente y ya no se '
+                      'ofrecen para emisiones nuevas: %s.'
+                      % ', '.join(inactivos_en_uso))
+
+    logger.info('catalogo de idoneidad de %s reescrito por %s: %d codigos',
+                model_urn, autor or '?', len(limpias))
+    return ([{'codigo': e['codigo'], 'etiqueta': e['etiqueta'], 'familia': e['familia']}
+             for e in activos], avisos)
 
 
 def canonico(cursor, model_urn, codigo):

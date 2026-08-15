@@ -142,7 +142,7 @@ falsos míos**. Lo que sigue es lo verificado y lo corregido en esta pasada.
 | **N51** | El modo «estricto» de nomenclatura era **configuración muerta** | **CERRADO** `01ef559` | se guardaba, se validaba y nadie la leía: encenderla no cambiaba ningún comportamiento. Misma familia que el `@requiere_rol` que no bloqueaba a nadie. Implementado en la puerta de estados; `nomenclatura_ok` NULL no bloquea y la vuelta a borrador tampoco |
 
 | **N52** | `indice_expediente` mandaba a una carpeta **que no existe** | **CERRADO** `dfe1fb0` | quitaba siempre el primer tramo de la ruta: un documento de «01. PLANOS/DRENAJE» salía listado en «DRENAJE». Es el documento que se entrega para que otro **encuentre** los ficheros |
-| **N53** | El catálogo de idoneidad se documentaba **editable** y no lo es | **MITIGADO** `dfe1fb0` | la tabla existe y se lee por obra; escribirla no se puede (ni función ni ruta, solo `GET`). Decirlo como si funcionara es peor que no tenerlo — misma familia que N51. Corregida la afirmación; **queda como deuda declarada** hasta que haya escritura y pantalla |
+| **N53** | El catálogo de idoneidad se documentaba **editable** y no lo era | **CERRADO** `dfe1fb0` + editor | la tabla existe y se lee por obra; escribirla no se puede (ni función ni ruta, solo `GET`). Decirlo como si funcionara es peor que no tenerlo — misma familia que N51. Corregida la afirmación; **cerrado el 15-ago**: `guardar_catalogo()` + `PUT /api/docs/idoneidad` (admin + guardia de obra) + pantalla en el portal. Y no es un CRUD: un código **ya usado no se borra, se desactiva** —borrarlo dejaría documentos sellados con una idoneidad que no significa nada— y **no se le cambia la familia**, que reescribiría el significado de lo ya entregado. 15 pruebas |
 
 ### Áreas 14, 15 y 16 · 15-ago-2026
 
@@ -155,10 +155,10 @@ falsos míos**. Lo que sigue es lo verificado y lo corregido en esta pasada.
 | **N55** | *(área 14)* `puede_salir_del_ecd` **no la llamaba nadie** | **CERRADO** `30a7173` | existía y estaba documentada como «la consulta única», y solo la invocaban sus pruebas. Tercera vez que aparece el patrón (tras el `@requiere_rol` y el modo estricto). Aplicada en enlaces públicos (estricta: sin triaje se deniega) y en transmittals (proporcionada: la clasificación manda cuando existe, para no parar las entregas) |
 | **N56** | *(área 16)* El plan de continuidad **daba por hecho** que el esquema se levantaba | **CERRADO** `0289af3` | no era cierto (N2). Corregido en `04-continuidad`, con lo que la verificación **no** demuestra: ni restauración real, ni copias de Cloud SQL, ni versionado del bucket. Un esquema sin copia de los bytes no restaura un expediente |
 
-### Sigue abierto del área 13 y del flujo
+### Área 13 y flujo · sin hallazgos abiertos
 
-- El catálogo de idoneidad **no se puede editar** (N53): una obra cuyo BEP use otros
-  códigos se queda con el catálogo por defecto. Necesita escritura + pantalla.
+Todo lo listado el 13-ago está cerrado. Lo que queda del saneamiento depende de accesos
+que el proveedor no tiene: portal de Autodesk, panel de Render y consola de Google.
 - ~~**30 manejadores de escritura** siguen sin guardia propia~~ → **CERRADO** `60d84a1`, 15-ago.
   Medidos de verdad quedaban **11**, no 30. De esos: 2 eran falso positivo del detector
   (el inventario ya se acota en su propio SQL), 1 es correcto por diseño (`/api/projects/join`
