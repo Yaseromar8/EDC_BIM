@@ -187,7 +187,7 @@ def transicionar(cursor, model_urn, ids, nuevo, usuario, motivo_del_cambio=None,
     # sello no encontraba donde grabarse y el numero de revision salia siempre
     # 'C01'. La interfaz no lo ofrece, pero la API si lo aceptaba.
     cursor.execute(
-        "SELECT id, name, status FROM file_nodes "
+        "SELECT id, name, status, nomenclatura_ok FROM file_nodes "
         "WHERE id = ANY(%s::uuid[]) AND model_urn = %s AND is_deleted = FALSE "
         "AND node_type = 'FILE'",
         (ids, model_urn),
@@ -211,8 +211,39 @@ def transicionar(cursor, model_urn, ids, nuevo, usuario, motivo_del_cambio=None,
             f"{len(perdidos)} documento(s) no están en esta obra.", documento=perdidos[0]
         )
 
+    # El modo ESTRICTO de nomenclatura era configuracion muerta: se guardaba, se
+    # validaba al escribirla y NADIE la leia. El modulo documentaba «aviso (se
+    # marca, no se aisla) y estricto», y el estricto no aislaba nada. Una opcion
+    # que dice que protege y no protege es peor que no tenerla: se enciende, se
+    # da por resuelto y se deja de mirar.
+    #
+    # Su sitio es esta puerta y no la subida: un fichero mal nombrado se puede
+    # tener en borrador -- ahi es donde se trabaja y se corrige -- pero no se
+    # comparte ni se publica. Emitir un contenedor cuyo nombre no cumple el
+    # patron de la obra es emitir algo que quien lo recibe no puede cotejar con
+    # su compromiso del MIDP.
+    estricta = False
+    if nuevo in ('SHARED', 'PUBLISHED'):
+        try:
+            import nomenclatura
+            estricta = (nomenclatura.config_de_obra(cursor, model_urn).get('modo')
+                        == nomenclatura.ESTRICTO)
+        except Exception as e:
+            # Si no se puede saber el modo NO se endurece: cortar el paso a
+            # compartido de una obra entera por un fallo de lectura seria peor
+            # que el problema que resuelve.
+            import logging
+            logging.getLogger(__name__).warning(
+                f'no se pudo leer el modo de nomenclatura de {model_urn}: {e}')
+
     cambiados, sin_cambio = [], []
-    for node_id, nombre, guardado in filas:
+    for node_id, nombre, guardado, nombre_ok in filas:
+        if estricta and nombre_ok is False:
+            raise TransicionRechazada(
+                f"«{nombre}»: el nombre no cumple la nomenclatura de la obra, y "
+                f"esta obra esta en modo estricto. Renombralo antes de "
+                f"{'publicarlo' if nuevo == 'PUBLISHED' else 'compartirlo'}.",
+                documento=str(node_id))
         actual = normalizar(guardado)
         if actual == nuevo:
             sin_cambio.append(str(node_id))

@@ -73,9 +73,14 @@ def test_los_motivos_estan_en_castellano_y_sin_jerga():
 # ── La puerta ───────────────────────────────────────────────────────────────
 
 class CursorFalso:
-    def __init__(self, documentos):
+    def __init__(self, documentos, modo_nomenclatura='aviso', nombres_ok=None):
         # documentos: [(id, nombre, estado_guardado)]
         self.documentos = documentos
+        # El modo de nomenclatura de la obra y la marca de cada documento. En
+        # 'aviso' -- que es el de por defecto -- no cambia nada; en 'estricto'
+        # un nombre que no cumple no se puede compartir ni publicar.
+        self.modo_nomenclatura = modo_nomenclatura
+        self.nombres_ok = nombres_ok or {}
         self.ejecutadas = []
         self._ultima = []
 
@@ -89,6 +94,14 @@ class CursorFalso:
             self._ultima = [(c, e, f, True) for c, e, f in _idn.CATALOGO_POR_DEFECTO]
         elif 'CODIGO_REVISION FROM FILE_VERSIONS' in s:
             self._ultima = []
+        elif 'TO_REGCLASS' in s:
+            self._ultima = [(None,)]
+        elif 'FROM NOMENCLATURA_CONFIG' in s:
+            self._ultima = [('*', [], self.modo_nomenclatura)]
+        elif 'NOMENCLATURA_OK FROM FILE_NODES' in s:
+            pedidos = set(params[0]) if params else set()
+            self._ultima = [(i, n, e, self.nombres_ok.get(i))
+                            for (i, n, e) in self.documentos if i in pedidos]
         elif sql.strip().upper().startswith('SELECT'):
             pedidos = set(params[0]) if params else set()
             self._ultima = [d for d in self.documentos if d[0] in pedidos]
@@ -400,3 +413,61 @@ def test_un_documento_archivado_no_se_desarchiva_subiendole_un_fichero():
 
 def test_la_maquina_sigue_prohibiendo_archivado_a_borrador():
     assert ecd.WIP not in ecd.TRANSICIONES[ecd.ARCHIVED]
+
+
+# ── Modo estricto de nomenclatura ─────────────────────────────────────────
+#
+# Era configuracion muerta: se guardaba, se validaba al escribirla, y nadie la
+# leia. El modulo documentaba «aviso (se marca, no se aisla) y estricto», y el
+# estricto no aislaba nada. Una opcion que dice que protege y no protege es peor
+# que no tenerla: se enciende, se da por resuelto y se deja de mirar.
+
+def test_en_modo_aviso_un_nombre_que_no_cumple_se_comparte_igual():
+    """Aviso es el modo de arranque a proposito: encender el estricto sobre un
+    ECD sin calibrar deja el portal vacio."""
+    cur = CursorFalso([('d1', 'fichero_raro.pdf', 'WIP')],
+                      modo_nomenclatura='aviso', nombres_ok={'d1': False})
+    r = ecd.transicionar(cur, 'obra/X', ['d1'], 'SHARED', USUARIO, codigo_idoneidad='S3')
+    assert r['cambiados'] == ['d1']
+
+
+def test_en_modo_estricto_un_nombre_que_no_cumple_no_se_comparte():
+    cur = CursorFalso([('d1', 'fichero_raro.pdf', 'WIP')],
+                      modo_nomenclatura='estricto', nombres_ok={'d1': False})
+    with pytest.raises(ecd.TransicionRechazada) as e:
+        ecd.transicionar(cur, 'obra/X', ['d1'], 'SHARED', USUARIO, codigo_idoneidad='S3')
+    assert 'nomenclatura' in str(e.value).lower()
+
+
+def test_en_modo_estricto_tampoco_se_publica():
+    cur = CursorFalso([('d1', 'fichero_raro.pdf', 'SHARED')],
+                      modo_nomenclatura='estricto', nombres_ok={'d1': False})
+    with pytest.raises(ecd.TransicionRechazada):
+        ecd.transicionar(cur, 'obra/X', ['d1'], 'PUBLISHED', USUARIO,
+                         autorizar=lambda _n: True, codigo_idoneidad='A1')
+
+
+def test_en_modo_estricto_un_nombre_que_si_cumple_pasa():
+    """Una guardia que tambien bloquea al que cumple no se puede encender."""
+    cur = CursorFalso([('d1', '500125-CSSP001-000-XX-DR-TP-000800.pdf', 'WIP')],
+                      modo_nomenclatura='estricto', nombres_ok={'d1': True})
+    assert ecd.transicionar(cur, 'obra/X', ['d1'], 'SHARED', USUARIO,
+                            codigo_idoneidad='S3')['cambiados'] == ['d1']
+
+
+def test_en_modo_estricto_un_documento_sin_evaluar_no_se_bloquea():
+    """nomenclatura_ok NULL es «no se ha mirado», que no es lo mismo que «no
+    cumple». Tratarlo como incumplimiento pararia la obra entera el dia que se
+    cambia el patron y aun no se ha recalculado."""
+    cur = CursorFalso([('d1', 'sin_evaluar.pdf', 'WIP')],
+                      modo_nomenclatura='estricto', nombres_ok={'d1': None})
+    assert ecd.transicionar(cur, 'obra/X', ['d1'], 'SHARED', USUARIO,
+                            codigo_idoneidad='S3')['cambiados'] == ['d1']
+
+
+def test_volver_a_borrador_no_mira_la_nomenclatura():
+    """El borrador es donde se corrige un nombre. Bloquear la vuelta a WIP
+    dejaria el documento atrapado sin forma de arreglarlo."""
+    cur = CursorFalso([('d1', 'fichero_raro.pdf', 'SHARED')],
+                      modo_nomenclatura='estricto', nombres_ok={'d1': False})
+    assert ecd.transicionar(cur, 'obra/X', ['d1'], 'WIP', USUARIO)['cambiados'] == ['d1']
