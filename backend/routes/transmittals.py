@@ -184,6 +184,42 @@ def _items_emisibles(cursor, model_urn, items):
                      % (len(faltan), len(ids)),
             "code": "TRANSMITTAL_ITEM_INEXISTENTE"}), 400
 
+    # ¿Pueden SALIR del ECD? (ISO 19650-5). Un transmittal manda los documentos a
+    # destinatarios que pueden ser externos, con su nombre en el correo: es una
+    # salida real, y hasta ahora no preguntaba.
+    #
+    # PERO NO CON LA MISMA REGLA QUE UN ENLACE PUBLICO. Alli, sin triaje hecho,
+    # se deniega: un enlace es distribucion incontrolada -- quien lo tenga, abre --
+    # y la parte 5 existe para que no salga lo que nadie ha mirado.
+    #
+    # Un transmittal es el canal FORMAL: destinatarios con nombre, numero de
+    # serie, acuse de recibo y registro. Aplicarle la misma regla pararia las
+    # entregas de la obra entera el dia que se despliegue esto, por no haber
+    # hecho un triaje que nadie ha pedido todavia. Aqui la clasificacion manda
+    # cuando EXISTE; cuando no existe, el ECD no tiene base para decir que un
+    # documento es delicado, y la entrega trazable sigue su curso.
+    try:
+        import sensibilidad as _sens
+        triaje = _sens.triaje_de_obra(cursor, model_urn)
+        frenados = []
+        if triaje and not triaje.get('caducado') and triaje.get('requiere_enfoque'):
+            for nid in ids:
+                permitido, nivel, motivo = _sens.puede_salir_del_ecd(cursor, nid, model_urn)
+                if not permitido:
+                    frenados.append('%s (%s)' % (encontrados[nid][0], motivo or nivel or '—'))
+        if frenados:
+            return jsonify({
+                "success": False,
+                "error": "No se pueden emitir %d documento(s) fuera del ECD: %s"
+                         % (len(frenados), '; '.join(frenados[:3])),
+                "code": "SENSIBILIDAD_NO_PERMITE_SALIDA"}), 403
+    except Exception as e:
+        # Si la clasificacion no se puede consultar NO se bloquea la emision: el
+        # transmittal es el camino formal de entrega de la obra, y tumbarlo por
+        # un fallo de lectura de un catalogo seria peor que el riesgo. Queda
+        # dicho en el registro, que es lo que permite volver sobre ello.
+        print(f'[transmittal] no se pudo comprobar la sensibilidad: {e}')
+
     borradores = [n for (n, s) in encontrados.values() if (s or '').upper() == 'WIP']
     if borradores:
         return jsonify({

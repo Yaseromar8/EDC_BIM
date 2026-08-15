@@ -127,3 +127,58 @@ def test_el_orden_de_los_niveles_no_se_toca_sin_querer():
     # Solo el nivel mas bajo puede salir del ECD.
     assert [p for _c, _e, _o, p in s.NIVELES_POR_DEFECTO] == [True, False, False, False]
     assert s.NIVEL_SIN_EVALUAR != 'N0'
+
+
+# ── Que el control ESTE PUESTO donde la informacion sale ──────────────────
+#
+# `puede_salir_del_ecd` existia y NADIE la llamaba: solo estas pruebas. Un
+# control que no se invoca no es un control, es documentacion. Es la tercera vez
+# que aparece este patron en la plataforma -- el @requiere_rol que no bloqueaba
+# a nadie, el modo estricto de nomenclatura -- asi que aqui se fija por escrito.
+
+def _fuente(*partes):
+    import io as _io
+    import os
+    return _io.open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), *partes), encoding='utf-8').read()
+
+
+def test_el_enlace_publico_pregunta_si_el_documento_puede_salir():
+    """Un enlace publico saca el fichero del alcance de cualquier permiso: quien
+    lo tenga, lo abre. Tener acceso y permiso de carpeta no es lo mismo que
+    poder sacarlo."""
+    fuente = _fuente('routes', 'documents.py')
+    cuerpo = fuente[fuente.index('def share_document'):]
+    cuerpo = cuerpo[:cuerpo.index('\ndef ', 1)]
+    assert 'puede_salir_del_ecd' in cuerpo
+    assert cuerpo.index('puede_salir_del_ecd') < cuerpo.index('INSERT INTO document_shares'), \
+        'se emite el enlace antes de preguntar si el documento puede salir'
+
+
+def test_el_transmittal_tambien_pregunta():
+    fuente = _fuente('routes', 'transmittals.py')
+    assert 'puede_salir_del_ecd' in fuente
+
+
+def test_pero_el_transmittal_no_se_para_por_falta_de_triaje():
+    """Un enlace publico sin triaje se deniega: es distribucion incontrolada y
+    la parte 5 existe para que no salga lo que nadie ha mirado.
+
+    Un transmittal es el canal FORMAL -- destinatarios con nombre, numero de
+    serie, acuse de recibo y registro. Aplicarle la misma regla pararia las
+    entregas de la obra entera el dia del despliegue, por no haber hecho un
+    triaje que nadie ha pedido todavia. La clasificacion manda cuando EXISTE."""
+    fuente = _fuente('routes', 'transmittals.py')
+    cuerpo = fuente[fuente.index('def _items_emisibles'):]
+    cuerpo = cuerpo[:cuerpo.index('\ndef ', 1)]
+    assert 'triaje_de_obra' in cuerpo
+    assert "triaje.get('requiere_enfoque')" in cuerpo
+
+
+def test_un_fallo_leyendo_el_catalogo_no_tumba_una_entrega():
+    """Tumbar el camino formal de entrega por un fallo de lectura seria peor que
+    el riesgo que evita."""
+    fuente = _fuente('routes', 'transmittals.py')
+    cuerpo = fuente[fuente.index('def _items_emisibles'):]
+    cuerpo = cuerpo[:cuerpo.index('\ndef ', 1)]
+    assert 'except Exception' in cuerpo

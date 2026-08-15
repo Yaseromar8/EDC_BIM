@@ -2138,6 +2138,31 @@ def share_document():
     try:
         from db import get_db_connection
         from datetime import datetime, timedelta, timezone
+
+        # ── ¿Este documento PUEDE salir del ECD? (ISO 19650-5) ──────────────
+        #
+        # Tener acceso y tener permiso de carpeta no es lo mismo que poder
+        # sacarlo. Un plano puede estar publicado, ser apto para construir y ser
+        # accesible a todo el equipo, y aun asi no deber salir -- y un enlace
+        # publico lo saca del alcance de cualquier permiso que el ECD sepa
+        # aplicar: quien lo tenga, lo abre.
+        #
+        # `sensibilidad.puede_salir_del_ecd` existia justamente para esto, y NADIE
+        # la llamaba: solo sus propias pruebas. Un control que no se invoca no es
+        # un control, es documentacion. Es la tercera vez que aparece este patron
+        # en esta plataforma (el @requiere_rol que no bloqueaba, el modo estricto
+        # de nomenclatura), asi que aqui va con prueba de que esta puesta.
+        import sensibilidad as _sens
+        with get_db_connection() as _c:
+            _permitido, _nivel, _motivo = _sens.puede_salir_del_ecd(
+                _c.cursor(), node_id, model_urn)
+        if not _permitido:
+            return jsonify({
+                "success": False,
+                "error": _motivo or "Este documento no puede salir del ECD.",
+                "code": "SENSIBILIDAD_NO_PERMITE_SALIDA",
+                "nivel": _nivel}), 403
+
         expires_at = None
         try:
             if expires_days and int(expires_days) > 0:
