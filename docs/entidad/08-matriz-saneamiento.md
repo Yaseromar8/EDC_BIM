@@ -131,13 +131,18 @@ falsos míos**. Lo que sigue es lo verificado y lo corregido en esta pasada.
 | **N37** | `/api/pins/upload` no validaba nada y metía el `projectId` **sin sanear** en la ruta del objeto | **CERRADO** | `../otra-obra` escribía fuera del prefijo propio |
 | **N38** | La puerta única de estados **aguanta** | **NO APLICA — refutado** | rechazó los cuatro ataques: saltarse un estado, retroceder de PUBLISHED, publicar sin idoneidad y publicar sin aprobador. Es la primera parte del sistema que resiste una prueba adversarial completa |
 
-### Sigue abierto del área 13 y del flujo (sin arreglar todavía)
+### Área 13 y flujo · cerrado el 15-ago-2026
 
-- El número de revisión preliminar **se reutiliza** (`P01` dos veces): publicar sobrescribe la
-  emisión anterior en la misma fila. Necesita tabla de emisiones.
-- El transmittal **acepta documentos que no existen** y borradores en WIP.
-- El modo «estricto» de nomenclatura es **configuración muerta**.
-- El autor de una revisión **puede ser su propio y único revisor**.
+| ID | Hallazgo | Estado | Evidencia |
+|---|---|---|---|
+| **N47** | El autor de una revisión podía ser su propio y **único** revisor | **CERRADO** `2d641c8` | cualquiera con permiso de edición sobre sus propios documentos se aprobaba a sí mismo y el expediente quedaba con material «autorizado» — con historial, revisores y fechas que **parecen** los de una revisión de verdad. Peor que no tener revisión: tiene su apariencia. La regla es que el autor no sea el ÚNICO (puede estar entre ellos); se comprueba al CREAR y compara sin distinguir mayúsculas y también por nombre. 7 pruebas |
+| **N48** | La segunda emisión **borraba** la primera | **CERRADO** `2d641c8` | el mismo fichero se comparte como S3 y semanas después se publica como A1; el `UPDATE` sobre la fila de la versión no matizaba la emisión anterior: la borraba. Quién compartió, qué día y con qué idoneidad dejaba de existir |
+| **N49** | Y por eso `P01` **se reutilizaba** | **CERRADO** `2d641c8` | `siguiente_revision` contaba sobre esa misma columna pisada. Tabla `file_emisiones`, sólo-añadir. **Demostrado contra Postgres real** (la lección de N31): `P01 (S3, ana) → C01 (A1, luis) → siguiente P02`, y el registro conserva las dos emisiones |
+| **N50** | Un transmittal podía **certificar una entrega que no ocurrió** | **CERRADO** `225a4e3` | aceptaba documentos inexistentes, de otra obra, o borradores en WIP. Se comprueba antes de numerar, para no dejar huecos en una serie que se enseña al cliente. 10 pruebas |
+| **N51** | El modo «estricto» de nomenclatura era **configuración muerta** | **CERRADO** `01ef559` | se guardaba, se validaba y nadie la leía: encenderla no cambiaba ningún comportamiento. Misma familia que el `@requiere_rol` que no bloqueaba a nadie. Implementado en la puerta de estados; `nomenclatura_ok` NULL no bloquea y la vuelta a borrador tampoco |
+
+### Sigue abierto del área 13 y del flujo
+
 - `indice_expediente` pierde la carpeta de primer nivel en la columna «Ubicación en el ECD».
 - El catálogo de idoneidad se documenta editable y solo tiene `GET`.
 - ~~**30 manejadores de escritura** siguen sin guardia propia~~ → **CERRADO** `60d84a1`, 15-ago.
