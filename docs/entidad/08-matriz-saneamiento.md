@@ -141,10 +141,13 @@ falsos míos**. Lo que sigue es lo verificado y lo corregido en esta pasada.
 | **N50** | Un transmittal podía **certificar una entrega que no ocurrió** | **CERRADO** `225a4e3` | aceptaba documentos inexistentes, de otra obra, o borradores en WIP. Se comprueba antes de numerar, para no dejar huecos en una serie que se enseña al cliente. 10 pruebas |
 | **N51** | El modo «estricto» de nomenclatura era **configuración muerta** | **CERRADO** `01ef559` | se guardaba, se validaba y nadie la leía: encenderla no cambiaba ningún comportamiento. Misma familia que el `@requiere_rol` que no bloqueaba a nadie. Implementado en la puerta de estados; `nomenclatura_ok` NULL no bloquea y la vuelta a borrador tampoco |
 
+| **N52** | `indice_expediente` mandaba a una carpeta **que no existe** | **CERRADO** `dfe1fb0` | quitaba siempre el primer tramo de la ruta: un documento de «01. PLANOS/DRENAJE» salía listado en «DRENAJE». Es el documento que se entrega para que otro **encuentre** los ficheros |
+| **N53** | El catálogo de idoneidad se documentaba **editable** y no lo es | **MITIGADO** `dfe1fb0` | la tabla existe y se lee por obra; escribirla no se puede (ni función ni ruta, solo `GET`). Decirlo como si funcionara es peor que no tenerlo — misma familia que N51. Corregida la afirmación; **queda como deuda declarada** hasta que haya escritura y pantalla |
+
 ### Sigue abierto del área 13 y del flujo
 
-- `indice_expediente` pierde la carpeta de primer nivel en la columna «Ubicación en el ECD».
-- El catálogo de idoneidad se documenta editable y solo tiene `GET`.
+- El catálogo de idoneidad **no se puede editar** (N53): una obra cuyo BEP use otros
+  códigos se queda con el catálogo por defecto. Necesita escritura + pantalla.
 - ~~**30 manejadores de escritura** siguen sin guardia propia~~ → **CERRADO** `60d84a1`, 15-ago.
   Medidos de verdad quedaban **11**, no 30. De esos: 2 eran falso positivo del detector
   (el inventario ya se acota en su propio SQL), 1 es correcto por diseño (`/api/projects/join`
