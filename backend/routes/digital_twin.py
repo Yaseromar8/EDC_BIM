@@ -689,6 +689,117 @@ def update_all_models():
 # Con la URL firmada, el backend solo hace dos llamadas cortas -- firmar y
 # cerrar -- y los megas viajan por su cuenta.
 
+@digital_twin_bp.route('/api/modelos/publicar-desde-ecd', methods=['POST'])
+def publicar_modelo_desde_ecd():
+    """Lleva al visor un modelo que YA esta en el ECD, sin volver a subirlo.
+
+    Hasta ahora un modelo se subia dos veces -- una al gestor documental y otra
+    al visor -- y de ahi salian las dos cosas de siempre: se desincronizan y
+    nadie sabe cual manda. Peor: el modelo del visor no tiene estado, ni
+    idoneidad, ni revision, ni huella, porque llego por su cuenta. Mirando el
+    visor no se podia decir si lo que se ve es la version aprobada.
+
+    Aqui el documento del ECD ES el modelo. Los bytes ya estan en el almacen: se
+    leen de ahi y se pasan a Autodesk sin que nadie vuelva a subir nada.
+
+    FASE 1 de dos. La FASE 2 -- esperar la traduccion y registrar el modelo -- es
+    `/api/config/project/upload/finalize`, que ya existe y funciona. No se
+    duplica: dos copias del mismo flujo es como se llego a tener una version
+    viva y otra muerta.
+    """
+    from flask import g
+    import publicar_al_visor as pub
+
+    d = request.get_json() or {}
+    node_id = d.get('node_id')
+    model_urn = d.get('model_urn')
+    forzar = bool(d.get('forzar'))
+    if not node_id or not model_urn:
+        return jsonify({'error': 'Faltan node_id o model_urn'}), 400
+
+    negativa = guardia_de_obra(model_urn, 'publicar un modelo al visor')
+    if negativa:
+        return negativa
+    # Traducir cuesta creditos de la cuenta de Autodesk que paga el usuario.
+    user = getattr(g, 'current_user', None) or {}
+    if user.get('role') != 'admin':
+        return jsonify({'error': 'Solo un administrador puede publicar modelos '
+                                 'al visor.'}), 403
+
+    try:
+        from db import get_db_connection, log_activity
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS urn_aps TEXT')
+            cur.execute("""SELECT n.id, n.name, n.gcs_urn, n.model_urn, n.status,
+                                  n.size_bytes, v.sha256, n.urn_aps
+                             FROM file_nodes n
+                             LEFT JOIN file_versions v ON v.id = n.current_version_id
+                            WHERE n.id = %s AND NOT COALESCE(n.is_deleted, FALSE)""",
+                        (str(node_id),))
+            fila = cur.fetchone()
+            conn.commit()
+
+        try:
+            doc = pub.comprobar_documento(fila, model_urn)
+        except pub.NoSePuedePublicar as motivo:
+            return jsonify({'error': str(motivo)}), 400
+
+        # Ya publicado: se devuelve el mismo URN en vez de pagar otra vez. No es
+        # hipotetico -- basta con que dos personas pulsen el boton.
+        urn_previo = pub.ya_publicado(doc, forzar)
+        if urn_previo:
+            return jsonify({'status': 'ya_publicado', 'urn': urn_previo,
+                            'translation_triggered': False,
+                            'nombre': doc['nombre']}), 200
+
+        token, error = get_internal_token()
+        if error or not token:
+            return jsonify({'error': 'Autenticación con Autodesk fallida'}), 502
+        bucket = get_app_bucket_key()
+        if not ensure_bucket_exists(bucket, token):
+            return jsonify({'error': 'No se pudo preparar el almacén de Autodesk'}), 502
+
+        # Los bytes salen del almacen del ECD y van a Autodesk sin pasar por el
+        # navegador de nadie: es el mismo fichero que aprobo la obra.
+        from gcs_manager import get_storage_client
+        from routes.docs_cad import _upload_to_oss, _urn_of
+        bucket_gcs = os.environ.get('GCS_BUCKET_NAME')
+        blob = get_storage_client().bucket(bucket_gcs).blob(doc['gcs_urn'])
+        try:
+            with blob.open('rb') as flujo:
+                object_id, fallo = _upload_to_oss(
+                    token, bucket, pub.clave_de_objeto(doc), flujo,
+                    size=doc['size_bytes'] or None)
+        except Exception as e:
+            return jsonify({'error': 'No se pudo leer el fichero del almacén: %s'
+                                     % str(e)[:120]}), 502
+        if fallo:
+            return jsonify({'error': 'Autodesk rechazó la subida: %s' % fallo}), 502
+
+        urn = _urn_of(object_id)
+        lanzada = trigger_translation(urn, token, filename=doc['nombre'], forzar=forzar)
+
+        # El URN se guarda EN EL DOCUMENTO: es lo que ata el modelo del visor con
+        # su ficha del expediente, y lo que evita pagar dos veces por lo mismo.
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('UPDATE file_nodes SET urn_aps = %s WHERE id = %s',
+                        (urn, doc['node_id']))
+            conn.commit()
+
+        log_activity(model_urn, 'modelo_publicado_al_visor', 'file',
+                     entity_id=doc['node_id'], entity_name=doc['nombre'],
+                     performed_by=user.get('name') or user.get('email'),
+                     details={'urn': urn, 'traduccion': bool(lanzada),
+                              'forzada': forzar})
+        return jsonify({'status': 'uploaded', 'urn': urn, 'nombre': doc['nombre'],
+                        'translation_triggered': bool(lanzada)}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @digital_twin_bp.route('/api/modelos/firmar-subida', methods=['POST'])
 def firmar_subida_de_modelo():
     """Devuelve las URL firmadas para que el navegador suba el modelo a S3."""

@@ -141,6 +141,35 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   const [reviewModalItems, setReviewModalItems] = React.useState(null); // null = cerrado
   // ── Transmittals ──
   const [transmittalItems, setTransmittalItems] = React.useState(null); // null = cerrado
+  const [publicando, setPublicando] = React.useState(false);
+
+  // Publicar al visor un modelo que YA esta en el ECD. No sube nada: le dice al
+  // servidor que lleve a Autodesk los bytes que ya tiene. La traduccion tarda,
+  // asi que se avisa y se deja seguir trabajando -- el modelo aparece en el
+  // visor cuando Autodesk termina.
+  const publicarAlVisor = async (doc) => {
+    setPublicando(true);
+    try {
+      const r = await apiFetch(`${API}/api/modelos/publicar-desde-ecd`, {
+        method: 'POST',
+        body: JSON.stringify({ node_id: doc.id, model_urn: projectPrefix }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) { toast.error(d.error || 'No se pudo publicar.'); return; }
+      if (d.status === 'ya_publicado') {
+        // No se vuelve a traducir: cada trabajo se cobra. Decirlo, en vez de
+        // fingir que se ha hecho algo.
+        toast.success(`${d.nombre} ya estaba publicado en el visor.`);
+        return;
+      }
+      toast.success(`${d.nombre} enviado al visor. La traducción tarda unos minutos.`);
+    } catch {
+      toast.error('No se pudo publicar el modelo.');
+    } finally {
+      setPublicando(false);
+    }
+  };
+
   // ── Atributos personalizados ──
   const [attributesItem, setAttributesItem] = React.useState(null); // archivo en edición
   // ── Conjuntos (Sets) ──
@@ -518,6 +547,28 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                     <button onClick={() => setReviewModalItems(selFiles.map(f => ({ node_id: f.id, name: f.name, version: f.version || 1, version_id: f.version_id || null })))}
                       style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: 'var(--accent)', fontSize: 13, cursor: 'pointer', padding: '6px 8px' }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Enviar a revisión
+                    </button>
+                  );
+                })()}
+
+                {/* PUBLICAR AL VISOR — solo administrador y solo si lo
+                    seleccionado es un modelo. El documento del ECD ES el modelo:
+                    esto no vuelve a subir nada, lleva a Autodesk los bytes que
+                    ya estan en el almacen. Traducir cuesta creditos, por eso no
+                    se ofrece a cualquiera ni sobre cualquier fichero. */}
+                {!fe.isTrashMode && isAdmin && fe.selected.size > 0 && (() => {
+                  const MODELOS = ['.rvt', '.ifc', '.nwd', '.nwc', '.dwg', '.dxf',
+                                   '.dgn', '.3dm', '.skp', '.laz', '.e57', '.rcp'];
+                  const selFiles = fe.files.filter(f => fe.selected.has(f.fullName))
+                    .filter(f => MODELOS.some(e => (f.name || '').toLowerCase().endsWith(e)));
+                  if (selFiles.length !== 1) return null;
+                  const doc = selFiles[0];
+                  return (
+                    <button onClick={() => publicarAlVisor(doc)} disabled={publicando}
+                      title="Llevar este modelo al visor sin volver a subirlo"
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: 'var(--accent)', fontSize: 13, cursor: publicando ? 'default' : 'pointer', padding: '6px 8px', opacity: publicando ? 0.6 : 1 }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="7.5 4.21 12 6.81 16.5 4.21"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                      {publicando ? 'Publicando…' : 'Publicar al visor'}
                     </button>
                   );
                 })()}
