@@ -954,12 +954,42 @@ def health_check():
     secretos: solo que codigo se esta ejecutando.
     """
     version = (os.getenv('RENDER_GIT_COMMIT') or os.getenv('GIT_COMMIT') or '')[:12]
+
+    # Y que POSTURA tiene. Mismo motivo que la version: varios hallazgos
+    # (APP_SECRET, SESSION_PEPPER, CORS, autorizacion transversal, DDL en
+    # caliente) se podian arreglar y no se podian DEMOSTRAR desde fuera.
+    #
+    # Aqui va solo el recuento: completa si/no y cuantos puntos faltan. Nunca
+    # cuales, y nunca ningun valor -- decir «falta SESSION_PEPPER» seria dar un
+    # mapa. El detalle vive detras de sesion de administrador, en
+    # /api/seguridad/postura.
+    import postura_de_seguridad as _postura
     return jsonify({
         'status': 'ok',
         'service': 'visor-ecd-backend',
         'version': version or 'desconocida',
         'rama': os.getenv('RENDER_GIT_BRANCH') or None,
+        'configuracion': _postura.resumen_publico(),
     })
+
+
+@app.route('/api/seguridad/postura', methods=['GET'])
+def postura_de_seguridad_detallada():
+    """Que punto concreto de la configuracion falla. Solo administrador.
+
+    El latido publica el recuento para que se pueda verificar desde fuera que un
+    cambio se aplico. Aqui va el detalle, que es lo que sirve para arreglarlo, y
+    por eso pide sesion: la lista de lo que falta es un mapa de por donde entrar.
+    """
+    u = getattr(g, 'current_user', None) or {}
+    if not u:
+        return jsonify({'error': 'Autenticación requerida'}), 401
+    if u.get('role') != 'admin':
+        return jsonify({'error': 'Solo un administrador puede ver la postura '
+                                 'de seguridad.'}), 403
+    import postura_de_seguridad as _postura
+    return jsonify({'resumen': _postura.resumen_publico(),
+                    'detalle': _postura.detalle()}), 200
 
 @app.route('/api/inventory/schema', methods=['GET'])
 def get_inventory_schema():

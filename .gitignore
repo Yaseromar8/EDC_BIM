@@ -75,3 +75,12 @@ backend/scratch*.py
 backend/clean_*.py
 backend/diagnose_*.py
 backend/test_full_flow.py
+
+# Guiones sueltos de depuracion con credenciales dentro. Retirados el 15-ago-2026:
+# apuntaban a localhost/visor_aps con la contrasena escrita en el fichero, y
+# estaban PUBLICADOS en el repositorio. Ninguno lo importaba nadie.
+# El peligro de esta familia no es lo que hace cada guion: es que puentean la
+# aplicacion, que es el camino por el que se pudo alterar el registro de
+# auditoria sin dejar rastro (C3).
+backend/debug_photos.py
+backend/check_cats.py

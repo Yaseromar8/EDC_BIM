@@ -70,7 +70,14 @@ def test_el_latido_sigue_sin_tocar_la_base(cliente):
 
 
 def test_el_latido_no_publica_nada_mas(cliente, monkeypatch):
-    """Es publico. Todo lo que salga por aqui sale sin sesion."""
+    """Es publico. Todo lo que salga por aqui sale sin sesion.
+
+    `configuracion` se anadio despues, a proposito y acotado: solo el RECUENTO
+    de puntos de seguridad que faltan, nunca cuales ni ningun valor. Es lo que
+    permite verificar desde fuera que un cambio de configuracion se aplico, sin
+    dar un mapa de por donde entrar.
+    """
     monkeypatch.setenv('RENDER_GIT_COMMIT', 'abc123')
     d = cliente.get('/api/health').get_json()
-    assert set(d) == {'status', 'service', 'version', 'rama'}
+    assert set(d) == {'status', 'service', 'version', 'rama', 'configuracion'}
+    assert set(d['configuracion']) == {'completa', 'puntos', 'faltan'}
