@@ -1,4 +1,4 @@
-RECONSTRUCCION DEL ESQUEMA DESDE CERO · 15-ago-2026 · hallazgo N2
+RECONSTRUCCION DEL ESQUEMA DESDE CERO · 15-ago-2026 · hallazgo N57
 =================================================================
 
 LA PREGUNTA
@@ -63,6 +63,13 @@ QUE QUEDA FIJADO
   · 4 pruebas que fijan el orden y comparan lo que el codigo declara contra ese
     manifiesto. Una familia de tablas nueva que nadie enchufe al arranque rompe
     la prueba, en vez de descubrirse el dia de la restauracion.
+
+RELACION CON N2, QUE SIGUE ABIERTO
+  N2 es «Alembic nunca se ejecuta en produccion: el esquema lo construye solo el
+  DDL en caliente». Esto NO lo cierra. Arreglar el bootstrap hace que la
+  reconstruccion funcione cuando alguien la ejecuta; el `startCommand` real de
+  Render no la ejecuta. Son dos mitades del mismo problema y solo esta resuelta
+  una.
 
 LO QUE ESTO **NO** DEMUESTRA
   · que una restauracion REAL funcione: eso exige una base vacia de verdad, con
