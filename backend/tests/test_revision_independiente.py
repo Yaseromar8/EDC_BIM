@@ -107,3 +107,29 @@ def test_la_comprobacion_esta_puesta_en_la_creacion():
     # Antes del INSERT, no despues.
     assert (cuerpo.index('_revision_independiente')
             < cuerpo.index('INSERT INTO doc_reviews'))
+
+
+def test_la_negativa_dice_COMO_desbloquearlo():
+    """Medido sobre la base real: la obra INTERFERENCIAS tiene UN solo miembro,
+    asi que con esta regla su unico usuario no puede crear ninguna revision.
+
+    La regla se queda -- una revision sin ojo ajeno no revisa nada -- pero un
+    «no puedes» sin salida deja a alguien pulsando el boton otra vez sin
+    entender que le piden. Aqui la salida existe (invitar a alguien a la obra) y
+    tiene que estar escrita en el propio error, no en la cabeza de quien lo
+    programo.
+
+    Es la misma leccion que los enlaces publicos, que deje bloqueados sin
+    pantalla para desbloquearlos.
+    """
+    import importlib
+    from flask import Flask, g
+    import routes.reviews as rv
+    importlib.reload(rv)
+    app = Flask(__name__)
+    with app.test_request_context('/'):
+        g.current_user = AUTOR
+        cuerpo, _codigo = rv._revision_independiente(AUTOR, [{'email': 'yaser@obra.test'}])
+    texto = cuerpo.get_json()['error']
+    assert 'invita' in texto.lower()
+    assert 'Miembros' in texto

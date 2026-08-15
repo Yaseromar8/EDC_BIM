@@ -143,7 +143,9 @@ def _revision_independiente(user, steps):
     return jsonify({
         "success": False,
         "error": "Una revisión necesita al menos un revisor distinto de quien la "
-                 "crea. Puedes estar entre los revisores, pero no ser el único.",
+                 "crea. Puedes estar entre los revisores, pero no ser el único. "
+                 "Si eres la única persona en esta obra, invita a alguien desde "
+                 "Administración → Miembros y asígnalo como revisor.",
         "code": "REVISION_SIN_INDEPENDENCIA",
     }), 400
 
