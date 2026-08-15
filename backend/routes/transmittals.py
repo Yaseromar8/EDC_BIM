@@ -131,6 +131,70 @@ def list_transmittals():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def _items_emisibles(cursor, model_urn, items):
+    """None si se pueden emitir; (respuesta, codigo) si no.
+
+    Un transmittal es la evidencia de que unos documentos SE ENTREGARON. Se
+    numera, se firma, se avisa por correo y se acusa recibo: en una discusion de
+    plazos es la prueba. Hasta ahora aceptaba cualquier lista.
+
+    Lo que se comprueba, y por que cada cosa:
+
+      · que el documento EXISTA. Emitir un TR-014 que lista un plano inexistente
+        certifica una entrega que no ocurrio, y el que lo recibe no tiene como
+        saberlo: le llega un correo con el nombre del fichero;
+
+      · que sea DE ESTA OBRA. Un transmittal que mezcla obras filtra el nombre
+        de los documentos de una a los destinatarios de la otra;
+
+      · que no este en BORRADOR. WIP es trabajo en curso, por definicion no
+        emitido. Entregar formalmente un borrador es entregar algo que su autor
+        todavia no da por bueno, y ademas rodea la puerta de estados: se emite
+        sin pasar por compartir ni publicar, sin idoneidad y sin numero de
+        revision. La emision quedaria en el expediente sin nada detras.
+
+    No se dice CUAL falla cuando el nodo no aparece: distinguir "no existe" de
+    "es de otra obra" permitiria descubrir identificadores validos.
+    """
+    ids = []
+    for it in (items or []):
+        node_id = it.get('node_id') if isinstance(it, dict) else it
+        if not node_id:
+            return jsonify({
+                "success": False,
+                "error": "Hay documentos en la lista sin identificador. Un "
+                         "transmittal solo puede emitir documentos del ECD.",
+                "code": "TRANSMITTAL_ITEM_SIN_NODO"}), 400
+        ids.append(str(node_id))
+    if not ids:
+        return None
+
+    cursor.execute(
+        "SELECT id::text, name, status FROM file_nodes "
+        "WHERE id = ANY(%s::uuid[]) AND model_urn = %s AND NOT is_deleted",
+        (ids, model_urn))
+    encontrados = {i: (n, s) for i, n, s in cursor.fetchall()}
+
+    faltan = [i for i in ids if i not in encontrados]
+    if faltan:
+        return jsonify({
+            "success": False,
+            "error": "%d de los %d documentos no estan en esta obra. No se puede "
+                     "emitir un transmittal de algo que el ECD no tiene."
+                     % (len(faltan), len(ids)),
+            "code": "TRANSMITTAL_ITEM_INEXISTENTE"}), 400
+
+    borradores = [n for (n, s) in encontrados.values() if (s or '').upper() == 'WIP']
+    if borradores:
+        return jsonify({
+            "success": False,
+            "error": "Hay %d documento(s) en borrador (WIP): %s. Comparte o "
+                     "publica antes de emitirlos -- un borrador no se entrega "
+                     "formalmente." % (len(borradores), ', '.join(borradores[:3])),
+            "code": "TRANSMITTAL_ITEM_EN_BORRADOR"}), 400
+    return None
+
+
 @transmittals_bp.route('/api/transmittals', methods=['POST'])
 @limite("20 per hour")
 def create_transmittal():
@@ -149,6 +213,9 @@ def create_transmittal():
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
+            negativa = _items_emisibles(cur, d['model_urn'], d['items'])
+            if negativa:
+                return negativa
             # Numeración secuencial por proyecto (TR-001, TR-002, ...)
             cur.execute("SELECT COALESCE(MAX(number), 0) + 1 FROM transmittals WHERE model_urn = %s",
                         (d['model_urn'],))

@@ -50,11 +50,21 @@ def entorno(monkeypatch):
     class Cursor:
         def __init__(self):
             self._u = None
+            self._filas = []
 
         def execute(self, sql, params=None):
             s = ' '.join(sql.split())
             su = s.upper()
-            if 'COALESCE(MAX(NUMBER), 0) + 1' in su:
+            if 'SELECT ID::TEXT, NAME, STATUS FROM FILE_NODES' in su:
+                # Un transmittal solo puede emitir documentos que existan, sean
+                # de esta obra y no esten en borrador. El escenario da por buenos
+                # los nodos de la obra; los casos que fallan tienen su propia
+                # prueba en test_transmittal_emisible.py.
+                pedidos, obra = params
+                self._filas = [(i, f'documento-{i}.pdf', 'SHARED')
+                               for i in pedidos] if obra == OBRA else []
+                self._u = None
+            elif 'COALESCE(MAX(NUMBER), 0) + 1' in su:
                 self._u = (4,)
             elif su.startswith('INSERT INTO TRANSMITTALS'):
                 escrito['insert'] = params
@@ -80,7 +90,8 @@ def entorno(monkeypatch):
             return self._u
 
         def fetchall(self):
-            return []
+            filas, self._filas = self._filas, []
+            return filas
 
     class Conn:
         def cursor(self):
