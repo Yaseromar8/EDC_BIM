@@ -941,8 +941,25 @@ def health_check():
     Permite distinguir "el servicio no arranco" de "la base no responde" sin
     tener que adivinar leyendo logs. Si esto contesta y el resto no, el problema
     es la base; si ni esto contesta, es el arranque.
+
+    Y dice QUE VERSION esta sirviendo. Sin esto no habia forma de comprobar que
+    un despliegue habia entrado: el middleware responde 401 a todo lo que no
+    lleva sesion -- tambien a una ruta inventada -- asi que sondear si existe un
+    endpoint nuevo no distingue "todavia no ha desplegado" de "no existe". La
+    unica prueba de despliegue era abrir el panel de Render y creerselo. Es el
+    residual que quedaba abierto del hallazgo C2.
+
+    El identificador del commit lo pone Render (RENDER_GIT_COMMIT). Es publico
+    -- el repositorio lo es -- y no dice nada de la configuracion ni de los
+    secretos: solo que codigo se esta ejecutando.
     """
-    return jsonify({'status': 'ok', 'service': 'visor-ecd-backend'})
+    version = (os.getenv('RENDER_GIT_COMMIT') or os.getenv('GIT_COMMIT') or '')[:12]
+    return jsonify({
+        'status': 'ok',
+        'service': 'visor-ecd-backend',
+        'version': version or 'desconocida',
+        'rama': os.getenv('RENDER_GIT_BRANCH') or None,
+    })
 
 @app.route('/api/inventory/schema', methods=['GET'])
 def get_inventory_schema():
