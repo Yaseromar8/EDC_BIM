@@ -1,10 +1,20 @@
 # Como arranca este backend, y por que
 
-`yarn start` es lo que ejecuta Render. Yarn corre `prestart` antes de `start`,
-asi que el orden real es:
+`yarn start` es lo que ejecuta Render, y ese script encadena dos cosas:
 
-    prestart  ->  python bootstrap_esquema.py     (construye/actualiza el esquema)
-    start     ->  gunicorn ... server:app         (levanta la aplicacion)
+    ./venv/bin/python bootstrap_esquema.py    (construye/actualiza el esquema)
+      &&
+    ./venv/bin/gunicorn ... server:app        (levanta la aplicacion)
+
+**Va encadenado en `start` y no en un `prestart` a proposito.** Yarn 1 ejecuta
+los guiones `pre*` automaticamente, pero Yarn 2 y posteriores **no**: dejarlo en
+`prestart` habria sido escribir un paso de migracion que, segun la version de
+yarn que use Render, podria no ejecutarse nunca -- y nadie se enteraria, porque
+el arranque seguiria funcionando igual gracias al DDL en caliente. Un `&&` no
+depende de la version de nada.
+
+El `&&` tambien es la garantia de orden: si el bootstrap devuelve error,
+gunicorn NO llega a arrancar.
 
 ## Por que existe el paso previo (hallazgo N2)
 

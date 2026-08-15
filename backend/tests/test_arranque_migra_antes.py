@@ -18,13 +18,19 @@ Eso no es un problema de rendimiento. Tiene dos consecuencias de fondo:
      recien restaurada se queda incompleta hasta que se usa, que es como se
      descubre tarde.
 
-Yarn ejecuta `prestart` antes de `start`, asi que el orden real pasa a ser:
+Ahora `start` encadena las dos cosas:
 
-    prestart -> bootstrap_esquema.py    (construye/actualiza el esquema)
-    start    -> gunicorn server:app     (levanta la aplicacion)
+    python bootstrap_esquema.py  &&  gunicorn server:app
 
-Esta prueba fija ese orden. No levanta nada: lee el manifiesto de arranque, que
-es el unico sitio donde el orden esta escrito.
+Va encadenado y NO en un `prestart`: yarn 1 ejecuta los guiones `pre*`
+automaticamente, yarn 2 y posteriores no. Dejarlo en `prestart` habria sido
+escribir un paso de migracion que, segun la version de yarn que use Render,
+podria no ejecutarse nunca -- y sin que nadie lo notara, porque el arranque
+seguiria funcionando gracias al DDL en caliente. Exactamente el patron que este
+trabajo viene persiguiendo.
+
+Esta prueba fija ese orden. No levanta nada: lee el unico sitio donde el orden
+esta escrito.
 """
 import io
 import json
@@ -40,17 +46,26 @@ def _scripts():
 
 def test_el_arranque_construye_el_esquema_antes_de_servir():
     s = _scripts()
-    assert 'prestart' in s, (
+    assert 'bootstrap_esquema' in s['start'], (
         'no hay paso de migracion: el esquema se construiria en caliente desde '
         'los manejadores, que es el hallazgo N2')
-    assert 'bootstrap_esquema' in s['prestart']
+    assert s['start'].index('bootstrap_esquema') < s['start'].index('gunicorn')
+
+
+def test_va_encadenado_y_no_en_un_prestart():
+    """Yarn 1 ejecuta los `pre*` automaticamente; yarn 2 y posteriores NO. En un
+    `prestart`, el paso de migracion podria no ejecutarse nunca segun la version
+    que use Render, y nadie se enteraria porque el DDL en caliente lo taparia."""
+    s = _scripts()
+    assert 'prestart' not in s
+    assert '&&' in s['start'], 'sin && no hay garantia de orden ni de parada'
 
 
 def test_el_paso_previo_no_es_solo_una_comprobacion():
     """`--verificar` mira y no construye. Poner eso aqui daria la sensacion de
     tener migracion sin tenerla -- el mismo patron que el modo estricto de
     nomenclatura o el @requiere_rol que no bloqueaba a nadie."""
-    assert '--verificar' not in _scripts().get('prestart', '')
+    assert '--verificar' not in _scripts()['start']
 
 
 def test_la_aplicacion_se_levanta_con_gunicorn_y_no_con_el_servidor_de_pruebas():
@@ -64,8 +79,7 @@ def test_los_dos_pasos_usan_el_MISMO_interprete():
     """Si el bootstrap corriera con otro python que gunicorn, migraria un
     entorno y serviria otro -- y la diferencia solo se veria en produccion."""
     s = _scripts()
-    assert s['prestart'].startswith('./venv/bin/'), s['prestart']
-    assert s['start'].startswith('./venv/bin/'), s['start']
+    assert s['start'].count('./venv/bin/') == 2, s['start']
 
 
 def test_esta_escrito_que_pasa_si_la_migracion_falla():
