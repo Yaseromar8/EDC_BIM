@@ -1196,30 +1196,29 @@ def civil_base_axis():
         import json as _json
         scope = request.args.get('scope', 'global')
 
-        # El «scope» ya era la obra, pero sin comprobarla: conocer el scope de
-        # otra obra bastaba para cambiarle el eje que se dibuja solo al abrir el
-        # visor a TODOS sus usuarios.
+        # El «scope» es el FRENTE, no la obra: en Talara conviven '1_CANAL' y
+        # '1_DRENAJE', que son dos frentes de la misma obra y tienen cada uno su
+        # eje base. Por eso la fila sigue yendo por scope.
         #
-        # Y ademas los dos sitios que llaman a esto mandaban valores DISTINTOS
-        # para la misma obra -- la lectura el id de proyecto y la escritura el
-        # URN del modelo -- asi que el pin se guardaba bajo una clave que nadie
-        # leia. «Fijar para todos los usuarios» no llegaba a nadie: lo unico que
-        # lo sostenia era el localStorage de quien lo fijaba. Resolver la obra
-        # arregla las dos cosas de una vez, y sin tocar el visor.
+        # Lo que faltaba es la AUTORIZACION: la tabla no sabia de que obra era
+        # cada fila, asi que conocer el scope ajeno bastaba para cambiarle a otra
+        # obra el eje que se dibuja solo al abrir el visor, para todos sus
+        # usuarios. La obra se deduce del frente y se guarda en la propia fila.
         from db import resolve_project_id
         from perimetro_de_obra import guardia_de_obra
         obra = resolve_project_id(scope) if scope and scope != 'global' else None
         if request.method == 'PUT':
             if not obra:
-                return jsonify({'error': 'Falta la obra sobre la que fijar el eje base.'}), 400
-            negativa = guardia_de_obra(obra, 'fijar el eje base de la obra')
+                return jsonify({'error': 'No se pudo determinar a qué obra pertenece '
+                                         'este frente.', 'code': 'PROJECT_UNRESOLVED'}), 403
+            negativa = guardia_de_obra(obra, 'fijar el eje base del frente')
             if negativa:
                 return negativa
         elif obra:
-            negativa = guardia_de_obra(obra, 'consultar el eje base de la obra')
+            negativa = guardia_de_obra(obra, 'consultar el eje base del frente')
             if negativa:
                 return negativa
-        clave = obra or scope
+        clave = scope
 
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -1232,6 +1231,10 @@ def civil_base_axis():
                 pin JSONB,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             )''')
+                # La fila tiene que decir de que obra es. Sin esto, saber de
+                # quien es un eje base exige volver a resolver el frente cada vez.
+                cur.execute('ALTER TABLE civil_base_axis '
+                            'ADD COLUMN IF NOT EXISTS model_urn TEXT')
             if request.method == 'GET':
                 cur.execute('SELECT pin FROM civil_base_axis WHERE scope = %s', (clave,))
                 row = cur.fetchone()
@@ -1242,10 +1245,11 @@ def civil_base_axis():
             if pin is None:
                 cur.execute('DELETE FROM civil_base_axis WHERE scope = %s', (clave,))
             else:
-                cur.execute('''INSERT INTO civil_base_axis (scope, pin, updated_at)
-                    VALUES (%s, %s::jsonb, NOW())
-                    ON CONFLICT (scope) DO UPDATE SET pin = EXCLUDED.pin, updated_at = NOW()''',
-                    (clave, _json.dumps(pin)))
+                cur.execute('''INSERT INTO civil_base_axis (scope, pin, model_urn, updated_at)
+                    VALUES (%s, %s::jsonb, %s, NOW())
+                    ON CONFLICT (scope) DO UPDATE SET pin = EXCLUDED.pin,
+                        model_urn = EXCLUDED.model_urn, updated_at = NOW()''',
+                    (clave, _json.dumps(pin), obra))
             conn.commit()
             return jsonify({'status': 'ok'}), 200
     except Exception as e:
