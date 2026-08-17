@@ -73,11 +73,16 @@ INOCENTES = re.compile(
     r'(?i)(tu_|your_|xxx|placeholder|ejemplo|example|dummy|cambiar|changeme|'
     r'sin-pimienta|fake|<[^>]+>|\.\.\.|secreto-de-prueba|os\.getenv|os\.environ)')
 
-# Ficheros que son DATOS, no codigo.
+# Ficheros que son DATOS, no codigo. Y UNA excepcion con nombre y apellidos:
+# el fichero de canarios. Sus credenciales de mentira tienen que parecer reales
+# byte a byte -- si llevaran una marca de "soy falsa", dejarian de probar nada --
+# asi que el barrido del arbol las encontraria siempre. Se excluye SOLO ese
+# fichero, y el riesgo de que alguien esconda un secreto real justo ahi queda
+# aceptado y escrito: es un fichero de pruebas que las propias pruebas releen.
 FUERA = re.compile(
     r'(?i)(node_modules|/venv/|\.lock$|package-lock|yarn\.lock|\.min\.js$|'
     r'\.map$|\.png$|\.jpe?g$|\.gif$|\.ico$|\.pdf$|\.svg$|\.woff2?$|'
-    r'tracking_data\.json$|\.ipynb$)')
+    r'tracking_data\.json$|\.ipynb$|tests/test_barrido_de_secretos\.py$)')
 
 MAX_BYTES = 2 * 1024 * 1024
 MAX_LINEA = 2000
