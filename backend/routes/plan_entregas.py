@@ -135,7 +135,7 @@ def vincular_compromiso(plan_id):
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
-            ok = plan.vincular(cur, plan_id, node_id, _autor())
+            ok = plan.vincular(cur, plan_id, node_id, _autor(), model_urn=model_urn)
             conn.commit()
         if not ok:
             # Puede ser que el documento sea de OTRA obra: plan.vincular lo
@@ -159,7 +159,7 @@ def desvincular_compromiso(plan_id):
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
-            ok = plan.desvincular(cur, plan_id, _autor())
+            ok = plan.desvincular(cur, plan_id, _autor(), model_urn=model_urn)
             conn.commit()
         if ok:
             log_activity(model_urn, 'desvincular_compromiso', 'plan',

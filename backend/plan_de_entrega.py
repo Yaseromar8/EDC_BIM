@@ -523,12 +523,20 @@ def requisitos(cursor, model_urn, tipo=None, hoy=None):
     }
 
 
-def vincular(cursor, plan_id, file_node_id, autor=None):
+def vincular(cursor, plan_id, file_node_id, autor=None, model_urn=None):
     """Ata un compromiso a su documento. Devuelve True si se ató.
 
-    Se comprueba que el documento sea DE LA MISMA OBRA que el compromiso: atar
-    un entregable de una obra a un PDF de otra convertiria el plan en una
-    mentira, y ademas seria una fuga entre obras.
+    Se comprueba DOS cosas, y hacen falta las dos:
+
+      · que el documento sea DE LA MISMA OBRA que el compromiso (n.model_urn =
+        p.model_urn): atar un entregable de una obra a un PDF de otra
+        convertiria el plan en una mentira;
+      · que esa obra sea la que la GUARDIA autorizo (p.model_urn = model_urn).
+        Faltaba, y era una fuga de escritura: la guardia mira el model_urn que
+        manda el cliente, y el UPDATE iba por `plan_id`. Un usuario de la obra A
+        podia escribir sobre el plan de la obra B pasando su propia obra en la
+        peticion. Que las dos filas fueran coherentes entre si no dice nada
+        sobre QUIEN esta autorizado a tocarlas.
     """
     cursor.execute("""
         UPDATE plan_entregas p
@@ -537,20 +545,30 @@ def vincular(cursor, plan_id, file_node_id, autor=None):
          WHERE p.id = %s
            AND n.id = %s
            AND n.model_urn = p.model_urn
+           AND (%s IS NULL OR p.model_urn = %s)
            AND NOT n.is_deleted
         RETURNING p.id
-    """, (file_node_id, autor, plan_id, file_node_id))
+    """, (file_node_id, autor, plan_id, file_node_id, model_urn, model_urn))
     return cursor.fetchone() is not None
 
 
-def desvincular(cursor, plan_id, autor=None):
-    """Deshace el vínculo. El compromiso sigue en el plan: no se borra."""
+def desvincular(cursor, plan_id, autor=None, model_urn=None):
+    """Deshace el vínculo. El compromiso sigue en el plan: no se borra.
+
+    `model_urn` es la obra que la guardia AUTORIZO, y va en el WHERE. Sin eso, la
+    comprobacion y el objeto tocado son de obras distintas y nada los cruza: la
+    guardia mira el model_urn que manda el cliente -- que el cliente controla --
+    y el UPDATE iba por `plan_id`, un entero correlativo y enumerable. Un usuario
+    de la obra A, pasando SU propia obra para que la guardia le deje pasar y el
+    id de un compromiso de la obra B, deshacia el vinculo de la obra B.
+    """
     cursor.execute("""
         UPDATE plan_entregas
            SET file_node_id = NULL, vinculado_en = NULL, vinculado_por = %s
          WHERE id = %s AND file_node_id IS NOT NULL
+           AND (%s IS NULL OR model_urn = %s)
         RETURNING id
-    """, (autor, plan_id))
+    """, (autor, plan_id, model_urn, model_urn))
     return cursor.fetchone() is not None
 
 

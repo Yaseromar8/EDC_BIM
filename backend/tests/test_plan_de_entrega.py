@@ -389,3 +389,62 @@ def test_todos_los_manejadores_del_plan_comprueban_la_obra():
     for t in trozos:
         url = re.match(r"\(\s*'([^']+)'", t.strip())
         assert 'guardia_de_obra' in t, f'la ruta {url.group(1) if url else "?"} no comprueba la obra'
+
+
+# ── La obra de la GUARDIA tiene que llegar al WHERE ───────────────────────
+#
+# Encontrado el 17-ago-2026 en un repaso adversarial de mi propio trabajo.
+#
+# La guardia comprueba el `model_urn` que manda el CLIENTE -- un dato que el
+# cliente controla -- y el UPDATE iba por `plan_id`, que es un entero
+# correlativo y por tanto enumerable. Nada cruzaba las dos cosas: un usuario de
+# la obra A, pasando SU propia obra para que la guardia le dejara pasar y el id
+# de un compromiso de la obra B, escribia sobre el plan de la obra B.
+#
+# `vincular` exigia `n.model_urn = p.model_urn`, que solo dice que el documento
+# y el compromiso son coherentes ENTRE SI. Eso no dice nada sobre quien esta
+# autorizado a tocarlos.
+
+OBRA_GUARDIA = 'proyectos/PQT8_TALARA'
+
+
+class CursorQueRecuerda:
+    """Guarda el SQL y los parametros para poder mirar el WHERE."""
+
+    def __init__(self):
+        self.sql = ''
+        self.params = ()
+
+    def execute(self, sql, params=None):
+        self.sql = ' '.join(sql.split())
+        self.params = params or ()
+
+    def fetchone(self):
+        return None
+
+
+def test_desvincular_ata_el_compromiso_a_la_obra_autorizada():
+    cur = CursorQueRecuerda()
+    plan.desvincular(cur, 42, 'ana@obra.test', model_urn=OBRA_GUARDIA)
+    assert 'model_urn' in cur.sql, 'el UPDATE no cruza el plan_id con la obra'
+    assert OBRA_GUARDIA in cur.params
+
+
+def test_vincular_ata_el_compromiso_a_la_obra_autorizada():
+    cur = CursorQueRecuerda()
+    plan.vincular(cur, 42, 'nodo-1', 'ana@obra.test', model_urn=OBRA_GUARDIA)
+    assert 'p.model_urn = %s' in cur.sql, (
+        'no basta con que documento y compromiso sean de la misma obra: esa obra '
+        'tiene que ser la que autorizo la guardia')
+    assert OBRA_GUARDIA in cur.params
+
+
+def test_las_rutas_pasan_la_obra_que_comprobo_la_guardia():
+    """Una regla en el modulo que la ruta no usa no protege de nada."""
+    import io
+    import os
+    ruta = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'routes', 'plan_entregas.py')
+    fuente = io.open(ruta, encoding='utf-8').read()
+    assert 'plan.vincular(cur, plan_id, node_id, _autor(), model_urn=model_urn)' in fuente
+    assert 'plan.desvincular(cur, plan_id, _autor(), model_urn=model_urn)' in fuente
