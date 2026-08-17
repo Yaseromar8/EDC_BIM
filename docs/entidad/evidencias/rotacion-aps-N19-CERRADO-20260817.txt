@@ -1,0 +1,55 @@
+ROTACION DEL APS_CLIENT_SECRET · N19 · 17-ago-2026
+===================================================
+
+EL HALLAZGO
+  El secreto de la aplicacion Autodesk en USO era byte a byte el publicado en el
+  fichero .env del blob ffa9d177 (commit 21ee9710efa4), ANCESTRO de main en LOS
+  DOS repositorios publicos:
+      github.com/Yaseromar8/EDC_BIM
+      github.com/yaseromarsanchez8-arch/VISOR_ECD
+  Huella del secreto expuesto: 7c5d9582a625 (SHA-256 truncada).
+  Client ID afectado: 3FkEfz...vHAS
+  Capacidades de esa aplicacion: data:read, data:write, data:create,
+  bucket:create, bucket:read y code:all (Design Automation). Con acceso medido a
+  3 buckets OSS reales (~700 MB de RVT/DWG).
+
+  Reescribir el historial de git NO era remedio: el commit ya estaba clonado y
+  publicado en dos sitios. La unica via era rotar en el origen.
+
+LINEA BASE, ANTES DE ROTAR (medida contra el servidor de Autodesk)
+  secreto publicado -> HTTP 200, token emitido.
+  No era una deduccion por huellas: era la respuesta de Autodesk. Estaba VIVO.
+  Evidencia: rotacion-aps-20260817-1645.json
+
+DESPUES DE ROTAR (misma medicion, mismo instrumento)
+  secreto publicado (7c5d9582a625) -> HTTP 401 invalid_credentials
+  secreto en uso    (590bdc4ede17) -> HTTP 200, token emitido
+  Evidencia: rotacion-aps-20260817-1754.json
+
+INCIDENTE DURANTE LA ROTACION, Y COMO SE DETECTO
+  Tras revocar el secreto viejo, PRODUCCION seguia configurada con el: el
+  endpoint publico del visor (/api/token) devolvia
+      HTTP 500 {"error":"401 Client Error: Unauthorized ...authentication/v2/token"}
+  es decir, el visor de produccion estaba caido. La comprobacion lo detecto de
+  inmediato porque no se dio por buena la rotacion sin medir el servicio real:
+  la credencial se rota en TRES sitios (Autodesk, Render, .env local) y solo se
+  habian tocado dos.
+  Corregido en Render. Comprobacion posterior: /api/token -> HTTP 200 en tres
+  intentos consecutivos, token de 796 caracteres.
+
+VERIFICACION FINAL (tres patas, todas medidas)
+  1. el secreto publicado es RECHAZADO por Autodesk          -> 401
+  2. el entorno local obtiene token con el nuevo             -> 806 car.
+  3. PRODUCCION obtiene token con el nuevo                   -> 200, 796 car.
+
+  En ningun momento se pego, se pidio, se imprimio ni se guardo el valor de
+  ningun secreto: solo huellas SHA-256 truncadas y codigos de respuesta.
+
+LO QUE ESTO **NO** DEMUESTRA
+  · no dice nada sobre si alguien USO el secreto mientras estuvo expuesto. Eso
+    exigiria los registros de acceso de la cuenta de Autodesk, que no se han
+    revisado. Mientras no se revisen, hay que asumir que pudo usarse;
+  · no cierra C5 ni C7: el acceso del proveedor al bucket y la falta de copia de
+    los ficheros son hallazgos distintos y siguen abiertos.
+
+ESTADO: N19 CERRADO con evidencia.

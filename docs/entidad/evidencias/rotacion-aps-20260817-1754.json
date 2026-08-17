@@ -1,0 +1,13 @@
+{
+  "cuando": "2026-08-17 17:54:41",
+  "hallazgo": "N19",
+  "blob_publicado": "ffa9d177",
+  "huella_secreto_publicado": "7c5d9582a625",
+  "huella_secreto_en_uso": "590bdc4ede17",
+  "son_el_mismo": false,
+  "publicado_aceptado_por_autodesk": false,
+  "detalle_publicado": "HTTP 401 invalid_credentials",
+  "en_uso_aceptado_por_autodesk": true,
+  "detalle_en_uso": "HTTP 200, token emitido",
+  "veredicto": "ROTACION CORRECTA: el publicado ya no sirve, el nuevo si"
+}
