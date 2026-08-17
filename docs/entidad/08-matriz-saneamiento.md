@@ -155,6 +155,15 @@ falsos míos**. Lo que sigue es lo verificado y lo corregido en esta pasada.
 | **N55** | *(área 14)* `puede_salir_del_ecd` **no la llamaba nadie** | **CERRADO** `30a7173` | existía y estaba documentada como «la consulta única», y solo la invocaban sus pruebas. Tercera vez que aparece el patrón (tras el `@requiere_rol` y el modo estricto). Aplicada en enlaces públicos (estricta: sin triaje se deniega) y en transmittals (proporcionada: la clasificación manda cuando existe, para no parar las entregas) |
 | **N56** | *(área 16)* El plan de continuidad **daba por hecho** que el esquema se levantaba | **CERRADO** `0289af3` | no era cierto (N2). Corregido en `04-continuidad`, con lo que la verificación **no** demuestra: ni restauración real, ni copias de Cloud SQL, ni versionado del bucket. Un esquema sin copia de los bytes no restaura un expediente |
 
+### Continuidad · 17-ago-2026
+
+| ID | Avance | Estado | Evidencia |
+|---|---|---|---|
+| **C7 (datos)** | **Primera copia real conservada** de la base con los datos del usuario (85 tablas, 77.940 filas, comprobada) + ensayo de restauración a un comando, con cotejo fila a fila. El último tramo (crear la base vacía) exige el superusuario **por diseño**: ni `ecd_app` ni `ecd_migrator` tienen CREATEDB — la separación de identidades funcionando | **MITIGADO parcial** `b2add3d` | `evidencias/copia-y-ensayo-restauracion-20260817.txt`. Residual: la copia es de la base **local**; los **ficheros** del bucket siguen sin copia, y las copias de Cloud SQL siguen sin verificar |
+| **N61** | Dos guiones de depuración **con credenciales dentro, publicados** (`debug_photos.py`, `check_cats.py`) — se escaparon de la barrida de N15 | **CERRADO** `4e98baa` | credencial de desarrollo antigua (localhost, no coincide con la actual): mala higiene, no explotable en remoto. Retirados y vetados |
+| **N62** | Mi detector de secretos **no detectaba**: caracteres 0x08 invisibles en los patrones; respondía «0 hallazgos» | **CERRADO** `4e98baa`+`e175f27` | encontrado con un canario ANTES de darlo por bueno. 21 pruebas con canarios en ambas direcciones |
+| **N63** | Producción **no podía decir su postura**: N3/N4/C8/N2 eran incomprobables desde fuera | **CERRADO** `4e98baa` | el latido publica el recuento (hoy: `faltan 6 de 6`), el detalle exige administrador. Primera medición real de la configuración de producción |
+
 ### Área 13 y flujo · sin hallazgos abiertos
 
 Todo lo listado el 13-ago está cerrado. Lo que queda del saneamiento depende de accesos
