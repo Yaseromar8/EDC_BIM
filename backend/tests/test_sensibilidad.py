@@ -156,8 +156,12 @@ def test_el_enlace_publico_pregunta_si_el_documento_puede_salir():
 
 
 def test_el_transmittal_tambien_pregunta():
+    """Pregunta, pero POR SU CANAL. Usar la funcion estricta aqui bloqueaba las
+    entregas de la obra entera en cuanto el triaje decia «si», porque ningun
+    documento tiene nivel declarado todavia."""
     fuente = _fuente('routes', 'transmittals.py')
-    assert 'puede_salir_del_ecd' in fuente
+    assert 'puede_salir_por_canal' in fuente
+    assert "canal='transmittal'" in fuente
 
 
 def test_pero_el_transmittal_no_se_para_por_falta_de_triaje():
@@ -182,3 +186,103 @@ def test_un_fallo_leyendo_el_catalogo_no_tumba_una_entrega():
     cuerpo = fuente[fuente.index('def _items_emisibles'):]
     cuerpo = cuerpo[:cuerpo.index('\ndef ', 1)]
     assert 'except Exception' in cuerpo
+
+
+# ── Canal: enlace publico vs transmittal ──────────────────────────────────
+#
+# EL CASO REAL, medido el 17-ago-2026. `nivel_efectivo` devuelve N1 tanto si
+# alguien clasifico el documento como «uso interno» como si NADIE lo ha mirado
+# nunca. La columna `file_nodes.sensibilidad` es nueva y NINGUNA pantalla la
+# escribe, asi que los ~3.000 documentos de la plataforma resuelven a N1, y N1
+# no puede salir.
+#
+# Consecuencia: en cuanto una obra contesta «si» en el triaje -- en la pantalla
+# que se construyo justamente para desbloquear la regresion anterior -- se le
+# bloquean de golpe TODOS los enlaces Y TODOS los transmittals, sin haber
+# clasificado nada y sin sitio donde hacerlo. La pantalla ademas promete lo
+# contrario: «contestar las dos preguntas lo desbloquea».
+#
+# El arreglo no es aflojar el control: es dejar de tratar igual dos canales que
+# no son el mismo riesgo, que es lo que el propio comentario de transmittals.py
+# ya defendia antes de aplicar la regla estricta a los dos.
+
+class CursorDeCanal:
+    """Triaje que exige enfoque + un nodo con (o sin) nivel declarado."""
+
+    def __init__(self, nivel_declarado=None):
+        self.nivel = nivel_declarado
+        self._r = []
+
+    def execute(self, sql, params=None):
+        s = ' '.join(sql.split()).upper()
+        if 'FROM TRIAJE_SEGURIDAD' in s:
+            self._r = [(True, 'obra con informacion delicada', 'ana', None, None)]
+        elif 'FROM SENSIBILIDAD_CATALOGO' in s:
+            self._r = [(c, e, o, p) for c, e, o, p in s_mod.NIVELES_POR_DEFECTO]
+        elif 'RECURSIVE' in s or 'SENSIBILIDAD FROM ARRIBA' in s:
+            self._r = [(self.nivel,)] if self.nivel else []
+        else:
+            self._r = []
+
+    def fetchone(self):
+        return self._r[0] if self._r else None
+
+    def fetchall(self):
+        return self._r
+
+
+import sensibilidad as s_mod  # noqa: E402
+
+
+def test_sin_clasificar_NO_para_un_transmittal():
+    """Es el caso de los ~3.000 documentos de hoy. Bloquear la entrega formal de
+    la obra entera por algo que nadie ha mirado, y sin pantalla para mirarlo, no
+    protege nada: para la obra."""
+    cur = CursorDeCanal(nivel_declarado=None)
+    permitido, _n, _m = s_mod.puede_salir_por_canal(cur, 'nodo', 'obra', canal='transmittal')
+    assert permitido is True
+
+
+def test_sin_clasificar_SI_para_un_enlace_publico():
+    """Un enlace es distribucion incontrolada: quien tenga la URL abre, y ningun
+    permiso del ECD alcanza a un fichero que ya salio. Aqui «nadie lo ha mirado»
+    tiene que bloquear."""
+    cur = CursorDeCanal(nivel_declarado=None)
+    permitido, _n, motivo = s_mod.puede_salir_por_canal(cur, 'nodo', 'obra',
+                                                        canal='enlace_publico')
+    assert permitido is False
+    assert 'Clasifícalo' in motivo, 'la negativa tiene que decir la salida'
+
+
+def test_un_nivel_DECLARADO_como_interno_si_para_el_transmittal():
+    """La clasificacion manda cuando EXISTE: si alguien miro el documento y dijo
+    «uso interno», mandarlo fuera por el canal formal tambien esta mal."""
+    cur = CursorDeCanal(nivel_declarado='N1')
+    permitido, nivel, _m = s_mod.puede_salir_por_canal(cur, 'nodo', 'obra',
+                                                        canal='transmittal')
+    assert permitido is False and nivel == 'N1'
+
+
+def test_un_nivel_declarado_abierto_pasa_por_los_dos_canales():
+    cur = CursorDeCanal(nivel_declarado='N0')
+    for canal in ('transmittal', 'enlace_publico'):
+        assert s_mod.puede_salir_por_canal(cur, 'nodo', 'obra', canal=canal)[0] is True
+
+
+def test_el_canal_por_defecto_es_el_mas_estricto():
+    """`puede_salir_del_ecd` conserva su nombre y su criterio: quien lo llame sin
+    pensar se lleva la regla dura, no la blanda."""
+    cur = CursorDeCanal(nivel_declarado=None)
+    assert s_mod.puede_salir_del_ecd(cur, 'nodo', 'obra')[0] is False
+
+
+def test_hay_una_sola_copia_de_la_decision():
+    """Dos copias del criterio es como se llega a tener una viva y otra muerta."""
+    import io
+    import os
+    ruta = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'sensibilidad.py')
+    fuente = io.open(ruta, encoding='utf-8').read()
+    cuerpo = fuente[fuente.index('def puede_salir_del_ecd'):]
+    assert 'puede_salir_por_canal' in cuerpo
+    assert 'triaje_de_obra' not in cuerpo, 'esta reimplementando la decision'

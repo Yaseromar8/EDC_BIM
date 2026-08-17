@@ -129,7 +129,9 @@ export function TriajeSeguridadView({ projectPrefix, isAdmin }) {
           <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
             Mientras siga así <strong>no se pueden emitir enlaces públicos</strong> de sus
             documentos. No es un castigo: la norma existe para que no salga del ECD lo que
-            nadie ha mirado. Contestar las dos preguntas de abajo lo desbloquea.
+            nadie ha mirado. Contestar las dos preguntas de abajo desbloquea los
+            transmittals; los enlaces públicos, además, necesitan que el documento (o su
+            carpeta) tenga nivel de sensibilidad asignado.
           </p>
         </div>
       )}

@@ -204,7 +204,8 @@ def _items_emisibles(cursor, model_urn, items):
         frenados = []
         if triaje and not triaje.get('caducado') and triaje.get('requiere_enfoque'):
             for nid in ids:
-                permitido, nivel, motivo = _sens.puede_salir_del_ecd(cursor, nid, model_urn)
+                permitido, nivel, motivo = _sens.puede_salir_por_canal(
+                    cursor, nid, model_urn, canal='transmittal')
                 if not permitido:
                     frenados.append('%s (%s)' % (encontrados[nid][0], motivo or nivel or '—'))
         if frenados:

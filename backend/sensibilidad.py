@@ -194,33 +194,100 @@ def nivel_efectivo(cursor, node_id, model_urn):
     return (fila[0] if fila and fila[0] else NIVEL_SIN_EVALUAR)
 
 
-def puede_salir_del_ecd(cursor, node_id, model_urn):
-    """¿Se puede emitir un enlace de este documento hacia fuera del ECD?
+def nivel_declarado(cursor, node_id, model_urn):
+    """(nivel, lo_declaro_alguien). La segunda mitad es la que importa.
 
-    Devuelve (permitido, nivel, motivo). Punto unico a proposito: si cada ruta que
-    emite enlaces lo decidiera por su cuenta, en tres meses habria tres criterios y
-    dos de ellos estarian mal.
+    `nivel_efectivo` devuelve N1 tanto si alguien clasifico el documento como
+    «uso interno» como si NADIE lo ha mirado nunca. Son cosas distintas y
+    confundirlas cuesta caro: hoy ningun documento de la plataforma tiene nivel
+    -- la columna es nueva y no hay pantalla que la escriba -- asi que TODOS
+    resuelven a N1, y N1 no puede salir.
 
-    Si la obra NO ha hecho su triaje, se responde que NO. Es incomodo y es lo
-    correcto: la parte 5 existe justamente para que no se comparta lo que nadie ha
-    mirado. La forma de desbloquearlo es hacer el triaje, que son diez minutos, no
-    saltarse la comprobacion.
+    Consecuencia medida: en cuanto una obra contesta «si» en su triaje, se le
+    bloquean de golpe los enlaces Y los transmittals de sus miles de documentos,
+    sin haber clasificado nada y sin sitio donde hacerlo.
+
+    Distinguir «lo miraron y dijeron interno» de «nadie lo ha mirado» permite
+    tratar cada canal como merece, en vez de parar la obra entera.
+    """
+    if not node_id:
+        return NIVEL_SIN_EVALUAR, False
+    cursor.execute("""
+        WITH RECURSIVE arriba AS (
+            SELECT id, parent_id, sensibilidad, 0 AS salto
+              FROM file_nodes WHERE id = %s AND model_urn = %s
+            UNION ALL
+            SELECT fn.id, fn.parent_id, fn.sensibilidad, a.salto + 1
+              FROM file_nodes fn
+              INNER JOIN arriba a ON fn.id = a.parent_id
+             WHERE fn.model_urn = %s
+        )
+        SELECT sensibilidad FROM arriba
+         WHERE sensibilidad IS NOT NULL
+         ORDER BY salto ASC LIMIT 1
+    """, (str(node_id), model_urn, model_urn))
+    fila = cursor.fetchone()
+    if fila and fila[0]:
+        return fila[0], True
+    return NIVEL_SIN_EVALUAR, False
+
+
+def puede_salir_por_canal(cursor, node_id, model_urn, canal='enlace_publico'):
+    """La misma pregunta, pero sabiendo POR DONDE sale. (permitido, nivel, motivo).
+
+    No son el mismo riesgo y tratarlos igual fue el error:
+
+      · ENLACE PUBLICO — distribucion incontrolada. Quien tenga la URL, abre, y
+        ningun permiso del ECD alcanza a un fichero que ya salio. Aqui «nadie lo
+        ha clasificado» tiene que bloquear: la parte 5 existe para que no salga
+        lo que nadie ha mirado.
+
+      · TRANSMITTAL — canal formal: destinatarios con nombre, numero de serie,
+        acuse de recibo y registro. Aqui bloquear por «sin clasificar» para la
+        obra entera, sin pantalla para clasificar, no protege nada y para las
+        entregas. Manda la clasificacion cuando EXISTE; cuando no existe, el ECD
+        no tiene base para llamar delicado a un documento, y la entrega trazable
+        sigue su curso.
+
+    El propio comentario de transmittals.py ya defendia esta distincion y luego
+    aplicaba la regla estricta igual. Esto la hace de verdad.
     """
     triaje = triaje_de_obra(cursor, model_urn)
     if triaje is None:
+        if canal == 'transmittal':
+            return True, None, ''
         return False, None, 'La obra no tiene hecho el triaje de seguridad.'
     if triaje['caducado']:
+        if canal == 'transmittal':
+            return True, None, ''
         return False, None, 'El triaje de seguridad de la obra está caducado; hay que revisarlo.'
     if not triaje['requiere_enfoque']:
-        # Obra evaluada y sin informacion delicada: no se estorba al equipo.
         return True, None, ''
 
-    nivel = nivel_efectivo(cursor, node_id, model_urn)
+    nivel, declarado = nivel_declarado(cursor, node_id, model_urn)
+    if canal == 'transmittal' and not declarado:
+        # Nadie lo ha clasificado: no hay base para frenar una entrega trazable.
+        return True, None, ''
+
     for n in catalogo_de_obra(cursor, model_urn):
         if n['codigo'] == nivel:
             if n['puede_salir']:
                 return True, nivel, ''
-            return False, nivel, f"Nivel {nivel}: {n['etiqueta']}"
-    # Nivel escrito en el nodo que ya no esta en el catalogo de la obra: se
-    # deniega. Un codigo que nadie reconoce no puede valer como autorizacion.
+            if declarado:
+                return False, nivel, f"Nivel {nivel}: {n['etiqueta']}"
+            return False, nivel, (
+                f'Este documento no tiene nivel de sensibilidad asignado, y esta '
+                f'obra declaró que maneja información delicada. Clasifícalo (o su '
+                f'carpeta) antes de emitir un enlace público.')
     return False, nivel, f'El nivel «{nivel}» no está en el catálogo de esta obra.'
+
+
+def puede_salir_del_ecd(cursor, node_id, model_urn):
+    """El canal por defecto es el ENLACE PUBLICO, que es el mas estricto.
+
+    Se conserva el nombre porque es el que llaman las rutas y porque el criterio
+    por defecto no cambia: delega en `puede_salir_por_canal`, que es donde vive
+    ahora la unica copia de la decision.
+    """
+    return puede_salir_por_canal(cursor, node_id, model_urn, canal='enlace_publico')
+
