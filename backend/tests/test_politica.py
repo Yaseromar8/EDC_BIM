@@ -199,6 +199,7 @@ _SIN_SESION_DEBEN_VIVIR = [
     ('GET', '/api/auth/aps/callback'),         # lo invoca Autodesk, sin sesión
     ('POST', '/api/auth/login'),
     ('POST', '/api/auth/register'),
+    ('POST', '/api/auth/2fa/verify'),          # entre la contrasena y la sesion
 ]
 
 _SIN_SESION_DEBEN_CAER = [
@@ -227,14 +228,31 @@ def _politica_de_ruta(app, metodo, ruta):
 
 @pytest.mark.parametrize('metodo,ruta', _SIN_SESION_DEBEN_VIVIR)
 def test_lo_que_no_puede_cerrarse(metodo, ruta):
-    """Cerrar esto rompe la vista compartida o la puerta de entrada."""
+    """Cerrar esto rompe la vista compartida o la puerta de entrada.
+
+    SE COMPRUEBAN LOS DOS CAMINOS, Y ESE ES EL PUNTO
+    Habia una version de este test que solo miraba la politica declarada. Verde
+    siempre, y sin embargo `POST /api/auth/2fa/verify` devolvia 401 en
+    produccion: la politica decia @publico y mandaba la otra, la heredada por
+    prefijo, que es la que decide mientras AUTH_POLICY_MODE siga en sombra.
+
+    Un test que comprueba lo que el codigo PRETENDE y no lo que el servidor HACE
+    no es un candado: es un adorno que ademas tranquiliza. Asi que se exige que
+    la ruta este abierta en los dos caminos, y quedara exigido tambien el dia
+    que se active el modo estricto y el heredado se pueda borrar.
+    """
     import os
     os.environ.setdefault('APP_SECRET', 'x' * 32)
     server = pytest.importorskip('server')
-    import politica as p
+    from auth_middleware import _abierto_por_prefijo
+
     politica = _politica_de_ruta(server.app, metodo, ruta)
     assert politica.evaluar(metodo, None) is None, (
         f"{metodo} {ruta} quedaria cerrada a un anonimo y eso rompe el producto"
+    )
+    assert _abierto_por_prefijo(ruta, metodo), (
+        f"{metodo} {ruta} esta declarada publica pero la logica heredada la "
+        f"cierra, y es la que manda hoy: en produccion responde 401"
     )
 
 

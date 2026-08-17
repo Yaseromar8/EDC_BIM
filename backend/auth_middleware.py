@@ -47,6 +47,15 @@ PUBLIC_ENDPOINTS = {
     # Sin estas dos lineas el flujo entero respondia 401 y era inservible.
     '/api/auth/forgot-password',
     '/api/auth/reset-password',
+    # EL MISMO ERROR, SEGUNDA VEZ. El segundo factor se presenta ENTRE la
+    # contrasena y la sesion: por definicion todavia no hay sesion. La vista ya
+    # estaba declarada @publico con su motivo escrito, pero aqui faltaba, y
+    # manda esta lista mientras AUTH_POLICY_MODE siga en sombra. Medido contra
+    # produccion el 17-ago-2026: POST devolvia 401 NO_TOKEN antes de entrar al
+    # manejador. Nadie lo habia notado porque ningun usuario tenia el 2FA
+    # encendido; el primero que lo encendiera se habria quedado fuera de su
+    # propia cuenta sin vuelta atras.
+    '/api/auth/2fa/verify',
 }
 
 # Publicos SOLO en lectura. '/api/companies' y '/api/job_titles' estaban en la
