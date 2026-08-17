@@ -1,0 +1,13 @@
+{
+  "cuando": "2026-08-17 16:45:02",
+  "hallazgo": "N19",
+  "blob_publicado": "ffa9d177",
+  "huella_secreto_publicado": "7c5d9582a625",
+  "huella_secreto_en_uso": "7c5d9582a625",
+  "son_el_mismo": true,
+  "publicado_aceptado_por_autodesk": true,
+  "detalle_publicado": "HTTP 200, token emitido",
+  "en_uso_aceptado_por_autodesk": true,
+  "detalle_en_uso": "HTTP 200, token emitido",
+  "veredicto": "NO ROTADO: el secreto publicado SIGUE SIENDO VALIDO"
+}
