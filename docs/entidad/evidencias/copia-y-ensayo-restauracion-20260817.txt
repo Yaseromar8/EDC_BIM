@@ -1,0 +1,37 @@
+COPIA REAL + ENSAYO DE RESTAURACION PREPARADO · 17-ago-2026
+===========================================================
+
+LO QUE SE HIZO Y QUEDO DEMOSTRADO
+  1. PRIMERA COPIA REAL DEL ECD. Hasta hoy no constaba ninguna copia conservada
+     (baseline, seccion 5 de 04-continuidad). Ejecutado:
+         python backend/copia_de_seguridad.py --destino copias
+     Resultado: ecd_20260817_154357.copia.gz · 85 tablas · 77.940 filas ·
+     5,5 MB · comprobacion interna: todas las tablas cuadran.
+     La copia queda FUERA del repositorio (copias/ esta vetado en .gitignore).
+
+  2. LA COPIA SE LEE ENTERA. Ensayo en seco del restaurador contra esa copia:
+     las 85 tablas se parsean con sus recuentos. El formato es restaurable.
+
+  3. EL ULTIMO TRAMO ESTA BLOQUEADO POR DISENO, no por dejadez. Restaurar exige
+     crear una base vacia, y en el cluster local:
+         ecd_app       createdb=False
+         ecd_migrator  createdb=False
+         postgres      superusuario (contrasena del propietario)
+     con autenticacion scram-sha-256 en todo pg_hba.conf. Es la separacion de
+     identidades funcionando: la aplicacion NO puede fabricar bases.
+
+LO QUE QUEDA EN MANOS DEL PROPIETARIO (2 minutos, un comando)
+     cd backend
+     python herramientas/ensayo_de_restauracion.py
+  Pide la contrasena de `postgres` por getpass (no se muestra ni se guarda),
+  crea ecd_ensayo_<fecha> con OWNER ecd_app, construye el esquema con el
+  bootstrap real, carga la copia, coteja FILA A FILA contra ella, escribe la
+  evidencia con veredicto RESTAURABLE/CON DESCUADRES y borra la base del
+  ensayo. Seguros: solo host local, solo borra lo que ella misma creo, y la
+  conexion privilegiada se usa unicamente para crear/borrar la base.
+
+LO QUE ESTO **NO** DEMUESTRA
+  · nada de los FICHEROS: los bytes viven en el bucket y siguen sin copia (C7);
+  · nada de los secretos (APP_SECRET, SESSION_PEPPER, credenciales de Google);
+  · nada de Cloud SQL: este ensayo es del cluster local. La restauracion de
+    produccion depende de las copias automaticas de Cloud SQL, sin verificar.

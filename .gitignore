@@ -84,3 +84,6 @@ backend/test_full_flow.py
 # auditoria sin dejar rastro (C3).
 backend/debug_photos.py
 backend/check_cats.py
+
+# Copias de seguridad locales: datos reales, nunca al repositorio.
+copias/
