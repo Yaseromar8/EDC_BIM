@@ -1,6 +1,7 @@
 # Tablas que deja construidas `python bootstrap_esquema.py`.
 # Generado midiendo una reconstruccion real en un espacio vacio.
 # No se edita a mano: se regenera cuando cambia el esquema.
+
 activity_log
 app_tokens
 asset_user_data
@@ -35,6 +36,7 @@ geo_control_points
 geo_model_georef
 handoff_tickets
 hubs
+ia_documentos_preparados
 idoneidad_catalogo
 inventory_assets
 job_titles

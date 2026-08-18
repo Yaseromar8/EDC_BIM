@@ -77,6 +77,9 @@ def _rutinas():
     from routes.tracking import ensure_tracking_pins_table
     from routes.civil_solids import ensure_civil_surfaces_table
     from routes.link import _ensure_tables as ensure_link_tables
+    from routes.dashboards import _ensure_tables as ensure_dashboards_tables
+    from routes.ai import _asegurar_tabla_cache as ensure_cache_ia
+    from folder_permissions import init_folder_permissions_table
 
     return [
         # ── Los 22 de server.py, en su orden ─────────────────────────────
@@ -110,6 +113,18 @@ def _rutinas():
         ('civil_surfaces', ensure_civil_surfaces_table),
         ('model_config', ensure_model_config_table),
         ('link', ensure_link_tables),
+        # ── Las tres que se descubrieron el 17-ago, al ir a apagar el DDL ──
+        # No las invocaba nadie desde aqui: sus tablas e indices solo nacian
+        # cuando alguien entraba por su ruta. Con el DDL congelado eso deja de
+        # ocurrir, y una base restaurada se quedaba sin ellas para siempre.
+        # `ia_documentos_preparados` ademas estaba EXCLUIDA de la prueba
+        # guardiana con el motivo de que pertenecia al esquema `ai_brain` y que
+        # «el bootstrap SI las crea». Las otras tres de esa lista van
+        # cualificadas (`ai_brain.global_knowledge`, etc.); esta no: cae en
+        # `public`. La exclusion tapaba precisamente el unico hueco real.
+        ('permisos_de_carpeta', init_folder_permissions_table),
+        ('dashboards', ensure_dashboards_tables),
+        ('cache_ia', ensure_cache_ia),
         # ── Catalogos por obra: crean su tabla la primera vez ────────────
         ('nomenclatura', _tabla_nomenclatura),
         ('sensibilidad', _tablas_sensibilidad),

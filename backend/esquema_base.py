@@ -660,6 +660,12 @@ COLUMNAS_PENDIENTES = [
      'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP'),
     ('tracking_details', 'tracking_id', 'INTEGER'),
     ('model_config', 'default_view_guid', 'TEXT'),
+    # Vivia SOLO dentro del manejador que publica un modelo al visor, sin
+    # condicionar al interruptor: era el ultimo DDL sin guardia en camino de
+    # peticion, y con DDL_EN_CALIENTE=false la columna no se habria creado
+    # nunca en una base restaurada -- publicar habria fallado con «no existe
+    # la columna urn_aps». Su sitio es este.
+    ('file_nodes', 'urn_aps', 'TEXT'),
 ]
 
 

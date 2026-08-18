@@ -1,4 +1,3 @@
-from esquema_congelado import solo_con_ddl
 import os
 import uuid
 import time
@@ -216,7 +215,13 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
 _root_cache = {}  # model_urn -> root_id
 
 
-@solo_con_ddl
+# SIN @solo_con_ddl, Y ESA ES LA CORRECCION. Estuvo decorada, y no crea esquema:
+# crea una FILA -- la carpeta raiz de cada obra -- con SELECT/INSERT/UPDATE. El
+# decorador devuelve None cuando el DDL esta congelado, asi que con
+# DDL_EN_CALIENTE=false esta funcion habria devuelto None para TODAS las obras y el
+# listado documental se habria quedado sin raiz. El interruptor existe para sacar el
+# DDL del tiempo de ejecucion; llevarse por delante datos de la aplicacion no entra
+# en el trato. Lo vigila test_solo_con_ddl_solo_donde_hay_ddl.
 def ensure_project_root_node(model_urn):
     """
     Asegura que exista un nodo raíz real ('Archivos de proyecto') para el proyecto dado.

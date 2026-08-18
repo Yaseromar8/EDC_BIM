@@ -730,7 +730,6 @@ def publicar_modelo_desde_ecd():
         from db import get_db_connection, log_activity
         with get_db_connection() as conn:
             cur = conn.cursor()
-            cur.execute('ALTER TABLE file_nodes ADD COLUMN IF NOT EXISTS urn_aps TEXT')
             cur.execute("""SELECT n.id, n.name, n.gcs_urn, n.model_urn, n.status,
                                   n.size_bytes, v.sha256, n.urn_aps
                              FROM file_nodes n
