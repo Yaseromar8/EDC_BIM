@@ -153,6 +153,17 @@ def asegurar_columnas(cursor):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_totp_recup_user ON totp_recuperacion(user_id)")
     # Con que pimienta se hasheo cada codigo. Ver huella_de_la_pimienta().
     cursor.execute("ALTER TABLE totp_recuperacion ADD COLUMN IF NOT EXISTS pimienta VARCHAR(12)")
+    # SELLAR LO QUE YA HABIA, Y HACERLO ANTES DE LA PRIMERA ROTACION.
+    # Los codigos anteriores a esta columna se hashearon con la pimienta que este
+    # proceso tiene AHORA MISMO: sellarlos con la huella actual es registrar un
+    # hecho, no adivinarlo. Y tiene que pasar en el arranque ANTERIOR al cambio:
+    # si se dejaran a NULL, tras rotar seguirian contandose como validos --que es
+    # justo la mentira que esta columna existe para acabar-- y si se sellaran DESPUES
+    # de rotar, se les pondria la huella nueva y quedarian marcados como buenos
+    # siendo ya inservibles. Una vez sellados no vuelve a haber NULL, asi que esta
+    # sentencia no puede volver a equivocarse.
+    cursor.execute("UPDATE totp_recuperacion SET pimienta = %s WHERE pimienta IS NULL",
+                   (huella_de_la_pimienta(),))
 
 
 def exigido_para(rol):
