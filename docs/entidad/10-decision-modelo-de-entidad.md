@@ -91,12 +91,12 @@ En orden, con su estado:
 | # | qué | estado |
 |---|---|---|
 | 1 | Perfil portal desplegable | **HECHO** (`bfb95f6`, con 3 candados) |
-| 2 | Instancia propia (servicio+base+bucket nuevos, perfil portal, 6 variables de postura desde el día uno) | pendiente — pasos del propietario, guiados |
+| 2 | Instancia propia | **GUÍA LISTA** (`11-guia-despliegue-instancia.md`): pasos verificados contra el código, postura completa desde el día uno, verificación medible al final. Ejecutar: ~medio día cuando haya entidad |
 | 3 | Copia y restauración probadas EN esa instancia | herramientas listas; ejecutar allí |
 | 4 | Gestión de roles desde el portal | **HECHO** — selector en Miembros; confirma dar/quitar admin; enseña el error real del backend; el último admin activo no se puede degradar (probado) |
 | 5 | Exportar el expediente | **HECHO** — panel en Configuración: índice xlsx (sin fórmulas, se abre sin la plataforma) + zip de documentos por URLs firmadas; con candado que exige las dos puertas |
 | 6 | Plan pagado en Render para esa instancia | decisión de precio del propietario |
-| 7 | Contrato: dónde viven los datos, Ley 29733, retención, salida | del propietario, con plantilla nuestra |
+| 7 | Contrato | **PLANTILLA LISTA** (`12-plantilla-anexo-datos.md`): coincide con lo que el sistema HACE — declara el acceso del proveedor en vez de negarlo, no firma ISO ni disponibilidad que no existen. La revisa un abogado antes de firmar |
 
 Lo que **no** entra en el mínimo (y por qué es honesto ofrecerlo así): ENFORCE
 encendido (la instancia es mono-entidad; C8 es control interno y se enciende en

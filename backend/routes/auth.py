@@ -177,18 +177,28 @@ def ensure_users_tables():
             # Crear usuario Admin (Omar) si no existe.
             # Sin password hardcodeada: usa ADMIN_PASSWORD del entorno, o genera una
             # aleatoria fuerte y la imprime una vez (para capturarla). Nunca 'admin123'.
-            cursor.execute("SELECT id FROM users WHERE email='omarsanchezh8@gmail.com'")
+            # EL ADMINISTRADOR INICIAL SE CONFIGURA, NO SE HEREDA.
+            # Estaba clavado al correo personal del desarrollador: cada
+            # instancia nueva -- incluida la de una ENTIDAD -- nacia con esa
+            # cuenta como administrador fijo. Para el despliegue por entidad
+            # eso es un defecto de fabrica: el primer admin de la instancia de
+            # una municipalidad tiene que ser QUIEN LA OPERA, declarado por
+            # entorno. Sin ADMIN_EMAIL se conserva el valor historico para no
+            # cambiar el comportamiento de la instancia existente.
+            import os as _os, secrets as _secrets
+            _admin_email = (_os.getenv('ADMIN_EMAIL') or 'omarsanchezh8@gmail.com').strip()
+            _admin_name = (_os.getenv('ADMIN_NAME') or 'Omar Sanchez').strip()
+            cursor.execute("SELECT id FROM users WHERE email=%s", (_admin_email,))
             if not cursor.fetchone():
-                import os as _os, secrets as _secrets
                 admin_pw = _os.getenv('ADMIN_PASSWORD') or _secrets.token_urlsafe(12)
                 if not _os.getenv('ADMIN_PASSWORD'):
                     print(f"[AUTH] ADMIN_PASSWORD no definido -> password generada (GUARDALA): {admin_pw}")
-                print("Creando usuario Administrador principal (Omar Sanchez)...")
+                print(f"Creando usuario Administrador principal ({_admin_name})...")
                 default_password = generate_password_hash(admin_pw)
                 cursor.execute('''
                     INSERT INTO users (name, email, password_hash, role)
                     VALUES (%s, %s, %s, %s)
-                ''', ('Omar Sanchez', 'omarsanchezh8@gmail.com', default_password, 'admin'))
+                ''', (_admin_name, _admin_email, default_password, 'admin'))
             
             # (Opcional) Borrar el admin antiguo si existe
             cursor.execute("DELETE FROM users WHERE email='admin@plataforma.com'")
