@@ -280,10 +280,29 @@ def _acceso_al_recurso(gcs_urn=None, node_id=None):
                 _anotar_acceso(None, None, 'enlace firmado', gcs_urn, node_id,
                                discriminante=firmado[-16:])
                 return None
-        return jsonify({"success": False, "error": "Enlace caducado o inválido"}), 403
+        # UN PERMISO CADUCADO NO PUEDE TAPAR UNA SESION BUENA.
+        #
+        # Aqui habia un `return 403`. El permiso firmado dura 24 h y el cliente
+        # lo guarda 20 h, renovandolo SOLO por edad -- nunca al recibir un 403.
+        # Resultado medido: una pestaña abierta en obra seguia pegando el
+        # `?t=` muerto y veia las fotos y los PDF rotos durante horas, teniendo
+        # la sesion perfectamente valida. Y tras un cierre de sesion forzado
+        # --como el de rotar la pimienta-- el usuario volvia a entrar y la
+        # pantalla seguia rota, porque el token viejo sobrevivia al re-login.
+        #
+        # `pins.py` y `server.py` ya lo hacen al reves y bien: miran el permiso
+        # firmado SOLO si no hay sesion. Aqui se hace lo mismo -- se sigue
+        # adelante y decide la sesion. No se afloja nada: el camino de sesion
+        # comprueba obra, pertenencia y permiso de carpeta igual que siempre.
 
     user = getattr(g, 'current_user', None)
     if not user:
+        if firmado:
+            # Visitante sin sesion que llega con un enlace caducado: se le dice
+            # lo que le pasa. Un «autenticacion requerida» le haria buscar unas
+            # credenciales que nunca tuvo ni necesita.
+            return jsonify({"success": False,
+                            "error": "Enlace caducado o inválido"}), 403
         return jsonify({"success": False, "error": "Autenticación requerida"}), 401
     if user.get('role') == 'admin':
         # Los administradores TAMBIEN quedan registrados. Un registro de accesos

@@ -57,6 +57,21 @@ function recursoDeLaUrl(url) {
   } catch { return null; }
 }
 
+/** Tira todos los permisos guardados.
+ *
+ * Se llama al cerrar sesion. Sin esto, los permisos sobrevivian al cierre y al
+ * siguiente inicio: el usuario volvia a entrar EN LA MISMA PESTAÑA y seguia
+ * pegando los `?t=` de la sesion anterior. Con la correccion del backend eso ya
+ * no rompe nada -- la sesion decide --, pero mandar credenciales viejas de una
+ * sesion que se cerro a proposito no tiene ninguna justificacion.
+ */
+export function olvidarPermisos() {
+  try {
+    cache.clear();
+    sessionStorage.removeItem(ALMACEN);
+  } catch { /* si no se puede limpiar, no se rompe la pantalla */ }
+}
+
 /** Pide permisos para varias urls de golpe y devuelve las urls ya firmadas. */
 export async function firmarUrls(backendUrl, urls) {
   const necesarias = new Map();   // urn -> [índices]

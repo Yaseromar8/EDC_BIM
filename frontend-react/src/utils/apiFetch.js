@@ -21,6 +21,12 @@ function clearSession() {
   localStorage.removeItem('visor_selectedProject'); // FIX: Previene reload loop si expira sesión
   sessionStorage.removeItem('visor_user');
   sessionStorage.removeItem('visor_session_token');
+  // Los permisos de lectura de fotos y PDF tambien son credenciales, y se
+  // quedaban. Import perezoso a proposito: este modulo lo importa medio
+  // frontend y no debe arrastrar dependencias en su carga.
+  import('./permisosDeLectura.js')
+    .then((m) => m.olvidarPermisos && m.olvidarPermisos())
+    .catch(() => { });
 }
 
 export async function apiFetch(url, options = {}) {
