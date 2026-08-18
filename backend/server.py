@@ -47,6 +47,20 @@ else:
     CORS(app, resources={r"/*": {"origins": "*"}})
     print("[security] CORS abierto (*). Define CORS_ORIGINS para restringir en produccion.")
 
+# UN SECRETO CORTO ES PEOR QUE NO PONER NINGUNO, Y HAY QUE DECIRLO FUERTE.
+# La postura da la variable por puesta a partir de 16 caracteres, pero
+# `_pimienta()` y `_secreto()` aceptan CUALQUIER valor no vacio. Con un secreto
+# de 10: la pimienta YA cambio --sesiones caidas y codigos de recuperacion
+# muertos-- y el latido sigue contando ese punto como pendiente, lo que empuja a
+# volver a ponerlo bien y a rotar por segunda vez. Dos rotaciones, dos rondas de
+# codigos muertos, por un aviso que no existia.
+for _v in ('APP_SECRET', 'SESSION_PEPPER'):
+    _x = (os.getenv(_v) or '').strip()
+    if _x and len(_x) < 16:
+        print("[security] %s tiene %d caracteres: YA esta en uso (cambia la pimienta y "
+              "la firma) pero la postura lo cuenta como ausente. Ponlo de 32 o mas y "
+              "rota UNA sola vez." % (_v, len(_x)))
+
 
 # --- CABECERAS DE SEGURIDAD ---
 # El backend no ponia ninguna: HTTPS existia solo porque lo termina el borde de
