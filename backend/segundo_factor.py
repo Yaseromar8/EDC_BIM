@@ -106,10 +106,34 @@ def codigos_de_recuperacion():
     return ['-'.join(secrets.token_hex(2) for _ in range(3)) for _ in range(CODIGOS_RECUPERACION)]
 
 
+def _pimienta():
+    return (os.getenv('SESSION_PEPPER') or os.getenv('APP_SECRET') or 'sin-pimienta').encode()
+
+
+def huella_de_la_pimienta():
+    """12 caracteres que identifican QUE pimienta hasheo un codigo. Nunca el valor.
+
+    POR QUE HACE FALTA ESTO
+    -----------------------
+    Los codigos de recuperacion se guardan como HMAC(pimienta, codigo) y solo se
+    enseñan UNA vez. El dia que se define o se rota SESSION_PEPPER --que es una
+    operacion de seguridad normal, no una rareza-- las huellas guardadas dejan de
+    corresponder para siempre a los codigos que su dueño lleva en papel.
+
+    Eso ya seria malo. Lo grave era que fallaba EN SILENCIO: la pantalla de
+    seguridad contaba filas de la tabla y seguia diciendo «te quedan 8 validos»
+    cuando quedaban cero. Su dueño se enteraba el dia que perdia el telefono, que
+    es exactamente el dia para el que existen.
+
+    Guardando esta huella junto a cada codigo, el sistema puede DECIR que le paso:
+    no los recupera --nadie puede-- pero deja de mentir sobre ellos.
+    """
+    return hashlib.sha256(_pimienta()).hexdigest()[:12]
+
+
 def huella_de_codigo(codigo_recuperacion):
     """Huella de un codigo de recuperacion, con la misma pimienta de las sesiones."""
-    pimienta = (os.getenv('SESSION_PEPPER') or os.getenv('APP_SECRET') or 'sin-pimienta').encode()
-    return hmac.new(pimienta, codigo_recuperacion.strip().lower().encode(),
+    return hmac.new(_pimienta(), codigo_recuperacion.strip().lower().encode(),
                     hashlib.sha256).hexdigest()
 
 
@@ -127,6 +151,8 @@ def asegurar_columnas(cursor):
             usado_en TIMESTAMP WITH TIME ZONE
         )""")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_totp_recup_user ON totp_recuperacion(user_id)")
+    # Con que pimienta se hasheo cada codigo. Ver huella_de_la_pimienta().
+    cursor.execute("ALTER TABLE totp_recuperacion ADD COLUMN IF NOT EXISTS pimienta VARCHAR(12)")
 
 
 def exigido_para(rol):

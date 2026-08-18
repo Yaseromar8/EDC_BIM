@@ -86,6 +86,13 @@ def entorno(monkeypatch):
                 return
             if s.startswith('INSERT INTO totp_recuperacion'):
                 estado['recuperacion'].append(params[1])
+                estado.setdefault('pimienta_de', {})[params[1]] = params[2]
+                return
+            if s.startswith('SELECT count(*) FROM totp_recuperacion'):
+                # el recuento de los que murieron al rotar la pimienta
+                ahora, marcas = params[1], estado.get('pimienta_de', {})
+                self._devolver = (len([h for h in estado['recuperacion']
+                                       if marcas.get(h) and marcas[h] != ahora]),)
                 return
             if s.startswith('DELETE FROM totp_recuperacion'):
                 estado['recuperacion'] = []
@@ -102,7 +109,12 @@ def entorno(monkeypatch):
                                   estado['hash'], estado['rol'], 'Contratista', 'BIM',
                                   estado['activa'])
             elif 'totp_activado_en,' in s:
-                self._devolver = (estado['totp_activo'], None, len(estado['recuperacion']))
+                ahora, marcas = params[1], estado.get('pimienta_de', {})
+                vivos = [h for h in estado['recuperacion']
+                         if marcas.get(h) in (None, ahora)]
+                muertos = [h for h in estado['recuperacion']
+                           if marcas.get(h) and marcas[h] != ahora]
+                self._devolver = (estado['totp_activo'], None, len(vivos), len(muertos))
             elif 'SELECT totp_secreto, COALESCE(totp_activo' in s:
                 self._devolver = (estado['secreto'], estado['totp_activo'])
             elif 'u.totp_secreto' in s:
@@ -343,3 +355,51 @@ def test_el_estado_dice_si_esta_activo_y_si_se_exige(entorno):
     c, _e, _ra = entorno
     d = c.get('/api/auth/2fa/estado').get_json()
     assert d['activo'] is True and d['exigido'] is True
+
+
+# ── Rotar la clave del servidor mata los codigos de recuperacion ──────────
+#
+# No se puede evitar: son HMAC(pimienta, codigo) y el codigo en claro solo se
+# enseño una vez. Lo que SI se puede evitar es que el sistema lo oculte. Estas
+# dos pruebas fijan que lo diga.
+
+def test_al_rotar_la_pimienta_el_estado_no_cuenta_como_validos_los_muertos(entorno, monkeypatch):
+    c, e, _ra = entorno
+    import segundo_factor as dfa
+    e['totp_activo'] = False
+    alta = c.post('/api/auth/2fa/setup').get_json()
+    c.post('/api/auth/2fa/activar', json={'codigo': dfa.codigo(alta['secreto'])})
+
+    antes = c.get('/api/auth/2fa/estado').get_json()
+    assert antes['codigos_de_recuperacion_sin_usar'] == dfa.CODIGOS_RECUPERACION
+    assert 'codigos_invalidados_por_rotacion' not in antes
+
+    monkeypatch.setenv('SESSION_PEPPER', 'otra-pimienta-distinta')
+
+    despues = c.get('/api/auth/2fa/estado').get_json()
+    assert despues['codigos_de_recuperacion_sin_usar'] == 0, (
+        'seguia contando como validos codigos que ya no abren nada')
+    assert despues['codigos_invalidados_por_rotacion'] == dfa.CODIGOS_RECUPERACION
+    assert 'rot' in despues.get('aviso', '').lower()
+
+
+def test_al_canjear_un_codigo_muerto_se_dice_la_causa(entorno, monkeypatch):
+    c, e, _ra = entorno
+    import segundo_factor as dfa
+    e['totp_activo'] = False
+    alta = c.post('/api/auth/2fa/setup').get_json()
+    codigos = c.post('/api/auth/2fa/activar',
+                     json={'codigo': dfa.codigo(alta['secreto'])}
+                     ).get_json()['codigos_de_recuperacion']
+
+    monkeypatch.setenv('SESSION_PEPPER', 'otra-pimienta-distinta')
+
+    desafio = c.post('/api/auth/login',
+                     json={'email': 'ana@contratista.com', 'password': CLAVE}
+                     ).get_json()['desafio']
+    r = c.post('/api/auth/2fa/verify', json={'desafio': desafio, 'codigo': codigos[0]})
+    assert r.status_code == 401
+    d = r.get_json()
+    assert d.get('code') == 'CODIGOS_INVALIDADOS_POR_ROTACION', (
+        'decia «el codigo no es valido» y quien tiene el papel delante lo prueba '
+        'ocho veces buscando su error, que no existe: %s' % d)

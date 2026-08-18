@@ -1101,8 +1101,9 @@ def dfa_activar():
             cur.execute('DELETE FROM totp_recuperacion WHERE user_id = %s', (u['id'],))
             codigos = dfa.codigos_de_recuperacion()
             for c in codigos:
-                cur.execute('INSERT INTO totp_recuperacion (user_id, huella) VALUES (%s, %s)',
-                            (u['id'], dfa.huella_de_codigo(c)))
+                cur.execute('INSERT INTO totp_recuperacion (user_id, huella, pimienta)'
+                            ' VALUES (%s, %s, %s)',
+                            (u['id'], dfa.huella_de_codigo(c), dfa.huella_de_la_pimienta()))
             conn.commit()
         registrar_evento('2fa_activado', email=u.get('email'), user_id=u['id'])
         return jsonify({'activo': True, 'codigos_de_recuperacion': codigos,
@@ -1152,6 +1153,23 @@ def dfa_verify():
 
             if not valido:
                 registrar_evento('2fa_fallido', email=fila[2], user_id=uid)
+                # Antes de dar el generico: mirar si el codigo no vale porque se
+                # roto la clave del servidor. Quien tiene el papel en la mano y
+                # lee «el codigo no es valido» piensa que se equivoco de linea, y
+                # lo prueba ocho veces hasta quedarse sin intentos. Decirle la
+                # verdad no le devuelve la cuenta, pero le ahorra buscar donde no
+                # hay nada.
+                cur.execute('SELECT count(*) FROM totp_recuperacion'
+                            ' WHERE user_id = %s AND usado_en IS NULL'
+                            '   AND pimienta IS NOT NULL AND pimienta <> %s',
+                            (uid, dfa.huella_de_la_pimienta()))
+                if (cur.fetchone() or [0])[0]:
+                    return jsonify({
+                        'error': 'Se rotó la clave del servidor y tus códigos de '
+                                 'recuperación dejaron de valer. Entra con el código '
+                                 'del teléfono; si lo perdiste, tiene que reponerte '
+                                 'el acceso quien administre la base.',
+                        'code': 'CODIGOS_INVALIDADOS_POR_ROTACION'}), 401
                 return jsonify({'error': 'El código no es válido.'}), 401
 
             cur.execute('UPDATE users SET last_login_at = NOW() WHERE id = %s', (uid,))
@@ -1210,15 +1228,32 @@ def dfa_estado():
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
+            # Se cuentan por SEPARADO los que siguen sirviendo y los que murieron
+            # al rotar la pimienta. Contarlos juntos era la mentira: la pantalla
+            # decia «8 validos» sobre codigos que ya no abrian nada.
+            ahora = dfa.huella_de_la_pimienta()
             cur.execute('SELECT COALESCE(totp_activo, FALSE), totp_activado_en,'
                         '       (SELECT count(*) FROM totp_recuperacion'
-                        '         WHERE user_id = %s AND usado_en IS NULL)'
-                        '  FROM users WHERE id = %s', (u['id'], u['id']))
-            activo, desde, quedan = cur.fetchone()
-        return jsonify({'activo': bool(activo),
-                        'activado_en': desde.isoformat() if desde else None,
-                        'codigos_de_recuperacion_sin_usar': quedan,
-                        'exigido': dfa.exigido_para(u.get('role'))}), 200
+                        '         WHERE user_id = %s AND usado_en IS NULL'
+                        '           AND (pimienta IS NULL OR pimienta = %s)),'
+                        '       (SELECT count(*) FROM totp_recuperacion'
+                        '         WHERE user_id = %s AND usado_en IS NULL'
+                        '           AND pimienta IS NOT NULL AND pimienta <> %s)'
+                        '  FROM users WHERE id = %s',
+                        (u['id'], ahora, u['id'], ahora, u['id']))
+            activo, desde, quedan, muertos = cur.fetchone()
+        respuesta = {'activo': bool(activo),
+                     'activado_en': desde.isoformat() if desde else None,
+                     'codigos_de_recuperacion_sin_usar': quedan,
+                     'exigido': dfa.exigido_para(u.get('role'))}
+        if muertos:
+            respuesta['codigos_invalidados_por_rotacion'] = muertos
+            respuesta['aviso'] = (
+                'Se rotó la clave del servidor y %d de tus códigos de recuperación '
+                'dejaron de valer. No se pueden recuperar. Desactiva y vuelve a '
+                'activar el segundo factor, con el teléfono a mano, para tener '
+                'códigos nuevos.' % muertos)
+        return jsonify(respuesta), 200
     except Exception as e:
         print(f'[2fa] estado: {e}')
         return jsonify({'error': 'No se pudo consultar el estado.'}), 500
