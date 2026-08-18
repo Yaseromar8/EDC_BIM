@@ -106,6 +106,8 @@ RUTAS_POR_RECURSO = {
     'get_dashboard':      ('dashboards', 'dash_id'),
     'update_dashboard':   ('dashboards', 'dash_id'),
     'get_extraction_status': ('extraction_jobs', 'job_id'),
+    # La ficha de un documento por su id de base de datos.
+    'get_document_by_id': ('file_nodes', 'node_id'),
 }
 
 
@@ -115,6 +117,15 @@ RUTAS_POR_QUERY = {
     'get_values':      ('file_nodes', 'node_id'),   # GET /api/attrs/values
     'list_markups':    ('file_nodes', 'node_id'),   # GET /api/pdf/markups
     'get_calibration': ('file_nodes', 'node_id'),   # GET /api/pdf/calibration
+    # -- Segunda tanda. Las tres resuelven la obra por el NODO, no por el
+    # model_urn que declare el cliente. Los tres manejadores ya lo hacen asi por
+    # dentro (documents.py lo dice: «desconfia del model_urn del cliente»), y el
+    # control central tenia que igualarlo: si el middleware se fiara del dato
+    # del cliente mientras el manejador mira la fila, serian dos verdades
+    # distintas sobre la misma peticion. --
+    'trazabilidad_de_documento': ('file_nodes', 'id'),        # ?id=
+    'get_versions': ('file_nodes', 'id'),                     # ?id=
+    'download_folder_urls': ('file_nodes', 'folder_id'),      # ?folder_id=
 }
 
 

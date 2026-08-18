@@ -4078,7 +4078,8 @@ function App() {
 
         {/* Modo Comparador: overlay que toma el lienzo sin desmontar el visor principal */}
         {compareMode && (
-          <CompareView BACKEND_URL={BACKEND_URL} onExit={() => setCompareMode(false)} />
+          <CompareView BACKEND_URL={BACKEND_URL} projectId={selectedProject?.id}
+                       onExit={() => setCompareMode(false)} />
         )}
 
         {lob4dTabOpen && (

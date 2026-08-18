@@ -72,7 +72,7 @@ const modelKey = (model) => {
     }
 };
 
-export default function CompareView({ BACKEND_URL, onExit }) {
+export default function CompareView({ BACKEND_URL, projectId, onExit }) {
     const [phase, setPhase] = useState('setup');           // 'setup' | 'view'
     const [models, setModels] = useState([]);
     const [side, setSide] = useState({
@@ -96,13 +96,21 @@ export default function CompareView({ BACKEND_URL, onExit }) {
     const vs = useRef({ a: null, b: null, maps: {}, rev: {}, syncing: false, selSyncing: false });
 
     useEffect(() => {
-        apiFetch(`${BACKEND_URL}/api/config/project`)
+        // La obra viaja en la peticion. Sin ella, el control de acceso por obra
+        // no puede saber de que obra habla esta pantalla, y al encender
+        // ENFORCE_PROJECT_AUTHZ responderia 403 a un usuario legitimo. El resto
+        // de App.jsx ya la manda asi (`?project=${selectedProject.id}`); esta
+        // pantalla era la unica que la omitia.
+        const conObra = projectId
+            ? `${BACKEND_URL}/api/config/project?project=${encodeURIComponent(projectId)}`
+            : `${BACKEND_URL}/api/config/project`;
+        apiFetch(conObra)
             .then(r => r.json())
             .then(cfg => setModels(cfg.models || []))
             .catch(() => setStatus('No se pudo cargar la lista de modelos.'));
         // Purgar temporales de sesiones anteriores (por si quedo algo de un crash)
         apiFetch(`${BACKEND_URL}/api/compare/cleanup`, { method: 'POST' }).catch(() => { });
-    }, [BACKEND_URL]);
+    }, [BACKEND_URL, projectId]);
 
     // Salir SIEMPRE limpia las extracciones temporales: no queda nada en la BD.
     const doExit = useCallback(() => {

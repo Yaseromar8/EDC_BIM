@@ -417,6 +417,12 @@ _CLAVES_OBRA = ('project_id', 'model_urn', 'scope_urn', 'scope', 'project', 'tar
                 # linea ninguna de las cinco resolvia obra: se colaban por el
                 # hueco sin dejar siquiera un aviso.
                 'projectId', 'base_project_id', 'acc_project_id',
+                # 'base' a secas: lo manda la pantalla de aterrizaje de la app
+                # de campo (GET /api/frentes?base=<obra>) y su valor ES el id
+                # canonico de la obra, el mismo que devuelve /api/projects.
+                # Estaba 'base_project_id' pero no 'base', asi que esa pantalla
+                # no resolvia obra y bajo ENFORCE se habria quedado sin frentes.
+                'base',
                 'source_urn', 'model_id', 'oldUrn', 'newModel')
 
 
