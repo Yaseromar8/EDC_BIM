@@ -86,13 +86,14 @@ export function useFileExplorer(project, user) {
   const [statusFilter, setStatusFilter] = useState('ALL'); // ALL | WIP | SHARED | PUBLISHED | ARCHIVED
   const [collapseSignal, setCollapseSignal] = useState(0);
 
-  // ── Mock Users for Share ──
-  const allProjectUsers = [
-    { email: 'omarsanchezh8@gmail.com', name: 'Yaser Omar', initials: 'YO' },
-    { email: 'admin@visor.com', name: 'Administrador', initials: 'AD' },
-    { email: 'residente@obra.com', name: 'Juan Perez', initials: 'JP' },
-    { email: 'supervisor@aps.com', name: 'Maria Lopez', initials: 'ML' }
-  ];
+  // Lista VACIA a proposito. Aqui vivia una lista de usuarios de prueba con el
+  // correo y el nombre PERSONALES del desarrollador. Ninguna pantalla la
+  // renderizaba (ShareModal no la desestructura), pero viajaba dentro del JS
+  // compilado del portal: cualquiera podia leerla viendo el fuente -- y en la
+  // instancia de una entidad, eso es identidad de otro dentro de SU portal.
+  // Si algun dia el modal de compartir necesita sugerencias, se piden a
+  // /api/users con la sesion, no se escriben en el codigo.
+  const allProjectUsers = [];
 
   // ── Chunked Upload Engine ──
   const { methods: cacheMethods, cacheVersion } = useFolderCache(API, projectPrefix);

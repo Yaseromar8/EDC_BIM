@@ -46,7 +46,7 @@ def puntos():
     El orden es el de la conversacion con el propietario, no el alfabetico: lo
     que primero rompe la confianza va arriba.
     """
-    return [
+    base = [
         ('APP_SECRET', _puesta('APP_SECRET'),
          'firma los enlaces de invitacion, restablecimiento y verificacion'),
         ('SESSION_PEPPER', _puesta('SESSION_PEPPER'),
@@ -61,6 +61,17 @@ def puntos():
          (os.getenv('AUTH_POLICY_MODE') or 'sombra').strip().lower() != 'sombra',
          'en modo sombra los decoradores de rol no bloquean a nadie'),
     ]
+    # En una instancia de ENTIDAD (perfil portal) hay un punto mas: el
+    # administrador inicial declarado. Sin ADMIN_EMAIL, el arranque crea el
+    # admin historico del DESARROLLADOR -- y la guia de despliegue usa
+    # «faltan: 0» como puerta, asi que una municipalidad podia dar postura
+    # COMPLETA teniendo al desarrollador como su primer administrador. En el
+    # perfil completo el punto no aplica: alli ese admin ES el propietario.
+    if (os.getenv('DEPLOY_PROFILE') or '').strip().lower() == 'portal':
+        base.append(('ADMIN_EMAIL',
+                     bool((os.getenv('ADMIN_EMAIL') or '').strip()),
+                     'sin el, el primer administrador es el del desarrollador'))
+    return base
 
 
 def resumen_publico():

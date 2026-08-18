@@ -71,6 +71,8 @@ Render y no se copian a ningún otro sitio):
 | `ADMIN_NAME` | nombre del admin de la entidad | ídem |
 | `ADMIN_PASSWORD` | Generate — se entrega al admin por canal seguro y la cambia al entrar | sin ella se genera una aleatoria que solo aparece una vez en el log |
 | `APP_URL` | la URL del portal del paso 4 | destino de los enlaces de los correos |
+| `MAIL_FROM` | remitente con el dominio de la entidad (o del servicio) | sin él, el correo cae en el remitente de pruebas de Resend, que **solo entrega al buzón del desarrollador**: los restablecimientos de contraseña de la entidad no llegarían |
+| `RESEND_API_KEY` | clave de Resend **propia del servicio** | sin ella el correo queda en modo degradado: los enlaces de restablecimiento se quedan en el log para envío a mano |
 | `APS_CLIENT_ID` / `APS_CLIENT_SECRET` / `APS_AUTH_URL` / `APS_DATA_URL` | credencial APS | ver DWG/CAD dentro de Documentos traduce vía Autodesk. **Decisión**: credencial APS propia por entidad (limpio) o la común (más simple; los modelos CAD de la entidad pasan por la cuenta APS del proveedor — se declara en el contrato) |
 
 **Qué NO se configura**, a propósito: `ALLOW_DEMO_TOKEN` (jamás), `DATABASE_URL`
