@@ -149,3 +149,20 @@ def test_archivar_una_obra_tiene_su_puerta_y_su_vuelta():
         'no hay forma de VER las obras archivadas, así que archivar sigue siendo '
         'un viaje de ida')
     assert 'restaurar' in cliente, 'no hay forma de restaurar una obra archivada'
+
+
+def test_el_expediente_se_puede_exportar_desde_el_portal():
+    """«¿Como saco mi expediente si me voy de tu plataforma?»
+
+    La respuesta del backend existia desde hace tiempo -- el docstring de
+    /api/docs/indice-expediente dice literalmente ser esa respuesta -- y ninguna
+    pantalla lo llamaba. La otra mitad, llevarse los BYTES, es la descarga por
+    URLs firmadas que la tabla ya usaba para carpetas. Este candado exige que
+    las dos mitades tengan puerta en el portal: un derecho que no se puede
+    ejercer desde el producto no es un derecho, es una frase en un contrato.
+    """
+    cliente = _codigo_de_los_clientes()
+    assert 'indice-expediente' in cliente, (
+        'el indice del expediente no se puede pedir desde ninguna pantalla')
+    assert 'download_folder_urls' in cliente, (
+        'no hay forma de llevarse los documentos en masa')

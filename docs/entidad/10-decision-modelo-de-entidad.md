@@ -94,7 +94,7 @@ En orden, con su estado:
 | 2 | Instancia propia (servicio+base+bucket nuevos, perfil portal, 6 variables de postura desde el día uno) | pendiente — pasos del propietario, guiados |
 | 3 | Copia y restauración probadas EN esa instancia | herramientas listas; ejecutar allí |
 | 4 | Gestión de roles desde el portal | **HECHO** — selector en Miembros; confirma dar/quitar admin; enseña el error real del backend; el último admin activo no se puede degradar (probado) |
-| 5 | Exportar el expediente (la entidad tiene derecho a llevárselo) | por construir — `indice_expediente` ya existe como base |
+| 5 | Exportar el expediente | **HECHO** — panel en Configuración: índice xlsx (sin fórmulas, se abre sin la plataforma) + zip de documentos por URLs firmadas; con candado que exige las dos puertas |
 | 6 | Plan pagado en Render para esa instancia | decisión de precio del propietario |
 | 7 | Contrato: dónde viven los datos, Ley 29733, retención, salida | del propietario, con plantilla nuestra |
 

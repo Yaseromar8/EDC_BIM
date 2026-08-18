@@ -54,6 +54,7 @@ const PlanEntregaView = lazy(() => import('../components/PlanEntregaModule').the
 const CatalogoIdoneidadView = lazy(() => import('../components/CatalogoIdoneidadModule').then(m => ({ default: m.CatalogoIdoneidadView })));
 const ArchivarObraPanel = lazy(() => import('../components/ArchivarObraPanel').then(m => ({ default: m.ArchivarObraPanel })));
 const RolDeMiembro = lazy(() => import('../components/RolDeMiembro').then(m => ({ default: m.RolDeMiembro })));
+const ExportarExpedientePanel = lazy(() => import('../components/ExportarExpedientePanel').then(m => ({ default: m.ExportarExpedientePanel })));
 const TriajeSeguridadView = lazy(() => import('../components/TriajeSeguridadModule').then(m => ({ default: m.TriajeSeguridadView })));
 const AddToSetModal = lazy(() => import('../components/SetsModule').then(m => ({ default: m.AddToSetModal })));
 const AttributesAdmin = lazy(() => import('../components/AttributesModule').then(m => ({ default: m.AttributesAdmin })));
@@ -466,6 +467,12 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
               <div style={{ marginTop: 12, background: '#f5f5f5', borderRadius: 8, height: 8, overflow: 'hidden' }}><div style={{ width: '15%', height: '100%', background: 'linear-gradient(90deg, var(--accent), #7e9bbd)', borderRadius: 8 }} /></div>
               <div style={{ fontSize: 11, color: '#999', marginTop: 6 }}>Uso estimado del proyecto</div>
             </div>
+
+            {/* El expediente es de la obra, no de la plataforma: indice xlsx
+                + zip de documentos. La mitad del backend existia sin llamador. */}
+            <Suspense fallback={null}>
+              <ExportarExpedientePanel project={project} projectPrefix={projectPrefix} />
+            </Suspense>
 
             {/* La puerta para archivar una obra. El backend sabia hacerlo desde
                 siempre --ruta de administrador, auditada-- y NINGUN cliente la
