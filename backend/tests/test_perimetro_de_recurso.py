@@ -171,7 +171,13 @@ def test_las_rutas_por_id_de_recurso_llevan_guardia():
             # Vale cualquier guardia que resuelva la obra del recurso, no solo
             # la generica: sets.py ya tenia la suya y funciona.
             otras = ('_guardia_del_conjunto', '_guardia_del_nodo', '_acceso_al_recurso',
-                     'obra_del_blob', '_obra_del_conjunto')
+                     'obra_del_blob', '_obra_del_conjunto',
+                     # El tablero de analisis lee la obra de su propia fila y
+                     # llama a _check_project_access, que es fail-closed
+                     # (routes/dashboards.py). Aparecio al declarar 'dashboards'
+                     # en RECURSOS el 17-ago: la guardia existia desde antes, lo
+                     # que faltaba era que este barrido supiera reconocerla.
+                     '_check_project_access')
             tiene = 'guardia_de_recurso' in cuerpo or any(o in cuerpo for o in otras)
             if toca_obra and not tiene:
                 sin_guardia.append(f'{nombre}  {url}')

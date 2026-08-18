@@ -474,8 +474,12 @@ def _request_project_id():
         # Ultima via: rutas que reciben el ID DE UN RECURSO y no la obra. La
         # obra esta en la propia fila y solo se sabe consultandola.
         try:
-            from perimetro_de_obra import obra_de_la_peticion
+            from perimetro_de_obra import obra_de_la_peticion, obra_por_query
             obra = obra_de_la_peticion(request.endpoint, request.view_args)
+            if obra:
+                return obra
+            # ...y rutas cuyo id de recurso viaja en la query (?node_id=...).
+            obra = obra_por_query(request.endpoint, request.args)
             if obra:
                 return obra
         except Exception as e:
@@ -515,12 +519,58 @@ _SIN_OBRA_JUSTIFICADO = {
     '/api/projects': 'lista y crea obras; filtra por pertenencia dentro de la vista',
     '/api/docs/global-search': 'busca en las obras del usuario; filtra por pertenencia',
     '/api/inventory/schema': 'catalogo de campos, igual para todas las obras',
+    # -- Anadidas el 17-ago al preparar ENFORCE --
+    #
+    # Estas cuatro reciben el id del recurso en el CUERPO de la peticion, no en
+    # la ruta ni en la query, asi que ninguna de las dos maquinarias de
+    # resolucion las alcanza. Se conceden porque el manejador comprueba la
+    # PERTENENCIA A LA OBRA por dentro -- no la mera existencia del recurso --
+    # y esa guardia esta leida linea a linea, no supuesta. Si alguna de esas
+    # guardias desaparece, la exencion se convierte en un agujero permanente:
+    # por eso hay una prueba que las ata (test_las_exenciones_tienen_guardia).
+    '/api/uploads/complete':
+        'recibe uploadId; el manejador lee model_urn de la fila de upload_sessions '
+        'y exige pertenencia con verify_project_access (routes/uploads.py)',
+    '/api/uploads/progress':
+        'recibe uploadId; el manejador exige pertenencia con guardia_de_recurso '
+        'sobre upload_sessions antes de escribir (routes/uploads.py)',
+    '/api/attrs/values':
+        'recibe node_id; la obra sale del propio nodo y _guardia_del_nodo exige '
+        'pertenencia y permiso de carpeta, en GET y en PUT (routes/attributes.py)',
+}
+
+
+# Exenciones por ENDPOINT, para rutas con segmento variable que el diccionario
+# de paths exactos no puede expresar. Mismo contrato: motivo escrito, una a una.
+_ENDPOINTS_JUSTIFICADOS = {
+    # La vista compartida por enlace. El identificador aleatorio ES la
+    # credencial, y el enlace se comparte fuera del equipo A PROPOSITO (por eso
+    # la vista es @publico_en_lectura). Resolver aqui la obra y exigir
+    # pertenencia invertiria el diseno: el anonimo entraria (pasa antes del
+    # bloque de authz) y el companero CON sesion recibiria 403. Riesgo asumido
+    # y escrito: quien tenga un enlace ve esa vista, con o sin sesion -- que es
+    # exactamente lo que "compartir por enlace" significa.
+    'get_view': 'el identificador aleatorio es la credencial del enlace compartido',
+    # Los dos PATCH del inventario. Comparten path con el GET, asi que la
+    # exencion NO puede ir por path: el GET sin identificador tiene que seguir
+    # cerrado -- hay dos pruebas que lo fijan, y son las que cazaron mi primer
+    # intento de exentar '/api/inventory' entero.
+    #
+    # Se conceden porque el cuerpo solo trae external_id / fieldName y la
+    # proteccion real esta dentro: ambos manejadores acotan por SQL contra
+    # project_users, que es MAS fino que el control central (comprueba el
+    # elemento, no solo la obra).
+    'update_inventory': 'acota por SQL contra project_users dentro del manejador (server.py)',
+    'bulk_update_inventory': 'acota por SQL contra project_users dentro del manejador (server.py)',
 }
 
 
 def _sin_obra_justificado(path):
     """¿Es una de las rutas que legitimamente no habla de UNA obra?"""
-    return path.rstrip('/') in _SIN_OBRA_JUSTIFICADO
+    if path.rstrip('/') in _SIN_OBRA_JUSTIFICADO:
+        return True
+    endpoint = (request.endpoint or '').rsplit('.', 1)[-1]
+    return endpoint in _ENDPOINTS_JUSTIFICADOS
 
 
 _PROJECT_SCOPED_PREFIXES = (

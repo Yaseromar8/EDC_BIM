@@ -45,7 +45,12 @@ RECURSOS = {
     'element_docs':      ('id', 'model_urn'),
     'pdf_markups':       ('id', 'model_urn'),
     'custom_attr_defs':  ('id', 'model_urn'),
-    'saved_views':       ('id', 'model_urn'),
+    # OJO: saved_views NO tiene model_urn -- su columna de obra es project_id
+    # (con semantica de frente, ej. '1_CANAL'; ver el CREATE en routes/views.py).
+    # La entrada decia model_urn y estuvo DORMIDA: ningun endpoint de vistas
+    # pasaba por aqui, asi que el error no se ejecutaba nunca. Se descubrio al
+    # clasificar las rutas para ENFORCE, no por un fallo.
+    'saved_views':       ('id', 'project_id'),
     'doc_reviews':       ('id', 'model_urn'),
     'transmittals':      ('id', 'model_urn'),
     'doc_sets':          ('id', 'model_urn'),
@@ -58,6 +63,13 @@ RECURSOS = {
     'upload_sessions':   ('id', 'model_urn'),
     # El buffer de correcciones de la IA. Lleva la obra de la consulta original.
     'ai_brain.feedback_buffer': ('id', 'model_urn'),
+    # El tablero de analisis. Su columna de obra se llama 'project' (TEXT NOT
+    # NULL, ver routes/dashboards.py y esquema_base.py).
+    'dashboards':        ('id', 'project'),
+    # El trabajo de extraccion de inventario. La columna model_urn se anadio el
+    # 17-ago: antes el job no sabia de que obra era y su sondeo de estado no
+    # podia resolver obra bajo ENFORCE.
+    'extraction_jobs':   ('job_id', 'model_urn'),
 }
 
 
@@ -84,6 +96,25 @@ RUTAS_POR_RECURSO = {
     'add_set_items':      ('doc_sets', 'set_id'),
     'remove_set_item':    ('doc_sets', 'set_id'),
     'acusar_recibo':      ('transmittals', 'tid'),
+    # -- Anadidas el 17-ago al preparar ENFORCE: rutas cuyo unico identificador
+    # es el id del recurso en la RUTA. Sin estas entradas, bajo ENFORCE
+    # devolvian 403 PROJECT_UNRESOLVED antes de llegar siquiera a su guardia
+    # interior (las de uploads la tienen; dashboards tambien; el sondeo de
+    # extraccion no tenia ninguna). --
+    'get_upload_status':  ('upload_sessions', 'upload_id'),
+    'cancel_upload':      ('upload_sessions', 'upload_id'),
+    'get_dashboard':      ('dashboards', 'dash_id'),
+    'update_dashboard':   ('dashboards', 'dash_id'),
+    'get_extraction_status': ('extraction_jobs', 'job_id'),
+}
+
+
+# Como RUTAS_POR_RECURSO, pero para rutas cuyo id de recurso viaja en la QUERY
+# (?node_id=...) y no en la ruta. Mismo mecanismo, otra fuente.
+RUTAS_POR_QUERY = {
+    'get_values':      ('file_nodes', 'node_id'),   # GET /api/attrs/values
+    'list_markups':    ('file_nodes', 'node_id'),   # GET /api/pdf/markups
+    'get_calibration': ('file_nodes', 'node_id'),   # GET /api/pdf/calibration
 }
 
 
@@ -104,6 +135,26 @@ def obra_de_la_peticion(nombre_vista, view_args):
             return obra_del_recurso(conn.cursor(), tabla, valor)
     except Exception as e:
         logger.warning(f'no se pudo resolver la obra de {corto}: {e}')
+        return None
+
+
+def obra_por_query(nombre_vista, args):
+    """La obra de una peticion cuyo id de recurso viaja en la query string."""
+    if not nombre_vista or not args:
+        return None
+    corto = nombre_vista.rsplit('.', 1)[-1]
+    if corto not in RUTAS_POR_QUERY:
+        return None
+    tabla, param = RUTAS_POR_QUERY[corto]
+    valor = args.get(param)
+    if not valor:
+        return None
+    from db import get_db_connection
+    try:
+        with get_db_connection() as conn:
+            return obra_del_recurso(conn.cursor(), tabla, valor)
+    except Exception as e:
+        logger.warning(f'no se pudo resolver la obra de {corto} por query: {e}')
         return None
 
 

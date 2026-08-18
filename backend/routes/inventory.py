@@ -64,6 +64,9 @@ def ensure_extraction_jobs_table():
             cur.execute("""CREATE TABLE IF NOT EXISTS extraction_jobs (
                 job_id TEXT PRIMARY KEY, status TEXT, progress INTEGER,
                 message TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+            # De que obra es el trabajo. Sin esto, el sondeo de estado no puede
+            # resolver obra y bajo ENFORCE devolvia 403 al usuario legitimo.
+            cur.execute("ALTER TABLE extraction_jobs ADD COLUMN IF NOT EXISTS model_urn TEXT")
             conn.commit()
     except Exception as e:
         print(f"[jobs] ensure table: {e}")
@@ -76,11 +79,14 @@ def set_job(job_id, data):
         from db import get_db_connection
         with get_db_connection() as conn:
             cur = conn.cursor()
-            cur.execute("""INSERT INTO extraction_jobs (job_id, status, progress, message, updated_at)
-                           VALUES (%s,%s,%s,%s,NOW())
+            cur.execute("""INSERT INTO extraction_jobs (job_id, status, progress, message, model_urn, updated_at)
+                           VALUES (%s,%s,%s,%s,%s,NOW())
                            ON CONFLICT (job_id) DO UPDATE SET status=EXCLUDED.status,
-                             progress=EXCLUDED.progress, message=EXCLUDED.message, updated_at=NOW()""",
-                        (job_id, data.get('status'), data.get('progress'), data.get('message')))
+                             progress=EXCLUDED.progress, message=EXCLUDED.message,
+                             model_urn=COALESCE(EXCLUDED.model_urn, extraction_jobs.model_urn),
+                             updated_at=NOW()""",
+                        (job_id, data.get('status'), data.get('progress'), data.get('message'),
+                         data.get('model_urn')))
             conn.commit()
     except Exception:
         pass
@@ -829,6 +835,11 @@ def start_extraction():
     safe_urn = urn.replace('/', '_').replace('+', '-')
     job_id = f"job_{safe_urn}_{int(time.time())}"
     
+    # Sembrar el job CON su obra antes de arrancar el hilo: el primer sondeo
+    # de estado puede llegar antes de que el hilo escriba nada.
+    set_job(job_id, {'status': 'queued', 'progress': 0,
+                     'message': 'En cola', 'model_urn': target_urn})
+
     # Iniciar hilo secundario
     thread = threading.Thread(target=extract_metadata_task, args=(urn, target_urn, job_id))
     thread.daemon = True

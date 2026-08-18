@@ -196,3 +196,46 @@ def test_la_cobertura_no_empeora():
     con_guardia = sum(1 for _f, _u, g, _r in rutas if g)
     assert len(rutas) >= 175, f'el detector dejo de ver rutas: {len(rutas)} < 175'
     assert con_guardia >= 70, f'bajaron las rutas con guardia propia: {con_guardia} < 70'
+
+
+# -- Las exenciones no pueden ser fantasmas ni cheques en blanco -----------
+
+import pytest
+
+def test_las_exenciones_por_endpoint_existen_de_verdad():
+    """Una exencion con un nombre de vista que no existe no exenta nada.
+
+    Paso de verdad: escribi 'update_inventory_bulk' y la vista se llama
+    'bulk_update_inventory'. La exencion quedaba muda y esa ruta habria seguido
+    devolviendo 403 bajo ENFORCE -- con el agravante de que el diccionario decia
+    lo contrario, asi que al depurarlo nadie habria mirado ahi.
+    """
+    import os
+    os.environ.setdefault('APP_SECRET', 'x' * 32)
+    server = pytest.importorskip('server')
+    import auth_middleware as am
+
+    reales = {n.rsplit('.', 1)[-1] for n in server.app.view_functions}
+    fantasmas = sorted(set(am._ENDPOINTS_JUSTIFICADOS) - reales)
+    assert not fantasmas, (
+        'estas exenciones nombran vistas que no existen, asi que no exentan '
+        'nada y ademas mienten: ' + ', '.join(fantasmas))
+
+
+def test_las_rutas_por_recurso_apuntan_a_vistas_y_tablas_declaradas():
+    """Lo mismo para la maquinaria de resolucion: un endpoint mal escrito ahi
+    no resuelve la obra, y bajo ENFORCE eso es un 403 al usuario legitimo."""
+    import os
+    os.environ.setdefault('APP_SECRET', 'x' * 32)
+    server = pytest.importorskip('server')
+    import perimetro_de_obra as po
+
+    reales = {n.rsplit('.', 1)[-1] for n in server.app.view_functions}
+    for nombre, mapa in (('RUTAS_POR_RECURSO', po.RUTAS_POR_RECURSO),
+                         ('RUTAS_POR_QUERY', po.RUTAS_POR_QUERY)):
+        fantasmas = sorted(set(mapa) - reales)
+        assert not fantasmas, (
+            f'{nombre} nombra vistas inexistentes: ' + ', '.join(fantasmas))
+        sin_tabla = sorted({t for t, _p in mapa.values()} - set(po.RECURSOS))
+        assert not sin_tabla, (
+            f'{nombre} usa tablas no declaradas en RECURSOS: ' + ', '.join(sin_tabla))
