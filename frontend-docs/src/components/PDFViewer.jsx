@@ -150,6 +150,9 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   // Texto por página SOLO EN MEMORIA: se lee del PDF al vuelo y se descarta al
   // cerrar el documento. No se extrae ni se guarda nada en el servidor.
   const textCacheRef = useRef(new Map());
+  const busquedaVivaRef = useRef(null);   // debounce de la busqueda en vivo
+  const bufferCanvasRef = useRef(null);   // doble bufer del render (uno, reutilizado)
+  const [zoomMenuOpen, setZoomMenuOpen] = useState(false);   // menu de presets de zoom
 
   // ── Búsqueda dentro del documento ──
   const [searchOpen, setSearchOpen] = useState(false);
@@ -291,20 +294,50 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
         dpr = Math.max(0.1, dpr * Math.sqrt(MAX_CANVAS_PIXELS / wanted));
       }
 
-      canvas.width = Math.round(viewport.width * dpr);
-      canvas.height = Math.round(viewport.height * dpr);
-      canvas.style.width = `${viewport.width}px`;
-      canvas.style.height = `${viewport.height}px`;
+      // DOBLE BÚFER: se dibuja en un canvas FUERA de pantalla y se vuelca de un
+      // golpe al visible cuando está terminado. Antes se redimensionaba el
+      // canvas visible (lo que lo BLANQUEA al instante) y se pintaba encima:
+      // cada cambio de página era un fogonazo en blanco hasta acabar el render.
+      // En el visor de Autodesk la página anterior se queda hasta que la nueva
+      // está lista, y eso es lo que se replica aquí.
+      //
+      // UN único búfer reutilizado (no OffscreenCanvas, no uno por render): los
+      // planos A0 ya rozan el tope de 16 MP y duplicar picos de memoria por
+      // gusto es como se muere un portátil de obra.
+      if (!bufferCanvasRef.current) bufferCanvasRef.current = document.createElement('canvas');
+      const buffer = bufferCanvasRef.current;
+      buffer.width = Math.round(viewport.width * dpr);
+      buffer.height = Math.round(viewport.height * dpr);
 
-      // OJO: NO usar { alpha:false } — deja el canvas NEGRO opaco hasta que
-      // termina de dibujar, tapando el fondo blanco (se veía una hoja negra).
-      const ctx = canvas.getContext('2d');
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const bctx = buffer.getContext('2d');
+      bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // El búfer no hereda fondo: se pinta blanco para que un PDF con
+      // transparencia no se vuelque sobre basura del render anterior.
+      bctx.fillStyle = '#fff';
+      bctx.fillRect(0, 0, viewport.width, viewport.height);
 
-      const renderContext = { canvasContext: ctx, viewport };
+      const renderContext = { canvasContext: bctx, viewport };
       renderTaskRef.current = page.render(renderContext);
       await renderTaskRef.current.promise;
       if (renderSequence !== renderSequenceRef.current) return;
+
+      // Volcado atómico: recién aquí se toca el canvas visible.
+      canvas.width = buffer.width;
+      canvas.height = buffer.height;
+      canvas.style.width = `${viewport.width}px`;
+      canvas.style.height = `${viewport.height}px`;
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(buffer, 0, 0);
+
+      // Calentar las páginas vecinas: getPage dispara el parseo del contenido,
+      // que es la parte lenta al avanzar hoja a hoja por un expediente.
+      const pdf = pdfDocRef.current;
+      if (pdf) {
+        for (const vecina of [currentPage + 1, currentPage - 1]) {
+          if (vecina >= 1 && vecina <= pdf.numPages) pdf.getPage(vecina).catch(() => {});
+        }
+      }
       // El overlay necesita el viewport vigente para transformar coordenadas PDF<->pantalla
       setVpInfo({ vp: viewport, w: viewport.width, h: viewport.height });
     } catch (err) {
@@ -547,15 +580,21 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     let lastPageChange = 0;
 
     const handleWheel = (e) => {
-      if (!(e.ctrlKey || e.metaKey) || !wrapRef.current?.contains(e.target)) return;
-      // Bloquear scroll vertical nativo (importante para que el zoom y cambio de pág funcionen sin que brinque la pantalla)
-      e.preventDefault(); 
-      
+      // ZOOM CON LA RUEDA A SECAS, COMO EL VISOR DE AUTODESK.
+      //
+      // Antes la rueda sobre la hoja exigia Ctrl para hacer zoom, y sin Ctrl no
+      // hacia nada (la condicion de arriba cortaba). Quien viene de ACC o de
+      // cualquier visor CAD espera rueda = zoom, sin teclas: es el gesto que
+      // mas veces se hace al leer un plano. El cambio de pagina con la rueda
+      // sobre el fondo gris se conserva tal cual.
       if (wrapRef.current && wrapRef.current.contains(e.target)) {
-        // Si el mouse está sobre la hoja (canvas u overlay) -> Zoom anclado al cursor
+        // Sobre la hoja: zoom anclado al cursor. Con o sin Ctrl -- Ctrl sigue
+        // funcionando para no romper el habito de quien ya lo aprendio.
+        e.preventDefault();
         zoomAt(e.deltaY < 0 ? 1 : -1, e.clientX, e.clientY);
       } else if (e.target === container) {
-        // Si el mouse está sobre el fondo gris -> Cambiar Página
+        // Sobre el fondo gris: cambiar de pagina, como siempre.
+        e.preventDefault();
         const now = Date.now();
         if (now - lastPageChange < 300) return; // Cooldown de 300ms
         lastPageChange = now;
@@ -571,6 +610,21 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
   }, [loading, error, numPages, zoomAt]);
+
+  // El menu de zoom se cierra como se espera de un menu: Escape o clic fuera.
+  useEffect(() => {
+    if (!zoomMenuOpen) return;
+    const alTeclear = (e) => { if (e.key === 'Escape') setZoomMenuOpen(false); };
+    const alPulsar = (e) => {
+      if (!e.target.closest || !e.target.closest('[role="menu"]')) setZoomMenuOpen(false);
+    };
+    document.addEventListener('keydown', alTeclear);
+    document.addEventListener('mousedown', alPulsar);
+    return () => {
+      document.removeEventListener('keydown', alTeclear);
+      document.removeEventListener('mousedown', alPulsar);
+    };
+  }, [zoomMenuOpen]);
 
   // --- Click & Drag Panning Logic ---
   const handleMouseDown = (e) => {
@@ -663,7 +717,21 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
               <input
                 id="pdf-search-input"
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
+                onChange={e => {
+                  const v = e.target.value;
+                  setSearchQuery(v);
+                  // BUSQUEDA EN VIVO. Antes habia que pulsar Enter o el boton
+                  // «Ir»; quien viene de Autodesk (o de cualquier navegador)
+                  // espera que el resaltado aparezca mientras escribe. 300 ms
+                  // de espera para no barrer el documento en cada tecla; el
+                  // motor ya cachea el texto por pagina, asi que repetir la
+                  // busqueda es barato.
+                  if (busquedaVivaRef.current) clearTimeout(busquedaVivaRef.current);
+                  busquedaVivaRef.current = setTimeout(() => {
+                    if (v.trim().length >= 2) runSearch(v);
+                    else { setMatches([]); setMatchIdx(0); }
+                  }, 300);
+                }}
                 onKeyDown={e => {
                   if (e.key === 'Enter') { e.preventDefault(); matches.length ? gotoMatch(e.shiftKey ? -1 : 1) : runSearch(searchQuery); }
                   if (e.key === 'Escape') setSearchOpen(false);
@@ -687,19 +755,58 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
         {/* Centro: Herramientas Principales */}
         <div className="pdf-toolbar__group pdf-toolbar__center" style={styles.toolbarGroupCenter}>
 
-          <button onClick={zoomOut} style={styles.toolBtnDark} title="Reducir zoom">
+          <button onClick={zoomOut} style={styles.toolBtnDark} title="Reducir zoom (−)">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13H5v-2h14v2z"/></svg>
           </button>
 
-          <span style={{ fontSize: 12, color: '#aaa', minWidth: 42, textAlign: 'center', fontWeight: 500 }}>
-            {Math.round(scale * 100)}%
+          {/* El porcentaje era un letrero pasivo. En el visor de Autodesk es un
+              MENU: pulsas y eliges 100%, 200%, ajustar a ancho... Es la forma
+              rapida de volver a un zoom conocido despues de perderse en un
+              plano A0. Se cierra con Escape, con clic fuera, o al elegir. */}
+          <span style={{ position: 'relative', display: 'inline-flex' }}>
+            <button onClick={() => setZoomMenuOpen(o => !o)}
+              aria-haspopup="menu" aria-expanded={zoomMenuOpen}
+              style={{ ...styles.toolBtnDark, fontSize: 12, color: '#ccc', minWidth: 48, fontWeight: 500 }}
+              title="Elegir nivel de zoom">
+              {Math.round(scale * 100)}%
+            </button>
+            {zoomMenuOpen && (
+              <div role="menu" style={{
+                position: 'absolute', top: '110%', left: '50%', transform: 'translateX(-50%)',
+                background: '#2b2b2b', border: '1px solid #444', borderRadius: 6,
+                boxShadow: '0 4px 14px rgba(0,0,0,.45)', padding: 4, zIndex: 40,
+                display: 'flex', flexDirection: 'column', minWidth: 150,
+              }}>
+                {[['Ajustar página', () => fitTo('page'), 'Ctrl+0'],
+                  ['Ajustar ancho', () => fitTo('width'), ''],
+                  ['50 %', () => { setFitMode('custom'); setScale(0.5); }, ''],
+                  ['100 %', () => { setFitMode('custom'); setScale(1); }, 'Ctrl+1'],
+                  ['200 %', () => { setFitMode('custom'); setScale(2); }, ''],
+                  ['400 %', () => { setFitMode('custom'); setScale(4); }, ''],
+                ].map(([texto, accion, atajo]) => (
+                  <button key={texto} role="menuitem"
+                    onClick={() => { accion(); setZoomMenuOpen(false); }}
+                    style={{
+                      background: 'transparent', border: 'none', color: '#ddd',
+                      padding: '7px 12px', fontSize: 12.5, textAlign: 'left',
+                      cursor: 'pointer', borderRadius: 4, display: 'flex',
+                      justifyContent: 'space-between', gap: 16,
+                    }}
+                    onMouseOver={e => e.currentTarget.style.background = '#3a3a3a'}
+                    onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                    <span>{texto}</span>
+                    {atajo && <span style={{ color: '#888', fontSize: 11 }}>{atajo}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
           </span>
 
-          <button onClick={zoomIn} style={styles.toolBtnDark} title="Aumentar zoom">
+          <button onClick={zoomIn} style={styles.toolBtnDark} title="Aumentar zoom (+)">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
           </button>
 
-          <button onClick={() => fitTo('page')} style={styles.toolBtnDark} title="Ajustar página completa">
+          <button onClick={() => fitTo('page')} style={styles.toolBtnDark} title="Ajustar página completa (Ctrl+0)">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 8l-2 2 2 2M15 8l2 2-2 2"/></svg>
           </button>
           <button onClick={() => fitTo('width')} style={styles.toolBtnDark} title="Ajustar al ancho">

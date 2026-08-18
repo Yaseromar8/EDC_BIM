@@ -55,6 +55,13 @@ def list_markups():
     page = request.args.get('page')
     if not node_id:
         return jsonify({"success": False, "error": "Falta node_id"}), 400
+    # Las ESCRITURAS de este blueprint llevaban guardia desde el principio; las
+    # LECTURAS no, asi que cualquier sesion leia las marcas de cualquier obra
+    # -- y una nube de revision o una medicion dice tanto del plano como el
+    # plano mismo. La misma guardia que ya usa el POST de aqui al lado.
+    negativa = guardia_de_recurso('file_nodes', node_id)
+    if negativa:
+        return negativa
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -132,6 +139,9 @@ def get_calibration():
     node_id = request.args.get('node_id')
     if not node_id:
         return jsonify({"success": False, "error": "Falta node_id"}), 400
+    negativa = guardia_de_recurso('file_nodes', node_id)
+    if negativa:
+        return negativa
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
