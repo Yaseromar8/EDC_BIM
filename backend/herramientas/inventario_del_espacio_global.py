@@ -155,6 +155,69 @@ def main():
         print('  leccion que backfill_obra.documentos() ya tiene escrita: un dato')
         print('  sin obra es preferible a un dato en la obra equivocada.')
 
+    # 3. LA PREGUNTA QUE DECIDE: ¿lo que hay en 'global' es una COPIA de lo que
+    #    ya vive bajo su frente? Si lo es, no hay nada que migrar ni que
+    #    declarar: hay algo que sobra.
+    print()
+    print('=' * 72)
+    print("¿ES 'global' UNA COPIA SOBRANTE?")
+    print('=' * 72)
+    print('Se compara el CONTENIDO, no el recuento: contar igual no es ser igual.')
+    print()
+
+    # (tabla, columnas que identifican una fila de verdad)
+    COMPARABLES = [
+        ('lob_activities', 'activity_id, start_date, finish_date, percent, status'),
+        ('lob_partidas',   'codigo, descripcion, unidad, metrado, pu'),
+        ('lob_avance',     'codigo, periodo, metrado_ejec'),
+        ('lob_frentes',    'frente, cod_base'),
+    ]
+    veredictos = []
+    for tabla, cols in COMPARABLES:
+        try:
+            cur.execute("SELECT DISTINCT model_urn FROM %s"
+                        " WHERE model_urn IS NOT NULL AND model_urn <> 'global'" % tabla)
+            otros = [r[0] for r in cur.fetchall()]
+        except Exception as e:
+            conn.rollback()
+            print('  %-16s (no se pudo leer: %s)' % (tabla, str(e)[:30]))
+            continue
+        if not otros:
+            print('  %-16s no hay otro scope con el que comparar' % tabla)
+            continue
+        cur.execute("SELECT COUNT(*) FROM %s WHERE model_urn = 'global'" % tabla)
+        en_global = cur.fetchone()[0]
+        if not en_global:
+            continue
+        for otro in otros:
+            cur.execute(
+                "SELECT COUNT(*) FROM ("
+                "  SELECT %s FROM %s WHERE model_urn = 'global'"
+                "  EXCEPT"
+                "  SELECT %s FROM %s WHERE model_urn = %%s) d"
+                % (cols, tabla, cols, tabla), (otro,))
+            sueltas = cur.fetchone()[0]
+            estado = ('COPIA EXACTA de %s' % otro) if sueltas == 0 else (
+                '%d filas que NO estan en %s' % (sueltas, otro))
+            print('  %-16s %d en global -> %s' % (tabla, en_global, estado))
+            veredictos.append(sueltas == 0)
+
+    print()
+    if veredictos and all(veredictos):
+        print('  VEREDICTO: todo lo que hay en \'global\' esta YA, identico, bajo su')
+        print('  frente real. Y las rutas de lectura de LOB rechazan el scope')
+        print("  'global', asi que esas filas no se pueden leer por ninguna via de")
+        print('  la API: son una copia sobrante e inalcanzable.')
+        print()
+        print('  Eso convierte N72 en un BORRADO, no en una migracion: no hay nada')
+        print('  que atribuir, y por tanto ningun riesgo de atribuir mal.')
+        print('  ANTES DE BORRAR: copia de seguridad, y este mismo informe como')
+        print('  evidencia de que lo borrado estaba duplicado.')
+    elif veredictos:
+        print('  VEREDICTO: hay filas en \'global\' que NO estan bajo ningun frente.')
+        print('  Esas SI son datos unicos: no se pueden borrar, y hay que decidir')
+        print('  si se migran (solo las que demuestren su obra) o se declaran.')
+
     cur.close()
     conn.close()
     return 0
