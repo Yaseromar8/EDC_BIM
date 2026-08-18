@@ -332,11 +332,15 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
 
       // Calentar las páginas vecinas: getPage dispara el parseo del contenido,
       // que es la parte lenta al avanzar hoja a hoja por un expediente.
-      const pdf = pdfDocRef.current;
-      if (pdf) {
-        for (const vecina of [currentPage + 1, currentPage - 1]) {
-          if (vecina >= 1 && vecina <= pdf.numPages) pdf.getPage(vecina).catch(() => {});
-        }
+      //
+      // OJO: se reutiliza el `pdf` de arriba a propósito. Declarar aquí otro
+      // `const pdf` metía la variable en zona muerta para TODO el bloque `try`,
+      // así que la línea que hace `pdf.getPage(currentPage)` -- centenares de
+      // líneas ANTES -- empezaba a lanzar «Cannot access before initialization»
+      // y ninguna página se dibujaba. Lo rompí yo y lo vio el usuario en
+      // producción, no una prueba: no hay ninguna que abra un PDF de verdad.
+      for (const vecina of [currentPage + 1, currentPage - 1]) {
+        if (vecina >= 1 && vecina <= pdf.numPages) pdf.getPage(vecina).catch(() => {});
       }
       // El overlay necesita el viewport vigente para transformar coordenadas PDF<->pantalla
       setVpInfo({ vp: viewport, w: viewport.width, h: viewport.height });
