@@ -30,7 +30,7 @@ python backend/backfill_obra.py
 En seco por defecto. Léelo, y si cuadra:
 
 ```bash
-python backend/backfill_obra.py --aplicar
+python backend/backfill_obra.py --aplicar` (desde el 17-ago ya **no** atribuye a la obra por defecto lo que no declara obra; antes sí, y escribía sin vuelta atrás) `
 ```
 
 ## Los dos modos
@@ -55,13 +55,21 @@ campo con la APK y una sesión en el portal.
   uno a uno. Si el usuario es legítimo y la obra es suya, **falta una membresía**:
   asígnasela desde el panel antes de activar.
 - `[authz HUECO] proyecto indeterminable…` — una ruta que maneja datos de obra pero de
-  la que no se puede deducir cuál. Bajo `true` esas **se colarían igual**. Cada línea es
-  una ruta a la que hay que añadirle el identificador de obra.
+  la que no se puede deducir cuál. **OJO — esto cambió el 15-ago y esta guía decía lo
+  contrario:** bajo `true` esas peticiones **se BLOQUEAN** con `403 PROJECT_UNRESOLVED`
+  (`auth_middleware.py`, marca `BLOQUEADO-HUECO`), no «se cuelan igual». Cada línea de
+  HUECO en sombra es un usuario legítimo que perderá esa pantalla al encender. Por eso
+  el interruptor NO se enciende mientras queden HUECOs de rutas de uso diario: primero
+  se les enseña a resolver su obra (claves del resolutor, `RUTAS_POR_RECURSO`) o se les
+  concede exención escrita si el manejador ya se protege por dentro.
 
 **3. Activa.** En Render, `ENFORCE_PROJECT_AUTHZ=true`. Redesplegar.
 
-**4. Comprueba en caliente**, con una cuenta que no sea admin: que ve su obra, que el
-modelo carga, que las fotos salen, y que no aparece la otra obra.
+**4. Comprueba en caliente**, con una cuenta que no sea admin — esto no es opcional:
+el bloque de autorización entero **se salta para `role='admin'`**, así que probar con
+la cuenta del administrador no prueba nada: para ella todo funciona siempre. Con la
+cuenta no-admin: que ve su obra, que el modelo carga, que las fotos salen, que puede
+SUBIR un documento de principio a fin, y que no aparece la otra obra.
 
 **Para revertir**: quita la variable o ponla en `false`. Vuelve al comportamiento
 anterior sin tocar código.

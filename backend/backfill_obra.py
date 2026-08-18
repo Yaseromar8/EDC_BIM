@@ -54,6 +54,16 @@ def inventario(cursor, aplicar):
     """)
     lineas, total, sin_resolver = [], 0, 0
     for urn, n in cursor.fetchall():
+        # Sin model_urn no hay nada que deducir. resolve_project_id('') devuelve
+        # la obra POR DEFECTO, y atribuir a la obra por defecto lo que no declara
+        # obra no es deducir: es inventar. Es la misma leccion que documentos()
+        # tiene escrita mas abajo -- «un dato sin obra es preferible a un dato en
+        # la obra equivocada» -- y que esta funcion incumplia. Con el agravante
+        # de que --aplicar escribe y no hay --deshacer.
+        if not urn.strip():
+            lineas.append(f"{n:>6} elementos  {'(sin model_urn)':58} -> SIN OBRA DECLARADA (no se toca)")
+            sin_resolver += n
+            continue
         obra = resolve_project_id(urn)
         if obra:
             lineas.append(f"{n:>6} elementos  {urn[:58]:58} -> {obra}")
