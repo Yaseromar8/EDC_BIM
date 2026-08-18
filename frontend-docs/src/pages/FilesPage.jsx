@@ -53,6 +53,7 @@ const SetsView = lazy(() => import('../components/SetsModule').then(m => ({ defa
 const PlanEntregaView = lazy(() => import('../components/PlanEntregaModule').then(m => ({ default: m.PlanEntregaView })));
 const CatalogoIdoneidadView = lazy(() => import('../components/CatalogoIdoneidadModule').then(m => ({ default: m.CatalogoIdoneidadView })));
 const ArchivarObraPanel = lazy(() => import('../components/ArchivarObraPanel').then(m => ({ default: m.ArchivarObraPanel })));
+const RolDeMiembro = lazy(() => import('../components/RolDeMiembro').then(m => ({ default: m.RolDeMiembro })));
 const TriajeSeguridadView = lazy(() => import('../components/TriajeSeguridadModule').then(m => ({ default: m.TriajeSeguridadView })));
 const AddToSetModal = lazy(() => import('../components/SetsModule').then(m => ({ default: m.AddToSetModal })));
 const AttributesAdmin = lazy(() => import('../components/AttributesModule').then(m => ({ default: m.AttributesAdmin })));
@@ -425,7 +426,15 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                         <span style={{ fontWeight: 500 }}>{m.name || '—'}</span>
                       </td>
                       <td style={{ padding: '12px', color: '#666' }}>{m.email}</td>
-                      <td style={{ padding: '12px' }}><span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', background: m.role === 'admin' ? '#eef2f7' : '#eef2f7', color: m.role === 'admin' ? '#4d6a8f' : '#4d6a8f' }}>{m.role || 'user'}</span></td>
+                      <td style={{ padding: '12px' }}>
+                        {/* La puerta que faltaba: el backend cambia roles bien
+                            (ultimo admin protegido, sesiones revocadas,
+                            auditado) y ningun cliente lo llamaba. */}
+                        <Suspense fallback={<span style={{ fontSize: 11, color: '#999' }}>…</span>}>
+                          <RolDeMiembro miembro={m} isAdmin={isAdmin}
+                                        onCambiado={() => { apiFetch(`${API}/api/users`).then(r => r.json()).then(d => fe.setMembersList(d.users || d || [])).catch(() => {}); }} />
+                        </Suspense>
+                      </td>
                       <td style={{ padding: '12px', color: '#999', fontSize: 12 }}>{m.created_at ? new Date(m.created_at).toLocaleDateString() : '—'}</td>
                     </tr>
                   ))}

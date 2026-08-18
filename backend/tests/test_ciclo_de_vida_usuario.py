@@ -137,3 +137,19 @@ def test_ultimo_admin_no_puede_degradarse(entorno):
 def test_cambiar_rol_exige_admin(entorno):
     c, _, _ = entorno
     assert c.patch('/api/users/5/role', json={'role': 'admin'}).status_code == 401
+
+
+def test_al_unico_admin_activo_no_se_le_degrada(entorno):
+    """La otra mitad de la regla del unico administrador.
+
+    Estaba probada para BORRARLO y no para degradarlo por rol -- y degradar deja
+    la instancia igual de acefala que borrar: nadie puede administrar miembros,
+    obras ni configuracion, y en una instancia de entidad no hay nadie por
+    encima que lo arregle.
+    """
+    c, estado, _ = entorno
+    estado['usuario'] = ('admin', True)
+    estado['admins_activos'] = 1
+    r = c.patch('/api/users/5/role', json={'role': 'viewer'}, headers=ADMIN)
+    assert r.status_code == 400
+    assert 'nico' in r.get_json()['error'].lower()   # "único administrador"

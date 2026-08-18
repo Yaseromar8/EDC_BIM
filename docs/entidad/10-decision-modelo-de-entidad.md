@@ -93,7 +93,7 @@ En orden, con su estado:
 | 1 | Perfil portal desplegable | **HECHO** (`bfb95f6`, con 3 candados) |
 | 2 | Instancia propia (servicio+base+bucket nuevos, perfil portal, 6 variables de postura desde el día uno) | pendiente — pasos del propietario, guiados |
 | 3 | Copia y restauración probadas EN esa instancia | herramientas listas; ejecutar allí |
-| 4 | Gestión de roles desde el portal (hoy no se puede cambiar un rol) | por construir — pequeño |
+| 4 | Gestión de roles desde el portal | **HECHO** — selector en Miembros; confirma dar/quitar admin; enseña el error real del backend; el último admin activo no se puede degradar (probado) |
 | 5 | Exportar el expediente (la entidad tiene derecho a llevárselo) | por construir — `indice_expediente` ya existe como base |
 | 6 | Plan pagado en Render para esa instancia | decisión de precio del propietario |
 | 7 | Contrato: dónde viven los datos, Ley 29733, retención, salida | del propietario, con plantilla nuestra |
