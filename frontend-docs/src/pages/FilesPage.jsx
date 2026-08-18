@@ -52,6 +52,7 @@ const TransmittalModal = lazy(() => import('../components/TransmittalsModule').t
 const SetsView = lazy(() => import('../components/SetsModule').then(m => ({ default: m.SetsView })));
 const PlanEntregaView = lazy(() => import('../components/PlanEntregaModule').then(m => ({ default: m.PlanEntregaView })));
 const CatalogoIdoneidadView = lazy(() => import('../components/CatalogoIdoneidadModule').then(m => ({ default: m.CatalogoIdoneidadView })));
+const ArchivarObraPanel = lazy(() => import('../components/ArchivarObraPanel').then(m => ({ default: m.ArchivarObraPanel })));
 const TriajeSeguridadView = lazy(() => import('../components/TriajeSeguridadModule').then(m => ({ default: m.TriajeSeguridadView })));
 const AddToSetModal = lazy(() => import('../components/SetsModule').then(m => ({ default: m.AddToSetModal })));
 const AttributesAdmin = lazy(() => import('../components/AttributesModule').then(m => ({ default: m.AttributesAdmin })));
@@ -456,6 +457,13 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
               <div style={{ marginTop: 12, background: '#f5f5f5', borderRadius: 8, height: 8, overflow: 'hidden' }}><div style={{ width: '15%', height: '100%', background: 'linear-gradient(90deg, var(--accent), #7e9bbd)', borderRadius: 8 }} /></div>
               <div style={{ fontSize: 11, color: '#999', marginTop: 6 }}>Uso estimado del proyecto</div>
             </div>
+
+            {/* La puerta para archivar una obra. El backend sabia hacerlo desde
+                siempre --ruta de administrador, auditada-- y NINGUN cliente la
+                llamaba: la capacidad estaba, la puerta no. */}
+            <Suspense fallback={null}>
+              <ArchivarObraPanel project={project} isAdmin={isAdmin} />
+            </Suspense>
           </div>
         )}
 

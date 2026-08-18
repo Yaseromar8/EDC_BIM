@@ -538,6 +538,73 @@ def update_project(project_id):
         return jsonify({"error": str(e)}), 500
 
 
+@projects_bp.route('/api/projects/archivadas', methods=['GET'])
+@requiere_rol('admin')
+def listar_archivadas():
+    """Las obras archivadas. Sin esto, archivar no se puede deshacer.
+
+    `/api/projects` las excluye a proposito -- una obra archivada no debe
+    aparecer en el trabajo del dia a dia -- y esa era justamente la razon de que
+    no hubiera vuelta atras: desaparecen de la unica lista que existe.
+    """
+    denegado = _solo_admin('ver las obras archivadas')
+    if denegado:
+        return denegado
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, name, updated_at
+                  FROM projects
+                 WHERE status = 'archived'
+                 ORDER BY updated_at DESC NULLS LAST, name
+            """)
+            obras = [{'id': r[0], 'name': r[1],
+                      'archivada_en': r[2].isoformat() if r[2] else None}
+                     for r in cursor.fetchall()]
+        return jsonify({'success': True, 'obras': obras}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@projects_bp.route('/api/projects/<project_id>/restaurar', methods=['POST'])
+@requiere_rol('admin')
+def restaurar_project(project_id):
+    """Devuelve una obra archivada al trabajo.
+
+    POR QUE EXISTE
+    Archivar era irreversible DESDE EL PRODUCTO: `UPDATE status='archived'` y
+    ninguna via para deshacerlo. El 2026-08-07 alguien archivo PQT8_TALARA por
+    error y la unica salida fue tocar la base a mano.
+
+    Una accion destructiva sin vuelta atras no es una medida de orden: es una
+    trampa. Y en el expediente de una obra publica, peor.
+
+    Se audita igual que el archivado: quien deshace tambien deja rastro.
+    """
+    denegado = _solo_admin('restaurar una obra')
+    if denegado:
+        return denegado
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name, status FROM projects WHERE id = %s", (project_id,))
+            fila = cursor.fetchone()
+            if not fila:
+                return jsonify({'error': 'No encontrada'}), 404
+            _nombre, _estado = fila
+            if _estado != 'archived':
+                # No es un error: decir que ya estaba activa es mas util que
+                # fingir que se ha hecho algo.
+                return jsonify({'success': True, 'ya_estaba_activa': True}), 200
+            cursor.execute("UPDATE projects SET status = 'active' WHERE id = %s", (project_id,))
+            conn.commit()
+        _auditar('obra_restaurada', project_id, f"nombre='{_nombre}'")
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @projects_bp.route('/api/projects/<project_id>', methods=['DELETE'])
 @requiere_rol('admin')
 def delete_project(project_id):
