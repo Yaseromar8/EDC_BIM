@@ -47,7 +47,12 @@ GUARDIAS = ('verify_project_access', 'check_folder_permission', '_hay_acceso', '
             '_assert_project_access',
             # La guardia del DOCUMENTO, para los manejadores que reciben un
             # fichero (id de nodo o ruta del objeto) en vez de una obra.
-            'guardia_del_documento')
+            'guardia_del_documento',
+            # La del comparador de versiones (17-ago): sus scopes viajan
+            # ANIDADOS en el cuerpo, invisibles para el resolutor central, y
+            # resuelve la obra del DATO -- un scope 'source' es un urn de
+            # version, no una obra.
+            '_guardia_scopes')
 
 # Tablas cuyo contenido pertenece a UNA obra. Medidas contra el esquema real:
 # son las que tienen model_urn, project_id, scope_urn o app_project_id.
@@ -92,15 +97,16 @@ SIN_CUBRIR = {
     # la base. Deuda declarada, no excusa.
     ('routes/civil_solids.py', '/api/civil/extract-surfaces'): 'PENDIENTE: deducir la obra del modelo',
     ('routes/compare.py', '/api/compare/cleanup'): 'borra solo el ambito temporal fijo __cmp__, que no es de ninguna obra. Residual: es compartido, y un usuario puede tirar la comparacion en curso de otro',
-    ('routes/compare.py', '/api/compare/diff'): 'PENDIENTE: comparacion de versiones',
-    ('routes/compare.py', '/api/compare/element'): 'PENDIENTE: comparacion de elemento',
-    ('routes/compare.py', '/api/compare/element-metrados'): 'PENDIENTE: comparacion de metrados',
-    ('routes/compare.py', '/api/compare/metrados'): 'PENDIENTE: comparacion de metrados',
     ('routes/digital_twin.py', '/api/modelos/firmar-subida'): 'exige rol admin dentro de la vista; traducir cuesta creditos de Autodesk',
-    ('routes/element_docs.py', '/api/element-docs'): 'PENDIENTE: acotar por la obra del elemento',
-    ('routes/pdf_tools.py', '/api/pdf/markups'): 'PENDIENTE: marcas sobre PDF',
     ('server.py', '/api/inventory'): 'va por external_id, no por obra: el limite esta en el propio SQL contra project_users',
     ('server.py', '/api/inventory/bulk'): 'va por external_id, no por obra: el limite esta en el propio SQL contra project_users',
+    # Anadida el 17-ago. NO es deuda por descuido: no hay de donde sacar la
+    # obra. El unico dato es el id del WorkItem de Autodesk y no existe
+    # tabla que lo ate a una obra -- el vinculo vive en memoria del proceso.
+    # Lo que SI se cerro: el nombre del objeto del bucket se aceptaba crudo
+    # de la query, o sea que cualquier sesion leia cualquier JSON del bucket.
+    ('routes/civil_design_automation.py', '/api/civil/alignment-result'):
+        'sin obra deducible (solo el id del WorkItem); el nombre del objeto ya no lo elige quien llama. Residual declarado: sin control por obra',
     ('server.py', '/maps/uploads/<path:filename>'): 'PENDIENTE: sirve ficheros de mapa por nombre',
 }
 
@@ -118,6 +124,21 @@ def _ficheros():
         if nombre.endswith('.py'):
             yield 'routes/' + nombre, os.path.join(RAIZ, nombre)
     yield 'server.py', os.path.join(BACKEND, 'server.py')
+
+
+def _por_recurso():
+    """Endpoints cuya obra resuelve el middleware consultando el propio recurso.
+
+    Son dos diccionarios de `perimetro_de_obra`: RUTAS_POR_RECURSO (el id viaja
+    en la RUTA) y RUTAS_POR_QUERY (viaja en la QUERY). Se leen del modulo, no se
+    copian aqui: una copia envejece y el detector volveria a contar como deuda
+    rutas que el control ya cubre -- que es exactamente lo que pasaba.
+    """
+    try:
+        import perimetro_de_obra as pm
+    except Exception:
+        return set()
+    return set(getattr(pm, 'RUTAS_POR_RECURSO', {})) | set(getattr(pm, 'RUTAS_POR_QUERY', {}))
 
 
 def _rutas():
@@ -138,6 +159,8 @@ def _rutas():
             while j < len(lineas) and not re.match(r'^def ', lineas[j]):
                 j += 1
             deco = '\n'.join(lineas[i:j])
+            mv = re.match(r'^def\s+(\w+)', lineas[j]) if j < len(lineas) else None
+            nombre_vista = mv.group(1) if mv else ''
             k, cuerpo = j + 1, ''
             while k < len(lineas) and not re.match(r'^(@|def )', lineas[k]):
                 cuerpo += lineas[k] + '\n'
@@ -152,7 +175,13 @@ def _rutas():
                 usadas = set(re.findall(
                     r"(?:args|form|view_args|data|payload|d)\.get\(\s*['\"](\w+)['\"]", cuerpo))
                 usadas |= set(PARAM.findall(url))
-                salida.append((relativo, url, guardia, bool(usadas & claves)))
+                # El middleware resuelve por tres vias, no una: la clave de obra
+                # (_CLAVES_OBRA), el id del recurso en la RUTA
+                # (RUTAS_POR_RECURSO) y el id del recurso en la QUERY
+                # (RUTAS_POR_QUERY, anadida el 17-ago). Mirar solo la primera
+                # contaba como deuda rutas que el control ya cubre.
+                resuelve = bool(usadas & claves) or nombre_vista in _por_recurso()
+                salida.append((relativo, url, guardia, resuelve))
             i = k
     return salida
 

@@ -34,16 +34,23 @@ const DocsPanel = ({ selectedElement }) => {
         ? resolveExternalId(selectedElement.urn, selectedElement.dbId)
         : null;
 
-    const loadDocs = useCallback(async (ext) => {
+    const loadDocs = useCallback(async (ext, urn) => {
         if (!ext) { setDocs([]); return; }
         try {
-            const r = await apiFetch(`${BACKEND_URL}/api/element-docs?external_id=${encodeURIComponent(ext)}`);
+            // La obra viaja tambien en la LECTURA. El POST de al lado ya la
+            // mandaba y el GET no, asi que el control por obra no podia saber de
+            // que obra era esta consulta: un `external_id` no identifica una
+            // obra -- en inventory_assets solo es unico JUNTO al model_urn.
+            const q = new URLSearchParams({ external_id: ext });
+            if (urn) q.set('model_urn', urn);
+            const r = await apiFetch(`${BACKEND_URL}/api/element-docs?${q.toString()}`);
             const d = await r.json();
             setDocs(d.success ? d.docs : []);
         } catch (e) { setDocs([]); }
     }, []);
 
-    useEffect(() => { loadDocs(extId); setStatus(null); }, [extId, loadDocs]);
+    useEffect(() => { loadDocs(extId, selectedElement?.urn); setStatus(null); },
+        [extId, selectedElement, loadDocs]);
 
     const handleAdd = async () => {
         if (!extId) { setStatus({ type: 'err', msg: 'Selecciona un elemento en el modelo primero.' }); return; }
@@ -62,7 +69,7 @@ const DocsPanel = ({ selectedElement }) => {
             if (!d.success) throw new Error(d.error || 'No se pudo vincular');
             setAccLink(''); setTitle('');
             setStatus({ type: 'ok', msg: 'Documento vinculado al elemento.' });
-            loadDocs(extId);
+            loadDocs(extId, selectedElement?.urn);
         } catch (e) {
             setStatus({ type: 'err', msg: e.message || 'Error al vincular el documento.' });
         } finally { setBusy(false); }

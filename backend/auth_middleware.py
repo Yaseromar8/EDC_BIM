@@ -560,6 +560,33 @@ _SIN_OBRA_JUSTIFICADO = {
         'scopes anidados; misma guardia _guardia_scopes (routes/compare.py)',
     '/api/compare/element-metrados':
         'scopes anidados; misma guardia _guardia_scopes (routes/compare.py)',
+    # -- Civil 3D y el enlace con Revit. Anadidas el 17-ago. --
+    #
+    # Las dos de civil NO PUEDEN resolver obra, y hay que decirlo tal cual: el
+    # unico dato es el identificador del WorkItem de Autodesk, y no existe
+    # ninguna tabla que lo ate a una obra (el vinculo vive en diccionarios EN
+    # MEMORIA del proceso). No es una exencion comoda: es que no hay de donde
+    # sacarla sin persistir esa relacion, que es trabajo aparte.
+    #
+    # Lo que SI se cerro es la puerta que estaba abierta de par en par: el
+    # nombre del objeto del bucket se aceptaba crudo de la query. Ahora solo
+    # vale el registrado por el servidor o un nombre con su forma exacta
+    # (prefijo + UUID de 32 hex).
+    #
+    # RIESGO RESIDUAL DECLARADO: quien conozca un identificador de trabajo de
+    # otra obra puede leer su resultado. Son UUID de 128 bits, no se adivinan, y
+    # ningun cliente los expone -- pero el control por obra ahi NO existe, y
+    # fingir lo contrario seria peor que declararlo.
+    '/api/civil/alignment-result':
+        'solo lleva el id del WorkItem de Autodesk, que no se puede traducir a '
+        'obra; el nombre del objeto ya no lo elige quien llama (routes/'
+        'civil_design_automation.py). Residual: sin control por obra',
+    '/api/link/active-frentes':
+        'descubrimiento de frente para el plugin de Revit: llama SIN parametros '
+        'porque la llamada existe precisamente para saber en que frente esta. La '
+        'respuesta se limita a los frentes con visor abierto del PROPIO usuario '
+        '(routes/link.py). Residual: las filas de presencia sin user_id las ve '
+        'cualquiera',
     '/api/compare/cleanup':
         'cuerpo vacio: no hay obra que resolver. Solo borra extracciones '
         'temporales del comparador, y ese scope es una CONSTANTE literal del '

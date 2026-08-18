@@ -1,5 +1,6 @@
 from esquema_congelado import solo_con_ddl
 import os
+import re
 import time
 import uuid
 import requests
@@ -846,6 +847,13 @@ def civil_alignments():
         return jsonify({'error': str(e)}), 500
 
 
+# Los nombres que el servidor genera para los resultados de Civil 3D:
+# 'alignment_result_<uuid4 hex>.json' y 'section_result_<uuid4 hex>.json'.
+# Sirve para no tener que fiarse de un nombre cualquiera que llegue por la query.
+# Los 32 hexadecimales son 128 bits: no se adivinan.
+_NOMBRE_DE_RESULTADO = re.compile(r'^(?:alignment|section)_result_[0-9a-f]{32}\.json$')
+
+
 @civil_da_bp.route('/api/civil/alignment-result', methods=['GET'])
 def get_alignment_result():
     """Downloads alignment_result.json from the app bucket and returns it to the frontend."""
@@ -854,8 +862,36 @@ def get_alignment_result():
         my_bucket = get_app_bucket_key()
         token = get_internal_token()
         workitem_id = request.args.get('workitem_id')
+        # EL NOMBRE DEL OBJETO NO PUEDE VENIR DE QUIEN LLAMA.
+        #
+        # Aqui habia:
+        #     object_name or request.args.get('object_name') or 'alignment_result.json'
+        #
+        # Es decir: `?object_name=<lo que sea>` descargaba ESE objeto del bucket
+        # de la aplicacion y lo devolvia. Con una sesion valida y nada mas, se
+        # leian los alineamientos, las secciones y los metrados de Civil 3D de
+        # cualquier obra -- y de cualquier cosa con forma de JSON que hubiera en
+        # el bucket. La ruta ni siquiera comprueba a que obra pertenece lo que
+        # sirve, asi que el nombre era la unica puerta, y estaba abierta.
+        #
+        # Ahora el nombre sale SOLO del registro que lleva el propio servidor al
+        # lanzar el trabajo (RESULT_OBJECTS). Quien no tenga un identificador de
+        # trabajo valido no descarga nada.
         object_name = RESULT_OBJECTS.get(workitem_id) if workitem_id else None
-        object_name = object_name or request.args.get('object_name') or 'alignment_result.json'
+        if not object_name:
+            # El registro vive en memoria del proceso (RESULT_OBJECTS), asi que
+            # un reinicio -- y este servicio se duerme por inactividad -- lo
+            # vacia y dejaria sin resultado a un trabajo legitimo ya lanzado.
+            # Por eso se sigue aceptando el nombre del cliente, PERO solo si
+            # tiene exactamente la forma que genera el servidor: el prefijo y un
+            # UUID de 32 caracteres hexadecimales. Cualquier otro nombre se
+            # rechaza.
+            candidato = (request.args.get('object_name') or '').strip()
+            if not _NOMBRE_DE_RESULTADO.match(candidato):
+                return jsonify({
+                    'error': 'No hay resultado para ese trabajo.',
+                    'code': 'RESULTADO_DESCONOCIDO'}), 404
+            object_name = candidato
         
         # Get download URL
         dl_url = f"https://developer.api.autodesk.com/oss/v2/buckets/{my_bucket}/objects/{object_name}/signeds3download"

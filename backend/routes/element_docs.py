@@ -41,11 +41,25 @@ def list_element_docs():
     external_id = request.args.get('external_id')
     if not external_id:
         return jsonify({"success": False, "error": "Falta external_id"}), 400
+    # LA OBRA ACOTA TAMBIEN LA LECTURA.
+    #
+    # Antes se filtraba SOLO por external_id, y ese identificador no distingue
+    # obras: en inventory_assets es unico junto al model_urn, no por si mismo
+    # (UNIQUE (model_urn, external_id)). Dos obras con el mismo elemento
+    # -- normal si comparten familia o plantilla -- se veian los documentos
+    # cruzados. El POST de aqui al lado ya exigia la obra; el GET no.
+    model_urn = request.args.get('model_urn')
+    negada = guardia_de_obra(model_urn, 'ver los documentos del elemento') if model_urn else None
+    if negada:
+        return negada
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("""SELECT id, url, doc_type, title, created_by, created_at
-                           FROM element_docs WHERE external_id = %s ORDER BY id DESC""", (external_id,))
+                           FROM element_docs
+                          WHERE external_id = %s
+                            AND (%s IS NULL OR model_urn IS NULL OR model_urn = %s)
+                          ORDER BY id DESC""", (external_id, model_urn, model_urn))
             docs = [{"id": r[0], "url": r[1], "doc_type": r[2], "title": r[3],
                      "created_by": r[4], "created_at": r[5].isoformat() if r[5] else None}
                     for r in cur.fetchall()]
