@@ -1,0 +1,67 @@
+EVIDENCIA DE CONFIGURACION DE PRODUCCION (Accion 2 del OWNER ACTION PACK)
+==========================================================================
+Hallazgos que cierra : N3 (SESSION_PEPPER y APP_SECRET ausentes)
+                       N4 (CORS abierto a cualquiera)
+Avanza               : N2 (DDL en caliente)
+fecha                : 2026-08-17
+servicio             : visor-ecd-backend (Render), version da346b70d736
+
+LINEA BASE, MEDIDA ANTES
+    GET /api/health -> configuracion: {faltan: 6, puntos: 6}
+    Las SEIS ausentes. No se supuso cuales: el recuento del propio servicio es
+    exhaustivo y `postura_de_seguridad.puntos()` es la lista autoritativa.
+
+    Panel de Render (captura del propietario, 17-ago): 13 variables definidas,
+    ninguna de las seis. Sin DATABASE_URL, lo que confirma por observacion --y ya
+    no por deduccion-- que la cadena de reserva de la pimienta caia hasta la
+    constante publica 'sin-pimienta'.
+
+DESPUES
+    GET /api/health -> configuracion: {faltan: 2, puntos: 6}
+    Definidas: APP_SECRET, SESSION_PEPPER, CORS_ORIGINS, DDL_EN_CALIENTE=false.
+    Pendientes a proposito: ENFORCE_PROJECT_AUTHZ y AUTH_POLICY_MODE (bloque 2B).
+
+CORS -- MEDIDO CONTRA EL SERVICIO, POR ORIGEN
+    https://visor-ecd-portal.onrender.com     -> allow-origin: el mismo
+    https://visor-ecd-frontend.onrender.com   -> allow-origin: el mismo
+    https://localhost                         -> allow-origin: el mismo
+    https://sitio-de-un-atacante.com          -> SIN CABECERA (el navegador corta)
+
+    Y desde DENTRO de las dos webs, no con curl -- que es donde CORS de verdad
+    se aplica:
+      origen https://visor-ecd-portal.onrender.com   fetch /api/health  -> 200
+      origen https://visor-ecd-frontend.onrender.com fetch /api/health  -> 200
+      origen https://visor-ecd-frontend.onrender.com fetch /api/token   -> 200
+
+NO SE ROMPIO NADA
+    /api/token (visor de Autodesk)      HTTP 200
+    /api/companies, /api/job_titles     HTTP 200
+    POST /api/auth/2fa/verify           contesta el MANEJADOR, no el middleware
+    Portal y visor cargan sin errores de consola
+
+LA PRUEBA QUE EXIGIA SESION, HECHA POR EL PROPIETARIO
+    Obra PQT8_TALARA, seccion Archivos: el arbol muestra el nodo raiz
+    «Archivos de proyecto» con las cinco carpetas del ciclo (01_WIP,
+    02_SHA, 03_PUB, 04_ARC, 05_Gestion_Administrativo) y 49 documentos
+    listados en 05_Gestion_Administrativo/03_RedLine, con version, tamaño,
+    fecha y autor.
+
+    POR QUE ESTA ES LA PRUEBA QUE IMPORTA
+    `ensure_project_root_node` resuelve ese nodo raiz, y llevaba @solo_con_ddl
+    siendo DML puro. Con DDL_EN_CALIENTE=false habria devuelto None para TODAS
+    las obras y el arbol se habria quedado sin punto de partida. Se corrigio en
+    6bc16a6 ANTES de definir la variable; esta captura demuestra que la
+    correccion vale en produccion y no solo en las pruebas.
+
+RIESGO RESIDUAL DECLARADO
+    1. Los codigos de recuperacion del 2FA anteriores a la rotacion han dejado
+       de valer (N67). Se sellaron en el arranque previo (da346b7), asi que el
+       sistema lo DICE en vez de callarlo, pero no se recuperan.
+       NO ESTA MEDIDO cuantos habia: exige leer la base de produccion.
+    2. Las invitaciones pendientes emitidas antes del cambio han caducado y no
+       se pueden reemitir sin purgar antes al usuario invitado.
+    3. `https://localhost` entra tambien en la lista blanca de destinos de los
+       correos de restablecimiento (routes/auth.py filtra por startswith('http')).
+       El daño posible se limita a que un enlace apunte al propio dispositivo.
+    4. Quedan ENFORCE_PROJECT_AUTHZ y AUTH_POLICY_MODE (2B), que son las que de
+       verdad cierran el aislamiento entre obras.
