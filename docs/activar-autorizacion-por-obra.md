@@ -30,8 +30,13 @@ python backend/backfill_obra.py
 En seco por defecto. Léelo, y si cuadra:
 
 ```bash
-python backend/backfill_obra.py --aplicar` (desde el 17-ago ya **no** atribuye a la obra por defecto lo que no declara obra; antes sí, y escribía sin vuelta atrás) `
+python backend/backfill_obra.py --aplicar
 ```
+
+> Desde el 17-ago `--aplicar` ya **no** atribuye a la obra por defecto lo que no
+> declara obra (antes sí, y escribía sin vuelta atrás). Lo que salga como
+> «SIN OBRA DECLARADA» se queda como está: un dato sin obra es preferible a un
+> dato en la obra equivocada.
 
 ## Los dos modos
 
