@@ -543,6 +543,27 @@ _SIN_OBRA_JUSTIFICADO = {
     '/api/attrs/values':
         'recibe node_id; la obra sale del propio nodo y _guardia_del_nodo exige '
         'pertenencia y permiso de carpeta, en GET y en PUT (routes/attributes.py)',
+    # -- El comparador de versiones. Sus scopes viajan ANIDADOS en el cuerpo
+    # ({a: {type, value}}), y el resolutor central solo mira claves de primer
+    # nivel: nunca podra verlos. La obra la comprueba _guardia_scopes dentro del
+    # manejador, y la resuelve del DATO, no de lo que declare quien llama -- un
+    # scope 'source' es un urn de VERSION, y la obra sale de inventory_assets.
+    # Anadidas el 17-ago; hasta entonces estas cuatro rutas no comprobaban NADA:
+    # con una sesion valida se leian las propiedades de elementos de cualquier
+    # obra. --
+    '/api/compare/diff':
+        'scopes anidados; _guardia_scopes exige pertenencia a TODAS las obras '
+        'implicadas antes de tocar la base (routes/compare.py)',
+    '/api/compare/metrados':
+        'scopes anidados; misma guardia _guardia_scopes (routes/compare.py)',
+    '/api/compare/element':
+        'scopes anidados; misma guardia _guardia_scopes (routes/compare.py)',
+    '/api/compare/element-metrados':
+        'scopes anidados; misma guardia _guardia_scopes (routes/compare.py)',
+    '/api/compare/cleanup':
+        'cuerpo vacio: no hay obra que resolver. Solo borra extracciones '
+        'temporales del comparador, y ese scope es una CONSTANTE literal del '
+        'SQL, no un dato de la peticion (routes/compare.py)',
 }
 
 

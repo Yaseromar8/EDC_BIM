@@ -18,7 +18,7 @@ import re
 import base64
 import urllib.parse
 import requests
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from db import get_db_connection
 from app_logging import get_logger
 
@@ -168,9 +168,119 @@ def _scope_filter(scope, alias):
     return f"{alias}.model_urn = %s", [value]
 
 
+def _obras_del_scope(cur, scope):
+    """Las obras a las que pertenece un scope del comparador. Conjunto vacio si
+    no se puede determinar -- y eso, arriba, se trata como negativa.
+
+    Hay dos formas de scope y NO se resuelven igual:
+
+      {type: 'frente',  value: <model_urn>}   la obra la dice el propio valor;
+      {type: 'source',  value: <urn>}         el valor es una VERSION del modelo,
+      {type: 'sources', values: [...]}        asi que la obra hay que sacarla de
+                                              los datos, no de lo que diga quien
+                                              llama.
+
+    Esa segunda forma es la razon de que esta funcion exista en vez de un
+    `resolve_project_id` suelto: un urn de version no es una obra, y aceptarlo
+    como si lo fuera seria volver a validar lo que el cliente DECLARA en vez de
+    lo que el dato ES.
+    """
+    from db import resolve_project_id
+    if not isinstance(scope, dict):
+        return set()
+    stype, value = scope.get('type'), scope.get('value')
+
+    if stype in ('source', 'sources'):
+        urns = scope.get('values') if stype == 'sources' else [value]
+        urns = [u for u in (urns or []) if u]
+        if not urns or cur is None:
+            return set()          # sin cursor no se puede resolver: se niega
+        variantes = []
+        for u in urns:
+            variantes.append(u)
+            try:
+                from routes.inventory import sanitize_urn
+                variantes.append(sanitize_urn(u))
+            except Exception:
+                pass
+        marcas = ', '.join(['%s'] * len(variantes))
+        try:
+            cur.execute('SELECT DISTINCT model_urn FROM inventory_assets'
+                        ' WHERE source_urn IN (%s)' % marcas, variantes)
+            filas = cur.fetchall()
+        except Exception as e:
+            logger.warning('[compare] no se pudo resolver la obra del scope: %s', e)
+            return set()          # no saber es negar
+        return {o for o in (resolve_project_id(f[0]) for f in filas) if o}
+
+    if not value:
+        return set()
+    obra = resolve_project_id(value)
+    return {obra} if obra else set()
+
+
+def _guardia_scopes(data, accion='comparar versiones'):
+    """None si se puede seguir; respuesta de error si no.
+
+    ESTAS CUATRO RUTAS NO COMPROBABAN NADA. Con una sesion valida y un
+    `external_id`, se leian el nombre y las propiedades COMPLETAS de elementos de
+    cualquier obra, y los metrados de cualquier frente: bastaba con nombrar el
+    scope ajeno en el cuerpo. No es un agujero futuro que abriria ENFORCE -- es
+    de hoy, y el control central tampoco lo tapa, porque los scopes viajan
+    ANIDADOS en el cuerpo y el resolutor solo mira las claves de primer nivel.
+    """
+    usuario = getattr(g, 'current_user', None)
+    if not usuario:
+        return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
+    if usuario.get('role') == 'admin':
+        return None
+
+    from perimetro_de_obra import guardia_de_obra
+
+    scopes = [(c, data.get(c)) for c in ('a', 'b') if data.get(c) is not None]
+    # La base solo se toca si hay algun scope por urn de VERSION: un scope de
+    # frente lleva la obra en el propio valor y no necesita consulta. Abrir
+    # conexion siempre encarecia el camino comun y ataba la guardia a que la
+    # base estuviera arriba para decidir algo que no la necesita.
+    necesita_base = any(isinstance(sc, dict) and sc.get('type') in ('source', 'sources')
+                        for _c, sc in scopes)
+
+    obras = set()
+    conn = cur = None
+    try:
+        if necesita_base:
+            conn = get_db_connection().__enter__()
+            cur = conn.cursor()
+        for clave, scope in scopes:
+            del_scope = _obras_del_scope(cur, scope)
+            if not del_scope:
+                logger.warning('[compare] scope %s sin obra determinable en %s', clave, accion)
+                return jsonify({
+                    'error': 'No se pudo determinar a qué obra pertenece esta comparación.',
+                    'code': 'PROJECT_UNRESOLVED'}), 403
+            obras |= del_scope
+    finally:
+        if conn is not None:
+            try:
+                conn.__exit__(None, None, None)
+            except Exception:
+                pass
+
+    # Se comprueban TODAS las obras implicadas, no una: comparar mezcla dos
+    # scopes, y bastaria con que uno fuera propio para colar el otro.
+    for obra in sorted(obras):
+        negada = guardia_de_obra(obra, accion)
+        if negada:
+            return negada
+    return None
+
+
 @compare_bp.route('/api/compare/diff', methods=['POST'])
 def compare_diff():
     data = request.get_json(silent=True) or {}
+    negada = _guardia_scopes(data)
+    if negada:
+        return negada
     cond_a, par_a = _scope_filter(data.get('a'), 'a')
     cond_b, par_b = _scope_filter(data.get('b'), 'b')
     if not cond_a or not cond_b:
@@ -407,6 +517,9 @@ def compare_metrados():
     para el hover sincronizado (solo recomendable comparando modelos individuales).
     """
     data = request.get_json(silent=True) or {}
+    negada = _guardia_scopes(data)
+    if negada:
+        return negada
     cond_a, par_a = _scope_filter(data.get('a'), 'ia')
     cond_b, par_b = _scope_filter(data.get('b'), 'ia')
     include_elements = bool(data.get('include_elements'))
@@ -499,6 +612,9 @@ def compare_element_metrados():
     usuario solo necesita el tooltip del elemento bajo hover.
     """
     data = request.get_json(silent=True) or {}
+    negada = _guardia_scopes(data)
+    if negada:
+        return negada
     ext_id = data.get('external_id')
     cond_a, par_a = _scope_filter(data.get('a'), 'ia')
     cond_b, par_b = _scope_filter(data.get('b'), 'ia')
@@ -540,6 +656,9 @@ def compare_element():
     """Detalle bajo demanda: properties del elemento en ambos scopes, para que el
     frontend muestre que cambio (A vs B) al hacer click en un elemento."""
     data = request.get_json(silent=True) or {}
+    negada = _guardia_scopes(data)
+    if negada:
+        return negada
     ext_id = data.get('external_id')
     cond_a, par_a = _scope_filter(data.get('a'), 'ia')
     cond_b, par_b = _scope_filter(data.get('b'), 'ia')
