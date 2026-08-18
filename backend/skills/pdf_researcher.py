@@ -1,4 +1,5 @@
-import fitz  # PyMuPDF
+# PyMuPDF perezoso: ver la nota en routes/ai.py. Este modulo se importa al
+# arrancar aunque no se investigue ningun PDF.
 import pdfplumber
 import os
 import re
@@ -32,6 +33,7 @@ class PDFResearcher:
             print(f"[Researcher] Analizando {os.path.basename(file_path)}...")
             
             try:
+                import fitz  # perezoso
                 doc = fitz.open(file_path)
                 num_pages = len(doc)
                 
@@ -101,6 +103,7 @@ class PDFResearcher:
         except Exception as e:
             # Fallback a fitz si pdfplumber falla
             try:
+                import fitz  # perezoso
                 doc = fitz.open(file_path)
                 page = doc[page_num - 1]
                 text = page.get_text("text")

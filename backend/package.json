@@ -4,6 +4,6 @@
   "private": true,
   "scripts": {
     "postinstall": "python3 -m venv venv && ./venv/bin/pip install -r requirements.txt",
-    "start": "./venv/bin/python bootstrap_esquema.py && ./venv/bin/gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 300 server:app"
+    "start": "./venv/bin/python bootstrap_esquema.py && ./venv/bin/gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 300 --max-requests 300 --max-requests-jitter 60 server:app"
   }
 }

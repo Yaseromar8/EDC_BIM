@@ -8,7 +8,11 @@ import vertexai
 from vertexai.generative_models import GenerativeModel, Part
 from google.cloud import storage
 import pdfplumber
-import fitz  # pymupdf
+# PyMuPDF NO se importa aqui: arrastra una biblioteca nativa de decenas de
+# MB que se quedaba residente en cada arranque, se usara o no. El plan de
+# este servicio tiene 512 MB y ya ha muerto por falta de memoria (evento
+# «Ran out of memory» del 17-ago). Se carga dentro de las cuatro funciones
+# que lo usan, que son las que trabajan con PDF.
 import traceback
 from google.cloud import discoveryengine_v1beta as discoveryengine
 import json
@@ -248,6 +252,7 @@ def _process_pdf(pdf_bytes: bytes) -> dict:
 
     images = []
     try:
+        import fitz  # perezoso: ver la nota de arriba
         doc   = fitz.open(stream=pdf_bytes, filetype="pdf")
         pages_to_render = min(len(doc), MAX_VISUAL_PAGES)
         mat   = fitz.Matrix(VISUAL_DPI / 72, VISUAL_DPI / 72)
@@ -863,6 +868,7 @@ def analyze_drawing_title():
         
         # Descargamos solo para procesar la primera página
         pdf_bytes = _download_pdf(gcs_urn, bucket_name)
+        import fitz  # perezoso: ver la nota de arriba
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         
         if len(doc) == 0:
