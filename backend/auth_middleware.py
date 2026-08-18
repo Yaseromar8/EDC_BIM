@@ -365,7 +365,7 @@ def revoke_session(token):
 # Transicion segura: ENFORCE_PROJECT_AUTHZ off por defecto => LOG-ONLY (registra
 # que bloquearia, pero PERMITE). Encender (=true) cuando se confirme que no
 # rompe accesos. Siempre: admin bypass + fail-open ante error de BD.
-ENFORCE_PROJECT_AUTHZ = os.getenv('ENFORCE_PROJECT_AUTHZ', 'false').lower() in ('true', '1', 'yes')
+ENFORCE_PROJECT_AUTHZ = os.getenv('ENFORCE_PROJECT_AUTHZ', 'false').strip().lower() in ('true', '1', 'yes')
 logger.info(f"Autorizacion por proyecto: {'ENFORCE' if ENFORCE_PROJECT_AUTHZ else 'log-only (no bloquea)'}")
 
 _membership_cache = {}  # (user_id, project_id) -> (bool, ts)
@@ -571,7 +571,19 @@ def _evaluar_politica(app, metodo, user):
             pol = politica.Politica(politica.SESION)
         return pol.evaluar(metodo, user)
     except Exception as e:
-        logger.error(f"error evaluando politica (se ignora): {e}")
+        # EN SOMBRA este error es inofensivo: decide la logica heredada.
+        # EN ESTRICTO la politica es la UNICA puerta, y devolver None aqui era
+        # dejarla abierta justo cuando falla -- fail-open en el peor momento.
+        # La salida segura es caer al minimo comun: quien tiene sesion pasa
+        # (no se le puede negar todo por un bug de evaluacion), quien no la
+        # tiene recibe el 401 de siempre. Se mira la variable directamente
+        # porque si lo que fallo fue importar `politica`, tampoco se puede
+        # preguntar a `politica.MODO`.
+        logger.error(f"error evaluando politica: {e}")
+        if os.getenv('AUTH_POLICY_MODE', 'sombra').strip().lower() == 'estricto':
+            if user:
+                return None
+            return ('Autenticación requerida', 'NO_TOKEN', 401)
         return None
 
 

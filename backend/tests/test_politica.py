@@ -266,3 +266,42 @@ def test_lo_que_debe_estar_cerrado(metodo, ruta):
     assert politica.evaluar(metodo, None) is not None, (
         f"{metodo} {ruta} sigue abierta a un anonimo"
     )
+
+
+# ── Si la evaluacion revienta, la puerta no puede quedarse abierta ────────
+
+def test_error_de_evaluacion_en_estricto_no_abre_la_puerta(monkeypatch):
+    """En sombra un error evaluando la politica es inofensivo: decide la logica
+    heredada. En estricto la politica es la UNICA puerta, y devolver None ante
+    una excepcion era fail-open exactamente cuando mas dano hace.
+
+    La salida segura es el minimo comun: con sesion se pasa, sin sesion 401.
+    """
+    import auth_middleware as am
+    import politica as p
+    from flask import Flask
+
+    def revienta(*a, **k):
+        raise RuntimeError('boom')
+
+    monkeypatch.setattr(p, 'politica_de', revienta)
+    app = Flask(__name__)
+
+    # La ruta TIENE que existir: sin endpoint resuelto, politica_de ni se llama
+    # y el 401 vendria del camino de «sin clasificar», no de la excepcion. La
+    # primera version de esta prueba caia justo ahi: pasaba sin ejercitar nada.
+    @app.route('/api/lo-que-sea')
+    def _lo_que_sea():
+        return ''
+
+    with app.test_request_context('/api/lo-que-sea'):
+        monkeypatch.setenv('AUTH_POLICY_MODE', 'estricto')
+        negativa = am._evaluar_politica(app, 'GET', None)
+        assert negativa is not None and negativa[2] == 401, (
+            'la politica revento en estricto y el anonimo paso igual')
+        assert am._evaluar_politica(app, 'GET', {'id': 1}) is None, (
+            'a quien tiene sesion no se le niega todo por un bug de evaluacion')
+
+        monkeypatch.setenv('AUTH_POLICY_MODE', 'sombra')
+        assert am._evaluar_politica(app, 'GET', None) is None, (
+            'en sombra el error debe seguir siendo inofensivo: decide la heredada')
