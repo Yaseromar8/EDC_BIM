@@ -311,7 +311,13 @@ export default function CadViewer({ file }) {
                   Volver a intentarlo
                 </button>
               )}
-              <a href={`${API}/api/docs/content/${file.id}`} download={file.name}
+              {/* Este enlace apuntaba a una ruta de descarga que NUNCA existio
+                  en el backend: llevaba roto desde que se escribio, y nadie lo
+                  noto porque solo aparece cuando la traduccion CAD falla. Se
+                  usa el proxy real, con el mismo patron de sesion-por-query que
+                  las imagenes (una etiqueta <a> no puede mandar cabeceras). */}
+              <a href={`${API}/api/docs/proxy?id=${file.id}&session_token=${encodeURIComponent(localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token') || '')}`}
+                 download={file.name}
                  style={{ fontSize: 13, color: '#7fb3d5', marginTop: 4 }}>
                 Descargar el archivo original
               </a>

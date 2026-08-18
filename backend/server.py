@@ -780,55 +780,42 @@ def link_acc_document():
     return jsonify(result)
 
 
-from routes.maps import maps_bp
-from routes.digital_twin import digital_twin_bp
-from routes.civil_design_automation import civil_da_bp
-from routes.views import views_bp
-from routes.pins import pins_bp
-from routes.tracking import tracking_bp
+# ── PERFIL DE DESPLIEGUE ─────────────────────────────────────────────────
+#
+# El mismo backend puede arrancar de dos formas:
+#
+#   DEPLOY_PROFILE=completo   (defecto)  todo: portal + visor + civil + 4D + IA
+#   DEPLOY_PROFILE=portal                SOLO el portal documental (ECD)
+#
+# POR QUE EXISTE. El portal documental es lo que se ofrece a una entidad, y su
+# perimetro auditable no puede ser el de la plataforma entera: el visor arrastra
+# civil, inventario, 4D, comparador e IA -- ninguno de los cuales toca el portal
+# (medido: solo comparten /api/docs, /api/auth y /api/projects). Con el perfil
+# 'portal', esos modulos NI SE IMPORTAN: menos superficie que atacar, menos
+# memoria que pagar, y un servicio que se puede razonar entero.
+#
+# No es un fork: es el mismo codigo, la misma politica, el mismo middleware y
+# las mismas guardias. Lo unico que cambia es que planos se registran.
+PERFIL_DESPLIEGUE = (os.getenv('DEPLOY_PROFILE', 'completo') or 'completo').strip().lower()
+print(f"[perfil] despliegue: {PERFIL_DESPLIEGUE}")
+
+# ── Lo que el PORTAL usa (medido contra frontend-docs/src, no de memoria) ──
 from routes.documents import documents_bp
 from routes.auth import auth_bp
 from routes.projects import projects_bp
-from routes.ai import ai_bp
-from routes.schedule import schedule_bp
 from routes.uploads import uploads_bp
-from routes.inventory import inventory_bp
 from routes.audit import audit_bp
-from routes.rfis import rfis_bp
-from routes.redlines import redlines_bp
 from routes.partidas import partidas_bp
-from routes.presupuesto import presupuesto_bp
-from routes.compare import compare_bp
-from routes.link import link_bp
-from routes.dashboards import dashboards_bp
-from routes.civil_ghost import civil_ghost_bp
-from routes.civil_solids import civil_solids_bp
 from routes.docs_cad import docs_cad_bp
 
-app.register_blueprint(digital_twin_bp)
-app.register_blueprint(link_bp)
-app.register_blueprint(dashboards_bp)
-app.register_blueprint(civil_ghost_bp)
-app.register_blueprint(civil_solids_bp)
-app.register_blueprint(docs_cad_bp)   # ver DWG/Civil/IFC dentro de Documentos
-app.register_blueprint(civil_da_bp)
-app.register_blueprint(audit_bp)
-app.register_blueprint(maps_bp)
-app.register_blueprint(views_bp)
-app.register_blueprint(pins_bp)
-app.register_blueprint(tracking_bp)
 app.register_blueprint(documents_bp)
-app.register_blueprint(projects_bp)
 app.register_blueprint(auth_bp)
-app.register_blueprint(ai_bp)
-app.register_blueprint(schedule_bp, url_prefix='/api/schedule')
+app.register_blueprint(projects_bp)
 app.register_blueprint(uploads_bp)
-app.register_blueprint(inventory_bp)
-app.register_blueprint(rfis_bp, url_prefix='/api/rfis')
-app.register_blueprint(redlines_bp, url_prefix='/api/redlines')
+app.register_blueprint(audit_bp)      # la auditoria es DEL expediente, no del visor
 app.register_blueprint(partidas_bp, url_prefix='/api/partidas')
-app.register_blueprint(presupuesto_bp, url_prefix='/api/presupuesto')
-app.register_blueprint(compare_bp)
+app.register_blueprint(docs_cad_bp)   # ver DWG/Civil/IFC dentro de Documentos
+
 from routes.pdf_tools import pdf_tools_bp, ensure_pdf_tools_tables
 app.register_blueprint(pdf_tools_bp)
 from routes.reviews import reviews_bp, ensure_reviews_table
@@ -841,14 +828,53 @@ from routes.attributes import attributes_bp, ensure_attributes_tables
 app.register_blueprint(attributes_bp)
 from routes.sets import sets_bp, ensure_sets_tables
 app.register_blueprint(sets_bp)
-from routes.element_docs import element_docs_bp, ensure_element_docs_table
-app.register_blueprint(element_docs_bp)
-from routes.lob4d import lob4d_bp, ensure_lob4d_tables
-app.register_blueprint(lob4d_bp)
-from routes.lob4d_linear import lob4d_linear_bp
-app.register_blueprint(lob4d_linear_bp)
-from routes.geo_control import geo_control_bp
-app.register_blueprint(geo_control_bp)
+
+# ── Lo que solo usa el VISOR ─────────────────────────────────────────────
+if PERFIL_DESPLIEGUE != 'portal':
+    from routes.maps import maps_bp
+    from routes.digital_twin import digital_twin_bp
+    from routes.civil_design_automation import civil_da_bp
+    from routes.views import views_bp
+    from routes.pins import pins_bp
+    from routes.tracking import tracking_bp
+    from routes.ai import ai_bp
+    from routes.schedule import schedule_bp
+    from routes.inventory import inventory_bp
+    from routes.rfis import rfis_bp
+    from routes.redlines import redlines_bp
+    from routes.presupuesto import presupuesto_bp
+    from routes.compare import compare_bp
+    from routes.link import link_bp
+    from routes.dashboards import dashboards_bp
+    from routes.civil_ghost import civil_ghost_bp
+    from routes.civil_solids import civil_solids_bp
+
+    app.register_blueprint(digital_twin_bp)
+    app.register_blueprint(link_bp)
+    app.register_blueprint(dashboards_bp)
+    app.register_blueprint(civil_ghost_bp)
+    app.register_blueprint(civil_solids_bp)
+    app.register_blueprint(civil_da_bp)
+    app.register_blueprint(maps_bp)
+    app.register_blueprint(views_bp)
+    app.register_blueprint(pins_bp)
+    app.register_blueprint(tracking_bp)
+    app.register_blueprint(ai_bp)
+    app.register_blueprint(schedule_bp, url_prefix='/api/schedule')
+    app.register_blueprint(inventory_bp)
+    app.register_blueprint(rfis_bp, url_prefix='/api/rfis')
+    app.register_blueprint(redlines_bp, url_prefix='/api/redlines')
+    app.register_blueprint(presupuesto_bp, url_prefix='/api/presupuesto')
+    app.register_blueprint(compare_bp)
+
+    from routes.element_docs import element_docs_bp, ensure_element_docs_table
+    app.register_blueprint(element_docs_bp)
+    from routes.lob4d import lob4d_bp, ensure_lob4d_tables
+    app.register_blueprint(lob4d_bp)
+    from routes.lob4d_linear import lob4d_linear_bp
+    app.register_blueprint(lob4d_linear_bp)
+    from routes.geo_control import geo_control_bp
+    app.register_blueprint(geo_control_bp)
 
 @app.route('/maps/uploads/<path:filename>')
 def serve_map_file(filename):
@@ -914,18 +940,31 @@ def _run_schema_setup():
         ('transmittals', ensure_transmittals_table),
         ('attributes', ensure_attributes_tables),
         ('sets', ensure_sets_tables),
-        ('element_docs', ensure_element_docs_table),
-        ('extraction_jobs', ensure_extraction_jobs_table),
-        ('inventory_identity', ensure_inventory_identity),
-        ('lob4d', ensure_lob4d_tables),
-        ('civil_alignments', ensure_civil_alignments_table),
-        ('frentes', ensure_frentes_table),
         ('folder_permissions', init_folder_permissions_table),
         ('share_revoked', _ensure_share_revoked_column),
         # AL FINAL: columnas sueltas que la base real tiene y que ninguna rutina
         # crea. Van aqui porque necesitan que sus tablas ya existan.
         ('columnas_pendientes', ensure_columnas_pendientes),
     ]
+    if PERFIL_DESPLIEGUE != 'portal':
+        # Las familias del visor solo se aseguran si sus modulos estan cargados.
+        # En perfil portal NO se pierden: el esquema completo lo construye
+        # bootstrap_esquema.py en cada despliegue, que importa estas rutinas por
+        # su cuenta (las 42, con su prueba guardiana). Esto de aqui es solo el
+        # remiendo en caliente, y un portal no necesita remendar tablas del visor.
+        from routes.element_docs import ensure_element_docs_table
+        from routes.inventory import ensure_extraction_jobs_table, ensure_inventory_identity
+        from routes.lob4d import ensure_lob4d_tables
+        from routes.civil_design_automation import ensure_civil_alignments_table
+        from routes.digital_twin import ensure_frentes_table
+        rutinas[-3:-3] = [
+            ('element_docs', ensure_element_docs_table),
+            ('extraction_jobs', ensure_extraction_jobs_table),
+            ('inventory_identity', ensure_inventory_identity),
+            ('lob4d', ensure_lob4d_tables),
+            ('civil_alignments', ensure_civil_alignments_table),
+            ('frentes', ensure_frentes_table),
+        ]
     inicio = _t.time()
     fallos = []
     for nombre, fn in rutinas:
