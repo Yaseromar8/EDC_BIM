@@ -62,6 +62,41 @@ for _v in ('APP_SECRET', 'SESSION_PEPPER'):
               "rota UNA sola vez." % (_v, len(_x)))
 
 
+PERFIL_DESPLIEGUE = (os.getenv('DEPLOY_PROFILE', 'completo') or 'completo').strip().lower()
+print(f"[perfil] despliegue: {PERFIL_DESPLIEGUE}")
+
+# Rutas del VISOR que estan declaradas directamente sobre la aplicacion, no en un
+# blueprint, asi que se registran siempre. Sin este corte, el perfil 'portal'
+# seguia sirviendolas: /api/inventory contestaba 200 en una instancia que se
+# vende como «solo portal documental». Lo encontro el SIMULACRO de primera
+# entidad probando el perimetro, no una lectura del codigo -- el candado del
+# perfil existia y su lista era demasiado estrecha.
+#
+# Se cortan por PREFIJO y ANTES de la autenticacion: en un despliegue de portal
+# estas rutas sencillamente no existen.
+_SOLO_DEL_VISOR = (
+    '/api/inventory',          # inventario de elementos del modelo 3D
+    '/api/civil/',             # eje base y utilidades de Civil 3D
+    '/api/build/',             # subida y traduccion contra ACC
+    '/api/hubs',               # navegacion de hubs/proyectos de Autodesk
+    '/api/images/proxy',       # proxy de imagenes del visor
+    '/api/documents/link',     # enlace a documento de ACC
+)
+
+
+@app.before_request
+def _perfil_recorta_el_perimetro():
+    if PERFIL_DESPLIEGUE != 'portal':
+        return None
+    if (request.path or '').startswith(_SOLO_DEL_VISOR):
+        # 404 y no 403: en este despliegue la ruta NO EXISTE. Un 403 confirmaria
+        # que existe y que solo falta permiso, que es informacion de mas. Y va
+        # ANTES que la autenticacion a proposito: si contestara 401, el perimetro
+        # dependeria de tener sesion en vez de del perfil desplegado.
+        return jsonify({'error': 'No encontrado'}), 404
+    return None
+
+
 # --- CABECERAS DE SEGURIDAD ---
 # El backend no ponia ninguna: HTTPS existia solo porque lo termina el borde de
 # Render, y la app no declaraba nada. Estas cuatro son las que aplican a una API
@@ -796,8 +831,13 @@ def link_acc_document():
 #
 # No es un fork: es el mismo codigo, la misma politica, el mismo middleware y
 # las mismas guardias. Lo unico que cambia es que planos se registran.
-PERFIL_DESPLIEGUE = (os.getenv('DEPLOY_PROFILE', 'completo') or 'completo').strip().lower()
-print(f"[perfil] despliegue: {PERFIL_DESPLIEGUE}")
+
+    ruta = request.path or ''
+    if ruta.startswith(_SOLO_DEL_VISOR):
+        # 404 y no 403: en este despliegue la ruta NO EXISTE. Un 403 confirmaria
+        # que existe y que solo falta permiso, que es informacion de mas.
+        return jsonify({'error': 'No encontrado'}), 404
+    return None
 
 # ── Lo que el PORTAL usa (medido contra frontend-docs/src, no de memoria) ──
 from routes.documents import documents_bp

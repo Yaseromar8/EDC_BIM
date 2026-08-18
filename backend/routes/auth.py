@@ -173,41 +173,62 @@ def ensure_users_tables():
             
             # La migración pesada se ha removido para evitar bloqueos en la base de datos
             # durante el reinicio de los contenedores en Render.
-            
-            # Crear usuario Admin (Omar) si no existe.
-            # Sin password hardcodeada: usa ADMIN_PASSWORD del entorno, o genera una
-            # aleatoria fuerte y la imprime una vez (para capturarla). Nunca 'admin123'.
-            # EL ADMINISTRADOR INICIAL SE CONFIGURA, NO SE HEREDA.
-            # Estaba clavado al correo personal del desarrollador: cada
-            # instancia nueva -- incluida la de una ENTIDAD -- nacia con esa
-            # cuenta como administrador fijo. Para el despliegue por entidad
-            # eso es un defecto de fabrica: el primer admin de la instancia de
-            # una municipalidad tiene que ser QUIEN LA OPERA, declarado por
-            # entorno. Sin ADMIN_EMAIL se conserva el valor historico para no
-            # cambiar el comportamiento de la instancia existente.
-            import os as _os, secrets as _secrets
-            _admin_email = (_os.getenv('ADMIN_EMAIL') or 'omarsanchezh8@gmail.com').strip()
-            _admin_name = (_os.getenv('ADMIN_NAME') or 'Omar Sanchez').strip()
-            cursor.execute("SELECT id FROM users WHERE email=%s", (_admin_email,))
-            if not cursor.fetchone():
-                admin_pw = _os.getenv('ADMIN_PASSWORD') or _secrets.token_urlsafe(12)
-                if not _os.getenv('ADMIN_PASSWORD'):
-                    print(f"[AUTH] ADMIN_PASSWORD no definido -> password generada (GUARDALA): {admin_pw}")
-                print(f"Creando usuario Administrador principal ({_admin_name})...")
-                default_password = generate_password_hash(admin_pw)
-                cursor.execute('''
-                    INSERT INTO users (name, email, password_hash, role)
-                    VALUES (%s, %s, %s, %s)
-                ''', (_admin_name, _admin_email, default_password, 'admin'))
-            
-            # (Opcional) Borrar el admin antiguo si existe
-            cursor.execute("DELETE FROM users WHERE email='admin@plataforma.com'")
-            
             conn.commit()
     except Exception as e:
         print(f"Error inicializando tablas de usuarios: {e}")
 
+
+def asegurar_administrador_inicial():
+    """Crea el primer administrador. NO lleva @solo_con_ddl, y ese es el punto.
+
+    EL BLOQUEANTE QUE ESTO ARREGLA
+    ------------------------------
+    Esto vivia DENTRO de `ensure_users_tables`, que si esta decorada porque crea
+    tablas. Con DDL_EN_CALIENTE=false -- que es justo lo que la guia de
+    despliegue manda para la instancia de una entidad -- el decorador devuelve
+    None sin entrar: las tablas no se tocan (correcto) y EL ADMINISTRADOR
+    TAMPOCO SE CREA (desastre). La instancia arranca impecable, declara
+    `faltan: 0`, y no puede entrar nadie. Nunca.
+
+    Se descubrio EJECUTANDO el simulacro de primera entidad, no leyendo codigo:
+    el login del administrador devolvio 401 sobre una instancia recien nacida.
+
+    Es la misma familia que `ensure_project_root_node` (N66): una funcion que
+    mezcla esquema con DATOS y queda muda entera al congelar el DDL. La
+    diferencia es que aquella no tenia ni una sentencia DDL y el candado la
+    cazo; esta si las tiene, asi que el candado la dejo pasar. Por eso crear
+    datos y crear esquema no pueden compartir funcion.
+
+    El correo y el nombre salen del ENTORNO: el primer administrador de la
+    instancia de una municipalidad tiene que ser quien la opera, no el
+    desarrollador. Sin ADMIN_EMAIL se conserva el valor historico para no
+    cambiarle nada a la instancia que ya existe.
+    """
+    import os as _os
+    import secrets as _secrets
+    email = (_os.getenv('ADMIN_EMAIL') or 'omarsanchezh8@gmail.com').strip()
+    nombre = (_os.getenv('ADMIN_NAME') or 'Omar Sanchez').strip()
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+            if cursor.fetchone():
+                return
+            clave = _os.getenv('ADMIN_PASSWORD') or _secrets.token_urlsafe(12)
+            if not _os.getenv('ADMIN_PASSWORD'):
+                print(f"[AUTH] ADMIN_PASSWORD no definido -> password generada (GUARDALA): {clave}")
+            print(f"[AUTH] Creando administrador inicial ({nombre} <{email}>)...")
+            cursor.execute(
+                "INSERT INTO users (name, email, password_hash, role) VALUES (%s, %s, %s, %s)",
+                (nombre, email, generate_password_hash(clave), 'admin'))
+            cursor.execute("DELETE FROM users WHERE email = 'admin@plataforma.com'")
+            conn.commit()
+    except Exception as e:
+        print(f"[AUTH] no se pudo asegurar el administrador inicial: {e}")
+
+
 ensure_users_tables()
+asegurar_administrador_inicial()
 
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests

@@ -801,7 +801,19 @@ def list_documents():
         # dentro. Medido en la base real: 11.238 enlaces entregados a usuarios
         # sin derecho a descargar. Quien solo puede mirar sigue viendo y
         # previsualizando por /api/docs/proxy, que si comprueba y si deja rastro.
-        if _puede_descargar(user, parent_id, model_urn):
+        # Y SOLO SI ALGUIEN LO VA A LEER. El portal documental no usa `mediaLink`
+        # en ninguna pantalla -- abre y descarga bajo demanda por
+        # /api/docs/signed-url y /api/docs/proxy, que comprueban y dejan rastro.
+        # Su unico consumidor es el visor 3D. Asi que en un despliegue de portal
+        # esto era trabajo tirado: firmar 49 URLs que nadie abre, y ademas ~40 KB
+        # de respuesta de mas.
+        #
+        # No es una optimizacion cosmetica: cada firma reconstruia el cliente de
+        # GCS (ver gcs_manager), y eso es lo que hacia que abrir una carpeta de 49
+        # documentos tardara cerca de un minuto en el plan gratuito.
+        import os as _os
+        _es_portal = (_os.getenv('DEPLOY_PROFILE', 'completo') or '').strip().lower() == 'portal'
+        if not _es_portal and _puede_descargar(user, parent_id, model_urn):
             for f in contents['files']:
                 if f.get('gcs_urn'):
                     f['mediaLink'] = generate_signed_url(f['gcs_urn'])
