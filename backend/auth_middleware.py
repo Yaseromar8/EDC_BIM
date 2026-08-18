@@ -372,9 +372,17 @@ _membership_cache = {}  # (user_id, project_id) -> (bool, ts)
 _MEMBERSHIP_TTL = 120
 
 
+# Identificador imposible: se devuelve cuando una peticion nombra dos obras
+# distintas. No es una obra, es una negativa con forma de obra.
+OBRA_EN_CONFLICTO = '__obras_en_conflicto__'
+
+
 def _user_in_project(user_id, project_id):
     """True si el usuario pertenece a la obra. Cachea. Fail-open ante error."""
     import time as _t
+    if project_id == OBRA_EN_CONFLICTO:
+        return False        # nadie pertenece a una peticion ambigua
+
     key = (user_id, str(project_id))
     cached = _membership_cache.get(key)
     if cached and _t.time() - cached[1] < _MEMBERSHIP_TTL:
@@ -474,9 +482,24 @@ def _request_project_id():
             logger.warning(f'[authz] no se pudo resolver por recurso: {e}')
         return None
     if len(encontradas) > 1:
-        # Dos obras distintas en la misma peticion: no se elige, se niega.
+        # DOS OBRAS EN LA MISMA PETICION: NO SE ELIGE, SE NIEGA.
+        #
+        # Eso decia el comentario. El codigo hacia `return encontradas[0]` en las
+        # dos ramas, y como las fuentes se recorren en orden [args, view_args,
+        # cuerpo], bastaba con colgar `?project_id=<mi_propia_obra>` a una
+        # peticion dirigida a otra obra: la comprobacion de pertenencia se hacia
+        # contra la mia, salia que si, y pasaba.
+        #
+        # Con el interruptor apagado esto no cambiaba nada --no se bloquea a
+        # nadie-- asi que nunca se noto. Pero el dia de encender ENFORCE el
+        # control habria nacido ya sorteable, que es la peor forma de tener un
+        # control: la que se cree que existe.
+        #
+        # Se devuelve un identificador al que no pertenece nadie. El flujo de
+        # arriba no necesita saber nada nuevo: `_user_in_project` dira que no y
+        # la peticion se niega bajo ENFORCE, o se anota bajo log-only.
         logger.warning(f"[authz] peticion con obras en conflicto {encontradas}: {request.method} {request.path}")
-        return encontradas[0]
+        return OBRA_EN_CONFLICTO
     return encontradas[0]
 
 

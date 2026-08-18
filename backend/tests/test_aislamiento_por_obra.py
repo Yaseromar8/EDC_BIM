@@ -182,3 +182,46 @@ def test_cada_exencion_lleva_su_motivo_escrito(entorno):
     _c, am, _e = entorno
     for ruta, motivo in am._SIN_OBRA_JUSTIFICADO.items():
         assert motivo and len(motivo) > 20, f'{ruta} no tiene motivo escrito'
+
+
+# ── El atajo: nombrar DOS obras y que gane la mia ─────────────────────────
+
+def test_colgar_mi_obra_en_la_url_no_abre_la_ajena(entorno, monkeypatch):
+    """La peticion nombra dos obras: la ajena en la ruta, la propia en la query.
+
+    El resolutor recorre las fuentes en orden [args, view_args, cuerpo] y
+    acumula todas las obras que resuelvan. Cuando salian dos, el comentario
+    decia «no se elige, se niega» y el codigo hacia `return encontradas[0]`:
+    ganaba la de la query, que es la que pone quien llama. Bastaba con
+    `?project_id=<mi_obra>` para que la comprobacion de pertenencia se hiciera
+    contra la mia mientras el manejador trabajaba sobre la ajena.
+
+    Con el interruptor apagado no se notaba, porque no se bloquea a nadie. El
+    dia de encenderlo, el control habria nacido ya sorteable -- que es la peor
+    forma de tener un control: la que se cree que existe.
+    """
+    c, am, _e = entorno
+    monkeypatch.setattr(am, 'ENFORCE_PROJECT_AUTHZ', True)
+    r = c.delete(f'/api/partidas/all/{URN_B}&project_id={OBRA_A}')
+    assert r.status_code == 403, (
+        'la obra propia colgada en la query abrio la ajena: %s' % r.get_json())
+
+
+def test_la_ambiguedad_no_es_una_obra(entorno):
+    """Ante dos obras se devuelve una negativa, no la primera de la lista."""
+    c, am, _e = entorno
+    with am_contexto(am, f'/api/partidas/all/{URN_B}&project_id={OBRA_A}'):
+        assert am._request_project_id() == am.OBRA_EN_CONFLICTO
+    assert am._user_in_project(7, am.OBRA_EN_CONFLICTO) is False
+
+
+def am_contexto(am, ruta):
+    """Contexto de peticion sobre una app pelada, para probar el resolutor."""
+    from flask import Flask
+    app = Flask(__name__)
+
+    @app.route('/api/partidas/all/<path:model_urn>', methods=['DELETE'])
+    def _r(model_urn):
+        return ''
+
+    return app.test_request_context(ruta, method='DELETE')
