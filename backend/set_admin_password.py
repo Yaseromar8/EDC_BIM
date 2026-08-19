@@ -5,7 +5,7 @@ Uso (cualquiera de las dos):
     set ADMIN_PASSWORD=TuPasswordFuerte   &&  python set_admin_password.py
     python set_admin_password.py "TuPasswordFuerte"
 
-Opcional: ADMIN_EMAIL (default omarsanchezh8@gmail.com).
+Obligatorio: ADMIN_EMAIL. Sin el, el guion se niega a actuar.
 No imprime la password. Rechaza passwords debiles.
 """
 import sys, os, io
@@ -17,7 +17,12 @@ load_dotenv()
 from werkzeug.security import generate_password_hash
 from db import init_db_pool, get_db_connection
 
-EMAIL = os.getenv('ADMIN_EMAIL', 'omarsanchezh8@gmail.com')
+# SIN DEFECTO A PROPOSITO. Tenia de defecto el correo personal del
+# desarrollador: ejecutar esto en la instancia de una entidad le habria
+# puesto contraseña de administrador a una cuenta que no es de ellos.
+EMAIL = (os.getenv('ADMIN_EMAIL') or '').strip()
+if not EMAIL:
+    raise SystemExit('Define ADMIN_EMAIL: este guion no adivina de quien es la cuenta.')
 pw = os.getenv('ADMIN_PASSWORD') or (sys.argv[1] if len(sys.argv) > 1 else None)
 
 if not pw:

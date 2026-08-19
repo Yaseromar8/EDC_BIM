@@ -206,8 +206,22 @@ def asegurar_administrador_inicial():
     """
     import os as _os
     import secrets as _secrets
-    email = (_os.getenv('ADMIN_EMAIL') or 'omarsanchezh8@gmail.com').strip()
-    nombre = (_os.getenv('ADMIN_NAME') or 'Omar Sanchez').strip()
+    email = (_os.getenv('ADMIN_EMAIL') or '').strip()
+    nombre = (_os.getenv('ADMIN_NAME') or '').strip()
+    if not email:
+        # EN PERFIL PORTAL NO HAY VALOR HISTORICO QUE CONSERVAR.
+        # Una instancia de entidad es nueva por definicion, y caer al correo del
+        # desarrollador ahi significa que el ECD de una municipalidad nace con un
+        # administrador que no es suyo. Se niega y se dice, en vez de crear
+        # callando una cuenta ajena. En perfil completo se conserva el historico:
+        # ahi si hay una instancia viva a la que no se le debe cambiar nada.
+        if (_os.getenv('DEPLOY_PROFILE') or 'completo').strip().lower() == 'portal':
+            print('[AUTH] ADMIN_EMAIL no definido en perfil portal: NO se crea '
+                  'administrador inicial. Definelo y vuelve a desplegar.')
+            return
+        email = 'omarsanchezh8@gmail.com'
+        nombre = nombre or 'Omar Sanchez'
+    nombre = nombre or email.split('@')[0]
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -1178,7 +1192,7 @@ def dfa_verify():
             if not fila:
                 return jsonify({'error': 'El desafío no es válido.'}), 401
 
-            valido = dfa.comprobar(fila[6], codigo_dado)
+            valido = dfa.consumir(cur, uid, fila[6], codigo_dado)
             if not valido and codigo_dado:
                 # Codigo de recuperacion: de un solo uso. Se marca usado DENTRO de la
                 # misma sentencia, para que dos intentos a la vez no canjeen el mismo.
@@ -1245,7 +1259,9 @@ def dfa_desactivar():
             fila = cur.fetchone()
             if not fila or not fila[1]:
                 return jsonify({'error': 'El segundo factor no está activo.'}), 400
-            if not dfa.comprobar(fila[0], codigo_dado):
+            # Quitar la proteccion tambien canjea el codigo: si vale una vez, no
+            # puede valer otra. Es la accion que deja la cuenta desnuda.
+            if not dfa.consumir(cur, u['id'], fila[0], codigo_dado):
                 registrar_evento('2fa_desactivacion_fallida', email=u.get('email'), user_id=u['id'])
                 return jsonify({'error': 'El código no es válido.'}), 400
             cur.execute('UPDATE users SET totp_activo = FALSE, totp_secreto = NULL,'

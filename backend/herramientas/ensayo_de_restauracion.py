@@ -100,8 +100,17 @@ def main():
     if cadmin.fetchone():
         _abortar('la base %s ya existe; no se toca nada que no haya creado '
                  'este ensayo.' % base_ensayo)
-    cadmin.execute('CREATE DATABASE "%s" OWNER ecd_app' % base_ensayo)
-    print('   creada, propietaria: ecd_app (la aplicacion, no el superusuario)')
+    # EL NOMBRE DEL ROL SALE DEL ENTORNO, NO ESTA ESCRITO AQUI.
+    # Estaba fijo como 'ecd_app', que es como se llama en la instalacion del
+    # desarrollador. En la instancia de una entidad el usuario es
+    # `ecd_app_<entidad>`, asi que el ensayo moria con «role "ecd_app" does not
+    # exist» -- es decir, la herramienta que demuestra que la copia sirve no
+    # funcionaba justo donde hace falta demostrarlo.
+    duenno = (os.getenv('DB_USER') or '').strip()
+    if not duenno:
+        _abortar('define DB_USER: el ensayo no adivina quien es el usuario de aplicacion')
+    cadmin.execute('CREATE DATABASE "%s" OWNER "%s"' % (base_ensayo, duenno))
+    print('   creada, propietaria: %s (la aplicacion, no el superusuario)' % duenno)
 
     try:
         resultado = _ensayar(copia, base_ensayo)
@@ -127,7 +136,12 @@ def main():
 def _ensayar(copia, base_ensayo):
     """Esquema + datos + cotejo, todo como ecd_app contra la base del ensayo."""
     # Todo lo que viene usa el entorno: se apunta a la base del ensayo ANTES de
-    # importar nada que abra conexiones.
+    # importar nada que abra conexiones. Pero SE GUARDA cual era la de verdad:
+    # el guardia de restaurar.py compara el destino contra DB_NAME, y si nadie
+    # le dice que DB_NAME ya no apunta a produccion, toma la base desechable del
+    # ensayo por produccion y se niega a cargar. Asi moria este ensayo, siempre,
+    # en el paso 3.
+    base_de_produccion = os.environ.get('DB_NAME')
     os.environ['DB_NAME'] = base_ensayo
 
     print('\n2. Construir el esquema (bootstrap, como en un despliegue)')
@@ -141,7 +155,8 @@ def _ensayar(copia, base_ensayo):
 
     print('\n3. Cargar los datos de la copia')
     import restaurar as rest
-    codigo = rest.restaurar(copia, base_ensayo, confirmar=True)
+    codigo = rest.restaurar(copia, base_ensayo, confirmar=True,
+                            base_de_produccion=base_de_produccion)
     if codigo not in (0, None):
         print('   LA CARGA FALLO (codigo %s)' % codigo)
         return 1

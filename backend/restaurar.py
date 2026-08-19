@@ -81,9 +81,24 @@ def leer_copia(fichero):
     return bloques
 
 
-def restaurar(fichero, base, confirmar=False, permitir_produccion=False):
+def restaurar(fichero, base, confirmar=False, permitir_produccion=False,
+              base_de_produccion=None):
+    """Carga una copia en `base`.
+
+    `base_de_produccion` existe porque el guardia de abajo preguntaba «¿la base
+    de destino se llama igual que DB_NAME?», y DB_NAME es una variable que
+    cualquiera puede haber cambiado por el camino. El ensayo de restauracion la
+    apunta a su base desechable para construirle el esquema, asi que al llegar
+    aqui el guardia veia destino == DB_NAME y gritaba «es PRODUCCION» sobre una
+    base recien creada y vacia. Resultado: el ensayo completo NUNCA llego a
+    cargar datos -- y era justo lo que decia demostrar.
+
+    Quien sepa cual es la base de produccion de verdad la pasa por aqui. Quien no
+    la pase se sigue midiendo contra DB_NAME, que es lo correcto para la linea de
+    ordenes. El guardia no se afloja: se le da la referencia buena.
+    """
     _entorno()
-    produccion = os.environ.get('DB_NAME')
+    produccion = base_de_produccion or os.environ.get('DB_NAME')
     if base == produccion and not permitir_produccion:
         raise SystemExit(
             f"NEGADO: '{base}' es la base de PRODUCCION.\n"

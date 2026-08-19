@@ -129,3 +129,67 @@ def test_no_se_puede_aflojar_por_debajo_de_admin(monkeypatch):
     for intento in ('ninguno', 'no', 'false', '', 'off'):
         monkeypatch.setenv('EXIGIR_2FA', intento)
         assert dfa.exigido_para('admin') is True, f'"{intento}" no puede eximir al admin'
+
+
+# ── Un codigo TOTP no vale dos veces ───────────────────────────────────────
+
+class _CursorFingido:
+    """Lo minimo para `consumir()`: guarda el ultimo paso canjeado."""
+
+    def __init__(self):
+        self.ultimo = None
+        self._devolver = None
+
+    def execute(self, sql, args=()):
+        if 'SELECT totp_ultimo_paso' in sql:
+            self._devolver = (self.ultimo,)
+        elif 'UPDATE users SET totp_ultimo_paso' in sql:
+            self.ultimo = args[0]
+            self._devolver = None
+
+    def fetchone(self):
+        return self._devolver
+
+
+def test_el_mismo_codigo_no_se_canjea_dos_veces():
+    """RFC 6238 §5.2: el verificador NO debe aceptar un segundo intento del
+    codigo generado para la misma ventana de tiempo.
+
+    Medido antes del arreglo: el mismo codigo entraba dos veces seguidas y las
+    dos entregaban sesion. Importa porque el codigo VIAJA -- se lee en voz alta,
+    se manda por WhatsApp al que esta en obra, se queda en el portapapeles.
+    """
+    import segundo_factor as dfa
+    secreto = dfa.secreto_nuevo()
+    cur = _CursorFingido()
+    codigo = dfa.codigo(secreto)
+
+    assert dfa.consumir(cur, 1, secreto, codigo) is True, 'el primer canje vale'
+    assert dfa.consumir(cur, 1, secreto, codigo) is False, (
+        'el SEGUNDO canje del mismo codigo tiene que fallar')
+
+
+def test_no_vale_un_codigo_anterior_todavia_dentro_de_la_ventana():
+    """La ventana de deriva admite el codigo del paso anterior. Si ya se canjeo
+    uno mas nuevo, el viejo no puede volver a entrar por esa puerta."""
+    import segundo_factor as dfa
+    secreto = dfa.secreto_nuevo()
+    cur = _CursorFingido()
+    ahora = 1_600_000_000
+    anterior = dfa.codigo(secreto, ahora - dfa.INTERVALO)
+
+    assert dfa.consumir(cur, 1, secreto, dfa.codigo(secreto, ahora), momento=ahora) is True
+    assert dfa.consumir(cur, 1, secreto, anterior, momento=ahora) is False, (
+        'un codigo de un paso ya superado no puede canjearse'
+    )
+
+
+def test_comprobar_sigue_diciendo_si_sin_canjear():
+    """`comprobar()` no toca la base: sirve para preguntar, no para canjear.
+    Si alguien la usa donde deberia usar `consumir()`, esto no lo detecta -- lo
+    detecta el test de endpoints. Aqui solo se fija el contrato."""
+    import segundo_factor as dfa
+    secreto = dfa.secreto_nuevo()
+    c = dfa.codigo(secreto)
+    assert dfa.comprobar(secreto, c) is True
+    assert dfa.comprobar(secreto, c) is True

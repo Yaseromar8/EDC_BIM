@@ -243,6 +243,72 @@ def _manifiesto():
         return set()
 
 
+# ── El manifiesto de OBJETOS, no solo de tablas ────────────────────────────
+# POR QUE EXISTE ESTE SEGUNDO FICHERO
+# -----------------------------------
+# La primera version de verificar() comparaba TABLAS y nada mas, y por eso pudo
+# imprimir «88 de 88 · el esquema quedo COMPLETO» sobre una base a la que le
+# faltaba `totp_recuperacion.pimienta`. La tabla estaba; la columna no. Resultado
+# medido: activar el segundo factor devolvia HTTP 500, y el fallo no aparecia el
+# dia del despliegue sino meses despues, el dia que un administrador intenta
+# protegerse la cuenta. Contar tablas es contar cajas sin mirar dentro.
+#
+# Lo que se exige aqui es el esquema MINIMO PARA OPERAR: tablas, columnas,
+# restricciones, indices, funciones y extensiones. Se genera midiendo una
+# reconstruccion real sobre una base vacia (--regenerar-manifiesto), igual que el
+# de tablas, para que no se escriba a mano ni se quede atras solo.
+_TIPOS = ('tabla', 'columna', 'restriccion', 'indice', 'funcion', 'extension')
+_PLURAL = {'tabla': 'tablas', 'columna': 'columnas', 'restriccion': 'restricciones',
+           'indice': 'indices', 'funcion': 'funciones', 'extension': 'extensiones'}
+
+_CONSULTAS = {
+    'tabla': """SELECT tablename FROM pg_tables
+                 WHERE schemaname IN ('public','ai_brain')""",
+    'columna': """SELECT table_name || '.' || column_name
+                    FROM information_schema.columns
+                   WHERE table_schema IN ('public','ai_brain')""",
+    'restriccion': """SELECT c.conrelid::regclass::text || '.' || c.conname
+                        FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
+                       WHERE n.nspname IN ('public','ai_brain')""",
+    'indice': """SELECT indexname FROM pg_indexes
+                  WHERE schemaname IN ('public','ai_brain')""",
+    'funcion': """SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                   WHERE n.nspname = 'public'""",
+    'extension': "SELECT extname FROM pg_extension",
+}
+
+_FICHERO_OBJETOS = 'esquema_objetos.txt'
+
+
+def _ruta(nombre):
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), nombre)
+
+
+def _objetos_esperados():
+    """Lee `esquema_objetos.txt`. Formato: `tipo<TAB>nombre`, una linea por objeto."""
+    import io as _io
+    esperado = {t: set() for t in _TIPOS}
+    try:
+        for linea in _io.open(_ruta(_FICHERO_OBJETOS), encoding='utf-8'):
+            linea = linea.strip()
+            if not linea or linea.startswith('#'):
+                continue
+            partes = linea.split('\t', 1)
+            if len(partes) == 2 and partes[0] in esperado:
+                esperado[partes[0]].add(partes[1].strip().lower())
+    except OSError:
+        return None
+    return esperado
+
+
+def _objetos_presentes(cur):
+    presente = {}
+    for tipo, sql in _CONSULTAS.items():
+        cur.execute(sql)
+        presente[tipo] = {r[0].lower() for r in cur.fetchall()}
+    return presente
+
+
 def verificar():
     """Comprueba que el esquema esta completo. Devuelve (completo, faltan).
 
@@ -250,11 +316,14 @@ def verificar():
     quedaron en la base. Una rutina puede tragarse su propia excepcion y dejar la
     tabla sin crear, y eso solo se ve mirando.
 
-    Y no cuenta: COMPARA CON NOMBRE contra `esquema_manifiesto.txt`. Contar
-    engaña -- 81 tablas suena a completo y puede faltar justo `file_nodes`, que
-    es lo unico que importa. La primera version contaba, e imprimia
-    «resolve_folder_path: FALTA» mientras devolvia codigo 0: una comprobacion que
-    siempre dice que si no es una comprobacion.
+    Y no cuenta: COMPARA CON NOMBRE contra los manifiestos. Contar engaña -- 81
+    tablas suena a completo y puede faltar justo `file_nodes`, que es lo unico que
+    importa. La primera version contaba, e imprimia «resolve_folder_path: FALTA»
+    mientras devolvia codigo 0: una comprobacion que siempre dice que si no es una
+    comprobacion.
+
+    Y no mira solo tablas: una tabla presente con una columna ausente es un fallo
+    DIFERIDO, que es la peor clase. Ver el comentario de _TIPOS.
     """
     import db as _db
     if getattr(_db, 'db_pool', None) is None:
@@ -262,38 +331,94 @@ def verificar():
     from db import get_db_connection
     with get_db_connection() as conn:
         cur = conn.cursor()
-        cur.execute("""SELECT tablename FROM pg_tables
-                        WHERE schemaname IN ('public','ai_brain')""")
-        presentes = {r[0].lower() for r in cur.fetchall()}
-        tablas = len(presentes)
-        cur.execute("""SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-                        WHERE n.nspname='public' AND p.proname='resolve_folder_path'""")
-        funcion = cur.fetchone()[0]
-        cur.execute("""SELECT count(*) FROM pg_extension WHERE extname='pgcrypto'""")
-        ext = cur.fetchone()[0]
-    esperadas = _manifiesto()
-    faltan = sorted(esperadas - presentes) if esperadas else []
+        presente = _objetos_presentes(cur)
 
-    print('tablas en public+ai_brain      : %d' % tablas)
-    print('funcion resolve_folder_path    : %s' % ('presente' if funcion else 'FALTA'))
-    print('extension pgcrypto             : %s' % ('presente' if ext else 'FALTA'))
-    if esperadas:
-        print('tablas del manifiesto           : %d de %d'
-              % (len(esperadas) - len(faltan), len(esperadas)))
-    if faltan:
+    esperadas_tablas = _manifiesto()
+    esperado = _objetos_esperados()
+
+    faltan_por_tipo = {}
+    if esperado is None:
+        # Sin el manifiesto de objetos se comprueba lo de siempre, y SE DICE.
+        # Callarselo seria repetir el «COMPLETO» que no comprobaba nada.
+        print('AVISO: no se encuentra %s -- solo se comprueban tablas.' % _FICHERO_OBJETOS)
+        faltan_por_tipo['tabla'] = sorted(esperadas_tablas - presente['tabla']) if esperadas_tablas else []
+    else:
+        if esperadas_tablas:
+            esperado['tabla'] |= esperadas_tablas
+        for tipo in _TIPOS:
+            faltan_por_tipo[tipo] = sorted(esperado[tipo] - presente[tipo])
+
+    for tipo in _TIPOS:
+        if tipo not in faltan_por_tipo:
+            continue
+        total = len(esperado[tipo]) if esperado else len(esperadas_tablas)
+        faltan_n = len(faltan_por_tipo[tipo])
+        print('%-14s : %d de %d%s' % (_PLURAL[tipo], total - faltan_n, total,
+                                      '   *** FALTAN %d ***' % faltan_n if faltan_n else ''))
+
+    todo_lo_que_falta = []
+    for tipo in _TIPOS:
+        for n in faltan_por_tipo.get(tipo, []):
+            todo_lo_que_falta.append('%s %s' % (tipo, n))
+
+    if todo_lo_que_falta:
         print('')
-        print('FALTAN %d TABLAS:' % len(faltan))
-        for n in faltan:
+        print('FALTAN %d OBJETO(S) OBLIGATORIO(S):' % len(todo_lo_que_falta))
+        for n in todo_lo_que_falta[:60]:
             print('   ·', n)
-    completo = not faltan and bool(funcion) and bool(ext)
-    return completo, faltan
+        if len(todo_lo_que_falta) > 60:
+            print('   ... y %d mas' % (len(todo_lo_que_falta) - 60))
+
+    return (not todo_lo_que_falta), todo_lo_que_falta
+
+
+def regenerar_manifiesto():
+    """Congela el esquema que hay AHORA como el minimo exigible.
+
+    Se ejecuta contra una base recien construida por este mismo guion sobre un
+    espacio VACIO, y con la configuracion recomendada para una instancia nueva.
+    Regenerarlo contra una base cualquiera congelaria sus taras.
+    """
+    import io as _io
+    import db as _db
+    if getattr(_db, 'db_pool', None) is None:
+        _db.init_db_pool()
+    from db import get_db_connection
+    with get_db_connection() as conn:
+        presente = _objetos_presentes(conn.cursor())
+
+    lineas = ['# Esquema MINIMO para operar una instancia. Tablas, columnas,',
+              '# restricciones, indices, funciones y extensiones.',
+              '# No se edita a mano: se regenera midiendo una reconstruccion real',
+              '# sobre una base VACIA:  python bootstrap_esquema.py --regenerar-manifiesto',
+              '']
+    for tipo in _TIPOS:
+        for nombre in sorted(presente[tipo]):
+            lineas.append('%s\t%s' % (tipo, nombre))
+    _io.open(_ruta(_FICHERO_OBJETOS), 'w', encoding='utf-8').write('\n'.join(lineas) + '\n')
+
+    _io.open(_ruta('esquema_manifiesto.txt'), 'w', encoding='utf-8').write(
+        '# Tablas que deja construidas `python bootstrap_esquema.py`.\n'
+        '# Generado midiendo una reconstruccion real en un espacio vacio.\n'
+        '# No se edita a mano: se regenera cuando cambia el esquema.\n\n'
+        + '\n'.join(sorted(presente['tabla'])) + '\n')
+
+    for tipo in _TIPOS:
+        print('  %-14s %d' % (_PLURAL[tipo], len(presente[tipo])))
+    print('manifiestos regenerados.')
 
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description='Construye el esquema del ECD. No mueve datos.')
     ap.add_argument('--verificar', action='store_true',
                     help='solo comprobar, sin construir')
+    ap.add_argument('--regenerar-manifiesto', action='store_true',
+                    help='congela el esquema actual como el minimo exigible '
+                         '(solo sobre una base recien construida desde vacio)')
     a = ap.parse_args()
+    if a.regenerar_manifiesto:
+        regenerar_manifiesto()
+        raise SystemExit(0)
     if a.verificar:
         completo, _faltan = verificar()
         # Lo que el propio guion promete en su ayuda: codigo 1 si algo falta.

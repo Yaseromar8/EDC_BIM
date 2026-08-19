@@ -149,11 +149,44 @@ def test_el_codigo_de_salida_mira_el_RESULTADO_y_no_los_fallos():
 def test_la_comprobacion_compara_con_nombre_y_no_cuenta():
     """Contar engaña: 81 tablas suena a completo y puede faltar justo
     `file_nodes`, que es lo unico que importa. Paso de verdad: la version que
-    contaba imprimia «resolve_folder_path: FALTA» y devolvia 0."""
-    fuente = _fuente('bootstrap_esquema.py')
-    cuerpo = fuente[fuente.index('def verificar'):fuente.index("if __name__")]
-    assert '_manifiesto()' in cuerpo
-    assert 'esperadas - presentes' in cuerpo
+    contaba imprimia «resolve_folder_path: FALTA» y devolvia 0.
+
+    Se comprueba el COMPORTAMIENTO, no el texto del codigo: la version anterior
+    de esta prueba exigia la cadena literal 'esperadas - presentes', asi que
+    renombrar una variable la ponia en rojo sin que nada se hubiera roto -- y
+    peor: alguien podia dejarla verde escribiendo esa cadena en un comentario.
+    """
+    import bootstrap_esquema as be
+    faltan = be._objetos_esperados()
+    assert faltan is not None, 'falta esquema_objetos.txt'
+    # Presente = lo esperado MENOS un objeto conocido. Debe salir ese y solo ese.
+    presente = {t: set(v) for t, v in faltan.items()}
+    presente['columna'].discard('totp_recuperacion.pimienta')
+    diferencia = sorted(faltan['columna'] - presente['columna'])
+    assert diferencia == ['totp_recuperacion.pimienta'], (
+        'la comprobacion tiene que decir QUE falta, por nombre, no cuantos hay')
+
+
+def test_la_comprobacion_mira_columnas_y_no_solo_tablas():
+    """Una tabla presente con una columna ausente es un fallo DIFERIDO.
+
+    Paso de verdad el 19-ago-2026: el bootstrap imprimio «88 de 88 · el esquema
+    quedo COMPLETO» sobre una base sin `totp_recuperacion.pimienta`. La tabla
+    estaba; la columna no. Activar el segundo factor devolvia HTTP 500, y no el
+    dia del despliegue sino meses despues, el dia que un administrador intenta
+    protegerse la cuenta. Contar cajas no es mirar dentro.
+    """
+    import bootstrap_esquema as be
+    esperado = be._objetos_esperados()
+    assert esperado is not None, 'falta esquema_objetos.txt'
+    for tipo in ('tabla', 'columna', 'restriccion', 'indice', 'funcion', 'extension'):
+        assert esperado[tipo], 'el manifiesto no exige ningun objeto de tipo %s' % tipo
+    # Las piezas sin las cuales el segundo factor no puede activarse.
+    assert 'totp_recuperacion.pimienta' in esperado['columna']
+    assert 'users.totp_secreto' in esperado['columna']
+    assert 'users.totp_activo' in esperado['columna']
+    assert 'users.totp_ultimo_paso' in esperado['columna']
+    assert 'totp_recuperacion' in esperado['tabla']
 
 
 # ── El decorador solo donde construye esquema ─────────────────────────────

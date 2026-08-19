@@ -1946,7 +1946,19 @@ def batch_update():
 
             conn.commit()
 
-        return jsonify({"success": True, "processed": len(items)}), 200
+        # SI SE LLEGA AQUI, NO SE HIZO NADA. Y decir "success: processed 1" sin
+        # haber tocado un documento es mentir con codigo 200. Paso de verdad:
+        # mandando `new_status` en vez de `status` --que es como se llama-- la
+        # peticion caia hasta esta linea y respondia exito; parecia que la puerta
+        # de estados dejaba publicar sin codigo de idoneidad. No lo dejaba: es
+        # que nunca llego a preguntarselo.
+        valida = ', '.join(sorted({'SET_STATUS', 'DELETE'}))
+        if action == 'SET_STATUS' and not new_status:
+            return jsonify({"success": False,
+                            "error": "Falta 'status' para SET_STATUS. Estados validos: "
+                                     "WIP, SHARED, PUBLISHED, ARCHIVED."}), 400
+        return jsonify({"success": False,
+                        "error": f"Accion no reconocida: {action!r}. Validas: {valida}."}), 400
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -2450,7 +2462,12 @@ def download_folder_urls():
     if not folder_id:
         return jsonify({"success": False, "error": "Falta folder_id"}), 400
         
-    from flask import g, jsonify
+    # `jsonify` y `g` YA vienen del import de arriba (linea 15). Volver a
+    # importarlos aqui los convertia en LOCALES de esta funcion, y entonces el
+    # `return jsonify(...)` de mas arriba --el que avisa de que falta
+    # folder_id-- caia en zona muerta: en vez del 400 con su motivo, un 500
+    # con UnboundLocalError. La rama de error se rompia a si misma.
+    from flask import g
     user = getattr(g, 'current_user', None)
     if not user:
         return jsonify({"success": False, "error": "Autenticación requerida"}), 401

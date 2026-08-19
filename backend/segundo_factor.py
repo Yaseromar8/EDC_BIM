@@ -65,20 +65,63 @@ def codigo(secreto, momento=None):
     return str(truncado % (10 ** DIGITOS)).zfill(DIGITOS)
 
 
-def comprobar(secreto, codigo_dado, momento=None):
-    """¿Es valido el codigo? Compara en tiempo constante y admite deriva de reloj."""
+def paso_de(secreto, codigo_dado, momento=None):
+    """El intervalo (paso de 30 s) al que corresponde el codigo, o None si no vale.
+
+    Devolver el PASO y no solo un si/no es lo que permite impedir que el mismo
+    codigo se canjee dos veces: ver `consumir()`.
+    """
     if not secreto or not codigo_dado:
-        return False
+        return None
     dado = str(codigo_dado).strip().replace(' ', '')
     if not dado.isdigit() or len(dado) != DIGITOS:
-        return False
+        return None
     ahora = momento if momento is not None else time.time()
     for salto in range(-VENTANA, VENTANA + 1):
+        instante = ahora + salto * INTERVALO
         # compare_digest y no ==: comparar cadenas byte a byte filtra por tiempo
         # cuantas cifras iniciales acertaste, y con 6 cifras eso importa.
-        if hmac.compare_digest(codigo(secreto, ahora + salto * INTERVALO), dado):
-            return True
-    return False
+        if hmac.compare_digest(codigo(secreto, instante), dado):
+            return int(instante // INTERVALO)
+    return None
+
+
+def comprobar(secreto, codigo_dado, momento=None):
+    """¿Es valido el codigo? Compara en tiempo constante y admite deriva de reloj.
+
+    OJO: esto NO impide reutilizarlo. Para el canje real usa `consumir()`.
+    """
+    return paso_de(secreto, codigo_dado, momento) is not None
+
+
+def consumir(cursor, user_id, secreto, codigo_dado, momento=None):
+    """Canjea un codigo TOTP UNA sola vez. Devuelve True si valia y se acepto.
+
+    POR QUE NO BASTA CON `comprobar()`
+    ----------------------------------
+    Un codigo TOTP vale durante su paso de 30 s (mas la ventana de deriva), y
+    `comprobar()` dice que si tantas veces como se lo preguntes. Medido: el mismo
+    codigo entraba dos veces seguidas y las dos entregaban sesion. El RFC 6238
+    (§5.2) lo dice sin rodeos: el verificador NO debe aceptar un segundo intento
+    del codigo generado para la misma ventana de tiempo.
+
+    Importa porque el codigo viaja: se lee en voz alta, se manda por WhatsApp al
+    compañero que esta en obra, se queda en el portapapeles. Quien lo vea pasar
+    tiene medio minuto para usarlo -- y con esto, solo si llega primero.
+
+    Se guarda el ULTIMO paso canjeado y se exige que el nuevo sea POSTERIOR: asi
+    tampoco vale un codigo anterior todavia dentro de la ventana de deriva.
+    """
+    paso = paso_de(secreto, codigo_dado, momento)
+    if paso is None:
+        return False
+    cursor.execute('SELECT totp_ultimo_paso FROM users WHERE id = %s', (user_id,))
+    fila = cursor.fetchone()
+    ultimo = (fila or [None])[0]
+    if ultimo is not None and paso <= int(ultimo):
+        return False
+    cursor.execute('UPDATE users SET totp_ultimo_paso = %s WHERE id = %s', (paso, user_id))
+    return True
 
 
 def uri_de_provisionamiento(secreto, correo, emisor='ECD Talara'):
@@ -142,6 +185,9 @@ def asegurar_columnas(cursor):
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secreto VARCHAR(64)")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_activo BOOLEAN DEFAULT FALSE")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_activado_en TIMESTAMP WITH TIME ZONE")
+    # El ultimo paso de 30 s ya canjeado. Es lo que impide reutilizar un codigo
+    # dentro de su propia ventana de validez. Ver consumir().
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_ultimo_paso BIGINT")
     # Los de recuperacion, hasheados y de un solo uso.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS totp_recuperacion (
