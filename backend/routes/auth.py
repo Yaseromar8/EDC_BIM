@@ -794,7 +794,17 @@ def manage_users():
                 return jsonify({
                     'success': True,
                     'invite_token': token,
-                    'invite_url': f"{request.host_url.rstrip('/')}/registro?invite={token}",
+                    # EL ENLACE APUNTA AL PORTAL, NO AL BACKEND.
+                    # Antes se construia con `request.host_url`, que es el host
+                    # del BACKEND. En un despliegue real el portal vive en otro
+                    # dominio (backend y portal son servicios distintos), asi que
+                    # el enlace que la entidad repartia a su equipo llevaba a un
+                    # sitio sin pagina de registro: nadie podia darse de alta.
+                    # `_origen_del_cliente()` ya resuelve esto bien para el
+                    # restablecimiento de contrasena -- valida el Origin contra
+                    # la lista blanca y, si no lo hay, cae en APP_URL -- y es la
+                    # misma pregunta: ¿a que web mando a esta persona?
+                    'invite_url': f"{_origen_del_cliente()}/registro?invite={token}",
                     'nota': 'Comparte este enlace con la persona invitada. Caduca en 14 días.'
                 }), 201
         except Exception as e:
