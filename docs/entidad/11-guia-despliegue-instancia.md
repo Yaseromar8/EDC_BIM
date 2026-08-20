@@ -104,6 +104,22 @@ Sin alguna de estas, la instancia no funciona o no es segura.
 > de su propio expediente sin nadie que pueda ayudarla. Se enciende **después** de
 > que el administrador tenga el 2FA activo (paso 5.4).
 
+### 3.2 bis · La valvula de emergencia
+
+`ESQUEMA_ESTRICTO` — **no la definas.** Su valor por defecto (bloquear) es el
+correcto: un servicio que arranca sobre un esquema que no es el que su codigo
+espera hace daño en silencio, y asi aparecio el HTTP 500 del segundo factor.
+
+Existe para una sola situacion: la noche en que el arranque se detiene, hay que
+servir igual, y se repara despues. Poniendola en `false` el servicio arranca y
+grita en el log en cada arranque lo que falta. **Se quita en cuanto se repara.**
+
+Se anadio el 20-ago-2026 despues de que esta comprobacion detuviera dos
+despliegues seguidos por dos errores de quien la escribio, sin que hubiera un
+solo problema real en la base. La leccion no fue aflojar el control: fue que un
+control nuevo se prueba contra una base CON HISTORIA antes de desplegarlo, no
+solo contra una recien creada, donde todo es perfecto por construccion.
+
 ### 3.3 · OPCIONALES (dejar sin definir salvo necesidad)
 
 `REDIS_URL` (exactitud del limitador con varios procesos; con un solo worker no

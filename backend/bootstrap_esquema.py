@@ -38,6 +38,11 @@ USO
 
     --verificar   no construye: solo comprueba que no falte nada y que la aplicacion
                   no necesite DDL. Devuelve codigo 1 si algo falta.
+
+VALVULA DE EMERGENCIA
+    ESQUEMA_ESTRICTO=false  arranca aunque falte algo, gritandolo en el log.
+    No es para uso normal: es para la noche en que hay que servir igual y
+    reparar despues. Quitala en cuanto se repare.
 """
 
 import argparse
@@ -468,6 +473,37 @@ def regenerar_manifiesto():
     print('manifiestos regenerados.')
 
 
+def _codigo_de_salida(completo):
+    """0 o 1, y la valvula de emergencia.
+
+    POR DEFECTO BLOQUEA, Y ESO NO SE TOCA. Un servicio que arranca sobre un
+    esquema que no es el que su codigo espera hace daño en silencio: asi
+    aparecio el HTTP 500 del segundo factor, meses despues de desplegarse.
+
+    Pero `ESQUEMA_ESTRICTO=false` existe, y existe a proposito. El 20-ago-2026
+    esta comprobacion bloqueo DOS despliegues seguidos por dos errores MIOS --
+    comparar nombres de restricciones autogenerados, y comparar mayusculas con
+    minusculas-- sin que hubiera un solo problema real en la base. A las once de
+    la noche, con un cliente esperando, alguien tiene que poder decir «arranca
+    igual, yo asumo». Lo que no seria profesional es que eso fuera el defecto.
+
+    Por eso, cuando la valvula esta abierta, se grita en CADA arranque: una
+    excepcion silenciosa deja de ser excepcion y pasa a ser la nueva normalidad.
+    """
+    if completo:
+        return 0
+    if (os.getenv('ESQUEMA_ESTRICTO') or 'true').strip().lower() in ('false', '0', 'no'):
+        print('')
+        print('!' * 70)
+        print('!!  ESQUEMA INCOMPLETO Y SE ARRANCA IGUAL (ESQUEMA_ESTRICTO=false).')
+        print('!!  Los objetos de arriba NO estan. Lo que dependa de ellos fallara,')
+        print('!!  y fallara mas tarde y peor que aqui. Esto es una excepcion')
+        print('!!  temporal: quita la variable en cuanto se reparen.')
+        print('!' * 70)
+        return 0
+    return 1
+
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description='Construye el esquema del ECD. No mueve datos.')
     ap.add_argument('--verificar', action='store_true',
@@ -485,7 +521,7 @@ if __name__ == '__main__':
         # Devolver siempre 0 convertia esto en un adorno -- y si alguien lo
         # enchufa a un despliegue o a integracion continua, en un adorno que
         # ademas da tranquilidad falsa.
-        raise SystemExit(0 if completo else 1)
+        raise SystemExit(_codigo_de_salida(completo))
     print('BOOTSTRAP DEL ESQUEMA · destino: %s' % os.getenv('DB_HOST'))
     fallos = construir()
     print()
@@ -511,4 +547,4 @@ if __name__ == '__main__':
         print('%d rutina(s) fallaron pero el esquema quedo COMPLETO.' % len(fallos))
         print('Normalmente significa que esta identidad no es dueña de esas '
               'tablas, que es lo correcto. Revisa las lineas FALLO de arriba.')
-    raise SystemExit(0 if completo else 1)
+    raise SystemExit(_codigo_de_salida(completo))

@@ -126,10 +126,21 @@ def test_el_bootstrap_cubre_las_tablas_que_el_codigo_sabe_crear():
 # devolver siempre 0 convertia `--verificar` en un adorno que ademas tranquiliza.
 
 def test_la_comprobacion_devuelve_codigo_segun_lo_que_encuentra():
+    """La ayuda del guion promete «codigo 1 si algo falta». Devolver siempre 0
+    lo convertiria en un adorno que ademas tranquiliza.
+
+    Se comprueba el COMPORTAMIENTO. La version anterior exigia la cadena literal
+    `SystemExit(0 if completo else 1)`, asi que mover esa decision a una funcion
+    --que es donde debe estar-- ponia la prueba en rojo sin que nada se hubiera
+    roto. Es la tercera prueba de este fichero que fijaba texto en vez de efecto.
+    """
+    import bootstrap_esquema as be
     fuente = _fuente('bootstrap_esquema.py')
     main = fuente[fuente.index("if __name__ == '__main__':"):]
-    assert 'SystemExit(0 if completo else 1)' in main, (
-        '--verificar tiene que devolver 1 cuando falta algo, como promete su ayuda')
+    assert main.count('_codigo_de_salida(completo)') == 2, (
+        'los DOS caminos --verificar y construir-- deciden igual')
+    assert be._codigo_de_salida(False) == 1
+    assert be._codigo_de_salida(True) == 0
 
 
 def test_el_codigo_de_salida_mira_el_RESULTADO_y_no_los_fallos():
@@ -140,10 +151,16 @@ def test_el_codigo_de_salida_mira_el_RESULTADO_y_no_los_fallos():
 
     Y al reves seria peor: dar por bueno un esquema incompleto porque ninguna
     rutina «fallo» es como se llego a N57."""
-    fuente = _fuente('bootstrap_esquema.py')
-    main = fuente[fuente.index("if __name__ == '__main__':"):]
-    assert 'SystemExit(1 if (fallos or not completo) else 0)' not in main
-    assert main.count('SystemExit(0 if completo else 1)') == 2
+    import inspect
+    import bootstrap_esquema as be
+    firma = inspect.signature(be._codigo_de_salida)
+    assert list(firma.parameters) == ['completo'], (
+        'el codigo de salida solo puede depender del RESULTADO. Si recibiera los '
+        'fallos, un ALTER rechazado por no ser dueño --que es la separacion de '
+        'identidades funcionando-- tumbaria el despliegue')
+    # Los fallos SI se imprimen --uno a uno, para poder leerlos en el log-- pero
+    # no entran en la decision. Eso lo garantiza la firma de arriba: la funcion
+    # no puede mirar lo que no recibe.
 
 
 def test_la_comprobacion_compara_con_nombre_y_no_cuenta():
@@ -440,3 +457,48 @@ def test_el_manifiesto_no_guarda_nombres_de_restricciones_ni_de_indices():
     for n in esperado['indice']:
         assert n.startswith('create '), 'un indice se guarda como su sentencia'
         assert ' index on ' in n, 'la sentencia va sin el nombre del indice'
+
+
+# ── La valvula de emergencia ──────────────────────────────────────────────
+
+def test_por_defecto_un_esquema_incompleto_DETIENE_el_arranque():
+    """Fail fast. Un servicio que arranca sobre un esquema que no es el que su
+    codigo espera hace daño en silencio: asi aparecio el HTTP 500 del segundo
+    factor, meses despues de desplegarse."""
+    import os
+    import bootstrap_esquema as be
+    antes = os.environ.pop('ESQUEMA_ESTRICTO', None)
+    try:
+        assert be._codigo_de_salida(False) == 1
+        assert be._codigo_de_salida(True) == 0
+    finally:
+        if antes is not None:
+            os.environ['ESQUEMA_ESTRICTO'] = antes
+
+
+def test_la_valvula_existe_pero_hay_que_abrirla_a_proposito():
+    """`ESQUEMA_ESTRICTO=false` arranca igual. Existe porque el 20-ago-2026 esta
+    comprobacion bloqueo DOS despliegues seguidos por dos errores de quien la
+    escribio --comparar nombres autogenerados, y comparar mayusculas con
+    minusculas-- sin un solo problema real en la base.
+
+    A las once de la noche alguien tiene que poder decir «arranca igual, yo
+    asumo». Lo que no seria profesional es que fuera el valor por defecto: por
+    eso hay que escribirla, y por eso grita en cada arranque.
+    """
+    import os
+    import bootstrap_esquema as be
+    antes = os.environ.get('ESQUEMA_ESTRICTO')
+    try:
+        for valor in ('false', 'False', '0', 'no'):
+            os.environ['ESQUEMA_ESTRICTO'] = valor
+            assert be._codigo_de_salida(False) == 0, valor
+        # Cualquier otra cosa NO abre la valvula: ante la duda, se bloquea.
+        for valor in ('true', '', 'si', 'sí', 'quizas'):
+            os.environ['ESQUEMA_ESTRICTO'] = valor
+            assert be._codigo_de_salida(False) == 1, valor
+    finally:
+        if antes is None:
+            os.environ.pop('ESQUEMA_ESTRICTO', None)
+        else:
+            os.environ['ESQUEMA_ESTRICTO'] = antes
