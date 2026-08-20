@@ -150,7 +150,13 @@ def test_las_rutas_del_visor_declaradas_sobre_la_app_no_se_sirven():
         'sys.path.insert(0, %r)' % BACKEND,
         'import server',
         'c = server.app.test_client()',
-        "rutas = ['/api/inventory', '/api/hubs', '/api/civil/base-axis', '/api/images/proxy']",
+        # OJO CON '/api/hubs': NO va aqui. Existe dos veces -- contra Autodesk
+        # en server.py y contra la base local en routes/projects.py, que es de
+        # donde el portal saca las municipalidades. Esta lista lo daba por
+        # ruta del visor, y esa suposicion es la que dejo la pantalla de
+        # proyectos vacia en la instancia de ensayo. Se prueba aparte, abajo.
+        "rutas = ['/api/inventory', '/api/civil/base-axis', '/api/images/proxy',",
+        "         '/api/hubs/b.x/projects/y/topFolders', '/api/build/status']",
         'res = {r: c.get(r).status_code for r in rutas}',
         "print('RES::' + json.dumps(res))",
     ])
@@ -166,3 +172,42 @@ def test_las_rutas_del_visor_declaradas_sobre_la_app_no_se_sirven():
     assert not servidas, (
         'el perfil portal SIRVE rutas del visor (deberian ser 404): '
         + ', '.join('%s->%s' % (r_, res[r_]) for r_ in servidas))
+
+
+def test_el_portal_conserva_su_propia_ruta_de_hubs():
+    """`/api/hubs` existe DOS veces: aqui contra Autodesk (server.py) y en
+    routes/projects.py contra la base local, que es de donde el portal saca las
+    municipalidades y sus obras.
+
+    El recorte de perimetro por prefijo no puede distinguirlas, y al cortar
+    '/api/hubs' mataba tambien la del portal. Medido el 20-ago-2026 MIRANDO LA
+    PANTALLA de la instancia de ensayo: `/api/hubs` devolvia 404, el navegador
+    lo bloqueaba por CORS, y eso hacia saltar la funcion que carga la pantalla
+    de proyectos ANTES de pedir `/api/projects`. La entidad veia "No hay
+    proyectos" y no llegaba a ningun documento.
+
+    Un bloqueante que ninguna prueba de API podia ver, porque por API cada
+    llamada funcionaba por separado.
+
+    Las de Autodesk se apagan por PERFIL (`_ruta_del_visor`), que sabe cual es
+    cual; el recorte por cadena no.
+    """
+    import io
+    import os
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    fuente = io.open(os.path.join(raiz, 'server.py'), encoding='utf-8').read()
+
+    i = fuente.index('_SOLO_DEL_VISOR = (')
+    lista = fuente[i:fuente.index('\n)', i)]
+    # Solo las lineas que declaran algo, no los comentarios: la version anterior
+    # de esta asercion casaba con el comentario que explica por que NO esta.
+    declaradas = [l.strip() for l in lista.splitlines()
+                  if l.strip().startswith("'") or l.strip().startswith('"')]
+    assert not any('/api/hubs' in l for l in declaradas), (
+        'cortar /api/hubs por prefijo deja la pantalla de proyectos vacia: '
+        'el portal tiene su propia ruta con ese camino')
+
+    assert 'def _ruta_del_visor' in fuente, (
+        'las rutas de Autodesk se apagan por perfil, no por cadena')
+    assert "@_ruta_del_visor('/api/hubs')" in fuente, (
+        'la de Autodesk SI debe apagarse en perfil portal')

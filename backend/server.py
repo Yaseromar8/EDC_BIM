@@ -78,7 +78,10 @@ _SOLO_DEL_VISOR = (
     '/api/inventory',          # inventario de elementos del modelo 3D
     '/api/civil/',             # eje base y utilidades de Civil 3D
     '/api/build/',             # subida y traduccion contra ACC
-    '/api/hubs',               # navegacion de hubs/proyectos de Autodesk
+    # '/api/hubs' YA NO se recorta aqui: el portal tiene SU PROPIA ruta con
+    # ese camino (routes/projects.py), y cortarla por prefijo dejaba la
+    # pantalla de proyectos vacia. La de Autodesk se apaga con
+    # `_ruta_del_visor`, que distingue por perfil y no por cadena.
     '/api/images/proxy',       # proxy de imagenes del visor
     '/api/documents/link',     # enlace a documento de ACC
 )
@@ -678,7 +681,35 @@ def get_viewer_token():
 
 # --- APS DATA ROUTES ---
 
-@app.route('/api/hubs')
+def _ruta_del_visor(*args, **kwargs):
+    """`@app.route` que NO se registra en perfil portal.
+
+    POR QUE HACE FALTA, Y NO BASTA CON RECORTAR POR CAMINO
+    ------------------------------------------------------
+    Estas rutas hablan con Autodesk, y sus caminos CHOCAN con los del portal:
+    `/api/hubs` y `/api/hubs/<id>/projects` existen dos veces -- aqui contra
+    APS, y en routes/projects.py contra la base local, que es de donde el
+    portal saca las municipalidades y sus obras.
+
+    Como estas se declaran al importar el modulo y el blueprint se registra
+    despues, ESTAS GANABAN. Y el recorte por prefijo de `_SOLO_DEL_VISOR`, al
+    no poder distinguirlas, mataba tambien la del portal.
+
+    Medido el 20-ago-2026 sobre la instancia de ensayo, mirando la pantalla y
+    no la API: `/api/hubs` devolvia 404, el navegador lo bloqueaba por CORS, y
+    eso hacia SALTAR la funcion que carga la pantalla de proyectos ANTES de
+    pedir `/api/projects`. Resultado: el portal de la entidad decia "No hay
+    proyectos" y no habia forma de llegar a ningun documento.
+
+    Un bloqueante que ninguna prueba de API podia ver, porque por API cada
+    llamada funcionaba por separado.
+    """
+    if PERFIL_DESPLIEGUE == 'portal':
+        return lambda fn: fn        # no se registra: en portal no existe
+    return app.route(*args, **kwargs)
+
+
+@_ruta_del_visor('/api/hubs')
 def get_hubs():
     token, error = get_internal_token()
     if error: return jsonify({'error': error}), 500
@@ -686,7 +717,7 @@ def get_hubs():
     if error: return jsonify({'error': error}), 500
     return jsonify(data)
 
-@app.route('/api/hubs/<hub_id>/projects')
+@_ruta_del_visor('/api/hubs/<hub_id>/projects')
 def get_projects(hub_id):
     token, error = get_internal_token()
     if error: return jsonify({'error': error}), 500
@@ -694,7 +725,7 @@ def get_projects(hub_id):
     if error: return jsonify({'error': error}), 500
     return jsonify(data)
 
-@app.route('/api/hubs/<hub_id>/projects/<project_id>/topFolders')
+@_ruta_del_visor('/api/hubs/<hub_id>/projects/<project_id>/topFolders')
 def get_top_folders(hub_id, project_id):
     token, error = get_internal_token()
     if error: return jsonify({'error': error}), 500
@@ -702,7 +733,7 @@ def get_top_folders(hub_id, project_id):
     if error: return jsonify({'error': error}), 500
     return jsonify(data)
 
-@app.route('/api/projects/<project_id>/folders/<folder_id>/contents')
+@_ruta_del_visor('/api/projects/<project_id>/folders/<folder_id>/contents')
 def get_folder_contents(project_id, folder_id):
     token, error = get_internal_token()
     if error: return jsonify({'error': error}), 500
@@ -710,7 +741,7 @@ def get_folder_contents(project_id, folder_id):
     if error: return jsonify({'error': error}), 500
     return jsonify(data)
 
-@app.route('/api/projects/<project_id>/items/<item_id>/versions')
+@_ruta_del_visor('/api/projects/<project_id>/items/<item_id>/versions')
 def get_item_versions(project_id, item_id):
     token, error = get_internal_token()
     if error: return jsonify({'error': error}), 500
