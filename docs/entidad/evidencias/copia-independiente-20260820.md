@@ -50,7 +50,41 @@ aplicación escribe los documentos del expediente
 | Caída de la región `us-east4` | **no.** Ambos buckets están en la misma región. Es una decisión consciente: la copia protege de borrados y de perder el bucket, no de un desastre regional |
 | Los ficheros de hace más de 24 h que se borren y se vacíen del soft delete antes de la siguiente transferencia | ventana teórica; con soft delete a 90 días no ocurre |
 
-## COMPROBADO — y NO cumple «permisos separados»
+## CERRADO — «permisos separados» se cumple (20-ago-2026, misma tarde)
+
+Se hizo en el orden seguro: conceder primero, comprobar, retirar despues.
+
+1. `visor-backend@…` recibio **Administrador de objetos de Storage** sobre
+   `yaser-pqt08-talara`, **a nivel de bucket**.
+2. Se retiro ese mismo rol **a nivel de proyecto**, dejandole los otros tres que
+   la pantalla de IAM mostraba y que si necesita:
+   **Cliente de Cloud SQL** (sin el pierde la base entera), **Usuario de Agent
+   Platform** (Vertex) y **Visualizador de Discovery Engine**. Ninguno de los
+   tres necesita Storage — que es lo que hacia seguro quitarlo.
+3. **Verificado por comportamiento:** el portal sigue abriendo documentos.
+
+Antes de tocar nada se comprobo en el codigo que TODO acceso a bucket de la
+aplicacion usa la misma variable `GCS_BUCKET_NAME` — incluida la IA, que lee los
+PDF de ese mismo bucket (`routes/ai.py:285, 346, 836`). La unica operacion que
+exigiria mando sobre el bucket entero (poner el CORS, `apply_cors.py`) es un
+guion suelto que no corre en produccion.
+
+**Resultado: la credencial de la aplicacion ya no alcanza el bucket de la
+copia.** Si esa credencial se ve comprometida, la copia sobrevive.
+
+### Lo que sigue teniendo alcance sobre los dos buckets
+
+- `1009984221602-compute@developer.gserviceaccount.com` con **Administrador de
+  almacenamiento** del proyecto — rol aun mas fuerte: incluye borrar buckets.
+- **Editores del proyecto**, como propietarios de buckets y objetos.
+
+No son la credencial que la aplicacion lleva encima, que era el riesgo concreto,
+pero cualquiera de los dos alcanza la copia. Van a la lista de despues del
+piloto.
+
+---
+
+## (El hallazgo original, ya resuelto)
 
 Medido en la consola el 20-ago-2026, pestaña **Permisos** del bucket de la copia:
 
