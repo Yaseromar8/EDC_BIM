@@ -81,7 +81,7 @@ Sin alguna de estas, la instancia no funciona o no es segura.
 | `GOOGLE_APPLICATION_CREDENTIALS` | ruta del Secret File | subir y descargar fallan con 500 |
 | `APP_SECRET` | **Generate** (≥32) | la clave de firma se deriva de la credencial de la base |
 | `SESSION_PEPPER` | **Generate** (≥32) | la pimienta efectiva es una constante pública del repositorio |
-| `CORS_ORIGINS` | la URL del portal (paso 4) | por defecto vacío → **el backend acepta cualquier origen** |
+| `CORS_ORIGINS` | **solo** la URL del portal (paso 4) | por defecto vacío → **el backend acepta cualquier origen**. Y **nada de `localhost`**: en la instancia del propietario están para poder desarrollar contra producción, pero en la de una entidad significarían que una página servida desde el localhost de cualquiera puede hablar con su backend |
 | `DDL_EN_CALIENTE` | `false` | por defecto `true`: la aplicación puede alterar su propio esquema |
 | `ENFORCE_PROJECT_AUTHZ` | `true` | **por defecto `false`**: no se comprueba la pertenencia a la obra |
 | `AUTH_POLICY_MODE` | `estricto` | **por defecto `sombra`**: los decoradores de rol no bloquean a nadie |
@@ -159,6 +159,23 @@ suelto; la de verdad es `DB_PASS`) · `ACC_PROJECT_ID`, `ACC_FOLDER_URN`,
 - **Variable de build:** `VITE_BACKEND_URL` = la URL del backend del paso 3.
 - Anotar la URL resultante, ponerla en `CORS_ORIGINS` y `APP_URL` del backend, y
   redesplegar el backend una vez.
+
+### 3.6 · Una variable de seguridad no es un bloc de notas
+
+Comprobado en producción el 20-ago-2026: `CORS_ORIGINS` llevaba pegadas tres
+líneas de una tabla de esta misma guía —`DDL_EN_CALIENTE false`,
+`APP_SECRET pulsa Generate`, `SESSION_PEPPER pulsa Generate`— dentro del propio
+valor, con saltos de línea y tabulaciones.
+
+No abría ningún agujero: una cadena así no coincide con ningún origen. Pero
+estaba ahí, y el día que alguien lea esa variable para depurar algo pierde una
+hora. **Al copiar de una tabla, se copia el valor, no la fila.**
+
+Se ve en el log de arranque, que imprime la lista ya troceada:
+
+    [security] CORS restringido a: ['https://…', 'https://…']
+
+Si ahí aparece algo que no es una URL, la variable está sucia.
 
 ## 5 · Verificación — nada se da por bueno sin medirlo
 
