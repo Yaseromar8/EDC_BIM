@@ -327,3 +327,52 @@ def test_ningun_ddl_sin_guardia_en_camino_de_peticion():
         'DDL sin guardia dentro de un manejador HTTP: el interruptor no lo tapa '
         'y la aplicacion sigue necesitando privilegio de esquema en produccion: '
         + ', '.join(sorted(sueltos)))
+
+
+def test_las_columnas_se_miran_en_el_CATALOGO_no_en_information_schema():
+    """`information_schema` FILTRA POR PRIVILEGIOS. El catalogo, no.
+
+    Paso de verdad el 19-ago-2026: contra la base de desarrollo, `ecd_app` no
+    tiene permiso sobre el esquema `ai_brain`, asi que information_schema
+    devolvia CERO columnas de global_knowledge, semantic_triples y
+    feedback_buffer -- 26 columnas que estaban perfectamente ahi. La
+    comprobacion las cantaba como ausentes y habria tumbado el despliegue por
+    la separacion de identidades funcionando, que es justo lo contrario de lo
+    que persigue.
+    """
+    import bootstrap_esquema as be
+    sql = be._CONSULTAS['columna']
+    assert 'information_schema' not in sql, (
+        'information_schema filtra por privilegios: no sirve para inventariar')
+    assert 'pg_attribute' in sql, 'las columnas salen del catalogo'
+    assert 'attisdropped' in sql, 'una columna borrada no cuenta como presente'
+
+
+def test_lo_condicional_solo_se_exige_si_su_interruptor_esta_puesto():
+    """El manifiesto se congela con la configuracion recomendada, asi que un
+    objeto que solo existe con su interruptor puesto queda dentro como si fuera
+    obligatorio siempre. El CHECK de estados lo crea ECD_CANDADO_ESTADOS=true;
+    exigirlo a secas tumbaba la comprobacion en cualquier instancia que
+    legitimamente corra sin el.
+
+    Exigir de mas es tan malo como exigir de menos: la primera vez que una
+    comprobacion falla por algo que no esta mal, se empieza a ignorar.
+    """
+    import os
+    import bootstrap_esquema as be
+    clave = ('restriccion', 'file_nodes.file_nodes_status_valido')
+    assert clave in be._CONDICIONALES
+
+    antes = os.environ.get('ECD_CANDADO_ESTADOS')
+    try:
+        os.environ['ECD_CANDADO_ESTADOS'] = 'false'
+        assert be._exigible(*clave) is False
+        os.environ['ECD_CANDADO_ESTADOS'] = 'true'
+        assert be._exigible(*clave) is True
+        # Lo que NO es condicional se exige siempre.
+        assert be._exigible('columna', 'totp_recuperacion.pimienta') is True
+    finally:
+        if antes is None:
+            os.environ.pop('ECD_CANDADO_ESTADOS', None)
+        else:
+            os.environ['ECD_CANDADO_ESTADOS'] = antes

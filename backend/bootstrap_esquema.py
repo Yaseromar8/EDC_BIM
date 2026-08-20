@@ -264,9 +264,22 @@ _PLURAL = {'tabla': 'tablas', 'columna': 'columnas', 'restriccion': 'restriccion
 _CONSULTAS = {
     'tabla': """SELECT tablename FROM pg_tables
                  WHERE schemaname IN ('public','ai_brain')""",
-    'columna': """SELECT table_name || '.' || column_name
-                    FROM information_schema.columns
-                   WHERE table_schema IN ('public','ai_brain')""",
+    # EL CATALOGO, NO information_schema.
+    # `information_schema` FILTRA POR PRIVILEGIOS: solo enseña las columnas de las
+    # tablas sobre las que el usuario actual tiene algo concedido. Medido: contra
+    # la base de desarrollo, `ecd_app` no tiene permiso sobre el esquema
+    # `ai_brain`, asi que information_schema devolvia CERO columnas de
+    # global_knowledge, semantic_triples y feedback_buffer -- y esta comprobacion
+    # cantaba 26 columnas ausentes que estaban perfectamente ahi. Es decir,
+    # tomaba la separacion de identidades por un esquema roto y habria tumbado el
+    # despliegue justo por hacer las cosas bien. `pg_attribute` es el catalogo y
+    # no filtra: dice lo que hay, lo pueda leer quien pregunta o no.
+    'columna': """SELECT c.relname || '.' || a.attname
+                    FROM pg_class c
+                    JOIN pg_namespace n ON n.oid = c.relnamespace
+                    JOIN pg_attribute a ON a.attrelid = c.oid
+                   WHERE n.nspname IN ('public','ai_brain')
+                     AND c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped""",
     'restriccion': """SELECT c.conrelid::regclass::text || '.' || c.conname
                         FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
                        WHERE n.nspname IN ('public','ai_brain')""",
@@ -278,6 +291,26 @@ _CONSULTAS = {
 }
 
 _FICHERO_OBJETOS = 'esquema_objetos.txt'
+
+# OBJETOS QUE SOLO EXISTEN SI SU INTERRUPTOR ESTA PUESTO.
+# El manifiesto se congela midiendo una base construida con la configuracion
+# recomendada, asi que un objeto condicional queda dentro como si fuera
+# obligatorio siempre. Medido: el CHECK de estados solo lo crea
+# ECD_CANDADO_ESTADOS=true, y exigirlo sin mirar el interruptor tumbaba la
+# comprobacion en cualquier instancia que legitimamente corra sin el.
+# Exigir de mas es tan malo como exigir de menos: la primera vez que una
+# comprobacion falla por algo que no esta mal, se empieza a ignorar.
+_CONDICIONALES = {
+    ('restriccion', 'file_nodes.file_nodes_status_valido'): 'ECD_CANDADO_ESTADOS',
+}
+
+
+def _exigible(tipo, nombre):
+    """¿Este objeto hace falta con la configuracion de AHORA?"""
+    interruptor = _CONDICIONALES.get((tipo, nombre))
+    if not interruptor:
+        return True
+    return (os.getenv(interruptor) or '').strip().lower() in ('true', '1', 'yes')
 
 
 def _ruta(nombre):
@@ -346,7 +379,8 @@ def verificar():
         if esperadas_tablas:
             esperado['tabla'] |= esperadas_tablas
         for tipo in _TIPOS:
-            faltan_por_tipo[tipo] = sorted(esperado[tipo] - presente[tipo])
+            faltan_por_tipo[tipo] = sorted(n for n in (esperado[tipo] - presente[tipo])
+                                           if _exigible(tipo, n))
 
     for tipo in _TIPOS:
         if tipo not in faltan_por_tipo:
