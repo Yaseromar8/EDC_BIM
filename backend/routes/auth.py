@@ -1112,8 +1112,12 @@ def dfa_setup():
             cur = conn.cursor()
             # Solo se pisa el secreto si el 2FA NO esta activo: si lo estuviera,
             # esta seria la forma de anularlo desde una sesion robada.
+            # Se guarda CIFRADO. En claro, una copia de la base bastaba para
+            # generar codigos validos de cualquier cuenta, para siempre -- y la
+            # copia de seguridad lo llevaba dentro.
             cur.execute('UPDATE users SET totp_secreto = %s WHERE id = %s'
-                        '   AND COALESCE(totp_activo, FALSE) = FALSE', (secreto, u['id']))
+                        '   AND COALESCE(totp_activo, FALSE) = FALSE',
+                        (dfa.cifrar_secreto(secreto), u['id']))
             if not cur.rowcount:
                 return jsonify({'error': 'El segundo factor ya está activo. '
                                          'Desactívalo antes de volver a darlo de alta.'}), 409
@@ -1145,7 +1149,14 @@ def dfa_activar():
                 return jsonify({'error': 'Primero hay que generar el secreto.'}), 400
             if fila[1]:
                 return jsonify({'error': 'El segundo factor ya está activo.'}), 409
-            if not dfa.comprobar(fila[0], codigo_dado):
+            try:
+                secreto_claro = dfa.descifrar_secreto(fila[0])
+            except dfa.SecretoIlegible:
+                return jsonify({
+                    'error': 'Se rotó la clave del servidor y este secreto ya no '
+                             'se puede leer. Vuelve a dar de alta el segundo factor.',
+                    'code': 'SECRETO_ILEGIBLE'}), 409
+            if not dfa.comprobar(secreto_claro, codigo_dado):
                 registrar_evento('2fa_activacion_fallida', email=u.get('email'), user_id=u['id'])
                 return jsonify({'error': 'El código no es válido.'}), 400
 
@@ -1192,7 +1203,14 @@ def dfa_verify():
             if not fila:
                 return jsonify({'error': 'El desafío no es válido.'}), 401
 
-            valido = dfa.consumir(cur, uid, fila[6], codigo_dado)
+            try:
+                secreto_claro = dfa.descifrar_secreto(fila[6])
+            except dfa.SecretoIlegible:
+                # No es «el codigo no vale»: es «ya no puedo leer tu secreto».
+                # Son cosas distintas y llevan a acciones distintas, asi que se
+                # dicen distinto. Le quedan sus codigos de recuperacion.
+                secreto_claro = None
+            valido = bool(secreto_claro) and dfa.consumir(cur, uid, secreto_claro, codigo_dado)
             if not valido and codigo_dado:
                 # Codigo de recuperacion: de un solo uso. Se marca usado DENTRO de la
                 # misma sentencia, para que dos intentos a la vez no canjeen el mismo.
@@ -1261,7 +1279,11 @@ def dfa_desactivar():
                 return jsonify({'error': 'El segundo factor no está activo.'}), 400
             # Quitar la proteccion tambien canjea el codigo: si vale una vez, no
             # puede valer otra. Es la accion que deja la cuenta desnuda.
-            if not dfa.consumir(cur, u['id'], fila[0], codigo_dado):
+            try:
+                secreto_claro = dfa.descifrar_secreto(fila[0])
+            except dfa.SecretoIlegible:
+                secreto_claro = None
+            if not secreto_claro or not dfa.consumir(cur, u['id'], secreto_claro, codigo_dado):
                 registrar_evento('2fa_desactivacion_fallida', email=u.get('email'), user_id=u['id'])
                 return jsonify({'error': 'El código no es válido.'}), 400
             cur.execute('UPDATE users SET totp_activo = FALSE, totp_secreto = NULL,'

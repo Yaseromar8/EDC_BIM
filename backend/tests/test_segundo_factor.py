@@ -193,3 +193,89 @@ def test_comprobar_sigue_diciendo_si_sin_canjear():
     c = dfa.codigo(secreto)
     assert dfa.comprobar(secreto, c) is True
     assert dfa.comprobar(secreto, c) is True
+
+
+# ── El secreto TOTP, cifrado en reposo ────────────────────────────────────
+
+def _con_clave(valor):
+    import os
+    os.environ['APP_SECRET'] = valor
+
+
+def test_el_secreto_guardado_no_contiene_el_secreto():
+    """Se guardaba EN CLARO en users.totp_secreto, y con el se generan codigos
+    validos infinitos. Lo grave era por donde salia: LA COPIA DE SEGURIDAD lo
+    llevaba dentro, y ese fichero se descarga, se guarda y se mueve.
+
+    Medido el 20-ago-2026 sobre la copia real: antes aparecia el secreto tal
+    cual; ahora solo la forma cifrada.
+    """
+    import os
+    import segundo_factor as dfa
+    antes = os.environ.get('APP_SECRET')
+    try:
+        _con_clave('una-clave-de-prueba-suficientemente-larga-0001')
+        secreto = dfa.secreto_nuevo()
+        guardado = dfa.cifrar_secreto(secreto)
+        assert guardado.startswith('v1:')
+        assert secreto not in guardado, 'el secreto no puede aparecer en lo guardado'
+        assert dfa.descifrar_secreto(guardado) == secreto
+    finally:
+        if antes is None:
+            os.environ.pop('APP_SECRET', None)
+        else:
+            os.environ['APP_SECRET'] = antes
+
+
+def test_si_se_rota_la_clave_lo_DICE_en_vez_de_fallar_en_silencio():
+    """Rotar APP_SECRET deja los secretos ilegibles. Eso ya paso con la pimienta
+    y los codigos de recuperacion, y lo grave no fue perderlos: fue que el
+    sistema seguia diciendo que estaban bien.
+
+    «El codigo no vale» y «ya no puedo leer tu secreto» son cosas distintas y
+    llevan a acciones distintas."""
+    import os
+    import segundo_factor as dfa
+    antes = os.environ.get('APP_SECRET')
+    try:
+        _con_clave('clave-original-de-esta-instancia-000000001')
+        guardado = dfa.cifrar_secreto(dfa.secreto_nuevo())
+        _con_clave('clave-nueva-tras-una-rotacion-00000000002')
+        try:
+            dfa.descifrar_secreto(guardado)
+            assert False, 'no deberia poder descifrarse con otra clave'
+        except dfa.SecretoIlegible:
+            pass
+    finally:
+        if antes is None:
+            os.environ.pop('APP_SECRET', None)
+        else:
+            os.environ['APP_SECRET'] = antes
+
+
+def test_los_secretos_anteriores_al_cifrado_se_siguen_leyendo():
+    """Migrar no puede dejar fuera a quien ya tenia el 2FA puesto: su secreto
+    esta en claro hasta que el bootstrap lo cifre, y mientras tanto tiene que
+    seguir entrando."""
+    import segundo_factor as dfa
+    viejo = dfa.secreto_nuevo()          # tal cual, sin prefijo
+    assert dfa.descifrar_secreto(viejo) == viejo
+
+
+def test_sin_APP_SECRET_no_se_inventa_una_clave():
+    """Sin clave no se puede cifrar. Lo que NO puede hacer es derivar una de la
+    base --que es justo de lo que se protege-- ni romper el alta: se guarda como
+    antes y se avisa."""
+    import os
+    import segundo_factor as dfa
+    antes_a = os.environ.pop('APP_SECRET', None)
+    antes_p = os.environ.pop('SESSION_PEPPER', None)
+    try:
+        assert dfa._clave_de_cifrado() is None
+        secreto = dfa.secreto_nuevo()
+        assert dfa.cifrar_secreto(secreto) == secreto
+    finally:
+        if antes_a is not None:
+            os.environ['APP_SECRET'] = antes_a
+        if antes_p is not None:
+            os.environ['SESSION_PEPPER'] = antes_p

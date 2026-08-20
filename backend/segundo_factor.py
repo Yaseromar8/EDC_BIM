@@ -65,6 +65,96 @@ def codigo(secreto, momento=None):
     return str(truncado % (10 ** DIGITOS)).zfill(DIGITOS)
 
 
+# ── El secreto TOTP, cifrado en reposo ─────────────────────────────────────
+# POR QUE
+# -------
+# Se guardaba en claro en `users.totp_secreto`. Y ese secreto es MAS peligroso
+# que un codigo suelto: con el se generan codigos validos infinitos, para
+# siempre. Lo grave no era la base en si, era por donde sale: LA COPIA DE
+# SEGURIDAD LO LLEVA DENTRO. Ese fichero se descarga, se guarda, se mueve --
+# quien lo tenga puede generar el segundo factor de cualquier cuenta, incluida
+# la del administrador de una entidad. El segundo factor dejaba de ser un
+# segundo factor.
+#
+# Habia ademas una ironia: los codigos de recuperacion SI iban protegidos
+# (HMAC con pimienta) y son los menos peligrosos de los dos.
+#
+# La clave sale de APP_SECRET, que vive FUERA de la base -- el mismo motivo por
+# el que la pimienta de las sesiones tampoco esta ahi. Una copia de la base, sin
+# el entorno, ya no sirve para generar codigos.
+_PREFIJO_CIFRADO = 'v1:'
+
+
+class SecretoIlegible(Exception):
+    """El secreto esta cifrado con OTRA clave. Se dice, no se falla en silencio.
+
+    Si APP_SECRET se rota, los secretos guardados dejan de poder descifrarse.
+    Eso ya paso con los codigos de recuperacion y la pimienta, y lo grave no fue
+    perderlos: fue que el sistema seguia diciendo que estaban bien. Aqui se
+    distingue «el codigo no vale» de «ya no puedo leer tu secreto», que llevan a
+    acciones distintas.
+    """
+
+
+def _clave_de_cifrado():
+    base = (os.getenv('APP_SECRET') or os.getenv('SESSION_PEPPER') or '').strip()
+    if not base:
+        return None
+    return base64.urlsafe_b64encode(hashlib.sha256(b'totp:' + base.encode()).digest())
+
+
+def huella_de_la_clave():
+    """8 caracteres que identifican QUE clave cifro un secreto. Nunca el valor."""
+    clave = _clave_de_cifrado()
+    return hashlib.sha256(clave).hexdigest()[:8] if clave else '--------'
+
+
+def cifrar_secreto(secreto):
+    """Deja el secreto listo para guardar. Sin APP_SECRET lo devuelve tal cual."""
+    if not secreto or secreto.startswith(_PREFIJO_CIFRADO):
+        return secreto
+    clave = _clave_de_cifrado()
+    if not clave:
+        logger.warning('[2fa] sin APP_SECRET: el secreto TOTP se guarda EN CLARO')
+        return secreto
+    from cryptography.fernet import Fernet
+    return '%s%s:%s' % (_PREFIJO_CIFRADO, huella_de_la_clave(),
+                        Fernet(clave).encrypt(secreto.encode()).decode())
+
+
+def descifrar_secreto(guardado):
+    """El secreto utilizable. Tolera los que quedaron en claro de antes."""
+    if not guardado or not guardado.startswith(_PREFIJO_CIFRADO):
+        return guardado          # anterior al cifrado: se lee tal cual
+    try:
+        _v, huella, token = guardado.split(':', 2)
+    except ValueError:
+        raise SecretoIlegible('el secreto guardado no tiene la forma esperada')
+    if huella != huella_de_la_clave():
+        raise SecretoIlegible('cifrado con una clave distinta de la actual')
+    from cryptography.fernet import Fernet, InvalidToken
+    try:
+        return Fernet(_clave_de_cifrado()).decrypt(token.encode()).decode()
+    except InvalidToken:
+        raise SecretoIlegible('no se puede descifrar con la clave actual')
+
+
+def cifrar_los_que_quedaron_en_claro(cursor):
+    """Migra a cifrado los secretos que se guardaron antes. Idempotente."""
+    if not _clave_de_cifrado():
+        return 0
+    cursor.execute("SELECT id, totp_secreto FROM users"
+                   " WHERE totp_secreto IS NOT NULL AND totp_secreto <> ''"
+                   "   AND totp_secreto NOT LIKE %s", (_PREFIJO_CIFRADO + '%',))
+    filas = cursor.fetchall()
+    for uid, secreto in filas:
+        cursor.execute("UPDATE users SET totp_secreto = %s WHERE id = %s",
+                       (cifrar_secreto(secreto), uid))
+    if filas:
+        logger.info('[2fa] %d secreto(s) TOTP pasados a cifrado', len(filas))
+    return len(filas)
+
+
 def paso_de(secreto, codigo_dado, momento=None):
     """El intervalo (paso de 30 s) al que corresponde el codigo, o None si no vale.
 
@@ -183,6 +273,11 @@ def huella_de_codigo(codigo_recuperacion):
 def asegurar_columnas(cursor):
     """Las columnas del segundo factor. Se llama desde el bootstrap."""
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secreto VARCHAR(64)")
+    # ENSANCHAR ANTES DE CIFRAR. El secreto en claro son 32 caracteres y cabia de
+    # sobra en VARCHAR(64); cifrado pasa de 150 y la base lo rechaza con «value
+    # too long». Si esto corriera DESPUES de la migracion de abajo, la migracion
+    # fallaria entera. El orden no es estetico.
+    cursor.execute("ALTER TABLE users ALTER COLUMN totp_secreto TYPE TEXT")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_activo BOOLEAN DEFAULT FALSE")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_activado_en TIMESTAMP WITH TIME ZONE")
     # El ultimo paso de 30 s ya canjeado. Es lo que impide reutilizar un codigo
@@ -210,6 +305,10 @@ def asegurar_columnas(cursor):
     # sentencia no puede volver a equivocarse.
     cursor.execute("UPDATE totp_recuperacion SET pimienta = %s WHERE pimienta IS NULL",
                    (huella_de_la_pimienta(),))
+    # Y los secretos TOTP que se guardaron en claro, a cifrado. Va aqui porque es
+    # el sitio por el que pasa el despliegue, y porque dejarlo para «cuando cada
+    # usuario vuelva a darse de alta» significa no hacerlo nunca.
+    cifrar_los_que_quedaron_en_claro(cursor)
 
 
 def exigido_para(rol):
