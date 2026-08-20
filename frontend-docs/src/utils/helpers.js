@@ -9,15 +9,27 @@ export const API = Capacitor.isNativePlatform()
   ? 'https://visor-ecd-backend.onrender.com'
   : (import.meta.env.VITE_BACKEND_URL || '');
 
-// URL del Visor (la ficha "Visor 3D" del Hub navega allí llevando el ticket
-// SSO). El respaldo depende del host: en localhost apunta al dev server; en
-// cualquier otro sitio, al despliegue. Antes el respaldo era SIEMPRE
-// localhost:5173, así que una build de producción sin VITE_VISOR_URL mandaba
-// al usuario a su propia máquina. Define VITE_VISOR_URL para fijarla.
+// URL del Visor. VACÍA si nadie la configura, y eso APAGA la ficha "Visor 3D"
+// del Hub (ver HubPage).
+//
+// POR QUÉ NO HAY RESPALDO AL DESPLIEGUE DEL PROVEEDOR
+// ---------------------------------------------------
+// Lo había, y apuntaba al visor del proveedor. En una instancia de entidad eso
+// significaba que un funcionario municipal pulsaba "Visor 3D" y su navegador
+// se iba a la web de OTRA empresa -- llevando en la URL un ticket SSO recién
+// emitido por SU backend (HubPage.openVisor, GatewayPanel).
+//
+// No daba acceso a nada: el ticket va firmado con el APP_SECRET de la entidad,
+// así que el backend del proveedor no puede validarlo. Pero mandaba a sus
+// usuarios fuera y dejaba un token con forma de credencial en los registros de
+// un tercero. Una municipalidad tiene todo el derecho a objetar eso.
+//
+// Ahora hay que declararla: quien contrate el visor pone VITE_VISOR_URL y ve la
+// ficha; quien no, no la ve. Explícito y sin sorpresas.
 export const VISOR_URL = import.meta.env.VITE_VISOR_URL
   || (typeof window !== 'undefined' && window.location.hostname === 'localhost'
     ? 'http://localhost:5173'
-    : 'https://visor-ecd-frontend.onrender.com');
+    : '');
 
 // ATAJOS INTERNOS Docs -> Visor 3D (boton "Frentes 3D" y overlay de frentes).
 // Apagados a proposito: se salta al visor desde DENTRO del explorador, sin

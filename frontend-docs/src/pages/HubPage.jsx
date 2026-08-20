@@ -57,6 +57,9 @@ export default function HubPage({ user, onChooseDocs, onLogout }) {
   const niceName = first ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase() : '';
 
   const openVisor = async () => {
+    // Sin destino declarado no se emite ticket. Emitirlo "por si acaso" era
+    // regalar un token a un tercero.
+    if (!VISOR_URL) return;
     try {
       const response = await apiFetch('/api/auth/handoff', { method: 'POST' });
       const data = await response.json();
@@ -120,11 +123,16 @@ export default function HubPage({ user, onChooseDocs, onLogout }) {
             locked={!isAdmin}
             lockNote="Solo administradores"
           />
-          <ProductCard
-            title="Visor 3D"
-            icon={<><path d="M12 2l8.66 5v10L12 22l-8.66-5V7L12 2z" /><path d="M12 22V12" /><path d="M3.5 7L12 12l8.5-5" /></>}
-            onClick={openVisor}
-          />
+          {/* Solo si esta instancia tiene visor contratado. Sin VITE_VISOR_URL
+              la ficha no existe: antes llevaba al visor del PROVEEDOR con un
+              ticket SSO de la entidad en la URL. Ver helpers.js. */}
+          {VISOR_URL && (
+            <ProductCard
+              title="Visor 3D"
+              icon={<><path d="M12 2l8.66 5v10L12 22l-8.66-5V7L12 2z" /><path d="M12 22V12" /><path d="M3.5 7L12 12l8.5-5" /></>}
+              onClick={openVisor}
+            />
+          )}
         </div>
       </main>
     </div>

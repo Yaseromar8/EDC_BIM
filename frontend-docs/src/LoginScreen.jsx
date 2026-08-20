@@ -2,9 +2,23 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './LoginScreen.css';
 import { Capacitor } from '@capacitor/core';
 
+// EN LA WEB SE CAE A RUTA RELATIVA, NUNCA AL BACKEND DEL PROVEEDOR.
+//
+// Aqui habia un respaldo distinto al del resto de la aplicacion: si no estaba
+// VITE_BACKEND_URL y el host no era localhost, apuntaba a
+// https://visor-ecd-backend.onrender.com -- el backend del PROVEEDOR. En una
+// instancia de entidad mal construida, esta pantalla habria mandado las
+// CREDENCIALES de sus usuarios a un tercero. El CORS del otro extremo lo
+// frenaria en la practica, pero eso es una red de seguridad, no un diseno: la
+// pantalla de login es el ultimo sitio donde se pone un destino por omision.
+//
+// `helpers.js` y `SharedViewer.jsx` ya caian a cadena vacia (mismo origen).
+// Esta era la unica copia que no. El respaldo nativo se queda: el APK de campo
+// no tiene origen propio al que caer.
 const BACKEND_URL = Capacitor.isNativePlatform()
     ? 'https://visor-ecd-backend.onrender.com'
-    : (import.meta.env.VITE_BACKEND_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://visor-ecd-backend.onrender.com'));
+    : (import.meta.env.VITE_BACKEND_URL
+        || (window.location.hostname === 'localhost' ? 'http://localhost:3000' : ''));
 
 // ── IDENTIDAD ────────────────────────────────────────────────────────────────
 // El producto necesita nombre propio: la pantalla anterior mostraba literalmente
