@@ -50,7 +50,59 @@ aplicación escribe los documentos del expediente
 | Caída de la región `us-east4` | **no.** Ambos buckets están en la misma región. Es una decisión consciente: la copia protege de borrados y de perder el bucket, no de un desastre regional |
 | Los ficheros de hace más de 24 h que se borren y se vacíen del soft delete antes de la siguiente transferencia | ventana teórica; con soft delete a 90 días no ocurre |
 
-## PENDIENTE DE COMPROBAR — y decide si «permisos separados» se cumple
+## COMPROBADO — y NO cumple «permisos separados»
+
+Medido en la consola el 20-ago-2026, pestaña **Permisos** del bucket de la copia:
+
+```
+visor-backend@correos-gmail-425301.iam.gserviceaccount.com
+Rol:      Administrador de objetos de Storage
+Herencia: PLATAFORMA BIM-TALARA        <- del PROYECTO, no del bucket
+```
+
+`visor-backend` es la cuenta de servicio de la aplicación. El permiso se
+concedió **a nivel de proyecto**, así que lo hereda sobre CUALQUIER bucket,
+incluido el de la copia recién creado. Puede leer, escribir y **borrar** ahí.
+
+**Consecuencia:** si esa credencial se ve comprometida, se lleva el original y
+la copia. La copia protege de perder el bucket y de un borrado accidental; NO
+protege de un compromiso de la credencial de la aplicación, que era la mitad del
+criterio.
+
+### Y hay más permiso amplio del que conviene
+
+En el mismo listado:
+
+- `1009984221602-compute@developer.gserviceaccount.com` (la cuenta por defecto de
+  Compute Engine) tiene **Administrador de almacenamiento** heredado del
+  proyecto — un rol aún más fuerte: incluye borrar buckets enteros.
+- **Editores del proyecto** figuran como propietarios de buckets y objetos.
+
+No son urgentes como el anterior, pero cualquiera de ellos alcanza también la
+copia. Van a la lista de después del piloto.
+
+### Cómo se cierra, y en este orden
+
+El orden importa: primero se concede lo nuevo, se comprueba que nada se rompe, y
+solo entonces se retira lo viejo. Al revés deja al servicio sin acceso a su
+propio bucket.
+
+1. En **`yaser-pqt08-talara`** (el original) → Permisos → Otorgar acceso a
+   `visor-backend@…` con **Administrador de objetos de Storage**, esta vez **a
+   nivel de bucket**.
+2. Comprobar que el portal sigue subiendo y descargando documentos.
+3. En **IAM del proyecto** → quitar a `visor-backend` el rol de Storage a nivel
+   de proyecto.
+4. Volver a Permisos del bucket de la copia: `visor-backend` ya no debe aparecer.
+
+**Cuidado antes del paso 3:** la misma cuenta se usa para la IA (el log dice
+`[AI] Credenciales cargadas solo para IA desde gcp_sa.json`). Si algo de Vertex
+AI escribe en otro bucket, quitarle el permiso de proyecto lo dejaría sin
+acceso. Hay que mirarlo antes, no después.
+
+---
+
+## (Comprobación original, ya resuelta)
 
 La credencial que usa la aplicación **no debe alcanzar el bucket de la copia**.
 Si lo alcanza, un compromiso de esa credencial se lleva las dos cosas y la copia
