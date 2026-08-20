@@ -37,7 +37,14 @@ Una base **nueva y solo suya**.
 
 ## 2 · El bucket (Google Cloud Storage)
 
-1. Bucket `ecd-<entidad>-docs`.
+1. Bucket `ecd-<entidad>-docs`. **Sin espacio de nombres jerarquico (HNS).**
+
+   > Comprobado el 20-ago-2026 sobre el bucket real: con HNS habilitado, Google
+   > **no permite activar el control de versiones de objetos** -- aparece en la
+   > lista oficial de capacidades no soportadas, junto con Bucket Lock y Object
+   > Retention Lock. La aplicacion no necesita HNS: escribe objetos con nombre
+   > plano y nunca renombra carpetas en el bucket. Renunciar a el no cuesta nada
+   > y devuelve el versionado.
 2. Cuenta de servicio `ecd-<entidad>@…` con permiso **solo sobre ese bucket**
    (`Storage Object Admin` a nivel de bucket, nunca de proyecto).
 3. Su clave JSON va al panel de Render como **Secret File**, nunca al repositorio.
