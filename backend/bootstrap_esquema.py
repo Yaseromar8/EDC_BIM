@@ -323,9 +323,18 @@ _CONDICIONALES = (
 
 
 def _exigible(tipo, nombre):
-    """¿Este objeto hace falta con la configuracion de AHORA?"""
+    """¿Este objeto hace falta con la configuracion de AHORA?
+
+    SIN MIRAR MAYUSCULAS. Los manifiestos se guardan y se comparan en
+    minusculas, asi que un fragmento escrito con la mayuscula de SQL --CHECK,
+    ANY, ARRAY-- no casaba NUNCA y el objeto condicional se exigia siempre.
+    Volvio a tumbar el despliegue de produccion el 20-ago-2026, y la prueba no
+    lo vio porque le pasaba el fragmento a mano, en mayusculas, en vez del valor
+    que produce el propio inventario.
+    """
+    nombre = (nombre or '').lower()
     for t, fragmento, interruptor in _CONDICIONALES:
-        if t == tipo and fragmento in nombre:
+        if t == tipo and fragmento.lower() in nombre:
             return (os.getenv(interruptor) or '').strip().lower() in ('true', '1', 'yes')
     return True
 

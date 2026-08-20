@@ -364,9 +364,21 @@ def test_lo_condicional_solo_se_exige_si_su_interruptor_esta_puesto():
     # test_las_restricciones_se_comparan_por_lo_que_HACEN_no_por_su_nombre.
     tipos = {t for t, _frag, _sw in be._CONDICIONALES}
     assert 'restriccion' in tipos
-    candado = ("file_nodes CHECK (((status)::text = ANY ((ARRAY['WIP'::character "
-               "varying, 'SHARED'::character varying, 'PUBLISHED'::character "
-               "varying, 'ARCHIVED'::character varying])::text[])))")
+
+    # EL VALOR SALE DEL MANIFIESTO, NO DE MI TECLADO.
+    # La version anterior de esta prueba escribia el fragmento a mano y en
+    # mayusculas de SQL. El inventario guarda y compara en MINUSCULAS, asi que
+    # la prueba pasaba con una entrada que el codigo real nunca ve, y el objeto
+    # condicional se exigia siempre en produccion. Una prueba que se inventa su
+    # propia entrada no prueba el camino que se usa.
+    esperado = be._objetos_esperados()
+    assert esperado is not None, 'falta esquema_objetos.txt'
+    # OJO: `file_nodes` tiene DOS restricciones CHECK -- esta y la de node_type.
+    # Filtrar solo por 'file_nodes check' agarraba la otra.
+    candados = [n for n in esperado['restriccion']
+                if 'file_nodes check' in n and '(status)' in n]
+    assert candados, 'el candado de estados no esta en el manifiesto'
+    candado = candados[0]
 
     antes = os.environ.get('ECD_CANDADO_ESTADOS')
     try:
