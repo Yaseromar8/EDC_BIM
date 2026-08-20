@@ -12,6 +12,15 @@ frontend-docs/dist/
 
 # Ignore environment and sensitive files
 backend/venv/
+# Credenciales de cuenta de servicio de Google. CUALQUIER variante.
+# Estaban listadas por nombre exacto (gcp_sa.json), asi que un fichero
+# llamado gcp_sa_ensayo.json --creado para el gate del 20-ago-2026-- NO
+# quedaba ignorado, y en esta misma sesion se estaban haciendo `git add -A
+# backend/`. Una clave privada a un commit por un sufijo.
+gcp_sa*.json
+backend/gcp_sa*.json
+**/gcp_sa*.json
+*-service-account*.json
 backend/gcp_sa.json
 gcp_sa.json
 *.env
