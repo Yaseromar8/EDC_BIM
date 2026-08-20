@@ -3,6 +3,7 @@
 # No se edita a mano: se regenera cuando cambia el esquema.
 
 activity_log
+alembic_version
 app_tokens
 asset_user_data
 auth_events

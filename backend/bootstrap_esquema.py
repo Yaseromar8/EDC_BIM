@@ -135,6 +135,7 @@ def _rutinas():
         ('sensibilidad', _tablas_sensibilidad),
         ('idoneidad', _tabla_idoneidad),
         ('segundo_factor', _columnas_segundo_factor),
+        ('alembic_version', _tabla_alembic),
         ('plan_de_entrega', _tabla_plan_de_entrega),
         ('emisiones', _tabla_emisiones),
         ('eje_base', _tabla_eje_base),
@@ -202,6 +203,35 @@ def _tabla_plan_de_entrega():
     from db import get_db_connection
     with get_db_connection() as conn:
         plan_de_entrega.asegurar_tablas(conn.cursor())
+        conn.commit()
+
+
+def _tabla_alembic():
+    """La libreta de Alembic. La crea Alembic, y por eso no volvia.
+
+    Medido el 20-ago-2026, ensayando la restauracion de la copia REAL de
+    produccion: 83.409 de 83.410 filas volvieron, y la que faltaba era esta --
+    `alembic_version`, una sola fila con la revision en la que va la base
+    (`0004_lob_linear_standard`). El constructor levanta el esquema desde las
+    rutinas `ensure_*`, que no incluyen la contabilidad de Alembic, asi que la
+    tabla no existia y la fila no tenia donde entrar.
+
+    No afecta al expediente: no se perdio ni un documento. Importa el dia que
+    alguien ejecute Alembic sobre una base restaurada, porque sin esta fila
+    creeria que esta a cero y volveria a aplicar las migraciones desde el
+    principio.
+
+    Se crea VACIA. El valor lo pone la restauracion, que es quien lo sabe:
+    inventarlo aqui seria afirmar una revision que quiza no es la suya.
+    """
+    from db import get_db_connection
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS alembic_version (
+                version_num VARCHAR(32) NOT NULL,
+                CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
+            )""")
         conn.commit()
 
 

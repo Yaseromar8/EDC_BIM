@@ -4,6 +4,7 @@
 # sobre una base VACIA:  python bootstrap_esquema.py --regenerar-manifiesto
 
 tabla	activity_log
+tabla	alembic_version
 tabla	app_tokens
 tabla	asset_user_data
 tabla	auth_events
@@ -105,6 +106,7 @@ columna	activity_log.hash_anterior
 columna	activity_log.id
 columna	activity_log.model_urn
 columna	activity_log.performed_by
+columna	alembic_version.version_num
 columna	app_tokens.access_token
 columna	app_tokens.expires_in
 columna	app_tokens.id
@@ -943,6 +945,8 @@ restriccion	ai_brain.semantic_triples not null id
 restriccion	ai_brain.semantic_triples not null predicate
 restriccion	ai_brain.semantic_triples not null subject
 restriccion	ai_brain.semantic_triples primary key (id)
+restriccion	alembic_version not null version_num
+restriccion	alembic_version primary key (version_num)
 restriccion	app_tokens not null access_token
 restriccion	app_tokens not null id
 restriccion	app_tokens not null refresh_token
@@ -1443,6 +1447,7 @@ indice	create unique index on ai_brain.feedback_buffer using btree (id)
 indice	create unique index on ai_brain.global_knowledge using btree (id)
 indice	create unique index on ai_brain.semantic_triples using btree (id)
 indice	create unique index on public.activity_log using btree (id)
+indice	create unique index on public.alembic_version using btree (version_num)
 indice	create unique index on public.app_tokens using btree (id)
 indice	create unique index on public.asset_user_data using btree (external_id)
 indice	create unique index on public.auth_events using btree (id)

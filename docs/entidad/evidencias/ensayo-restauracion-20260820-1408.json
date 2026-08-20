@@ -1,0 +1,14 @@
+{
+  "cuando": "2026-08-20 14:08:02",
+  "copia": "ecd_20260820_185913.copia.gz",
+  "base_ensayo": "ecd_ensayo_20260820_140715",
+  "tablas": 87,
+  "filas": 83409,
+  "descuadres": [
+    {
+      "tabla": "alembic_version",
+      "motivo": "error: relation \"alembic_version\" does not exist"
+    }
+  ],
+  "veredicto": "CON DESCUADRES"
+}
