@@ -280,11 +280,27 @@ _CONSULTAS = {
                     JOIN pg_attribute a ON a.attrelid = c.oid
                    WHERE n.nspname IN ('public','ai_brain')
                      AND c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped""",
-    'restriccion': """SELECT c.conrelid::regclass::text || '.' || c.conname
+    # POR LA DEFINICION, NO POR EL NOMBRE.
+    # Una misma regla puede llamarse de dos maneras segun como nacio la tabla.
+    # Paso de verdad, y tumbo el despliegue de produccion el 20-ago-2026:
+    #   base nueva  -> `UNIQUE (model_urn, external_id)` dentro del CREATE TABLE
+    #                  (esquema_base.py:241), y Postgres la autonombra
+    #                  `inventory_assets_model_urn_external_id_key`
+    #   produccion  -> la misma regla puesta despues por una migracion con nombre
+    #                  explicito, `inventory_assets_modelext_key`
+    #                  (routes/inventory.py:50)
+    # Misma garantia, dos nombres. Comparando nombres, produccion "faltaba" algo
+    # que tenia, y el arranque se nego a servir. Comparando la DEFINICION, las dos
+    # dicen `UNIQUE (model_urn, external_id)` y son lo que son: iguales.
+    'restriccion': """SELECT c.conrelid::regclass::text || ' ' || pg_get_constraintdef(c.oid)
                         FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
                        WHERE n.nspname IN ('public','ai_brain')""",
-    'indice': """SELECT indexname FROM pg_indexes
-                  WHERE schemaname IN ('public','ai_brain')""",
+    # Igual con los indices, y ademas uno de UNIQUE hereda el nombre de su
+    # restriccion, asi que arrastraba el mismo falso positivo. Se quita el nombre
+    # de la sentencia y queda lo unico que importa: sobre que tabla y por que
+    # columnas.
+    'indice': """SELECT regexp_replace(indexdef, ' INDEX [^ ]+ ON ', ' INDEX ON ')
+                   FROM pg_indexes WHERE schemaname IN ('public','ai_brain')""",
     'funcion': """SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
                    WHERE n.nspname = 'public'""",
     'extension': "SELECT extname FROM pg_extension",
@@ -300,17 +316,18 @@ _FICHERO_OBJETOS = 'esquema_objetos.txt'
 # comprobacion en cualquier instancia que legitimamente corra sin el.
 # Exigir de mas es tan malo como exigir de menos: la primera vez que una
 # comprobacion falla por algo que no esta mal, se empieza a ignorar.
-_CONDICIONALES = {
-    ('restriccion', 'file_nodes.file_nodes_status_valido'): 'ECD_CANDADO_ESTADOS',
-}
+# (tipo, fragmento que lo identifica, interruptor que lo enciende)
+_CONDICIONALES = (
+    ('restriccion', "file_nodes CHECK (((status)::text = ANY", 'ECD_CANDADO_ESTADOS'),
+)
 
 
 def _exigible(tipo, nombre):
     """¿Este objeto hace falta con la configuracion de AHORA?"""
-    interruptor = _CONDICIONALES.get((tipo, nombre))
-    if not interruptor:
-        return True
-    return (os.getenv(interruptor) or '').strip().lower() in ('true', '1', 'yes')
+    for t, fragmento, interruptor in _CONDICIONALES:
+        if t == tipo and fragmento in nombre:
+            return (os.getenv(interruptor) or '').strip().lower() in ('true', '1', 'yes')
+    return True
 
 
 def _ruta(nombre):

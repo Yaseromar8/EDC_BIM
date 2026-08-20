@@ -360,15 +360,20 @@ def test_lo_condicional_solo_se_exige_si_su_interruptor_esta_puesto():
     """
     import os
     import bootstrap_esquema as be
-    clave = ('restriccion', 'file_nodes.file_nodes_status_valido')
-    assert clave in be._CONDICIONALES
+    # El candado se identifica por su DEFINICION, no por su nombre: ver
+    # test_las_restricciones_se_comparan_por_lo_que_HACEN_no_por_su_nombre.
+    tipos = {t for t, _frag, _sw in be._CONDICIONALES}
+    assert 'restriccion' in tipos
+    candado = ("file_nodes CHECK (((status)::text = ANY ((ARRAY['WIP'::character "
+               "varying, 'SHARED'::character varying, 'PUBLISHED'::character "
+               "varying, 'ARCHIVED'::character varying])::text[])))")
 
     antes = os.environ.get('ECD_CANDADO_ESTADOS')
     try:
         os.environ['ECD_CANDADO_ESTADOS'] = 'false'
-        assert be._exigible(*clave) is False
+        assert be._exigible('restriccion', candado) is False
         os.environ['ECD_CANDADO_ESTADOS'] = 'true'
-        assert be._exigible(*clave) is True
+        assert be._exigible('restriccion', candado) is True
         # Lo que NO es condicional se exige siempre.
         assert be._exigible('columna', 'totp_recuperacion.pimienta') is True
     finally:
@@ -376,3 +381,50 @@ def test_lo_condicional_solo_se_exige_si_su_interruptor_esta_puesto():
             os.environ.pop('ECD_CANDADO_ESTADOS', None)
         else:
             os.environ['ECD_CANDADO_ESTADOS'] = antes
+
+
+def test_las_restricciones_se_comparan_por_lo_que_HACEN_no_por_su_nombre():
+    """Una misma regla puede llamarse de dos maneras segun como nacio la tabla.
+
+    Paso de verdad, y TUMBO EL DESPLIEGUE DE PRODUCCION el 20-ago-2026:
+
+      base nueva  -> `UNIQUE (model_urn, external_id)` dentro del CREATE TABLE
+                     (esquema_base.py:241). Postgres la autonombra
+                     `inventory_assets_model_urn_external_id_key`.
+      produccion  -> la misma regla, puesta despues por una migracion con nombre
+                     explicito: `inventory_assets_modelext_key`
+                     (routes/inventory.py:50), porque su tabla es anterior.
+
+    Misma garantia, dos nombres. Comparando NOMBRES, produccion "faltaba" algo
+    que tenia, el arranque devolvia 1 y el servicio no llego a servir. Comparar
+    por definicion es lo unico que no depende de como nacio la tabla.
+
+    Un indice de UNIQUE hereda el nombre de su restriccion, asi que arrastraba
+    exactamente el mismo falso positivo: por eso tambien va normalizado.
+    """
+    import bootstrap_esquema as be
+    sql_r = be._CONSULTAS['restriccion']
+    assert 'pg_get_constraintdef' in sql_r, (
+        'la restriccion se identifica por lo que impone, no por como se llama')
+    # OJO con la comprobacion ingenua: `connamespace` CONTIENE `conname`, asi que
+    # buscar 'conname' a secas da falso positivo. Lo que no puede aparecer es el
+    # nombre CONCATENADO en el resultado.
+    assert '|| c.conname' not in sql_r, 'el nombre no puede entrar en la comparacion'
+
+    sql_i = be._CONSULTAS['indice']
+    assert 'regexp_replace' in sql_i and 'indexdef' in sql_i, (
+        'del indice importa la tabla y las columnas, no su nombre')
+    assert "SELECT indexname" not in sql_i
+
+
+def test_el_manifiesto_no_guarda_nombres_de_restricciones_ni_de_indices():
+    """Si el manifiesto congelara nombres, el arreglo de arriba no serviria de
+    nada: la comparacion seria por definicion contra una lista de nombres."""
+    import bootstrap_esquema as be
+    esperado = be._objetos_esperados()
+    assert esperado is not None
+    for n in esperado['restriccion']:
+        assert ' ' in n, 'una restriccion se guarda como «tabla DEFINICION»'
+    for n in esperado['indice']:
+        assert n.startswith('create '), 'un indice se guarda como su sentencia'
+        assert ' index on ' in n, 'la sentencia va sin el nombre del indice'
