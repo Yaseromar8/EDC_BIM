@@ -189,7 +189,14 @@ Si ahí aparece algo que no es una URL, la variable está sucia.
 4. **El administrador y su segundo factor**, en este orden:
    1. entrar con `ADMIN_EMAIL` + `ADMIN_PASSWORD` y **cambiar la contraseña**;
    2. activar el 2FA y **guardar en papel los 8 códigos de recuperación** (se
-      muestran una sola vez);
+      muestran una sola vez).
+
+      > **Donde esta el boton, porque no se encuentra solo:** en la pantalla de
+      > bienvenida, arriba a la derecha, **Seguridad**. Esa pantalla es la
+      > PRIMERA tras el login, la de elegir «Documentos» o «Visor 3D». Una vez
+      > dentro de Documentos ya no hay acceso al panel: hay que volver pulsando
+      > el logo **ECD-VISIION** de la cabecera, que es un boton aunque no lo
+      > parezca. Digaselo al administrador de la entidad, o no lo activara;
    3. **cerrar sesión y volver a entrar** para ver que pide el segundo factor;
    4. **solo entonces** poner `EXIGIR_2FA_ESTRICTO=true` y redesplegar.
 5. Crear la primera obra, subir un documento, verlo, descargarlo.
