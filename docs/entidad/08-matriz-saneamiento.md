@@ -196,3 +196,67 @@ que el proveedor no tiene: portal de Autodesk, panel de Render y consola de Goog
 | **N44** | Los adjuntos de chincheta escribían **dentro del prefijo de una obra ajena** | **CERRADO** | sanear el `projectId` (N37) evitaba salirse del prefijo, no escribir en el de otro |
 | **N45** | El código de invitación se generaba con `random` y unirse no tenía límite de intentos | **MITIGADO** | Mersenne Twister no es criptográfico. Ahora `secrets` y 8 caracteres (36⁸ en vez de 36⁶), con 10 intentos/hora. Residual: **los códigos ya repartidos siguen siendo de 6 y de `random`** — rotarlos rompe invitaciones y es decisión del propietario |
 | **N46** | La suite de pruebas dependía de que hubiera **un servidor encendido** | **CERRADO** | cinco guiones `test_*.py` en la raíz de `backend/` son sondas que piden a `localhost:3000` al importarse: con el servidor parado reventaban la recolección entera antes de ejecutar una sola prueba. `testpaths = tests` |
+
+---
+
+# Cuarta pasada · 18 al 20-ago-2026 · hasta el estado final
+
+Lo que va de la última entrada de esta matriz (17-ago) al commit candidato a
+piloto. Todo lo de aquí **se encontró ejecutando**, no leyendo.
+
+## Hallazgos de la preparación de primera entidad · 18-19 ago
+
+| # | hallazgo | cómo apareció | estado |
+|---|---|---|---|
+| E1 | **El administrador institucional no se creaba.** `asegurar_administrador_inicial()` vivía dentro de la función gobernada por `DDL_EN_CALIENTE`. Con el interruptor apagado —que es lo que la guía manda— la instancia nacía diciendo `faltan: 0` y **no podía entrar nadie** | levantando una instancia con la configuración de la guía | **CERRADO** — extraída fuera del interruptor |
+| E2 | **`render.yaml` contradecía el arranque real.** Decía `alembic upgrade head` y 4 workers; el real es `bootstrap_esquema.py` y 1 worker. **Ninguna migración de alembic crea el esquema del 2FA**: aprovisionar desde el Blueprint dejaba la instancia sin segundo factor | comparando descriptores | **CERRADO** — retirado, con prueba guardiana |
+| E3 | **El bootstrap decía «COMPLETO» contando tablas, no columnas.** «88 de 88» sobre una base sin `totp_recuperacion.pimienta`. Consecuencia: activar el 2FA devolvía HTTP 500, meses después del despliegue | ejecutando el 2FA de punta a punta | **CERRADO** — verifica tablas, columnas, restricciones, índices, funciones y extensiones |
+| E4 | **El mismo código TOTP se aceptaba dos veces.** RFC 6238 §5.2 lo prohíbe | recorrido completo del segundo factor | **CERRADO** — canje de un solo uso |
+| E5 | `/api/docs/batch` respondía `200 {"processed":1}` sin tocar nada ante una acción no reconocida | prueba autenticada | **CERRADO** — 400 con el motivo |
+| E6 | `download_folder_urls` reventaba con 500 **en su propia rama de error** (`jsonify` ensombrecido por un import) | prueba autenticada | **CERRADO** |
+| E7 | Sin `ADMIN_EMAIL`, el arranque creaba como administrador **la cuenta del desarrollador** | auditoría de aprovisionamiento | **CERRADO** — en perfil portal se niega y lo dice |
+| E8 | 32 de 59 variables que el código lee no estaban en la guía, incluidas `EXIGIR_2FA_ESTRICTO`, `ECD_CANDADO_ESTADOS` y `STRICT_ISO_VISIBILITY` | barrido del código | **CERRADO** — guía §3.1-3.5, clasificadas |
+
+## Hallazgos del cierre de continuidad · 19-20 ago
+
+| # | hallazgo | estado |
+|---|---|---|
+| E9 | **C7: el bucket sin protección ni copia.** Los bytes del expediente no tenían red | **CERRADO** — soft delete 90 días, copia diaria a bucket aparte con «Cuándo borrar: Nunca», y recuperación **ejercida con cotejo de hash** |
+| E10 | **La copia no era independiente.** `visor-backend` tenía Storage a nivel de **proyecto**, así que alcanzaba el bucket de la copia | **CERRADO** — permiso acotado al bucket de origen; verificado por comportamiento |
+| E11 | **El secreto TOTP viajaba en claro dentro de cada copia de seguridad.** Quien tuviera una copia podía generar códigos de cualquier cuenta | **CERRADO** — cifrado con clave derivada de `APP_SECRET`, que vive fuera de la base. Medido sobre la copia real: 0 ocurrencias del secreto |
+| E12 | `alembic_version` no volvía en la restauración: 83.409 de 83.410 filas | **CERRADO** — el bootstrap la crea vacía; segunda pasada 83.410 de 83.410 |
+| E13 | `CORS_ORIGINS` de producción llevaba pegadas tres líneas de una tabla de la guía | **CERRADO** |
+
+### Mis propios errores en la comprobación de esquema
+
+Tres, y **dos tumbaron el despliegue de producción**. Se registran porque son
+parte honesta del historial:
+
+| # | error | estado |
+|---|---|---|
+| E14 | `information_schema` **filtra por privilegios**: cantaba 26 columnas ausentes que estaban, tomando la separación de identidades por un esquema roto | **CERRADO** — se pregunta al catálogo |
+| E15 | Un objeto **condicional** (el candado de estados) congelado como obligatorio | **CERRADO** — se exige solo con su interruptor puesto |
+| E16 | Comparaba **nombres** de restricciones autogenerados. Una misma regla con dos nombres → «falta» algo que estaba → **despliegue detenido** | **CERRADO** — se compara por definición |
+| E17 | El fragmento condicional en mayúsculas contra un manifiesto en minúsculas → **segundo despliegue detenido** | **CERRADO** — comparación sin mayúsculas |
+
+## Hallazgos del gate final · 20 ago
+
+Los dos primeros **solo eran visibles mirando la pantalla**. Ninguna prueba de
+API podía verlos.
+
+| # | hallazgo | estado |
+|---|---|---|
+| E18 | **BLOQUEANTE — el portal no mostraba ninguna obra.** `/api/hubs` estaba en el recorte del perfil portal, pero esa ruta existe dos veces (Autodesk y portal). El 404 abortaba la carga **antes** de pedir los proyectos: la entidad veía «No hay proyectos» | **CERRADO** — las de Autodesk se apagan por perfil, no por cadena |
+| E19 | **BLOQUEANTE — no se abría ningún PDF.** El bucket sin CORS; el navegador bloqueaba la lectura. `apply_cors.py` existía y la guía no lo mencionaba | **CERRADO** — paso obligatorio de la guía §2.4 |
+| E20 | **La pantalla de login caía al backend del proveedor** sin `VITE_BACKEND_URL`: credenciales de una municipalidad a un tercero | **CERRADO** — cae a origen propio |
+| E21 | La ficha **«Visor 3D» mandaba un ticket SSO** de la entidad al visor del proveedor, en la URL | **CERRADO** — no se pinta sin visor contratado |
+| E22 | **`.gitignore` listaba las credenciales por nombre exacto**: una clave privada de servicio quedaba sin ignorar en un repositorio con `git add -A` | **CERRADO** — por patrón; comprobado que no hay ninguna en la historia |
+| E23 | `apply_cors.py` declaraba `origin: ["*"]` sobre el bucket de una entidad | **CERRADO** — sale de `CORS_ORIGINS`, y sin ella se niega a correr |
+
+---
+
+## Estado al cerrar la matriz
+
+**Ningún hallazgo de esta pasada queda abierto.** Lo que no se cerró está
+**declarado** como riesgo residual o POST-PILOTO en
+`15-final-first-entity-go-no-go.md` §11 y §12, y en el expediente de entrega.
