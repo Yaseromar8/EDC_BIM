@@ -3,6 +3,17 @@
 **20-ago-2026** · Sobre el commit candidato `01b51c7`
 **Nada de esto se ha implementado.** Es diagnóstico.
 
+> ⚠ **DOS CORRECCIONES.** Ver [18 — Cierre de seis puntos](18-cierre-de-seis-puntos-foundation-v2.md).
+> 1. **§1 es inexacto.** `resolve_project_id()` **sí** traduce `proyectos/PQT8_TALARA` → `1`, y hay
+>    4 filas de membresía para `'1'`. No serían 403 los 14 usuarios. El problema real es otro:
+>    `dataset_id` y `global` **no resuelven**, y bajo ENFORCE el guardián es fail-closed → 403 en
+>    todo `/api/lob`. Y solo 5 de 14 no administradores tienen membresía alguna.
+> 2. **§14 es inexacto.** Las cinco rutas de IA **sí** tienen guardia (`routes/ai.py:293, 354, 526,
+>    674, 841`) y `guardia_del_documento` es fail-closed. B4 sigue necesitando cambios, pero otros.
+>
+> Además: son **siete** vocabularios de alcance, no cuatro; y el diseño `project_alias(alias TEXT
+> PRIMARY KEY)` de §17 **queda retirado** — colisiona (ver 18 §3).
+
 ---
 
 ## 1 · Executive conclusion
