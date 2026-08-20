@@ -48,6 +48,26 @@ Una base **nueva y solo suya**.
 2. Cuenta de servicio `ecd-<entidad>@…` con permiso **solo sobre ese bucket**
    (`Storage Object Admin` a nivel de bucket, nunca de proyecto).
 3. Su clave JSON va al panel de Render como **Secret File**, nunca al repositorio.
+4. **DECLARAR EL CORS DEL BUCKET.** Sin esto **no se abre ni un PDF**.
+
+   ```
+   cd backend && python apply_cors.py
+   ```
+
+   Lo ejecuta el propietario, con una identidad que pueda administrar el bucket
+   — no la cuenta de la aplicacion, que solo debe mover objetos. Toma los
+   origenes de `CORS_ORIGINS`, asi que hay que definirla antes.
+
+   > **Por que es obligatorio:** el portal no sirve los documentos a traves del
+   > backend. Pide una URL firmada y **el navegador** va directo a
+   > `storage.googleapis.com`. Sin CORS el navegador bloquea esa lectura y el
+   > lector muestra su pantalla de error, sin decir por que.
+   >
+   > Se descubrio el 20-ago-2026 **mirando la pantalla** de la instancia de
+   > ensayo. Ninguna prueba de API lo veia: por API el backend firma la URL
+   > correctamente y ahi acaba su trabajo. El que se estrella es el navegador,
+   > despues. Si alguna vez cambia la URL del portal, hay que volver a
+   > ejecutarlo.
 
 > La protección del bucket (soft delete, versionado, copia independiente) está en
 > `14-cierre-de-continuidad-y-gate.md` §1 y §2. No se despacha aquí.
