@@ -34,6 +34,7 @@ Esta prueba fija ese orden. No levanta nada: lee el unico sitio donde el orden
 esta escrito.
 """
 import io
+import pytest
 import json
 import os
 
@@ -105,11 +106,62 @@ def test_esta_escrita_la_separacion_y_el_ddl_congelado():
 
 
 def test_bootstrap_constructor_exige_migrador_antes_de_construir():
+    """El orden: se comprueba la identidad ANTES de la primera sentencia DDL."""
     fuente = io.open(os.path.join(BACKEND, 'bootstrap_esquema.py'),
                      encoding='utf-8').read()
     main = fuente.split("if __name__ == '__main__':", 1)[1]
     assert main.index('exigir_identidad_migrador()') < main.index('construir()')
-    assert "actual != 'ecd_migrator'" in fuente
+
+
+def _bootstrap_con_usuario(monkeypatch, usuario):
+    """Carga el bootstrap con una base falsa que autentica como `usuario`."""
+    import importlib
+    import db as _db
+    import bootstrap_esquema as bs
+
+    class Cur:
+        def execute(self, *a, **k): pass
+        def fetchone(self): return (usuario,)
+
+    class Conn:
+        def cursor(self): return Cur()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(_db, 'db_pool', object(), raising=False)
+    monkeypatch.setattr(_db, 'get_db_connection', lambda: Conn())
+    return importlib.reload(bs)
+
+
+def test_una_identidad_no_declarada_se_rechaza(monkeypatch):
+    """SE COMPRUEBA EL EFECTO, no que el fichero contenga cierto texto.
+
+    La version anterior de esta prueba afirmaba `"actual != 'ecd_migrator'" in
+    fuente`. Cuando el nombre del rol paso a ser declarable --porque produccion
+    no tiene `ecd_migrator` y el candado dejaba la base sin forma de migrar--,
+    la prueba fallo sin que hubiera nada roto: medía la forma del codigo, no lo
+    que el codigo hace.
+    """
+    monkeypatch.delenv('ROL_MIGRADOR', raising=False)
+    bs = _bootstrap_con_usuario(monkeypatch, 'postgres')
+    assert bs.ROL_MIGRADOR == 'ecd_migrator'      # el defecto no se afloja
+    with pytest.raises(RuntimeError) as e:
+        bs.exigir_identidad_migrador()
+    assert 'postgres' in str(e.value) and 'ROL_MIGRADOR' in str(e.value),         'el rechazo tiene que decir COMO declararlo, o deja la base bloqueada'
+
+
+def test_el_rol_de_migracion_se_puede_declarar(monkeypatch):
+    """Y declararlo funciona: es la salida de una instancia sin identidades
+    separadas. No es silenciosa -- avisa en cada construccion."""
+    monkeypatch.setenv('ROL_MIGRADOR', 'postgres')
+    bs = _bootstrap_con_usuario(monkeypatch, 'postgres')
+    assert bs.ROL_MIGRADOR == 'postgres'
+    bs.exigir_identidad_migrador()                # no levanta
+
+    # Y si NO coincide, sigue rechazando: declarar no es desactivar.
+    bs2 = _bootstrap_con_usuario(monkeypatch, 'otro_usuario')
+    with pytest.raises(RuntimeError):
+        bs2.exigir_identidad_migrador()
 
 
 def test_migracion_aplica_grants_de_datos_al_final():

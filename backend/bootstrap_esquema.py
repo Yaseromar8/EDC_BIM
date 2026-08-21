@@ -285,12 +285,30 @@ def construir():
     return fallos
 
 
-def exigir_identidad_migrador():
-    """Impide construir objetos con la identidad permanente de la aplicacion.
+# El rol con el que se construye el esquema. Por defecto `ecd_migrator`, que es
+# la identidad separada del runtime.
+#
+# POR QUE SE PUEDE DECLARAR OTRO
+# ------------------------------
+# La separacion de identidades es un objetivo, no un hecho universal: hay
+# instancias --entre ellas la de produccion a 21-ago-2026-- donde `ecd_migrator`
+# NO EXISTE y todo corre con un unico usuario. Exigir un nombre fijo dejaba esas
+# instancias sin forma de migrar: el arranque se negaba a levantar por falta de
+# tablas, y la unica herramienta que las crea se negaba a ejecutarse. Un candado
+# que se cierra por dentro.
+#
+# Se declara con `ROL_MIGRADOR`, y cuando NO es `ecd_migrator` se grita: eso
+# significa que se esta construyendo con la misma identidad que despues sirve la
+# aplicacion, y eso es deuda, no una opcion mas.
+ROL_MIGRADOR = (os.getenv('ROL_MIGRADOR') or 'ecd_migrator').strip()
 
-    No basta con que Render declare ``DB_USER=ecd_migrator``: la prueba que
-    importa es la identidad que PostgreSQL autentico. Si este control falla se
-    detiene ANTES de ejecutar la primera sentencia DDL.
+
+def exigir_identidad_migrador():
+    """Impide construir objetos con una identidad que no se ha declarado.
+
+    No basta con que Render declare ``DB_USER``: la prueba que importa es la
+    identidad que PostgreSQL AUTENTICO. Si este control falla se detiene ANTES
+    de ejecutar la primera sentencia DDL.
     """
     import db as _db
     if getattr(_db, 'db_pool', None) is None:
@@ -299,11 +317,24 @@ def exigir_identidad_migrador():
         cur = conn.cursor()
         cur.execute('SELECT current_user')
         actual = cur.fetchone()[0]
-    if actual != 'ecd_migrator':
+    if actual != ROL_MIGRADOR:
         raise RuntimeError(
-            'bootstrap constructor rechazado: PostgreSQL autentico como %s; '
-            'se exige ecd_migrator' % actual)
-    print('identidad de migracion verificada: ecd_migrator')
+            'bootstrap constructor rechazado: PostgreSQL autentico como «%s» '
+            'y se exige «%s». Si esta instancia todavia NO tiene identidades '
+            'separadas y construye con su unico usuario, decláralo con '
+            'ROL_MIGRADOR=%s . No es una opcion mas: significa que el esquema '
+            'se construye con la misma identidad que luego sirve la aplicacion.'
+            % (actual, ROL_MIGRADOR, actual))
+    if ROL_MIGRADOR != 'ecd_migrator':
+        print('')
+        print('!' * 70)
+        print('!!  SE CONSTRUYE CON «%s», NO CON ecd_migrator.' % ROL_MIGRADOR)
+        print('!!  Esta instancia no tiene las identidades separadas: el mismo')
+        print('!!  usuario crea el esquema y sirve la aplicacion. Funciona, pero')
+        print('!!  es deuda -- un fallo en la aplicacion alcanza al esquema.')
+        print('!' * 70)
+        print('')
+    print('identidad de migracion verificada: %s' % ROL_MIGRADOR)
 
 
 def aplicar_grants_aplicacion():
