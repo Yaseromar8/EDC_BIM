@@ -1,0 +1,9 @@
+EVIDENCIA E3 · 2026-08-21 16:35 · https://visor-ecd-backend.onrender.com
+resumen: {"completa": false, "faltan": 1, "puntos": 6}
+detalle:
+   APP_SECRET                   cumple
+   SESSION_PEPPER               cumple
+   CORS_ORIGINS                 cumple
+   DDL_EN_CALIENTE_APAGADO      cumple
+   ENFORCE_PROJECT_AUTHZ        ** FALLA **
+   AUTH_POLICY_MODE_ESTRICTO    cumple
