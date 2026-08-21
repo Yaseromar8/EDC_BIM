@@ -367,6 +367,63 @@ def test_ningun_ddl_sin_guardia_en_camino_de_peticion():
         + ', '.join(sorted(sueltos)))
 
 
+def test_toda_rutina_del_arranque_respeta_el_interruptor():
+    """El hueco por el que se colo `asegurar_columna` el 21-ago-2026.
+
+    Los dos guardianes que ya habia miraban:
+
+      · funciones CON decorador que no construyen esquema  (el reves), y
+      · DDL suelto dentro de un MANEJADOR HTTP.
+
+    `asegurar_columna` no era ninguna de las dos: construia esquema, no era una
+    ruta, y `server.py` la llamaba en cada arranque **sin decorador**. Con
+    `DDL_EN_CALIENTE=false` --el estado objetivo en produccion-- ejecutaba su
+    `ALTER TABLE` igual. Medido: `ensure_columnas_pendientes` callaba y esta
+    ejecutaba.
+
+    Lo que se rompia no es un log feo en el boot. La aplicacion seguia
+    necesitando ser PROPIETARIA de `project_users`, que es exactamente lo que el
+    interruptor existe para evitar -- y la frase «DDL_EN_CALIENTE=false ⇒ la
+    aplicacion no puede alterar su esquema», que el servicio PUBLICA como uno de
+    sus seis puntos de postura, dejaba de ser cierta.
+
+    Asi que la regla se comprueba donde vive el riesgo: TODA rutina de la lista
+    de arranque de `server.py` que contenga DDL lleva `@solo_con_ddl`.
+    """
+    import ast
+    fuente = io.open(os.path.join(BACKEND, 'server.py'), encoding='utf-8').read()
+    arbol = ast.parse(fuente)
+
+    arranque = next((n for n in ast.walk(arbol)
+                     if isinstance(n, ast.FunctionDef) and n.name == '_run_schema_setup'), None)
+    assert arranque is not None, (
+        'no existe `_run_schema_setup` en server.py: si el arranque se reorganizo, '
+        'este guardian hay que reapuntarlo, no borrarlo')
+
+    # Los nombres invocados desde la lista de rutinas: ('nombre', funcion).
+    llamadas = set()
+    for n in ast.walk(arranque):
+        if isinstance(n, ast.Name):
+            llamadas.add(n.id)
+        elif isinstance(n, ast.Attribute):
+            llamadas.add(n.attr)
+    assert len(llamadas) > 10, 'no se reconocio la lista de rutinas del arranque'
+
+    sin_guardia = []
+    for nombre, cuerpo, decorada, ruta, _cte in _funciones_del_backend():
+        if nombre not in llamadas or decorada:
+            continue
+        if not any(k in cuerpo.upper() for k in DDL):
+            continue
+        sin_guardia.append('%s:%s' % (ruta, nombre))
+
+    assert not sin_guardia, (
+        'estas rutinas se ejecutan en cada arranque, construyen esquema y NO '
+        'llevan @solo_con_ddl: con DDL_EN_CALIENTE=false la aplicacion seguiria '
+        'alterando su propio esquema, que es justo lo que el interruptor '
+        'promete impedir: ' + ', '.join(sorted(sin_guardia)))
+
+
 def test_las_columnas_se_miran_en_el_CATALOGO_no_en_information_schema():
     """`information_schema` FILTRA POR PRIVILEGIOS. El catalogo, no.
 

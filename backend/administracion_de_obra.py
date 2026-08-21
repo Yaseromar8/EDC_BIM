@@ -48,6 +48,8 @@ con `resolve_project_id`.
 """
 import logging
 
+from esquema_congelado import solo_con_ddl
+
 logger = logging.getLogger(__name__)
 
 
@@ -110,8 +112,25 @@ def guardia_administrativa(cur, usuario, obra, accion='administrar esta obra'):
         'motivo': 'NO_ES_ADMIN_DE_OBRA'}), 403
 
 
+@solo_con_ddl
 def asegurar_columna():
     """`project_users.es_admin`. Idempotente. Punto de entrada del bootstrap.
+
+    RESPETA EL CONGELADO DEL DDL, COMO LAS OTRAS 43 RUTINAS DE ESQUEMA
+    ------------------------------------------------------------------
+    Nacio sin el decorador y eso era un defecto: `server.py` la llama en cada
+    arranque, asi que con `DDL_EN_CALIENTE=false` --que es el estado objetivo en
+    produccion-- la aplicacion habria seguido ejecutando `ALTER TABLE`. Medido:
+    `ensure_columnas_pendientes` callaba y esta ejecutaba.
+
+    No es solo un error de log en cada boot. Mientras estuviera sin decorar, la
+    frase «DDL_EN_CALIENTE=false ⇒ la aplicacion no puede alterar su esquema»
+    dejaba de ser cierta -- y esa frase es uno de los seis puntos de postura que
+    el servicio publica. Un control que se describe por intencion y no por
+    comportamiento no controla nada.
+
+    Con el DDL congelado devuelve None sin tocar la base. Quien SI puede
+    ejecutarla es el bootstrap, que corre dentro de `with permitir_ddl()`.
 
     NACE FALSE PARA TODOS, y eso es la mitad del diseño: no se infiere quien
     debia administrar que. Los `users.role='admin'` actuales siguen siendo
