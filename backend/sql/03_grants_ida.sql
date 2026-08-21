@@ -11,6 +11,8 @@ BEGIN;
 -- Despues de bootstrap_esquema.py, con el esquema ya construido.
 
 -- USAGE deja VER el schema. CREATE seria poder crear objetos en el: no se concede.
+REVOKE CREATE ON SCHEMA public, ai_brain FROM PUBLIC;
+REVOKE CREATE ON SCHEMA public, ai_brain FROM ecd_app;
 GRANT USAGE ON SCHEMA public, ai_brain TO ecd_app;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public, ai_brain TO ecd_app;

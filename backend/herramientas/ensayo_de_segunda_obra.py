@@ -120,7 +120,7 @@ def montar_app(usuario, obras_del_usuario):
 
 def main():
     os.environ['ENFORCE_PROJECT_AUTHZ'] = 'true'
-    os.environ.setdefault('AUTH_POLICY_MODE', 'sombra')
+    os.environ['AUTH_POLICY_MODE'] = 'estricto'
     os.environ.setdefault('APP_SECRET', 'x' * 32)
 
     import db
@@ -209,6 +209,14 @@ def main():
         r = cb.get('/api/docs/listar?project_id=' + OBRA_B)
         _paso(r.status_code == 200, 'el miembro de B SI alcanza los suyos',
               'devolvio %s' % r.status_code)
+
+        admin = montar_app({'id': 0, 'email': 'admin@ensayo', 'role': 'admin'},
+                           {OBRA_A, OBRA_B})
+        ra = admin.get('/api/docs/listar?project_id=' + OBRA_A)
+        rb = admin.get('/api/docs/listar?project_id=' + OBRA_B)
+        _paso(ra.status_code == 200 and rb.status_code == 200,
+              'el administrador de la instancia conserva acceso a ambas obras',
+              'A=%s B=%s' % (ra.status_code, rb.status_code))
 
         print()
         print('CRITERIO 5 -- lo que no resuelve se niega')

@@ -113,3 +113,30 @@ def test_hay_lock_timeout():
     con la obra parada."""
     for nombre in ('01_ownership_ida.sql', '02_ownership_vuelta.sql'):
         assert 'lock_timeout' in _leer(nombre), f'{nombre}: sin lock_timeout'
+
+
+def test_la_convergencia_recoge_objetos_nuevos_y_cierra_create():
+    """Una lista estatica envejece: Gen 1 ya creo tablas despues de la foto de
+    01_ownership. La convergencia debe mirar el catalogo y terminar con una
+    asercion, no con otra enumeracion que vuelva a quedar vieja."""
+    texto = _leer('05_convergencia_propiedad.sql')
+    assert 'ON_ERROR_STOP' in texto
+    assert "pg_get_userbyid(c.relowner)='ecd_app'" in texto
+    assert 'OWNER TO ecd_migrator' in texto
+    assert 'REVOKE CREATE ON SCHEMA public, ai_brain FROM PUBLIC' in texto
+    assert 'REVOKE CREATE ON SCHEMA public, ai_brain FROM ecd_app' in texto
+    assert 'Quedan % objetos poseidos por ecd_app' in texto
+    assert 'Quedan % rutinas poseidas por ecd_app' in texto
+
+
+def test_el_ejecutor_administrativo_es_de_una_sola_vez_y_preserva_invariantes():
+    ruta = os.path.join(os.path.dirname(SQL), 'herramientas',
+                        'converger_propiedad.py')
+    texto = open(ruta, encoding='utf-8').read()
+    assert "CONFIRMAR_CONVERGENCIA_PROPIEDAD') != 'SI_UNA_VEZ'" in texto
+    assert "sesion != 'postgres' or actual != 'postgres'" in texto
+    assert 'antes = tomar()' in texto and 'despues = tomar()' in texto
+    assert '_invariantes_preservadas(antes, despues)' in texto
+    assert "os.environ['PGOPTIONS'] = '-c role=ecd_migrator'" in texto
+    assert 'bootstrap.exigir_identidad_migrador()' in texto
+    assert 'bootstrap.aplicar_grants_aplicacion()' in texto

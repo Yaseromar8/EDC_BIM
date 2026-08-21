@@ -32,6 +32,11 @@ REVOKE ALL ON ALL SEQUENCES IN SCHEMA public, ai_brain FROM ecd_app;
 REVOKE ALL ON ALL TABLES    IN SCHEMA public, ai_brain FROM ecd_app;
 REVOKE USAGE ON SCHEMA public, ai_brain FROM ecd_app;
 
+-- Inverso exacto del cierre de CREATE de 03. Solo se ejecuta durante un
+-- rollback deliberado a la postura anterior.
+GRANT CREATE ON SCHEMA public, ai_brain TO PUBLIC;
+GRANT CREATE ON SCHEMA public, ai_brain TO ecd_app;
+
 COMMIT;
 
 -- COMPROBACION POSTERIOR (debe devolver 0):

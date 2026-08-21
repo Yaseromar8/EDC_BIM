@@ -280,6 +280,49 @@ def construir():
     return fallos
 
 
+def exigir_identidad_migrador():
+    """Impide construir objetos con la identidad permanente de la aplicacion.
+
+    No basta con que Render declare ``DB_USER=ecd_migrator``: la prueba que
+    importa es la identidad que PostgreSQL autentico. Si este control falla se
+    detiene ANTES de ejecutar la primera sentencia DDL.
+    """
+    import db as _db
+    if getattr(_db, 'db_pool', None) is None:
+        _db.init_db_pool()
+    with _db.get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT current_user')
+        actual = cur.fetchone()[0]
+    if actual != 'ecd_migrator':
+        raise RuntimeError(
+            'bootstrap constructor rechazado: PostgreSQL autentico como %s; '
+            'se exige ecd_migrator' % actual)
+    print('identidad de migracion verificada: ecd_migrator')
+
+
+def aplicar_grants_aplicacion():
+    """Concede al runtime acceso a datos, nunca DDL, tras cada migracion.
+
+    Los permisos por defecto protegen objetos futuros, pero solo a partir del
+    momento en que se instalaron. Ejecutar tambien los GRANT sobre todos los
+    objetos existentes hace que este paso sea idempotente y cubra una base que
+    se esta convergiendo por primera vez.
+    """
+    import db as _db
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        'sql', '03_grants_ida.sql')
+    with open(ruta, encoding='utf-8') as f:
+        sql = f.read()
+    if any(line.lstrip().startswith('\\') for line in sql.splitlines()):
+        raise RuntimeError('03_grants_ida.sql contiene una orden exclusiva de psql')
+    with _db.get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(sql)
+        conn.commit()
+    print('permisos de ecd_app aplicados: datos SI, DDL NO')
+
+
 def _manifiesto():
     """Las tablas que un bootstrap completo deja construidas."""
     import io as _io
@@ -566,10 +609,22 @@ if __name__ == '__main__':
         # enchufa a un despliegue o a integracion continua, en un adorno que
         # ademas da tranquilidad falsa.
         raise SystemExit(_codigo_de_salida(completo))
+    try:
+        exigir_identidad_migrador()
+    except Exception as e:
+        print('FALLO DE IDENTIDAD: %s' % e)
+        raise SystemExit(1)
     print('BOOTSTRAP DEL ESQUEMA · destino: %s' % os.getenv('DB_HOST'))
     fallos = construir()
     print()
     completo, _faltan = verificar()
+    grants_ok = False
+    if completo:
+        try:
+            aplicar_grants_aplicacion()
+            grants_ok = True
+        except Exception as e:
+            print('FALLO DE PERMISOS: %s' % e)
 
     # LO QUE DECIDE EL CODIGO DE SALIDA ES EL RESULTADO, NO EL PROCESO.
     #
@@ -591,4 +646,6 @@ if __name__ == '__main__':
         print('%d rutina(s) fallaron pero el esquema quedo COMPLETO.' % len(fallos))
         print('Normalmente significa que esta identidad no es dueña de esas '
               'tablas, que es lo correcto. Revisa las lineas FALLO de arriba.')
+    if completo and not grants_ok:
+        raise SystemExit(1)
     raise SystemExit(_codigo_de_salida(completo))

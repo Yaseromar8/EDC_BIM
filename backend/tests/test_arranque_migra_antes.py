@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""El despliegue construye el esquema ANTES de levantar la aplicacion (N2).
+"""Migracion y runtime usan identidades realmente separadas (N2/N6).
 
 EL HALLAZGO
 -----------
@@ -18,9 +18,10 @@ Eso no es un problema de rendimiento. Tiene dos consecuencias de fondo:
      recien restaurada se queda incompleta hasta que se usa, que es como se
      descubre tarde.
 
-Ahora `start` encadena las dos cosas:
+Ahora hay dos comandos y dos identidades:
 
-    python bootstrap_esquema.py  &&  gunicorn server:app
+    yarn migrate  -> bootstrap con ecd_migrator
+    yarn start    -> verificar + gunicorn con ecd_app
 
 Va encadenado y NO en un `prestart`: yarn 1 ejecuta los guiones `pre*`
 automaticamente, yarn 2 y posteriores no. Dejarlo en `prestart` habria sido
@@ -44,28 +45,33 @@ def _scripts():
     return json.loads(io.open(ruta, encoding='utf-8').read()).get('scripts', {})
 
 
-def test_el_arranque_construye_el_esquema_antes_de_servir():
+def test_hay_un_comando_explicito_de_migracion():
     s = _scripts()
-    assert 'bootstrap_esquema' in s['start'], (
-        'no hay paso de migracion: el esquema se construiria en caliente desde '
-        'los manejadores, que es el hallazgo N2')
-    assert s['start'].index('bootstrap_esquema') < s['start'].index('gunicorn')
+    assert 'migrate' in s
+    assert 'bootstrap_esquema' in s['migrate']
+    assert '--verificar' not in s['migrate']
 
 
-def test_va_encadenado_y_no_en_un_prestart():
-    """Yarn 1 ejecuta los `pre*` automaticamente; yarn 2 y posteriores NO. En un
-    `prestart`, el paso de migracion podria no ejecutarse nunca segun la version
-    que use Render, y nadie se enteraria porque el DDL en caliente lo taparia."""
+def test_convergencia_administrativa_no_es_el_arranque_normal():
+    s = _scripts()
+    assert 'converge:ownership' in s
+    assert 'converger_propiedad.py' in s['converge:ownership']
+    assert 'converge:ownership' not in s['start']
+    assert 'converge:ownership' not in s['migrate']
+
+
+def test_runtime_solo_verifica_y_no_construye():
+    """La credencial del migrador no puede vivir en el proceso web. El runtime
+    comprueba el resultado, pero nunca ejecuta el bootstrap constructor."""
     s = _scripts()
     assert 'prestart' not in s
+    assert 'bootstrap_esquema.py --verificar' in s['start']
     assert '&&' in s['start'], 'sin && no hay garantia de orden ni de parada'
 
 
-def test_el_paso_previo_no_es_solo_una_comprobacion():
-    """`--verificar` mira y no construye. Poner eso aqui daria la sensacion de
-    tener migracion sin tenerla -- el mismo patron que el modo estricto de
-    nomenclatura o el @requiere_rol que no bloqueaba a nadie."""
-    assert '--verificar' not in _scripts()['start']
+def test_la_verificacion_ocurre_antes_de_gunicorn():
+    s = _scripts()['start']
+    assert s.index('bootstrap_esquema.py --verificar') < s.index('gunicorn')
 
 
 def test_la_aplicacion_se_levanta_con_gunicorn_y_no_con_el_servidor_de_pruebas():
@@ -75,11 +81,10 @@ def test_la_aplicacion_se_levanta_con_gunicorn_y_no_con_el_servidor_de_pruebas()
         'el servidor de desarrollo de Flask no sirve produccion')
 
 
-def test_los_dos_pasos_usan_el_MISMO_interprete():
-    """Si el bootstrap corriera con otro python que gunicorn, migraria un
-    entorno y serviria otro -- y la diferencia solo se veria en produccion."""
+def test_cada_comando_usa_el_entorno_del_backend():
     s = _scripts()
     assert s['start'].count('./venv/bin/') == 2, s['start']
+    assert s['migrate'].count('./venv/bin/') == 1, s['migrate']
 
 
 def test_esta_escrito_que_pasa_si_la_migracion_falla():
@@ -91,10 +96,33 @@ def test_esta_escrito_que_pasa_si_la_migracion_falla():
     assert 'version anterior' in doc.lower() or 'versión anterior' in doc.lower()
 
 
-def test_esta_escrito_que_falta_apagar_el_DDL_en_caliente():
-    """Construir el esquema en el despliegue no cierra el agujero por si solo:
-    mientras `DDL_EN_CALIENTE` no este en false, la aplicacion CONSERVA el
-    permiso de tocar el esquema en caliente. Es media solucion, y decirlo evita
-    darla por entera."""
+def test_esta_escrita_la_separacion_y_el_ddl_congelado():
     doc = io.open(os.path.join(BACKEND, 'ARRANQUE.md'), encoding='utf-8').read()
     assert 'DDL_EN_CALIENTE=false' in doc
+    assert 'DB_USER=ecd_migrator' in doc
+    assert 'DB_USER=ecd_app' in doc
+    assert 'no se declara en el servicio web' in doc
+
+
+def test_bootstrap_constructor_exige_migrador_antes_de_construir():
+    fuente = io.open(os.path.join(BACKEND, 'bootstrap_esquema.py'),
+                     encoding='utf-8').read()
+    main = fuente.split("if __name__ == '__main__':", 1)[1]
+    assert main.index('exigir_identidad_migrador()') < main.index('construir()')
+    assert "actual != 'ecd_migrator'" in fuente
+
+
+def test_migracion_aplica_grants_de_datos_al_final():
+    fuente = io.open(os.path.join(BACKEND, 'bootstrap_esquema.py'),
+                     encoding='utf-8').read()
+    assert "'03_grants_ida.sql'" in fuente
+    assert 'aplicar_grants_aplicacion()' in fuente
+    assert 'if completo and not grants_ok' in fuente
+
+
+def test_documenta_la_convergencia_unica_de_propiedad():
+    doc = io.open(os.path.join(BACKEND, 'ARRANQUE.md'), encoding='utf-8').read()
+    assert '05_convergencia_propiedad.sql' in doc
+    assert doc.index('05_convergencia_propiedad.sql') < doc.rindex('yarn migrate')
+    assert 'No se crea un segundo servicio permanente' in doc
+    assert 'manualmente como `ecd_migrator`' in doc

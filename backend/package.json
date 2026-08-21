@@ -4,6 +4,11 @@
   "private": true,
   "scripts": {
     "postinstall": "python3 -m venv venv && ./venv/bin/pip install -r requirements.txt",
-    "start": "./venv/bin/python bootstrap_esquema.py && ./venv/bin/gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 300 --max-requests 300 --max-requests-jitter 60 server:app"
+    "migrate": "./venv/bin/python bootstrap_esquema.py",
+    "converge:ownership": "./venv/bin/python herramientas/converger_propiedad.py",
+    "verify:schema": "./venv/bin/python bootstrap_esquema.py --verificar",
+    "test:postgres": "./venv/bin/python herramientas/ensayo_de_revisiones.py",
+    "test:authz": "./venv/bin/python herramientas/ensayo_de_segunda_obra.py",
+    "start": "./venv/bin/python bootstrap_esquema.py --verificar && ./venv/bin/gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 300 --max-requests 300 --max-requests-jitter 60 server:app"
   }
 }

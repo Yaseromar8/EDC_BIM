@@ -4,35 +4,7 @@ import toast from 'react-hot-toast';
 import { API, formatDate, getInitials } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import DocQuickView from './DocQuickView';
-
-// Resuelve la URL firmada de un documento por su node_id y lo abre en el visor
-// Abre un documento de una entrega. Lo usan Revisiones Y Conjuntos, así que el
-// arreglo de aquí vale para los dos.
-//
-// Abre la VERSIÓN, no el documento. Antes pedía siempre por node_id, o sea «lo
-// que haya hoy en ese fichero»: bastaba con que alguien subiera una revisión
-// para que una entrega enseñara otra cosa —con la etiqueta «V3 congelada»
-// puesta— y para que un revisor mirara algo distinto de lo que se le mandó.
-// Los elementos guardados antes de este cambio no tienen version_id; para esos
-// se sigue abriendo lo vivo, porque no hay forma de saber qué había entonces.
-export function useDocPreview(projectPrefix) {
-  const [preview, setPreview] = useState(null);
-  const open = async (it) => {
-    try {
-      const porVersion = it.version_id
-        ? `&version_id=${encodeURIComponent(it.version_id)}`
-        : '';
-      const r = await apiFetch(`${API}/api/docs/signed-url?model_urn=${encodeURIComponent(projectPrefix)}&id=${encodeURIComponent(it.node_id)}${porVersion}`);
-      const d = await r.json();
-      if (!d.success || !d.url) throw new Error(d.error || 'No se pudo abrir');
-      const etiqueta = it.version_id
-        ? ` · v${it.version_number || it.version || '?'}`
-        : ' · versión actual';
-      setPreview({ name: (it.name || '') + etiqueta, url: d.url, nodeId: it.node_id });
-    } catch (e) { toast.error(e.message || 'No se pudo abrir el documento'); }
-  };
-  return [preview, open, () => setPreview(null)];
-}
+import useDocPreview from '../hooks/useDocPreview';
 
 const STATUS_CHIP = {
   pending: { label: 'En revisión', bg: '#fff7e0', color: '#b26a00' },
@@ -41,7 +13,7 @@ const STATUS_CHIP = {
 };
 
 // ── Modal: enviar documentos a revisión ──
-export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCreated }) {
+export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }) {
   const [title, setTitle] = useState('');
   const [users, setUsers] = useState([]);
   const [steps, setSteps] = useState([]);
@@ -250,9 +222,21 @@ export function ReviewsView({ projectPrefix, user, isAdmin }) {
       ) : reviews.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 48, color: '#999', fontSize: 13 }}>No hay revisiones aún.</div>
       ) : reviews.map(rev => {
-        const chip = STATUS_CHIP[rev.status] || STATUS_CHIP.pending;
+        const bloqueada = rev.status === 'pending' && rev.flujo === 'BLOQUEADA';
+        const chip = bloqueada
+          ? { label: 'Bloqueada', bg: '#fee2e2', color: '#b91c1c' }
+          : (STATUS_CHIP[rev.status] || STATUS_CHIP.pending);
         const step = rev.steps[rev.current_step] || {};
-        const myTurn = rev.status === 'pending' && (user?.email === step.email || isAdmin);
+        // La interfaz usa la misma autoridad que el backend. Si el paso nuevo
+        // trae user_id, correo y nombre son solo etiquetas históricas y nunca
+        // deciden quién puede actuar. El respaldo se conserva sólo para pasos
+        // legacy que todavía no tienen identidad estructurada.
+        const pasoEsMio = step.user_id
+          ? String(user?.id || '') === String(step.user_id)
+          : (step.email
+              ? String(user?.email || '').toLowerCase() === String(step.email).toLowerCase()
+              : Boolean(step.name && user?.name && step.name === user.name));
+        const myTurn = rev.status === 'pending' && !bloqueada && (pasoEsMio || isAdmin);
         return (
           <div key={rev.id} style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8, marginBottom: 14, overflow: 'hidden' }}>
             <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #f3f3f3' }}>
@@ -289,6 +273,16 @@ export function ReviewsView({ projectPrefix, user, isAdmin }) {
               })}
               <span style={{ marginLeft: 'auto', fontSize: 11, color: '#aaa' }}>{rev.created_by} · {formatDate(rev.created_at)}</span>
             </div>
+            {rev.status === 'pending' && rev.paso_vence_en && (
+              <div style={{ padding: '0 16px 10px', fontSize: 12, color: '#6b7280' }}>
+                Plazo del paso actual: <b>{formatDate(rev.paso_vence_en)}</b>
+              </div>
+            )}
+            {bloqueada && (
+              <div role="alert" style={{ margin: '0 16px 12px', padding: '9px 11px', borderRadius: 6, background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239', fontSize: 12 }}>
+                <b>La revisión no puede avanzar.</b>{rev.flujo_motivo ? ` ${rev.flujo_motivo}` : ''}
+              </div>
+            )}
             {rev.history.filter(h => h.comment).length > 0 && (
               <div style={{ padding: '0 16px 10px', fontSize: 12, color: '#777' }}>
                 {rev.history.filter(h => h.comment).map((h, i) => (

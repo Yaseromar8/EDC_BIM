@@ -53,11 +53,14 @@ def main():
         print('1. USUARIOS SIN NINGUNA MEMBRESIA')
         cur.execute("""SELECT u.id, u.email, u.role FROM users u
                         WHERE u.is_active AND u.role <> 'admin'
+                          AND COALESCE(u.password_hash, '') <> ''
                           AND NOT EXISTS (SELECT 1 FROM project_users pu
                                            WHERE pu.user_id = u.id)
                         ORDER BY u.id""")
         sueltos = cur.fetchall()
-        cur.execute("SELECT count(*) FROM users WHERE is_active AND role <> 'admin'")
+        cur.execute("""SELECT count(*) FROM users
+                        WHERE is_active AND role <> 'admin'
+                          AND COALESCE(password_hash, '') <> ''""")
         total = cur.fetchone()[0]
         if sueltos:
             problemas += 1

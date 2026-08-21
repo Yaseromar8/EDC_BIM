@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { API, formatDate } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import DocQuickView from './DocQuickView';
-import { useDocPreview } from './ReviewsModule';
+import useDocPreview from '../hooks/useDocPreview';
 
 // ── Modal: añadir selección a un conjunto (existente o nuevo) ──
 export function AddToSetModal({ isOpen, onClose, items, projectPrefix, onAdded }) {

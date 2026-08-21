@@ -109,7 +109,7 @@ def cliente_como(usuario):
 
 def main():
     os.environ['ENFORCE_PROJECT_AUTHZ'] = 'true'
-    os.environ.setdefault('AUTH_POLICY_MODE', 'sombra')
+    os.environ['AUTH_POLICY_MODE'] = 'estricto'
     os.environ.setdefault('APP_SECRET', 'x' * 32)
 
     import db
@@ -153,6 +153,14 @@ def main():
         if not ok:
             return 1
         rid = r.get_json()['id']
+
+        r = cli.get('/api/reviews?model_urn=' + OBRA)
+        listado = (r.get_json() or {}).get('reviews') or []
+        creada = next((x for x in listado if x.get('id') == rid), None)
+        _paso(r.status_code == 200 and creada is not None,
+              'la revision se LISTA desde PostgreSQL por su obra')
+        _paso(creada and creada.get('flujo') == 'ACTIVA' and creada.get('paso_vence_en'),
+              'el listado expone flujo ACTIVA y plazo del turno')
 
         cur.execute("SELECT paso_vence_en, history FROM doc_reviews WHERE id=%s", (rid,))
         vence1, historia = cur.fetchone()
