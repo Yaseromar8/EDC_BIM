@@ -241,19 +241,23 @@ columna	doc_reviews.status
 columna	doc_reviews.steps
 columna	doc_reviews.title
 columna	doc_rfis.adjuntos
+columna	doc_rfis.cerrado_por
 columna	doc_rfis.codigo
 columna	doc_rfis.created_at
 columna	doc_rfis.created_by
 columna	doc_rfis.estado
 columna	doc_rfis.fecha
 columna	doc_rfis.fecha_respuesta
+columna	doc_rfis.historial
 columna	doc_rfis.id
 columna	doc_rfis.model_urn
 columna	doc_rfis.project_id
 columna	doc_rfis.responsable
+columna	doc_rfis.responsable_id
 columna	doc_rfis.respuesta
 columna	doc_rfis.titulo
 columna	doc_rfis.updated_at
+columna	doc_rfis.vence_en
 columna	doc_set_items.added_at
 columna	doc_set_items.added_by
 columna	doc_set_items.name
@@ -1043,10 +1047,15 @@ restriccion	doc_reviews not null model_urn
 restriccion	doc_reviews not null steps
 restriccion	doc_reviews not null title
 restriccion	doc_reviews primary key (id)
+restriccion	doc_rfis check (((estado is null) or ((estado)::text = any ((array['emitido'::character varying, 'en revisión'::character varying, 'respondido'::character varying, 'cerrado'::character varying])::text[]))))
+restriccion	doc_rfis foreign key (project_id) references projects(id)
+restriccion	doc_rfis foreign key (responsable_id) references users(id) on delete set null
 restriccion	doc_rfis not null codigo
 restriccion	doc_rfis not null id
 restriccion	doc_rfis not null model_urn
+restriccion	doc_rfis not null project_id
 restriccion	doc_rfis primary key (id)
+restriccion	doc_rfis unique (project_id, codigo)
 restriccion	doc_set_items foreign key (set_id) references doc_sets(id) on delete cascade
 restriccion	doc_set_items not null node_id
 restriccion	doc_set_items not null set_id
@@ -1538,6 +1547,7 @@ indice	create unique index on public.doc_partidas using btree (id)
 indice	create unique index on public.doc_redlines using btree (id)
 indice	create unique index on public.doc_reviews using btree (id)
 indice	create unique index on public.doc_rfis using btree (id)
+indice	create unique index on public.doc_rfis using btree (project_id, codigo)
 indice	create unique index on public.doc_set_items using btree (set_id, node_id)
 indice	create unique index on public.doc_sets using btree (id)
 indice	create unique index on public.doc_sets using btree (model_urn, name)

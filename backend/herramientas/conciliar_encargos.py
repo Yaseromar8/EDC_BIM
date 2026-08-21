@@ -22,15 +22,15 @@ Aqui es distinto: el objeto sigue siendo la fuente de verdad y esto solo ajusta
 su reflejo. Cerrar un encargo sobrante o abrir uno que falta no pierde nada.
 Aun asi, por defecto solo informa.
 
-QUE NO PUEDE COMPROBAR, Y POR QUE
----------------------------------
-De un RFI o un Redline se puede detectar que SOBRA un encargo (el objeto ya esta
-respondido), pero no que FALTE. Su responsable es TEXTO LIBRE --en los datos
-reales, 'Ing. Valeria Barrenechea'--, asi que del objeto no se puede deducir a
-que usuario habria que abrirselo. Es la consecuencia aceptada de la semantica
-congelada, no un descuido: el objeto guarda el responsable contractual y el
-encargo la responsabilidad operativa estructurada, y no se exige que sean el
-mismo dato.
+QUE SE PUEDE COMPROBAR DE CADA TIPO
+-----------------------------------
+REVIEW, TRANSMITTAL y RFI: las dos direcciones -- lo que sobra y lo que falta.
+
+Los RFI LEGACY y los REDLINE, solo lo que SOBRA. Su responsable es TEXTO LIBRE
+--en los datos reales, 'Ing. Valeria Barrenechea'--, asi que del objeto no se
+deduce a que usuario abrirle el encargo. Es la consecuencia aceptada de no
+convertir el texto historico en un usuario, no un descuido: el objeto guarda el
+responsable contractual y el encargo la responsabilidad operativa estructurada.
 
     python herramientas/conciliar_encargos.py             # informe
     python herramientas/conciliar_encargos.py --aplicar   # y repara

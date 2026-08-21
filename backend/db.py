@@ -810,6 +810,132 @@ def log_activity(model_urn, action, entity_type, entity_id=None, entity_name=Non
         # No romper la operacion principal si el log falla
         print(f"[ActivityLog] Warning: no se pudo registrar actividad: {e}")
 
+ESTADOS_RFI = ('Emitido', 'En revisión', 'Respondido', 'Cerrado')
+
+
+def _reglas_del_rfi(cursor, conn):
+    """Las restricciones que hacen del RFI un objeto contractual fiable.
+
+    NINGUNA SE IMPONE ADIVINANDO. Cada una comprueba primero los datos reales y,
+    si no puede aplicarse de forma segura, LO DICE y sigue. Una restriccion que
+    se aplica «arreglando» filas de un cliente no es una garantia: es una
+    perdida de informacion con buena intencion.
+    """
+    def _existe(nombre):
+        cursor.execute("SELECT 1 FROM pg_constraint WHERE conname = %s", (nombre,))
+        return cursor.fetchone() is not None
+
+    # 1. `project_id` NO NULO -- la obra de un RFI no puede ser desconocida.
+    #
+    #    Y no es cosmetico: la restriccion unica de abajo es (project_id,
+    #    codigo), y en SQL DOS NULL NO CHOCAN. Con `project_id` nulo, dos
+    #    RFI-013 se colarian por debajo de la unicidad.
+    cursor.execute("SELECT count(*) FROM doc_rfis WHERE project_id IS NULL")
+    sin_obra = cursor.fetchone()[0]
+    if sin_obra:
+        print('[DB] AVISO: %d RFI sin project_id. NO se impone NOT NULL y NO se '
+              'adivina su obra: hay que decidirla a mano.' % sin_obra)
+    else:
+        try:
+            cursor.execute("ALTER TABLE doc_rfis ALTER COLUMN project_id SET NOT NULL")
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print('[DB] project_id NOT NULL no aplicado: %s' % str(e)[:90])
+
+    # 2. La obra existe de verdad.
+    if not _existe('fk_doc_rfis_project'):
+        cursor.execute("""SELECT count(*) FROM doc_rfis r
+                           WHERE r.project_id IS NOT NULL
+                             AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = r.project_id)""")
+        if cursor.fetchone()[0]:
+            conn.commit()
+            print('[DB] AVISO: hay RFI cuyo project_id no existe en projects. '
+                  'NO se crea la clave ajena.')
+        else:
+            try:
+                cursor.execute("ALTER TABLE doc_rfis ADD CONSTRAINT fk_doc_rfis_project "
+                               "FOREIGN KEY (project_id) REFERENCES projects(id)")
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                print('[DB] fk_doc_rfis_project no creada: %s' % str(e)[:90])
+
+    if not _existe('fk_doc_rfis_responsable'):
+        try:
+            cursor.execute("ALTER TABLE doc_rfis ADD CONSTRAINT fk_doc_rfis_responsable "
+                           "FOREIGN KEY (responsable_id) REFERENCES users(id) ON DELETE SET NULL")
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print('[DB] fk_doc_rfis_responsable no creada: %s' % str(e)[:90])
+
+    # 3. DOS RFI-013 EN LA MISMA OBRA NO PUEDEN EXISTIR.
+    #
+    #    Por OBRA, no por `model_urn`: una obra tiene varios alcances --la obra
+    #    '1' tiene OCHO alias registrados-- y agrupar por alcance dejaria pasar
+    #    dos RFI-013 creados bajo alias distintos de la misma obra.
+    if not _existe('uq_doc_rfis_codigo'):
+        cursor.execute("""SELECT count(*) FROM (
+                            SELECT project_id, codigo FROM doc_rfis
+                             WHERE project_id IS NOT NULL
+                             GROUP BY 1,2 HAVING count(*) > 1) d""")
+        if cursor.fetchone()[0]:
+            conn.commit()
+            print('[DB] AVISO: ya hay codigos de RFI repetidos dentro de una obra. '
+                  'NO se crea la restriccion unica; hay que renumerarlos a mano.')
+        else:
+            try:
+                cursor.execute("ALTER TABLE doc_rfis ADD CONSTRAINT uq_doc_rfis_codigo "
+                               "UNIQUE (project_id, codigo)")
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                print('[DB] uq_doc_rfis_codigo no creada: %s' % str(e)[:90])
+
+    # 4. Los cuatro estados, y nada mas. No se inventa ninguno: son los que la
+    #    interfaz ya ofrece y los que los 25 registros reales usan.
+    if not _existe('ck_doc_rfis_estado'):
+        cursor.execute("SELECT count(*) FROM doc_rfis WHERE estado IS NOT NULL "
+                       "  AND estado NOT IN %s", (ESTADOS_RFI,))
+        if cursor.fetchone()[0]:
+            conn.commit()
+            print('[DB] AVISO: hay RFI con estados fuera de los cuatro. NO se crea '
+                  'el CHECK y NO se reescribe ningun estado.')
+        else:
+            try:
+                cursor.execute("ALTER TABLE doc_rfis ADD CONSTRAINT ck_doc_rfis_estado "
+                               "CHECK (estado IS NULL OR estado IN %s)", (ESTADOS_RFI,))
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                print('[DB] ck_doc_rfis_estado no creado: %s' % str(e)[:90])
+
+
+def ensure_reglas_del_rfi():
+    """Las restricciones del RFI, en un paso PROPIO y AL FINAL del arranque.
+
+    Estaban dentro de `ensure_rfi_schema`, que corre pronto -- y sus claves
+    ajenas apuntan a `projects` y a `users`, que todavia no existen entonces.
+    Sobre una base ya construida funcionaba; sobre una VACIA fallaba en
+    silencio y la instancia nueva se quedaba sin la restriccion unica de
+    codigos, sin el CHECK de estados y sin `project_id NOT NULL`.
+
+    Lo encontro la regeneracion del manifiesto desde cero. Es el mismo error de
+    orden que ya se pago con las claves ajenas: lo que referencia tablas ajenas
+    va despues de quien las crea.
+    """
+    from db import get_db_connection as _c
+    try:
+        with _c() as conn:
+            cur = conn.cursor()
+            _reglas_del_rfi(cur, conn)
+            conn.commit()
+        print('[DB] Reglas del RFI verificadas.')
+    except Exception as e:
+        print('Error aplicando las reglas del RFI: %s' % e)
+
+
 @solo_con_ddl
 def ensure_rfi_schema():
     """Crea la tabla principal para el modulo de Requerimiento de Informacion (RFI)."""
@@ -841,6 +967,30 @@ def ensure_rfi_schema():
 
             cursor.execute("ALTER TABLE doc_rfis ADD COLUMN IF NOT EXISTS respuesta VARCHAR(50);")
             cursor.execute("ALTER TABLE doc_rfis ADD COLUMN IF NOT EXISTS fecha_respuesta TIMESTAMP WITH TIME ZONE;")
+
+            # -- EL RFI PROFESIONAL --------------------------------------
+            #
+            # `responsable` (texto) NO SE TOCA: es lo que dice el documento
+            # contractual, y en los datos reales vale 'Ing. Valeria Barrenechea'.
+            # `responsable_id` es OTRA cosa: a quien le toca AHORA, como
+            # identidad del sistema. No se exige que sean el mismo dato.
+            #
+            # Y esta en el OBJETO, no solo en `encargos`, por una razon concreta:
+            # sin el, la conciliacion no puede detectar que FALTE un encargo de
+            # RFI --del texto libre no se deduce a que usuario abrirselo--. Con
+            # el, la proyeccion se vuelve RECONSTRUIBLE.
+            cursor.execute("ALTER TABLE doc_rfis ADD COLUMN IF NOT EXISTS "
+                           "responsable_id INTEGER;")
+            # El plazo vive en el OBJETO. Leccion ya pagada en Reviews: si el
+            # encargo se perdia y se reconstruia, el plazo desaparecia porque el
+            # objeto no sabia cual era.
+            cursor.execute("ALTER TABLE doc_rfis ADD COLUMN IF NOT EXISTS "
+                           "vence_en TIMESTAMP;")
+            cursor.execute("ALTER TABLE doc_rfis ADD COLUMN IF NOT EXISTS "
+                           "historial JSONB DEFAULT '[]'::jsonb;")
+            cursor.execute("ALTER TABLE doc_rfis ADD COLUMN IF NOT EXISTS "
+                           "cerrado_por VARCHAR(255);")
+            conn.commit()
             
             conn.commit()
             print("[DB] Esquema RFI verificado/creado exitosamente.")

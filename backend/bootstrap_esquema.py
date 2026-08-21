@@ -85,6 +85,7 @@ def _rutinas():
     from routes.dashboards import _ensure_tables as ensure_dashboards_tables
     from routes.ai import _asegurar_tabla_cache as ensure_cache_ia
     from folder_permissions import init_folder_permissions_table
+    from db import ensure_reglas_del_rfi
     from integridad_referencial import ensure_claves_ajenas
     from referencias_de_obra import ensure_tabla_referencias
     from directorio_de_obra import ensure_directorio
@@ -159,6 +160,9 @@ def _rutinas():
         ('encargos', ensure_encargos),
         # Las claves ajenas van LAS ULTIMAS: no se puede referenciar una
         # tabla que todavia no existe.
+        # Las reglas del RFI referencian `projects` y `users`: van con las
+        # claves ajenas, al final, no donde se crea su tabla.
+        ('reglas_del_rfi', ensure_reglas_del_rfi),
         ('integridad_referencial', ensure_claves_ajenas),
     ]
 

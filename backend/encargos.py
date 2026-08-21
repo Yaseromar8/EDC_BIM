@@ -496,13 +496,18 @@ def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
 def _faltantes(cur):
     """Lo que el objeto dice que se debe y no tiene encargo abierto.
 
-    OJO CON RFI Y REDLINE: no se comprueban, y no es un olvido. Su responsable
-    es TEXTO LIBRE ('Ing. Valeria Barrenechea'), asi que del objeto no se puede
-    deducir a que USUARIO habria que abrirle el encargo. Es la consecuencia
-    directa y aceptada de la semantica congelada: el objeto guarda el
-    responsable contractual, el encargo guarda la responsabilidad operativa
-    estructurada, y no se exige que sean el mismo dato. Se puede detectar que
-    SOBRA un encargo de un RFI ya respondido; no que FALTE uno.
+    QUE SE PUEDE COMPROBAR DE CADA TIPO, Y POR QUE
+    ----------------------------------------------
+    REVIEW y TRANSMITTAL: las dos direcciones. Sus destinatarios llevan identidad.
+
+    RFI: las dos direcciones DESDE QUE TIENE `responsable_id`. Antes solo se
+    podia detectar que SOBRARA un encargo --el objeto ya estaba respondido--,
+    porque su responsable era texto libre y del objeto no se deducia a que
+    usuario abrirselo. Los RFI LEGACY, que siguen sin `responsable_id`, siguen
+    sin poder comprobarse en esa direccion: es la consecuencia aceptada de no
+    convertir el texto historico en un usuario.
+
+    REDLINE: solo que SOBRE. Su responsable sigue siendo texto libre.
     """
     faltan, bloqueadas = [], []
     import flujo_de_revision as _flujo
@@ -531,6 +536,44 @@ def _faltantes(cur):
             # y con el, el recordatorio y el aviso de vencido en la bandeja.
             faltan.append(('REVIEW', str(rid), uid,
                            'Revisar: %s (paso %d)' % (titulo, (paso or 0) + 1), vence))
+
+    # RFI vivos con responsable ESTRUCTURADO.
+    #
+    # Esto ANTES NO SE PODIA. El responsable de un RFI era texto libre --'Ing.
+    # Valeria Barrenechea'-- y del objeto no se deducia a que usuario abrirle el
+    # encargo: solo se detectaba que SOBRARA uno, nunca que faltara. Con
+    # `responsable_id` en el objeto, la proyeccion se vuelve reconstruible.
+    try:
+        # EL MISMO CRITERIO QUE `_sigue_debiendose`, y no otro parecido.
+        #
+        # La primera version filtraba solo `estado <> 'Cerrado'`, asi que un RFI
+        # RESPONDIDO se contaba como «falta su encargo», la conciliacion lo
+        # reabria, y acto seguido `_sigue_debiendose` lo declaraba sobrante: dos
+        # mitades con criterios distintos hacen que la conciliacion OSCILE en vez
+        # de converger. Lo encontro el ensayo.
+        cur.execute("SELECT id::text, codigo, titulo, responsable_id, project_id, "
+                    "       vence_en, estado FROM doc_rfis "
+                    "  WHERE responsable_id IS NOT NULL "
+                    "    AND lower(coalesce(estado,'')) NOT IN %s "
+                    "    AND coalesce(respuesta,'') = ''", (ESTADOS_DE_CIERRE,))
+        for rid, codigo, titulo, uid, obra, vence, estado in cur.fetchall():
+            # Si el responsable ya no esta en la obra, el RFI esta BLOQUEADO:
+            # no es una divergencia reparable --`abrir()` se negaria-- sino un
+            # asunto que necesita a una persona.
+            cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
+                        (str(obra), uid))
+            if not cur.fetchone():
+                bloqueadas.append(('RFI', str(rid), codigo or '',
+                                   'su responsable ya no pertenece a la obra'))
+                continue
+            cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='RFI' AND objeto_id=%s "
+                        "   AND destino_usuario=%s AND estado='abierto'", (str(rid), uid))
+            if not cur.fetchone():
+                faltan.append(('RFI', str(rid), uid,
+                               'Responder %s: %s' % (codigo or 'RFI', titulo or ''),
+                               vence))
+    except Exception:
+        cur.connection.rollback()
 
     # Emisiones sin acusar: cada destinatario que sea usuario y miembro.
     cur.execute('SELECT id, number, subject, recipients, acuses FROM transmittals')
