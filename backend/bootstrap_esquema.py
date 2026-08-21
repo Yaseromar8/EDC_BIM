@@ -593,6 +593,28 @@ def _codigo_de_salida(completo):
         print('!!  temporal: quita la variable en cuanto se reparen.')
         print('!' * 70)
         return 0
+
+    # EL REMEDIO, AQUI MISMO.
+    #
+    # Sin esto, el log de un despliegue caido son 71 objetos que faltan y un
+    # `exit 1`. Quien lo lee --a las once de la noche, con el servicio abajo--
+    # tiene que saber ademas que `yarn migrate` es la respuesta y que exige
+    # `ecd_migrator`. Un diagnostico que no dice que hacer obliga a buscarlo
+    # justo cuando no hay tiempo de buscar nada.
+    print('')
+    print('QUE HACER')
+    print('  El esquema de esta base no es el que el codigo espera, asi que el')
+    print('  servicio NO arranca. Construyelo antes de arrancar:')
+    print('')
+    print('      yarn migrate          (backend/, con DB_USER=ecd_migrator)')
+    print('')
+    print('  `start` solo VERIFICA: no migra a proposito -- la aplicacion corre')
+    print('  como `ecd_app`, que no puede crear esquema. Si la migracion se')
+    print('  lanza con ese rol, se rechaza y lo dice.')
+    print('')
+    print('  Si hace falta arrancar YA sabiendo que el esquema esta incompleto:')
+    print('      ESQUEMA_ESTRICTO=false')
+    print('  y quitala en cuanto se repare, porque grita en cada arranque.')
     return 1
 
 
