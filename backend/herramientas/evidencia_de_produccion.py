@@ -330,6 +330,71 @@ def contra_el_servicio(url):
     return 0
 
 
+def diagnostico(host, puerto, base, usuario):
+    """¿Por que la interfaz enseña cero proyectos? Se mira LA BASE, no la app.
+
+    Solo lectura, con el mismo candado que E1/E2. Responde de una pasada:
+    ¿hay proyectos?, ¿que cuentas existen y con que rol?, ¿quien es miembro de
+    que?, y ¿cuanto expediente hay debajo?
+    """
+    import psycopg2
+    clave = getpass.getpass('contraseña de %s en %s:%s (no se muestra): '
+                            % (usuario, host, puerto))
+    try:
+        conn = psycopg2.connect(host=host, port=puerto, dbname=base,
+                                user=usuario, password=clave, connect_timeout=15)
+    except Exception as e:
+        print('NO SE PUDO CONECTAR: %s' % str(e).split('\n')[0])
+        return 2
+    finally:
+        del clave
+    conn.set_session(readonly=True)
+    cur = conn.cursor()
+
+    _p('DIAGNOSTICO DE PROYECTOS · %s · base %s · %s'
+       % (datetime.datetime.now().strftime('%Y-%m-%d %H:%M'), base, host))
+    _p('sesion de SOLO LECTURA')
+    _p()
+
+    _p('── PROYECTOS ──')
+    cur.execute("SELECT count(*) FROM projects")
+    n = cur.fetchone()[0]
+    _p('projects: %d fila(s)' % n)
+    cur.execute("SELECT id, name, status, hub_id FROM projects ORDER BY name LIMIT 30")
+    for r in cur.fetchall():
+        _p('   %-40s %-10s %s' % ((r[1] or '—')[:40], r[2] or '—', (r[0] or '')[:30]))
+    _p()
+
+    _p('── CUENTAS ──')
+    cur.execute("SELECT id, email, name, role, COALESCE(is_active, TRUE), created_at "
+                "  FROM users ORDER BY id")
+    for r in cur.fetchall():
+        _p('   id=%-4s %-36s %-22s rol=%-8s activa=%s alta=%s'
+           % (r[0], (r[1] or '—')[:36], (r[2] or '—')[:22], r[3] or '—',
+              'sí' if r[4] else 'NO', r[5].date() if r[5] else '—'))
+    _p()
+
+    _p('── MEMBRESIAS (project_users) ──')
+    cur.execute("""SELECT pu.project_id, pu.user_id, u.email
+                     FROM project_users pu LEFT JOIN users u ON u.id = pu.user_id
+                    ORDER BY pu.project_id, pu.user_id""")
+    filas = cur.fetchall()
+    if not filas:
+        _p('   NINGUNA: nadie es miembro de nada')
+    for r in filas[:40]:
+        _p('   %-30s -> id=%-4s %s' % ((r[0] or '')[:30], r[1], (r[2] or '—')[:36]))
+    _p()
+
+    _p('── EL EXPEDIENTE DEBAJO ──')
+    for t in ('file_nodes', 'file_versions', 'doc_rfis', 'doc_redlines',
+              'transmittals', 'activity_log', 'project_ref'):
+        cur.execute('SELECT count(*) FROM "%s"' % t)
+        _p('   %-14s %8d' % (t, cur.fetchone()[0]))
+    conn.close()
+    _guardar('diagnostico-proyectos')
+    return 0
+
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description='Evidencia E1-E3, solo lectura.')
     ap.add_argument('--db-host')
@@ -339,7 +404,11 @@ if __name__ == '__main__':
     ap.add_argument('--web', help='URL del servicio para E3')
     ap.add_argument('--solo-e1', action='store_true',
                     help='solo el esquema contra el manifiesto; ni roles ni grants')
+    ap.add_argument('--diagnostico', action='store_true',
+                    help='proyectos, cuentas y membresias reales; solo lectura')
     a = ap.parse_args()
+    if a.diagnostico and a.db_host and a.db_name:
+        raise SystemExit(diagnostico(a.db_host, a.db_port, a.db_name, a.db_user))
     if a.web:
         raise SystemExit(contra_el_servicio(a.web))
     if a.db_host and a.db_name:
