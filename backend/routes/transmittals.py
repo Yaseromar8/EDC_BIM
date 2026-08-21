@@ -257,6 +257,35 @@ def create_transmittal():
             cur.execute("SELECT COALESCE(MAX(number), 0) + 1 FROM transmittals WHERE model_urn = %s",
                         (d['model_urn'],))
             number = cur.fetchone()[0]
+            # LA IDENTIDAD DEL DESTINATARIO, RESUELTA AL EMITIR.
+            #
+            # `recipients` guardaba `{email, name}` y el acuse se resolvia por
+            # TEXTO -- incluido el NOMBRE. Dos personas llamadas igual y la
+            # equivocada acusa recibo de una emision formal. Es la misma clase
+            # de defecto que ya se cerro en Reviews, RFI y Red Line; este flujo
+            # se habia quedado fuera.
+            #
+            # Se resuelve AHORA y no al acusar, por dos razones: la emision es
+            # el acto contractual --lo que conste ahi es lo que se defiende-- y
+            # asi cada emision nueva nace con identidad en vez de sumarse a una
+            # deuda que despues habria que adoptar a mano, como paso con los 25
+            # RFI y los 33 Red Lines heredados.
+            #
+            # Si un destinatario no es usuario del sistema, se guarda tal cual:
+            # NO se inventa un `user_id`, y su acuse seguira resolviendose por
+            # texto. Inferir seria peor que no saber.
+            for _r in d['recipients']:
+                if not isinstance(_r, dict) or _r.get('user_id'):
+                    continue
+                _correo = (_r.get('email') or '').strip().lower()
+                if not _correo:
+                    continue
+                cur.execute("SELECT id FROM users WHERE lower(email) = %s "
+                            "  AND COALESCE(is_active, TRUE)", (_correo,))
+                _u = cur.fetchone()
+                if _u:
+                    _r['user_id'] = _u[0]
+
             cur.execute("""INSERT INTO transmittals (model_urn, number, subject, message, recipients, items, created_by)
                            VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                         (d['model_urn'], number, d['subject'], d.get('message', ''),
@@ -303,11 +332,37 @@ def create_transmittal():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def _es_destinatario(recipients, email, nombre):
-    """¿Esta persona figura entre los destinatarios del transmittal?"""
+def _es_destinatario(recipients, email, nombre, user_id=None):
+    """¿Esta persona figura entre los destinatarios del transmittal?
+
+    IDENTIDAD ESTRICTA CUANDO LA HAY. Si el destinatario lleva `user_id` --las
+    emisiones nuevas lo llevan siempre que el destinatario sea usuario del
+    sistema-- la respuesta es una comparacion de identidades y NO hay respaldo
+    por nombre ni por correo. Comparar nombres dejaba que dos personas llamadas
+    igual acusaran recibo la una por la otra, en un acto contractual.
+
+    El respaldo por texto se conserva SOLO para las emisiones LEGACY, que no
+    tienen `user_id` y que no se convierten: adivinar a quien se referia un
+    nombre escrito hace meses es inferir sobre el expediente.
+    """
     email = (email or '').strip().lower()
     nombre = (nombre or '').strip().lower()
+    try:
+        user_id = int(user_id) if user_id is not None else None
+    except (TypeError, ValueError):
+        user_id = None
+
     for r in (recipients or []):
+        if isinstance(r, dict) and r.get('user_id'):
+            # Destinatario CON identidad: solo decide la identidad.
+            try:
+                if user_id is not None and int(r['user_id']) == user_id:
+                    return True
+            except (TypeError, ValueError):
+                pass
+            continue
+
+        # -- Respaldo SOLO para destinatarios legacy, sin `user_id` --
         re_mail = str((r.get('email') if isinstance(r, dict) else r) or '').strip().lower()
         re_nom = str((r.get('name') if isinstance(r, dict) else '') or '').strip().lower()
         if email and re_mail == email:
@@ -343,7 +398,8 @@ def acusar_recibo(tid):
                 return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
 
             es_admin = u.get('role') == 'admin'
-            if not es_admin and not _es_destinatario(recipients, u.get('email'), u.get('name')):
+            if not es_admin and not _es_destinatario(recipients, u.get('email'),
+                                                     u.get('name'), u.get('id')):
                 return jsonify({"success": False,
                                 "error": "Solo un destinatario (o un administrador) puede acusar recibo."}), 403
 
@@ -353,7 +409,8 @@ def acusar_recibo(tid):
                 acuses.append({
                     'por': quien,
                     'en': datetime.now(timezone.utc).isoformat(),
-                    'via': 'admin' if (es_admin and not _es_destinatario(recipients, u.get('email'), u.get('name'))) else 'destinatario',
+                    'via': 'admin' if (es_admin and not _es_destinatario(
+                        recipients, u.get('email'), u.get('name'), u.get('id'))) else 'destinatario',
                 })
                 cur.execute("UPDATE transmittals SET acuses = %s WHERE id = %s",
                             (json.dumps(acuses), tid))

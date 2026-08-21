@@ -38,9 +38,18 @@ import re
 
 logger = logging.getLogger(__name__)
 
-# Sin permiso explicito en ninguna carpeta de la cadena, manda el rol global.
-# Es el mismo mapa de `folder_permissions.py`: se importa de alli para que no
-# puedan divergir dos definiciones de quien ve que.
+# LA REGLA NO SE REESCRIBE AQUI: se importa de donde vive.
+#
+# `permiso_documental` es la unica verdad sobre quien puede acceder a un
+# documento. Esta consulta la traduce a SQL para poder filtrar miles de filas de
+# una vez -- pero traduce la MISMA regla, con los MISMOS sujetos y la MISMA
+# precedencia, y el ensayo compara las dos respuestas en cada caso.
+#
+# Ya se pago el precio de no hacerlo: la primera version de esta busqueda tomaba
+# el permiso mas cercano cuando el producto sumaba, y escondia documentos que el
+# usuario si podia abrir. La segunda sumaba cuando el producto ya decidia por el
+# mas cercano. Dos veces la misma leccion.
+import permiso_documental as _pd
 from folder_permissions import GLOBAL_ROLE_TO_PERMISSION, PERMISSION_LEVELS
 
 # Ver es el minimo para aparecer en una busqueda. Quien no llega a esto no
@@ -49,6 +58,18 @@ _MINIMO = PERMISSION_LEVELS['viewer']
 
 # Un limite duro. Una busqueda no es una exportacion del expediente.
 TOPE = 200
+
+# El mapa nivel->entero y la precedencia de sujetos, como CASE de enteros. Se
+# interpolan porque son constantes del codigo, no entrada del usuario -- y
+# resolverlos como jsonb por fila costo 3.845 ms con 5.000 documentos.
+_CASE_NIVEL = ('CASE fp.permission_level '
+               + ' '.join("WHEN '%s' THEN %d" % (k, v)
+                          for k, v in sorted(PERMISSION_LEVELS.items()))
+               + ' ELSE -1 END')
+_CASE_PRECEDENCIA = ('CASE fp.sujeto_tipo '
+                     + ' '.join("WHEN '%s' THEN %d" % (t, i)
+                                for i, t in enumerate(_pd.PRECEDENCIA))
+                     + ' ELSE 99 END')
 
 
 def _patron(texto):
@@ -64,22 +85,16 @@ def _patron(texto):
 
 # La consulta entera, en un solo sitio.
 #
-# 1. `cand`    los FILE de la obra que casan con el texto.
-# 2. `cadena`  la cadena de ancestros de cada candidato, con su nivel.
-# 3. `subida`  de esa cadena, en UNA pasada: el MAXIMO nivel explicito
-#              (herencia aditiva) y la ruta de carpetas de la raiz hacia abajo.
+# 1. `cand`     los FILE de la obra que casan con el texto.
+# 2. `cadena`   la cadena de ancestros de cada candidato, con su nivel.
+# 3. `reglas`   las reglas de esa cadena que ALCANZAN a este principal, por
+#               cualquiera de sus tres sujetos.
+# 4. `elegida`  CLOSEST-WINS: el nivel MAS CERCANO decide, y dentro de el manda
+#               el sujeto mas especifico (USER > COMPANY > FUNCTION).
+# 5. `ruta`     los nombres de los ancestros, de la raiz hacia abajo.
 #
-# `is_deleted = FALSE` en las tres: un documento en la papelera no se encuentra,
-# y una carpeta borrada no aporta ruta.
-# El mapa nivel->entero se interpola como un CASE de enteros, NO como jsonb.
-# La primera version resolvia `%(niveles)s::jsonb ->> ...` por fila y la
-# busqueda paso de 68 ms a 3.845 ms con 5.000 documentos. Se interpola porque
-# `PERMISSION_LEVELS` es una constante del codigo, no entrada del usuario.
-_CASE_NIVEL = ('CASE fp.permission_level '
-               + ' '.join("WHEN '%s' THEN %d" % (k, v)
-                          for k, v in sorted(PERMISSION_LEVELS.items()))
-               + ' ELSE -1 END')
-
+# `is_deleted = FALSE` en todas: un documento en la papelera no se encuentra, y
+# una carpeta borrada no aporta ruta.
 _BUSCAR = """
 WITH RECURSIVE cand AS (
     SELECT n.id, n.parent_id, n.name, n.mime_type, n.status, n.updated_at,
@@ -102,45 +117,46 @@ cadena AS (
       JOIN file_nodes f ON f.id = ca.nodo AND f.is_deleted = FALSE
      WHERE f.parent_id IS NOT NULL AND ca.nivel < 40
 ),
-subida AS (
-    -- UNA SOLA PASADA sobre la cadena: de ella salen el permiso heredado y la
-    -- ruta. Estaban en dos CTE separadas y el planificador unia la del permiso
-    -- con un BUCLE ANIDADO -- 12,5 MILLONES de comparaciones descartadas para
-    -- 5.000 documentos, 2.8 s en vez de 30 ms. Lo enseño `EXPLAIN ANALYZE`, no
-    -- una corazonada.
-    --
-    -- El permiso es el MAXIMO de la cadena, no el mas cercano: es la MISMA
-    -- regla que `_get_effective_permission_impl`, cuya herencia es ADITIVA. La
-    -- primera version tomaba el mas cercano, que es otra regla distinta, y con
-    -- eso la busqueda escondia documentos que el usuario SI podia abrir desde
-    -- Archivos. Dos modelos de permisos en el mismo producto es exactamente lo
-    -- que este fichero dice querer evitar.
-    --
-    -- `folder_permissions` tiene UNIQUE(folder_node_id, user_id), asi que el
-    -- LEFT JOIN no duplica ninguna carpeta y `string_agg` sigue siendo la ruta.
+reglas AS (
+    SELECT ca.hoja, ca.nivel, {precedencia} AS prec, {niveles} AS nivel_regla
+      FROM cadena ca
+      JOIN folder_permissions fp ON fp.folder_node_id = ca.nodo
+       AND ( (fp.sujeto_tipo = 'USER'                 AND fp.sujeto_id = %(s_user)s)
+          OR (fp.sujeto_tipo = 'COMPANY'              AND fp.sujeto_id = %(s_company)s)
+          OR (fp.sujeto_tipo = 'CONTRACTUAL_FUNCTION' AND fp.sujeto_id = %(s_funcion)s) )
+),
+elegida AS (
+    -- CLOSEST-WINS: `nivel ASC` toma la carpeta mas cercana; `prec ASC`, el
+    -- sujeto mas especifico DENTRO de esa carpeta. No se acumula con las de
+    -- arriba: eso era la herencia aditiva, y es lo que impedia reservar una
+    -- carpeta a alguien que tuviera permiso mas arriba.
+    SELECT DISTINCT ON (hoja) hoja, nivel_regla
+      FROM reglas
+     ORDER BY hoja, nivel ASC, prec ASC
+),
+ruta AS (
     SELECT ca.hoja,
-           string_agg(f.name, ' / ' ORDER BY ca.nivel DESC) AS carpetas,
-           MAX({niveles}) AS nivel
+           string_agg(f.name, ' / ' ORDER BY ca.nivel DESC) AS carpetas
       FROM cadena ca
       JOIN file_nodes f ON f.id = ca.nodo AND f.is_deleted = FALSE
- LEFT JOIN folder_permissions fp
-        ON fp.folder_node_id = ca.nodo AND fp.user_id = %(uid)s
      GROUP BY ca.hoja
 )
 SELECT c.id::text, c.name, c.mime_type, c.status, c.updated_at,
        c.gcs_urn, c.version_number, c.current_version_id::text,
        c.tags, c.metadata, c.parent_id::text,
-       COALESCE(s.carpetas, '') AS ruta,
-       GREATEST(COALESCE(s.nivel, -1), %(nivel_global)s) AS nivel,
+       COALESCE(r.carpetas, '') AS ruta,
+       COALESCE(e.nivel_regla, %(nivel_defecto)s) AS nivel,
        v.version_number AS version_vigente, v.id::text AS version_vigente_id
   FROM cand c
-  LEFT JOIN subida s ON s.hoja = c.id
+  LEFT JOIN elegida e ON e.hoja = c.id
+  LEFT JOIN ruta r ON r.hoja = c.id
   LEFT JOIN file_versions v ON v.id = c.current_version_id
- -- El rol global es un SUELO, no un techo: es el «Paso 3» del resolutor.
- WHERE GREATEST(COALESCE(s.nivel, -1), %(nivel_global)s) >= %(minimo)s
+ -- El perfil global es el VALOR POR DEFECTO cuando no hay ninguna regla en toda
+ -- la cadena. Ya no es un suelo que se imponga sobre lo que se haya decidido.
+ WHERE COALESCE(e.nivel_regla, %(nivel_defecto)s) >= %(minimo)s
  ORDER BY c.updated_at DESC NULLS LAST, c.name
  LIMIT %(tope)s
-""".replace('{niveles}', _CASE_NIVEL)
+""".replace('{niveles}', _CASE_NIVEL).replace('{precedencia}', _CASE_PRECEDENCIA)
 
 
 def buscar(cur, obra, texto, usuario, tope=50):
@@ -155,22 +171,28 @@ def buscar(cur, obra, texto, usuario, tope=50):
         return []
 
     rol = (usuario or {}).get('role') or 'viewer'
-    uid = (usuario or {}).get('id')
-    try:
-        uid = int(uid)
-    except (TypeError, ValueError):
-        # Una sesion sin identidad numerica no tiene permisos propios: solo el
-        # que le da su rol global.
-        uid = -1
 
-    # Un administrador global ve toda la obra: es lo que ya decide
-    # `_get_effective_permission_impl` en su paso 0, y aqui no puede decir otra
-    # cosa.
-    fallback = 'admin' if rol == 'admin' else GLOBAL_ROLE_TO_PERMISSION.get(rol, 'none')
+    # Un administrador global ve toda la obra: es el paso 0 de
+    # `permiso_documental.permiso_efectivo`, y aqui no puede decir otra cosa.
+    if rol == 'admin':
+        defecto = PERMISSION_LEVELS['admin']
+    else:
+        defecto = PERMISSION_LEVELS.get(
+            GLOBAL_ROLE_TO_PERMISSION.get(rol, 'none'), -1)
+
+    # LOS TRES SUJETOS, resueltos por la misma funcion que usa el guardia. Si
+    # alguno no aplica se manda un valor imposible, para que ninguna regla case
+    # por accidente con una cadena vacia.
+    sujetos = _pd.sujetos_de(cur, usuario, obra)
+    if _pd.USER not in sujetos and rol != 'admin':
+        return []
 
     cur.execute(_BUSCAR, {
-        'obra': str(obra), 'q': _patron(texto), 'uid': uid,
-        'nivel_global': PERMISSION_LEVELS.get(fallback, -1),
+        'obra': str(obra), 'q': _patron(texto),
+        's_user': sujetos.get(_pd.USER) or _pd.SIN_SUJETO,
+        's_company': sujetos.get(_pd.COMPANY) or _pd.SIN_SUJETO,
+        's_funcion': sujetos.get(_pd.FUNCTION) or _pd.SIN_SUJETO,
+        'nivel_defecto': defecto,
         'minimo': _MINIMO,
         'tope': min(int(tope or 50), TOPE),
     })

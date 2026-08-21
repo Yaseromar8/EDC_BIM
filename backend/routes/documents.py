@@ -257,7 +257,7 @@ def _existing_file_id(cursor, model_urn, parent_id, filename):
     return row[0] if row else None
 
 
-def _acceso_al_recurso(gcs_urn=None, node_id=None):
+def _acceso_al_recurso(gcs_urn=None, node_id=None, version_id=None):
     """Comprueba el acceso a un archivo POR EL ARCHIVO, no por lo que diga el cliente.
 
     Estas rutas sirven bytes identificando el fichero por ?urn=, ?id= o ?path=,
@@ -342,6 +342,39 @@ def _acceso_al_recurso(gcs_urn=None, node_id=None):
         return jsonify({"success": False, "error": "Documento no encontrado"}), 404
     if not verify_project_access(user, ambito):
         return jsonify({"success": False, "error": "Sin acceso a este documento"}), 403
+
+    # ── EL PERMISO DE CARPETA, TAMBIEN AQUI ─────────────────────────────
+    #
+    # Hasta el 21-ago-2026 esta funcion terminaba una linea mas arriba: bastaba
+    # con SER MIEMBRO DE LA OBRA para obtener cualquier documento cuyo id se
+    # conociera. El permiso de carpeta gobernaba la navegacion y la busqueda
+    # --DESCUBRIR-- pero no la entrega de bytes --OBTENER--. Un permiso que solo
+    # esconde no es un permiso: es un indice ordenado.
+    #
+    # `permiso_documental.guardia` resuelve los tres identificadores al MISMO
+    # recurso canonico: conocer un `node_id`, un `version_id` o un `gcs_urn` ya
+    # no aumenta el acceso. Y si el objeto NO es un documento del arbol --una
+    # foto de campo, un adjunto de punto de control-- devuelve None y decide
+    # quien ya decidia, que para esos objetos es lo correcto.
+    try:
+        import permiso_documental as _pd
+        from db import get_db_connection as _gc
+        with _gc() as _c:
+            _negado = _pd.guardia(_c.cursor(), user, ambito,
+                                  'abrir este documento', minimo='viewer',
+                                  node_id=node_id, version_id=version_id,
+                                  gcs_urn=gcs_urn)
+        if _negado:
+            _anotar_acceso(user, ambito, 'DENEGADO por permiso de carpeta',
+                           gcs_urn, node_id)
+            return _negado
+    except Exception as e:
+        # FAIL-CLOSED. Si no se puede decidir, no se entrega. Lo contrario
+        # convertiria cualquier fallo transitorio en una puerta abierta.
+        logger.error('permiso documental no resuelto: %s', e)
+        return jsonify({"success": False,
+                        "error": "No se pudo verificar el acceso"}), 503
+
     _anotar_acceso(user, ambito, 'sesión', gcs_urn, node_id)
     return None
 
@@ -555,7 +588,8 @@ def get_signed_url_json():
     if not gcs_urn:
         return jsonify({"success": False, "error": "File not found"}), 404
 
-    denegado = _acceso_al_recurso(gcs_urn=gcs_urn, node_id=node_id or None)
+    denegado = _acceso_al_recurso(gcs_urn=gcs_urn, node_id=node_id or None,
+                                  version_id=version_id or None)
     if denegado:
         return denegado
 
@@ -621,6 +655,20 @@ def list_media_paginated():
         parent_id = resolve_path_to_node_id('MULTIMEDIA/', model_urn, auto_create=False)
         if not parent_id:
             return jsonify({"success": True, "files": [], "total": 0, "has_more": False})
+
+        # ESTA RUTA REVELA METADATA DOCUMENTAL --nombre, descripcion y
+        # `metadata` de cada fichero-- y no comprobaba ningun permiso de
+        # carpeta: bastaba con ser miembro de la obra. Ahora consulta la MISMA
+        # decision que la navegacion, la busqueda y la entrega de bytes.
+        from flask import g as _g
+        import permiso_documental as _pd
+        from db import get_db_connection as _gc
+        with _gc() as _c:
+            _negado = _pd.guardia(_c.cursor(), getattr(_g, 'current_user', None),
+                                  model_urn, 'ver esta galería',
+                                  minimo='viewer', node_id=parent_id)
+        if _negado:
+            return _negado
 
         from db import get_db_connection
         with get_db_connection() as conn:
@@ -2875,8 +2923,20 @@ def indice_del_expediente():
     try:
         import indice_expediente as ie
         from db import get_db_connection, log_activity
+        import permiso_documental as _pd
         with get_db_connection() as conn:
-            filas = ie.filas_del_indice(conn.cursor(), model_urn, estados=estados)
+            _cur = conn.cursor()
+            filas = ie.filas_del_indice(_cur, model_urn, estados=estados)
+            # EL INDICE DEL EXPEDIENTE ES METADATA DOCUMENTAL DE TODA LA OBRA, y
+            # solo comprobaba pertenencia. Se filtra por la MISMA decision que
+            # todo lo demas: quien no puede abrir un documento tampoco lo ve
+            # listado aqui. Sin permiso sobre ninguno, el indice sale vacio --
+            # que es la respuesta correcta, no un error.
+            _u = user
+            filas = [f for f in filas
+                     if f.get('node_id') is None
+                     or _pd.guardia(_cur, _u, model_urn, 'ver el expediente',
+                                    minimo='viewer', node_id=f.get('node_id')) is None]
 
         if request.args.get('formato') == 'xlsx':
             quien = (user or {}).get('name') or (user or {}).get('email')

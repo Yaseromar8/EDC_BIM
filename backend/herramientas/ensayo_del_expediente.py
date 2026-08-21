@@ -254,11 +254,14 @@ def main():
                                    ('residente', direccion, 'none'),
                                    ('supervisor', direccion, 'none'),
                                    ('auxiliar', direccion, 'none')):
+            # CON SUJETO: una concesion sin `sujeto_tipo`/`sujeto_id` no la
+            # encuentra el resolutor, y seria una prueba que se engaña sola.
             cur.execute("INSERT INTO folder_permissions (folder_node_id, user_id, "
-                        "  permission_level) VALUES (%s::uuid,%s,%s) "
+                        "  sujeto_tipo, sujeto_id, permission_level) "
+                        "VALUES (%s::uuid,%s,'USER',%s::text,%s) "
                         "ON CONFLICT (folder_node_id, user_id) DO UPDATE "
                         "  SET permission_level = EXCLUDED.permission_level",
-                        (nodo, g[quien], nivel))
+                        (nodo, g[quien], g[quien], nivel))
         conn.commit()
 
         from folder_permissions import get_effective_permission as efec
@@ -272,18 +275,21 @@ def main():
         _paso(efec(g['jefa'], direccion, OBRA, cursor=cur) == 'admin',
               'la jefa entra: es administradora')
 
-        # LA HERENCIA DE ESTE PRODUCTO ES ADITIVA, y conviene dejarlo escrito:
-        # se toma el MAXIMO de la cadena y el rol global actua de SUELO. Por eso
-        # un `editor` alcanza toda la obra y un `none` explicito NO le corta.
-        # No es un fallo de esta prueba: es el modelo, y va como limitacion
-        # conocida en el informe de cierre.
+        # LA LIMITACION QUE ESTAS DOS LINEAS AFIRMABAN, YA NO EXISTE.
+        #
+        # Hasta el 21-ago-2026 la herencia era ADITIVA y el rol global un SUELO:
+        # un `editor` alcanzaba toda la obra y un `none` explicito no le cortaba.
+        # Se reporto como limitacion conocida y se cerro despues con CLOSEST-WINS
+        # (`permiso_documental`). Estas dos comprobaciones estan al reves a
+        # proposito: si alguien volviera al modelo aditivo, saltarian.
         nivel_resi = efec(g['residente'], direccion, OBRA, cursor=cur)
-        _paso(nivel_resi == 'edit',
-              'LIMITACION CONOCIDA: un `none` explicito NO corta la herencia a un '
-              '`editor` -- el modelo solo SUMA permisos', nivel_resi)
-        _paso(efec(g['supervisor'], drenaje, OBRA, cursor=cur) == 'edit',
-              'y el rol global es un SUELO: `editor` obtiene `edit` aunque su '
-              'concesion sea menor')
+        _paso(nivel_resi == 'none',
+              'un `none` explicito SI corta la herencia a un `editor`: '
+              'closest-wins', nivel_resi)
+        _paso(efec(g['supervisor'], drenaje, OBRA, cursor=cur) == 'view_download',
+              'y el rol global YA NO es un suelo: el supervisor se queda en la '
+              'concesion que se le dio (`view_download`)',
+              efec(g['supervisor'], drenaje, OBRA, cursor=cur))
 
         # ══════════════════════════════════════════════════════════════════
         _titulo('3', 'Documentos, versiones y huellas')
@@ -365,10 +371,11 @@ def main():
         r = doc_como('residente').get(
             '/api/docs/global-search?model_urn=%s&q=Contrato' % OBRA)
         visto = len((r.get_json() or {}).get('results', []))
-        _paso((visto > 0) == (efec(g['residente'], direccion, OBRA, cursor=cur) != 'none'),
-              'y para el residente la busqueda dice LO MISMO que el resolutor de '
-              'permisos: no inventa su propia regla',
-              'resolutor edit, busqueda %d' % visto)
+        _nivel_resi = efec(g['residente'], direccion, OBRA, cursor=cur)
+        _paso((visto > 0) == (_nivel_resi != 'none'),
+              'y la busqueda dice LO MISMO que el resolutor de permisos: no '
+              'inventa su propia regla', 'resolutor %s, busqueda %d'
+              % (_nivel_resi, visto))
         r = doc_como('jefa').get(
             '/api/docs/global-search?model_urn=%s&q=Contrato' % OBRA)
         _paso(len((r.get_json() or {}).get('results', [])) == 1,
@@ -763,8 +770,9 @@ def main():
                            raiz2, estado='SHARED')
         version(plano2, 1, 'otro contenido')
         cur.execute("INSERT INTO folder_permissions (folder_node_id, user_id, "
-                    "  permission_level) VALUES (%s::uuid,%s,'edit')",
-                    (raiz2, g['ajeno']))
+                    "  sujeto_tipo, sujeto_id, permission_level) "
+                    "VALUES (%s::uuid,%s,'USER',%s::text,'edit')",
+                    (raiz2, g['ajeno'], g['ajeno']))
         conn.commit()
         rfi_como('ajeno').post('/api/rfis', json={'model_urn': OTRA, 'titulo': 'De B'})
         rl_como('ajeno').post('/api/redlines', json={'model_urn': OTRA, 'titulo': 'De B'})

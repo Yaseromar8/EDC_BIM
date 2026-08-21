@@ -74,7 +74,12 @@ def filas_del_indice(cursor, model_urn, estados=None):
         )
         SELECT fn.name, r.ruta, fn.status, fn.codigo_idoneidad, fn.codigo_revision,
                fn.version_number, fv.emitida_en, fv.emitida_por,
-               fv.created_at, fv.created_by, fn.nomenclatura_ok, fn.size_bytes
+               fv.created_at, fv.created_by, fn.nomenclatura_ok, fn.size_bytes,
+               -- AL FINAL a proposito: asi no se mueve ninguna posicion de las
+               -- que ya se desempaquetan abajo. Hace falta para que el indice
+               -- se pueda filtrar por el MISMO permiso documental que todo lo
+               -- demas: quien no puede abrir un documento tampoco lo ve aqui.
+               fn.id::text
           FROM file_nodes fn
           JOIN rutas r ON fn.id = r.id
           -- La version VIGENTE, no la ultima subida: son distintas si alguien
@@ -105,13 +110,17 @@ def filas_del_indice(cursor, model_urn, estados=None):
 
     filas = []
     for (nombre, ruta, estado, idoneidad, revision, version,
-         emitida_en, emitida_por, subida_en, subida_por, nom_ok, tam) in crudas:
+         emitida_en, emitida_por, subida_en, subida_por, nom_ok, tam,
+         node_id) in crudas:
         # El ultimo tramo es el propio fichero: la columna dice DONDE esta, no
         # como se llama, que ya va en su columna.
         carpetas = (ruta or '').split('/')[:-1]
         if hay_raiz_unica and carpetas:
             carpetas = carpetas[1:]
         filas.append({
+            # No se enseña al usuario: sirve para que el llamante pueda aplicar
+            # el permiso documental sobre cada fila.
+            'node_id': node_id,
             # El codigo es el nombre sin extension: en esta convencion el nombre
             # del fichero ES el identificador del contenedor de informacion.
             'codigo': (nombre or '').rsplit('.', 1)[0],

@@ -57,9 +57,112 @@ def init_folder_permissions_table():
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_fp_folder ON folder_permissions(folder_node_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_fp_user ON folder_permissions(user_id);")
             conn.commit()
+            _sujetos(cursor, conn)
             print("[permissions] Tabla folder_permissions verificada.")
     except Exception as e:
         print(f"[permissions] Error creando tabla: {e}")
+
+
+def _sujetos(cursor, conn):
+    """Una regla puede dirigirse a una PERSONA, una EMPRESA o una FUNCION.
+
+    POR QUE AHORA Y NO DESPUES
+    --------------------------
+    La tabla nacio con `UNIQUE(folder_node_id, user_id)`. Dirigir una regla a
+    una empresa obliga a cambiar esa clave, y cambiar una clave unica con
+    concesiones repartidas por obras reales es una migracion con datos vivos.
+    Hoy hay UNA concesion en toda la instancia --y apunta a una carpeta que ya
+    no existe--, asi que cuesta lo que cuesta ahora y no lo que costaria luego.
+
+    LAS CONCESIONES ACTUALES NO SE REINTERPRETAN
+    --------------------------------------------
+    Cada fila existente se marca `USER` con su propio `user_id`. Nadie decide
+    que una concesion a una persona «en realidad» era a su empresa: eso seria
+    inferir sobre permisos, que es la peor clase de inferencia.
+
+    LA CLAVE DEL SUJETO ES ESTABLE Y NO ES UN NOMBRE
+    ------------------------------------------------
+      USER                  `users.id`
+      COMPANY               `companies.id`
+      CONTRACTUAL_FUNCTION  el codigo de `directorio_de_obra.FUNCIONES`, que es
+                            una lista CERRADA y congelada con un CHECK en
+                            `project_companies` -- no un texto libre.
+    """
+    try:
+        cursor.execute("""SELECT count(*) FROM information_schema.columns
+                           WHERE table_name = 'folder_permissions'
+                             AND column_name = 'sujeto_tipo'""")
+        if cursor.fetchone()[0]:
+            return                                  # ya migrada
+
+        cursor.execute("ALTER TABLE folder_permissions "
+                       "  ADD COLUMN IF NOT EXISTS sujeto_tipo TEXT")
+        cursor.execute("ALTER TABLE folder_permissions "
+                       "  ADD COLUMN IF NOT EXISTS sujeto_id TEXT")
+        conn.commit()
+
+        # Lo que ya habia es, por definicion, de tipo USER.
+        cursor.execute("UPDATE folder_permissions "
+                       "   SET sujeto_tipo = 'USER', sujeto_id = user_id::text "
+                       " WHERE sujeto_tipo IS NULL AND user_id IS NOT NULL")
+        conn.commit()
+
+        # `user_id` deja de ser obligatorio: una regla de EMPRESA no tiene
+        # usuario. Se conserva la columna --y su clave ajena-- porque las reglas
+        # de USER la siguen usando y hay codigo que la lee.
+        try:
+            cursor.execute("ALTER TABLE folder_permissions "
+                           "  ALTER COLUMN user_id DROP NOT NULL")
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print('[permissions] user_id sigue NOT NULL: %s' % str(e)[:80])
+
+        cursor.execute("ALTER TABLE folder_permissions "
+                       "  ALTER COLUMN sujeto_tipo SET DEFAULT 'USER'")
+        try:
+            cursor.execute("ALTER TABLE folder_permissions ADD CONSTRAINT "
+                           "  ck_fp_sujeto CHECK (sujeto_tipo IN "
+                           "  ('USER','COMPANY','CONTRACTUAL_FUNCTION'))")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+        # La unicidad pasa a ser por SUJETO. La vieja `UNIQUE(folder, user_id)`
+        # se conserva: sigue siendo cierta para las reglas de USER y no estorba
+        # a las demas, que llevan `user_id` nulo (y en SQL dos NULL no chocan).
+        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_fp_sujeto "
+                       "  ON folder_permissions (folder_node_id, sujeto_tipo, sujeto_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_fp_sujeto "
+                       "  ON folder_permissions (sujeto_tipo, sujeto_id)")
+        conn.commit()
+
+        # UNA REGLA SIN SUJETO NO APLICA NUNCA, y eso no puede pasar en
+        # silencio: un `INSERT` al estilo antiguo --solo `user_id`-- crearia una
+        # concesion que el resolutor jamas encuentra, y quien la creo creeria
+        # haber dado acceso. Mas vale que reviente al escribirla.
+        cursor.execute("UPDATE folder_permissions SET sujeto_id = user_id::text "
+                       " WHERE sujeto_id IS NULL AND user_id IS NOT NULL")
+        cursor.execute("SELECT count(*) FROM folder_permissions WHERE sujeto_id IS NULL")
+        if cursor.fetchone()[0] == 0:
+            try:
+                cursor.execute("ALTER TABLE folder_permissions "
+                               "  ALTER COLUMN sujeto_id SET NOT NULL")
+                cursor.execute("ALTER TABLE folder_permissions "
+                               "  ALTER COLUMN sujeto_tipo SET NOT NULL")
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                print('[permissions] sujeto NOT NULL no aplicado: %s' % str(e)[:80])
+        else:
+            conn.commit()
+            print('[permissions] AVISO: hay concesiones sin sujeto. NO se impone '
+                  'NOT NULL y NO se adivina a quien iban dirigidas.')
+        print('[permissions] folder_permissions ahora acepta sujetos '
+              'USER / COMPANY / CONTRACTUAL_FUNCTION.')
+    except Exception as e:
+        conn.rollback()
+        print('[permissions] sujetos no migrados: %s' % str(e)[:120])
 
 
 def get_effective_permission(user_id, node_id, model_urn, **kwargs):
@@ -93,6 +196,34 @@ def get_effective_permission(user_id, node_id, model_urn, **kwargs):
         return 'none'  # Fail-Closed: sin permiso en caso de error
 
 def _get_effective_permission_impl(cursor, user_id, node_id, model_urn):
+    """UNA SOLA REGLA. Delega en `permiso_documental`.
+
+    Esta funcion contenia su propia resolucion --herencia ADITIVA, con el rol
+    global como SUELO--. Mientras existio, el producto tuvo dos reglas: esta
+    para la navegacion y otra para la busqueda, y ninguna de las dos gobernaba
+    la entrega de bytes. Ahora navegacion, busqueda, preview, descarga,
+    signed-url, proxy, indice y flujos preguntan LO MISMO.
+
+    La firma y el valor devuelto no cambian: `check_folder_permission` y
+    `file_system_db` siguen llamando igual.
+    """
+    try:
+        import permiso_documental as _pd
+        cursor.execute("SELECT id, name, email, role FROM users WHERE id = %s",
+                       (user_id,))
+        u = cursor.fetchone()
+        usuario = ({'id': u[0], 'name': u[1], 'email': u[2], 'role': u[3]}
+                   if u else {'id': user_id, 'role': 'viewer'})
+        return _pd.permiso_efectivo(cursor, usuario, model_urn, node_id)
+    except Exception as e:
+        print(f"[permissions] Error en _get_effective_permission_impl: {e}")
+        return 'none'          # FAIL-CLOSED
+
+
+def _resolucion_aditiva_retirada(cursor, user_id, node_id, model_urn):
+    """La resolucion ANTERIOR. Se conserva sin llamar, como referencia de lo que
+    hacia el producto antes del 21-ago-2026: maximo de la cadena y rol global
+    como suelo. No se usa."""
     try:
         # Paso 0: Si el usuario global es admin, tiene acceso total siempre
         cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
@@ -211,31 +342,33 @@ def set_folder_permission(folder_node_id, user_id, permission_level, granted_by,
     """
     Asigna o actualiza un permiso de usuario en una carpeta.
     Usa ON CONFLICT para upsert (insertar o actualizar).
-    Verifica que el permiso asignado no sea MENOR que el permiso heredado (Top-Down ISO rule).
+
+    SE RETIRA «Inherited permissions must expand»
+    ---------------------------------------------
+    Esta funcion se negaba a asignar un nivel MENOR que el heredado. Era la cara
+    de ESCRITURA del modelo aditivo: si los permisos solo suman, conceder menos
+    no significa nada y mas vale rechazarlo.
+
+    Con CLOSEST-WINS conceder menos es EXACTAMENTE la operacion que hacia falta
+    y no existia: «esta carpeta es de Direccion» se dice poniendo `none` a quien
+    tiene `edit` mas arriba. Mantener la validacion habria dejado el modelo
+    nuevo sin la unica accion que lo justifica -- y el producto habria seguido
+    sin poder reservar una carpeta, ahora con una regla mas complicada.
     """
     if permission_level not in PERMISSION_LEVELS:
         raise ValueError(f"Nivel inválido: {permission_level}. Válidos: {list(PERMISSION_LEVELS.keys())}")
-    
+
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        
-        # Validación Restrictiva de Autodesk: "Inherited permissions must expand"
-        # Subimos al padre para ver cuál es nuestro poder base.
-        cursor.execute("SELECT parent_id FROM file_nodes WHERE id = %s", (folder_node_id,))
-        parent_row = cursor.fetchone()
-        parent_id = parent_row[0] if parent_row else None
-        
-        inherited = _get_effective_permission_impl(cursor, user_id, parent_id, model_urn)
-        if PERMISSION_LEVELS.get(permission_level, -1) < PERMISSION_LEVELS.get(inherited, -1):
-            raise ValueError(f"Inherited permissions must expand: No puedes asignar un nivel '{permission_level}' que es menor alnivel ya heredado superior '{inherited}'.")
 
         cursor.execute("""
-            INSERT INTO folder_permissions (folder_node_id, user_id, permission_level, granted_by)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (folder_node_id, user_id) 
+            INSERT INTO folder_permissions (folder_node_id, user_id, permission_level,
+                                            granted_by, sujeto_tipo, sujeto_id)
+            VALUES (%s, %s, %s, %s, 'USER', %s::text)
+            ON CONFLICT (folder_node_id, user_id)
             DO UPDATE SET permission_level = %s, granted_by = %s, updated_at = CURRENT_TIMESTAMP
             RETURNING id
-        """, (folder_node_id, user_id, permission_level, granted_by,
+        """, (folder_node_id, user_id, permission_level, granted_by, user_id,
               permission_level, granted_by))
         result = cursor.fetchone()
         conn.commit()

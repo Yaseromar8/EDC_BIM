@@ -379,6 +379,8 @@ columna	folder_permissions.folder_node_id
 columna	folder_permissions.granted_by
 columna	folder_permissions.id
 columna	folder_permissions.permission_level
+columna	folder_permissions.sujeto_id
+columna	folder_permissions.sujeto_tipo
 columna	folder_permissions.updated_at
 columna	folder_permissions.user_id
 columna	gemelo_assets.added_at
@@ -1114,10 +1116,12 @@ restriccion	file_versions not null gcs_urn
 restriccion	file_versions not null id
 restriccion	file_versions not null version_number
 restriccion	file_versions primary key (id)
+restriccion	folder_permissions check ((sujeto_tipo = any (array['user'::text, 'company'::text, 'contractual_function'::text])))
 restriccion	folder_permissions not null folder_node_id
 restriccion	folder_permissions not null id
 restriccion	folder_permissions not null permission_level
-restriccion	folder_permissions not null user_id
+restriccion	folder_permissions not null sujeto_id
+restriccion	folder_permissions not null sujeto_tipo
 restriccion	folder_permissions primary key (id)
 restriccion	folder_permissions unique (folder_node_id, user_id)
 restriccion	gemelo_assets not null element_id
@@ -1509,6 +1513,7 @@ indice	create index on public.file_versions using btree (file_node_id)
 indice	create index on public.file_versions using btree (gcs_urn)
 indice	create index on public.file_versions using btree (sha256)
 indice	create index on public.folder_permissions using btree (folder_node_id)
+indice	create index on public.folder_permissions using btree (sujeto_tipo, sujeto_id)
 indice	create index on public.folder_permissions using btree (user_id)
 indice	create index on public.inventory_assets using btree (project_id)
 indice	create index on public.link_commands using btree (project, id)
@@ -1571,6 +1576,7 @@ indice	create unique index on public.file_nodes using btree (id)
 indice	create unique index on public.file_nodes using btree (model_urn) where (((folder_type)::text = 'project_root'::text) and (is_deleted = false))
 indice	create unique index on public.file_nodes using btree (model_urn, parent_id, name, node_type) where (is_deleted = false)
 indice	create unique index on public.file_versions using btree (id)
+indice	create unique index on public.folder_permissions using btree (folder_node_id, sujeto_tipo, sujeto_id)
 indice	create unique index on public.folder_permissions using btree (folder_node_id, user_id)
 indice	create unique index on public.folder_permissions using btree (id)
 indice	create unique index on public.gemelo_assets using btree (id)

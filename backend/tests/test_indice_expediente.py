@@ -85,9 +85,12 @@ class CursorDeArbol:
             self._modo = 'filas'
 
     def fetchall(self):
+        # La ultima columna es `fn.id`: el indice la lleva desde que se filtra
+        # por el permiso documental de cada documento.
         return [(nombre, ruta, 'PUBLISHED', 'A1', 'C01', 1,
-                 None, None, None, None, True, 1048576)
-                for nombre, ruta in self.filas]
+                 None, None, None, None, True, 1048576,
+                 'nodo-%d' % i)
+                for i, (nombre, ruta) in enumerate(self.filas)]
 
     def fetchone(self):
         return (self.raices,)

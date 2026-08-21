@@ -150,13 +150,30 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
             if is_admin:
                 perm_level = 'admin'
                 has_access = True
-            elif u_id and r_type == 'FOLDER':
-                # Nivel efectivo = max(permiso directo, heredado del padre).
-                from folder_permissions import PERMISSION_LEVELS as _PL
-                direct = r_perm or 'none'
-                eff = direct if _PL.get(direct, -1) >= _PL.get(parent_eff, -1) else parent_eff
+            elif u_id:
+                # LA MISMA REGLA QUE TODO LO DEMAS, y para carpetas Y FICHEROS.
+                #
+                # Antes esta rama era `elif ... r_type == 'FOLDER'` y los
+                # FICHEROS caian en el `else`, que los daba por accesibles
+                # SIEMPRE. Resultado: una carpeta con `none` se veia vacia --sus
+                # subcarpetas si se filtraban-- pero los documentos sueltos de
+                # una carpeta visible salian listados aunque el usuario no
+                # pudiera abrirlos. El listado prometia lo que las otras cinco
+                # puertas negaban.
+                #
+                # Ademas, el nivel ya no es `max(directo, heredado)`: la
+                # herencia de este producto es CLOSEST-WINS desde el
+                # 21-ago-2026, y `permiso_documental` es quien lo sabe. Aqui no
+                # se reescribe la regla: se pregunta.
+                try:
+                    import permiso_documental as _pd
+                    eff = _pd.permiso_efectivo(
+                        cursor, {'id': u_id, 'role': (user or {}).get('role')},
+                        model_urn, r_id)
+                except Exception:
+                    eff = 'none'                       # FAIL-CLOSED
                 perm_level = eff
-                has_access = eff != 'none'  # Fail-closed solo si NO hay ni directo ni heredado
+                has_access = eff != 'none'
             else:
                 perm_level = 'view_only'
                 has_access = True

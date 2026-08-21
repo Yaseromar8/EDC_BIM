@@ -171,11 +171,13 @@ def main():
         # El residente ve la obra, pero la carpeta «Direccion» es solo de la
         # jefa. Al residente NO se le da permiso ahi.
         cur.execute("INSERT INTO folder_permissions (folder_node_id, user_id, "
-                    "  permission_level) VALUES (%s::uuid,%s,'edit')",
-                    (raiz_a, g['residente']))
+                    "  sujeto_tipo, sujeto_id, permission_level) "
+                    "VALUES (%s::uuid,%s,'USER',%s::text,'edit')",
+                    (raiz_a, g['residente'], g['residente']))
         cur.execute("INSERT INTO folder_permissions (folder_node_id, user_id, "
-                    "  permission_level) VALUES (%s::uuid,%s,'none')",
-                    (reservada, g['residente']))
+                    "  sujeto_tipo, sujeto_id, permission_level) "
+                    "VALUES (%s::uuid,%s,'USER',%s::text,'none')",
+                    (reservada, g['residente'], g['residente']))
         conn.commit()
         db._project_resolver_cache['map'] = None
 
