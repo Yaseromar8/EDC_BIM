@@ -18,7 +18,7 @@ def _mover_encargo(cur, objeto_id, datos, actor, etiqueta):
     try:
         estado = (datos.get('estado') or '').strip().lower()
         respuesta = (datos.get('respuesta') or '').strip()
-        if estado in ('cerrado', 'respondido', 'closed', 'answered') or respuesta:
+        if estado in _enc.ESTADOS_DE_CIERRE or respuesta:
             _enc.cerrar_los_de(cur, 'REDLINE', objeto_id, actor)
             return
 

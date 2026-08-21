@@ -357,20 +357,222 @@ def mi_trabajo(cur, user_id, project_id=None):
 
 # ── Conciliacion ───────────────────────────────────────────────────────────
 
+# Los motivos por los que un encargo sobra. Son CONSTANTES y no cadenas sueltas
+# porque `huerfanos()` filtra por ellas: la primera version comparaba el prefijo
+# del texto ('el objeto...'), y 'el objeto ya esta resuelto' empieza igual que
+# 'el objeto no existe', asi que la divergencia de ESTADO se colaba como si
+# fuera un huerfano. Lo encontro el ensayo. Un filtro por la forma del texto no
+# distingue significados.
+SIN_OBJETO = 'el objeto no existe'
+OTRA_OBRA = 'el objeto pertenece a otra obra'
+YA_RESUELTO = 'el objeto ya esta resuelto'
+_DE_EXISTENCIA = (SIN_OBJETO, OTRA_OBRA)
+
+
 def huerfanos(cur):
     """Encargos abiertos que apuntan a un objeto inexistente o de otra obra.
 
-    Solo INFORMA. No borra: un encargo huerfano es un sintoma, y borrarlo en
-    silencio taparia la causa. `abrir()` valida en el momento de crear, asi que
-    esto no deberia encontrar nada; existe para demostrarlo, no para arreglarlo.
+    Es un SUBCONJUNTO estricto de `divergencias()`: mira EXISTENCIA, no estado.
+    Se conserva porque responde a una pregunta distinta y mas grave -- un
+    encargo huerfano apunta a algo que nadie puede abrir.
     """
-    malos = []
-    cur.execute("SELECT id, project_id, objeto_tipo, objeto_id FROM encargos "
-                " WHERE estado = 'abierto'")
-    for eid, pid, tipo, oid in cur.fetchall():
+    return [(e, t, o, m) for e, t, o, m, _d in divergencias(cur)['sobrantes']
+            if m in _DE_EXISTENCIA or m.startswith(OTRA_OBRA)]
+
+
+# ── Conciliacion: ¿la proyeccion coincide con el estado real? ──────────────
+#
+# POR QUE HACE FALTA
+# ------------------
+# Se acepto --y con razon-- que un fallo de la proyeccion nunca impida una
+# transicion contractual del objeto: un acuse, una respuesta o una aprobacion
+# tienen que sobrevivir aunque `encargos` falle. Pero eso abre exactamente un
+# caso: RFI = RESPONDIDO con su encargo = ABIERTO. Alguien seguiria viendo en su
+# bandeja una deuda que ya salda.
+#
+# `huerfanos()` NO detectaba eso: solo miraba si el objeto existia.
+#
+# COMO SE MIRA, Y EN LAS DOS DIRECCIONES
+# --------------------------------------
+# Igual que `conciliacion_almacen.py` hace con el bucket:
+#   - SOBRANTES: hay encargo abierto y el objeto dice que ya no se debe.
+#   - FALTANTES: el objeto dice que alguien debe algo y no hay encargo.
+# Y si aparece un `objeto_tipo` que este modulo no sabe interpretar, la
+# conciliacion SE NIEGA A CORRER en vez de darlo por saldado. Cerrar por no
+# entender seria peor que no conciliar.
+
+# Estados que significan «ya no le toca a nadie». Una sola definicion: las rutas
+# de RFI y Redline la usan tambien, y dos listas que se separan producen
+# divergencias que nadie sabe explicar.
+ESTADOS_DE_CIERRE = ('cerrado', 'respondido', 'closed', 'answered')
+
+
+class TipoNoInterpretable(Exception):
+    """Hay encargos de un tipo que este modulo no sabe cotejar."""
+
+
+def _acuso(acuses, email, nombre):
+    correo = (email or '').strip().lower()
+    nom = (nombre or '').strip().lower()
+    for a in (acuses or []):
+        por = str((a or {}).get('por') or '').strip().lower()
+        if por and (por == correo or por == nom):
+            return True
+    return False
+
+
+def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
+    """¿El OBJETO dice que esto se sigue debiendo? None si no se puede saber.
+
+    El objeto es la fuente de verdad. Esta funcion no opina: le pregunta.
+    """
+    if tipo in ('RFI', 'REDLINE'):
+        tabla = 'doc_rfis' if tipo == 'RFI' else 'doc_redlines'
+        cur.execute('SELECT estado, respuesta FROM %s WHERE id::text = %%s' % tabla,
+                    (str(objeto_id),))
+        fila = cur.fetchone()
+        if not fila:
+            return None
+        estado = (fila[0] or '').strip().lower()
+        respuesta = (fila[1] or '').strip()
+        return not (estado in ESTADOS_DE_CIERRE or respuesta)
+
+    if tipo == 'REVIEW':
+        cur.execute('SELECT status, current_step, steps FROM doc_reviews WHERE id::text = %s',
+                    (str(objeto_id),))
+        fila = cur.fetchone()
+        if not fila:
+            return None
+        status, paso, steps = fila
+        if status != 'pending':
+            return False
+        # Y ademas tiene que ser el revisor del paso ACTUAL: si la revision
+        # avanzo y el encargo del paso anterior quedo abierto, esa persona ya no
+        # la debe.
+        if destino_usuario is None:
+            return True
+        try:
+            correo = (steps or [])[paso or 0].get('email')
+        except Exception:
+            return True
+        return usuario_por_email(cur, correo) == destino_usuario
+
+    if tipo == 'TRANSMITTAL':
+        cur.execute('SELECT acuses FROM transmittals WHERE id::text = %s', (str(objeto_id),))
+        fila = cur.fetchone()
+        if not fila:
+            return None
+        if destino_usuario is None:
+            return True
+        cur.execute('SELECT email, name FROM users WHERE id = %s', (destino_usuario,))
+        u = cur.fetchone()
+        if not u:
+            return True
+        return not _acuso(fila[0], u[0], u[1])
+
+    return None
+
+
+def _faltantes(cur):
+    """Lo que el objeto dice que se debe y no tiene encargo abierto.
+
+    OJO CON RFI Y REDLINE: no se comprueban, y no es un olvido. Su responsable
+    es TEXTO LIBRE ('Ing. Valeria Barrenechea'), asi que del objeto no se puede
+    deducir a que USUARIO habria que abrirle el encargo. Es la consecuencia
+    directa y aceptada de la semantica congelada: el objeto guarda el
+    responsable contractual, el encargo guarda la responsabilidad operativa
+    estructurada, y no se exige que sean el mismo dato. Se puede detectar que
+    SOBRA un encargo de un RFI ya respondido; no que FALTE uno.
+    """
+    faltan = []
+
+    # Revisiones vivas: el revisor del paso actual deberia tener su encargo.
+    cur.execute("SELECT id, model_urn, title, current_step, steps FROM doc_reviews "
+                " WHERE status = 'pending'")
+    for rid, urn, titulo, paso, steps in cur.fetchall():
+        try:
+            correo = (steps or [])[paso or 0].get('email')
+        except Exception:
+            continue
+        uid = usuario_por_email(cur, correo)
+        if not uid:
+            continue
+        cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='REVIEW' AND objeto_id=%s "
+                    "   AND destino_usuario=%s AND estado='abierto'", (str(rid), uid))
+        if not cur.fetchone():
+            faltan.append(('REVIEW', str(rid), uid,
+                           'Revisar: %s (paso %d)' % (titulo, (paso or 0) + 1)))
+
+    # Emisiones sin acusar: cada destinatario que sea usuario y miembro.
+    cur.execute('SELECT id, number, subject, recipients, acuses FROM transmittals')
+    for tid, num, asunto, recipients, acuses in cur.fetchall():
+        for r in (recipients or []):
+            correo = r.get('email') if isinstance(r, dict) else r
+            nombre = r.get('name') if isinstance(r, dict) else None
+            uid = usuario_por_email(cur, correo)
+            if not uid or _acuso(acuses, correo, nombre):
+                continue
+            cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='TRANSMITTAL' AND objeto_id=%s "
+                        "   AND destino_usuario=%s AND estado='abierto'", (str(tid), uid))
+            if not cur.fetchone():
+                faltan.append(('TRANSMITTAL', str(tid), uid,
+                               'Acusar recibo de TR-%03d: %s' % (num or 0, asunto or '')))
+    return faltan
+
+
+def divergencias(cur):
+    """¿Coincide la proyeccion con el estado real de sus objetos?
+
+    Devuelve {'sobrantes': [...], 'faltantes': [...]}. Solo LEE.
+    Lanza `TipoNoInterpretable` si hay encargos de un tipo desconocido.
+    """
+    cur.execute("SELECT DISTINCT objeto_tipo FROM encargos WHERE estado = 'abierto'")
+    desconocidos = sorted({t for (t,) in cur.fetchall() if t not in TIPOS})
+    if desconocidos:
+        raise TipoNoInterpretable(
+            'hay encargos abiertos de tipos que no se saben cotejar (%s): la '
+            'conciliacion no corre, porque cerrar por no entender seria peor que '
+            'no conciliar' % ', '.join(desconocidos))
+
+    sobrantes = []
+    cur.execute("SELECT id, project_id, objeto_tipo, objeto_id, destino_usuario "
+                "  FROM encargos WHERE estado = 'abierto' ORDER BY id")
+    for eid, pid, tipo, oid, uid in cur.fetchall():
         obra = _obra_del_objeto(cur, tipo, oid)
         if obra is None:
-            malos.append((eid, tipo, oid, 'el objeto no existe'))
-        elif obra != pid:
-            malos.append((eid, tipo, oid, 'el objeto es de la obra %s, no de %s' % (obra, pid)))
-    return malos
+            sobrantes.append((eid, tipo, oid, SIN_OBJETO, uid))
+            continue
+        if obra != pid:
+            sobrantes.append((eid, tipo, oid,
+                              '%s (%s, no %s)' % (OTRA_OBRA, obra, pid), uid))
+            continue
+        debe = _sigue_debiendose(cur, tipo, oid, uid)
+        if debe is False:
+            sobrantes.append((eid, tipo, oid, YA_RESUELTO, uid))
+    return {'sobrantes': sobrantes, 'faltantes': _faltantes(cur)}
+
+
+def conciliar(cur, aplicar=False, actor='conciliacion'):
+    """Repara la divergencia. Idempotente: correrla dos veces no cambia nada.
+
+    Cerrar un encargo sobrante y abrir uno que falta NO pierde informacion: el
+    objeto sigue siendo la fuente de verdad y esto solo ajusta su reflejo. Por
+    eso aqui SI se puede reparar, a diferencia de la conciliacion del almacen,
+    donde borrar bytes es irreversible.
+
+    Con `aplicar=False` solo informa. Devuelve (cerrados, abiertos, informe).
+    """
+    d = divergencias(cur)
+    cerrados = abiertos = 0
+    if aplicar:
+        for eid, _t, _o, _motivo, _u in d['sobrantes']:
+            cur.execute("UPDATE encargos SET estado='cerrado', "
+                        "       cerrado_en=CURRENT_TIMESTAMP, cerrado_por=%s "
+                        " WHERE id=%s AND estado='abierto'", (actor, eid))
+            cerrados += cur.rowcount
+        for tipo, oid, uid, asunto in d['faltantes']:
+            # Pasa por `abrir()`, que vuelve a comprobar pertenencia: la
+            # conciliacion no puede colar un encargo que la via normal negaria.
+            if abrir(cur, tipo, oid, asunto, destino_usuario=uid, creado_por=actor):
+                abiertos += 1
+    return cerrados, abiertos, d

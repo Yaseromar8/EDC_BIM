@@ -208,3 +208,79 @@ def test_el_bloque_no_toca_documentos_ni_permisos():
                 culpables.append('%s: %s' % (fichero, m.group(0)))
     assert not culpables, (
         'el bloque escribe en tablas que no le corresponden:\n  ' + '\n  '.join(culpables))
+
+
+# ── Consistencia eventual: detectar la divergencia de ESTADO ───────────────
+#
+# Se acepto que un fallo de la proyeccion nunca impida una transicion
+# contractual del objeto. Eso abre exactamente un caso: RFI = RESPONDIDO con su
+# encargo = ABIERTO. `huerfanos()` no lo veia: solo miraba si el objeto existia.
+
+class _CursorGuion:
+    """Responde segun una lista de (fragmento_de_sql, resultado)."""
+
+    def __init__(self, guion):
+        self.guion = guion
+        self._r = None
+        self.rowcount = 0
+
+    def execute(self, sql, params=None):
+        self._r = None
+        for fragmento, resultado in self.guion:
+            if fragmento in sql:
+                self._r = resultado
+                return
+
+    def fetchone(self):
+        return self._r[0] if isinstance(self._r, list) and self._r else self._r
+
+    def fetchall(self):
+        return self._r if isinstance(self._r, list) else []
+
+
+def test_un_rfi_respondido_deja_de_deberse():
+    """La pregunta se la hace AL OBJETO, que es la fuente de verdad."""
+    import encargos as enc
+    resuelto = _CursorGuion([('FROM doc_rfis', ('Cerrado', 'Ya esta respondido'))])
+    vivo = _CursorGuion([('FROM doc_rfis', ('En revision', None))])
+    assert enc._sigue_debiendose(resuelto, 'RFI', '1', 5) is False
+    assert enc._sigue_debiendose(vivo, 'RFI', '1', 5) is True
+
+
+def test_un_rfi_con_respuesta_escrita_tambien_deja_de_deberse():
+    """No hace falta que el estado diga 'Cerrado': si hay respuesta, esta hecho."""
+    import encargos as enc
+    cur = _CursorGuion([('FROM doc_rfis', ('En revision', 'La respuesta es esta'))])
+    assert enc._sigue_debiendose(cur, 'RFI', '1', 5) is False
+
+
+def test_una_revision_ya_aprobada_deja_de_deberse():
+    import encargos as enc
+    cur = _CursorGuion([('FROM doc_reviews', ('approved', 0, [{'email': 'a@b.c'}]))])
+    assert enc._sigue_debiendose(cur, 'REVIEW', '1', 5) is False
+
+
+def test_no_se_concilia_un_tipo_que_no_se_sabe_cotejar():
+    """Cerrar por no entender seria peor que no conciliar.
+
+    En la base lo impide ademas `ck_encargos_tipo`; este guardia es la segunda
+    linea, para una base antigua que no tenga la restriccion.
+    """
+    import encargos as enc
+    cur = _CursorGuion([('DISTINCT objeto_tipo', [('SUBMITTAL',)])])
+    with pytest.raises(enc.TipoNoInterpretable):
+        enc.divergencias(cur)
+
+
+def test_los_motivos_de_sobrante_son_constantes_distinguibles():
+    """`huerfanos()` filtra por motivo, y la primera version comparaba el
+    PREFIJO del texto: «el objeto ya esta resuelto» empieza igual que «el objeto
+    no existe», asi que la divergencia de estado se colaba como si fuera un
+    huerfano. Lo encontro el ensayo contra PostgreSQL.
+
+    Un filtro por la forma del texto no distingue significados.
+    """
+    import encargos as enc
+    assert enc.YA_RESUELTO not in enc._DE_EXISTENCIA, (
+        'la divergencia de ESTADO se cuenta como huerfano: son cosas distintas')
+    assert enc.SIN_OBJETO in enc._DE_EXISTENCIA

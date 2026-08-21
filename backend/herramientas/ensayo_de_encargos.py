@@ -255,6 +255,73 @@ def main():
         _paso(any(x['id'] == e2 for x in enc.mi_trabajo(cur, gente['carlos'])),
               'Carlos NO se libera porque haya acusado Sonia')
 
+        print()
+        print('8 · CONSISTENCIA EVENTUAL: divergencia, deteccion y reparacion')
+        # 1. El objeto transiciona CORRECTAMENTE.
+        cur.execute("INSERT INTO doc_rfis (model_urn, codigo, titulo, project_id) "
+                    "VALUES (%s,'RFI-009','Consulta que se respondera',%s) RETURNING id::text",
+                    (OBRA_A, OBRA_A))
+        rfi_d = cur.fetchone()[0]
+        e_d = enc.abrir(cur, 'RFI', rfi_d, 'Responder RFI-009',
+                        destino_usuario=gente['carlos'], creado_por='ensayo')
+        conn.commit()
+        _paso(any(x['id'] == e_d for x in enc.mi_trabajo(cur, gente['carlos'])),
+              'Carlos ve el encargo del RFI-009')
+
+        # 2. FALLO DELIBERADO DE LA PROYECCION: el RFI se responde -- que es la
+        #    transicion contractual, y sobrevive-- y el encargo NO se cierra.
+        #    Se reproduce escribiendo el objeto directamente, que es exactamente
+        #    lo que queda cuando `cerrar_los_de` revienta y su try lo absorbe.
+        cur.execute("UPDATE doc_rfis SET estado='Cerrado', respuesta='Ya esta', "
+                    "       fecha_respuesta=CURRENT_DATE WHERE id::text = %s", (rfi_d,))
+        conn.commit()
+        cur.execute("SELECT estado FROM doc_rfis WHERE id::text=%s", (rfi_d,))
+        _paso(cur.fetchone()[0] == 'Cerrado',
+              'el RFI queda RESPONDIDO (la transicion contractual sobrevive)')
+        _paso(any(x['id'] == e_d for x in enc.mi_trabajo(cur, gente['carlos'])),
+              'y el encargo se queda ABIERTO: la divergencia existe de verdad')
+
+        # 3. DETECCION.
+        d = enc.divergencias(cur)
+        detectado = [s for s in d['sobrantes'] if s[0] == e_d]
+        _paso(bool(detectado), 'la conciliacion DETECTA la divergencia de estado',
+              detectado[0][3] if detectado else 'no la vio')
+        _paso(not any(s[0] == e_d for s in enc.huerfanos(cur)),
+              'y `huerfanos()` NO la ve -- por eso hacia falta `divergencias()`')
+
+        # 4. REPARACION.
+        cerrados, abiertos, _ = enc.conciliar(cur, aplicar=True, actor='ensayo')
+        conn.commit()
+        _paso(cerrados >= 1, 'la conciliacion cierra %d encargo(s) sobrante(s)' % cerrados)
+
+        # 5. LA BANDEJA REFLEJA EL ESTADO CORRECTO.
+        _paso(not any(x['id'] == e_d for x in enc.mi_trabajo(cur, gente['carlos'])),
+              'Carlos deja de ver en su bandeja algo que ya salda')
+
+        # Y es IDEMPOTENTE: repetirla no cambia nada.
+        c2, a2, resto = enc.conciliar(cur, aplicar=True, actor='ensayo')
+        conn.commit()
+        _paso(c2 == 0 and a2 == 0,
+              'correrla otra vez no cambia nada (es idempotente)',
+              'cerro %d, abrio %d' % (c2, a2))
+        _paso(not resto['sobrantes'] and not resto['faltantes'],
+              'y no queda ninguna divergencia',
+              'sobran %d, faltan %d' % (len(resto['sobrantes']), len(resto['faltantes'])))
+
+        # Un tipo desconocido no puede llegar a existir: lo impide la BASE.
+        # El guardia en Python (`TipoNoInterpretable`) es la segunda linea, para
+        # una base antigua que no tenga la restriccion; se prueba aparte, sin
+        # base de datos, porque aqui no se puede ni insertar la fila.
+        try:
+            cur.execute("INSERT INTO encargos (project_id, objeto_tipo, objeto_id, "
+                        "  destino_usuario, asunto) VALUES (%s,'SUBMITTAL','1',%s,'x')",
+                        (OBRA_A, gente['ana']))
+            conn.rollback()
+            _paso(False, 'la base ACEPTO un tipo de encargo desconocido')
+        except Exception:
+            conn.rollback()
+            _paso(True, 'la base RECHAZA un tipo de encargo desconocido (ck_encargos_tipo)')
+
         limpiar(cur)
         conn.commit()
 
