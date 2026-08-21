@@ -1,7 +1,13 @@
-# MATRIZ DELTA ACC/PROCORE → ECD
+# MATRIZ DELTA ACC/PROCORE → ECD · REV.01
 
 **Fecha:** 21 de agosto de 2026 · Comparación de cierre contra la investigación ya hecha (docs 43–44).
 **Sin investigación nueva de fabricante. Sin código. Sin producción. Sin tocar la Controlled Window ni el mapa maestro.**
+
+> **REV.01** corrige cuatro clasificaciones de la primera entrega: Project
+> Membership (experiencia), Identity/Principal (operativa), la paridad operativa
+> global (partida en dos), y una afirmación sobre ACC que **nuestra propia
+> investigación no estableció** — retirada. Ninguna corrección impacta la
+> Controlled Window.
 
 **La pregunta que se responde:** ¿nuestro ECD **representa correctamente** las
 capas profesionales que la investigación ACC/Procore nos enseñó? — no si tenemos
@@ -23,8 +29,12 @@ EXPERIENCE     ¿se puede operar profesionalmente desde la interfaz?
 ### 1 · Identity / Principal
 **ACC/Procore nos enseñó:** la identidad es de la persona, vive por encima del proyecto y se revoca en un sitio.
 **Modelo objetivo ECD:** `users` + `sessions`, identidad **numérica** revocable, 2FA, política de contraseña en servidor.
-**ESTADO REAL: COMPLETE** (arq ✅ · op ✅ · exp 🟡 — la pantalla existe y funciona; su cara es la del rediseño pendiente).
-**GAP REAL:** ninguno funcional. **¿BLOQUEA PILOTO?** NO. **TRIGGER:** —
+**ESTADO REAL: PARTIAL** — **arq ✅ · op 🟡 · exp 🟡**, distinguiendo dos cosas que no son la misma:
+
+- **Motor actual existente (op ✅ para lo que hace):** login, 2FA, sesiones, recuperación, suspensión, política de contraseña en servidor. Opera hoy, en producción.
+- **Modelo definitivo diseñado, POST-WINDOW (op 🟡):** el state machine cerrado (docs 58–61) contiene **correcciones backend reales de identidad todavía no implementadas** — G5a (`auth/google` y `register` no comprueban `is_active`), G6 (el reset promete un solo uso y no lo es), G7 (`activated_at` + `invitacion_gen`, la única migración), y el invariante `sesión válida ⇒ activada`. No son mejoras cosméticas: son huecos de identidad ya diagnosticados.
+
+**GAP REAL:** los de G5a/G6/G7 + el invariante de sesión. **¿BLOQUEA PILOTO?** **SÍ** — viajan dentro de Identity & Access UX (capa 12), que ya está en el baseline. **TRIGGER:** —
 **DIFERENCIA DELIBERADA ECD:** identidad numérica estricta en toda proyección (ACC/Procore toleran cotejo por texto en varios sitios; nosotros lo prohibimos tras pagarlo cinco veces).
 
 ### 2 · Account / Entity
@@ -38,8 +48,8 @@ EXPERIENCE     ¿se puede operar profesionalmente desde la interfaz?
 ### 3 · Project Membership
 **Nos enseñó:** el proyecto es la frontera; sin membresía no hay nada.
 **Objetivo ECD:** `project_users` — **LA FRONTERA REAL**.
-**ESTADO REAL: COMPLETE** (arq ✅ · op ✅ · exp ✅ — asignación desde la pantalla de entidad, y Participantes por obra).
-**GAP REAL:** ninguno. **¿BLOQUEA PILOTO?** NO.
+**ESTADO REAL: PARTIAL** (arq ✅ · op ✅ · **exp 🟡**) — la asignación existe (modal de accesos en la pantalla de entidad; Participantes por obra), pero **el flujo profesional de alta en obra es P5, pendiente de la implementación post-window**: hoy no hay un camino guiado «añadir persona a esta obra → empresa → función → ¿administra?» desde Participantes.
+**GAP REAL:** P5. **¿BLOQUEA PILOTO?** **SÍ** — dentro del baseline, como parte de la administración profesional de participantes.
 **DIFERENCIA DELIBERADA ECD:** el perímetro es transversal y **fail-closed** (`ENFORCE_PROJECT_AUTHZ`), no una comprobación por herramienta.
 
 ### 4 · Company
@@ -68,7 +78,8 @@ EXPERIENCE     ¿se puede operar profesionalmente desde la interfaz?
 **Objetivo ECD:** `project_users.es_admin` — **es la fila de membresía**; nace FALSE, nadie hereda.
 **ESTADO REAL: COMPLETE** (arq ✅ · op ✅ · exp 🟡 — el control existe en Participantes; falta la ficha de persona y el flujo de alta).
 **GAP REAL:** experiencia parcial (marcado 🟡 en el mapa maestro). **¿BLOQUEA PILOTO?** NO por sí solo; su UX va con el baseline.
-**DIFERENCIA DELIBERADA ECD:** la administración **ES la membresía** (una columna, no una tabla): retirar de la obra retira la administración en el mismo acto, sin que nadie tenga que acordarse. En ACC son objetos separados que pueden desincronizarse.
+**DIFERENCIA DELIBERADA ECD:** la administración **ES la membresía** — `project_users.es_admin`, una columna en la fila de participación: retirar de la obra retira la administración en el mismo acto, sin que nadie tenga que acordarse, y no puede existir un administrador que no sea miembro.
+*(REV.01 — retirada la afirmación «en ACC son objetos separados que pueden desincronizarse». Nuestra investigación estableció que ACC maneja el nivel de acceso **asociado al miembro del proyecto** — `Project member` / `Project administrator` —, no una separación entre objetos. Nuestra implementación se presenta por lo que es, sin apoyarse en un contraste que la investigación no soporta.)*
 
 ### 8 · Member Tool Access — **DEFER**
 **Nos enseñó:** ACC da nivel de acceso por herramienta al miembro; Procore, plantillas por herramienta.
@@ -200,17 +211,29 @@ fabricantes: Contractual Function (no existe en ninguno), closest-wins
 (explicable y con reserva), Ball-in-Court reconstruible, y la separación del
 System Operator.
 
-## B · PARIDAD OPERATIVA
+## B · PARIDAD OPERATIVA — en dos planos que no se confunden
 
 ```
-✅ ALCANZADA en el dominio documental — con una condición pendiente
+FOUNDATION DOCUMENTAL   ✅ ALCANZADA EN EL ÁRBOL
+                           pendiente de la Controlled Window para producción
+
+MODELO ACTIVO TOTAL     🟡 PARCIAL
+                           pendiente de Identity & Access post-window
 ```
 
-Backend completo y probado (459 comprobaciones de batería + 890 de suite) en las
-11 capas activas. **Condición:** dos ALERT vivos que **cierra la Controlled
-Window** — conceder permisos de carpeta roto en producción desde el 20-ago, y
-`ENFORCE_PROJECT_AUTHZ` en log-only. Hasta cruzar la ventana, la paridad
-operativa está **demostrada en el árbol, no en producción**.
+**FOUNDATION DOCUMENTAL** — capas 3 a 11 en su dominio: membresía, empresa,
+función contractual, administración, permiso de recurso, workflow y
+responsabilidad. Backend completo y probado: **459 comprobaciones de batería +
+890 de suite**. Pendiente únicamente de cruzar la ventana, que cierra sus dos
+ALERT vivos (permisos de carpeta rotos desde el 20-ago; enforce en log-only).
+
+**MODELO ACTIVO TOTAL** — lo anterior **más identidad**. Aquí la paridad es
+**PARCIAL**, y no por la ventana: la capa 1 tiene gaps operativos reales ya
+diagnosticados y no implementados (G5a, G6, G7, invariante de sesión), que
+viajan con la implementación de la capa 12, **post-window**.
+
+Decir «backend completo en las 11 capas activas» habría sido inexacto: es
+completo en la foundation documental, no en identidad.
 
 ## C · PARIDAD DE EXPERIENCIA
 
@@ -220,8 +243,10 @@ operativa está **demostrada en el árbol, no en producción**.
 
 | Capa | Arq | Op | Exp |
 |---|---|---|---|
-| Membership · Contractual Function · Workflow · Responsibility | ✅ | ✅ | ✅ |
-| Identity · Account/Entity · Company · Entity Admin · Project Admin | ✅ | ✅ | 🟡 |
+| Contractual Function · Workflow · Responsibility | ✅ | ✅ | ✅ |
+| **Identity / Principal** | ✅ | **🟡** *(motor actual sí; modelo definitivo post-window)* | 🟡 |
+| **Project Membership** | ✅ | ✅ | **🟡** *(P5 post-window)* |
+| Account/Entity · Company · Entity Admin · Project Admin | ✅ | ✅ | 🟡 |
 | **Resource Permission** | ✅ | ✅ | **🟡 — el gap** |
 | Identity & Access UX | ✅ (diseño) | — | ⏳ |
 
@@ -270,7 +295,8 @@ enciende: **se decide al definirlo, no ahora**.
 ```
                         YA ALCANZADO
     ├─ Paridad arquitectónica ...................... 16/16 capas
-    ├─ Foundations backend ......................... 11 capas activas, probadas
+    ├─ Foundation documental (backend) ............. capas 3–11, probadas
+    │     (identidad: motor actual sí; modelo definitivo, post-window)
     ├─ Contractual Function ........................ capa propia, más que ACC/Procore
     ├─ Closest-wins + 3 sujetos (motor) ............ más explicable que ambos
     ├─ Ball-in-Court reconstruible ................. mejor que ACC
@@ -280,6 +306,8 @@ enciende: **se decide al definirlo, no ahora**.
                        GAP QUE FALTA
     ├─ CONTROLLED WINDOW ........................... ⏳ ESTAMOS AQUÍ
     ├─ Identity & Access UX — implementación ....... post-window
+    │     incluye G5a · G6 · G7 · invariante de sesión (gaps de identidad)
+    ├─ Project Membership UX (P5) .................. alta guiada en obra
     ├─ Resource Permission UX — COMPANY/FUNCIÓN .... el gap real de experiencia
     │     efectivo · conceder por colectivo · qué regla gana
     ├─ UX de entidad + ficha de persona ............ el recorrido profesional entero
@@ -299,5 +327,15 @@ enciende: **se decide al definirlo, no ahora**.
 *Análisis de cierre sobre la investigación existente. El mapa maestro (doc 63) y
 el organigrama no se modifican con este documento: esta matriz los usa, no los
 sustituye.*
+
+**Lo que REV.01 NO cambia:** `Controlled Window = ESTAMOS AQUÍ` · Resource
+Permission UX = gap antes del piloto · Identity & Access UX = diseño cerrado /
+implementación post-window · Member Tool Access = TRIGGER PROBABLE EN PILOTO ·
+las demás capas DEFER. **Ninguna corrección impacta la Controlled Window**: los
+gaps reclasificados son todos post-window y no alteran su alcance congelado.
+
+```
+MATRIZ DELTA ACC/PROCORE → ECD — REV.01 CERRADA
+```
 
 **STOP.**
