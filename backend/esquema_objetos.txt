@@ -213,19 +213,23 @@ columna	doc_partidas.software
 columna	doc_partidas.unidad
 columna	doc_partidas.updated_at
 columna	doc_redlines.adjuntos
+columna	doc_redlines.cerrado_por
 columna	doc_redlines.codigo
 columna	doc_redlines.created_at
 columna	doc_redlines.created_by
 columna	doc_redlines.estado
 columna	doc_redlines.fecha
 columna	doc_redlines.fecha_respuesta
+columna	doc_redlines.historial
 columna	doc_redlines.id
 columna	doc_redlines.model_urn
 columna	doc_redlines.project_id
 columna	doc_redlines.responsable
+columna	doc_redlines.responsable_id
 columna	doc_redlines.respuesta
 columna	doc_redlines.titulo
 columna	doc_redlines.updated_at
+columna	doc_redlines.vence_en
 columna	doc_reviews.cerrada_en
 columna	doc_reviews.codigo_idoneidad
 columna	doc_reviews.created_at
@@ -1037,10 +1041,15 @@ restriccion	doc_partidas not null descripcion
 restriccion	doc_partidas not null id
 restriccion	doc_partidas not null model_urn
 restriccion	doc_partidas primary key (id)
+restriccion	doc_redlines check (((estado is null) or ((estado)::text = any ((array['emitido'::character varying, 'en revisión'::character varying, 'respondido'::character varying, 'cerrado'::character varying])::text[]))))
+restriccion	doc_redlines foreign key (project_id) references projects(id)
+restriccion	doc_redlines foreign key (responsable_id) references users(id) on delete set null
 restriccion	doc_redlines not null codigo
 restriccion	doc_redlines not null id
 restriccion	doc_redlines not null model_urn
+restriccion	doc_redlines not null project_id
 restriccion	doc_redlines primary key (id)
+restriccion	doc_redlines unique (project_id, codigo)
 restriccion	doc_reviews not null id
 restriccion	doc_reviews not null items
 restriccion	doc_reviews not null model_urn
@@ -1545,6 +1554,7 @@ indice	create unique index on public.daily_reports using btree (model_urn, repor
 indice	create unique index on public.dashboards using btree (id)
 indice	create unique index on public.doc_partidas using btree (id)
 indice	create unique index on public.doc_redlines using btree (id)
+indice	create unique index on public.doc_redlines using btree (project_id, codigo)
 indice	create unique index on public.doc_reviews using btree (id)
 indice	create unique index on public.doc_rfis using btree (id)
 indice	create unique index on public.doc_rfis using btree (project_id, codigo)

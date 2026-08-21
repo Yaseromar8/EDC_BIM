@@ -979,7 +979,7 @@ def serve_map_file(filename):
 # CONTINUA. El esquema es idempotente (CREATE ... IF NOT EXISTS), de modo que la
 # que fallo se reintenta sola en el siguiente arranque. Servir la aplicacion
 # importa mas que completar una migracion accesoria.
-from db import ensure_file_nodes_table, ensure_ai_brain_schema, ensure_rfi_schema, ensure_redline_schema, ensure_partidas_schema, ensure_asset_user_data_table, ensure_project_identity_columns
+from db import ensure_file_nodes_table, ensure_ai_brain_schema, ensure_rfi_schema, ensure_redline_schema, ensure_partidas_schema, ensure_asset_user_data_table, ensure_project_identity_columns, ensure_reglas_del_redline
 from routes.presupuesto import ensure_presupuesto_schema
 from routes.inventory import ensure_extraction_jobs_table, ensure_inventory_identity
 from routes.civil_design_automation import ensure_civil_alignments_table
@@ -1018,6 +1018,9 @@ def _run_schema_setup():
         # AL FINAL: columnas sueltas que la base real tiene y que ninguna rutina
         # crea. Van aqui porque necesitan que sus tablas ya existan.
         ('columnas_pendientes', ensure_columnas_pendientes),
+        # Y las reglas del Red Line las ULTIMAS: sus claves ajenas apuntan a
+        # `projects` y a `users`, que las crea `esquema_base` mas arriba.
+        ('reglas_del_redline', ensure_reglas_del_redline),
     ]
     if PERFIL_DESPLIEGUE != 'portal':
         # Las familias del visor solo se aseguran si sus modulos estan cargados.

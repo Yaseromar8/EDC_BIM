@@ -507,7 +507,10 @@ def _faltantes(cur):
     sin poder comprobarse en esa direccion: es la consecuencia aceptada de no
     convertir el texto historico en un usuario.
 
-    REDLINE: solo que SOBRE. Su responsable sigue siendo texto libre.
+    REDLINE: las dos direcciones DESDE QUE TIENE `responsable_id`, igual que el
+    RFI y por la misma razon. Los 33 Red Lines HEREDADOS siguen sin el --su
+    responsable es texto libre-- pero estan TODOS cerrados, asi que no deben
+    nada y no aparecen por ninguna de las dos vias.
     """
     faltan, bloqueadas = [], []
     import flujo_de_revision as _flujo
@@ -571,6 +574,43 @@ def _faltantes(cur):
             if not cur.fetchone():
                 faltan.append(('RFI', str(rid), uid,
                                'Responder %s: %s' % (codigo or 'RFI', titulo or ''),
+                               vence))
+    except Exception:
+        cur.connection.rollback()
+
+    # Red Lines vivos con responsable ESTRUCTURADO.
+    #
+    # MISMA MECANICA QUE EL RFI, y a proposito el MISMO CRITERIO --
+    # `ESTADOS_DE_CIERRE` y `respuesta` vacia-- y no otro parecido: dos mitades
+    # con criterios distintos hacen que la conciliacion OSCILE en vez de
+    # converger, y eso ya se pago una vez en este mismo fichero.
+    #
+    # Lo que NO se comparte es el SIGNIFICADO: aqui el encargo dice «Revisar»,
+    # porque lo que se pide no es contestar una consulta sino pronunciarse
+    # sobre una modificacion del proyecto.
+    try:
+        import flujo_de_redline as _rl
+        cur.execute("SELECT id::text, codigo, titulo, responsable_id, project_id, "
+                    "       vence_en, estado FROM doc_redlines "
+                    "  WHERE responsable_id IS NOT NULL "
+                    "    AND lower(coalesce(estado,'')) NOT IN %s "
+                    "    AND coalesce(respuesta,'') = ''", (ESTADOS_DE_CIERRE,))
+        for rid, codigo, titulo, uid, obra, vence, estado in cur.fetchall():
+            # Si el responsable ya no esta en la obra, el Red Line esta
+            # BLOQUEADO: no es una divergencia reparable --`abrir()` se
+            # negaria, porque un encargo no da acceso-- sino un asunto que
+            # necesita a una persona.
+            cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
+                        (str(obra), uid))
+            if not cur.fetchone():
+                bloqueadas.append(('REDLINE', str(rid), codigo or '',
+                                   'su responsable ya no pertenece a la obra'))
+                continue
+            cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='REDLINE' AND objeto_id=%s "
+                        "   AND destino_usuario=%s AND estado='abierto'", (str(rid), uid))
+            if not cur.fetchone():
+                faltan.append(('REDLINE', str(rid), uid,
+                               _rl.SEMANTICA.asunto_encargo % (codigo or 'RL', titulo or ''),
                                vence))
     except Exception:
         cur.connection.rollback()

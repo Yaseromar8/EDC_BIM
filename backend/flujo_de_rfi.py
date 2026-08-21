@@ -1,5 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Quien puede hacer que con un RFI, y en que orden.
+"""La SEMANTICA del RFI. La mecanica esta en `flujo_de_registro.py`.
+
+Este fichero antes contenia las dos cosas. Se separo al profesionalizar los Red
+Lines, que son de la MISMA FAMILIA --registro numerado de documentos formales
+con veredicto-- pero NO el mismo objeto. La mecanica se comparte; lo que
+significa cada uno se declara aqui, a la vista.
+
+EL API PUBLICA DE ESTE MODULO NO CAMBIO. `routes/rfis.py` no se toco: el RFI se
+cerro en F2 y esta pieza no vuelve a abrirlo.
 
 POR QUE EL RFI NO COPIA EL MECANISMO DE REVIEWS
 -----------------------------------------------
@@ -41,9 +49,10 @@ expediente.
             elige a que usuario de la obra corresponde. El texto original se
             conserva al lado, y queda dicho QUIEN lo eligio.
 """
-import datetime
 import logging
-import re
+
+import flujo_de_registro as _reg
+from flujo_de_registro import AUTOR, RESPONSABLE, ADMIN, entrada  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -63,37 +72,52 @@ TRANSICIONES = {
 }
 
 
-def _mismo(a, b):
-    return bool(a) and bool(b) and str(a).strip().lower() == str(b).strip().lower()
+# ── LA SEMANTICA DEL RFI, DECLARADA ───────────────────────────────────────
+#
+# Quien puede que, escrito como POSICIONES DEL FLUJO. Se lee de un vistazo, y
+# `ensayo_de_desacople.py` comprueba que cambiar esto NO cambia el Red Line.
+SEMANTICA = _reg.Semantica(
+    clave='RFI',
+    tabla='doc_rfis',
+    prefijo='RFI',
+    singular='RFI',
+    estados=ESTADOS,
+    transiciones=TRANSICIONES,
+    quien_pasa_la_pelota=(AUTOR, RESPONSABLE, ADMIN),
+    quien_dicta_veredicto=(RESPONSABLE,),      # ni el autor ni un administrador
+    quien_cierra=(AUTOR, ADMIN),
+    quien_adopta=(AUTOR, ADMIN),
+    restriccion_unica='uq_doc_rfis_codigo',
+    asunto_encargo='Responder %s: %s',
+    msg_no_reasigna=('Solo quien creó el RFI, quien lo tiene ahora o un '
+                     'administrador pueden cambiar el responsable.'),
+    msg_no_adopta=('Solo quien creó el RFI o un administrador puede '
+                   'incorporarlo al flujo.'),
+    msg_no_veredicto='Solo quien tiene el RFI puede responderlo.',
+    msg_no_cierra='Cierra el RFI quien lo creó, o un administrador.',
+    msg_falta_veredicto='Responder exige un veredicto (Aceptado o Rechazado).',
+    msg_cerrado='Un RFI cerrado ya no se modifica.',
+    msg_necesita_adopcion=('Este RFI viene del registro anterior y todavía no '
+                           'tiene responsable del sistema. Asígnalo antes de '
+                           'responderlo o cerrarlo.'),
+    msg_bloqueado_fuera=('%s ya no pertenece a esta obra, así que nadie puede '
+                         'responder este RFI'),
+)
 
 
-def es_el_autor(usuario, rfi):
-    """`created_by` guarda el correo o el nombre. Se comparan los dos."""
-    u = usuario or {}
-    autor = (rfi or {}).get('created_by')
-    return _mismo(u.get('email'), autor) or _mismo(u.get('name'), autor)
+# ── El API de siempre, ahora sobre la mecanica comun ──────────────────────
+# Las firmas no cambiaron: `routes/rfis.py` y sus 49 pruebas siguen igual.
 
+es_el_autor = _reg.es_el_autor
+es_el_responsable = _reg.es_el_responsable
+es_admin = _reg.es_admin
+es_legacy = _reg.es_legacy
+necesita_adopcion = _reg.necesita_adopcion
+exige_veredicto = _reg.exige_veredicto
 
-def es_el_responsable(usuario, rfi):
-    """Por IDENTIDAD. El texto `responsable` nunca decide."""
-    rid = (rfi or {}).get('responsable_id')
-    if not rid:
-        return False
-    try:
-        return int((usuario or {}).get('id') or 0) == int(rid)
-    except (TypeError, ValueError):
-        return False
-
-
-def es_admin(usuario):
-    return (usuario or {}).get('role') == 'admin'
-
-
-# ── Las tres reglas ───────────────────────────────────────────────────────
 
 def puede_pasar_la_pelota(usuario, rfi):
-    return (es_el_autor(usuario, rfi) or es_el_responsable(usuario, rfi)
-            or es_admin(usuario))
+    return _reg.puede_pasar_la_pelota(SEMANTICA, usuario, rfi)
 
 
 def puede_dictar_veredicto(usuario, rfi):
@@ -103,38 +127,11 @@ def puede_dictar_veredicto(usuario, rfi):
     pregunto no prueba nada. Un administrador que necesite intervenir se asigna
     el RFI primero --y eso queda escrito en el historial--.
     """
-    return es_el_responsable(usuario, rfi)
+    return _reg.puede_dictar_veredicto(SEMANTICA, usuario, rfi)
 
 
 def puede_cerrar(usuario, rfi):
-    return es_el_autor(usuario, rfi) or es_admin(usuario)
-
-
-# ── El RFI legacy ─────────────────────────────────────────────────────────
-
-def es_legacy(rfi):
-    """Viene del registro ANTERIOR: tiene responsable en TEXTO y ninguno estructurado.
-
-    Las dos condiciones, y las dos importan. La primera version solo miraba la
-    ausencia de `responsable_id`, y con eso un RFI RECIEN CREADO --que tampoco
-    lo tiene-- se tomaba por legacy: su primera asignacion se registraba como
-    «adopción» en vez de como asignación. Lo encontro el ensayo.
-
-    Un RFI nuevo sin asignar no es legacy: es nuevo. Legacy es el que arrastra
-    un nombre escrito a mano y ningun usuario detras.
-    """
-    rfi = rfi or {}
-    return bool((rfi.get('responsable') or '').strip()) and not rfi.get('responsable_id')
-
-
-def necesita_adopcion(rfi):
-    """Legacy y TODAVIA ABIERTO.
-
-    Un legacy cerrado no necesita nada: es archivo y se conserva tal cual.
-    Uno abierto, en cambio, arrastraria el defecto de que cualquiera dicte su
-    veredicto, y eso no puede pasar al producto nuevo.
-    """
-    return es_legacy(rfi) and (rfi or {}).get('estado') != 'Cerrado'
+    return _reg.puede_cerrar(SEMANTICA, usuario, rfi)
 
 
 def puede_adoptar(usuario, rfi):
@@ -143,100 +140,21 @@ def puede_adoptar(usuario, rfi):
     El autor o un administrador. El «responsable actual» no puede: todavia no
     existe como identidad -- es justamente lo que falta.
     """
-    return es_el_autor(usuario, rfi) or es_admin(usuario)
+    return _reg.puede_adoptar(SEMANTICA, usuario, rfi)
 
-
-# ── Estados ───────────────────────────────────────────────────────────────
 
 def transicion_valida(actual, nuevo):
-    actual = actual or 'Emitido'
-    if nuevo not in ESTADOS:
-        return False, 'El estado «%s» no existe.' % nuevo
-    permitidos = TRANSICIONES.get(actual, ())
-    if nuevo not in permitidos:
-        return False, ('Un RFI «%s» no puede pasar a «%s». Desde ahí solo: %s.'
-                       % (actual, nuevo, ', '.join(permitidos)))
-    return True, ''
-
-
-def exige_veredicto(nuevo):
-    """`Respondido` sin veredicto es un estado que no dice nada.
-
-    Hoy hay DOS RFI con `fecha_respuesta` puesta y ninguna respuesta: cada campo
-    se escribia por su cuenta y nada comprobaba que el conjunto tuviera sentido.
-    """
-    return nuevo == 'Respondido'
+    return _reg.transicion_valida(SEMANTICA, actual, nuevo)
 
 
 def estado_del_flujo(cur, rfi, project_id=None):
-    """('ACTIVO'|'SIN_ASIGNAR'|'BLOQUEADO'|'CERRADO', motivo).
-
-    Se CALCULA al mirarlo; no se guarda. Un estado guardado habria que
-    mantenerlo al dia, y uno que puede quedarse viejo es peor que no tenerlo.
-    """
-    rfi = rfi or {}
-    if rfi.get('estado') == 'Cerrado':
-        return 'CERRADO', ''
-
-    rid = rfi.get('responsable_id')
-    if not rid:
-        if rfi.get('responsable'):
-            return 'SIN_ASIGNAR', ('viene del registro anterior: su responsable es '
-                                   'solo el texto «%s»' % rfi['responsable'])
-        return 'SIN_ASIGNAR', 'todavía no tiene responsable'
-
-    cur.execute('SELECT 1 FROM users WHERE id = %s AND is_active', (int(rid),))
-    if not cur.fetchone():
-        return 'BLOQUEADO', 'la cuenta del responsable (usuario %s) ya no está activa' % rid
-
-    obra = project_id or rfi.get('project_id')
-    if not obra:
-        return 'BLOQUEADO', 'no se puede determinar la obra del RFI'
-    cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
-                (str(obra), int(rid)))
-    if not cur.fetchone():
-        cur.execute('SELECT name, email FROM users WHERE id = %s', (int(rid),))
-        quien = cur.fetchone() or ('', '')
-        return 'BLOQUEADO', ('%s ya no pertenece a esta obra, así que nadie puede '
-                             'responder este RFI' % (quien[0] or quien[1] or rid))
-    return 'ACTIVO', ''
-
-
-# ── Numeracion ────────────────────────────────────────────────────────────
-
-_SUFIJO = re.compile(r'(\d+)\s*$')
+    return _reg.estado_del_flujo(cur, SEMANTICA, rfi, project_id)
 
 
 def siguiente_codigo(cur, project_id, prefijo='RFI'):
-    """El siguiente numero DENTRO DE LA OBRA, tratando el sufijo como numero.
+    """El siguiente numero DENTRO DE LA OBRA. Ver `flujo_de_registro`.
 
-    POR QUE NO `COUNT(*) + 1`
-    -------------------------
-    Contar filas recicla numeros en cuanto se borra uno, y ordena 'RFI-9'
-    despues de 'RFI-10'. Se toma el MAXIMO del sufijo numerico, que es lo que la
-    numeracion significa.
-
-    POR QUE POR `project_id` Y NO POR `model_urn`
-    ---------------------------------------------
-    Porque `model_urn` es un ALCANCE, no la obra: la obra '1' tiene OCHO alias
-    registrados. Agrupar por alcance dejaria convivir dos RFI-013 en la misma
-    obra, creados bajo alias distintos.
-
-    Los codigos que no encajen en el patron se ignoran en el calculo en vez de
-    reventar: un registro heredado con un codigo raro no puede impedir crear el
-    siguiente.
+    `prefijo` sigue en la firma porque estaba: si alguien pasa otro, manda ese.
     """
-    cur.execute("""SELECT COALESCE(MAX(NULLIF(substring(codigo from '[0-9]+$'), '')::bigint), 0)
-                     FROM doc_rfis WHERE project_id = %s""", (str(project_id),))
-    ultimo = (cur.fetchone() or [0])[0] or 0
-    return '%s-%03d' % (prefijo, int(ultimo) + 1)
-
-
-# ── Historial ─────────────────────────────────────────────────────────────
-
-def entrada(evento, por, **datos):
-    """Una linea del historial. Siempre con quien y cuando."""
-    d = {'event': evento, 'by': por,
-         'at': datetime.datetime.now(datetime.timezone.utc).isoformat()}
-    d.update({k: v for k, v in datos.items() if v is not None})
-    return d
+    sem = SEMANTICA if prefijo == 'RFI' else SEMANTICA._replace(prefijo=prefijo)
+    return _reg.siguiente_codigo(cur, sem, project_id)

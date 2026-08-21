@@ -811,16 +811,39 @@ def log_activity(model_urn, action, entity_type, entity_id=None, entity_name=Non
         print(f"[ActivityLog] Warning: no se pudo registrar actividad: {e}")
 
 ESTADOS_RFI = ('Emitido', 'En revisión', 'Respondido', 'Cerrado')
+# Los Red Lines usan los MISMOS cuatro estados --y los 33 registros reales no
+# tienen ninguno fuera de ellos-- pero la lista se declara aparte a proposito:
+# si manana un Red Line necesita un estado que un RFI no tiene, esa decision no
+# puede obligar a cambiar el RFI. Ver `flujo_de_redline.py`.
+ESTADOS_REDLINE = ('Emitido', 'En revisión', 'Respondido', 'Cerrado')
 
 
-def _reglas_del_rfi(cursor, conn):
-    """Las restricciones que hacen del RFI un objeto contractual fiable.
+def _reglas_del_registro(cursor, conn, tabla, singular, estados):
+    """Las restricciones que hacen de un REGISTRO DOCUMENTAL un objeto fiable.
+
+    Vale para `doc_rfis` y para `doc_redlines`: la MECANICA es la misma --la
+    obra no puede ser desconocida, el codigo no puede repetirse dentro de ella,
+    el estado no puede ser cualquiera-- y duplicarla habria sido pedir que las
+    dos mitades divergieran. Lo que cada objeto SIGNIFICA se declara en su
+    propio `flujo_de_*.py`, no aqui.
+
+    Los nombres de las restricciones se derivan de la tabla, asi que los del RFI
+    salen exactamente iguales que antes: `uq_doc_rfis_codigo`, `ck_doc_rfis_estado`.
 
     NINGUNA SE IMPONE ADIVINANDO. Cada una comprueba primero los datos reales y,
     si no puede aplicarse de forma segura, LO DICE y sigue. Una restriccion que
     se aplica «arreglando» filas de un cliente no es una garantia: es una
     perdida de informacion con buena intencion.
     """
+    # Lo que NO se pudo aplicar. Se DEVUELVE, para que quien llama no pueda
+    # anunciar «verificadas» cuando no se verifico nada.
+    pendientes = []
+
+    _fk_obra = 'fk_%s_project' % tabla
+    _fk_resp = 'fk_%s_responsable' % tabla
+    _uq = 'uq_%s_codigo' % tabla
+    _ck = 'ck_%s_estado' % tabla
+
     def _existe(nombre):
         cursor.execute("SELECT 1 FROM pg_constraint WHERE conname = %s", (nombre,))
         return cursor.fetchone() is not None
@@ -829,87 +852,135 @@ def _reglas_del_rfi(cursor, conn):
     #
     #    Y no es cosmetico: la restriccion unica de abajo es (project_id,
     #    codigo), y en SQL DOS NULL NO CHOCAN. Con `project_id` nulo, dos
-    #    RFI-013 se colarian por debajo de la unicidad.
-    cursor.execute("SELECT count(*) FROM doc_rfis WHERE project_id IS NULL")
+    #    RL-013 se colarian por debajo de la unicidad.
+    cursor.execute('SELECT count(*) FROM %s WHERE project_id IS NULL' % tabla)
     sin_obra = cursor.fetchone()[0]
     if sin_obra:
-        print('[DB] AVISO: %d RFI sin project_id. NO se impone NOT NULL y NO se '
-              'adivina su obra: hay que decidirla a mano.' % sin_obra)
+        print('[DB] AVISO: %d %s sin project_id. NO se impone NOT NULL y NO se '
+              'adivina su obra: hay que decidirla a mano.' % (sin_obra, singular))
+        pendientes.append('%s.project_id NOT NULL' % tabla)
     else:
         try:
-            cursor.execute("ALTER TABLE doc_rfis ALTER COLUMN project_id SET NOT NULL")
+            cursor.execute('ALTER TABLE %s ALTER COLUMN project_id SET NOT NULL' % tabla)
             conn.commit()
         except Exception as e:
             conn.rollback()
             print('[DB] project_id NOT NULL no aplicado: %s' % str(e)[:90])
+            pendientes.append('%s.project_id NOT NULL' % tabla)
 
     # 2. La obra existe de verdad.
-    if not _existe('fk_doc_rfis_project'):
-        cursor.execute("""SELECT count(*) FROM doc_rfis r
-                           WHERE r.project_id IS NOT NULL
-                             AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = r.project_id)""")
+    if not _existe(_fk_obra):
+        cursor.execute('SELECT count(*) FROM %s r WHERE r.project_id IS NOT NULL '
+                       '  AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = r.project_id)'
+                       % tabla)
         if cursor.fetchone()[0]:
             conn.commit()
-            print('[DB] AVISO: hay RFI cuyo project_id no existe en projects. '
-                  'NO se crea la clave ajena.')
+            print('[DB] AVISO: hay %s cuyo project_id no existe en projects. '
+                  'NO se crea la clave ajena.' % singular)
+            pendientes.append(_fk_obra)
         else:
             try:
-                cursor.execute("ALTER TABLE doc_rfis ADD CONSTRAINT fk_doc_rfis_project "
-                               "FOREIGN KEY (project_id) REFERENCES projects(id)")
+                cursor.execute('ALTER TABLE %s ADD CONSTRAINT %s '
+                               'FOREIGN KEY (project_id) REFERENCES projects(id)'
+                               % (tabla, _fk_obra))
                 conn.commit()
             except Exception as e:
                 conn.rollback()
-                print('[DB] fk_doc_rfis_project no creada: %s' % str(e)[:90])
+                print('[DB] %s no creada: %s' % (_fk_obra, str(e)[:90]))
+                pendientes.append(_fk_obra)
 
-    if not _existe('fk_doc_rfis_responsable'):
+    if not _existe(_fk_resp):
         try:
-            cursor.execute("ALTER TABLE doc_rfis ADD CONSTRAINT fk_doc_rfis_responsable "
-                           "FOREIGN KEY (responsable_id) REFERENCES users(id) ON DELETE SET NULL")
+            cursor.execute('ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (responsable_id) '
+                           'REFERENCES users(id) ON DELETE SET NULL' % (tabla, _fk_resp))
             conn.commit()
         except Exception as e:
             conn.rollback()
-            print('[DB] fk_doc_rfis_responsable no creada: %s' % str(e)[:90])
+            print('[DB] %s no creada: %s' % (_fk_resp, str(e)[:90]))
+            pendientes.append(_fk_resp)
 
-    # 3. DOS RFI-013 EN LA MISMA OBRA NO PUEDEN EXISTIR.
+    # 3. DOS RL-013 (O RFI-013) EN LA MISMA OBRA NO PUEDEN EXISTIR.
     #
     #    Por OBRA, no por `model_urn`: una obra tiene varios alcances --la obra
     #    '1' tiene OCHO alias registrados-- y agrupar por alcance dejaria pasar
-    #    dos RFI-013 creados bajo alias distintos de la misma obra.
-    if not _existe('uq_doc_rfis_codigo'):
-        cursor.execute("""SELECT count(*) FROM (
-                            SELECT project_id, codigo FROM doc_rfis
-                             WHERE project_id IS NOT NULL
-                             GROUP BY 1,2 HAVING count(*) > 1) d""")
+    #    dos codigos iguales creados bajo alias distintos de la misma obra.
+    if not _existe(_uq):
+        cursor.execute('SELECT count(*) FROM (SELECT project_id, codigo FROM %s '
+                       '  WHERE project_id IS NOT NULL GROUP BY 1,2 HAVING count(*) > 1) d'
+                       % tabla)
         if cursor.fetchone()[0]:
             conn.commit()
-            print('[DB] AVISO: ya hay codigos de RFI repetidos dentro de una obra. '
-                  'NO se crea la restriccion unica; hay que renumerarlos a mano.')
+            print('[DB] AVISO: ya hay codigos de %s repetidos dentro de una obra. '
+                  'NO se crea la restriccion unica; hay que renumerarlos a mano.' % singular)
+            pendientes.append(_uq)
         else:
             try:
-                cursor.execute("ALTER TABLE doc_rfis ADD CONSTRAINT uq_doc_rfis_codigo "
-                               "UNIQUE (project_id, codigo)")
+                cursor.execute('ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (project_id, codigo)'
+                               % (tabla, _uq))
                 conn.commit()
             except Exception as e:
                 conn.rollback()
-                print('[DB] uq_doc_rfis_codigo no creada: %s' % str(e)[:90])
+                print('[DB] %s no creada: %s' % (_uq, str(e)[:90]))
+                pendientes.append(_uq)
 
     # 4. Los cuatro estados, y nada mas. No se inventa ninguno: son los que la
-    #    interfaz ya ofrece y los que los 25 registros reales usan.
-    if not _existe('ck_doc_rfis_estado'):
-        cursor.execute("SELECT count(*) FROM doc_rfis WHERE estado IS NOT NULL "
-                       "  AND estado NOT IN %s", (ESTADOS_RFI,))
+    #    interfaz ya ofrece y los que usan los registros reales --los 25 RFI y
+    #    los 33 Red Lines--.
+    if not _existe(_ck):
+        cursor.execute('SELECT count(*) FROM %s WHERE estado IS NOT NULL '
+                       '  AND estado NOT IN %%s' % tabla, (estados,))
         if cursor.fetchone()[0]:
             conn.commit()
-            print('[DB] AVISO: hay RFI con estados fuera de los cuatro. NO se crea '
-                  'el CHECK y NO se reescribe ningun estado.')
+            print('[DB] AVISO: hay %s con estados fuera de los cuatro. NO se crea '
+                  'el CHECK y NO se reescribe ningun estado.' % singular)
+            pendientes.append(_ck)
         else:
             try:
-                cursor.execute("ALTER TABLE doc_rfis ADD CONSTRAINT ck_doc_rfis_estado "
-                               "CHECK (estado IS NULL OR estado IN %s)", (ESTADOS_RFI,))
+                cursor.execute('ALTER TABLE %s ADD CONSTRAINT %s '
+                               'CHECK (estado IS NULL OR estado IN %%s)' % (tabla, _ck),
+                               (estados,))
                 conn.commit()
             except Exception as e:
                 conn.rollback()
-                print('[DB] ck_doc_rfis_estado no creado: %s' % str(e)[:90])
+                print('[DB] %s no creado: %s' % (_ck, str(e)[:90]))
+                pendientes.append(_ck)
+
+    return pendientes
+
+
+def _reglas_del_rfi(cursor, conn):
+    return _reglas_del_registro(cursor, conn, 'doc_rfis', 'RFI', ESTADOS_RFI)
+
+
+def _reglas_del_redline(cursor, conn):
+    return _reglas_del_registro(cursor, conn, 'doc_redlines', 'Red Line',
+                                ESTADOS_REDLINE)
+
+
+def ensure_reglas_del_redline():
+    """Las restricciones del Red Line, AL FINAL del arranque.
+
+    Igual que las del RFI, y por la misma razon: sus claves ajenas apuntan a
+    `projects` y a `users`, que no existen cuando se crea su tabla. Lo que
+    referencia tablas ajenas va DESPUES de quien las crea.
+
+    Los 33 Red Lines reales admiten las cuatro restricciones sin tocar una sola
+    fila: ninguno sin `project_id`, ninguno con obra inexistente, ningun codigo
+    repetido y ningun estado fuera de los cuatro. Se comprobo antes de imponer.
+    """
+    from db import get_db_connection as _c
+    try:
+        with _c() as conn:
+            cur = conn.cursor()
+            pendientes = _reglas_del_redline(cur, conn)
+            conn.commit()
+        if pendientes:
+            print('[DB] Reglas del Red Line INCOMPLETAS. Sin aplicar: %s'
+                  % ', '.join(pendientes))
+        else:
+            print('[DB] Reglas del Red Line verificadas.')
+    except Exception as e:
+        print('Error aplicando las reglas del Red Line: %s' % e)
 
 
 def ensure_reglas_del_rfi():
@@ -929,9 +1000,13 @@ def ensure_reglas_del_rfi():
     try:
         with _c() as conn:
             cur = conn.cursor()
-            _reglas_del_rfi(cur, conn)
+            pendientes = _reglas_del_rfi(cur, conn)
             conn.commit()
-        print('[DB] Reglas del RFI verificadas.')
+        if pendientes:
+            print('[DB] Reglas del RFI INCOMPLETAS. Sin aplicar: %s'
+                  % ', '.join(pendientes))
+        else:
+            print('[DB] Reglas del RFI verificadas.')
     except Exception as e:
         print('Error aplicando las reglas del RFI: %s' % e)
 
@@ -1027,6 +1102,29 @@ def ensure_redline_schema():
                 ON doc_redlines(model_urn);
             """)
             
+            # -- EL RED LINE PROFESIONAL ---------------------------------
+            #
+            # `responsable` (texto) NO SE TOCA: es lo que dice el registro
+            # historico, y en las 33 filas reales vale siempre lo mismo.
+            # `responsable_id` es OTRA cosa: a quien le toca AHORA pronunciarse
+            # sobre la modificacion, como identidad del sistema. No se exige que
+            # sean el mismo dato, y el texto historico NO se convierte.
+            #
+            # Y esta en el OBJETO, no solo en `encargos`, por una razon concreta:
+            # sin el, la conciliacion solo podia detectar que SOBRARA un encargo
+            # de Red Line, nunca que FALTARA --del texto libre no se deduce a que
+            # usuario abrirselo--. Con el, la proyeccion se vuelve RECONSTRUIBLE.
+            cursor.execute("ALTER TABLE doc_redlines ADD COLUMN IF NOT EXISTS "
+                           "responsable_id INTEGER;")
+            # El plazo vive en el OBJETO. Leccion ya pagada en Reviews: si el
+            # encargo se perdia y se reconstruia, el plazo desaparecia porque el
+            # objeto no sabia cual era. Se cuenta en DIAS CALENDARIO.
+            cursor.execute("ALTER TABLE doc_redlines ADD COLUMN IF NOT EXISTS "
+                           "vence_en TIMESTAMP;")
+            cursor.execute("ALTER TABLE doc_redlines ADD COLUMN IF NOT EXISTS "
+                           "historial JSONB DEFAULT '[]'::jsonb;")
+            cursor.execute("ALTER TABLE doc_redlines ADD COLUMN IF NOT EXISTS "
+                           "cerrado_por VARCHAR(255);")
             conn.commit()
             print("[DB] Esquema Red Lines verificado/creado exitosamente.")
     except Exception as e:

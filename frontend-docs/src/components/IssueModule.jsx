@@ -341,7 +341,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
     ws['!cols'] = colKeys.map(k => ({ wch: Math.max(k.length, ...data.map(r => String(r[k] || '').length)) + 2 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, cfg.plural);
-    XLSX.writeFile(wb, `RFI_${project.name.replace(/ /g, '_')}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.writeFile(wb, `${cfg.singular.replace(/ /g, '_')}_${project.name.replace(/ /g, '_')}_${new Date().toISOString().slice(0,10)}.xlsx`);
   };
 
   // ── Export to PDF ──
@@ -527,7 +527,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
       doc.text('VISOR APS — Sistema de Gestión BIM', 14, doc.internal.pageSize.getHeight() - 8);
     }
 
-    doc.save(`RFI_${project.name.replace(/ /g, '_')}_${new Date().toISOString().slice(0,10)}.pdf`);
+    doc.save(`${cfg.singular.replace(/ /g, '_')}_${project.name.replace(/ /g, '_')}_${new Date().toISOString().slice(0,10)}.pdf`);
   };
 
   // SVG icons for file types
@@ -1418,7 +1418,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                         <text x={p.x} y={p.y - 8} textAnchor="middle" fill="#e53935" fontSize="9" fontWeight="700">{p.avg}d</text>
                         <text x={p.x} y={tH - 2} textAnchor="middle" fill="#666" fontSize="8">{p.label}</text>
                         <rect x={p.x - 16} y={tPT} width="32" height={tAH + tPB} fill="transparent" style={{ cursor: 'pointer' }}>
-                          <title>{p.label}: {p.avg} día(s) — {p.count} RFI(s)</title>
+                          <title>{p.label}: {p.avg} día(s) — {p.count} {cfg.singular}(s)</title>
                         </rect>
                       </g>
                     ))}
