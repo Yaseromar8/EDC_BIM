@@ -1,0 +1,107 @@
+EVIDENCIA E1/E2 · 2026-08-21 16:32 · base postgres · 34.86.206.187
+sesion de SOLO LECTURA (set_session readonly)
+
+── E1 · ESQUEMA REAL vs MANIFIESTO DEL ARBOL ACTUAL ──
+esquema completo contra el manifiesto: NO
+objetos que el manifiesto exige y NO existen (3):
+   FALTA  columna project_users.es_admin
+   FALTA  restriccion project_users not null es_admin
+   FALTA  indice create index on public.project_users using btree (project_id) where es_admin
+
+   SOBRA  restriccion control_pins not null name
+   SOBRA  restriccion control_pins not null type
+   SOBRA  restriccion control_pins not null x_coord
+   SOBRA  restriccion control_pins not null y_coord
+   SOBRA  restriccion control_pins not null z_coord
+   SOBRA  restriccion folder_permissions foreign key (folder_node_id) references file_nodes(id) on delete cascade
+   SOBRA  restriccion folder_permissions foreign key (granted_by) references users(id)
+   SOBRA  restriccion folder_permissions foreign key (user_id) references users(id) on delete cascade
+   SOBRA  restriccion lob_activity_relations check ((relation_type = any (array['fs'::text, 'ss'::text, 'ff'::text, 'sf'::text])))
+   SOBRA  restriccion lob_activity_relations foreign key (dataset_id) references lob_datasets(id) on delete cascade
+   SOBRA  restriccion lob_activity_schedule check (((percent is null) or ((percent >= (0)::double precision) and (percent <= (100)::double precision))))
+   SOBRA  restriccion lob_activity_schedule foreign key (dataset_id) references lob_datasets(id) on delete cascade
+   SOBRA  restriccion lob_cost_items check (((metrado is null) or (metrado >= (0)::double precision)))
+   SOBRA  restriccion lob_cost_items check (((pu is null) or (pu >= (0)::double precision)))
+   SOBRA  restriccion lob_cost_items check ((tipo = any (array['partida'::text, 'titulo'::text])))
+   … y 55 restricciones mas
+   SOBRA  indice      create index on public.control_pins using btree (project_id)
+   SOBRA  indice      create index on public.file_nodes using btree (parent_id, is_deleted)
+   SOBRA  indice      create index on public.inventory_assets using btree (model_urn)
+   SOBRA  indice      create index on public.inventory_assets using btree (model_urn, external_id)
+   SOBRA  indice      create index on public.inventory_assets using btree (source_urn, external_id)
+   SOBRA  indice      create index on public.inventory_assets using gist (physical_station_range)
+   SOBRA  indice      create index on public.lob_activity_relations using btree (dataset_id, successor_id)
+   SOBRA  indice      create index on public.lob_cost_items using btree (dataset_id, activity_id)
+   SOBRA  indice      create index on public.lob_dataset_audit using btree (scope_urn, created_at desc)
+   SOBRA  indice      create index on public.lob_datasets using btree (project_id, front_id, created_at desc)
+   SOBRA  indice      create index on public.lob_element_links using btree (dataset_id, codigo)
+   SOBRA  indice      create index on public.lob_element_links using btree (dataset_id, source_urn, external_id)
+   SOBRA  indice      create index on public.lob_linear_profiles using btree (project_id, front_id)
+   SOBRA  indice      create index on public.lob_linear_progress_events using btree (scope_urn, codigo, event_date desc)
+   SOBRA  indice      create index on public.lob_linear_progress_events using btree (scope_urn, event_date desc)
+   … y 7 indices mas
+
+los tres que deciden la ventana:
+   folder_permissions.sujeto_tipo           EXISTE (nullable=NO)
+   folder_permissions.sujeto_id             EXISTE (nullable=NO)
+   project_users.es_admin                   NO EXISTE
+   folder_permissions.user_id               existe (nullable=YES)
+
+── CLASIFICACION DEL ESQUEMA ──
+ESTADO C — PARCIALMENTE MIGRADO:
+   sujeto_tipo: nullable=NO
+   sujeto_id  : nullable=NO
+   es_admin   : no existe
+   Antes de la ventana hay que entender COMO llego aqui.
+   (folder_permissions tiene 1 fila(s) hoy)
+
+── E2 · ROLES / PROPIEDAD / GRANTS ──
+rol ecd_app        existe: False
+rol ecd_migrator   existe: False
+rol postgres       existe: True
+atributos (super/createdb/createrole/login/bypassrls):
+   cloudsqladmin            True True True True True
+   cloudsqlagent            False True True True False
+   cloudsqlconnpooladmin    False False False True False
+   cloudsqliamgroup         False False False False False
+   cloudsqliamgroupserviceaccount False False False False False
+   cloudsqliamgroupuser     False False False False False
+   cloudsqliamserviceaccount False False False False False
+   cloudsqliamuser          False False False False False
+   cloudsqliamworkforceidentity False False False False False
+   cloudsqlimportexport     False True True True False
+   cloudsqlinactiveuser     False False False False False
+   cloudsqllogical          False False False False False
+   cloudsqlobservability    False False False True False
+   cloudsqlreplica          False False False True False
+   cloudsqlsuperuser        False True True True False
+   postgres                 False True True True False
+
+propiedad por clase:
+   funcion     postgres                   38
+   indice      postgres                  205
+   schema      pg_database_owner           1
+   schema      postgres                    1
+   secuencia   postgres                   38
+   tabla       postgres                   95
+
+ecd_app CREATE sobre public   : rol inexistente
+ecd_app CREATE sobre ai_brain : rol inexistente
+ecd_app UPDATE activity_log : rol inexistente
+ecd_app DELETE activity_log : rol inexistente
+ecd_app UPDATE auth_events  : rol inexistente
+ecd_app DELETE auth_events  : rol inexistente
+grants a ecd_app / ecd_migrator: NINGUNO
+
+── E4 · VARIABLES DE RENDER (rellenar A MANO desde el panel) ──
+   DB_USER                                    = ______________
+   DDL_EN_CALIENTE                            = ______________
+   ESQUEMA_ESTRICTO                           = ______________
+   ENFORCE_PROJECT_AUTHZ                      = ______________
+   AUTH_POLICY_MODE                           = ______________
+   DEPLOY_PROFILE                             = ______________
+   CORS_ORIGINS                               = ______________
+   APP_URL                                    = ______________
+   APP_SECRET (solo PRESENTE/AUSENTE)         = ______________
+   SESSION_PEPPER (solo PRESENTE/AUSENTE)     = ______________
+   DB_PASS (solo PRESENTE/AUSENTE)            = ______________

@@ -294,10 +294,10 @@ def contra_el_servicio(url):
         print('login rechazado (%s): %s' % (r.status_code, d.get('error', '')))
         return 2
     if d.get('requiere_2fa'):
-        codigo = input('código del segundo factor: ').strip()
+        codigo = input('código del segundo factor (6 dígitos): ').strip()
         r = requests.post(url + '/api/auth/2fa/verify',
-                          json={'email': correo, 'code': codigo,
-                                'pre_token': d.get('pre_token')}, timeout=40)
+                          json={'desafio': d.get('desafio'), 'codigo': codigo},
+                          timeout=40)
         d = r.json()
         if r.status_code != 200:
             print('2FA rechazado: %s' % d.get('error', ''))
