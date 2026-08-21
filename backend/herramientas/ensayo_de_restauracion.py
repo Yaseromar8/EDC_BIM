@@ -168,6 +168,20 @@ def _ensayar(copia, base_ensayo):
                             user=os.getenv('DB_USER'), password=os.getenv('DB_PASS'),
                             dbname=base_ensayo)
     cur = conn.cursor()
+
+    # Filas EN CUARENTENA: apartadas por la restauracion en un fichero al lado
+    # de la copia, anunciadas, y esperando decision humana. No son perdida y no
+    # cuentan como descuadre -- pero se dicen, con su recuento.
+    cuarentenas = {}
+    for fich in pathlib.Path(copia).parent.glob(
+            pathlib.Path(copia).name.replace('.copia.gz', '') + '.copia.cuarentena-*.csv'):
+        tabla_c = fich.name.rsplit('.cuarentena-', 1)[1][:-4]
+        with open(fich, encoding='utf-8') as f:
+            cuarentenas[tabla_c] = sum(1 for linea in f if linea.strip())
+    if cuarentenas:
+        print('   en cuarentena (decision pendiente): %s'
+              % ', '.join('%s=%d' % kv for kv in sorted(cuarentenas.items())))
+
     mal = []
     total = 0
     for tabla, _datos, filas_esperadas in bloques:
@@ -179,7 +193,7 @@ def _ensayar(copia, base_ensayo):
             mal.append((tabla, 'error: %s' % str(e).split('\n')[0][:60]))
             continue
         total += reales
-        if reales != filas_esperadas:
+        if reales != filas_esperadas - cuarentenas.get(tabla, 0):
             mal.append((tabla, '%d en la copia, %d restauradas' % (filas_esperadas, reales)))
     conn.close()
 
@@ -203,6 +217,7 @@ def _ensayar(copia, base_ensayo):
         'tablas': len(bloques),
         'filas': total,
         'descuadres': [{'tabla': t, 'motivo': m} for t, m in mal],
+        'en_cuarentena': cuarentenas,
         'veredicto': 'RESTAURABLE' if not mal else 'CON DESCUADRES',
     }, ensure_ascii=False, indent=2), encoding='utf-8')
     print('\nevidencia: %s' % ruta)

@@ -156,6 +156,7 @@ def restaurar(fichero, base, confirmar=False, permitir_produccion=False,
         return {c for (c,) in cur.fetchall()}
 
     cargadas, saltadas, desajustadas = 0, [], []
+    en_cuarentena = {}                # tabla -> filas apartadas, anunciadas
     for tabla, datos, filas in bloques:
         if tabla not in existentes:
             # Falta la tabla: la crea la aplicacion al arrancar. Se avisa en vez
@@ -182,10 +183,86 @@ def restaurar(fichero, base, confirmar=False, permitir_produccion=False,
 
         cur.execute(f'TRUNCATE TABLE "{tabla}" CASCADE')
         if datos.strip() and nombres:
+            if tabla == 'folder_permissions' and 'sujeto_id' not in nombres:
+                # COPIA DEL MODELO ANTERIOR DE PERMISOS. El esquema nuevo exige
+                # `sujeto_id NOT NULL` y estas filas no lo traen, asi que el
+                # COPY las rechaza EN LA INSERCION -- no hay un «despues» donde
+                # arreglarlo. Lo encontro el ensayo de restauracion el
+                # 21-ago-2026, que para eso existe.
+                #
+                # Se les aplica LA MISMA migracion que aplico el producto
+                # (`folder_permissions.py`): «lo que ya habia es, por
+                # definicion, de tipo USER», y su sujeto es su `user_id`. No se
+                # adivina nada -- es la regla ya escrita, aplicada al mismo
+                # dato por otro camino de entrada. Y se aplica AL FLUJO: las
+                # dos columnas se añaden a cada fila antes de que toque la
+                # base.
+                import csv as _csv
+                entrada = io.StringIO(datos.decode('utf-8'))
+                salida = io.StringIO()
+                lector = _csv.reader(entrada)
+                escritor = _csv.writer(salida, lineterminator='\n')
+                idx_user = nombres.index('user_id') if 'user_id' in nombres else None
+                for i, fila in enumerate(lector):
+                    if i == 0:
+                        escritor.writerow(fila + ['sujeto_tipo', 'sujeto_id'])
+                        continue
+                    u = fila[idx_user] if idx_user is not None else ''
+                    if not u:
+                        # Una concesion vieja SIN usuario no tiene a quien
+                        # apuntar. No se inventa un sujeto: se deja fuera y se
+                        # dice, igual que el aviso de la migracion en vivo.
+                        print('   (folder_permissions: fila sin user_id, '
+                              'no se carga: %s)' % fila[:3])
+                        continue
+                    escritor.writerow(fila + ['USER', u])
+                datos = salida.getvalue().encode('utf-8')
+                nombres = nombres + ['sujeto_tipo', 'sujeto_id']
+            if (tabla in ('pdf_markups', 'pdf_calibrations')
+                    and 'file_node_id' in nombres):
+                # COPIA DEL MODELO INTEGER. La misma regla que la migracion en
+                # vivo (`routes/pdf_tools.py`): solo convierte lo que ES un
+                # UUID; lo demas no se adivina y no se borra -- va a CUARENTENA
+                # al lado de la copia, y se dice.
+                import csv as _csv
+                import re as _re
+                _es_uuid = _re.compile(r'^[0-9a-fA-F-]{36}$')
+                idx = nombres.index('file_node_id')
+                entrada = io.StringIO(datos.decode('utf-8'))
+                salida, rebeldes = io.StringIO(), []
+                lector = _csv.reader(entrada)
+                escritor = _csv.writer(salida, lineterminator='\n')
+                for i, fila in enumerate(lector):
+                    if i == 0 or _es_uuid.match(fila[idx] or ''):
+                        escritor.writerow(fila)
+                    else:
+                        rebeldes.append(fila)
+                if rebeldes:
+                    cuarentena = pathlib.Path(fichero).with_suffix(
+                        '.cuarentena-%s.csv' % tabla)
+                    with open(cuarentena, 'w', encoding='utf-8', newline='') as f:
+                        _csv.writer(f).writerows(rebeldes)
+                    print('   AVISO %s: %d fila(s) con file_node_id que no es '
+                          'UUID. NO se cargan y NO se borran: quedan en %s '
+                          'hasta que una persona decida.'
+                          % (tabla, len(rebeldes), cuarentena.name))
+                    en_cuarentena[tabla] = len(rebeldes)
+                    datos = salida.getvalue().encode('utf-8')
+
             lista = ', '.join(f'"{c}"' for c in nombres)
-            cur.copy_expert(
-                f'COPY "{tabla}" ({lista}) FROM STDIN WITH (FORMAT csv, HEADER true)',
-                io.BytesIO(datos))
+            # CADA TABLA BAJO SU SAVEPOINT. Si una revienta, se anota y las
+            # demas entran: el dia de la urgencia, 88 tablas restauradas y una
+            # señalada valen mas que cero.
+            cur.execute('SAVEPOINT tabla')
+            try:
+                cur.copy_expert(
+                    f'COPY "{tabla}" ({lista}) FROM STDIN WITH (FORMAT csv, HEADER true)',
+                    io.BytesIO(datos))
+                cur.execute('RELEASE SAVEPOINT tabla')
+            except Exception as e:
+                cur.execute('ROLLBACK TO SAVEPOINT tabla')
+                desajustadas.append('%s: %s' % (tabla, str(e).split(chr(10))[0][:90]))
+                continue
         cargadas += 1
         print(f"   {tabla:34} {filas:>8} filas")
 
@@ -227,8 +304,16 @@ def restaurar(fichero, base, confirmar=False, permitir_produccion=False,
             continue
         cur.execute(f'SELECT count(*) FROM "{tabla}"')
         hay = cur.fetchone()[0]
-        if hay != esperadas:
-            fallos.append(f"{tabla}: {hay} restauradas, {esperadas} en la copia")
+        # Las filas EN CUARENTENA no son perdida silenciosa: estan apartadas en
+        # un fichero, anunciadas, y esperando una decision humana. Se descuentan
+        # de lo esperado y se dicen aparte.
+        apartadas = en_cuarentena.get(tabla, 0)
+        if hay != esperadas - apartadas:
+            fallos.append(f"{tabla}: {hay} restauradas, {esperadas} en la copia"
+                          + (f" ({apartadas} en cuarentena)" if apartadas else ""))
+        elif apartadas:
+            print(f"   {tabla}: {hay} restauradas + {apartadas} en cuarentena "
+                  f"(decisión pendiente, ver el .cuarentena-*.csv)")
     conn.close()
 
     if saltadas:
