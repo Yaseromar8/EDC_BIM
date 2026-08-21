@@ -9,8 +9,10 @@ import IssueModule from './IssueModule';
  * el navegador), plazo en días calendario, veredicto sólo por quien tiene el
  * RFI, aviso de bloqueo, adopción de los registros heredados e historial.
  *
- * Observaciones (RedLineModule) todavía NO lo enciende: su semántica es otra y
- * se decide aparte. Compartir el componente no obliga a compartir el flujo.
+ * Red Line (RedLineModule) también lo enciende desde F1, pero con SU semántica:
+ * su veredicto acepta o rechaza una MODIFICACIÓN DEL PROYECTO, no una respuesta.
+ * Compartir el componente no es compartir el flujo — las reglas de cada objeto
+ * viven en su propio módulo del backend, y `ensayo_de_desacople` lo vigila.
  */
 const RFI_CFG = {
   endpoint: 'api/rfis',

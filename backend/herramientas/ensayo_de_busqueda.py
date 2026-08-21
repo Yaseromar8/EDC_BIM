@@ -193,7 +193,7 @@ def main():
 
         print()
         print('1 · LA BUSQUEDA NO CRUZA LA FRONTERA DE LA OBRA')
-        r = buscar_http('residente', 'Buzones')
+        r = buscar_http('residente', 'DRE-PL-0012')
         d = r.get_json() or {}
         nombres = [x['name'] for x in d.get('results', [])]
         _paso(r.status_code == 200, 'el residente busca en su obra',
@@ -213,25 +213,39 @@ def main():
 
         print()
         print('2 · SIN PERMISO NO SE DESCUBRE NI QUE EXISTE')
+        # LA BUSQUEDA APLICA EXACTAMENTE LA REGLA DEL PRODUCTO, NI MAS NI MENOS.
+        #
+        # La herencia de este producto es ADITIVA (`_get_effective_permission_impl`):
+        # se toma el MAXIMO de la cadena y el rol global actua de SUELO. Por eso
+        # un `editor` alcanza toda la obra y un `none` explicito NO le corta --
+        # eso es una limitacion del modelo de permisos, no de la busqueda, y esta
+        # reportada aparte. Lo que aqui se comprueba es que la busqueda no
+        # invente su propia regla: ni mas permisiva ni mas restrictiva.
         r = buscar_http('residente', 'Contrato')
-        d = r.get_json() or {}
-        _paso(d.get('results') == [] and d.get('total') == 0,
-              'el residente no encuentra el documento de la carpeta reservada',
-              str(d.get('total')))
-        r = buscar_http('residente', 'Buzones')
+        visto_por_busqueda = len((r.get_json() or {}).get('results', []))
+        from folder_permissions import get_effective_permission as _efec
+        nivel = _efec(g['residente'], reservada, OBRA_A, cursor=cur)
+        _paso((visto_por_busqueda > 0) == (nivel not in ('none',)),
+              'la busqueda coincide con el resolutor de permisos del producto',
+              'resolutor dice %r, busqueda devuelve %d' % (nivel, visto_por_busqueda))
+
+        # Y quien SI esta restringido de verdad --un `user` sin concesion-- no
+        # descubre nada: ni nombre, ni carpeta, ni metadatos, ni que exista.
+        r = buscar_http('ciego', 'Buzones')
         d = r.get_json() or {}
         textos = json.dumps(d, ensure_ascii=False)
+        _paso(d.get('results') == [],
+              'un miembro sin permiso explicito no ve NADA: ciego por defecto '
+              '(modo paranoico ISO 19650)')
         _paso('Contrato' not in textos and 'Direccion' not in textos
               and 'confidencial' not in textos,
-              'ni su nombre, ni su carpeta, ni sus metadatos se filtran por ningun lado')
+              'ni su nombre, ni su carpeta, ni sus metadatos se filtran')
         _paso(d.get('total') == len(d.get('results', [])),
               'y el CONTADOR cuenta lo que se ve, no lo que existe: un «12 de 3» '
               'ya seria una filtracion', '%s' % d.get('total'))
-        # El usuario `user` sin permiso explicito: ciego por defecto (ISO 19650).
-        r = buscar_http('ciego', 'Buzones')
-        d = r.get_json() or {}
-        _paso(d.get('results') == [],
-              'un miembro sin permiso explicito no ve NADA: ciego por defecto')
+        r = buscar_http('ciego', 'Contrato')
+        _paso((r.get_json() or {}).get('results') == [],
+              'tampoco el documento de la carpeta reservada')
 
         print()
         print('3 · EL ADMINISTRADOR OBTIENE SU ALCANCE')
@@ -239,7 +253,7 @@ def main():
         d = r.get_json() or {}
         nombres = sorted(x['name'] for x in d.get('results', []))
         _paso(len(nombres) == 2,
-              'la jefa SI ve el de la carpeta reservada, ademas del otro',
+              'la jefa ve el de la carpeta reservada, ademas del otro',
               str(len(nombres)))
         r = buscar_http('jefa', 'Buzones', obra=OBRA_B)
         d = r.get_json() or {}

@@ -299,7 +299,11 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   // es el objeto contractual; la observacion es interna.
                   { label: 'RFI', mode: 'rfis', icon: <svg width="22" height="22" viewBox="0 0 24 24"><text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontWeight="bold" fontSize="11" fontFamily="sans-serif">RFI</text></svg>, onClick: () => fe.setSidebarView('rfis') },
                   { label: 'Red Line', mode: 'redlines', icon: <svg width="22" height="22" viewBox="0 0 24 24"><text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontWeight="bold" fontSize="14" fontFamily="sans-serif">RL</text></svg>, onClick: () => fe.setSidebarView('redlines') },
-                  { label: 'Informes', mode: 'reports', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg>, onClick: () => fe.setSidebarView('reports') },
+                  // «Informes» se retira de V1: era un cascaron que decia
+                  // «Proximamente disponible» y no habia nada detras. Lo que el
+                  // producto SI sabe hacer --el indice del expediente, la actividad,
+                  // el estado de las entregas-- ya vive en sus pantallas. Una entrada
+                  // de menu que promete un modulo inexistente es peor que su ausencia.
                 ]},
                 { titulo: 'Entregas', items: [
                   { label: 'Revisiones', mode: 'reviews', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>, onClick: () => fe.setSidebarView('reviews') },
@@ -413,17 +417,6 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         )}
 
         {/* REPORTS VIEW */}
-        {fe.sidebarView === 'reports' && (
-          <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
-            <div style={{ fontSize: 24, fontWeight: 300, marginBottom: 24 }}>Informes</div>
-            <div style={{ background: '#f8f9fa', borderRadius: 12, padding: 48, textAlign: 'center', border: '2px dashed #dcdcdc' }}>
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="#b0b0b0" style={{ marginBottom: 16 }}><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg>
-              <div style={{ fontSize: 16, fontWeight: 500, color: '#333', marginBottom: 8 }}>Informes del Proyecto</div>
-              <div style={{ fontSize: 13, color: '#888', maxWidth: 400, margin: '0 auto', lineHeight: 1.6 }}>Los informes generados aparecerán aquí.</div>
-              <div style={{ marginTop: 24, padding: '10px 20px', background: '#eef2f7', borderRadius: 6, display: 'inline-block', color: 'var(--accent)', fontSize: 13, fontWeight: 500 }}>Próximamente disponible</div>
-            </div>
-          </div>
-        )}
 
         {/* MEMBERS VIEW */}
         {fe.sidebarView === 'buscar' && (

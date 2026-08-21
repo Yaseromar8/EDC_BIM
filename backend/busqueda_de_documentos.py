@@ -18,7 +18,8 @@ siguiente pantalla podria olvidarlo. Es la misma leccion que ya se aplico en
 posterior.
 
 Aqui la cadena de ancestros se recorre UNA vez, en una CTE recursiva, y de ella
-salen las dos cosas que hacen falta: el permiso heredado mas cercano y la ruta
+salen las dos cosas que hacen falta: el nivel de permiso HEREDADO --el MAXIMO
+de la cadena, que es como resuelve `_get_effective_permission_impl`-- y la ruta
 que se enseña al usuario.
 
 LO QUE UN USUARIO SIN PERMISO NO PUEDE DESCUBRIR
@@ -65,11 +66,20 @@ def _patron(texto):
 #
 # 1. `cand`    los FILE de la obra que casan con el texto.
 # 2. `cadena`  la cadena de ancestros de cada candidato, con su nivel.
-# 3. `permiso` el permiso EXPLICITO mas cercano hacia arriba (DISTINCT ON).
-# 4. `ruta`    los nombres de esos ancestros, de la raiz hacia abajo.
+# 3. `subida`  de esa cadena, en UNA pasada: el MAXIMO nivel explicito
+#              (herencia aditiva) y la ruta de carpetas de la raiz hacia abajo.
 #
 # `is_deleted = FALSE` en las tres: un documento en la papelera no se encuentra,
 # y una carpeta borrada no aporta ruta.
+# El mapa nivel->entero se interpola como un CASE de enteros, NO como jsonb.
+# La primera version resolvia `%(niveles)s::jsonb ->> ...` por fila y la
+# busqueda paso de 68 ms a 3.845 ms con 5.000 documentos. Se interpola porque
+# `PERMISSION_LEVELS` es una constante del codigo, no entrada del usuario.
+_CASE_NIVEL = ('CASE fp.permission_level '
+               + ' '.join("WHEN '%s' THEN %d" % (k, v)
+                          for k, v in sorted(PERMISSION_LEVELS.items()))
+               + ' ELSE -1 END')
+
 _BUSCAR = """
 WITH RECURSIVE cand AS (
     SELECT n.id, n.parent_id, n.name, n.mime_type, n.status, n.updated_at,
@@ -92,34 +102,45 @@ cadena AS (
       JOIN file_nodes f ON f.id = ca.nodo AND f.is_deleted = FALSE
      WHERE f.parent_id IS NOT NULL AND ca.nivel < 40
 ),
-permiso AS (
-    SELECT DISTINCT ON (ca.hoja) ca.hoja, fp.permission_level
-      FROM cadena ca
-      JOIN folder_permissions fp
-        ON fp.folder_node_id = ca.nodo AND fp.user_id = %(uid)s
-     ORDER BY ca.hoja, ca.nivel
-),
-ruta AS (
+subida AS (
+    -- UNA SOLA PASADA sobre la cadena: de ella salen el permiso heredado y la
+    -- ruta. Estaban en dos CTE separadas y el planificador unia la del permiso
+    -- con un BUCLE ANIDADO -- 12,5 MILLONES de comparaciones descartadas para
+    -- 5.000 documentos, 2.8 s en vez de 30 ms. Lo enseño `EXPLAIN ANALYZE`, no
+    -- una corazonada.
+    --
+    -- El permiso es el MAXIMO de la cadena, no el mas cercano: es la MISMA
+    -- regla que `_get_effective_permission_impl`, cuya herencia es ADITIVA. La
+    -- primera version tomaba el mas cercano, que es otra regla distinta, y con
+    -- eso la busqueda escondia documentos que el usuario SI podia abrir desde
+    -- Archivos. Dos modelos de permisos en el mismo producto es exactamente lo
+    -- que este fichero dice querer evitar.
+    --
+    -- `folder_permissions` tiene UNIQUE(folder_node_id, user_id), asi que el
+    -- LEFT JOIN no duplica ninguna carpeta y `string_agg` sigue siendo la ruta.
     SELECT ca.hoja,
-           string_agg(f.name, ' / ' ORDER BY ca.nivel DESC) AS carpetas
+           string_agg(f.name, ' / ' ORDER BY ca.nivel DESC) AS carpetas,
+           MAX({niveles}) AS nivel
       FROM cadena ca
       JOIN file_nodes f ON f.id = ca.nodo AND f.is_deleted = FALSE
+ LEFT JOIN folder_permissions fp
+        ON fp.folder_node_id = ca.nodo AND fp.user_id = %(uid)s
      GROUP BY ca.hoja
 )
 SELECT c.id::text, c.name, c.mime_type, c.status, c.updated_at,
        c.gcs_urn, c.version_number, c.current_version_id::text,
        c.tags, c.metadata, c.parent_id::text,
-       COALESCE(r.carpetas, '') AS ruta,
-       COALESCE(p.permission_level, %(fallback)s) AS permiso,
+       COALESCE(s.carpetas, '') AS ruta,
+       GREATEST(COALESCE(s.nivel, -1), %(nivel_global)s) AS nivel,
        v.version_number AS version_vigente, v.id::text AS version_vigente_id
   FROM cand c
-  LEFT JOIN permiso p ON p.hoja = c.id
-  LEFT JOIN ruta r ON r.hoja = c.id
+  LEFT JOIN subida s ON s.hoja = c.id
   LEFT JOIN file_versions v ON v.id = c.current_version_id
- WHERE COALESCE(p.permission_level, %(fallback)s) = ANY(%(visibles)s)
+ -- El rol global es un SUELO, no un techo: es el «Paso 3» del resolutor.
+ WHERE GREATEST(COALESCE(s.nivel, -1), %(nivel_global)s) >= %(minimo)s
  ORDER BY c.updated_at DESC NULLS LAST, c.name
  LIMIT %(tope)s
-"""
+""".replace('{niveles}', _CASE_NIVEL)
 
 
 def buscar(cur, obra, texto, usuario, tope=50):
@@ -147,20 +168,17 @@ def buscar(cur, obra, texto, usuario, tope=50):
     # cosa.
     fallback = 'admin' if rol == 'admin' else GLOBAL_ROLE_TO_PERMISSION.get(rol, 'none')
 
-    # Los niveles que llegan al minimo. Se calcula del mapa, no se escribe a
-    # mano: si mañana se añade un nivel, entra solo.
-    visibles = [k for k, v in PERMISSION_LEVELS.items() if v >= _MINIMO]
-
     cur.execute(_BUSCAR, {
         'obra': str(obra), 'q': _patron(texto), 'uid': uid,
-        'fallback': fallback, 'visibles': visibles,
+        'nivel_global': PERMISSION_LEVELS.get(fallback, -1),
+        'minimo': _MINIMO,
         'tope': min(int(tope or 50), TOPE),
     })
 
     salida = []
     for r in cur.fetchall():
         (nid, nombre, mime, estado, actualizado, gcs, vnum, cur_vid, tags,
-         meta, padre, ruta, permiso, v_vigente, v_vigente_id) = r
+         meta, padre, ruta, nivel, v_vigente, v_vigente_id) = r
         salida.append({
             'node_id': nid,
             'name': nombre,
@@ -178,6 +196,6 @@ def buscar(cur, obra, texto, usuario, tope=50):
             'version_id': cur_vid,
             'version_number': v_vigente if v_vigente is not None else vnum,
             'es_legacy': cur_vid is None,
-            'permiso': permiso,
+            'nivel_permiso': nivel,
         })
     return salida

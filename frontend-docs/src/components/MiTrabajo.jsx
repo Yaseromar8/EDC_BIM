@@ -15,6 +15,11 @@
  */
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../utils/apiFetch';
+// CON el prefijo `API`, como todo lo demas. El backend NO sirve el frontend:
+// son origenes distintos, asi que una ruta relativa iba al sitio estatico y no
+// al backend. En desarrollo colaba por el proxy de Vite, que es justo lo que
+// hacia que el defecto no se viera.
+import { API } from '../utils/helpers';
 
 const ETIQUETA = {
   REVIEW: 'Revisión',
@@ -37,7 +42,7 @@ export default function MiTrabajo({ compacto = false }) {
     let vivo = true;
     (async () => {
       try {
-        const r = await apiFetch('/api/mi-trabajo');
+        const r = await apiFetch(`${API}/api/mi-trabajo`);
         if (!vivo) return;
         if (!r.ok) { setEstado('error'); return; }
         const d = await r.json();

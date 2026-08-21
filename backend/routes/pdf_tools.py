@@ -20,7 +20,7 @@ def ensure_pdf_tools_tables():
         cur.execute('''
             CREATE TABLE IF NOT EXISTS pdf_markups (
                 id SERIAL PRIMARY KEY,
-                file_node_id INTEGER NOT NULL,
+                file_node_id UUID NOT NULL,
                 model_urn TEXT NOT NULL,
                 page INTEGER NOT NULL,
                 kind TEXT NOT NULL,
@@ -33,7 +33,7 @@ def ensure_pdf_tools_tables():
         cur.execute('CREATE INDEX IF NOT EXISTS idx_pdf_markups_node_page ON pdf_markups(file_node_id, page)')
         cur.execute('''
             CREATE TABLE IF NOT EXISTS pdf_calibrations (
-                file_node_id INTEGER NOT NULL,
+                file_node_id UUID NOT NULL,
                 page INTEGER NOT NULL,
                 units_per_pdf DOUBLE PRECISION NOT NULL,
                 display_unit TEXT DEFAULT 'm',
@@ -42,6 +42,58 @@ def ensure_pdf_tools_tables():
                 PRIMARY KEY (file_node_id, page)
             )''')
         conn.commit()
+        _migrar_a_uuid(cur, conn)
+
+
+def _migrar_a_uuid(cur, conn):
+    """`file_node_id` tiene que ser UUID, porque `file_nodes.id` LO ES.
+
+    EL DEFECTO
+    ----------
+    Las dos tablas se crearon con `file_node_id INTEGER` mientras `file_nodes.id`
+    es UUID. Consecuencia: crear un markup sobre CUALQUIER documento real
+    devolvia 500 --`invalid input syntax for type integer`--. La herramienta
+    estaba en el visor de PDF, el usuario la veia, y el backend la rechazaba
+    siempre. Lo encontro el ensayo del expediente el 21-ago-2026.
+
+    COMO SE MIGRA
+    -------------
+    Solo si TODAS las filas convierten. Si alguna no --por ejemplo una fila
+    huerfana con `file_node_id = 123`, que no apunta a ningun documento y nunca
+    pudo mostrarse-- NO se toca nada y SE DICE cual es y por que. Convertir
+    «arreglando» filas seria perder informacion con buena intencion, y decidir
+    que se hace con un dato que no entendemos no es cosa del arranque.
+    """
+    for tabla in ('pdf_markups', 'pdf_calibrations'):
+        try:
+            cur.execute("""SELECT format_type(a.atttypid, a.atttypmod)
+                             FROM pg_class c JOIN pg_attribute a ON a.attrelid = c.oid
+                            WHERE c.relname = %s AND a.attname = 'file_node_id'""",
+                        (tabla,))
+            fila = cur.fetchone()
+            if not fila or fila[0] == 'uuid':
+                continue
+            cur.execute("SELECT count(*) FROM %s WHERE file_node_id::text "
+                        "  !~ '^[0-9a-fA-F-]{36}$'" % tabla)
+            rebeldes = cur.fetchone()[0]
+            if rebeldes:
+                cur.execute("SELECT DISTINCT file_node_id FROM %s WHERE "
+                            "  file_node_id::text !~ '^[0-9a-fA-F-]{36}$' LIMIT 5" % tabla)
+                print('[pdf] AVISO: %s.file_node_id sigue siendo INTEGER. %d fila(s) '
+                      'no convierten a UUID (%s). NO se migra y NO se borra nada: '
+                      'crear markups seguira fallando hasta que se decida que hacer '
+                      'con esas filas.'
+                      % (tabla, rebeldes,
+                         ', '.join(str(r[0]) for r in cur.fetchall())))
+                conn.commit()
+                continue
+            cur.execute('ALTER TABLE %s ALTER COLUMN file_node_id TYPE UUID '
+                        '  USING file_node_id::text::uuid' % tabla)
+            conn.commit()
+            print('[pdf] %s.file_node_id migrado a UUID.' % tabla)
+        except Exception as e:
+            conn.rollback()
+            print('[pdf] %s.file_node_id no migrado: %s' % (tabla, str(e)[:90]))
 
 
 def _user():

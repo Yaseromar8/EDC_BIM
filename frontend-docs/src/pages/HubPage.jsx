@@ -5,7 +5,7 @@
 // ya sabe qué es cada cosa. Detrás de ambas, una única luz difusa que centra la
 // mirada. Es una bifurcación de dos caminos: se entra, se elige y se sale.
 import React, { useState } from 'react';
-import { VISOR_URL } from '../utils/helpers';
+import { API, VISOR_URL } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import MiTrabajo from '../components/MiTrabajo';
 import SegundoFactorPanel from '../components/SegundoFactorPanel';
@@ -62,7 +62,7 @@ export default function HubPage({ user, onChooseDocs, onLogout }) {
     // regalar un token a un tercero.
     if (!VISOR_URL) return;
     try {
-      const response = await apiFetch('/api/auth/handoff', { method: 'POST' });
+      const response = await apiFetch(`${API}/api/auth/handoff`, { method: 'POST' });
       const data = await response.json();
       if (!response.ok || !data.ticket) throw new Error(data.error || 'No se pudo abrir el Visor.');
       // `pick=1`: entrar por el Hub SIEMPRE aterriza en el selector de modelos,
