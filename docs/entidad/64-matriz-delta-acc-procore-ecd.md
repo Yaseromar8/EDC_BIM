@@ -14,6 +14,12 @@
 > documental incluía la capa 8, que está DEFER y no forma parte del backend
 > implementado.
 >
+> **Corrección de secuencia (REV.02):** la adjudicación de admins **no forma
+> parte de la Controlled Window ni se completa automáticamente al ejecutarla**.
+> El doc 53 la sitúa en el paso 14, *después* de `FIN DE VENTANA`: es
+> **POST-WINDOW / PRODUCTION STABILIZATION**, `MUST HAVE BEFORE EXTERNAL PILOT`,
+> y una decisión humana del propietario cuenta por cuenta.
+>
 > Ninguna corrección impacta la Controlled Window.
 
 **La pregunta que se responde:** ¿nuestro ECD **representa correctamente** las
@@ -95,7 +101,7 @@ tabla de §4.C.
 **Nos enseñó:** Account Admin custodia la cuenta; no es el que mantiene los servidores.
 **Objetivo ECD:** `users.role='admin'` — custodio de la instancia; alcance global mientras 1=1.
 **ESTADO REAL: PARTIAL** (arq ✅ · op ✅ · **exp 🟡** — se cambia el rol desde «Usuarios del sistema»; falta la ficha que explique qué significa).
-**GAP REAL:** adjudicación pendiente en producción (3 cuentas admin, una técnica). **¿BLOQUEA PILOTO?** **SÍ** — antes de un tercero, «¿quién pudo ver esto?» debe tener respuesta acotada. Es paso 14 de la ventana.
+**GAP REAL:** adjudicación pendiente en producción (3 cuentas admin, una técnica). **¿BLOQUEA PILOTO?** **SÍ** — antes de un tercero, «¿quién pudo ver esto?» debe tener respuesta acotada. **Ubicación: POST-WINDOW / PRODUCTION STABILIZATION** — el doc 53 la sitúa en el paso 14, *después* de `FIN DE VENTANA`; es una decisión humana del propietario, cuenta por cuenta.
 **DIFERENCIA DELIBERADA ECD:** **SYSTEM OPERATOR fuera de la cadena** — separación que ACC/Procore no necesitan hacer explícita porque son SaaS; nosotros sí, y se declara en vez de fingir aislamiento.
 
 ### 7 · Project Admin
@@ -318,7 +324,7 @@ dos precisiones que la evidencia obliga a añadir.
 | **3 · Resource Permission UX (COMPANY / FUNCTION + efectivo + explicación)** | §2. Sin colectivos, repartir es persona a persona; sin efectivo/explicación, «¿por qué este ve esto?» no tiene respuesta |
 | **4 · Administración profesional de participantes** | Ficha de persona + alta en obra + significado de Entity/Project Admin visible |
 | **5 · Gate externo de seguridad/DR** | C7 residual (ambos buckets, mismo proyecto y región), 19650-5, MFA de la cuenta administrativa |
-| **+6 · Adjudicación de admins** *(precisión añadida)* | Ya identificada: 3 cuentas admin, una técnica con cero obras. Ante un tercero, la autoridad debe estar acotada **antes**, no después. Es paso 14 de la ventana — se cumple sola si la ventana se ejecuta entera |
+| **+6 · Adjudicación de admins** *(precisión añadida)* | Ya identificada: 3 cuentas admin, una técnica con cero obras. Ante un tercero, la autoridad debe estar acotada **antes**, no después. **POST-WINDOW / PRODUCTION STABILIZATION**: paso 14 del doc 53, *fuera* de la ventana. **No se cumple sola** — es una decisión humana del propietario, cuenta por cuenta, y hay que ejecutarla explícitamente |
 | **+7 · UX de entidad** *(precisión añadida)* | §9 del encargo: quién pertenece, quién administra, qué proyectos, qué empresas. Hoy **no existe como vista**. Pertenece a Product Experience aunque la entidad sea técnicamente implícita |
 
 ### TRIGGER-BASED / DEFER
@@ -328,8 +334,9 @@ Member Tool Access *(salvo `TRIGGER ACTIVADO` en la definición del piloto — �
 Activation.
 
 **Dónde la evidencia matiza tu hipótesis, y por qué:**
-+6 y +7 no la contradicen — la completan: la adjudicación ya viaja dentro de (1)
-y la UX de entidad es el eslabón que faltaba nombrar dentro de (4). Y Member
++6 y +7 no la contradicen — la completan: la adjudicación es un acto **posterior
+a la ventana** (estabilización), no una parte de ella, y la UX de entidad es el
+eslabón que faltaba nombrar dentro de (4). Y Member
 Tool Access **podría saltar** de DEFER a MUST HAVE si el alcance del piloto lo
 enciende: **se decide al definirlo, no ahora**.
 
@@ -356,7 +363,8 @@ enciende: **se decide al definirlo, no ahora**.
     ├─ Resource Permission UX — COMPANY/FUNCIÓN .... el gap real de experiencia
     │     efectivo · conceder por colectivo · qué regla gana
     ├─ UX de entidad + ficha de persona ............ el recorrido profesional entero
-    ├─ Adjudicación de admins ...................... dentro de la ventana
+    ├─ Adjudicación de admins ...................... POST-WINDOW (estabilización)
+    │     decisión humana, cuenta por cuenta — no automática
     └─ Gate externo de seguridad / DR .............. C7 residual · 19650-5 · MFA
                              ↓
                     DEFER POR TRIGGER
