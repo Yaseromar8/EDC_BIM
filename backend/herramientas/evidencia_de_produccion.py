@@ -56,7 +56,7 @@ def _guardar(nombre):
 
 # ── E1 + E2 · contra la base ─────────────────────────────────────────────
 
-def contra_la_base(host, puerto, base, usuario):
+def contra_la_base(host, puerto, base, usuario, solo_e1=False):
     import psycopg2
     clave = getpass.getpass('contraseña de %s en %s:%s (no se muestra): '
                             % (usuario, host, puerto))
@@ -69,8 +69,9 @@ def contra_la_base(host, puerto, base, usuario):
     conn.set_session(readonly=True)   # el candado: esta sesion NO puede escribir
     cur = conn.cursor()
 
-    _p('EVIDENCIA E1/E2 · %s · base %s · %s'
-       % (datetime.datetime.now().strftime('%Y-%m-%d %H:%M'), base, host))
+    _p('EVIDENCIA %s · %s · base %s · %s'
+       % ('E1' if solo_e1 else 'E1/E2',
+          datetime.datetime.now().strftime('%Y-%m-%d %H:%M'), base, host))
     _p('sesion de SOLO LECTURA (set_session readonly)')
     _p()
 
@@ -95,10 +96,50 @@ def contra_la_base(host, puerto, base, usuario):
     _p('esquema completo contra el manifiesto: %s' % ('SI' if completo else 'NO'))
     if faltan:
         _p('objetos que el manifiesto exige y NO existen (%d):' % len(faltan))
-        for f in faltan[:40]:
-            _p('   %s' % f)
-        if len(faltan) > 40:
-            _p('   … y %d mas' % (len(faltan) - 40))
+        for f in faltan[:60]:
+            _p('   FALTA  %s' % f)
+        if len(faltan) > 60:
+            _p('   … y %d mas' % (len(faltan) - 60))
+    _p()
+
+    # Y LA OTRA DIRECCION: lo que la base tiene y el manifiesto no exige.
+    # `verificar()` no lo mira --el manifiesto es un MINIMO-- pero para
+    # clasificar el estado real de produccion importa: una tabla sobrante
+    # cuenta la historia de que se construyo ahi y cuando.
+    presente = boot._objetos_presentes(cur)
+    esperado = boot._objetos_esperados()
+    if esperado:
+        # Los MIEMBROS DE EXTENSION van con su extension: listarlos uno a uno
+        # seria 30 lineas de ruido tapando lo que importa. Se leen del catalogo
+        # (pg_depend, deptype='e'), nunca del nombre.
+        cur.execute("""SELECT lower(p.proname), e.extname
+                         FROM pg_proc p
+                         JOIN pg_depend d ON d.classid='pg_proc'::regclass
+                                         AND d.objid=p.oid AND d.deptype='e'
+                         JOIN pg_extension e ON e.oid=d.refobjid""")
+        de_extension = {}
+        for nombre, ext in cur.fetchall():
+            de_extension.setdefault(ext, set()).add(nombre)
+        todas_ext = set().union(*de_extension.values()) if de_extension else set()
+
+        sobran_total = 0
+        for tipo in boot._TIPOS:
+            sobran = sorted(presente[tipo] - esperado[tipo])
+            if tipo == 'funcion':
+                sobran = [x for x in sobran if x not in todas_ext]
+            if tipo == 'extension':
+                for ext in sobran:
+                    _p('   SOBRA  extension   %s (+%d funciones suyas, van con ella)'
+                       % (ext, len(de_extension.get(ext, ()))))
+                sobran_total += len(sobran)
+                continue
+            sobran_total += len(sobran)
+            for x in sobran[:15]:
+                _p('   SOBRA  %-11s %s' % (tipo, x))
+            if len(sobran) > 15:
+                _p('   … y %d %s mas' % (len(sobran) - 15, boot._PLURAL[tipo]))
+        if not sobran_total:
+            _p('objetos que sobren respecto al manifiesto: NINGUNO')
     _p()
 
     # Los tres objetos que deciden la compatibilidad con el codigo viejo/nuevo.
@@ -117,6 +158,47 @@ def contra_la_base(host, puerto, base, usuario):
     _p('   %-40s %s' % ('folder_permissions.user_id',
                         ('existe (nullable=%s)' % f[0]) if f else 'no existe'))
     _p()
+
+    # ── EL ESTADO, CLASIFICADO ───────────────────────────────────────────
+    # El backend que sirve es el que diga /api/health; lo que clasifica esta
+    # lectura es EL ESQUEMA. Importa porque esta demostrado que el backend
+    # viejo no puede escribir en el modelo nuevo de folder_permissions.
+    def _col(tabla, columna):
+        cur.execute("SELECT is_nullable FROM information_schema.columns "
+                    " WHERE table_name=%s AND column_name=%s", (tabla, columna))
+        f = cur.fetchone()
+        return None if not f else f[0]          # None = no existe
+
+    st = _col('folder_permissions', 'sujeto_tipo')
+    si = _col('folder_permissions', 'sujeto_id')
+    ea = _col('project_users', 'es_admin')
+    nuevo_completo = (st == 'NO' and si == 'NO' and ea == 'NO' and completo)
+    viejo_puro = (st is None and si is None and ea is None)
+    _p('── CLASIFICACION DEL ESQUEMA ──')
+    if nuevo_completo:
+        _p('ESTADO B — ESQUEMA NUEVO (sujetos NOT NULL, es_admin presente,')
+        _p('           manifiesto completo). Con el backend viejo sirviendo,')
+        _p('           CONCEDER PERMISOS DE CARPETA FALLA desde que se')
+        _p('           construyo este esquema: la ventana ya esta abierta.')
+    elif viejo_puro:
+        _p('ESTADO A — ESQUEMA VIEJO (sin columnas de sujeto ni es_admin).')
+        _p('           Coherente con el backend viejo; la migracion entera')
+        _p('           esta pendiente y se hace en la ventana.')
+    else:
+        _p('ESTADO C — PARCIALMENTE MIGRADO:')
+        _p('   sujeto_tipo: %s' % ('no existe' if st is None else 'nullable=' + st))
+        _p('   sujeto_id  : %s' % ('no existe' if si is None else 'nullable=' + si))
+        _p('   es_admin   : %s' % ('no existe' if ea is None else 'nullable=' + ea))
+        _p('   Antes de la ventana hay que entender COMO llego aqui.')
+    if si == 'NO':
+        cur.execute('SELECT count(*) FROM folder_permissions')
+        _p('   (folder_permissions tiene %d fila(s) hoy)' % cur.fetchone()[0])
+    _p()
+
+    if solo_e1:
+        conn.close()
+        _guardar('evidencia-e1')
+        return 0
 
     # ── E2 · roles, propiedad, grants (tolerante) ────────────────────────
     _p('── E2 · ROLES / PROPIEDAD / GRANTS ──')
@@ -246,10 +328,13 @@ if __name__ == '__main__':
     ap.add_argument('--db-name')
     ap.add_argument('--db-user', default='postgres')
     ap.add_argument('--web', help='URL del servicio para E3')
+    ap.add_argument('--solo-e1', action='store_true',
+                    help='solo el esquema contra el manifiesto; ni roles ni grants')
     a = ap.parse_args()
     if a.web:
         raise SystemExit(contra_el_servicio(a.web))
     if a.db_host and a.db_name:
-        raise SystemExit(contra_la_base(a.db_host, a.db_port, a.db_name, a.db_user))
+        raise SystemExit(contra_la_base(a.db_host, a.db_port, a.db_name,
+                                        a.db_user, solo_e1=a.solo_e1))
     ap.print_help()
     raise SystemExit(2)
