@@ -68,12 +68,38 @@ def _invariantes_preservadas(antes, despues):
 
 
 def _migrar_como_rol():
-    # libpq aplica esta opcion a CADA conexion nueva del pool. La autenticacion
-    # sigue siendo la administrativa, pero PostgreSQL ejecuta todo el bootstrap
-    # con current_user=ecd_migrator. No se copia ni almacena su contrasena.
+    """Reabre el pool con `SET ROLE ecd_migrator`, SIN perder las demas opciones.
+
+    La autenticacion sigue siendo la administrativa --no se copia ni se almacena
+    la contrasena del migrador-- pero PostgreSQL ejecuta todo el bootstrap con
+    `current_user = ecd_migrator`.
+
+    ANTES SE HACIA CON `PGOPTIONS` Y NO FUNCIONABA. libpq da precedencia al
+    parametro `options` de la conexion sobre la variable de entorno, y `db.py`
+    siempre pasa uno. Resultado medido: `current_user` seguia siendo `postgres`,
+    la guardia del bootstrap lo detectaba y abortaba -- DESPUES de que la
+    transaccion de propiedad hubiera confirmado, dejando la base a medio
+    converger. Ahora la opcion se AÑADE a las que ya habia, en vez de competir
+    con ellas.
+
+    Esto solo afecta a ESTE proceso de mantenimiento. Ninguna conexion ordinaria
+    del backend recibe `SET ROLE`: `init_db_pool()` sin argumento se comporta
+    igual que siempre, y el ensayo lo comprueba.
+    """
     _cerrar_pool()
-    os.environ['PGOPTIONS'] = '-c role=ecd_migrator'
-    db.init_db_pool()
+    db.init_db_pool(opciones=db.OPCIONES_DE_CONEXION + ' -c role=ecd_migrator')
+
+    # Y se DEMUESTRA, en vez de darlo por hecho.
+    with db.get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT session_user, current_user')
+        sesion, actual = cur.fetchone()
+    if sesion != 'postgres' or actual != 'ecd_migrator':
+        raise RuntimeError(
+            'la conexion de migracion no quedo como se esperaba: '
+            'session_user=%s current_user=%s' % (sesion, actual))
+    print('  identidad de migracion: session_user=%s · current_user=%s'
+          % (sesion, actual))
 
     import bootstrap_esquema as bootstrap
     bootstrap.exigir_identidad_migrador()
@@ -106,32 +132,63 @@ def converger():
     despues = tomar()
     _invariantes_preservadas(antes, despues)
 
+    # POSTCONDICION: cero objetos APLICATIVOS fuera de ecd_migrator.
+    #
+    # La version anterior contaba «objetos de ecd_app», que es LO MISMO que
+    # miraba el bucle: en una instancia sin identidades separadas no hay
+    # ninguno, asi que daba 0 y se declaraba correcta habiendo dejado 95 tablas
+    # de `postgres` donde estaban. Un control tiene que medir lo que persigue,
+    # no repetir la pregunta del bucle.
+    #
+    # «Aplicativo» excluye a los miembros de extension por `pg_depend`
+    # (deptype='e'): de las 38 funciones de `public`, 37 son de `pgcrypto` y no
+    # se tocan -- ni siquiera se pueden tocar bien, porque `pg_dump` no emite
+    # esos cambios de dueño.
     with db.get_db_connection() as conn:
         cur = conn.cursor()
-        cur.execute("""SELECT count(*)
-                         FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-                        WHERE n.nspname IN ('public','ai_brain')
-                          AND pg_get_userbyid(c.relowner)='ecd_app'
-                          AND c.relkind IN ('r','p','v','m','f','S')""")
-        propios = cur.fetchone()[0]
-        cur.execute("""SELECT count(*)
-                         FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-                        WHERE n.nspname IN ('public','ai_brain')
-                          AND pg_get_userbyid(p.proowner)='ecd_app'""")
-        rutinas_propias = cur.fetchone()[0]
+        cur.execute("""
+            SELECT 'schema '||nspname||' -> '||pg_get_userbyid(nspowner)
+              FROM pg_namespace WHERE nspname IN ('public','ai_brain')
+               AND pg_get_userbyid(nspowner) IS DISTINCT FROM 'ecd_migrator'
+            UNION ALL
+            SELECT 'relacion '||n.nspname||'.'||c.relname||' -> '
+                   ||pg_get_userbyid(c.relowner)
+              FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+              LEFT JOIN pg_depend d ON d.classid='pg_class'::regclass
+                                   AND d.objid=c.oid AND d.deptype='e'
+             WHERE n.nspname IN ('public','ai_brain') AND d.refobjid IS NULL
+               AND c.relkind IN ('r','p','v','m','f','S','i','I')
+               AND pg_get_userbyid(c.relowner) IS DISTINCT FROM 'ecd_migrator'
+            UNION ALL
+            SELECT 'rutina '||n.nspname||'.'||p.proname||' -> '
+                   ||pg_get_userbyid(p.proowner)
+              FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+              LEFT JOIN pg_depend d ON d.classid='pg_proc'::regclass
+                                   AND d.objid=p.oid AND d.deptype='e'
+             WHERE n.nspname IN ('public','ai_brain') AND d.refobjid IS NULL
+               AND pg_get_userbyid(p.proowner) IS DISTINCT FROM 'ecd_migrator'
+        """)
+        fuera = [r[0] for r in cur.fetchall()]
         cur.execute("""SELECT has_schema_privilege('ecd_app','public','CREATE'),
                               has_schema_privilege('ecd_app','ai_brain','CREATE')""")
         create_public, create_ai = cur.fetchone()
-    if propios or rutinas_propias or create_public or create_ai:
+        # Y lo que SI tiene que conservar su dueño original.
+        cur.execute("""SELECT count(*) FROM pg_proc p
+                         JOIN pg_namespace n ON n.oid=p.pronamespace
+                         JOIN pg_depend d ON d.classid='pg_proc'::regclass
+                                         AND d.objid=p.oid AND d.deptype='e'
+                        WHERE n.nspname IN ('public','ai_brain')""")
+        de_extension = cur.fetchone()[0]
+    if fuera or create_public or create_ai:
         raise RuntimeError(
-            'postcondicion fallida: propios=%s rutinas=%s '
+            'postcondicion fallida: fuera_de_ecd_migrator=%s '
             'create_public=%s create_ai=%s'
-            % (propios, rutinas_propias, create_public, create_ai))
+            % (fuera[:10], create_public, create_ai))
 
     print('CONVERGENCIA DE PROPIEDAD COMPLETA')
-    print('  objetos de ecd_app : 0')
-    print('  rutinas de ecd_app : 0')
-    print('  CREATE de ecd_app  : no')
+    print('  objetos aplicativos fuera de ecd_migrator : 0')
+    print('  rutinas de extension intactas             : %d' % de_extension)
+    print('  CREATE de ecd_app                         : no')
     print('  file_nodes         : %d · %s' %
           (despues['file_nodes']['filas'], despues['file_nodes']['huella'][:16]))
     print('  file_versions      : %d · %s' %
@@ -163,7 +220,6 @@ if __name__ == '__main__':
     # El proceso de mantenimiento que queda escuchando no conserva secretos ni
     # conexiones. Render puede comprobarlo y sustituir la version anterior.
     _cerrar_pool()
-    os.environ.pop('PGOPTIONS', None)
     os.environ.pop('CONFIRMAR_CONVERGENCIA_PROPIEDAD', None)
     os.environ.pop('DB_PASS', None)
     os.environ.pop('DB_USER', None)

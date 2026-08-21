@@ -10,7 +10,40 @@ logger = get_logger('db')
 # Definimos un Connection Pool global
 db_pool = None
 
-def init_db_pool():
+# LAS OPCIONES DE CONEXION, EN UN SITIO Y NO DENTRO DE UNA LLAMADA.
+#
+# statement_timeout: ninguna consulta puede colgarse mas de 30 s.
+# lock_timeout: y ninguna espera mas de 5 s por un LOCK. Sin esto, un DDL del
+# arranque que choca con otra transaccion espera PARA SIEMPRE: gunicorn abre el
+# puerto pero el worker nunca termina de importar, y el servicio acepta
+# conexiones sin responder jamas.
+#
+# Estan aqui arriba porque la convergencia de propiedad necesita AÑADIR una
+# opcion (`-c role=ecd_migrator`) sin PERDER estas. Escribirlas otra vez alli
+# habria creado dos verdades que divergen en cuanto alguien toque una.
+OPCIONES_DE_CONEXION = '-c statement_timeout=30000 -c lock_timeout=5000'
+
+
+def init_db_pool(opciones=None):
+    """Abre el pool. `opciones` SOLO lo usa la convergencia de propiedad.
+
+    POR QUE UN PARAMETRO Y NO LA VARIABLE `PGOPTIONS`
+    -------------------------------------------------
+    Porque no funciona. libpq da precedencia al parametro `options` de la
+    conexion sobre la variable de entorno, y aqui SIEMPRE se pasa uno. Medido el
+    21-ago-2026 con el mismo `PGOPTIONS='-c role=ecd_migrator'` en los tres casos:
+
+        sin `options=`                 -> ('postgres', 'ecd_migrator')
+        con `options=` (lo de aqui)    -> ('postgres', 'postgres')     <-- se ignora
+        con `options=` incluyendo role -> ('postgres', 'ecd_migrator')
+
+    `converger_propiedad.py` dependia de `PGOPTIONS` y por eso su migracion
+    corria como `postgres`; la guardia `exigir_identidad_migrador` lo detectaba y
+    abortaba -- despues de que la transaccion de propiedad ya hubiera confirmado.
+
+    Sin argumento, el comportamiento es exactamente el de siempre: NINGUNA
+    conexion ordinaria recibe `SET ROLE`.
+    """
     global db_pool
     if db_pool is not None:
         return
@@ -28,12 +61,7 @@ def init_db_pool():
             port=os.environ.get("DB_PORT", "5432"),
             database=os.environ.get("DB_NAME"),
             connect_timeout=10,
-            # statement_timeout: ninguna consulta puede colgarse mas de 30 s.
-            # lock_timeout: y ninguna espera mas de 5 s por un LOCK. Sin esto,
-            # un DDL del arranque que choca con otra transaccion espera PARA
-            # SIEMPRE: gunicorn abre el puerto pero el worker nunca termina de
-            # importar, y el servicio acepta conexiones sin responder jamas.
-            options='-c statement_timeout=30000 -c lock_timeout=5000',
+            options=(opciones or OPCIONES_DE_CONEXION),
             keepalives=1,
             keepalives_idle=30,
             keepalives_interval=10,

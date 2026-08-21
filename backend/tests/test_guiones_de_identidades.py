@@ -115,18 +115,52 @@ def test_hay_lock_timeout():
         assert 'lock_timeout' in _leer(nombre), f'{nombre}: sin lock_timeout'
 
 
-def test_la_convergencia_recoge_objetos_nuevos_y_cierra_create():
-    """Una lista estatica envejece: Gen 1 ya creo tablas despues de la foto de
-    01_ownership. La convergencia debe mirar el catalogo y terminar con una
-    asercion, no con otra enumeracion que vuelva a quedar vieja."""
+def test_la_convergencia_conserva_sus_piezas_de_seguridad():
+    """Lo que se puede comprobar sin base: que no se caiga ninguna guardia.
+
+    ESTA PRUEBA FIJABA EL DEFECTO. Hasta el 21-ago-2026 exigia literalmente
+    `pg_get_userbyid(c.relowner)='ecd_app'` en el guion -- o sea, exigia que
+    siguiera mirando SOLO los objetos de `ecd_app`. En una instancia que nunca
+    tuvo identidades separadas no hay ninguno: los tiene `postgres`. La
+    convergencia recorria cero filas, y esta prueba estaba verde.
+
+    Un control que se describe por INTENCION en vez de por COMPORTAMIENTO no
+    controla nada. El comportamiento lo mide `ensayo_de_convergencia.py` contra
+    PostgreSQL: cuatro rondas, reproducibilidad, idempotencia y fail-closed.
+    """
     texto = _leer('05_convergencia_propiedad.sql')
     assert 'ON_ERROR_STOP' in texto
-    assert "pg_get_userbyid(c.relowner)='ecd_app'" in texto
+    assert 'lock_timeout' in texto
     assert 'OWNER TO ecd_migrator' in texto
     assert 'REVOKE CREATE ON SCHEMA public, ai_brain FROM PUBLIC' in texto
     assert 'REVOKE CREATE ON SCHEMA public, ai_brain FROM ecd_app' in texto
-    assert 'Quedan % objetos poseidos por ecd_app' in texto
-    assert 'Quedan % rutinas poseidas por ecd_app' in texto
+    # La postcondicion mide LO QUE SE PERSIGUE, no lo mismo que el bucle.
+    assert 'Quedan objetos aplicativos fuera de ecd_migrator' in texto
+    # Y la parada ante lo desconocido sigue ahi.
+    assert 'CONVERGENCIA DETENIDA' in texto
+
+
+def test_la_convergencia_no_toca_objetos_de_extension():
+    """La pertenencia se lee del catalogo, nunca de nombres.
+
+    De las 38 funciones de `public`, 37 son de `pgcrypto`. Apropiarselas
+    romperia el modelo de extensiones: `pg_dump` no emite esos cambios de dueño
+    y un `DROP/CREATE EXTENSION` los deshace.
+
+    Cada bucle que transfiere propiedad tiene que excluirlas, y la exclusion se
+    escribe siempre igual: `deptype='e'` y `d.refobjid IS NULL`.
+    """
+    texto = _leer('05_convergencia_propiedad.sql')
+    assert texto.count("deptype='e'") >= 3, (
+        'algun bucle de transferencia dejo de excluir a los miembros de '
+        'extension')
+    assert 'd.refobjid IS NULL' in texto
+    # Y nunca por nombre. En los COMENTARIOS se cita `pgcrypto` a proposito
+    # --explicar cual es el caso real vale-- pero ninguna SENTENCIA puede
+    # depender del nombre de una extension concreta.
+    ejecutable = ' | '.join(_sentencias(texto))
+    assert 'pgcrypto' not in ejecutable, (
+        'la exclusion no puede depender del nombre de una extension concreta')
 
 
 def test_el_ejecutor_administrativo_es_de_una_sola_vez_y_preserva_invariantes():
@@ -137,6 +171,49 @@ def test_el_ejecutor_administrativo_es_de_una_sola_vez_y_preserva_invariantes():
     assert "sesion != 'postgres' or actual != 'postgres'" in texto
     assert 'antes = tomar()' in texto and 'despues = tomar()' in texto
     assert '_invariantes_preservadas(antes, despues)' in texto
-    assert "os.environ['PGOPTIONS'] = '-c role=ecd_migrator'" in texto
     assert 'bootstrap.exigir_identidad_migrador()' in texto
     assert 'bootstrap.aplicar_grants_aplicacion()' in texto
+
+
+def test_el_set_role_de_la_migracion_no_depende_de_PGOPTIONS():
+    """El otro defecto que esta prueba fijaba.
+
+    Exigia literalmente `os.environ['PGOPTIONS'] = '-c role=ecd_migrator'`, que
+    es la linea que NO funcionaba: libpq da precedencia al parametro `options`
+    de la conexion sobre la variable de entorno, y `db.py` siempre pasa uno.
+    Medido con el mismo PGOPTIONS en los tres casos:
+
+        sin `options=`                 -> ('postgres', 'ecd_migrator')
+        con `options=` (lo de db.py)   -> ('postgres', 'postgres')
+        con `options=` incluyendo role -> ('postgres', 'ecd_migrator')
+
+    La migracion corria como `postgres`, la guardia del bootstrap lo detectaba y
+    abortaba -- DESPUES de que la transaccion de propiedad hubiera confirmado.
+    """
+    import db
+    ruta = os.path.join(os.path.dirname(SQL), 'herramientas',
+                        'converger_propiedad.py')
+    texto = open(ruta, encoding='utf-8').read()
+    assert "os.environ['PGOPTIONS']" not in texto, (
+        'PGOPTIONS no llega: `db.py` pasa `options=` en la conexion y libpq le '
+        'da precedencia')
+    assert 'role=ecd_migrator' in texto and 'opciones=' in texto, (
+        'el SET ROLE tiene que viajar DENTRO de las opciones de la conexion')
+    # Y sin perder las que ya habia.
+    assert 'OPCIONES_DE_CONEXION' in texto
+    assert 'statement_timeout' in db.OPCIONES_DE_CONEXION
+    assert 'lock_timeout' in db.OPCIONES_DE_CONEXION
+
+
+def test_la_conexion_ordinaria_no_lleva_SET_ROLE():
+    """`init_db_pool()` sin argumento se comporta como siempre.
+
+    El parametro existe solo para la convergencia. Si alguna vez alguien le
+    pusiera un valor por defecto con `role=`, TODAS las conexiones del backend
+    cambiarian de identidad sin que nadie lo notara.
+    """
+    import inspect
+    import db
+    firma = inspect.signature(db.init_db_pool)
+    assert firma.parameters['opciones'].default is None
+    assert 'role=' not in db.OPCIONES_DE_CONEXION
