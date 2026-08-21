@@ -125,7 +125,17 @@ def funcion_de(cur, project_id, user_id):
 
     Se deriva de su empresa: no hay ninguna columna que lo declare, y por tanto
     tampoco hay ninguna que pueda contradecirlo.
+
+    `user_id` puede no ser un numero: con `ALLOW_DEMO_TOKEN=true` --el atajo de
+    desarrollo local-- la sesion vale `{'id': 'demo'}`, y comparar eso con
+    `users.id` reventaba la consulta y devolvia un 500 en la pantalla de
+    participantes. Una sesion sin identidad numerica no ejerce ninguna funcion:
+    se responde eso, que es la verdad, en vez de romper.
     """
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        return None
     cur.execute("""SELECT pc.funcion
                      FROM users u
                      JOIN project_companies pc ON pc.company_id = u.company_id

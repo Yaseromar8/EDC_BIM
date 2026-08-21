@@ -41,6 +41,7 @@ import DocumentViewer from '../components/DocumentViewer';
 // Cada uno se descarga solo cuando el usuario entra a ese módulo, en vez de
 // inflar el bundle inicial. Antes: 1 chunk de ~1.6 MB con TODO.
 const RedLineModule = lazy(() => import('../components/RedLineModule'));
+const ParticipantesModule = lazy(() => import('../components/ParticipantesModule'));
 const RfiModule = lazy(() => import('../components/RfiModule'));
 const MultimediaModule = lazy(() => import('../components/MultimediaModule'));
 const GatewayPanel = lazy(() => import('../components/panels/GatewayPanel'));
@@ -304,7 +305,11 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 { titulo: 'Administración', items: [
                   { label: 'Códigos de idoneidad', mode: 'idoneidad', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3 6 6 .9-4.5 4.2 1.1 6.1L12 16.3 6.4 19.2l1.1-6.1L3 8.9 9 8z"/></svg>, onClick: () => fe.setSidebarView('idoneidad') },
                   { label: 'Triaje de seguridad', mode: 'triaje', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, onClick: () => fe.setSidebarView('triaje') },
-                  { label: 'Miembros', mode: 'members', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>, onClick: () => { fe.setSidebarView('members'); fe.setMembersLoading(true); apiFetch(`${API}/api/users`).then(r => r.json()).then(d => fe.setMembersList(d.users || d || [])).catch(() => { fe.setMembersList([]); toast.error('No se pudieron cargar los miembros.'); }).finally(() => fe.setMembersLoading(false)); } },
+                  // Participantes = quien participa en ESTA obra (persona, empresa,
+                  // funcion contractual). «Miembros» es otra cosa: los usuarios del
+                  // SISTEMA y su rol global. Estaban confundidos en un solo sitio.
+                  { label: 'Participantes', mode: 'participantes', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>, onClick: () => fe.setSidebarView('participantes') },
+                  { label: 'Usuarios del sistema', mode: 'members', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>, onClick: () => { fe.setSidebarView('members'); fe.setMembersLoading(true); apiFetch(`${API}/api/users`).then(r => r.json()).then(d => fe.setMembersList(d.users || d || [])).catch(() => { fe.setMembersList([]); toast.error('No se pudieron cargar los miembros.'); }).finally(() => fe.setMembersLoading(false)); } },
                   { label: 'Actividad', mode: 'activity', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>, onClick: () => fe.setSidebarView('activity') },
                   { label: 'Configuración', mode: 'settings', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>, onClick: () => fe.setSidebarView('settings') },
                 ]},
@@ -416,10 +421,24 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         )}
 
         {/* MEMBERS VIEW */}
+        {fe.sidebarView === 'participantes' && (
+          <Suspense fallback={<div style={{ padding: 48, textAlign: 'center', color: '#888' }}>Cargando…</div>}>
+            <ParticipantesModule project={project} isAdmin={isAdmin} />
+          </Suspense>
+        )}
+
         {fe.sidebarView === 'members' && (
           <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-              <div style={{ fontSize: 24, fontWeight: 300 }}>Miembros</div>
+              <div>
+                <div style={{ fontSize: 24, fontWeight: 300 }}>Usuarios del sistema</div>
+                {/* Esta pantalla NO lista la obra: lista usuarios de la instancia,
+                    y por eso puede enseñar gente de otros proyectos. Quien participa
+                    en ESTA obra está en «Participantes». */}
+                <div style={{ fontSize: 12, color: '#999', marginTop: 3 }}>
+                  Cuentas y perfil de acceso. Quién participa en esta obra está en <b>Participantes</b>.
+                </div>
+              </div>
               <div style={{ fontSize: 13, color: '#888' }}>{fe.membersList.length} miembro{fe.membersList.length !== 1 ? 's' : ''}</div>
             </div>
             {fe.membersLoading ? (

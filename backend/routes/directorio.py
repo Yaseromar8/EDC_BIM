@@ -90,8 +90,15 @@ def listar_miembros(project_id):
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
+            # `company_id` ademas del nombre: dos empresas pueden llamarse
+            # igual, y un selector que casa por texto elegiria la equivocada.
+            #
+            # `role` es el PERFIL DEL SISTEMA, no una funcion contractual. Sale
+            # aqui porque la pantalla de participantes lo necesita y porque no
+            # amplia nada: `GET /api/users` ya se lo ensena a cualquiera sobre
+            # las personas con las que comparte obra.
             cur.execute("""
-                SELECT u.id, u.name, u.email, c.name, pc.funcion
+                SELECT u.id, u.name, u.email, c.name, pc.funcion, u.company_id, u.role
                   FROM project_users pu
                   JOIN users u ON u.id = pu.user_id AND u.is_active
              LEFT JOIN companies c ON c.id = u.company_id
@@ -101,8 +108,73 @@ def listar_miembros(project_id):
                  ORDER BY u.name NULLS LAST, u.email
             """, (obra,))
             miembros = [{'id': r[0], 'name': r[1], 'email': r[2],
-                         'empresa': r[3], 'funcion': r[4]} for r in cur.fetchall()]
+                         'empresa': r[3], 'funcion': r[4],
+                         'company_id': r[5], 'role': r[6]} for r in cur.fetchall()]
         return jsonify({'project_id': obra, 'miembros': miembros}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@directorio_bp.route('/api/projects/<path:project_id>/miembros/<int:user_id>',
+                     methods=['PATCH'])
+def poner_empresa_de_miembro(project_id, user_id):
+    """A que EMPRESA pertenece una persona.
+
+    POR QUE HACIA FALTA, Y POR QUE ESTA AQUI
+    ----------------------------------------
+    Sin esto la pantalla de participantes existe pero no dice nada: hoy NINGUN
+    usuario tiene empresa, asi que la funcion contractual --que se DERIVA de la
+    empresa-- sale vacia para todo el mundo. Habia forma de crear un usuario con
+    empresa (`POST /api/users`) pero ninguna de ponersela a uno que ya existe.
+
+    Y ESTO ES GLOBAL, NO DE LA OBRA. Una persona trabaja para una empresa, y es
+    la misma en todas las obras: `users.company_id`. Se dice explicitamente en la
+    respuesta --`alcance: 'global'`-- para que la pantalla lo advierta y nadie
+    crea que esta cambiando algo solo aqui.
+
+    Lo que SI acota la obra es a QUIEN se le puede cambiar: solo a personas que
+    participan en ESTA obra. Conocer un `user_id` no basta para editar a
+    cualquiera del sistema.
+
+    NO DA NI QUITA ACCESO. La membresia sigue siendo `project_users` y los
+    permisos siguen siendo el rol y `folder_permissions`, igual que antes.
+    """
+    if _usuario().get('role') != 'admin':
+        return jsonify({'error': 'Solo un administrador puede cambiar el directorio',
+                        'code': 'FORBIDDEN'}), 403
+    obra = resolve_project_id(project_id)
+    if not obra:
+        return jsonify({'error': 'Obra no encontrada'}), 404
+    negativa = guardia_de_obra(obra, 'cambiar el directorio de esta obra')
+    if negativa:
+        return negativa
+
+    d = request.get_json(silent=True) or {}
+    if 'company_id' not in d:
+        return jsonify({'error': 'Falta company_id (usa null para quitar la empresa)'}), 400
+    company_id = d.get('company_id')
+
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
+                        (obra, user_id))
+            if not cur.fetchone():
+                return jsonify({'error': 'Esa persona no participa en esta obra.',
+                                'code': 'NO_ES_MIEMBRO'}), 404
+            if company_id is not None:
+                cur.execute('SELECT 1 FROM companies WHERE id = %s', (int(company_id),))
+                if not cur.fetchone():
+                    return jsonify({'error': 'Esa empresa no existe.'}), 400
+            cur.execute('UPDATE users SET company_id = %s WHERE id = %s RETURNING id',
+                        (int(company_id) if company_id is not None else None, user_id))
+            if not cur.fetchone():
+                return jsonify({'error': 'Usuario no encontrado'}), 404
+            conn.commit()
+            # La funcion contractual NO se guarda: se vuelve a derivar.
+            funcion = dir_obra.funcion_de(cur, obra, user_id)
+        return jsonify({'user_id': user_id, 'company_id': company_id,
+                        'funcion': funcion, 'alcance': 'global'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
