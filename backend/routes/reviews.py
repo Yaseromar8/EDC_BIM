@@ -517,3 +517,141 @@ def act_on_review(rid):
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@reviews_bp.route('/api/reviews/<int:rid>/reasignar', methods=['POST'])
+def reasignar_revisor(rid):
+    """Sustituye al revisor del paso actual de una revision BLOQUEADA.
+
+    POR QUE EXISTE, Y POR QUE ES TAN ESTRECHA
+    -----------------------------------------
+    Una revision cuyo revisor sale de la obra se queda parada: no se le puede
+    abrir encargo --un encargo no da acceso-- y el tampoco puede actuar. Se
+    detecta y se dice, pero hasta ahora no habia salida.
+
+    Esta ruta es esa salida, y NADA MAS:
+
+      - SOLO si la revision esta BLOQUEADA. No es administracion de flujos: no
+        sirve para cambiar revisores de una revision que avanza bien. Permitirlo
+        convertiria una via de rescate en una forma de elegir quien firma.
+      - SOLO un administrador.
+      - NUNCA automatica. Quien sustituye a un revisor que se fue es una
+        decision de obra; el sistema la ejecuta, no la toma.
+      - El nuevo revisor tiene que ser miembro de la obra, igual que al crear.
+      - La INDEPENDENCIA se vuelve a comprobar: una sustitucion no puede dejar
+        como unico revisor al autor de la revision.
+
+    LO QUE NO TOCA
+    --------------
+    Los actos ya firmados. Solo reescribe el paso EN CURSO y ANADE una entrada
+    al historial. Las aprobaciones anteriores siguen exactamente como estaban.
+
+    Y no toca ningun encargo directamente: cierra los del objeto y arranca el
+    turno por la MISMA via que el resto del flujo (`_empieza_el_turno`), porque
+    `encargos` es la proyeccion y se mueve cuando se mueve el objeto.
+    """
+    u = _user()
+    if not u:
+        return jsonify({"success": False, "error": "Autenticación requerida"}), 401
+    if u.get('role') != 'admin':
+        return jsonify({"success": False,
+                        "error": "Solo un administrador puede sustituir al revisor "
+                                 "de una revisión bloqueada.",
+                        "code": "SOLO_ADMIN"}), 403
+
+    d = request.get_json(silent=True) or {}
+    nuevo_id, motivo = d.get('user_id'), (d.get('motivo') or '').strip()
+    if not nuevo_id:
+        return jsonify({"success": False, "error": "Falta user_id del nuevo revisor"}), 400
+    if not motivo:
+        # El motivo es obligatorio a proposito: una sustitucion sin explicacion
+        # deja el historial contando QUE paso y no POR QUE, que es la mitad
+        # inutil de una trazabilidad.
+        return jsonify({"success": False,
+                        "error": "Explica por qué se sustituye al revisor: queda en "
+                                 "el historial de la revisión.",
+                        "code": "FALTA_MOTIVO"}), 400
+
+    import flujo_de_revision as flujo
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""SELECT id, model_urn, title, items, steps, current_step, status,
+                                  final_status, history, created_by, created_at,
+                                  codigo_idoneidad, cerrada_en, paso_vence_en
+                           FROM doc_reviews WHERE id = %s FOR UPDATE""", (rid,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"success": False, "error": "Revisión no encontrada"}), 404
+            rev = _row_to_dict(row)
+
+            # La obra sale de la revision guardada, no de lo que mande el cliente.
+            from routes.documents import verify_project_access
+            if not verify_project_access(u, rev['model_urn']):
+                return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
+
+            estado, motivo_bloqueo = flujo.estado_del_flujo(cur, rev)
+            if estado != 'BLOQUEADA':
+                return jsonify({
+                    "success": False,
+                    "error": "Esta revisión no está bloqueada (%s). Sustituir al "
+                             "revisor solo sirve para desatascar, no para cambiar "
+                             "quién firma una revisión que avanza." % estado.lower(),
+                    "code": "NO_ESTA_BLOQUEADA"}), 409
+
+            obra = resolve_project_id(rev['model_urn'])
+            cur.execute('SELECT id, email, name FROM users WHERE id = %s AND is_active',
+                        (int(nuevo_id),))
+            fila = cur.fetchone()
+            if not fila:
+                return jsonify({"success": False,
+                                "error": "El revisor elegido no existe o está desactivado."}), 400
+            nuevo = {'id': fila[0], 'email': fila[1], 'name': fila[2]}
+
+            cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
+                        (str(obra), nuevo['id']))
+            if not cur.fetchone():
+                return jsonify({
+                    "success": False,
+                    "error": "%s no pertenece a esta obra. Añádelo a la obra antes de "
+                             "asignarle la revisión." % (nuevo['name'] or nuevo['email']),
+                    "code": "REVISOR_FUERA_DE_LA_OBRA"}), 400
+
+            indice = rev['current_step'] or 0
+            pasos, entrada = flujo.sustituir_revisor(
+                rev['steps'], indice, nuevo, u.get('email') or u.get('name'), motivo)
+
+            if not flujo.sigue_habiendo_independencia(pasos, rev['created_by']):
+                return jsonify({
+                    "success": False,
+                    "error": "Esa sustitución dejaría a quien creó la revisión como "
+                             "único revisor. Elige a otra persona.",
+                    "code": "REVISION_SIN_INDEPENDENCIA"}), 400
+
+            historia = list(rev['history'] or []) + [entrada]
+
+            # El encargo del revisor que se fue deja de existir; el turno arranca
+            # de nuevo para quien entra, con el plazo del paso.
+            try:
+                import encargos as _enc
+                _enc.cerrar_los_de(cur, 'REVIEW', rid, u.get('email') or u.get('name'))
+            except Exception as e:
+                logging.getLogger('reviews').warning('encargo previo no cerrado: %s', e)
+
+            vence, historia = _empieza_el_turno(
+                cur, rid, pasos, indice, u.get('email') or u.get('name'),
+                rev['title'], historia)
+
+            cur.execute("UPDATE doc_reviews SET steps=%s, history=%s, paso_vence_en=%s "
+                        " WHERE id=%s",
+                        (json.dumps(pasos), json.dumps(historia), vence, rid))
+            conn.commit()
+
+        log_activity(rev['model_urn'], 'review_reassigned', 'review', entity_id=str(rid),
+                     entity_name=rev['title'], performed_by=u.get('name'))
+        return jsonify({"success": True, "id": rid, "step": indice,
+                        "nuevo_revisor": nuevo, "paso_vence_en":
+                            vence.isoformat() if vence else None})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500

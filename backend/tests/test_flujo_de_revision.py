@@ -157,34 +157,120 @@ def test_si_la_cuenta_del_revisor_se_desactiva_tambien_queda_BLOQUEADA():
     assert estado == 'BLOQUEADA'
     assert 'activa' in motivo
 
+def test_solo_la_sustitucion_reescribe_los_pasos_de_una_revision():
+    """La guardiana cambio de forma, y conviene decir por que.
 
-def test_nadie_reescribe_los_pasos_de_una_revision():
-    """No hay reasignacion automatica, y se comprueba donde importa: NADA en el
-    producto modifica `steps` despues de crear la revision.
+    Antes exigia que NADA reescribiera `steps`. Servia mientras no habia salida
+    para una revision bloqueada: garantizaba que el sistema no cambiara quien
+    revisa sin que nadie lo decidiera.
 
-    Si algo lo hiciera, el sistema podria cambiar quien revisa sin que nadie lo
-    decidiera -- y podria acabar poniendo de revisor a quien creo la revision,
-    rompiendo la regla de independencia.
-
-    Reasignar es una decision de obra. Cuando haga falta, sera una operacion
-    explicita sobre el Review, con su entrada en el historial.
+    Ahora existe esa salida, y es una operacion EXPLICITA: solo administrador,
+    solo sobre una revision BLOQUEADA, con motivo obligatorio y con su entrada
+    en el historial. La regla util ya no es «nadie», es «solo ahi». Si aparece
+    un segundo sitio, el sistema vuelve a poder mover revisores por vias que
+    nadie vigila.
     """
     import io as _io
     import os as _os
     raiz = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
-    culpables = []
+    sitios = []
     for carpeta, _dirs, ficheros in _os.walk(raiz):
         if any(x in carpeta for x in ('venv', 'tests', '__pycache__', 'herramientas')):
             continue
         for f in ficheros:
             if not f.endswith('.py'):
                 continue
-            ruta = _os.path.join(carpeta, f)
-            src = _io.open(ruta, encoding='utf-8', errors='ignore').read()
+            src = _io.open(_os.path.join(carpeta, f), encoding='utf-8', errors='ignore').read()
             for linea in src.splitlines():
                 seco = linea.upper().replace(' ', '')
                 if 'UPDATEDOC_REVIEWSSET' in seco and 'STEPS=' in seco:
-                    culpables.append('%s: %s' % (f, linea.strip()[:80]))
-    assert not culpables, (
-        'algo reescribe los pasos de una revision ya creada: '
-        + ' | '.join(culpables))
+                    sitios.append(f)
+    assert sitios == ['reviews.py'], (
+        'los pasos de una revision se reescriben desde un sitio inesperado: %s' % sitios)
+
+
+def test_la_sustitucion_esta_encerrada_tras_sus_tres_puertas():
+    """Administrador, BLOQUEADA y motivo. Las tres, en el mismo manejador."""
+    import io as _io
+    import os as _os
+    raiz = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    src = _io.open(_os.path.join(raiz, 'routes', 'reviews.py'), encoding='utf-8').read()
+    i = src.index('def reasignar_revisor')
+    j = src.find('\n@reviews_bp.route', i)
+    cuerpo = src[i:j if j > 0 else len(src)]
+    for puerta, codigo in (("solo administrador", 'SOLO_ADMIN'),
+                           ("solo si esta bloqueada", 'NO_ESTA_BLOQUEADA'),
+                           ("motivo obligatorio", 'FALTA_MOTIVO'),
+                           ("miembro de la obra", 'REVISOR_FUERA_DE_LA_OBRA'),
+                           ("independencia", 'REVISION_SIN_INDEPENDENCIA')):
+        assert codigo in cuerpo, 'falta la puerta «%s» (%s)' % (puerta, codigo)
+
+
+# ── La sustitucion, sin base de datos ─────────────────────────────────────
+
+def test_sustituir_conserva_al_revisor_anterior():
+    """No se borra a quien estaba: el paso tiene que poder contarlo por si mismo."""
+    pasos = [{'user_id': 7, 'email': 'ana@obra.pe', 'name': 'Ana', 'dias': 3}]
+    nuevos, entrada = flujo.sustituir_revisor(
+        pasos, 0, {'id': 9, 'email': 'luis@obra.pe', 'name': 'Luis'},
+        'admin@obra.pe', 'Ana dejo la obra')
+
+    assert nuevos[0]['user_id'] == 9
+    assert nuevos[0]['reasignado_de']['user_id'] == 7
+    assert nuevos[0]['reasignado_de']['name'] == 'Ana'
+    assert nuevos[0]['dias'] == 3, 'el plazo del paso no se pierde al sustituir'
+    assert entrada['event'] == 'step_reassigned'
+    assert entrada['from']['user_id'] == 7 and entrada['to']['user_id'] == 9
+    assert entrada['by'] == 'admin@obra.pe'
+    assert entrada['reason'] == 'Ana dejo la obra'
+
+
+def test_sustituir_NO_modifica_los_pasos_ya_firmados():
+    """Solo se reescribe el paso EN CURSO. Lo que ya firmo otro no se toca."""
+    pasos = [{'user_id': 1, 'name': 'Primero'},
+             {'user_id': 7, 'name': 'Ana'},
+             {'user_id': 3, 'name': 'Tercero'}]
+    nuevos, _e = flujo.sustituir_revisor(
+        pasos, 1, {'id': 9, 'email': 'l@o.pe', 'name': 'Luis'}, 'admin', 'motivo')
+    assert nuevos[0] == pasos[0], 'se toco un paso ya resuelto'
+    assert nuevos[2] == pasos[2], 'se toco un paso futuro sin motivo'
+    assert 'reasignado_de' not in nuevos[0] and 'reasignado_de' not in nuevos[2]
+
+
+def test_sustituir_no_muta_la_lista_original():
+    """El historial de la revision guarda los pasos de antes: si esta funcion
+    mutara la lista recibida, el `history` que se guarda despues contaria la
+    version nueva como si fuera la vieja."""
+    pasos = [{'user_id': 7, 'name': 'Ana'}]
+    flujo.sustituir_revisor(pasos, 0, {'id': 9, 'name': 'Luis'}, 'admin', 'x')
+    assert pasos[0]['user_id'] == 7, 'la lista original quedo modificada'
+
+
+def test_una_segunda_sustitucion_no_anida_al_anterior_dentro_de_si_mismo():
+    """`reasignado_de` guarda al inmediatamente anterior, no una muneca rusa.
+    La cadena completa se lee en el historial, que es donde vive el relato."""
+    pasos = [{'user_id': 7, 'name': 'Ana'}]
+    p1, _ = flujo.sustituir_revisor(pasos, 0, {'id': 9, 'name': 'Luis'}, 'admin', 'x')
+    p2, _ = flujo.sustituir_revisor(p1, 0, {'id': 11, 'name': 'Marta'}, 'admin', 'y')
+    assert p2[0]['reasignado_de']['user_id'] == 9
+    assert 'reasignado_de' not in p2[0]['reasignado_de']
+
+
+# ── La independencia se vuelve a comprobar ────────────────────────────────
+
+def test_una_sustitucion_no_puede_dejar_al_autor_como_unico_revisor():
+    """Seria una firma delante del espejo, y por la puerta de atras: la revision
+    es el camino a PUBLICADO."""
+    pasos = [{'user_id': 5, 'email': 'autor@obra.pe', 'name': 'Autor'}]
+    assert flujo.sigue_habiendo_independencia(pasos, 'autor@obra.pe') is False
+
+
+def test_con_otro_revisor_ademas_del_autor_si_hay_independencia():
+    pasos = [{'user_id': 5, 'email': 'autor@obra.pe', 'name': 'Autor'},
+             {'user_id': 9, 'email': 'otro@obra.pe', 'name': 'Otro'}]
+    assert flujo.sigue_habiendo_independencia(pasos, 'autor@obra.pe') is True
+
+
+def test_sin_autor_registrado_no_hay_a_quien_excluir():
+    """Revisiones antiguas sin `created_by`: no se bloquean por falta de dato."""
+    assert flujo.sigue_habiendo_independencia([{'user_id': 1}], None) is True

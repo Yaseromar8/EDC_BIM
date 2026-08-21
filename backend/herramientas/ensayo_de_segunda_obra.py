@@ -220,6 +220,13 @@ def main():
 
         print()
         print('CRITERIO 5 -- lo que no resuelve se niega')
+        # SE VUELVE A MONTAR EL CLIENTE. `montar_app` reasigna
+        # `am.validate_session`, que es una global del modulo: despues de montar
+        # el cliente administrador, `ca` hablaba TAMBIEN como administrador -- y
+        # un administrador salta la comprobacion de obra a proposito, asi que
+        # este criterio devolvia 200 y parecia un fallo del producto cuando era
+        # del banco de pruebas.
+        ca = montar_app(usuario_a, {OBRA_A})
         r = ca.get('/api/lob/timeline?dataset_id=' + str(uuid.uuid4()))
         _paso(r.status_code == 403 and (r.get_json() or {}).get('code') == 'PROJECT_UNRESOLVED',
               'un alcance indeterminable recibe 403 PROJECT_UNRESOLVED',

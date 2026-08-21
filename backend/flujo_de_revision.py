@@ -128,6 +128,77 @@ def etiqueta_del_paso(paso):
     return paso.get('name') or paso.get('email') or ('usuario %s' % paso.get('user_id'))
 
 
+def sustituir_revisor(pasos, indice, nuevo, quien, motivo, ahora=None):
+    """Devuelve (pasos_nuevos, entrada_de_historial). NO escribe nada.
+
+    LO QUE SE CONSERVA, Y POR QUE
+    -----------------------------
+    El revisor anterior no se borra: queda dentro del propio paso, en
+    `reasignado_de`. Un paso que fue sustituido tiene que poder contarlo por si
+    mismo, sin obligar a nadie a reconstruirlo leyendo el historial entero.
+
+    Y los actos ya realizados NO se tocan. Esta funcion solo reescribe el paso
+    EN CURSO y anade una entrada; las aprobaciones y rechazos anteriores siguen
+    en `history` exactamente como se firmaron. Sustituir a quien todavia no ha
+    actuado no cambia lo que ya hizo otro.
+
+    Si el paso ya habia sido sustituido antes, `reasignado_de` guarda al de
+    entonces --el inmediatamente anterior-- y la cadena completa se lee en el
+    historial, que es donde vive el relato.
+    """
+    import copy
+    import datetime as _dt
+
+    pasos = copy.deepcopy(list(pasos or []))
+    anterior = dict(pasos[indice] or {})
+    # `reasignado_de` no se arrastra dentro de si mismo: el historial es la
+    # cadena, el paso solo guarda de quien viene ahora.
+    anterior.pop('reasignado_de', None)
+
+    paso = dict(pasos[indice] or {})
+    paso['user_id'] = nuevo['id']
+    paso['email'] = nuevo.get('email')
+    paso['name'] = nuevo.get('name')
+    paso['reasignado_de'] = anterior          # el que estaba, tal cual
+    pasos[indice] = paso
+
+    entrada = {
+        'event': 'step_reassigned',
+        'step': indice,
+        'from': {'user_id': anterior.get('user_id'),
+                 'email': anterior.get('email'),
+                 'name': anterior.get('name')},
+        'to': {'user_id': nuevo['id'], 'email': nuevo.get('email'),
+               'name': nuevo.get('name')},
+        'by': quien,
+        'reason': (motivo or '').strip()[:400],
+        'at': (ahora or _dt.datetime.now(_dt.timezone.utc)).isoformat(),
+    }
+    return pasos, entrada
+
+
+def sigue_habiendo_independencia(pasos, autor):
+    """¿Queda al menos un revisor distinto de quien creo la revision?
+
+    Se vuelve a comprobar DESPUES de sustituir. Sin esto, una sustitucion
+    podria dejar como unico revisor al propio autor -- una firma delante del
+    espejo, y por la puerta de atras: la revision es el camino a PUBLICADO.
+
+    `autor` es lo que guarda `doc_reviews.created_by`: el correo, o el nombre si
+    no habia correo. Se compara contra las dos claves del paso porque en un paso
+    legacy puede no haber correo.
+    """
+    autor = (autor or '').strip().lower()
+    if not autor:
+        return True          # sin autor registrado no hay a quien excluir
+    for paso in (pasos or []):
+        correo = ((paso or {}).get('email') or '').strip().lower()
+        nombre = ((paso or {}).get('name') or '').strip().lower()
+        if correo != autor and nombre != autor:
+            return True
+    return False
+
+
 def estado_del_flujo(cur, rev, project_id=None):
     """('ACTIVA'|'BLOQUEADA'|'CERRADA', motivo) de una revision.
 

@@ -298,6 +298,7 @@ columna	encargos.id
 columna	encargos.objeto_id
 columna	encargos.objeto_tipo
 columna	encargos.project_id
+columna	encargos.recordado_en
 columna	encargos.vence_en
 columna	extraction_jobs.job_id
 columna	extraction_jobs.message

@@ -118,6 +118,7 @@ def main():
     import referencias_de_obra as ref
     import encargos as enc
     import flujo_de_revision as flujo
+    from herramientas.recordatorios import pendientes_de_recordar
     init_db_pool()
 
     print()
@@ -311,10 +312,133 @@ def main():
                         creado_por='ensayo')
         cur.execute("UPDATE encargos SET avisado_en=CURRENT_TIMESTAMP WHERE id=%s", (eid,))
         conn.commit()
-        from herramientas.recordatorios import pendientes_de_recordar
         vencidos = pendientes_de_recordar(cur, 0)
         _paso(any(v[0] == eid for v in vencidos),
               'el recordatorio la ve vencida', '%d pendientes' % len(vencidos))
+
+        print()
+        print('11 · LA SALIDA CONTROLADA DE UNA REVISION BLOQUEADA')
+        # `rid_b` sigue bloqueada: su revisor (r2) salio de la obra en el paso 7.
+        # OJO: `cliente_como` reasigna `am.validate_session`, que es una global del
+        # modulo. Guardar dos clientes y alternar entre ellos NO funciona: los dos
+        # hablarian con la identidad del ultimo creado. Se construye uno nuevo
+        # justo antes de cada peticion.
+        def como_admin():
+            return cliente_como({'id': g['autor'], 'email': PREFIJO + 'autor@ensayo.test',
+                                 'name': 'Autor Uno', 'role': 'admin'})
+
+        def como_r1():
+            return cliente_como({'id': g['r1'], 'email': PREFIJO + 'r1@ensayo.test',
+                                 'name': 'Revisor Uno', 'role': 'editor'})
+
+        r = como_r1().post('/api/reviews/%s/reasignar' % rid_b,
+                          json={'user_id': g['r1'], 'motivo': 'me la quedo yo'})
+        _paso(r.status_code == 403, 'un NO administrador no puede sustituir',
+              'devolvio %s' % r.status_code)
+
+        r = como_admin().post('/api/reviews/%s/reasignar' % rid_b, json={'user_id': g['r1']})
+        _paso(r.status_code == 400
+              and (r.get_json() or {}).get('code') == 'FALTA_MOTIVO',
+              'sin motivo NO se sustituye: el historial contaria que y no por que')
+
+        cur.execute("SELECT id FROM doc_reviews WHERE model_urn=%s AND status='approved' "
+                    " ORDER BY id LIMIT 1", (OBRA,))
+        fila = cur.fetchone()
+        if fila:
+            r = como_admin().post('/api/reviews/%s/reasignar' % fila[0],
+                           json={'user_id': g['r1'], 'motivo': 'porque si'})
+            _paso(r.status_code == 409
+                  and (r.get_json() or {}).get('code') == 'NO_ESTA_BLOQUEADA',
+                  'no sirve para cambiar quien firma una revision que NO esta bloqueada',
+                  'devolvio %s' % r.status_code)
+
+        # El revisor nuevo tiene que estar en la obra: r2 sigue fuera.
+        r = como_admin().post('/api/reviews/%s/reasignar' % rid_b,
+                       json={'user_id': g['r2'], 'motivo': 'vuelve el mismo'})
+        _paso(r.status_code == 400
+              and (r.get_json() or {}).get('code') == 'REVISOR_FUERA_DE_LA_OBRA',
+              'no se puede sustituir por alguien que no pertenece a la obra')
+
+        # Independencia: una revision cuyo autor es el tocayo, con un solo paso.
+        cur.execute("INSERT INTO doc_reviews (model_urn, title, items, steps, final_status,"
+                    "  created_by, history) VALUES (%s,'Revision del tocayo',"
+                    "  %s,%s,'SHARED',%s,'[]'::jsonb) RETURNING id",
+                    (OBRA, json.dumps([{'node_id': g['nodo']}]),
+                     json.dumps([{'user_id': g['r2'], 'name': 'Revisor Dos'}]),
+                     PREFIJO + 'tocayo@ensayo.test'))
+        rid_i = cur.fetchone()[0]
+        conn.commit()
+        r = como_admin().post('/api/reviews/%s/reasignar' % rid_i,
+                       json={'user_id': g['tocayo'], 'motivo': 'que la firme el autor'})
+        _paso(r.status_code == 400
+              and (r.get_json() or {}).get('code') == 'REVISION_SIN_INDEPENDENCIA',
+              'una sustitucion NO puede dejar al autor como unico revisor',
+              'devolvio %s' % r.status_code)
+
+        # Y ahora la sustitucion buena.
+        antes_hist = None
+        cur.execute("SELECT history FROM doc_reviews WHERE id=%s", (rid_b,))
+        antes_hist = cur.fetchone()[0] or []
+        r = como_admin().post('/api/reviews/%s/reasignar' % rid_b,
+                       json={'user_id': g['r1'], 'motivo': 'Revisor Dos dejo la obra'})
+        _paso(r.status_code == 200 and (r.get_json() or {}).get('success'),
+              'el administrador SI puede sustituir en una bloqueada',
+              str(r.get_json())[:80])
+
+        cur.execute("SELECT steps, history, paso_vence_en FROM doc_reviews WHERE id=%s",
+                    (rid_b,))
+        pasos_b, hist_b, vence_b = cur.fetchone()
+        paso_b = pasos_b[0]
+        _paso(paso_b.get('user_id') == g['r1'], 'el paso apunta ya al nuevo revisor')
+        _paso((paso_b.get('reasignado_de') or {}).get('user_id') == g['r2'],
+              'y CONSERVA quien era el anterior, dentro del propio paso')
+
+        cambio = [h for h in hist_b if h.get('event') == 'step_reassigned']
+        _paso(len(cambio) == 1
+              and cambio[0]['from']['user_id'] == g['r2']
+              and cambio[0]['to']['user_id'] == g['r1']
+              and cambio[0].get('reason')
+              and cambio[0].get('by'),
+              'el historial dice a quien, por quien, cuando y POR QUE',
+              str(cambio[0])[:88] if cambio else 'sin entrada')
+        _paso(all(h in hist_b for h in antes_hist),
+              'y no se toco ni una entrada anterior del historial')
+
+        estado, _m = flujo.estado_del_flujo(
+            cur, {'status': 'pending', 'current_step': 0, 'steps': pasos_b,
+                  'model_urn': OBRA})
+        _paso(estado == 'ACTIVA', 'la revision deja de estar BLOQUEADA')
+        de_r1 = [x for x in enc.mi_trabajo(cur, g['r1'])
+                 if x['objeto_tipo'] == 'REVIEW' and x['objeto_id'] == str(rid_b)]
+        _paso(len(de_r1) == 1, 'y el nuevo revisor la ve en su bandeja')
+        _paso(vence_b is not None and de_r1 and de_r1[0]['vence_en'],
+              'con el plazo del paso, recalculado al empezar su turno')
+
+        r = como_r1().post('/api/reviews/%s/act' % rid_b, json={'action': 'approve'})
+        _paso(r.status_code == 200, 'y puede aprobarla: la revision avanza de nuevo',
+              'devolvio %s' % r.status_code)
+
+        print()
+        print('12 · EL RECORDATORIO NO SE REPITE')
+        cur.execute("DELETE FROM encargos WHERE project_id=%s", (OBRA,))
+        eid2 = enc.abrir(cur, 'REVIEW', rid_h, 'Revisar historica',
+                         destino_usuario=g['r1'],
+                         vence_en=datetime.datetime.now() - datetime.timedelta(days=1),
+                         creado_por='ensayo')
+        cur.execute("UPDATE encargos SET avisado_en=CURRENT_TIMESTAMP WHERE id=%s", (eid2,))
+        conn.commit()
+        primera = pendientes_de_recordar(cur, 0)
+        _paso(any(v[0] == eid2 for v in primera), 'la primera vez, sale para recordar')
+
+        cur.execute("UPDATE encargos SET recordado_en=CURRENT_TIMESTAMP WHERE id=%s", (eid2,))
+        conn.commit()
+        segunda = pendientes_de_recordar(cur, 0)
+        _paso(not any(v[0] == eid2 for v in segunda),
+              'recien recordado, YA NO sale: programarlo cada hora no manda un correo por hora')
+
+        pasado = pendientes_de_recordar(cur, 0, cada_horas=0)
+        _paso(any(v[0] == eid2 for v in pasado),
+              'y cuando pasa la ventana, vuelve a salir')
 
         limpiar(cur)
         conn.commit()

@@ -91,6 +91,12 @@ RUTAS_POR_RECURSO = {
     'delete_def':         ('custom_attr_defs', 'attr_id'),
     'delete_markup':      ('pdf_markups', 'markup_id'),
     'act_on_review':      ('doc_reviews', 'rid'),
+    # La salida de una revision BLOQUEADA. Recibe solo el id de la
+    # revision, asi que su obra sale de la fila -- igual que `act`.
+    # Sin esta linea devolvia 403 PROJECT_UNRESOLVED antes de llegar a
+    # sus propias comprobaciones, y una revision parada se quedaba sin
+    # la unica via que tiene para desatascarse.
+    'reasignar_revisor':  ('doc_reviews', 'rid'),
     'delete_set':         ('doc_sets', 'set_id'),
     'get_set_items':      ('doc_sets', 'set_id'),
     'add_set_items':      ('doc_sets', 'set_id'),

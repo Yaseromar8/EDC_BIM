@@ -101,7 +101,13 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
           </div>
 
           <div>
-            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>Secuencia de revisores (en orden)</label>
+            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>
+              Secuencia de revisores (en orden)
+              {/* Se dice aquí y no sólo en el tooltip: un plazo que el usuario
+                  cree en días hábiles y el sistema cuenta en naturales es una
+                  discusión garantizada la primera vez que uno vence en sábado. */}
+              <span style={{ fontWeight: 400, color: '#999', fontSize: 11 }}> · el plazo se cuenta en días calendario (naturales)</span>
+            </label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
               {steps.map((s, i) => (
                 <span key={s.id || s.email} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eef2f7', color: '#1a56a8', padding: '4px 10px', borderRadius: 14, fontSize: 12, fontWeight: 600 }}>
@@ -110,10 +116,10 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                       no desde que se crea la revisión: cuando se crea no se
                       sabe cuándo le tocará al paso 3. Vacío = sin plazo. */}
                   <input
-                    type="number" min="1" placeholder="días" value={s.dias || ''}
+                    type="number" min="1" placeholder="d. cal." value={s.dias || ''}
                     onChange={e => setSteps(prev => prev.map((x, j) =>
                       j === i ? { ...x, dias: e.target.value } : x))}
-                    title="Días de plazo para este paso (opcional)"
+                    title="Días CALENDARIO de plazo para este paso (opcional). Son días naturales: no hay calendario de días hábiles, así que un plazo de 3 días vence en 3 días aunque caigan en fin de semana."
                     style={{ width: 52, border: '1px solid #c8d6e8', borderRadius: 8, padding: '1px 5px', fontSize: 11, color: '#1a56a8', background: '#fff' }}
                   />
                   <button onClick={() => setSteps(prev => prev.filter((_x, j) => j !== i))} style={{ background: 'none', border: 'none', color: '#1a56a8', cursor: 'pointer', padding: 0, fontSize: 13 }}>×</button>
@@ -181,10 +187,94 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
 }
 
 // ── Vista: listado de revisiones + aprobar/rechazar ──
+function SustituirRevisor({ rev, projectPrefix, onCerrar, onHecho }) {
+  /* Sustituir al revisor de un paso BLOQUEADO.
+   *
+   * El motivo es obligatorio, igual que en el backend: una sustitución sin
+   * explicación deja el historial contando QUÉ pasó y no POR QUÉ, que es la
+   * mitad inútil de una trazabilidad. Y el revisor anterior no desaparece:
+   * queda en el paso y en el historial.
+   */
+  const [users, setUsers] = useState([]);
+  const [elegido, setElegido] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  const paso = rev.steps[rev.current_step] || {};
+
+  useEffect(() => {
+    apiFetch(`${API}/api/users`).then(r => r.json())
+      .then(d => setUsers(d.users || d || [])).catch(() => setUsers([]));
+  }, []);
+
+  const enviar = async () => {
+    if (!elegido) { toast.error('Elige al nuevo revisor'); return; }
+    if (!motivo.trim()) { toast.error('Explica por qué se sustituye'); return; }
+    setGuardando(true);
+    try {
+      const r = await apiFetch(`${API}/api/reviews/${rev.id}/reasignar`, {
+        method: 'POST',
+        body: JSON.stringify({ user_id: Number(elegido), motivo: motivo.trim() }),
+      });
+      const d = await r.json();
+      if (!d.success) throw new Error(d.error);
+      toast.success('Revisor sustituido');
+      onHecho?.(); onCerrar();
+    } catch (e) { toast.error(e.message || 'No se pudo sustituir'); }
+    finally { setGuardando(false); }
+  };
+
+  return (
+    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCerrar}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 460, background: '#fff', borderRadius: 8, boxShadow: '0 10px 40px rgba(0,0,0,0.25)' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid #eee', fontSize: 15, fontWeight: 600 }}>
+          Sustituir al revisor del paso {rev.current_step + 1}
+        </div>
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14, fontSize: 13 }}>
+          <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 6, padding: '8px 10px', color: '#9f1239', fontSize: 12 }}>
+            {rev.flujo_motivo || 'La revisión está bloqueada.'}
+          </div>
+          <div>
+            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>
+              Revisor actual
+            </label>
+            <div style={{ color: '#555' }}>{paso.name || paso.email || `usuario ${paso.user_id}`}</div>
+            <div style={{ color: '#999', fontSize: 11, marginTop: 2 }}>Se conserva en el historial de la revisión.</div>
+          </div>
+          <div>
+            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>Nuevo revisor</label>
+            <select value={elegido} onChange={e => setElegido(e.target.value)}
+              style={{ width: '100%', padding: '7px 10px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13 }}>
+              <option value="">Elige a un miembro de la obra…</option>
+              {users.filter(u => String(u.id) !== String(paso.user_id)).map(u => (
+                <option key={u.id} value={u.id}>{u.name || u.email}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>Motivo</label>
+            <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={2}
+              placeholder="Por ejemplo: dejó la obra el 15 de agosto"
+              style={{ width: '100%', padding: '7px 10px', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, resize: 'vertical' }} />
+          </div>
+        </div>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button onClick={onCerrar} style={{ padding: '7px 14px', background: 'none', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={enviar} disabled={guardando}
+            style={{ padding: '7px 16px', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            {guardando ? 'Sustituyendo…' : 'Sustituir'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 export function ReviewsView({ projectPrefix, user, isAdmin }) {
   const [reviews, setReviews] = useState(null);
   const [comments, setComments] = useState({}); // { reviewId: texto }
   const [acting, setActing] = useState(null);
+  const [sustituyendo, setSustituyendo] = useState(null);
   const [preview, openDoc, closePreview] = useDocPreview(projectPrefix);
 
   const load = () => {
@@ -281,6 +371,17 @@ export function ReviewsView({ projectPrefix, user, isAdmin }) {
             {bloqueada && (
               <div role="alert" style={{ margin: '0 16px 12px', padding: '9px 11px', borderRadius: 6, background: '#fff1f2', border: '1px solid #fecdd3', color: '#9f1239', fontSize: 12 }}>
                 <b>La revisión no puede avanzar.</b>{rev.flujo_motivo ? ` ${rev.flujo_motivo}` : ''}
+                {/* La salida sólo aparece para quien puede tomarla, y sólo
+                    aquí: sustituir a un revisor no es administrar el flujo, es
+                    desatascar uno concreto que está parado. */}
+                {isAdmin && (
+                  <div style={{ marginTop: 8 }}>
+                    <button onClick={() => setSustituyendo(rev)}
+                      style={{ padding: '5px 12px', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      Sustituir revisor…
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             {rev.history.filter(h => h.comment).length > 0 && (
@@ -304,6 +405,15 @@ export function ReviewsView({ projectPrefix, user, isAdmin }) {
           </div>
         );
       })}
+
+      {sustituyendo && (
+        <SustituirRevisor
+          rev={sustituyendo}
+          projectPrefix={projectPrefix}
+          onCerrar={() => setSustituyendo(null)}
+          onHecho={load}
+        />
+      )}
     </div>
   );
 }

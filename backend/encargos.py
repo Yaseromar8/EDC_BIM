@@ -73,7 +73,8 @@ CREATE TABLE IF NOT EXISTS encargos (
     creado_en       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     cerrado_en      TIMESTAMP,
     cerrado_por     TEXT,
-    avisado_en      TIMESTAMP
+    avisado_en      TIMESTAMP,
+    recordado_en    TIMESTAMP
 )
 """
 
@@ -115,6 +116,9 @@ def ensure_encargos():
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute(_TABLA)
+            # Para tablas creadas antes de que existiera la memoria de recordatorios.
+            cur.execute('ALTER TABLE encargos ADD COLUMN IF NOT EXISTS '
+                        'recordado_en TIMESTAMP')
             for sql in _INDICES:
                 cur.execute(sql)
             cur.execute(_UNICO)
@@ -240,7 +244,7 @@ def cerrar_los_de(cur, objeto_tipo, objeto_id, cerrado_por=None, destino_usuario
     return cur.rowcount
 
 
-def avisar(cur, encargo_id, enlace=None):
+def avisar(cur, encargo_id, enlace=None, es_recordatorio=False):
     """Avisa por correo a quien le toca. Nunca revienta la operacion de origen.
 
     Un fallo de correo no puede tumbar la aprobacion de una revision ni la
@@ -250,6 +254,12 @@ def avisar(cur, encargo_id, enlace=None):
     Los destinatarios se resuelven con las MISMAS reglas que la bandeja
     (`usuarios_de_la_funcion` filtra por membresia), asi que un aviso no puede
     llegarle a alguien a quien la bandeja no le mostraria el encargo.
+
+    `es_recordatorio` decide QUE marca se sella. Son dos columnas y no una a
+    proposito: `avisado_en` dice cuando se anuncio el encargo --una sola vez, al
+    empezar el turno-- y `recordado_en` cuando se insistio por ultima vez. Con
+    una sola columna, cada recordatorio borraria la fecha del anuncio y ya no se
+    podria saber cuanto llevaba alguien debiendo algo.
     """
     try:
         cur.execute("""SELECT project_id, asunto, destino_usuario, destino_funcion,
@@ -276,19 +286,26 @@ def avisar(cur, encargo_id, enlace=None):
         import mailer
         cuerpo = asunto
         if vence:
-            cuerpo += '\n\nVence: %s' % vence.strftime('%d/%m/%Y')
+            # «dias calendario», dicho asi de claro: no hay calendario de
+            # feriados, de modo que un plazo de 3 dias vence en 3 dias
+            # naturales aunque caigan en fin de semana.
+            cuerpo += '\n\nVence el %s (dias calendario).' % vence.strftime('%d/%m/%Y')
         enviados = 0
         for correo in correos:
             try:
                 ok, _detalle = mailer.enviar(
-                    correo, 'Tienes trabajo pendiente en la obra',
-                    'Te toca a ti', cuerpo, enlace=enlace, texto_boton='Ver mi trabajo')
+                    correo,
+                    'Recordatorio: sigue pendiente' if es_recordatorio
+                    else 'Tienes trabajo pendiente en la obra',
+                    'Sigue esperando por ti' if es_recordatorio else 'Te toca a ti',
+                    cuerpo, enlace=enlace, texto_boton='Ver mi trabajo')
                 enviados += 1 if ok else 0
             except Exception as e:
                 logger.warning('[encargos] no se pudo avisar a %s: %s', correo, e)
         if enviados:
-            cur.execute('UPDATE encargos SET avisado_en = CURRENT_TIMESTAMP WHERE id = %s',
-                        (encargo_id,))
+            columna = 'recordado_en' if es_recordatorio else 'avisado_en'
+            cur.execute('UPDATE encargos SET %s = CURRENT_TIMESTAMP WHERE id = %%s'
+                        % columna, (encargo_id,))
         return enviados
     except Exception as e:
         logger.warning('[encargos] aviso del encargo %s fallido: %s', encargo_id, e)
