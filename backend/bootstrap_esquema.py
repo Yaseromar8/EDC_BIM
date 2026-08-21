@@ -87,6 +87,8 @@ def _rutinas():
     from folder_permissions import init_folder_permissions_table
     from integridad_referencial import ensure_claves_ajenas
     from referencias_de_obra import ensure_tabla_referencias
+    from directorio_de_obra import ensure_directorio
+    from encargos import ensure_encargos
 
     return [
         # ── Los 22 de server.py, en su orden ─────────────────────────────
@@ -151,6 +153,10 @@ def _rutinas():
         # `project_ref` traduce cada alias historico a su obra. Necesita
         # `projects` creada, porque cuelga de ella con una clave ajena.
         ('referencias_de_obra', ensure_tabla_referencias),
+        # El directorio cuelga de `projects` y de `companies`; los encargos
+        # de `projects` y de `users`. Van despues de que existan.
+        ('directorio_de_obra', ensure_directorio),
+        ('encargos', ensure_encargos),
         # Las claves ajenas van LAS ULTIMAS: no se puede referenciar una
         # tabla que todavia no existe.
         ('integridad_referencial', ensure_claves_ajenas),

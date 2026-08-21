@@ -26,6 +26,7 @@ tabla	doc_set_items
 tabla	doc_sets
 tabla	document_shares
 tabla	element_docs
+tabla	encargos
 tabla	extraction_jobs
 tabla	feedback_buffer
 tabla	file_emisiones
@@ -79,6 +80,7 @@ tabla	pdf_markups
 tabla	photo_evidences
 tabla	plan_entregas
 tabla	presupuesto_maestro
+tabla	project_companies
 tabla	project_frentes
 tabla	project_ref
 tabla	project_settings
@@ -282,6 +284,20 @@ columna	element_docs.id
 columna	element_docs.model_urn
 columna	element_docs.title
 columna	element_docs.url
+columna	encargos.asunto
+columna	encargos.avisado_en
+columna	encargos.cerrado_en
+columna	encargos.cerrado_por
+columna	encargos.creado_en
+columna	encargos.creado_por
+columna	encargos.destino_funcion
+columna	encargos.destino_usuario
+columna	encargos.estado
+columna	encargos.id
+columna	encargos.objeto_id
+columna	encargos.objeto_tipo
+columna	encargos.project_id
+columna	encargos.vence_en
 columna	extraction_jobs.job_id
 columna	extraction_jobs.message
 columna	extraction_jobs.model_urn
@@ -775,6 +791,11 @@ columna	presupuesto_maestro.parent_item
 columna	presupuesto_maestro.precio_unitario
 columna	presupuesto_maestro.project_id
 columna	presupuesto_maestro.unidad
+columna	project_companies.company_id
+columna	project_companies.creado_en
+columna	project_companies.creado_por
+columna	project_companies.funcion
+columna	project_companies.project_id
 columna	project_frentes.base_project_id
 columna	project_frentes.created_at
 columna	project_frentes.description
@@ -1041,6 +1062,19 @@ restriccion	element_docs not null external_id
 restriccion	element_docs not null id
 restriccion	element_docs not null url
 restriccion	element_docs primary key (id)
+restriccion	encargos check (((destino_usuario is not null) or (destino_funcion is not null)))
+restriccion	encargos check ((estado = any (array['abierto'::text, 'cerrado'::text])))
+restriccion	encargos check ((objeto_tipo = any (array['review'::text, 'rfi'::text, 'redline'::text, 'transmittal'::text])))
+restriccion	encargos foreign key (destino_usuario) references users(id) on delete cascade
+restriccion	encargos foreign key (project_id) references projects(id) on delete cascade
+restriccion	encargos not null asunto
+restriccion	encargos not null creado_en
+restriccion	encargos not null estado
+restriccion	encargos not null id
+restriccion	encargos not null objeto_id
+restriccion	encargos not null objeto_tipo
+restriccion	encargos not null project_id
+restriccion	encargos primary key (id)
 restriccion	extraction_jobs not null job_id
 restriccion	extraction_jobs primary key (job_id)
 restriccion	file_emisiones not null destino
@@ -1336,6 +1370,14 @@ restriccion	presupuesto_maestro not null model_urn
 restriccion	presupuesto_maestro not null nivel
 restriccion	presupuesto_maestro primary key (id)
 restriccion	presupuesto_maestro unique (model_urn, item)
+restriccion	project_companies check ((funcion = any (array['entidad'::text, 'supervision'::text, 'contratista'::text, 'proyectista'::text, 'otro'::text])))
+restriccion	project_companies foreign key (company_id) references companies(id) on delete cascade
+restriccion	project_companies foreign key (project_id) references projects(id) on delete cascade
+restriccion	project_companies not null company_id
+restriccion	project_companies not null creado_en
+restriccion	project_companies not null funcion
+restriccion	project_companies not null project_id
+restriccion	project_companies primary key (project_id, company_id)
 restriccion	project_frentes not null base_project_id
 restriccion	project_frentes not null front_id
 restriccion	project_frentes not null id
@@ -1434,6 +1476,9 @@ indice	create index on public.doc_reviews using btree (model_urn)
 indice	create index on public.doc_rfis using btree (model_urn)
 indice	create index on public.doc_rfis using btree (project_id)
 indice	create index on public.element_docs using btree (external_id)
+indice	create index on public.encargos using btree (destino_usuario) where (estado = 'abierto'::text)
+indice	create index on public.encargos using btree (objeto_tipo, objeto_id)
+indice	create index on public.encargos using btree (project_id) where (estado = 'abierto'::text)
 indice	create index on public.file_emisiones using btree (file_node_id, emitida_en desc)
 indice	create index on public.file_nodes using btree (gcs_urn)
 indice	create index on public.file_nodes using btree (model_urn) where (is_deleted = false)
@@ -1455,6 +1500,7 @@ indice	create index on public.presupuesto_maestro using btree (item)
 indice	create index on public.presupuesto_maestro using btree (model_urn)
 indice	create index on public.presupuesto_maestro using btree (parent_item)
 indice	create index on public.presupuesto_maestro using btree (project_id)
+indice	create index on public.project_companies using btree (project_id, funcion)
 indice	create index on public.project_ref using btree (project_id)
 indice	create index on public.project_users using btree (user_id, project_id)
 indice	create index on public.projects using btree (model_urn)
@@ -1495,6 +1541,8 @@ indice	create unique index on public.doc_sets using btree (id)
 indice	create unique index on public.doc_sets using btree (model_urn, name)
 indice	create unique index on public.document_shares using btree (id)
 indice	create unique index on public.element_docs using btree (id)
+indice	create unique index on public.encargos using btree (id)
+indice	create unique index on public.encargos using btree (project_id, objeto_tipo, objeto_id, coalesce(destino_usuario, '-1'::integer), coalesce(destino_funcion, ''::text)) where (estado = 'abierto'::text)
 indice	create unique index on public.extraction_jobs using btree (job_id)
 indice	create unique index on public.file_emisiones using btree (id)
 indice	create unique index on public.file_nodes using btree (id)
@@ -1563,6 +1611,7 @@ indice	create unique index on public.plan_entregas using btree (id)
 indice	create unique index on public.plan_entregas using btree (model_urn, tipo, identificador, hito)
 indice	create unique index on public.presupuesto_maestro using btree (id)
 indice	create unique index on public.presupuesto_maestro using btree (model_urn, item)
+indice	create unique index on public.project_companies using btree (project_id, company_id)
 indice	create unique index on public.project_frentes using btree (base_project_id, front_id)
 indice	create unique index on public.project_frentes using btree (id)
 indice	create unique index on public.project_ref using btree (account_id, alias)

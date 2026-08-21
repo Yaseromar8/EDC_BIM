@@ -202,6 +202,9 @@ POLITICAS_POR_BLUEPRINT = {
     'pins': _SESION, 'tracking': _SESION, 'views': _SESION, 'maps': _SESION,
     'ai': _SESION, 'dashboards': _SESION, 'sets': _SESION, 'attributes': _SESION,
     'reviews': _SESION, 'transmittals': _SESION, 'rfis_bp': _SESION,
+    # El directorio de obra y «Mi Trabajo»: exigen sesion, y cada ruta
+    # comprueba obra o pertenencia por dentro.
+    'directorio': _SESION,
     'redlines_bp': _SESION, 'geo_control': _SESION, 'pdf_tools': _SESION,
     'auth': _SESION, 'projects': _SESION,
     # Herramientas de mantenimiento: solo administracion

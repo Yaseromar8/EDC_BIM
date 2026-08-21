@@ -274,6 +274,20 @@ def create_transmittal():
                 cur = conn.cursor()
                 cur.execute("UPDATE transmittals SET notificado = %s WHERE id = %s",
                             (json.dumps(notificado), tid))
+                # Un encargo POR DESTINATARIO: cada uno debe su acuse. Solo se
+                # abre para quien es usuario del sistema Y miembro de la obra --
+                # `_enc.abrir` lo comprueba--, porque un encargo no da acceso.
+                # A un destinatario externo se le sigue avisando por correo,
+                # que es lo que ya hacia `_avisar_a_los_destinatarios`.
+                import encargos as _enc
+                for _r in (d['recipients'] or []):
+                    _correo = _r.get('email') if isinstance(_r, dict) else _r
+                    _uid = _enc.usuario_por_email(cur, _correo)
+                    if not _uid:
+                        continue
+                    _enc.abrir(cur, 'TRANSMITTAL', tid,
+                               'Acusar recibo de TR-%03d: %s' % (number, d['subject']),
+                               destino_usuario=_uid, creado_por=emisor)
                 conn.commit()
         except Exception as e:   # pragma: no cover - defensivo
             print(f"[TRANSMITTAL] TR-{number:03d} emitido pero no se pudo anotar el aviso: {e}")
@@ -343,6 +357,17 @@ def acusar_recibo(tid):
                 })
                 cur.execute("UPDATE transmittals SET acuses = %s WHERE id = %s",
                             (json.dumps(acuses), tid))
+                # Cierra SOLO el encargo de quien acusa. Los demas destinatarios
+                # siguen debiendo el suyo: una emision no se salda porque la
+                # reciba uno.
+                try:
+                    import encargos as _enc
+                    _enc.cerrar_los_de(cur, 'TRANSMITTAL', tid, quien,
+                                       destino_usuario=u.get('id'))
+                except Exception as _e:
+                    # El acuse YA esta registrado: es lo que importa. Si la
+                    # proyeccion no se pudo cerrar, se dice y se sigue.
+                    print(f"[TRANSMITTAL] acuse registrado; encargo no cerrado: {_e}")
                 conn.commit()
                 cur.execute("SELECT number FROM transmittals WHERE id = %s", (tid,))
                 num = cur.fetchone()[0]

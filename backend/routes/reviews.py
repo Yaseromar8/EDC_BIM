@@ -18,6 +18,32 @@ reviews_bp = Blueprint('reviews', __name__)
 FINAL_STATUSES = (ecd.SHARED, ecd.PUBLISHED)
 
 
+def _encargo_del_paso(cur, rid, steps, indice, vence_en, actor, titulo):
+    """Abre el encargo del revisor que toca. Silencioso si no se puede.
+
+    Si el correo del paso no corresponde a ningun usuario, o el usuario no es
+    miembro de la obra, NO se abre nada: un encargo no da acceso, asi que
+    tampoco se inventa uno para alguien que no esta dentro. La revision sigue su
+    curso -- lo que se pierde es el aviso, no el flujo.
+    """
+    try:
+        import encargos as _enc
+        if indice >= len(steps or []):
+            return
+        paso = steps[indice] or {}
+        uid = _enc.usuario_por_email(cur, paso.get('email'))
+        if not uid:
+            return
+        eid = _enc.abrir(cur, 'REVIEW', rid,
+                         'Revisar: %s (paso %d)' % (titulo, indice + 1),
+                         destino_usuario=uid, vence_en=vence_en, creado_por=actor)
+        if eid:
+            _enc.avisar(cur, eid)
+    except Exception as e:
+        import logging
+        logging.getLogger('reviews').warning('encargo no abierto: %s', e)
+
+
 @solo_con_ddl
 def ensure_reviews_table():
     with get_db_connection() as conn:
@@ -192,6 +218,12 @@ def create_review():
                                       "at": datetime.now(timezone.utc).isoformat()}]),
                          (d.get('codigo_idoneidad') or '').strip().upper() or None))
             rid = cur.fetchone()[0]
+
+            # El primer revisor pasa a deberla. El encargo es una PROYECCION de
+            # lo que `steps` y `current_step` ya dicen: se abre aqui porque es
+            # aqui donde el objeto cambia, no por una via aparte.
+            _encargo_del_paso(cur, rid, steps, 0, d.get('vence_en'),
+                              u.get('email') or u.get('name'), d['title'])
             conn.commit()
         log_activity(d['model_urn'], 'review_created', 'review', entity_id=str(rid),
                      entity_name=d['title'], performed_by=u.get('name'))
@@ -243,12 +275,25 @@ def act_on_review(rid):
                      "at": datetime.now(timezone.utc).isoformat()}
             history = rev['history'] + [entry]
 
+            # Se resolvio el paso: quien lo debia deja de deberlo. Va antes de
+            # decidir si avanza o se rechaza, porque en los dos casos el encargo
+            # de ESTE paso queda cerrado.
+            try:
+                import encargos as _enc
+                _enc.cerrar_los_de(cur, 'REVIEW', rid, u.get('email') or u.get('name'))
+            except Exception as _e:
+                # La revision avanza igual: el encargo es su reflejo, no su motor.
+                import logging as _lg
+                _lg.getLogger('reviews').warning('encargo no cerrado: %s', _e)
+
             if action == 'reject':
                 cur.execute("UPDATE doc_reviews SET status='rejected', history=%s WHERE id=%s",
                             (json.dumps(history), rid))
             elif rev['current_step'] + 1 < len(rev['steps']):
                 cur.execute("UPDATE doc_reviews SET current_step=%s, history=%s WHERE id=%s",
                             (rev['current_step'] + 1, json.dumps(history), rid))
+                _encargo_del_paso(cur, rid, rev['steps'], rev['current_step'] + 1,
+                                  None, u.get('email') or u.get('name'), rev['title'])
             else:
                 # Ultimo paso aprobado: los documentos avanzan al estado final.
                 #

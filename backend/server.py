@@ -883,6 +883,8 @@ app.register_blueprint(documents_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(projects_bp)
 app.register_blueprint(uploads_bp)
+from routes.directorio import directorio_bp
+app.register_blueprint(directorio_bp)   # directorio de obra y «Mi Trabajo»
 app.register_blueprint(audit_bp)      # la auditoria es DEL expediente, no del visor
 app.register_blueprint(partidas_bp, url_prefix='/api/partidas')
 app.register_blueprint(docs_cad_bp)   # ver DWG/Civil/IFC dentro de Documentos

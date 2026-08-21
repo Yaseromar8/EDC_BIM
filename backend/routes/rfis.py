@@ -3,6 +3,40 @@ from db import get_db_connection, resolve_project_id
 import uuid
 import json
 from perimetro_de_obra import guardia_de_recurso
+import encargos as _enc
+
+
+def _mover_encargo(cur, objeto_id, datos, actor, etiqueta):
+    """Abre o cierra el encargo segun lo que cambie en la peticion.
+
+    Abre si llega un destinatario estructurado (`responsable_id` para una
+    persona, `responsable_funcion` para una funcion contractual). Cierra si el
+    estado pasa a uno de cierre o si se escribe una respuesta.
+
+    Ninguna de las dos claves se guarda en el objeto: solo dirigen el encargo.
+    """
+    try:
+        estado = (datos.get('estado') or '').strip().lower()
+        respuesta = (datos.get('respuesta') or '').strip()
+        if estado in ('cerrado', 'respondido', 'closed', 'answered') or respuesta:
+            _enc.cerrar_los_de(cur, 'RFI', objeto_id, actor)
+            return
+
+        uid = datos.get('responsable_id')
+        funcion = (datos.get('responsable_funcion') or '').strip().upper() or None
+        if not uid and not funcion:
+            return
+        # Reasignar cierra lo anterior: la deuda no puede quedar en dos manos.
+        _enc.cerrar_los_de(cur, 'RFI', objeto_id, actor)
+        eid = _enc.abrir(cur, 'RFI', objeto_id, etiqueta,
+                         destino_usuario=int(uid) if uid else None,
+                         destino_funcion=funcion,
+                         vence_en=datos.get('vence_en'), creado_por=actor)
+        if eid:
+            _enc.avisar(cur, eid)
+    except Exception as e:
+        import logging
+        logging.getLogger('rfi').warning('encargo no movido: %s', e)
 
 rfis_bp = Blueprint('rfis_bp', __name__)
 
@@ -132,6 +166,11 @@ def update_rfi(rfi_id):
             cursor = conn.cursor()
             cursor.execute(query, tuple(values))
             if cursor.fetchone():
+                # Misma transaccion que el UPDATE: o cambian los dos, o ninguno.
+                from flask import g as _g
+                _actor = (getattr(_g, 'current_user', None) or {}).get('email')
+                _mover_encargo(cursor, rfi_id, data, _actor,
+                               'Responder %s' % (data.get('titulo') or rfi_id))
                 conn.commit()
                 return jsonify({"message": "Updated successfully"})
             else:

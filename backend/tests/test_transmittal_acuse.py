@@ -193,3 +193,29 @@ def test_no_se_acusa_un_transmittal_de_otra_obra(api):
 def test_un_transmittal_que_no_existe_da_404(api):
     cli, _g, _f = api
     assert _acusar(cli, tid=999).status_code == 404
+
+
+def test_un_fallo_del_encargo_NO_tumba_el_acuse(api, monkeypatch):
+    """La proyeccion no puede tumbar la transicion del objeto.
+
+    Lo encontro esta misma suite: al conectar el motor de encargo, el acuse se
+    registraba correctamente y la respuesta pasaba de 200 a 500 porque fallaba
+    la actualizacion de la tabla auxiliar.
+
+    Es al reves de como tiene que ser. `encargos` es una PROYECCION de lo que el
+    objeto ya sabe: un encargo que se queda abierto de mas es molesto y VISIBLE
+    --sale en la bandeja, y `encargos.huerfanos()` lo encuentra--. Un acuse que
+    no se registra porque fallo una tabla auxiliar es informacion contractual
+    perdida.
+    """
+    import encargos
+    cli, guardado, _filas = api
+
+    def revienta(*a, **k):
+        raise RuntimeError('la base dijo que no')
+
+    monkeypatch.setattr(encargos, 'cerrar_los_de', revienta)
+
+    r = _acusar(cli)
+    assert r.status_code == 200, 'un fallo de la proyeccion tumbo el acuse'
+    assert guardado.get('acuses'), 'el acuse no llego a registrarse'

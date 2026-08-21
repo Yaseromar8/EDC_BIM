@@ -531,6 +531,12 @@ def _request_project_id():
 _SIN_OBRA_JUSTIFICADO = {
     '/api/projects': 'lista y crea obras; filtra por pertenencia dentro de la vista',
     '/api/docs/global-search': 'busca en las obras del usuario; filtra por pertenencia',
+    # «Mi Trabajo» es transversal a las obras A PROPOSITO: la pregunta «¿que
+    # debo?» no se hace obra por obra. No se salta la comprobacion de
+    # pertenencia -- la lleva DENTRO de la consulta, como `JOIN project_users`
+    # (encargos._MI_TRABAJO). Un encargo dirigido a una funcion contractual
+    # alcanza solo a quien YA es miembro de esa obra.
+    '/api/mi-trabajo': 'trabajo pendiente del usuario en TODAS sus obras; la consulta hace JOIN con project_users, asi que solo devuelve obras de las que es miembro',
     '/api/inventory/schema': 'catalogo de campos, igual para todas las obras',
     # -- Anadidas el 17-ago al preparar ENFORCE --
     #

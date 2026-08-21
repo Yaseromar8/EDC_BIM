@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import { VISOR_URL } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
+import MiTrabajo from '../components/MiTrabajo';
 import SegundoFactorPanel from '../components/SegundoFactorPanel';
 
 const ACCENT = 'var(--accent)';
@@ -133,6 +134,15 @@ export default function HubPage({ user, onChooseDocs, onLogout }) {
               onClick={openVisor}
             />
           )}
+        </div>
+
+        {/* Lo que está esperando por esta persona, en la portada.
+            Hasta ahora se entraba y se veían carpetas: nada estaba organizado
+            por quién debe hacer qué. Sólo lee, y el backend la construye
+            partiendo de la membresía, así que no muestra ni una obra de las que
+            el usuario no forme parte. */}
+        <div style={{ marginTop: 34, width: '100%', display: 'flex', justifyContent: 'center' }}>
+          <MiTrabajo compacto />
         </div>
       </main>
     </div>
