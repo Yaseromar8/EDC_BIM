@@ -2,6 +2,7 @@
 
 **Fecha:** 21 de agosto de 2026 · Continúa la investigación de docs 43–46. **No la reabre.**
 Es el mapa de control del producto: qué capa existe, con qué evidencia, y qué despierta a cada una de las que duermen.
+**Seguimiento vivo:** las dos vistas (organigrama de arquitectura · mapa de avance con el marcador «estamos aquí») viven en el **doc 63**, que gobierna el seguimiento; este documento le da el detalle por capa.
 
 **Distinción que este tablero no permite perder:** «`frontend-docs` cerrado» ≠ «producto ACC/Procore cerrado». Lo cerrado es la **FOUNDATION BACKEND** del dominio documental. Ver §3.
 
