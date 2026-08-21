@@ -85,6 +85,8 @@ def _rutinas():
     from routes.dashboards import _ensure_tables as ensure_dashboards_tables
     from routes.ai import _asegurar_tabla_cache as ensure_cache_ia
     from folder_permissions import init_folder_permissions_table
+    from integridad_referencial import ensure_claves_ajenas
+    from referencias_de_obra import ensure_tabla_referencias
 
     return [
         # ── Los 22 de server.py, en su orden ─────────────────────────────
@@ -146,6 +148,12 @@ def _rutinas():
         # por definicion: no puede correr antes que quien las crea.
         ('project_identity', ensure_project_identity_columns),
         ('columnas_pendientes', ensure_columnas_pendientes),
+        # `project_ref` traduce cada alias historico a su obra. Necesita
+        # `projects` creada, porque cuelga de ella con una clave ajena.
+        ('referencias_de_obra', ensure_tabla_referencias),
+        # Las claves ajenas van LAS ULTIMAS: no se puede referenciar una
+        # tabla que todavia no existe.
+        ('integridad_referencial', ensure_claves_ajenas),
     ]
 
 

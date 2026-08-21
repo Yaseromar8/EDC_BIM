@@ -4858,7 +4858,14 @@ function App() {
                   onRemoveDoc={(id, docId) => handleRemoveDocFromPin(id, docId, trackingTab)}
                   onRename={(id, newTitle) => handleTrackingPinUpdate(trackingTab, id, { val: newTitle })}
                   projectPrefix={selectedProject?.baseName ? `proyectos/${selectedProject.baseName.replace(/ /g, '_')}/` : 'proyectos/'}
-                  modelUrn={selectedProject?.baseName ? `proyectos/${selectedProject.baseName.replace(/ /g, '_')}` : 'global'}
+                  /* El ALCANCE con el que se guarda lo llega decidido del servidor
+                     (`scope_escritura`). Antes se fabricaba aqui a partir del nombre
+                     visible de la obra: renombrarla movia el alcance de todo lo que se
+                     escribiera despues, y dos entidades con una obra del mismo nombre
+                     producian el mismo identificador. `projectPrefix` de arriba SI
+                     sigue derivandose del nombre, y debe: es la ruta de CARPETAS que
+                     se navega, no la obra a la que pertenece el dato. */
+                  modelUrn={selectedProject?.scope_escritura || selectedProject?.id || 'global'}
                 />
               </div>
             )}

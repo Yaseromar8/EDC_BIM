@@ -55,7 +55,8 @@ def _obras_conocidas(*ids):
     import time
     import db
     db._project_resolver_cache['map'] = {
-        'by_id': {i: i for i in ids}, 'by_name': {}, 'default': None,
+        'by_ref': {}, 'by_id': {i: i for i in ids}, 'by_dataset': {},
+        'prefijables': {i: i for i in ids},
     }
     db._project_resolver_cache['ts'] = time.time()
 

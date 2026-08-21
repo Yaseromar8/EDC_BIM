@@ -44,10 +44,11 @@ def entorno(monkeypatch):
     importlib.reload(db)
     # El mapa que el cargador sacaria de projects + model_config.
     db._project_resolver_cache['map'] = {
+        'by_ref': {},
         'by_id': {OBRA_A: OBRA_A, OBRA_B: OBRA_B},
-        'by_name': {},
         'by_urn': {v: OBRA_B for v in db._variantes_de_urn(URN_B)},
-        'default': None,
+        'by_dataset': {},
+        'prefijables': {OBRA_A: OBRA_A, OBRA_B: OBRA_B},
     }
     db._project_resolver_cache['ts'] = 10 ** 12   # que no caduque durante la prueba
 

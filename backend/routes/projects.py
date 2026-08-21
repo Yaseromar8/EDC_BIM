@@ -193,6 +193,8 @@ def list_hubs():
                 GROUP BY h.id
                 ORDER BY h.name
             """)
+            from referencias_de_obra import mapa_de_escritura
+            _escritura = mapa_de_escritura(cursor)
             rows = cursor.fetchall()
             hubs = [{
                 "id": r[0], "name": r[1], "region": r[2],
@@ -220,12 +222,28 @@ def create_hub():
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            # `RETURNING id` en vez de dar por hecho que se inserto.
+            #
+            # Estaba `ON CONFLICT DO NOTHING` seguido de un 201 incondicional. El
+            # id se acuna con `int(time.time()) % 100000`, un sufijo que DA LA
+            # VUELTA CADA 27,7 HORAS: dos carteras con el mismo nombre creadas
+            # con esa separacion producen el mismo id, la segunda insercion no
+            # hacia nada, y la respuesta contestaba «201 Creado» devolviendo el
+            # id de la PRIMERA. Quien la creaba se quedaba trabajando dentro de
+            # la cartera de otro, sin error y sin rastro.
             cursor.execute("""
                 INSERT INTO hubs (id, name, region, logo_url)
                 VALUES (%s, %s, %s, %s)
                 ON CONFLICT (id) DO NOTHING
+                RETURNING id
             """, (hub_id, data['name'], data.get('region'), data.get('logo_url')))
+            creada = cursor.fetchone()
             conn.commit()
+        if not creada:
+            return jsonify({
+                'error': 'Ya existe una cartera con ese identificador. '
+                         'Vuelve a intentarlo con otro nombre.',
+                'code': 'HUB_DUPLICADO'}), 409
         _auditar('portafolio_creado', hub_id, f"nombre='{data['name']}'")
         return jsonify({"id": hub_id, "name": data['name']}), 201
     except Exception as e:
@@ -281,10 +299,18 @@ def list_all_projects():
             query += " ORDER BY h.name, p.name"
             
             cursor.execute(query, params)
+            from referencias_de_obra import mapa_de_escritura
+            _escritura = mapa_de_escritura(cursor)
             rows = cursor.fetchall()
             projects = [{
                 "id": r[0], "hub_id": r[1], "name": r[2], "description": r[3],
                 "model_urn": r[4], "thumbnail_url": r[5], "status": r[6],
+                # Con QUE alcance hay que guardar lo nuevo de esta obra.
+                # Lo decide el servidor midiendo donde vive ya el expediente;
+                # el navegador NO lo deriva del nombre visible, que es
+                # editable y hacia que renombrar una obra moviese el alcance
+                # de todo lo que se escribiera despues.
+                "scope_escritura": _escritura.get(r[0]) or r[0],
                 "project_type": r[7],
                 "start_date": r[8].isoformat() if r[8] else None,
                 "end_date": r[9].isoformat() if r[9] else None,
@@ -314,10 +340,18 @@ def list_hub_projects(hub_id):
                 WHERE hub_id = %s AND status != 'archived'
                 ORDER BY name
             """, (hub_id,))
+            from referencias_de_obra import mapa_de_escritura
+            _escritura = mapa_de_escritura(cursor)
             rows = cursor.fetchall()
             projects = [{
                 "id": r[0], "hub_id": r[1], "name": r[2], "description": r[3],
                 "model_urn": r[4], "thumbnail_url": r[5], "status": r[6],
+                # Con QUE alcance hay que guardar lo nuevo de esta obra.
+                # Lo decide el servidor midiendo donde vive ya el expediente;
+                # el navegador NO lo deriva del nombre visible, que es
+                # editable y hacia que renombrar una obra moviese el alcance
+                # de todo lo que se escribiera despues.
+                "scope_escritura": _escritura.get(r[0]) or r[0],
                 "project_type": r[7],
                 "start_date": r[8].isoformat() if r[8] else None,
                 "end_date": r[9].isoformat() if r[9] else None,
@@ -363,6 +397,23 @@ def create_hub_project(hub_id):
                 json.dumps(data.get('metadata', {})),
                 invite_code
             ))
+
+            # Los alias de la obra se registran EN EL MISMO MOMENTO en que la
+            # obra nace. Si se dejara para despues habria una ventana en la que
+            # existe una obra cuyos alias no estan en `project_ref`, y en esa
+            # ventana su alcance no resolveria -- que es exactamente el agujero
+            # que esta tabla existe para cerrar.
+            try:
+                from referencias_de_obra import registrar_obra
+                registrar_obra(cursor, proj_id, nombre=data['name'],
+                               model_urn=data.get('model_urn'),
+                               origen='alta de obra')
+            except Exception as e:
+                # No se traga en silencio: si los alias no se registran, la obra
+                # nace sin poder resolverse y hay que saberlo.
+                conn.rollback()
+                return jsonify({'error': 'No se pudieron registrar las '
+                                         'referencias de la obra: %s' % e}), 500
             conn.commit()
 
             # Auto-crear estructura profesional estilo ACC (ISO 19650)
@@ -385,7 +436,11 @@ def create_hub_project(hub_id):
 
         _auditar('obra_creada', proj_id, f"nombre='{data['name']}' hub={hub_id}")
         # Retornar model_urn para que los frontends lo usen como fuente de verdad
-        return jsonify({"id": proj_id, "hub_id": hub_id, "name": data['name'], "model_urn": data.get('model_urn', proj_id)}), 201
+        # Una obra nueva escribe con su propio id: no tiene historia que
+        # partir, asi que no hereda el alcance derivado del nombre.
+        return jsonify({"id": proj_id, "hub_id": hub_id, "name": data['name'],
+                        "model_urn": data.get('model_urn', proj_id),
+                        "scope_escritura": proj_id}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -417,6 +472,12 @@ def get_project(project_id):
             return jsonify({
                 "id": r[0], "hub_id": r[1], "name": r[2], "description": r[3],
                 "model_urn": r[4], "thumbnail_url": r[5], "status": r[6],
+                # Con QUE alcance hay que guardar lo nuevo de esta obra.
+                # Lo decide el servidor midiendo donde vive ya el expediente;
+                # el navegador NO lo deriva del nombre visible, que es
+                # editable y hacia que renombrar una obra moviese el alcance
+                # de todo lo que se escribiera despues.
+                "scope_escritura": _escritura.get(r[0]) or r[0],
                 "project_type": r[7],
                 "start_date": r[8].isoformat() if r[8] else None,
                 "end_date": r[9].isoformat() if r[9] else None,

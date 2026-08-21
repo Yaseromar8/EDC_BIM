@@ -1034,108 +1034,189 @@ def _variantes_de_urn(valor):
 
 
 def _load_project_resolver():
+    """Carga los mapas de traduccion. La AUTORIDAD es `project_ref`.
+
+    Cuatro fuentes, todas deterministas, en orden de autoridad:
+
+      by_ref     `project_ref`: una fila por alias, decidida explicitamente.
+      by_id      los propios `projects.id`.
+      by_urn     `model_config`: el REGISTRO de modelos por obra.
+      by_dataset `lob_datasets`: el REGISTRO de datasets 4D por obra.
+
+    Lo que se QUITO respecto de la version anterior, y por que:
+
+      by_name    La coincidencia por nombre de obra. `projects` no tiene UNIQUE
+                 sobre `name`, y hoy hay CUATRO obras llamadas
+                 'HOSPITAL_MATUCANA': el resultado dependia del orden en que la
+                 base devolviera las filas. Los nombres que de verdad hacen
+                 falta estan ahora en `project_ref` como LEGACY_NAME, uno a uno
+                 y decididos, no adivinados.
+
+      default    «Si hay UNA sola obra activa, esa». Resolvia todo por accidente
+                 mientras solo hubiera una obra, y cambiaba el comportamiento de
+                 medio sistema el dia que entrara la segunda.
+
+    Se sigue SIN deducir obras de las tablas de datos (inventory_assets,
+    doc_partidas, tracking_pins...): quien pueda escribir una fila ahi elegiria
+    a que obra pertenece su peticion.
+    """
     import time as _time
     now = _time.time()
     if _project_resolver_cache['map'] is not None and now - _project_resolver_cache['ts'] < _PROJECT_RESOLVER_TTL:
         return _project_resolver_cache['map']
-    by_id, by_name, by_urn, active = {}, {}, {}, []
+    by_id, by_ref, by_urn, by_dataset, prefijables = {}, {}, {}, {}, {}
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT id, name, status FROM projects")
-            for pid, name, status in cur.fetchall():
+            cur.execute("SELECT id FROM projects")
+            for (pid,) in cur.fetchall():
                 by_id[pid] = pid
-                if name:
-                    by_name[name] = pid
-                if status == 'active':
-                    active.append(pid)
+                prefijables[pid] = pid
 
-            # ── El mapa que faltaba: URN DEL MODELO -> OBRA ──────────────
+            # -- La tabla de referencias: manda sobre todo lo demas --------
+            cur.execute("SELECT to_regclass('public.project_ref')")
+            if cur.fetchone()[0]:
+                from referencias_de_obra import cargar, CUENTA_DE_ESTA_INSTANCIA
+                by_ref, solo_proyectos = cargar(cur, CUENTA_DE_ESTA_INSTANCIA)
+                prefijables.update(solo_proyectos)
+
+            # Base determinista para traducir lo que traen los registros. Se
+            # deja `by_urn` vacio a proposito: si el propio registro se
+            # consultara mientras se construye, el resultado dependeria del
+            # orden en que la base devolviera las filas.
+            base = {'by_ref': by_ref, 'by_id': by_id, 'by_urn': {},
+                    'by_dataset': {}, 'prefijables': prefijables}
+
+            # -- Registro de modelos: URN DEL MODELO -> OBRA ---------------
             # Sin esto el resolutor no entendia el identificador con el que se
-            # direcciona CASI TODO el sistema, asi que devolvia None para
-            # cualquier model_urn y el control central de obra no llegaba a
-            # comprobar nada. Medido: un usuario de la obra A leia y ESCRIBIA
-            # en 11 familias de rutas de la obra B, y encender
-            # ENFORCE_PROJECT_AUTHZ no lo impedia.
-            #
-            # SOLO se lee model_config, que es el REGISTRO de modelos por obra.
-            # Deliberadamente NO se deducen obras de las tablas de datos
-            # (inventory_assets, doc_partidas, tracking_pins...): quien pueda
-            # escribir una fila ahi elegiria a que obra pertenece su peticion,
-            # y la comprobacion de acceso se decidiria con datos que controla
-            # el atacante.
+            # direcciona CASI TODO el sistema. Medido en su dia: un usuario de
+            # la obra A leia y ESCRIBIA en 11 familias de rutas de la obra B.
             cur.execute("SELECT to_regclass('public.model_config')")
             if cur.fetchone()[0]:
                 cur.execute("SELECT urn, model_id, app_project_id, project_id FROM model_config")
                 for urn, model_id, app_pid, acc_pid in cur.fetchall():
-                    obra = app_pid if app_pid in by_id else None
+                    # `app_project_id` no siempre es un `projects.id`: en los
+                    # datos reales vale '1_DRENAJE', que es un FRENTE. Exigir
+                    # que estuviera en `by_id` descartaba el registro entero, y
+                    # con el se perdia la traduccion del id de ACC que guarda
+                    # `model_config.project_id`. Ahora se traduce como cualquier
+                    # otro alcance.
+                    obra = _traducir(base, app_pid)
                     if not obra:
                         continue
                     for clave in (urn, model_id, acc_pid):
                         for variante in _variantes_de_urn(clave):
                             by_urn[variante] = obra
+
+            parcial = dict(base, by_urn=by_urn)
+
+            # -- Registro de datasets 4D: UUID -> OBRA ---------------------
+            # Once tablas del 4D LOB (mas de 40.000 filas medidas) NO tienen
+            # ninguna columna de obra: solo `dataset_id`. Sin esta traduccion,
+            # con ENFORCE encendido el modulo entero contestaba 403 porque su
+            # alcance no era resoluble.
+            #
+            # SE EXIGE QUE LAS DOS SENALES COINCIDAN. `lob_datasets.project_id`
+            # sale de `request.form.get('project_id')` (routes/lob4d.py:373):
+            # lo declara quien llama. Esta gateado por pertenencia
+            # (`_assert_project_access`), asi que nadie puede atribuirle una
+            # obra ajena -- pero quien sea miembro de DOS obras si podria
+            # declarar una y traer el alcance de la otra. Cuando el alcance y
+            # la obra declarada no dicen lo mismo, no se elige: no resuelve.
+            cur.execute("SELECT to_regclass('public.lob_datasets')")
+            if cur.fetchone()[0]:
+                cur.execute("SELECT id, project_id, scope_urn FROM lob_datasets")
+                for ds_id, declarada, alcance in cur.fetchall():
+                    obra_declarada = _traducir(parcial, declarada)
+                    obra_del_alcance = _traducir(parcial, alcance)
+                    if obra_declarada and obra_declarada == obra_del_alcance:
+                        by_dataset[str(ds_id)] = obra_declarada
+                    elif obra_declarada or obra_del_alcance:
+                        logger.warning(
+                            '[resolver] dataset %s no resuelve: declara obra %s '
+                            'y su alcance %s apunta a %s', ds_id, obra_declarada,
+                            alcance, obra_del_alcance)
     except Exception as e:
         print(f"[DB] resolve_project_id: no se pudo cargar projects: {e}")
-        return _project_resolver_cache['map'] or {'by_id': {}, 'by_name': {}, 'by_urn': {}, 'default': None}
-    resolved = {'by_id': by_id, 'by_name': by_name, 'by_urn': by_urn,
-                'default': active[0] if len(active) == 1 else None}
+        return _project_resolver_cache['map'] or {
+            'by_ref': {}, 'by_id': {}, 'by_urn': {}, 'by_dataset': {}, 'prefijables': {}}
+    resolved = {'by_ref': by_ref, 'by_id': by_id, 'by_urn': by_urn,
+                'by_dataset': by_dataset, 'prefijables': prefijables}
     _project_resolver_cache['map'] = resolved
     _project_resolver_cache['ts'] = now
     return resolved
 
 
+def _traducir(m, texto):
+    """Traduccion determinista con los mapas ya cargados. None si no se sabe.
+
+    Nunca elige entre candidatos empatados y nunca cae en un valor por defecto:
+    o hay una respuesta unica, o no hay respuesta.
+    """
+    if not texto:
+        return None
+    texto = str(texto).strip()
+    if not texto:
+        return None
+
+    # Se leen los mapas con `.get`, y `prefijables` cae en `by_id`.
+    #
+    # No es por comodidad: si a este diccionario le falta una clave, un acceso
+    # directo lanza KeyError, `resolve_project_id` lo atrapa en su `except` y
+    # devuelve None -- es decir, DEJA DE RESOLVER TODO, en silencio, y el
+    # sintoma que se ve es «nadie tiene acceso a nada». Un mapa incompleto tiene
+    # que degradar lo que le falte, no apagar la traduccion entera.
+    by_ref = m.get('by_ref') or {}
+    by_id = m.get('by_id') or {}
+    by_urn = m.get('by_urn') or {}
+    by_dataset = m.get('by_dataset') or {}
+    prefijables = m.get('prefijables')
+    if prefijables is None:
+        prefijables = by_id
+
+    # 1. La tabla de referencias manda.
+    for variante in _variantes_de_urn(texto):
+        if variante in by_ref:
+            return by_ref[variante]
+
+    # 2. El alcance ES el id de una obra.
+    if texto in by_id:
+        return texto
+
+    # 3. Registro de modelos.
+    for variante in _variantes_de_urn(texto):
+        if variante in by_urn:
+            return by_urn[variante]
+
+    # 4. Registro de datasets 4D.
+    if texto in by_dataset:
+        return by_dataset[texto]
+
+    # 5. Prefijo mas largo: la convencion de alcance es '<obra>_<FRENTE>'.
+    #    Se busca el MAS LARGO porque los ids reales
+    #    ('b.proj_<slug>_<sufijo>') ya contienen guiones bajos: partir por el
+    #    primero devolvia siempre 'b.proj', que no es ninguna obra.
+    candidatos = [alias for alias in prefijables if texto.startswith(alias + '_')]
+    if candidatos:
+        return prefijables[max(candidatos, key=len)]
+
+    return None
+
+
 def resolve_project_id(frente):
-    """Resuelve un 'frente' (model_urn/app_project_id) a la obra canonica (projects.id).
+    """Resuelve un alcance (model_urn / scope_urn / dataset_id) a `projects.id`.
+
     Devuelve None si no se puede resolver. Nunca lanza.
 
-    Dos correcciones importantes respecto de la version anterior:
-
-    1) LA REGLA DE PREFIJO ESTABA MUERTA. Hacia split('_', 1)[0], pero los ids
-       reales son 'b.proj_<slug>_<timestamp>' (routes/projects.py), que YA
-       contienen guiones bajos: para el scope '<projects.id>_<FRENTE>' devolvia
-       siempre 'b.proj', que no es ninguna obra. Ahora se busca el id de obra
-       MAS LARGO que sea prefijo del frente, que es lo que la convencion
-       '<id>_<FRENTE>' significa de verdad.
-
-    2) LO NO RECONOCIDO YA NO SE ATRIBUYE A LA OBRA POR DEFECTO. Antes, un
-       frente desconocido caia en m['default']; con una sola obra activa eso
-       hacia que TODO se resolviera por accidente a esa obra — y el dia que
-       entrara la segunda, la mitad del sistema cambiaria de comportamiento a la
-       vez. Devolver None es honesto: deja el hueco visible en los logs de authz
-       en vez de fabricar una respuesta plausible y equivocada.
+    'global' YA NO resuelve. Antes caia en «la unica obra activa», y por eso
+    parecia funcionar: mientras hubiera una sola obra, cualquier cosa
+    desconocida acababa en ella. Hay mas de 4.000 filas de datos reales
+    guardadas bajo 'global', y esa deuda no se salda adivinando: se salda
+    atribuyendolas a su obra en `project_ref`, que es una decision y queda
+    escrita. Mientras no se haga, esas peticiones aparecen como hueco en los
+    registros de autorizacion, que es donde tienen que verse.
     """
     try:
-        m = _load_project_resolver()
-        if not frente or frente == 'global':
-            # 'global' es el namespace sin obra. Se mantiene el default (solo
-            # existe si hay UNA obra activa) por compatibilidad con los datos ya
-            # guardados ahi, pero es deuda: hay datos reales de obra viviendo en
-            # 'global' y habria que migrarlos a su obra.
-            return m['default']
-
-        texto = str(frente)
-
-        # Coincidencia exacta primero (el frente ES la obra).
-        if texto in m['by_id']:
-            return texto
-
-        # El frente es un modelo registrado: se traduce por el registro.
-        mapa_urn = m.get('by_urn') or {}
-        for variante in _variantes_de_urn(texto):
-            if variante in mapa_urn:
-                return mapa_urn[variante]
-
-        # Prefijo mas largo: la convencion de scope es '<projects.id>_<FRENTE>'.
-        candidatos = [pid for pid in m['by_id'] if texto.startswith(pid + '_')]
-        if candidatos:
-            return max(candidatos, key=len)
-
-        tail = texto.split('/')[-1]
-        if tail in m['by_name']:
-            return m['by_name'][tail]
-        if texto in m['by_name']:
-            return m['by_name'][texto]
-
-        return None   # no resoluble: hueco visible, no adivinanza silenciosa
+        return _traducir(_load_project_resolver(), frente)
     except Exception:
         return None

@@ -80,6 +80,7 @@ tabla	photo_evidences
 tabla	plan_entregas
 tabla	presupuesto_maestro
 tabla	project_frentes
+tabla	project_ref
 tabla	project_settings
 tabla	project_users
 tabla	projects
@@ -782,6 +783,14 @@ columna	project_frentes.front_type
 columna	project_frentes.icon
 columna	project_frentes.id
 columna	project_frentes.name
+columna	project_ref.account_id
+columna	project_ref.alias
+columna	project_ref.creado_en
+columna	project_ref.es_escritura
+columna	project_ref.kind
+columna	project_ref.model_code
+columna	project_ref.origen
+columna	project_ref.project_id
 columna	project_settings.created_at
 columna	project_settings.enforce_depth
 columna	project_settings.enforce_naming
@@ -1333,13 +1342,25 @@ restriccion	project_frentes not null id
 restriccion	project_frentes not null name
 restriccion	project_frentes primary key (id)
 restriccion	project_frentes unique (base_project_id, front_id)
+restriccion	project_ref foreign key (project_id) references projects(id) on delete cascade
+restriccion	project_ref not null account_id
+restriccion	project_ref not null alias
+restriccion	project_ref not null creado_en
+restriccion	project_ref not null es_escritura
+restriccion	project_ref not null kind
+restriccion	project_ref not null origen
+restriccion	project_ref not null project_id
+restriccion	project_ref primary key (account_id, alias)
 restriccion	project_settings not null id
 restriccion	project_settings not null model_urn
 restriccion	project_settings primary key (id)
 restriccion	project_settings unique (model_urn)
+restriccion	project_users foreign key (project_id) references projects(id) on delete cascade
+restriccion	project_users foreign key (user_id) references users(id) on delete cascade
 restriccion	project_users not null project_id
 restriccion	project_users not null user_id
 restriccion	project_users primary key (project_id, user_id)
+restriccion	projects foreign key (hub_id) references hubs(id) on delete restrict
 restriccion	projects not null id
 restriccion	projects not null name
 restriccion	projects primary key (id)
@@ -1434,6 +1455,7 @@ indice	create index on public.presupuesto_maestro using btree (item)
 indice	create index on public.presupuesto_maestro using btree (model_urn)
 indice	create index on public.presupuesto_maestro using btree (parent_item)
 indice	create index on public.presupuesto_maestro using btree (project_id)
+indice	create index on public.project_ref using btree (project_id)
 indice	create index on public.project_users using btree (user_id, project_id)
 indice	create index on public.projects using btree (model_urn)
 indice	create index on public.projects using btree (name)
@@ -1543,6 +1565,8 @@ indice	create unique index on public.presupuesto_maestro using btree (id)
 indice	create unique index on public.presupuesto_maestro using btree (model_urn, item)
 indice	create unique index on public.project_frentes using btree (base_project_id, front_id)
 indice	create unique index on public.project_frentes using btree (id)
+indice	create unique index on public.project_ref using btree (account_id, alias)
+indice	create unique index on public.project_ref using btree (account_id, project_id) where es_escritura
 indice	create unique index on public.project_settings using btree (id)
 indice	create unique index on public.project_settings using btree (model_urn)
 indice	create unique index on public.project_users using btree (project_id, user_id)

@@ -423,7 +423,14 @@ _CLAVES_OBRA = ('project_id', 'model_urn', 'scope_urn', 'scope', 'project', 'tar
                 # Estaba 'base_project_id' pero no 'base', asi que esa pantalla
                 # no resolvia obra y bajo ENFORCE se habria quedado sin frentes.
                 'base',
-                'source_urn', 'model_id', 'oldUrn', 'newModel')
+                'source_urn', 'model_id', 'oldUrn', 'newModel',
+                # 'dataset_id': el 4D LOB direcciona por el UUID del dataset, y
+                # ONCE de sus tablas (mas de 40.000 filas medidas) no tienen
+                # ninguna otra columna de obra. Sin esta clave, `/api/lob` --que
+                # SI esta en _PROJECT_SCOPED_PREFIXES-- no resolvia obra nunca:
+                # con ENFORCE encendido el modulo entero habria contestado 403
+                # PROJECT_UNRESOLVED a todo el que no fuera administrador.
+                'dataset_id', 'datasetId')
 
 
 def _primer_valor(origen):

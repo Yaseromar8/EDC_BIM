@@ -30,9 +30,9 @@ def entorno(monkeypatch):
     import db
     importlib.reload(db)
     db._project_resolver_cache['map'] = {
-        'by_id': {OBRA_A: OBRA_A, OBRA_B: OBRA_B},
-        'by_name': {}, 'by_urn': {'urn:MODELO_B': OBRA_B, 'urn:MODELO_A': OBRA_A},
-        'default': None,
+        'by_ref': {}, 'by_id': {OBRA_A: OBRA_A, OBRA_B: OBRA_B},
+        'by_urn': {'urn:MODELO_B': OBRA_B, 'urn:MODELO_A': OBRA_A},
+        'by_dataset': {}, 'prefijables': {OBRA_A: OBRA_A, OBRA_B: OBRA_B},
     }
     db._project_resolver_cache['ts'] = 10 ** 12
 

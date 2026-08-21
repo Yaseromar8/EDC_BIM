@@ -68,10 +68,31 @@ def test_lo_que_toca_tablas_ajenas_va_al_final_del_bootstrap():
         'exista')
 
 
-def test_las_columnas_pendientes_siguen_siendo_las_ultimas():
+def test_el_final_del_bootstrap_respeta_sus_dependencias():
+    """Los ultimos pasos no son intercambiables, y el orden importa por un
+    motivo concreto en cada caso -- no porque «siempre han ido ahi».
+
+    Esta prueba comprobaba `orden[-1] == 'columnas_pendientes'`: una POSICION.
+    Al anadir las claves ajenas fallo, y no porque nada se hubiera roto, sino
+    porque una asercion posicional no sabe distinguir «se colo algo indebido»
+    de «entro algo que tambien tiene que ir al final». Ahora comprueba la
+    DEPENDENCIA, que es lo que de verdad no puede violarse.
+    """
     boot = _fuente('bootstrap_esquema.py')
     orden = [m.group(1) for m in re.finditer(r"\(\s*'([a-z0-9_]+)'\s*,\s*\w+\)", boot)]
-    assert orden[-1] == 'columnas_pendientes'
+
+    # `columnas_pendientes` hace ALTER TABLE sobre tablas de otras rutinas.
+    assert 'columnas_pendientes' in orden
+    assert orden.index('columnas_pendientes') > orden.index('project_identity')
+
+    # Y las claves ajenas van DESPUES incluso de eso: una clave ajena no puede
+    # referenciar una columna que `columnas_pendientes` todavia no ha creado.
+    assert 'integridad_referencial' in orden, (
+        'el paso que crea las claves ajenas desaparecio del arranque')
+    assert orden.index('integridad_referencial') > orden.index('columnas_pendientes'), (
+        'las claves ajenas necesitan que las columnas ya existan')
+    assert orden[-1] == 'integridad_referencial', (
+        'nada que cree tablas o columnas puede correr despues de las claves ajenas')
 
 
 def test_el_bootstrap_cubre_las_tablas_que_el_codigo_sabe_crear():

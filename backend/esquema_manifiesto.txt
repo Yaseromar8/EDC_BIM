@@ -79,6 +79,7 @@ photo_evidences
 plan_entregas
 presupuesto_maestro
 project_frentes
+project_ref
 project_settings
 project_users
 projects

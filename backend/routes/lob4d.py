@@ -53,7 +53,24 @@ def _user_label():
 def _scope_context(raw_scope, project_id=None, front_id=None):
     scope = normalize_scope(raw_scope)
     from db import resolve_project_id
-    canonical_project = str(project_id or resolve_project_id(scope) or '').strip()
+    del_alcance = resolve_project_id(scope)
+    declarado = str(project_id or '').strip()
+
+    # Si quien llama DECLARA una obra y el alcance dice otra, no se elige.
+    #
+    # Antes bastaba con `project_id or resolve_project_id(scope)`: el valor del
+    # formulario ganaba siempre y el alcance ni se miraba. La pertenencia se
+    # comprueba despues contra la obra DECLARADA (`_assert_project_access`), asi
+    # que nadie podia atribuirse una obra ajena -- pero quien fuera miembro de
+    # dos obras si podia publicar un dataset declarando la obra A mientras
+    # traia el alcance de la B. Ese dataset quedaba archivado bajo A, y desde
+    # ese momento cualquier miembro de A alcanzaba datos de B.
+    if declarado and del_alcance and declarado != del_alcance:
+        raise ValueError(
+            'La obra declarada (%s) no es la del alcance «%s» (%s).'
+            % (declarado, scope, del_alcance))
+
+    canonical_project = declarado or str(del_alcance or '').strip()
     if not canonical_project:
         raise ValueError('No se pudo resolver el proyecto canonico del frente.')
     if not front_id:
