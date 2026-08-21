@@ -222,7 +222,7 @@ def contra_la_base(host, puerto, base, usuario, solo_e1=False):
         UNION ALL
         SELECT CASE c.relkind WHEN 'S' THEN 'secuencia'
                               WHEN 'i' THEN 'indice' WHEN 'I' THEN 'indice'
-                              WHEN 'v' THEN 'vista' WHEN 'm' THEN 'vista'
+                              WHEN 'v' THEN 'vista' WHEN 'm' THEN 'vista mat.'
                               ELSE 'tabla' END,
                pg_get_userbyid(c.relowner), count(*)
           FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
@@ -238,15 +238,24 @@ def contra_la_base(host, puerto, base, usuario, solo_e1=False):
         _p('   %-11s %-24s %4d' % (clase, owner, n))
     _p()
 
-    cur.execute("""SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname='ecd_app')
-                     THEN has_schema_privilege('ecd_app','public','CREATE')::text
-                     ELSE 'rol inexistente' END,
-                          CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname='ecd_app')
-                     THEN has_table_privilege('ecd_app','activity_log','UPDATE')::text
-                     ELSE 'rol inexistente' END""")
-    a, b = cur.fetchone()
-    _p('ecd_app CREATE sobre public : %s' % a)
-    _p('ecd_app UPDATE activity_log : %s' % b)
+    # Los privilegios que deciden la separacion, uno a uno y tolerantes:
+    # `has_*_privilege` sobre un rol inexistente ABORTA la consulta entera,
+    # asi que cada uno va tras su comprobacion de existencia.
+    def _priv(expr):
+        cur.execute("""SELECT CASE WHEN EXISTS
+                          (SELECT 1 FROM pg_roles WHERE rolname='ecd_app')
+                          THEN %s::text ELSE 'rol inexistente' END""" % expr)
+        return cur.fetchone()[0]
+
+    _p('ecd_app CREATE sobre public   : %s'
+       % _priv("has_schema_privilege('ecd_app','public','CREATE')"))
+    _p('ecd_app CREATE sobre ai_brain : %s'
+       % _priv("has_schema_privilege('ecd_app','ai_brain','CREATE')"))
+    for tabla in ('activity_log', 'auth_events'):
+        for accion in ('UPDATE', 'DELETE'):
+            _p('ecd_app %-6s %-12s : %s'
+               % (accion, tabla,
+                  _priv("has_table_privilege('ecd_app','%s','%s')" % (tabla, accion))))
     cur.execute("""SELECT grantee, privilege_type, count(*)
                      FROM information_schema.table_privileges
                     WHERE grantee IN ('ecd_app','ecd_migrator')
