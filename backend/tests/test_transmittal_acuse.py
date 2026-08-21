@@ -87,12 +87,23 @@ def api(monkeypatch):
         quien = request.headers.get('X-Quien', 'supervision')
         if quien == 'anonimo':
             return
+        # CADA PERSONA CON SU IDENTIDAD.
+        #
+        # Este doble daba `id: 3` a las TRES, asi que
+        # `test_dos_personas_distintas_suman_dos_acuses` decia «dos personas
+        # distintas» mientras usaba una sola identidad. Mientras el acuse se
+        # cotejaba por texto no se notaba; en cuanto paso a cotejarse por
+        # identidad, el segundo acuse quedaba --correctamente-- como repetido.
+        # Una prueba que se llama «dos personas distintas» tiene que usarlas.
         gente = {
-            'supervision': {'email': 'supervision@cliente.pe', 'name': 'Supervisión', 'role': 'user'},
-            'ajeno': {'email': 'nadie@otra.pe', 'name': 'Nadie', 'role': 'user'},
-            'admin': {'email': 'jefe@obra.pe', 'name': 'Jefe de obra', 'role': 'admin'},
+            'supervision': {'id': 3, 'email': 'supervision@cliente.pe',
+                            'name': 'Supervisión', 'role': 'user'},
+            'ajeno': {'id': 4, 'email': 'nadie@otra.pe', 'name': 'Nadie',
+                      'role': 'user'},
+            'admin': {'id': 5, 'email': 'jefe@obra.pe', 'name': 'Jefe de obra',
+                      'role': 'admin'},
         }
-        g.current_user = {'id': 3, **gente[quien]}
+        g.current_user = dict(gente[quien])
 
     return app.test_client(), guardado, filas
 

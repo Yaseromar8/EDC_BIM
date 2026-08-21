@@ -428,11 +428,43 @@ class TipoNoInterpretable(Exception):
     """Hay encargos de un tipo que este modulo no sabe cotejar."""
 
 
-def _acuso(acuses, email, nombre):
+def _acuso(acuses, email, nombre, user_id=None):
+    """¿Esta persona ya acuso recibo de esta emision?
+
+    IDENTIDAD ESTRICTA CUANDO LA HAY. Un acuse emitido por el producto actual
+    lleva `por_id`; ahi la respuesta es una comparacion de identidades y NO hay
+    respaldo por nombre ni por correo. Cotejar nombres dejaba que el acuse de un
+    HOMONIMO cerrara el encargo de otra persona -- y un encargo cerrado por
+    error desaparece de la bandeja de quien todavia lo debe, que es la peor
+    forma de perderlo: sin ruido.
+
+    El respaldo por texto se conserva SOLO para los acuses LEGACY, que no tienen
+    `por_id`. No se convierten: adivinar a quien se referia un nombre escrito
+    hace meses seria inferir sobre el expediente.
+
+    Es la misma correccion que ya se hizo en `_es_destinatario`, del otro lado
+    del mismo objeto.
+    """
     correo = (email or '').strip().lower()
     nom = (nombre or '').strip().lower()
+    try:
+        user_id = int(user_id) if user_id is not None else None
+    except (TypeError, ValueError):
+        user_id = None
+
     for a in (acuses or []):
-        por = str((a or {}).get('por') or '').strip().lower()
+        a = a or {}
+        if a.get('por_id') is not None:
+            # Acuse CON identidad: solo decide la identidad.
+            try:
+                if user_id is not None and int(a['por_id']) == user_id:
+                    return True
+            except (TypeError, ValueError):
+                pass
+            continue
+
+        # -- Respaldo SOLO para acuses legacy, sin `por_id` --
+        por = str(a.get('por') or '').strip().lower()
         if por and (por == correo or por == nom):
             return True
     return False
@@ -488,7 +520,8 @@ def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
         u = cur.fetchone()
         if not u:
             return True
-        return not _acuso(fila[0], u[0], u[1])
+        # Se pasa el ID: si el acuse lo lleva, decide el, y el nombre no cuenta.
+        return not _acuso(fila[0], u[0], u[1], destino_usuario)
 
     return None
 
@@ -621,8 +654,19 @@ def _faltantes(cur):
         for r in (recipients or []):
             correo = r.get('email') if isinstance(r, dict) else r
             nombre = r.get('name') if isinstance(r, dict) else None
-            uid = usuario_por_email(cur, correo)
-            if not uid or _acuso(acuses, correo, nombre):
+            # EL `user_id` DEL DESTINATARIO MANDA, si la emision lo lleva. Las
+            # emisiones nuevas lo guardan; buscar por correo cuando ya se sabe
+            # quien es seria volver a resolver una identidad ya resuelta -- y
+            # dos cuentas pueden compartir correo si alguna vez se permite.
+            uid = None
+            if isinstance(r, dict) and r.get('user_id'):
+                try:
+                    uid = int(r['user_id'])
+                except (TypeError, ValueError):
+                    uid = None
+            if uid is None:
+                uid = usuario_por_email(cur, correo)      # emision legacy
+            if not uid or _acuso(acuses, correo, nombre, uid):
                 continue
             cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='TRANSMITTAL' AND objeto_id=%s "
                         "   AND destino_usuario=%s AND estado='abierto'", (str(tid), uid))

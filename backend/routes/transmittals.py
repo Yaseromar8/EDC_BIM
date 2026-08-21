@@ -404,10 +404,25 @@ def acusar_recibo(tid):
                                 "error": "Solo un destinatario (o un administrador) puede acusar recibo."}), 403
 
             acuses = acuses or []
-            ya = any((a.get('por') or '').strip().lower() == str(quien).strip().lower() for a in acuses)
+            # ¿YA ACUSO ESTA PERSONA? Por IDENTIDAD si la hay.
+            #
+            # Comparar solo el texto dejaba que la misma persona acusara dos
+            # veces si cambiaba de nombre, y que dos homonimos se pisaran el
+            # acuse. `por_id` es la respuesta; `por` se conserva porque es lo
+            # que se enseña y lo que llevan los acuses ya emitidos.
+            _mi_id = u.get('id')
+            ya = any(
+                (a.get('por_id') is not None and _mi_id is not None
+                 and str(a.get('por_id')) == str(_mi_id))
+                or (a.get('por_id') is None
+                    and (a.get('por') or '').strip().lower() == str(quien).strip().lower())
+                for a in acuses)
             if not ya:
                 acuses.append({
                     'por': quien,
+                    # LA IDENTIDAD DE QUIEN ACUSA. Los acuses LEGACY no la
+                    # tienen y no se les inventa: se siguen cotejando por texto.
+                    'por_id': _mi_id,
                     'en': datetime.now(timezone.utc).isoformat(),
                     'via': 'admin' if (es_admin and not _es_destinatario(
                         recipients, u.get('email'), u.get('name'), u.get('id'))) else 'destinatario',
