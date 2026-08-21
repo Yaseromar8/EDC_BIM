@@ -15,10 +15,41 @@ de producción. No añade arquitectura, ni funcionalidad, ni investigación.
 | Commit sirviendo | `b671559bc3e2` (rama `main`) — **28 commits por detrás** del árbol local | `/api/health` |
 | Esquema | **ESTADO C explicado**: árbol del 20-ago. Modelo de sujetos presente (`sujeto_tipo`/`sujeto_id` NOT NULL, `user_id` ya nullable); **faltan exactamente los 3 objetos de `es_admin`** | E1 |
 | Roles PostgreSQL | Solo `postgres` (sin `rolsuper`, con `createrole`/`createdb` — el caso Cloud SQL previsto). `ecd_app`/`ecd_migrator` **no existen**. Grants a ellos: **ninguno** | E2 |
-| Propiedad | Todo de `postgres`: 95 tablas · 38 secuencias · 205 índices · 38 funciones (1 nuestra + 37 de `pgcrypto`). **Estado de partida exacto del fixture** donde la convergencia está probada 89/89 | E2 |
+| Propiedad | Todo de `postgres`: 95 tablas · 38 secuencias · 205 índices · 38 funciones (1 nuestra + 37 de `pgcrypto`). **Estado de partida EQUIVALENTE al fixture de convergencia en roles, ownership y clases relevantes** — no idéntico objeto por objeto: ver nota | E2 |
 | Postura (6 puntos) | 5 cumplen. **Falla `ENFORCE_PROJECT_AUTHZ`** | E3 |
 | Variables Render | Presentes: `DB_USER`, `DB_PASS`, `DDL_EN_CALIENTE`, `ESQUEMA_ESTRICTO`, `AUTH_POLICY_MODE`, `CORS_ORIGINS`, `APP_SECRET`, `SESSION_PEPPER`. Ausentes: `ENFORCE_PROJECT_AUTHZ`, `DEPLOY_PROFILE` (default correcto), `APP_URL` | E4, declarado por el propietario |
 | Copia de la base | `DATABASE RESTORABLE = PROBADO` | E5 |
+
+
+### Nota de precisión sobre E2 — «equivalente», no «idéntico»
+
+Producción tiene **38 secuencias y 205 índices** donde el fixture tenía 36 y
+185. La diferencia está **totalmente explicada por los objetos legacy ya
+inventariados en E1**, y la cuenta cierra sin resto:
+
+- **Índices**: 183 del manifiesto presentes (falta solo el de `es_admin`)
+  + los **22 legados listados por nombre en E1** (sobre `control_pins`,
+  `file_nodes`, `inventory_assets`, `lob_*`) = **205**. Todos pertenecen a
+  tablas que la convergencia transfiere, y está **medido** que un índice sigue
+  al dueño de su tabla — viajan solos.
+- **Secuencias**: el manifiesto no rastrea secuencias como tipo; las **2**
+  legadas de más las cubre el bucle propio de la convergencia («secuencias
+  independientes», cualquier dueño ≠ `ecd_migrator`, no-extensión).
+- **Restricciones legadas** (~60): no tienen dueño propio — pertenecen a sus
+  tablas. Fuera del alcance de la convergencia por construcción.
+- **Idéntico donde importa**: roles (ninguno `ecd_*`, `postgres` sin
+  `rolsuper`), reparto de schemas (`public`=`pg_database_owner`,
+  `ai_brain`=`postgres`), funciones (1 aplicativa + 37 de `pgcrypto`, mismo
+  desglose), extensiones (2, las mismas), vistas (0).
+
+Por tanto: producción es **equivalente al fixture para efectos de roles,
+ownership, clases de objetos, extensiones y comportamiento de la
+convergencia** — los bucles operan por *dueño y clase*, no por lista de
+nombres, así que el excedente legado queda dentro de su cobertura. Y para
+cualquier clase **no medida** en producción (operadores, enums sueltos…), la
+protección no es una suposición: es el bloque fail-closed, que **se detiene y
+nombra** en vez de proceder — el peor caso posible es un STOP limpio en el
+paso 4, no un comportamiento distinto.
 
 ### Los dos ALERT conocidos, explícitos
 
@@ -41,7 +72,7 @@ de producción. No añade arquitectura, ni funcionalidad, ni investigación.
 | | Veredicto | Fichero |
 |---|---|---|
 | E1 | ALERT — aceptado | `evidencias/evidencia-e1-2026-08-21.txt` |
-| E2 | PASS | `evidencias/evidencia-e1-e2-2026-08-21.txt` |
+| E2 | PASS — equivalente al fixture (ver nota de precisión) | `evidencias/evidencia-e1-e2-2026-08-21.txt` |
 | E3 | ALERT — aceptado | `evidencias/evidencia-e3-2026-08-21.txt` |
 | E4 | PASS con notas | Declaración del propietario, citada en doc 52 |
 | E5 | **PASS — `DATABASE RESTORABLE = PROBADO`, con 1 fila legacy en cuarentena explícita** (`pdf_markups`, fila de `Demo User`; CSV junto a la copia). **No es `FULL ECD DISASTER RECOVERY`**: los bytes de GCS tienen su protección propia y su gate propio | `evidencias/ensayo-restauracion-20260821-1602.json` |
