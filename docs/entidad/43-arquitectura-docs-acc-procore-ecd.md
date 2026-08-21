@@ -1,3 +1,10 @@
+> ⚠️ **SUPERADO por [44-arquitectura-docs-rev02.md](44-arquitectura-docs-rev02.md).**
+> Este documento contiene cinco afirmaciones corregidas allí: la creación de
+> proyectos en ACC, la naturaleza del objeto `Role`, las Project Templates de
+> ACC, la herencia de Documents en Procore, y dos decisiones nuestras
+> (función contractual ≠ plantilla de permisos, y el disparador de Member
+> Tool Access). Se conserva como registro de lo que se corrigió.
+
 # ARQUITECTURA DOCS — ACC vs PROCORE vs NUESTRO ECD
 
 **21-ago-2026** · Investigación. **No se implementó nada.**
