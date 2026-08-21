@@ -236,6 +236,7 @@ columna	doc_reviews.history
 columna	doc_reviews.id
 columna	doc_reviews.items
 columna	doc_reviews.model_urn
+columna	doc_reviews.paso_vence_en
 columna	doc_reviews.status
 columna	doc_reviews.steps
 columna	doc_reviews.title

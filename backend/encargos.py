@@ -448,14 +448,17 @@ def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
             return False
         # Y ademas tiene que ser el revisor del paso ACTUAL: si la revision
         # avanzo y el encargo del paso anterior quedo abierto, esa persona ya no
-        # la debe.
+        # la debe. Se resuelve por la MISMA via que usa el manejador de
+        # revisiones -- `flujo_de_revision` --, para que la revision y su
+        # proyeccion no puedan discrepar sobre a quien le toca.
         if destino_usuario is None:
             return True
         try:
-            correo = (steps or [])[paso or 0].get('email')
+            import flujo_de_revision as _flujo
+            uid, _motivo = _flujo.revisor_del_paso(cur, (steps or [])[paso or 0])
         except Exception:
             return True
-        return usuario_por_email(cur, correo) == destino_usuario
+        return uid == destino_usuario
 
     if tipo == 'TRANSMITTAL':
         cur.execute('SELECT acuses FROM transmittals WHERE id::text = %s', (str(objeto_id),))
@@ -484,24 +487,33 @@ def _faltantes(cur):
     estructurada, y no se exige que sean el mismo dato. Se puede detectar que
     SOBRA un encargo de un RFI ya respondido; no que FALTE uno.
     """
-    faltan = []
+    faltan, bloqueadas = [], []
+    import flujo_de_revision as _flujo
 
     # Revisiones vivas: el revisor del paso actual deberia tener su encargo.
-    cur.execute("SELECT id, model_urn, title, current_step, steps FROM doc_reviews "
-                " WHERE status = 'pending'")
-    for rid, urn, titulo, paso, steps in cur.fetchall():
-        try:
-            correo = (steps or [])[paso or 0].get('email')
-        except Exception:
+    cur.execute("SELECT id, model_urn, title, current_step, steps, status, paso_vence_en "
+                "  FROM doc_reviews WHERE status = 'pending'")
+    for rid, urn, titulo, paso, steps, status, vence in cur.fetchall():
+        rev = {'model_urn': urn, 'steps': steps, 'current_step': paso, 'status': status}
+        estado, motivo = _flujo.estado_del_flujo(cur, rev)
+        if estado == 'BLOQUEADA':
+            # NO es una divergencia reparable: es un asunto que necesita a una
+            # persona. Intentar repararla llamaria a `abrir()`, que se negaria
+            # --un encargo no da acceso--, y la conciliacion no convergeria
+            # nunca imprimiendo un mensaje que no dice cual es el problema.
+            bloqueadas.append(('REVIEW', str(rid), titulo, motivo))
             continue
-        uid = usuario_por_email(cur, correo)
+        uid, _m = _flujo.revisor_del_paso(cur, (steps or [])[paso or 0])
         if not uid:
             continue
         cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='REVIEW' AND objeto_id=%s "
                     "   AND destino_usuario=%s AND estado='abierto'", (str(rid), uid))
         if not cur.fetchone():
+            # El plazo se recupera DEL REVIEW, que es su fuente de verdad. Si
+            # viniera vacio, reconstruir el encargo perderia el vencimiento --
+            # y con el, el recordatorio y el aviso de vencido en la bandeja.
             faltan.append(('REVIEW', str(rid), uid,
-                           'Revisar: %s (paso %d)' % (titulo, (paso or 0) + 1)))
+                           'Revisar: %s (paso %d)' % (titulo, (paso or 0) + 1), vence))
 
     # Emisiones sin acusar: cada destinatario que sea usuario y miembro.
     cur.execute('SELECT id, number, subject, recipients, acuses FROM transmittals')
@@ -516,8 +528,9 @@ def _faltantes(cur):
                         "   AND destino_usuario=%s AND estado='abierto'", (str(tid), uid))
             if not cur.fetchone():
                 faltan.append(('TRANSMITTAL', str(tid), uid,
-                               'Acusar recibo de TR-%03d: %s' % (num or 0, asunto or '')))
-    return faltan
+                               'Acusar recibo de TR-%03d: %s' % (num or 0, asunto or ''),
+                               None))
+    return faltan, bloqueadas
 
 
 def divergencias(cur):
@@ -549,7 +562,8 @@ def divergencias(cur):
         debe = _sigue_debiendose(cur, tipo, oid, uid)
         if debe is False:
             sobrantes.append((eid, tipo, oid, YA_RESUELTO, uid))
-    return {'sobrantes': sobrantes, 'faltantes': _faltantes(cur)}
+    faltantes, bloqueadas = _faltantes(cur)
+    return {'sobrantes': sobrantes, 'faltantes': faltantes, 'bloqueadas': bloqueadas}
 
 
 def conciliar(cur, aplicar=False, actor='conciliacion'):
@@ -570,9 +584,12 @@ def conciliar(cur, aplicar=False, actor='conciliacion'):
                         "       cerrado_en=CURRENT_TIMESTAMP, cerrado_por=%s "
                         " WHERE id=%s AND estado='abierto'", (actor, eid))
             cerrados += cur.rowcount
-        for tipo, oid, uid, asunto in d['faltantes']:
+        for tipo, oid, uid, asunto, vence in d['faltantes']:
             # Pasa por `abrir()`, que vuelve a comprobar pertenencia: la
             # conciliacion no puede colar un encargo que la via normal negaria.
-            if abrir(cur, tipo, oid, asunto, destino_usuario=uid, creado_por=actor):
+            # Y con `vence_en`: reconstruir el encargo sin su plazo lo dejaria
+            # sin recordatorio y sin aviso de vencido, que es media reparacion.
+            if abrir(cur, tipo, oid, asunto, destino_usuario=uid,
+                     vence_en=vence, creado_por=actor):
                 abiertos += 1
     return cerrados, abiertos, d

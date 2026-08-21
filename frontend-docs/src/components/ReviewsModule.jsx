@@ -66,6 +66,10 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCre
   const submit = async () => {
     if (!title.trim()) { toast.error('Ponle un título a la revisión'); return; }
     if (!steps.length) { toast.error('Agrega al menos un revisor'); return; }
+    if (steps.some(s => !s.id)) {
+      toast.error('Algún revisor no se pudo identificar. Recarga la página e inténtalo de nuevo.');
+      return;
+    }
     // Publicar exige decir para que queda autorizado. Se avisa AQUI y no al
     // aprobar: enterarse cuando ya han firmado tres revisores es tarde.
     if (finalStatus === 'PUBLISHED' && !idoneidad) {
@@ -77,7 +81,16 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCre
         method: 'POST',
         body: JSON.stringify({
           model_urn: projectPrefix, title: title.trim(), items,
-          steps: steps.map(s => ({ email: s.email, name: s.name })),
+          // `user_id` es la IDENTIDAD del revisor; `email` y `name` van como
+          // instantanea de a quien se le pidio y con que nombre, aunque esa
+          // persona se llame distinto dentro de dos anos. Antes solo se
+          // mandaban esos dos, y quien podia firmar se decidia comparando
+          // correo O NOMBRE: dos personas llamadas igual eran las dos
+          // candidatas al mismo paso.
+          steps: steps.map(s => ({
+            user_id: s.id, email: s.email, name: s.name,
+            ...(s.dias ? { dias: Number(s.dias) } : {}),
+          })),
           final_status: finalStatus, codigo_idoneidad: idoneidad || undefined
         })
       });
@@ -119,16 +132,26 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, user, onCre
             <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>Secuencia de revisores (en orden)</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
               {steps.map((s, i) => (
-                <span key={s.email} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eef2f7', color: '#1a56a8', padding: '4px 10px', borderRadius: 14, fontSize: 12, fontWeight: 600 }}>
+                <span key={s.id || s.email} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eef2f7', color: '#1a56a8', padding: '4px 10px', borderRadius: 14, fontSize: 12, fontWeight: 600 }}>
                   {i + 1}. {s.name || s.email}
-                  <button onClick={() => setSteps(prev => prev.filter(x => x.email !== s.email))} style={{ background: 'none', border: 'none', color: '#1a56a8', cursor: 'pointer', padding: 0, fontSize: 13 }}>×</button>
+                  {/* El plazo del paso. Se cuenta desde que EMPIEZA su turno,
+                      no desde que se crea la revisión: cuando se crea no se
+                      sabe cuándo le tocará al paso 3. Vacío = sin plazo. */}
+                  <input
+                    type="number" min="1" placeholder="días" value={s.dias || ''}
+                    onChange={e => setSteps(prev => prev.map((x, j) =>
+                      j === i ? { ...x, dias: e.target.value } : x))}
+                    title="Días de plazo para este paso (opcional)"
+                    style={{ width: 52, border: '1px solid #c8d6e8', borderRadius: 8, padding: '1px 5px', fontSize: 11, color: '#1a56a8', background: '#fff' }}
+                  />
+                  <button onClick={() => setSteps(prev => prev.filter((_x, j) => j !== i))} style={{ background: 'none', border: 'none', color: '#1a56a8', cursor: 'pointer', padding: 0, fontSize: 13 }}>×</button>
                 </span>
               ))}
               {!steps.length && <span style={{ color: '#aaa', fontSize: 12 }}>Haz clic en un usuario para añadirlo como paso…</span>}
             </div>
             <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid #eee', borderRadius: 4 }}>
-              {users.filter(u => !steps.find(s => s.email === u.email)).map(u => (
-                <div key={u.email} onClick={() => setSteps(prev => [...prev, { email: u.email, name: u.name }])}
+              {users.filter(u => !steps.find(s => s.id === u.id)).map(u => (
+                <div key={u.email} onClick={() => setSteps(prev => [...prev, { id: u.id, email: u.email, name: u.name, dias: '' }])}
                   style={{ padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', borderBottom: '1px solid #f5f5f5' }}
                   onMouseOver={e => e.currentTarget.style.background = '#f4f6f9'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
                   <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{getInitials(u.name || u.email)}</span>

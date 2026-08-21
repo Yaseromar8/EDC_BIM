@@ -1,0 +1,65 @@
+{
+  "activity_log": {
+    "filas": 94
+  },
+  "alcances": {
+    "activity_log.model_urn": "76403dd88a2e2f5316823b811a6a182c8677eec8276dc8924138ade932998cd3",
+    "asset_user_data.model_urn": "9652595f37edd08c51dfa26567e6cd76e6fa2709c3e578478ca398d316837a7a",
+    "civil_alignments.model_urn": "1a7c2cac55cb61a6cc4cb8af96068908b5182783c6b39cf27ce4ec37cd318b8a",
+    "civil_alignments.scope_urn": "576120b7e6c9e0c1c8021eab7ecd7d3b7de5c4706920ed46c94800b52b937a60",
+    "civil_sections.model_urn": "4485e80358bb40a9e55fd5e812db4832b0628b0a4e59b2e0e4acef257200cdf9",
+    "civil_sections.scope_urn": "4485e80358bb40a9e55fd5e812db4832b0628b0a4e59b2e0e4acef257200cdf9",
+    "civil_surfaces.scope_urn": "34e514da5bc363c5fd9479f8759ba7dee3dda698543c16974f3b675ccd6b095a",
+    "custom_attr_defs.model_urn": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "daily_reports.model_urn": "34e514da5bc363c5fd9479f8759ba7dee3dda698543c16974f3b675ccd6b095a",
+    "doc_partidas.model_urn": "17523d32a4eee105aad6edf4c1a7d7832a5d1a5456695403f4eb99b9d4768416",
+    "doc_redlines.model_urn": "17523d32a4eee105aad6edf4c1a7d7832a5d1a5456695403f4eb99b9d4768416",
+    "doc_reviews.model_urn": "17523d32a4eee105aad6edf4c1a7d7832a5d1a5456695403f4eb99b9d4768416",
+    "doc_rfis.model_urn": "17523d32a4eee105aad6edf4c1a7d7832a5d1a5456695403f4eb99b9d4768416",
+    "doc_sets.model_urn": "17523d32a4eee105aad6edf4c1a7d7832a5d1a5456695403f4eb99b9d4768416",
+    "document_shares.model_urn": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "element_docs.model_urn": "9652595f37edd08c51dfa26567e6cd76e6fa2709c3e578478ca398d316837a7a",
+    "file_emisiones.model_urn": "76403dd88a2e2f5316823b811a6a182c8677eec8276dc8924138ade932998cd3",
+    "file_nodes.model_urn": "f50c6925fb0a1df12ea8a6dd6408175ab0cf98080614be2edeeeb8ad88694f03",
+    "idoneidad_catalogo.model_urn": "76403dd88a2e2f5316823b811a6a182c8677eec8276dc8924138ade932998cd3",
+    "inventory_assets.model_urn": "8d204754e176d34121d032dfb970a2428c4c328a2a4c773cb5f3ee11914dd91a",
+    "lob_activities.model_urn": "32ab9cfc54b35fa1dbd5c9180573210e058b0d4e87c80c875c2c54e2fae058e7",
+    "lob_avance.model_urn": "32ab9cfc54b35fa1dbd5c9180573210e058b0d4e87c80c875c2c54e2fae058e7",
+    "lob_config.model_urn": "32ab9cfc54b35fa1dbd5c9180573210e058b0d4e87c80c875c2c54e2fae058e7",
+    "lob_dataset_audit.scope_urn": "b3dab57fc333ff6cc7ac24267f4294f3bbc182405e73d5b0d1355d7d0640381d",
+    "lob_datasets.scope_urn": "b3dab57fc333ff6cc7ac24267f4294f3bbc182405e73d5b0d1355d7d0640381d",
+    "lob_frentes.model_urn": "32ab9cfc54b35fa1dbd5c9180573210e058b0d4e87c80c875c2c54e2fae058e7",
+    "lob_linear_methodologies.scope_urn": "b3dab57fc333ff6cc7ac24267f4294f3bbc182405e73d5b0d1355d7d0640381d",
+    "lob_linear_profiles.scope_urn": "b3dab57fc333ff6cc7ac24267f4294f3bbc182405e73d5b0d1355d7d0640381d",
+    "lob_linear_progress_events.scope_urn": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lob_linear_resources.scope_urn": "b3dab57fc333ff6cc7ac24267f4294f3bbc182405e73d5b0d1355d7d0640381d",
+    "lob_linear_scenarios.scope_urn": "b3dab57fc333ff6cc7ac24267f4294f3bbc182405e73d5b0d1355d7d0640381d",
+    "lob_linear_zones.scope_urn": "b3dab57fc333ff6cc7ac24267f4294f3bbc182405e73d5b0d1355d7d0640381d",
+    "lob_partidas.model_urn": "32ab9cfc54b35fa1dbd5c9180573210e058b0d4e87c80c875c2c54e2fae058e7",
+    "nomenclatura_config.model_urn": "76403dd88a2e2f5316823b811a6a182c8677eec8276dc8924138ade932998cd3",
+    "pdf_markups.model_urn": "91fd67a7eaff918b99dde67bbce51d51543bc82b2fc6b6349dbbafce28548286",
+    "photo_evidences.model_urn": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "plan_entregas.model_urn": "17523d32a4eee105aad6edf4c1a7d7832a5d1a5456695403f4eb99b9d4768416",
+    "presupuesto_maestro.model_urn": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "project_settings.model_urn": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sensibilidad_catalogo.model_urn": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tracking_details.model_urn": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tracking_pins.model_urn": "7e9fb9e880a5885aa7e309dedc1202cef12827c9e37a82d3ef2c9a66eb6a917a",
+    "tracking_progress.model_urn": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "transmittals.model_urn": "17523d32a4eee105aad6edf4c1a7d7832a5d1a5456695403f4eb99b9d4768416",
+    "triaje_seguridad.model_urn": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "upload_sessions.model_urn": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "auth_events": {
+    "filas": 43
+  },
+  "file_nodes": {
+    "filas": 18,
+    "huella": "2e0dd670f0503b38048be415c6f96586ab3d89cd7b7aec0c824874df6de3bbed"
+  },
+  "file_versions": {
+    "filas": 0,
+    "huella": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "versiones_con_sha256": 0
+}

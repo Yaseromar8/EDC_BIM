@@ -6,10 +6,11 @@ Al aprobar el último paso, los documentos transicionan al estado ISO final.
 """
 from esquema_congelado import solo_con_ddl
 import json
+import logging
 import traceback
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
-from db import get_db_connection, log_activity
+from db import get_db_connection, log_activity, resolve_project_id
 import estados_ecd as ecd
 from perimetro_de_obra import guardia_de_obra
 
@@ -18,30 +19,111 @@ reviews_bp = Blueprint('reviews', __name__)
 FINAL_STATUSES = (ecd.SHARED, ecd.PUBLISHED)
 
 
-def _encargo_del_paso(cur, rid, steps, indice, vence_en, actor, titulo):
-    """Abre el encargo del revisor que toca. Silencioso si no se puede.
+def _empieza_el_turno(cur, rid, steps, indice, actor, titulo, history):
+    """Arranca el turno de un paso: fija su plazo, lo anota y abre el encargo.
 
-    Si el correo del paso no corresponde a ningun usuario, o el usuario no es
-    miembro de la obra, NO se abre nada: un encargo no da acceso, asi que
-    tampoco se inventa uno para alguien que no esta dentro. La revision sigue su
-    curso -- lo que se pierde es el aviso, no el flujo.
+    Devuelve (vence_en, history). El plazo se calcula AQUI, al empezar el turno,
+    y se guarda en el Review -- no en el encargo. El encargo lo copia. Si el
+    encargo se pierde, la conciliacion lo reconstruye CON su plazo, porque el
+    Review lo sabe.
+
+    Si el revisor no se puede determinar o no es miembro de la obra, NO se abre
+    encargo: un encargo no da acceso, y no se inventa uno para quien no esta
+    dentro. La revision no avanza sola por eso -- queda BLOQUEADA, y
+    `flujo_de_revision.estado_del_flujo` lo dice al mirarla.
     """
+    import flujo_de_revision as flujo
+    if indice >= len(steps or []):
+        return None, history
+    paso = steps[indice] or {}
+    vence = flujo.vencimiento(paso)
+
+    # El historial registra el COMIENZO del turno, no solo su resolucion. Sin
+    # esto, «cuanto tardo cada revisor» y «con que plazo se le pidio» habia que
+    # inferirlos de la fila anterior.
+    history = list(history or []) + [{
+        'event': 'step_started',
+        'step': indice,
+        'to': flujo.etiqueta_del_paso(paso),
+        'to_user_id': paso.get('user_id'),
+        'due': vence.isoformat() if vence else None,
+        'at': datetime.now(timezone.utc).isoformat(),
+    }]
+
     try:
         import encargos as _enc
-        if indice >= len(steps or []):
-            return
-        paso = steps[indice] or {}
-        uid = _enc.usuario_por_email(cur, paso.get('email'))
+        uid, motivo = flujo.revisor_del_paso(cur, paso)
         if not uid:
-            return
+            logging.getLogger('reviews').warning(
+                'revision %s paso %s sin encargo: %s', rid, indice, motivo)
+            return vence, history
         eid = _enc.abrir(cur, 'REVIEW', rid,
                          'Revisar: %s (paso %d)' % (titulo, indice + 1),
-                         destino_usuario=uid, vence_en=vence_en, creado_por=actor)
+                         destino_usuario=uid, vence_en=vence, creado_por=actor)
         if eid:
             _enc.avisar(cur, eid)
     except Exception as e:
-        import logging
+        # La revision avanza igual: el encargo es su reflejo, no su motor.
         logging.getLogger('reviews').warning('encargo no abierto: %s', e)
+    return vence, history
+
+
+def _pasos_validos(cur, obra, steps):
+    """None si los pasos son utilizables; (respuesta, codigo) si no.
+
+    UNA REVISION NUEVA EXIGE REVISOR ESTRUCTURADO. Hasta ahora un paso era
+    `{email, name}` y quien podia actuar se decidia comparando correo O NOMBRE:
+    con dos personas llamadas igual -- que en una obra con varias empresas no es
+    raro -- las dos eran candidatas a firmar el mismo paso.
+
+    Se exige aqui, al crear, y no al aprobar: descubrir que el paso 3 apunta a
+    nadie cuando ya han firmado dos revisores es tarde.
+
+    Los pasos HISTORICOS no se tocan ni se convierten: siguen resolviendose por
+    correo y por nombre. Esta comprobacion solo mira lo que entra de nuevo.
+    """
+    for i, paso in enumerate(steps):
+        if not isinstance(paso, dict) or not paso.get('user_id'):
+            return jsonify({
+                "success": False,
+                "error": "El paso %d no dice a que USUARIO le toca. Elige al "
+                         "revisor de la lista de miembros de la obra." % (i + 1),
+                "code": "PASO_SIN_REVISOR",
+            }), 400
+        try:
+            uid = int(paso['user_id'])
+        except (TypeError, ValueError):
+            return jsonify({"success": False,
+                            "error": "El revisor del paso %d no es valido." % (i + 1)}), 400
+        cur.execute('SELECT 1 FROM users WHERE id = %s AND is_active', (uid,))
+        if not cur.fetchone():
+            return jsonify({"success": False,
+                            "error": "El revisor del paso %d no existe o esta "
+                                     "desactivado." % (i + 1)}), 400
+        # Y tiene que estar EN LA OBRA. Si no, el encargo no se podria abrir
+        # --un encargo no da acceso-- y la revision naceria bloqueada.
+        cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
+                    (str(obra), uid))
+        if not cur.fetchone():
+            cur.execute('SELECT name, email FROM users WHERE id = %s', (uid,))
+            quien = cur.fetchone() or ('', '')
+            return jsonify({
+                "success": False,
+                "error": "%s no pertenece a esta obra, asi que no puede revisar "
+                         "el paso %d. Anadelo a la obra primero." % (
+                             quien[0] or quien[1] or ('usuario %s' % uid), i + 1),
+                "code": "REVISOR_FUERA_DE_LA_OBRA",
+            }), 400
+        # `dias` es opcional; si viene, tiene que ser un numero positivo.
+        if paso.get('dias') not in (None, ''):
+            try:
+                if int(paso['dias']) <= 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return jsonify({"success": False,
+                                "error": "El plazo del paso %d tiene que ser un "
+                                         "numero de dias mayor que cero." % (i + 1)}), 400
+    return None
 
 
 @solo_con_ddl
@@ -68,6 +150,17 @@ def ensure_reviews_table():
         # historial guardaba quien y en que paso, pero ninguna fecha.
         cur.execute('ALTER TABLE doc_reviews ADD COLUMN IF NOT EXISTS codigo_idoneidad VARCHAR(10)')
         cur.execute('ALTER TABLE doc_reviews ADD COLUMN IF NOT EXISTS cerrada_en TIMESTAMP WITH TIME ZONE')
+        # CUANDO VENCE EL TURNO ACTUAL, Y POR QUE VIVE AQUI.
+        #
+        # El plazo estaba solo en `encargos`, y solo para el primer paso. Eso es
+        # al reves de la regla: el Review es la fuente de verdad de su proceso.
+        # Si el encargo se perdia y la conciliacion lo reconstruia, el plazo
+        # desaparecia -- porque el Review no sabia cual era.
+        #
+        # Se guarda el vencimiento del paso EN CURSO. El de cada paso se calcula
+        # al empezar su turno desde `steps[i].dias`, porque al crear la revision
+        # no se sabe cuando le tocara al paso 3.
+        cur.execute('ALTER TABLE doc_reviews ADD COLUMN IF NOT EXISTS paso_vence_en TIMESTAMP')
         conn.commit()
 
 
@@ -107,7 +200,27 @@ def _row_to_dict(r):
         "created_by": r[9], "created_at": r[10].isoformat() if r[10] else None,
         "codigo_idoneidad": r[11] if len(r) > 11 else None,
         "cerrada_en": r[12].isoformat() if len(r) > 12 and r[12] else None,
+        "paso_vence_en": r[13].isoformat() if len(r) > 13 and r[13] else None,
     }
+
+
+def _con_estado_del_flujo(cur, rev):
+    """Anade si la revision esta ACTIVA, BLOQUEADA o CERRADA.
+
+    Se CALCULA al mirarla; no se guarda. Un estado guardado habria que
+    mantenerlo al dia, y un estado que puede quedarse viejo es peor que no
+    tenerlo. Tampoco es un estado nuevo del ciclo de vida del Review: `status`
+    sigue siendo pending/approved/rejected.
+    """
+    try:
+        import flujo_de_revision as flujo
+        estado, motivo = flujo.estado_del_flujo(cur, rev)
+        rev['flujo'] = estado
+        rev['flujo_motivo'] = motivo
+    except Exception:
+        rev['flujo'] = None
+        rev['flujo_motivo'] = ''
+    return rev
 
 
 @reviews_bp.route('/api/reviews', methods=['GET'])
@@ -125,10 +238,10 @@ def list_reviews():
             cur = conn.cursor()
             cur.execute("""SELECT id, model_urn, title, items, steps, current_step, status,
                                   final_status, history, created_by, created_at,
-                                  codigo_idoneidad, cerrada_en
+                                  codigo_idoneidad, cerrada_en, paso_vence_en
                            FROM doc_reviews WHERE model_urn = %s ORDER BY id DESC LIMIT 200""",
                         (model_urn,))
-            data = [_row_to_dict(r) for r in cur.fetchall()]
+            data = [_con_estado_del_flujo(cur, _row_to_dict(r)) for r in cur.fetchall()]
         return jsonify({"success": True, "reviews": data})
     except Exception as e:
         traceback.print_exc()
@@ -157,8 +270,17 @@ def _revision_independiente(user, steps):
     """
     correo = (user.get('email') or '').strip().lower()
     nombre = (user.get('name') or '').strip().lower()
+    mi_id = user.get('id')
 
     def es_el_autor(paso):
+        # Con identidad estructurada se comparan identidades: si no, dos
+        # personas con el mismo nombre podrian «dar independencia» a una
+        # revision en la que en realidad solo firma el autor.
+        if paso.get('user_id') and mi_id:
+            try:
+                return int(paso['user_id']) == int(mi_id)
+            except (TypeError, ValueError):
+                return False
         c = (paso.get('email') or '').strip().lower()
         n = (paso.get('name') or '').strip().lower()
         return (correo and c == correo) or (nombre and n == nombre)
@@ -209,21 +331,31 @@ def create_review():
                                         d.get('codigo_idoneidad'), final_status)
             if not vale:
                 return jsonify({"success": False, "error": motivo}), 400
+
+            # Una revision NUEVA exige revisor estructurado en cada paso.
+            obra = resolve_project_id(d['model_urn'])
+            negado = _pasos_validos(cur, obra, steps)
+            if negado:
+                return negado
+
+            actor = u.get('email') or u.get('name')
+            historia = [{"event": "created", "by": actor,
+                         "at": datetime.now(timezone.utc).isoformat()}]
             cur.execute("""INSERT INTO doc_reviews (model_urn, title, items, steps, final_status,
                                                     created_by, history, codigo_idoneidad)
                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                         (d['model_urn'], d['title'], json.dumps(items), json.dumps(steps),
-                         final_status, u.get('email') or u.get('name'),
-                         json.dumps([{"event": "created", "by": u.get('email') or u.get('name'),
-                                      "at": datetime.now(timezone.utc).isoformat()}]),
+                         final_status, actor, json.dumps(historia),
                          (d.get('codigo_idoneidad') or '').strip().upper() or None))
             rid = cur.fetchone()[0]
 
-            # El primer revisor pasa a deberla. El encargo es una PROYECCION de
-            # lo que `steps` y `current_step` ya dicen: se abre aqui porque es
-            # aqui donde el objeto cambia, no por una via aparte.
-            _encargo_del_paso(cur, rid, steps, 0, d.get('vence_en'),
-                              u.get('email') or u.get('name'), d['title'])
+            # Arranca el turno del primer revisor: fija su plazo EN EL REVIEW, lo
+            # anota en el historial y abre el encargo, que es la proyeccion de lo
+            # que `steps` y `current_step` ya dicen.
+            vence, historia = _empieza_el_turno(cur, rid, steps, 0, actor,
+                                                d['title'], historia)
+            cur.execute("UPDATE doc_reviews SET paso_vence_en=%s, history=%s WHERE id=%s",
+                        (vence, json.dumps(historia), rid))
             conn.commit()
         log_activity(d['model_urn'], 'review_created', 'review', entity_id=str(rid),
                      entity_name=d['title'], performed_by=u.get('name'))
@@ -247,7 +379,7 @@ def act_on_review(rid):
             cur = conn.cursor()
             cur.execute("""SELECT id, model_urn, title, items, steps, current_step, status,
                                   final_status, history, created_by, created_at,
-                                  codigo_idoneidad, cerrada_en
+                                  codigo_idoneidad, cerrada_en, paso_vence_en
                            FROM doc_reviews WHERE id = %s FOR UPDATE""", (rid,))
             row = cur.fetchone()
             if not row:
@@ -261,10 +393,17 @@ def act_on_review(rid):
                 return jsonify({"success": False, "error": f"La revisión ya está {rev['status']}"}), 409
 
             step = rev['steps'][rev['current_step']]
-            is_reviewer = (u.get('email') and u.get('email') == step.get('email')) or \
-                          (u.get('name') and u.get('name') == step.get('name'))
-            if not is_reviewer and u.get('role') != 'admin':
-                return jsonify({"success": False, "error": f"Este paso corresponde a {step.get('name') or step.get('email')}"}), 403
+            # UNA sola forma de decidir quien es el revisor. Con `user_id` en el
+            # paso es una comparacion de identidades y NADA MAS: los respaldos
+            # por correo y por nombre solo se consultan en pasos LEGACY, que no
+            # tienen identidad estructurada. Consultarlos «por si acaso» en un
+            # paso nuevo devolveria la ambiguedad que el user_id viene a quitar
+            # -- dos personas llamadas igual, las dos candidatas a firmar.
+            import flujo_de_revision as flujo
+            if not flujo.puede_actuar(u, step) and u.get('role') != 'admin':
+                return jsonify({"success": False,
+                                "error": "Este paso corresponde a %s"
+                                         % flujo.etiqueta_del_paso(step)}), 403
 
             # CON FECHA. Cada acto de aprobacion o rechazo tiene que quedar
             # fechado: es la primera pregunta de una supervision, y hasta ahora la
@@ -287,13 +426,20 @@ def act_on_review(rid):
                 _lg.getLogger('reviews').warning('encargo no cerrado: %s', _e)
 
             if action == 'reject':
-                cur.execute("UPDATE doc_reviews SET status='rejected', history=%s WHERE id=%s",
+                cur.execute("UPDATE doc_reviews SET status='rejected', history=%s, "
+                            "       paso_vence_en=NULL WHERE id=%s",
                             (json.dumps(history), rid))
             elif rev['current_step'] + 1 < len(rev['steps']):
-                cur.execute("UPDATE doc_reviews SET current_step=%s, history=%s WHERE id=%s",
-                            (rev['current_step'] + 1, json.dumps(history), rid))
-                _encargo_del_paso(cur, rid, rev['steps'], rev['current_step'] + 1,
-                                  None, u.get('email') or u.get('name'), rev['title'])
+                # El turno siguiente calcula SU plazo, no hereda el del anterior
+                # ni se queda sin ninguno -- que es lo que pasaba antes: solo el
+                # primer paso recibia vencimiento.
+                siguiente = rev['current_step'] + 1
+                vence, history = _empieza_el_turno(
+                    cur, rid, rev['steps'], siguiente,
+                    u.get('email') or u.get('name'), rev['title'], history)
+                cur.execute("UPDATE doc_reviews SET current_step=%s, history=%s, "
+                            "       paso_vence_en=%s WHERE id=%s",
+                            (siguiente, json.dumps(history), vence, rid))
             else:
                 # Ultimo paso aprobado: los documentos avanzan al estado final.
                 #
@@ -304,7 +450,7 @@ def act_on_review(rid):
                 # (backend/estados_ecd.py), que valida el camino y deja UNA linea
                 # de auditoria por documento, con su nombre y su estado anterior.
                 cur.execute("UPDATE doc_reviews SET status='approved', history=%s, "
-                            "cerrada_en=CURRENT_TIMESTAMP WHERE id=%s",
+                            "cerrada_en=CURRENT_TIMESTAMP, paso_vence_en=NULL WHERE id=%s",
                             (json.dumps(history), rid))
                 ids = [it.get('node_id') for it in rev['items'] if it.get('node_id')]
                 destino = ecd.normalizar(rev['final_status'])

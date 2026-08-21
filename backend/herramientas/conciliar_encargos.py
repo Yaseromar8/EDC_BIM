@@ -83,9 +83,25 @@ def main():
         print()
         print('FALTAN (%d) -- el objeto dice que se debe y no hay encargo:'
               % len(d['faltantes']))
-        for tipo, oid, uid, asunto in d['faltantes']:
-            print('  %-12s objeto %-30s usuario %-6s %s'
-                  % (tipo, str(oid)[:30], uid, (asunto or '')[:44]))
+        for tipo, oid, uid, asunto, vence in d['faltantes']:
+            print('  %-12s objeto %-26s usuario %-5s %-38s %s'
+                  % (tipo, str(oid)[:26], uid, (asunto or '')[:38],
+                     ('vence %s' % vence.strftime('%d/%m/%Y')) if vence else 'sin plazo'))
+
+        # Las BLOQUEADAS no son divergencias reparables: son asuntos que
+        # necesitan a una persona. Contarlas como «falta un encargo» hacia que
+        # la conciliacion intentara repararlas, `abrir()` se negara --un encargo
+        # no da acceso-- y el informe dijera «no converge» sin decir por que.
+        print()
+        print('BLOQUEADAS (%d) -- nadie puede actuar; NO se reparan solas:'
+              % len(d.get('bloqueadas') or []))
+        for tipo, oid, titulo, motivo in (d.get('bloqueadas') or []):
+            print('  %-12s objeto %-26s %-30s' % (tipo, str(oid)[:26], (titulo or '')[:30]))
+            print('               %s' % motivo)
+        if d.get('bloqueadas'):
+            print()
+            print('  Reasignar a un revisor que se fue es una decision de obra, no un')
+            print('  automatismo: hacerlo solo romperia la regla de independencia.')
 
         if a.aplicar:
             conn.commit()
