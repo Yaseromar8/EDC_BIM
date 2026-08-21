@@ -42,6 +42,7 @@ import DocumentViewer from '../components/DocumentViewer';
 // inflar el bundle inicial. Antes: 1 chunk de ~1.6 MB con TODO.
 const RedLineModule = lazy(() => import('../components/RedLineModule'));
 const ParticipantesModule = lazy(() => import('../components/ParticipantesModule'));
+const BusquedaGlobalModule = lazy(() => import('../components/BusquedaGlobalModule'));
 const RfiModule = lazy(() => import('../components/RfiModule'));
 const MultimediaModule = lazy(() => import('../components/MultimediaModule'));
 const GatewayPanel = lazy(() => import('../components/panels/GatewayPanel'));
@@ -288,6 +289,10 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   de MIRAR los archivos, y viven como filtros dentro de Archivos. */}
               {[
                 { titulo: 'Obra', items: [
+                  // Buscar va primero: es lo que se hace cuando NO se sabe en qué
+                  // carpeta está el documento. El filtro de la barra de archivos
+                  // sólo mira la carpeta abierta, que es otra cosa.
+                  { label: 'Buscar', mode: 'buscar', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>, onClick: () => fe.setSidebarView('buscar') },
                   { label: 'Archivos', mode: 'files', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5,5l2,2H20v12h-16V5H12.5 M13.17,3h-10.34A1.83,1.83,0,0,0,1,4.83v14.34A1.83,1.83,0,0,0,2.83,21h18.34A1.83,1.83,0,0,0,23,19.17V6.83A1.83,1.83,0,0,0,21.17,5H14.83Z"/></svg>, onClick: () => { fe.setSidebarView('files'); fe.switchMode(false); } },
                   { label: 'Fotos de campo', mode: 'multimedia', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>, onClick: () => fe.setSidebarView('multimedia') },
                   // RFI: registro formal de consultas. Va antes de Red Line porque
@@ -421,6 +426,12 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         )}
 
         {/* MEMBERS VIEW */}
+        {fe.sidebarView === 'buscar' && (
+          <Suspense fallback={<div style={{ padding: 48, textAlign: 'center', color: '#888' }}>Cargando…</div>}>
+            <BusquedaGlobalModule project={project} />
+          </Suspense>
+        )}
+
         {fe.sidebarView === 'participantes' && (
           <Suspense fallback={<div style={{ padding: 48, textAlign: 'center', color: '#888' }}>Cargando…</div>}>
             <ParticipantesModule project={project} isAdmin={isAdmin} />

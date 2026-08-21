@@ -474,6 +474,55 @@ def view_document():
     return jsonify({"success": False, "error": "Failed to generate access URL"}), 500
 
 
+@documents_bp.route('/api/docs/global-search', methods=['GET'])
+def buscar_documentos():
+    """Encontrar un documento de la obra sin saber en que carpeta esta.
+
+    Esta ruta estaba DECLARADA como excepcion en `auth_middleware.py:533` --con
+    su motivo escrito y todo-- y NO EXISTIA en ningun blueprint. Una excepcion
+    de seguridad para una ruta inexistente no protege nada y ademas engaña a
+    quien lee la lista.
+
+    La obra es obligatoria y el perimetro se comprueba aqui, ademas de en el
+    middleware: buscar es LEER el expediente entero de una obra, y eso no puede
+    depender de una variable de entorno.
+
+    Las reglas de quien ve que estan en `busqueda_de_documentos.py`, dentro de
+    la consulta.
+    """
+    from db import get_db_connection, resolve_project_id
+    import busqueda_de_documentos as busqueda
+
+    texto = (request.args.get('q') or '').strip()
+    model_urn = request.args.get('model_urn') or request.args.get('project_id') or ''
+    obra = resolve_project_id(model_urn) if model_urn else None
+    if not obra:
+        return jsonify({'error': 'No se pudo determinar la obra de la búsqueda.',
+                        'code': 'PROJECT_UNRESOLVED'}), 400
+    negativa = guardia_de_obra(obra, 'buscar documentos en esta obra')
+    if negativa:
+        return negativa
+    if len(texto) < 2:
+        return jsonify({'results': [], 'total': 0,
+                        'aviso': 'Escribe al menos dos caracteres.'}), 200
+
+    usuario = getattr(g, 'current_user', None) or {}
+    try:
+        limite = int(request.args.get('limit') or 50)
+    except ValueError:
+        limite = 50
+    try:
+        with get_db_connection() as conn:
+            filas = busqueda.buscar(conn.cursor(), obra, texto, usuario, limite)
+        # `total` es lo que ESTE usuario puede ver, no lo que existe. Un
+        # contador que dijera «12» enseñando 3 ya seria una filtracion.
+        return jsonify({'results': filas, 'total': len(filas),
+                        'project_id': obra, 'truncado': len(filas) >= limite}), 200
+    except Exception as e:
+        logger.error('GET /api/docs/global-search: %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
 @documents_bp.route('/api/docs/signed-url', methods=['GET'])
 @publico_en_lectura(motivo='sirve bytes a etiquetas <img> y a pdf.js, que no pueden mandar cabecera; la puerta real es _acceso_al_recurso() dentro, que exige sesion o un permiso firmado del fichero')
 def get_signed_url_json():

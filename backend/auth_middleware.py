@@ -530,7 +530,11 @@ def _request_project_id():
 # peticion que, con el control encendido, pasa sin saber de que obra es.
 _SIN_OBRA_JUSTIFICADO = {
     '/api/projects': 'lista y crea obras; filtra por pertenencia dentro de la vista',
-    '/api/docs/global-search': 'busca en las obras del usuario; filtra por pertenencia',
+    # '/api/docs/global-search' SALE de esta lista (21-ago-2026). Estaba
+    # declarada aqui cuando la ruta NO EXISTIA en ningun blueprint: una
+    # excepcion de seguridad para una ruta inexistente no protege nada y
+    # ademas engaña a quien lee la lista. Ahora existe, exige `model_urn` y
+    # busca en UNA sola obra, asi que el control central tambien la alcanza.
     # «Mi Trabajo» es transversal a las obras A PROPOSITO: la pregunta «¿que
     # debo?» no se hace obra por obra. No se salta la comprobacion de
     # pertenencia -- la lleva DENTRO de la consulta, como `JOIN project_users`
