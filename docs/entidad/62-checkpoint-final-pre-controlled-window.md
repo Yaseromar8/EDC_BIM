@@ -55,9 +55,13 @@ La tabla del doc 53 §5, íntegra — incluida la que no se negocia: ante un fal
 
 ### 7 · El siguiente acto es abrir la ventana, no seguir diseñando ✅
 
-No queda ningún frente de diseño abierto: el tablero maestro tiene 9 capas
-implementadas, 2 parciales con su camino escrito, 5 DEFER con su trigger. Lo
-único entre hoy y el estado objetivo es **ejecutar** — y eso empieza por las
+No queda ningún frente de diseño abierto **que bloquee la CONTROLLED WINDOW**:
+el tablero maestro tiene 9 capas implementadas, 2 parciales con su camino
+escrito, 5 DEFER con su trigger. (`Resource Permission UX` por
+`COMPANY / CONTRACTUAL FUNCTION` sigue siendo un frente posterior de Product
+Experience, **antes del piloto externo** — capa 9 del tablero; no toca esta
+ventana.) Lo único entre el estado actual y la siguiente transición de
+producción es **ejecutar la CONTROLLED WINDOW** — y eso empieza por las
 precondiciones del doc 53 §3 (copia fresca + restauración, contraseñas listas,
 árbol confirmado, panel re-verificado, obra de prueba, una hora sin prisa).
 
