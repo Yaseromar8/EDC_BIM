@@ -203,9 +203,16 @@ herramienta está hecha para ejecutarse igual sobre producción, antes y despué
 2. **`projects.name` sin `UNIQUE`**, y cuatro obras comparten nombre. Sus alias
    por nombre no se siembran y el sembrador lo informa.
 3. **`project_id` significa tres cosas distintas** según la tabla (`db.py:964-967`):
-   la obra, el frente, y el id de ACC. No se renombró nada. **Regla para lo
-   nuevo:** `project_uid` para la obra, `model_code` para el frente,
-   `external_ref` para ids ajenos, y **nunca `project_id` en una tabla nueva**.
+   la obra, el frente, y el id de ACC. No se renombró nada. La regla para tablas
+   nuevas está en [21 — Vocabulario congelado](21-vocabulario-y-clave-de-referencias.md).
+
+   > **Corrección.** Aquí decía «`project_uid` para la obra … y nunca
+   > `project_id` en una tabla nueva». **Era incorrecto y podía inducir a
+   > error:** no existe ningún `project_uid` en este diseño, ni está previsto
+   > antes de multi-Account. La identidad canónica es `projects.id`, de tipo
+   > TEXT. Lo que está quemado no es el nombre `project_id` sino su uso **sin
+   > clave ajena**: la regla real es que una tabla nueva puede llamarla
+   > `project_id` **si y solo si** lleva `REFERENCES projects(id)`.
 4. **La columna `project_id` de las 11 tablas del «Pilar Identidad» sigue dormida**
    (`db.py:978`): está poblada y ninguna consulta de autorización la lee. Hoy no
    estorba; sigue siendo un dato sin lector.

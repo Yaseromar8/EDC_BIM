@@ -61,10 +61,28 @@ def _paso(ok, texto, detalle=''):
     return ok
 
 
-def limpiar(cur):
-    """Borra SOLO lo que este ensayo crea. Nada mas."""
+def borrar_las_obras(cur):
+    """Borra SOLO las obras del ensayo. NADA MAS -- a proposito.
+
+    El criterio 6 mide si al borrar una obra se van con ella sus membresias y
+    referencias. Si esta funcion las borrara tambien, ese criterio pasaria
+    siempre y no mediria nada: estaria comprobando su propia limpieza.
+    """
     cur.execute("DELETE FROM projects WHERE id LIKE %s", (PREFIJO + '%',))
     return cur.rowcount
+
+
+def limpiar_restos(cur):
+    """Al EMPEZAR: barre lo que quedara de una ejecucion anterior.
+
+    Hace falta porque en una base SIN las claves ajenas nuevas, borrar la obra
+    deja las membresias huerfanas y el ensayo siguiente choca contra su propia
+    basura. Que esta funcion sea necesaria es, en si misma, el problema que las
+    claves ajenas cierran.
+    """
+    borrar_las_obras(cur)
+    cur.execute("DELETE FROM project_users WHERE project_id LIKE %s", (PREFIJO + '%',))
+    cur.execute("DELETE FROM project_ref WHERE project_id LIKE %s", (PREFIJO + '%',))
 
 
 def alcances_existentes(cur):
@@ -119,7 +137,7 @@ def main():
 
     with get_db_connection() as conn:
         cur = conn.cursor()
-        limpiar(cur)
+        limpiar_restos(cur)
         conn.commit()
 
         # ── 1. Como resuelve el sistema HOY, con las obras que ya hay ──────
@@ -229,7 +247,7 @@ def main():
                 len(presentes),
                 '' if all(presentes.values()) else ' (alguna sin validar)'))
 
-        limpiar(cur)
+        borrar_las_obras(cur)
         conn.commit()
         cur.execute("SELECT count(*) FROM project_users WHERE project_id LIKE %s",
                     (PREFIJO + '%',))

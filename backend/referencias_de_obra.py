@@ -174,6 +174,18 @@ def anotar(cur, alias, project_id, kind, origen, model_code=None,
     llega otra atribucion distinta, eso no es una correccion automatica: es una
     contradiccion que alguien tiene que mirar. Pisarla en silencio moveria datos
     historicos de obra sin dejar rastro.
+
+    Y «que alguien tiene que mirar» exige que alguien PUEDA mirarlo. Eso es lo
+    que faltaba: el `ON CONFLICT DO NOTHING` descartaba la atribucion nueva sin
+    dejar ni una linea, asi que la contradiccion que este docstring prometia
+    sacar a la luz era invisible. La decision no cambia --sigue mandando la
+    atribucion que ya estaba, que es lo correcto porque los datos historicos
+    cuelgan de ella-- pero ahora se dice.
+
+    El caso real: crear una segunda obra con el MISMO nombre que otra. Su alias
+    por nombre se queda apuntando a la primera. La obra nueva funciona igual
+    (resuelve y escribe por su propio `projects.id`, que es unico), pero quien
+    la creo merece saber que su nombre ya estaba cogido.
     """
     if not alias or not project_id:
         return False
@@ -181,7 +193,15 @@ def anotar(cur, alias, project_id, kind, origen, model_code=None,
         'INSERT INTO project_ref (account_id, alias, kind, project_id, model_code, origen) '
         'VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (account_id, alias) DO NOTHING',
         (account_id, str(alias), kind, str(project_id), model_code, origen))
-    return cur.rowcount > 0
+    if cur.rowcount > 0:
+        return True
+    de_quien = conflicto(cur, alias, project_id, account_id)
+    if de_quien:
+        logger.warning(
+            '[referencias] el alias «%s» NO se atribuye a la obra %s: ya es de '
+            '%s, y ahi se queda. La obra %s sigue resolviendo por su propio id.',
+            alias, project_id, de_quien, project_id)
+    return False
 
 
 def conflicto(cur, alias, project_id, account_id=CUENTA_DE_ESTA_INSTANCIA):

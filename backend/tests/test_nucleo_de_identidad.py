@@ -194,6 +194,38 @@ def test_el_alcance_de_escritura_sale_de_la_tabla_no_del_nombre():
     assert ref.scope_de_escritura(_Cur(None), 'b.proj_nueva_1') == 'b.proj_nueva_1'
 
 
+def test_un_alias_ya_atribuido_no_se_mueve_pero_SE_DICE(caplog):
+    """`anotar` promete en su docstring que una contradiccion «es algo que
+    alguien tiene que mirar». Pero el `ON CONFLICT DO NOTHING` la descartaba sin
+    dejar ni una linea, asi que nadie podia mirarla.
+
+    Se comprueban las DOS mitades: que la atribucion antigua manda (los datos
+    historicos cuelgan de ella) y que la nueva deja rastro.
+    """
+    import logging
+
+    import referencias_de_obra as ref
+
+    class _Cur:
+        """Un INSERT que choca, y una consulta que dice de quien es el alias."""
+        rowcount = 0
+
+        def execute(self, sql, params=None):
+            self.rowcount = 0 if 'INSERT' in sql else 1
+
+        def fetchone(self):
+            return ('obra_vieja',)
+
+    with caplog.at_level(logging.WARNING):
+        escrito = ref.anotar(_Cur(), 'Obra Repetida', 'obra_nueva', 'LEGACY_NAME', 'alta')
+
+    assert escrito is False, 'la atribucion antigua tiene que seguir mandando'
+    dichos = [r.getMessage() for r in caplog.records]
+    assert any('Obra Repetida' in m and 'obra_vieja' in m for m in dichos), (
+        'la contradiccion se descarto en silencio: nadie puede enterarse. '
+        'Se dijo: %s' % dichos)
+
+
 def test_el_navegador_ya_no_deriva_el_alcance_del_nombre():
     """La correccion vive en el frontend, asi que se comprueba ahi.
 
