@@ -25,6 +25,7 @@ from flask import Blueprint, request, jsonify, g
 
 from db import get_db_connection, resolve_project_id
 from perimetro_de_obra import guardia_de_obra
+import administracion_de_obra as _adm
 import directorio_de_obra as dir_obra
 import encargos as enc
 
@@ -98,7 +99,8 @@ def listar_miembros(project_id):
             # amplia nada: `GET /api/users` ya se lo ensena a cualquiera sobre
             # las personas con las que comparte obra.
             cur.execute("""
-                SELECT u.id, u.name, u.email, c.name, pc.funcion, u.company_id, u.role
+                SELECT u.id, u.name, u.email, c.name, pc.funcion, u.company_id,
+                       u.role, COALESCE(pu.es_admin, FALSE)
                   FROM project_users pu
                   JOIN users u ON u.id = pu.user_id AND u.is_active
              LEFT JOIN companies c ON c.id = u.company_id
@@ -109,7 +111,10 @@ def listar_miembros(project_id):
             """, (obra,))
             miembros = [{'id': r[0], 'name': r[1], 'email': r[2],
                          'empresa': r[3], 'funcion': r[4],
-                         'company_id': r[5], 'role': r[6]} for r in cur.fetchall()]
+                         'company_id': r[5], 'role': r[6],
+                         # ADMINISTRACION DE ESTA OBRA. No es el rol global: una
+                         # persona puede administrar esta obra y ninguna otra.
+                         'es_admin_de_obra': bool(r[7])} for r in cur.fetchall()]
         return jsonify({'project_id': obra, 'miembros': miembros}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -139,13 +144,18 @@ def poner_empresa_de_miembro(project_id, user_id):
     NO DA NI QUITA ACCESO. La membresia sigue siendo `project_users` y los
     permisos siguen siendo el rol y `folder_permissions`, igual que antes.
     """
-    if _usuario().get('role') != 'admin':
-        return jsonify({'error': 'Solo un administrador puede cambiar el directorio',
-                        'code': 'FORBIDDEN'}), 403
     obra = resolve_project_id(project_id)
     if not obra:
         return jsonify({'error': 'Obra no encontrada'}), 404
     negativa = guardia_de_obra(obra, 'cambiar el directorio de esta obra')
+    if negativa:
+        return negativa
+    # ADMINISTRADOR DE ESTA OBRA. Decia `role != 'admin'`, y con eso un
+    # administrador que ni siquiera era miembro cambiaba la funcion contractual
+    # de una empresa en una obra ajena -- medido con sonda el 21-ago-2026.
+    with get_db_connection() as _c:
+        negativa = _adm.guardia_administrativa(
+            _c.cursor(), _usuario(), obra, 'cambiar el directorio de esta obra')
     if negativa:
         return negativa
 
@@ -187,13 +197,18 @@ def poner_participante(project_id):
     `project_users`, y este registro solo dice en que calidad participa una
     empresa que ya esta en la obra.
     """
-    if _usuario().get('role') != 'admin':
-        return jsonify({'error': 'Solo un administrador puede cambiar el directorio',
-                        'code': 'FORBIDDEN'}), 403
     obra = resolve_project_id(project_id)
     if not obra:
         return jsonify({'error': 'Obra no encontrada'}), 404
     negativa = guardia_de_obra(obra, 'cambiar el directorio de esta obra')
+    if negativa:
+        return negativa
+    # ADMINISTRADOR DE ESTA OBRA. Decia `role != 'admin'`, y con eso un
+    # administrador que ni siquiera era miembro cambiaba la funcion contractual
+    # de una empresa en una obra ajena -- medido con sonda el 21-ago-2026.
+    with get_db_connection() as _c:
+        negativa = _adm.guardia_administrativa(
+            _c.cursor(), _usuario(), obra, 'cambiar el directorio de esta obra')
     if negativa:
         return negativa
 
@@ -225,13 +240,18 @@ def poner_participante(project_id):
 @directorio_bp.route('/api/projects/<path:project_id>/participantes/<int:company_id>',
                      methods=['DELETE'])
 def quitar_participante(project_id, company_id):
-    if _usuario().get('role') != 'admin':
-        return jsonify({'error': 'Solo un administrador puede cambiar el directorio',
-                        'code': 'FORBIDDEN'}), 403
     obra = resolve_project_id(project_id)
     if not obra:
         return jsonify({'error': 'Obra no encontrada'}), 404
     negativa = guardia_de_obra(obra, 'cambiar el directorio de esta obra')
+    if negativa:
+        return negativa
+    # ADMINISTRADOR DE ESTA OBRA. Decia `role != 'admin'`, y con eso un
+    # administrador que ni siquiera era miembro cambiaba la funcion contractual
+    # de una empresa en una obra ajena -- medido con sonda el 21-ago-2026.
+    with get_db_connection() as _c:
+        negativa = _adm.guardia_administrativa(
+            _c.cursor(), _usuario(), obra, 'cambiar el directorio de esta obra')
     if negativa:
         return negativa
     try:

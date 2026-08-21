@@ -271,8 +271,8 @@ def update_redline(redline_id):
                                     'code': 'REDLINE_CERRADO'}), 409
 
                 adopcion = flujo.necesita_adopcion(rl)
-                permitido = (flujo.puede_adoptar(u, rl) if adopcion
-                             else flujo.puede_pasar_la_pelota(u, rl))
+                permitido = (flujo.puede_adoptar(u, rl, cur) if adopcion
+                             else flujo.puede_pasar_la_pelota(u, rl, cur))
                 if not permitido:
                     return jsonify({
                         'error': sem.msg_no_adopta if adopcion else sem.msg_no_reasigna,
@@ -323,7 +323,7 @@ def update_redline(redline_id):
                     # EL VEREDICTO SOBRE LA MODIFICACION lo dicta SOLO quien
                     # tiene el Red Line. Ni quien lo emitio ni un administrador:
                     # aceptar la propia propuesta no prueba nada.
-                    if not flujo.puede_dictar_veredicto(u, rl):
+                    if not flujo.puede_dictar_veredicto(u, rl, cur):
                         return jsonify({'error': sem.msg_no_veredicto,
                                         'code': 'NO_PUEDE_RESPONDER'}), 403
                     veredicto = (data.get('respuesta') or rl['respuesta'] or '').strip()
@@ -334,7 +334,7 @@ def update_redline(redline_id):
                     poner_sql('fecha_respuesta = CURRENT_TIMESTAMP')
                     historia.append(flujo.entrada('responded', actor, veredicto=veredicto))
                 elif nuevo_estado == 'Cerrado':
-                    if not flujo.puede_cerrar(u, rl):
+                    if not flujo.puede_cerrar(u, rl, cur):
                         return jsonify({'error': sem.msg_no_cierra,
                                         'code': 'NO_PUEDE_CERRAR'}), 403
                     poner('cerrado_por', actor)
@@ -345,7 +345,7 @@ def update_redline(redline_id):
                     # misma posicion que cerrar: quien lo emitio, o un
                     # administrador. Quien dicto el veredicto no puede deshacerlo.
                     if rl['estado'] == 'Respondido' and nuevo_estado == 'En revisión':
-                        if not flujo.puede_cerrar(u, rl):
+                        if not flujo.puede_cerrar(u, rl, cur):
                             return jsonify({
                                 'error': 'Devuelve el Red Line a revisión quien lo '
                                          'emitió, o un administrador.',
@@ -390,7 +390,7 @@ def update_redline(redline_id):
                     poner(campo, data[campo] or None)
             if 'respuesta' in data and not nuevo_estado:
                 # Cambiar el veredicto sin cambiar de estado tambien es dictarlo.
-                if not flujo.puede_dictar_veredicto(u, rl):
+                if not flujo.puede_dictar_veredicto(u, rl, cur):
                     return jsonify({'error': sem.msg_no_veredicto,
                                     'code': 'NO_PUEDE_RESPONDER'}), 403
                 poner('respuesta', data['respuesta'])

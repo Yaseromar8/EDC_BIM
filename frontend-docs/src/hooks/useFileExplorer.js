@@ -11,11 +11,24 @@ import { apiFetch } from '../utils/apiFetch';
 import { API, getAuthHeaders, getInitialsDetailed, formatDate } from '../utils/helpers';
 import { useChunkedUpload } from './useChunkedUpload';
 import { useFolderCache } from './useFolderCache';
+import { useAdministracion } from './useAdministracion';
 import toast from 'react-hot-toast';
 
 export function useFileExplorer(project, user) {
   const projectPrefix = `proyectos/${project.name.replace(/ /g, '_')}`;
-  const isAdmin = user.role === 'admin';
+
+  // ADMINISTRACIÓN **DE ESTA OBRA**, no el rol global.
+  //
+  // Decía `user.role === 'admin'`, y con eso la misma persona veía «Crear
+  // carpeta», «Permisos» y «Destruir» en TODAS las obras, incluso en las que no
+  // participaba. El servidor ya lo rechazaba desde el 21-ago-2026; lo que
+  // faltaba era que la interfaz dejara de ofrecerlo.
+  //
+  // `esEntityAdmin` se conserva aparte porque hay cosas que SÍ son de la
+  // entidad -- el catálogo de idoneidad, archivar la obra -- y no del proyecto.
+  const { esAdminDeObra, esEntityAdmin, cargando: cargandoAdmin } =
+    useAdministracion(project);
+  const isAdmin = esAdminDeObra;
 
   // ── Core Navigation State ──
   const [currentPath, setCurrentPath] = useState(projectPrefix + '/');
@@ -479,7 +492,7 @@ export function useFileExplorer(project, user) {
   // ── Upload Handler ──
   const handleSopUpload = async (fileList) => {
     if (!isAdmin) {
-      toast.error('Solo los administradores pueden cargar archivos.');
+      toast.error('Solo un administrador de esta obra puede cargar archivos.');
       return;
     }
     if (!fileList?.length) return;
@@ -524,7 +537,12 @@ export function useFileExplorer(project, user) {
 
   return {
     // Constants
-    projectPrefix, isAdmin,
+    projectPrefix,
+    // `isAdmin` = administra ESTA obra. Se conserva el nombre porque lo leen 19
+    // componentes y renombrarlo en todos era ruido sin valor; lo que cambió es
+    // lo que SIGNIFICA, y eso está dicho arriba y en `useAdministracion`.
+    isAdmin,
+    esAdminDeObra, esEntityAdmin, cargandoAdmin,
     
     // Navigation
     currentPath, setCurrentPath, currentNodeId, setCurrentNodeId,

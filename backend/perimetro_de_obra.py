@@ -193,6 +193,32 @@ def obra_del_recurso(cursor, tabla, valor_id):
     return resolve_project_id(fila[0])
 
 
+def _entidad(usuario):
+    """ENTITY ADMIN: el custodio de la instancia. Alcance global mientras
+    1 instancia = 1 cliente."""
+    from administracion_de_obra import es_entity_admin
+    return es_entity_admin(usuario)
+
+
+def _es_admin_de_esta_obra(usuario, valor_obra):
+    """ENTITY ADMIN, o PROJECT ADMIN **de esta obra concreta**.
+
+    Se abre su propia conexion porque las guardias se llaman desde manejadores
+    que todavia no tienen cursor. El Entity Admin se resuelve ANTES, sin tocar
+    la base: es el caso mayoritario y no merece una consulta.
+    """
+    if _entidad(usuario):
+        return True
+    try:
+        from administracion_de_obra import es_admin_de_obra
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            return es_admin_de_obra(conn.cursor(), usuario, valor_obra)
+    except Exception as e:
+        logger.error('[perimetro] administracion no resuelta: %s', e)
+        return False                      # FAIL-CLOSED
+
+
 def guardia_de_obra(valor_obra, accion='esta operación'):
     """None si se puede seguir; (respuesta, codigo) si hay que cortar.
 
@@ -210,7 +236,13 @@ def guardia_de_obra(valor_obra, accion='esta operación'):
     usuario = getattr(g, 'current_user', None)
     if not usuario:
         return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
-    if usuario.get('role') == 'admin':
+    # ADMINISTRADOR **DE ESTA OBRA**, no cualquier `admin`.
+    #
+    # Aqui decia `role == 'admin'`, y con eso un administrador que ni siquiera
+    # era miembro leia el arbol, sacaba el indice del expediente y emitia un RFI
+    # en una obra ajena. El Entity Admin sigue pasando --conserva alcance global
+    # mientras 1 instancia = 1 cliente-- pero ahora se dice POR QUE pasa.
+    if _es_admin_de_esta_obra(usuario, valor_obra):
         return None
 
     from db import resolve_project_id
@@ -263,7 +295,10 @@ def guardia_del_documento(node_id=None, gcs_urn=None, accion='abrir este documen
     usuario = getattr(g, 'current_user', None)
     if not usuario:
         return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
-    if usuario.get('role') == 'admin':
+    # La obra del blob se resuelve mas abajo; aqui solo puede atravesar quien
+    # administra la INSTANCIA. Un Project Admin pasara por la via normal, que ya
+    # sabe de que obra es el objeto.
+    if _entidad(usuario):
         return None
     if not node_id and not gcs_urn:
         return jsonify({'error': 'Falta el documento sobre el que operar.'}), 400
@@ -297,7 +332,9 @@ def guardia_de_recurso(tabla, valor_id):
     usuario = getattr(g, 'current_user', None)
     if not usuario:
         return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
-    if usuario.get('role') == 'admin':
+    # La obra del recurso se averigua abajo, leyendo su fila. El Entity Admin
+    # atraviesa; el Project Admin lo hara al comprobarse su obra.
+    if _entidad(usuario):
         return None
 
     from db import get_db_connection

@@ -142,7 +142,14 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   const { globalSidebarWidth, setGlobalSidebarWidth, treeSidebarWidth, startTreeResize, startGlobalResize } = useSidebarResize();
   const { versionPanelWidth, startVersionResize } = useVersionPanelResize();
 
-  const { isAdmin, projectPrefix } = fe;
+  // LAS DOS ADMINISTRACIONES, SEPARADAS.
+  //
+  //   isAdmin         administra ESTA obra: su expediente, sus permisos, sus
+  //                   flujos. Es lo que gobierna casi toda esta pantalla.
+  //   esEntityAdmin   custodio de la instancia: el catálogo de idoneidad de la
+  //                   entidad y archivar la obra. NO son actos de proyecto, y
+  //                   el servidor tampoco los trata como tales.
+  const { isAdmin, esEntityAdmin, projectPrefix } = fe;
 
   // ── Revisiones (flujos de aprobación) ──
   const [reviewModalItems, setReviewModalItems] = React.useState(null); // null = cerrado
@@ -386,7 +393,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         )}
 
         {fe.sidebarView === 'idoneidad' && (
-          <CatalogoIdoneidadView projectPrefix={projectPrefix} isAdmin={isAdmin} />
+          <CatalogoIdoneidadView projectPrefix={projectPrefix} isAdmin={esEntityAdmin} />
         )}
 
         {fe.sidebarView === 'triaje' && (
@@ -463,7 +470,11 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                             (ultimo admin protegido, sesiones revocadas,
                             auditado) y ningun cliente lo llamaba. */}
                         <Suspense fallback={<span style={{ fontSize: 11, color: '#999' }}>…</span>}>
-                          <RolDeMiembro miembro={m} isAdmin={isAdmin}
+                          {/* CAMBIAR `users.role` ES UN ACTO DE LA ENTIDAD.
+                              Esta pantalla lista usuarios de la INSTANCIA, no
+                              de la obra, asi que administrar esta obra no
+                              alcanza: hace falta ser Entity Admin. */}
+                          <RolDeMiembro miembro={m} isAdmin={esEntityAdmin}
                                         onCambiado={() => { apiFetch(`${API}/api/users`).then(r => r.json()).then(d => fe.setMembersList(d.users || d || [])).catch(() => {}); }} />
                         </Suspense>
                       </td>
@@ -509,7 +520,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 siempre --ruta de administrador, auditada-- y NINGUN cliente la
                 llamaba: la capacidad estaba, la puerta no. */}
             <Suspense fallback={null}>
-              <ArchivarObraPanel project={project} isAdmin={isAdmin} />
+              <ArchivarObraPanel project={project} isAdmin={esEntityAdmin} />
             </Suspense>
           </div>
         )}

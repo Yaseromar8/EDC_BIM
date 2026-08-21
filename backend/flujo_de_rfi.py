@@ -110,37 +110,40 @@ SEMANTICA = _reg.Semantica(
 
 es_el_autor = _reg.es_el_autor
 es_el_responsable = _reg.es_el_responsable
+# `cur` en las cuatro reglas: la posicion ADMIN pasa a significar
+# «administrador DE ESTA OBRA», y eso hay que preguntarlo a la base.
+# Sin cursor cae al Entity Admin, que conserva alcance global.
 es_admin = _reg.es_admin
 es_legacy = _reg.es_legacy
 necesita_adopcion = _reg.necesita_adopcion
 exige_veredicto = _reg.exige_veredicto
 
 
-def puede_pasar_la_pelota(usuario, rfi):
-    return _reg.puede_pasar_la_pelota(SEMANTICA, usuario, rfi)
+def puede_pasar_la_pelota(usuario, rfi, cur=None):
+    return _reg.puede_pasar_la_pelota(SEMANTICA, usuario, rfi, cur)
 
 
-def puede_dictar_veredicto(usuario, rfi):
+def puede_dictar_veredicto(usuario, rfi, cur=None):
     """SOLO el responsable actual.
 
     Ni el autor ni un administrador: un veredicto que puede dictar quien
     pregunto no prueba nada. Un administrador que necesite intervenir se asigna
     el RFI primero --y eso queda escrito en el historial--.
     """
-    return _reg.puede_dictar_veredicto(SEMANTICA, usuario, rfi)
+    return _reg.puede_dictar_veredicto(SEMANTICA, usuario, rfi, cur)
 
 
-def puede_cerrar(usuario, rfi):
-    return _reg.puede_cerrar(SEMANTICA, usuario, rfi)
+def puede_cerrar(usuario, rfi, cur=None):
+    return _reg.puede_cerrar(SEMANTICA, usuario, rfi, cur)
 
 
-def puede_adoptar(usuario, rfi):
+def puede_adoptar(usuario, rfi, cur=None):
     """Quien incorpora un legacy al flujo estructurado.
 
     El autor o un administrador. El «responsable actual» no puede: todavia no
     existe como identidad -- es justamente lo que falta.
     """
-    return _reg.puede_adoptar(SEMANTICA, usuario, rfi)
+    return _reg.puede_adoptar(SEMANTICA, usuario, rfi, cur)
 
 
 def transicion_valida(actual, nuevo):

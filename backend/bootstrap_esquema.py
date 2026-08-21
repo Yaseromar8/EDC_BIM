@@ -86,6 +86,7 @@ def _rutinas():
     from routes.ai import _asegurar_tabla_cache as ensure_cache_ia
     from folder_permissions import init_folder_permissions_table
     from db import ensure_reglas_del_rfi, ensure_reglas_del_redline
+    import administracion_de_obra as _admin_obra
     from integridad_referencial import ensure_claves_ajenas
     from referencias_de_obra import ensure_tabla_referencias
     from directorio_de_obra import ensure_directorio
@@ -158,6 +159,9 @@ def _rutinas():
         # de `projects` y de `users`. Van despues de que existan.
         ('directorio_de_obra', ensure_directorio),
         ('encargos', ensure_encargos),
+        # `project_users.es_admin`: la administracion POR OBRA. Va aqui
+        # porque `project_users` ya existe y porque nace FALSE para todos.
+        ('administracion_de_obra', _admin_obra.asegurar_columna),
         # Las claves ajenas van LAS ULTIMAS: no se puede referenciar una
         # tabla que todavia no existe.
         # Las reglas del RFI y del Red Line referencian `projects` y `users`:

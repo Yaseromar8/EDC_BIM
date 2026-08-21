@@ -397,11 +397,50 @@ def acusar_recibo(tid):
             if not _hay_acceso(obra):
                 return jsonify({"success": False, "error": "No tienes acceso a esta obra."}), 403
 
-            es_admin = u.get('role') == 'admin'
-            if not es_admin and not _es_destinatario(recipients, u.get('email'),
-                                                     u.get('name'), u.get('id')):
+            # ¿ACUSA UN DESTINATARIO, O LO REGISTRA UN ADMINISTRADOR?
+            #
+            # Son DOS ACTOS DISTINTOS y hasta hoy producian la misma fila. El
+            # administrativo ademas cerraba el encargo de QUIEN REGISTRABA --que
+            # no tenia ninguno-- y dejaba al destinatario debiendolo, con la
+            # emision mostrando un acuse. Ni saldaba ni decia por quien.
+            import administracion_de_obra as _adm
+            propio = _es_destinatario(recipients, u.get('email'), u.get('name'),
+                                      u.get('id'))
+            es_admin = _adm.es_admin_de_obra(cur, u, obra)
+            if not propio and not es_admin:
                 return jsonify({"success": False,
-                                "error": "Solo un destinatario (o un administrador) puede acusar recibo."}), 403
+                                "error": "Solo un destinatario (o un administrador de "
+                                         "la obra) puede registrar la recepción."}), 403
+
+            # LA VIA ADMINISTRATIVA EXIGE DECIR POR QUIEN.
+            #
+            # Registrar «recibido» sin decir quien lo recibio no es un registro:
+            # es una afirmacion sin sujeto. Y convertirlo en un acuse del
+            # destinatario cuando el destinatario no actuo seria falsear el
+            # expediente.
+            destinatario_id = None
+            if not propio:
+                d = request.get_json(silent=True) or {}
+                destinatario_id = d.get('destinatario_id')
+                if destinatario_id is None:
+                    return jsonify({
+                        "success": False,
+                        "error": "Registrar una recepción por vía administrativa exige "
+                                 "decir de qué destinatario se trata.",
+                        "code": "FALTA_DESTINATARIO"}), 400
+                try:
+                    destinatario_id = int(destinatario_id)
+                except (TypeError, ValueError):
+                    return jsonify({"success": False,
+                                    "error": "Destinatario inválido."}), 400
+                _dest = next((r for r in (recipients or [])
+                              if isinstance(r, dict)
+                              and str(r.get('user_id') or '') == str(destinatario_id)), None)
+                if not _dest:
+                    return jsonify({
+                        "success": False,
+                        "error": "Esa persona no figura como destinatario de esta emisión.",
+                        "code": "NO_ES_DESTINATARIO"}), 400
 
             acuses = acuses or []
             # ¿YA ACUSO ESTA PERSONA? Por IDENTIDAD si la hay.
@@ -410,23 +449,46 @@ def acusar_recibo(tid):
             # veces si cambiaba de nombre, y que dos homonimos se pisaran el
             # acuse. `por_id` es la respuesta; `por` se conserva porque es lo
             # que se enseña y lo que llevan los acuses ya emitidos.
+            # De QUIEN se esta registrando la recepcion: de uno mismo, o del
+            # destinatario que el administrador indica.
             _mi_id = u.get('id')
+            _de_quien = _mi_id if propio else destinatario_id
             ya = any(
-                (a.get('por_id') is not None and _mi_id is not None
-                 and str(a.get('por_id')) == str(_mi_id))
-                or (a.get('por_id') is None
+                (a.get('por_id') is not None and _de_quien is not None
+                 and str(a.get('por_id')) == str(_de_quien))
+                or (a.get('destinatario_id') is not None and _de_quien is not None
+                    and str(a.get('destinatario_id')) == str(_de_quien))
+                or (a.get('por_id') is None and a.get('destinatario_id') is None
                     and (a.get('por') or '').strip().lower() == str(quien).strip().lower())
                 for a in acuses)
-            if not ya:
+            if not ya and propio:
+                # ACUSE DEL DESTINATARIO. Identidad estricta, como estaba.
                 acuses.append({
                     'por': quien,
                     # LA IDENTIDAD DE QUIEN ACUSA. Los acuses LEGACY no la
                     # tienen y no se les inventa: se siguen cotejando por texto.
                     'por_id': _mi_id,
                     'en': datetime.now(timezone.utc).isoformat(),
-                    'via': 'admin' if (es_admin and not _es_destinatario(
-                        recipients, u.get('email'), u.get('name'), u.get('id'))) else 'destinatario',
+                    'via': 'destinatario',
                 })
+            elif not ya:
+                # REGISTRO ADMINISTRATIVO DE RECEPCION. NO es un acuse del
+                # destinatario y no se puede confundir con uno: lleva `tipo`,
+                # dice DE QUIEN es la recepcion y QUIEN la registro, y conserva
+                # el motivo si se aporta.
+                _dm = (_dest.get('name') or _dest.get('email') or '')
+                acuses.append({
+                    'tipo': 'ADMIN_RECORDED_RECEIPT',
+                    'destinatario_id': destinatario_id,
+                    'destinatario': _dm,
+                    'registrado_por': quien,
+                    'registrado_por_id': _mi_id,
+                    'en': datetime.now(timezone.utc).isoformat(),
+                    'via': 'admin',
+                    'motivo': ((request.get_json(silent=True) or {}).get('motivo')
+                               or '').strip() or None,
+                })
+            if not ya:
                 cur.execute("UPDATE transmittals SET acuses = %s WHERE id = %s",
                             (json.dumps(acuses), tid))
                 # Cierra SOLO el encargo de quien acusa. Los demas destinatarios
@@ -434,8 +496,13 @@ def acusar_recibo(tid):
                 # reciba uno.
                 try:
                     import encargos as _enc
+                    # El encargo que se salda es el DEL DESTINATARIO. Antes se
+                    # cerraba el de quien acusaba: por la via administrativa eso
+                    # era el del propio administrador --que no tenia ninguno--, y
+                    # el destinatario seguia debiendolo mientras la emision
+                    # mostraba un acuse.
                     _enc.cerrar_los_de(cur, 'TRANSMITTAL', tid, quien,
-                                       destino_usuario=u.get('id'))
+                                       destino_usuario=_de_quien)
                 except Exception as _e:
                     # El acuse YA esta registrado: es lo que importa. Si la
                     # proyeccion no se pudo cerrar, se dice y se sigue.
@@ -443,7 +510,9 @@ def acusar_recibo(tid):
                 conn.commit()
                 cur.execute("SELECT number FROM transmittals WHERE id = %s", (tid,))
                 num = cur.fetchone()[0]
-                log_activity(obra, 'transmittal_acuse', 'transmittal', entity_id=str(tid),
+                log_activity(obra,
+                             'transmittal_acuse' if propio else 'transmittal_recepcion_registrada',
+                             'transmittal', entity_id=str(tid),
                              entity_name=f"TR-{num:03d}", performed_by=quien)
         return jsonify({"success": True, "acuses": acuses, "ya_estaba": ya})
     except Exception as e:

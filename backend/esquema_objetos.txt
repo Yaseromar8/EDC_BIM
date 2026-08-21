@@ -838,6 +838,7 @@ columna	project_settings.reserved_names
 columna	project_settings.storage_limit_bytes
 columna	project_settings.updated_at
 columna	project_users.assigned_at
+columna	project_users.es_admin
 columna	project_users.project_id
 columna	project_users.user_id
 columna	projects.account
@@ -1423,6 +1424,7 @@ restriccion	project_settings primary key (id)
 restriccion	project_settings unique (model_urn)
 restriccion	project_users foreign key (project_id) references projects(id) on delete cascade
 restriccion	project_users foreign key (user_id) references users(id) on delete cascade
+restriccion	project_users not null es_admin
 restriccion	project_users not null project_id
 restriccion	project_users not null user_id
 restriccion	project_users primary key (project_id, user_id)
@@ -1527,6 +1529,7 @@ indice	create index on public.presupuesto_maestro using btree (parent_item)
 indice	create index on public.presupuesto_maestro using btree (project_id)
 indice	create index on public.project_companies using btree (project_id, funcion)
 indice	create index on public.project_ref using btree (project_id)
+indice	create index on public.project_users using btree (project_id) where es_admin
 indice	create index on public.project_users using btree (user_id, project_id)
 indice	create index on public.projects using btree (model_urn)
 indice	create index on public.projects using btree (name)

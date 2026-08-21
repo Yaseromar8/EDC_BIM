@@ -454,6 +454,16 @@ def _acuso(acuses, email, nombre, user_id=None):
 
     for a in (acuses or []):
         a = a or {}
+        # REGISTRO ADMINISTRATIVO DE RECEPCION: salda al DESTINATARIO, no a
+        # quien lo registro. Es un acto distinto del acuse y por eso se lee
+        # distinto -- pero salda igual, que es de lo que se trataba.
+        if a.get('destinatario_id') is not None:
+            try:
+                if user_id is not None and int(a['destinatario_id']) == user_id:
+                    return True
+            except (TypeError, ValueError):
+                pass
+            continue
         if a.get('por_id') is not None:
             # Acuse CON identidad: solo decide la identidad.
             try:

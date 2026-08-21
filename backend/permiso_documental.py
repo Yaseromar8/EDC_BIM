@@ -175,8 +175,19 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
     un permiso que no se puede explicar se acaba concediendo «por si acaso».
     """
     usuario = usuario or {}
-    if usuario.get('role') == 'admin':
-        return ('admin', 'administrador de la instancia') if con_motivo else 'admin'
+    # POLITICA ADMINISTRATIVA EXPLICITA, no un bypass accidental.
+    #
+    # Un administrador DE ESTA OBRA atraviesa sus permisos de carpeta, igual que
+    # el Project Admin de ACC («Manage en todas las carpetas») y el `Admin` de
+    # Documents de Procore. Y NO atraviesa los de ninguna otra: antes bastaba
+    # `role == 'admin'` y con eso un administrador que no era miembro obtenia
+    # `admin` sobre el contrato de una obra ajena.
+    #
+    # Lo que NO concede esta autoridad: dictar veredictos. Eso lo deciden las
+    # posiciones del flujo, y ahi el administrador nunca responde por otro.
+    from administracion_de_obra import es_admin_de_obra as _adm
+    if _adm(cur, usuario, model_urn):
+        return ('admin', 'administrador de esta obra') if con_motivo else 'admin'
 
     sujetos = sujetos_de(cur, usuario, model_urn)
     if USER not in sujetos:

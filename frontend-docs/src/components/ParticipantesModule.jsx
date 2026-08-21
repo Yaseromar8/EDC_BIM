@@ -197,6 +197,42 @@ export default function ParticipantesModule({ project, isAdmin }) {
     }
   }
 
+
+  // ── Nombrar / retirar administrador DE ESTA OBRA ────────────────────────
+  //
+  // QUÉ CONCEDE: administrar esta obra -- su expediente, sus permisos, sus
+  // rescates. Y NADA en ninguna otra obra.
+  //
+  // QUÉ NO TOCA: la empresa, la función contractual, los encargos ni un solo
+  // histórico. Es una casilla en la fila de participación y nada más.
+  async function ponerAdminDeObra(persona, quiere) {
+    if (!obra) return;
+    if (!quiere && !window.confirm(
+      `¿Retirar a ${persona.name || persona.email} la administración de esta obra?\n\n`
+      + 'Seguirá participando en la obra y conservará sus permisos de carpeta. '
+      + 'Lo que pierde es administrarla.')) return;
+    setGuardando('admin:' + persona.id);
+    try {
+      const r = await apiFetch(
+        `${API}/api/projects/${encodeURIComponent(obra)}/miembros/${persona.id}/admin`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ es_admin: quiere }),
+        });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'No se pudo cambiar');
+      setPersonas(prev => prev.map(x =>
+        x.id === persona.id ? { ...x, es_admin_de_obra: quiere } : x));
+      toast.success(quiere
+        ? `${persona.name || persona.email} administra esta obra`
+        : `${persona.name || persona.email} ya no administra esta obra`);
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setGuardando(null);
+    }
+  }
+
   // ── Pantalla ────────────────────────────────────────────────────────────
 
   const sinEmpresa = personas.filter(p => !p.empresa).length;
@@ -258,7 +294,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
           <tbody>
             {empresas.map(e => {
               const suyas = personas.filter(p => p.company_id === e.company_id);
-              return (
+  return (
                 <tr key={e.company_id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                   <td style={{ padding: '11px 12px', fontWeight: 500 }}>
                     {/* Un cuadrado, no un círculo: una empresa no es una persona. */}
@@ -366,6 +402,10 @@ export default function ParticipantesModule({ project, isAdmin }) {
           <th style={{ padding: '9px 12px', textAlign: 'left' }}>Empresa</th>
           <th style={{ padding: '9px 12px', textAlign: 'left' }}>Función contractual</th>
           <th style={{ padding: '9px 12px', textAlign: 'left' }}>Perfil del sistema</th>
+          {/* ADMINISTRA ESTA OBRA. Columna aparte del «perfil del sistema» a
+              propósito: son dos cosas distintas y confundirlas fue el problema.
+              El perfil es de la entidad; esto es de esta obra y solo de esta. */}
+          <th style={{ padding: '9px 12px', textAlign: 'left' }}>Administra esta obra</th>
         </tr></thead>
         <tbody>
           {personas.map(p => (
@@ -404,6 +444,31 @@ export default function ParticipantesModule({ project, isAdmin }) {
               </td>
               <td style={{ padding: '11px 12px', color: '#666' }}>
                 {ETIQUETA_ROL[p.role] || p.role || '—'}
+              </td>
+              <td style={{ padding: '11px 12px' }}>
+                {p.role === 'admin' ? (
+                  // ENTITY ADMIN: administra la instancia entera, así que esta
+                  // obra también. No hay nada que nombrar ni que retirar aquí,
+                  // y fingir un interruptor que no hace nada sería peor.
+                  <span title="Administra toda la entidad, no solo esta obra"
+                        style={{ fontSize: 11.5, color: '#8b5cf6', fontWeight: 500 }}>
+                    Administrador de la entidad
+                  </span>
+                ) : isAdmin ? (
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
+                                  cursor: guardando === 'admin:' + p.id ? 'wait' : 'pointer',
+                                  fontSize: 12, color: '#555' }}>
+                    <input type="checkbox"
+                           checked={!!p.es_admin_de_obra}
+                           disabled={guardando === 'admin:' + p.id}
+                           onChange={ev => ponerAdminDeObra(p, ev.target.checked)} />
+                    {p.es_admin_de_obra ? 'Sí' : 'No'}
+                  </label>
+                ) : (
+                  <span style={{ color: p.es_admin_de_obra ? '#444' : '#bbb' }}>
+                    {p.es_admin_de_obra ? 'Sí' : '—'}
+                  </span>
+                )}
               </td>
             </tr>
           ))}

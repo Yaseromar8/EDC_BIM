@@ -57,7 +57,18 @@ def list_contents(parent_id, model_urn, base_path="", user=None):
     # Determinar datos del usuario una sola vez
     u_id = user.get('id') if user else None
     u_role = user.get('role', 'viewer') if user else None
-    is_admin = (u_role == 'admin') if u_role else False
+    # ADMINISTRACION **DE ESTA OBRA**. Decia `u_role == 'admin'`, y con eso el
+    # listado --y el filtro ISO que oculta los WIP-- se abrian para cualquier
+    # administrador, fuera o no de la obra. `permiso_efectivo` ya resuelve la
+    # autoridad por obra; aqui solo se necesita para las decisiones de
+    # VISIBILIDAD que no pasan por el.
+    is_admin = False
+    if u_id:
+        try:
+            from administracion_de_obra import es_admin_de_obra as _adm
+            is_admin = _adm(cursor, {'id': u_id, 'role': u_role}, model_urn)
+        except Exception:
+            is_admin = False              # FAIL-CLOSED
 
     # Modo ISO 19650 estricto (opt-in por entorno): los no-admin solo ven
     # documentos Compartido/Publicado. Los WIP son borradores internos del

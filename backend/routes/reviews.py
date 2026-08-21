@@ -400,7 +400,19 @@ def act_on_review(rid):
             # paso nuevo devolveria la ambiguedad que el user_id viene a quitar
             # -- dos personas llamadas igual, las dos candidatas a firmar.
             import flujo_de_revision as flujo
-            if not flujo.puede_actuar(u, step) and u.get('role') != 'admin':
+            # B12 CERRADO (21-ago-2026).
+            #
+            # Aqui habia `… or u.get('role') == 'admin'`: un administrador podia
+            # APROBAR O RECHAZAR el paso asignado a otra persona. Es mas
+            # autoridad de la que declaran las propias reglas de Reviews, y
+            # contradice el patron de RFI y Red Line, donde el administrador NO
+            # dicta el veredicto -- «un veredicto que puede dictar cualquiera no
+            # prueba nada».
+            #
+            # El rescate administrativo legitimo sigue existiendo y esta abajo:
+            # sustituir al revisor de una revision BLOQUEADA, con auditoria. Eso
+            # cambia QUIEN debe actuar; no actua por el.
+            if not flujo.puede_actuar(u, step):
                 return jsonify({"success": False,
                                 "error": "Este paso corresponde a %s"
                                          % flujo.etiqueta_del_paso(step)}), 403

@@ -186,6 +186,9 @@ def acceso_por_obra_id(cursor, user, obra_id):
     if not obra_id:
         return False
     if isinstance(user, dict):
+        # ENTITY ADMIN. Este punto decide sobre un blob cuya obra puede no
+        # estar resuelta todavia; la autoridad POR OBRA la aplica
+        # `permiso_documental` un paso mas adelante, que si la conoce.
         if user.get('role') == 'admin':
             return True
         user_id = user.get('id')

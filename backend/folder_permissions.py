@@ -209,6 +209,9 @@ def _get_effective_permission_impl(cursor, user_id, node_id, model_urn):
     """
     try:
         import permiso_documental as _pd
+        # El usuario se recompone entero --incluido su `role`-- porque
+        # `permiso_efectivo` necesita saber si es Entity Admin, y ahora ademas
+        # consulta `project_users.es_admin` de ESA obra.
         cursor.execute("SELECT id, name, email, role FROM users WHERE id = %s",
                        (user_id,))
         u = cursor.fetchone()

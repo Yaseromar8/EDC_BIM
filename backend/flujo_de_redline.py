@@ -121,28 +121,31 @@ SEMANTICA = _reg.Semantica(
 
 es_el_autor = _reg.es_el_autor
 es_el_responsable = _reg.es_el_responsable
+# `cur` en las cuatro reglas: la posicion ADMIN pasa a significar
+# «administrador DE ESTA OBRA», y eso hay que preguntarlo a la base.
+# Sin cursor cae al Entity Admin, que conserva alcance global.
 es_admin = _reg.es_admin
 es_legacy = _reg.es_legacy
 necesita_adopcion = _reg.necesita_adopcion
 exige_veredicto = _reg.exige_veredicto
 
 
-def puede_pasar_la_pelota(usuario, rl):
-    return _reg.puede_pasar_la_pelota(SEMANTICA, usuario, rl)
+def puede_pasar_la_pelota(usuario, rl, cur=None):
+    return _reg.puede_pasar_la_pelota(SEMANTICA, usuario, rl, cur)
 
 
-def puede_dictar_veredicto(usuario, rl):
+def puede_dictar_veredicto(usuario, rl, cur=None):
     """SOLO el responsable actual acepta o rechaza la modificacion."""
-    return _reg.puede_dictar_veredicto(SEMANTICA, usuario, rl)
+    return _reg.puede_dictar_veredicto(SEMANTICA, usuario, rl, cur)
 
 
-def puede_cerrar(usuario, rl):
+def puede_cerrar(usuario, rl, cur=None):
     """El emisor o un administrador. Tambien es quien puede DEVOLVER."""
-    return _reg.puede_cerrar(SEMANTICA, usuario, rl)
+    return _reg.puede_cerrar(SEMANTICA, usuario, rl, cur)
 
 
-def puede_adoptar(usuario, rl):
-    return _reg.puede_adoptar(SEMANTICA, usuario, rl)
+def puede_adoptar(usuario, rl, cur=None):
+    return _reg.puede_adoptar(SEMANTICA, usuario, rl, cur)
 
 
 def transicion_valida(actual, nuevo):

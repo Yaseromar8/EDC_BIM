@@ -14,9 +14,14 @@ DECISIONES QUE FIJAN ESTAS PRUEBAS
   acuse que se puede retirar no prueba nada.
 · Acusa QUIEN RECIBIÓ, no cualquiera con sesión. Un tercero acusando por su cuenta
   convertiría la prueba en ruido.
-· Un administrador puede registrarlo en nombre de alguien -pasa constantemente:
-  el contratista avisa por teléfono- pero queda marcado como 'admin', no como
-  'destinatario'. Quien lea el expediente tiene que poder distinguirlos.
+· Un administrador puede REGISTRAR una recepción -pasa constantemente: el
+  contratista avisa por teléfono- pero eso NO es un acuse del destinatario, y
+  desde el 21-ago-2026 tampoco lo parece: es un ADMIN_RECORDED_RECEIPT, dice de
+  qué destinatario se trata y quién lo anotó, y no lleva los campos con los que
+  se firma un acuse propio. Quien lea el expediente no puede confundirlos.
+· Y salda al DESTINATARIO. Antes cerraba el encargo de quien registraba -que no
+  tenía ninguno-, así que el destinatario seguía debiéndolo mientras la emisión
+  mostraba un acuse.
 · La FECHA la pone el servidor, nunca el cliente. En una discusión de plazos, la
   fecha no la decide el navegador de quien acusa.
 """
@@ -40,8 +45,16 @@ def api(monkeypatch):
 
     # id -> (obra, destinatarios, acuses)
     filas = {
-        7: (OBRA, [{'email': 'supervision@cliente.pe', 'name': 'Supervisión'}], []),
-        9: (AJENA, [{'email': 'otro@cliente.pe', 'name': 'Otro'}], []),
+        7: (OBRA, [{'user_id': 3, 'email': 'supervision@cliente.pe',
+                    'name': 'Supervisión'}], []),
+        # DOS destinatarios distintos: es el unico caso en que una emision reune
+        # dos recepciones. Antes esa prueba usaba «destinatario + admin», que
+        # bajo el modelo nuevo son la MISMA recepcion contada dos veces.
+        8: (OBRA, [{'user_id': 3, 'email': 'supervision@cliente.pe',
+                    'name': 'Supervisión'},
+                   {'user_id': 6, 'email': 'contratista@cliente.pe',
+                    'name': 'Contratista'}], []),
+        9: (AJENA, [{'user_id': 9, 'email': 'otro@cliente.pe', 'name': 'Otro'}], []),
     }
     guardado = {'acuses': None, 'id': None}
 
@@ -102,14 +115,17 @@ def api(monkeypatch):
                       'role': 'user'},
             'admin': {'id': 5, 'email': 'jefe@obra.pe', 'name': 'Jefe de obra',
                       'role': 'admin'},
+            'contratista': {'id': 6, 'email': 'contratista@cliente.pe',
+                            'name': 'Contratista', 'role': 'user'},
         }
         g.current_user = dict(gente[quien])
 
     return app.test_client(), guardado, filas
 
 
-def _acusar(cli, tid=7, quien='supervision'):
-    return cli.post(f'/api/transmittals/{tid}/acuse', headers={'X-Quien': quien})
+def _acusar(cli, tid=7, quien='supervision', **cuerpo):
+    return cli.post(f'/api/transmittals/{tid}/acuse',
+                    headers={'X-Quien': quien}, json=(cuerpo or None))
 
 
 # ── Lo esencial ─────────────────────────────────────────────────────────────
@@ -150,18 +166,65 @@ def test_sin_sesion_no_se_acusa(api):
 
 # ── El administrador que registra por otra vía ──────────────────────────────
 
-def test_un_admin_puede_registrar_el_acuse(api):
-    """Pasa constantemente: el contratista avisa por teléfono."""
+def test_un_admin_puede_registrar_la_recepcion(api):
+    """Pasa constantemente: el contratista avisa por teléfono.
+
+    Pero tiene que decir DE QUIÉN es la recepción. Antes no hacía falta, y el
+    resultado era una fila que decía «recibido» sin sujeto.
+    """
     cli, guardado, _f = api
-    assert _acusar(cli, quien='admin').status_code == 200
-    assert guardado['acuses'][0]['por'] == 'Jefe de obra'
+    assert _acusar(cli, quien='admin', destinatario_id=3).status_code == 200
+    assert guardado['acuses'][0]['registrado_por'] == 'Jefe de obra'
+    assert guardado['acuses'][0]['destinatario_id'] == 3
 
 
-def test_el_acuse_del_admin_se_distingue_del_del_destinatario(api):
-    """Quien lea el expediente tiene que poder saber cuál es cuál."""
+def test_registrar_sin_decir_de_quien_no_se_admite(api):
+    """«Recibido» sin sujeto no es un registro: es una afirmación sin dueño."""
     cli, guardado, _f = api
-    _acusar(cli, quien='admin')
-    assert guardado['acuses'][0]['via'] == 'admin'
+    r = _acusar(cli, quien='admin')
+    assert r.status_code == 400
+    assert r.get_json()['code'] == 'FALTA_DESTINATARIO'
+    assert guardado['acuses'] is None
+
+
+def test_no_se_registra_por_quien_no_es_destinatario(api):
+    cli, guardado, _f = api
+    r = _acusar(cli, quien='admin', destinatario_id=4)
+    assert r.status_code == 400
+    assert r.get_json()['code'] == 'NO_ES_DESTINATARIO'
+    assert guardado['acuses'] is None
+
+
+def test_el_registro_del_admin_NO_se_confunde_con_un_acuse(api):
+    """La distinción que pedía la Enmienda 2.
+
+    Antes las dos vías producían la misma forma de fila y solo cambiaba el
+    campo `via`; leído desde el expediente, el registro administrativo pasaba
+    por un acuse del destinatario. Ahora lleva `tipo`, y NO lleva `por_id`: no
+    hay forma de leerlo como si el destinatario hubiera actuado.
+    """
+    cli, guardado, _f = api
+    _acusar(cli, quien='admin', destinatario_id=3)
+    fila = guardado['acuses'][0]
+    assert fila['tipo'] == 'ADMIN_RECORDED_RECEIPT'
+    assert fila['via'] == 'admin'
+    assert fila['destinatario'] == 'Supervisión'
+    assert fila['registrado_por_id'] == 5
+    assert 'por_id' not in fila and 'por' not in fila
+
+
+def test_el_registro_administrativo_salda_al_DESTINATARIO(api):
+    """Y no a quien lo registró, que no debía nada.
+
+    `encargos._acuso` lee `destinatario_id`: quien queda saldado es la persona
+    que recibió, no el administrador que lo anotó.
+    """
+    import encargos
+    cli, guardado, _f = api
+    _acusar(cli, quien='admin', destinatario_id=3)
+    acuses = guardado['acuses']
+    assert encargos._acuso(acuses, 'supervision@cliente.pe', 'Supervisión', 3)
+    assert not encargos._acuso(acuses, 'jefe@obra.pe', 'Jefe de obra', 5)
 
 
 def test_el_acuse_del_destinatario_se_marca_como_tal(api):
@@ -180,11 +243,25 @@ def test_acusar_dos_veces_no_duplica(api):
     assert len(r.get_json()['acuses']) == 1
 
 
-def test_dos_personas_distintas_suman_dos_acuses(api):
+def test_dos_destinatarios_distintos_suman_dos_acuses(api):
+    """DOS DESTINATARIOS, no «destinatario + admin».
+
+    Esta prueba usaba antes al administrador como segunda persona. Bajo el
+    modelo nuevo eso no son dos recepciones: es la MISMA recepción --la del
+    destinatario-- contada dos veces, y por eso ya no suma.
+    """
+    cli, guardado, _f = api
+    _acusar(cli, tid=8, quien='supervision')
+    _acusar(cli, tid=8, quien='contratista')
+    assert len(guardado['acuses']) == 2
+
+
+def test_el_admin_no_duplica_una_recepcion_ya_acusada(api):
     cli, guardado, _f = api
     _acusar(cli, quien='supervision')
-    _acusar(cli, quien='admin')
-    assert len(guardado['acuses']) == 2
+    r = _acusar(cli, quien='admin', destinatario_id=3)
+    assert r.get_json()['ya_estaba'] is True
+    assert len(guardado['acuses']) == 1
 
 
 def test_no_hay_forma_de_retirar_un_acuse(api):

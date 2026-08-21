@@ -92,43 +92,65 @@ def es_el_responsable(usuario, obj):
         return False
 
 
-def es_admin(usuario):
-    return (usuario or {}).get('role') == 'admin'
+def es_admin(usuario, cur=None, obra=None):
+    """La posicion ADMIN de un flujo: administrador **DE ESA OBRA**.
+
+    Antes era `role == 'admin'` a secas, y con eso un administrador ajeno a la
+    obra podia pasar la pelota de un RFI o cerrarlo. Ahora, cuando se le da
+    contexto --cursor y obra--, se resuelve por obra; sin contexto cae al Entity
+    Admin, que conserva alcance global mientras 1 instancia = 1 cliente.
+
+    Lo que esta posicion NUNCA ha concedido, y sigue sin conceder: dictar el
+    veredicto. Eso es `quien_dicta_veredicto=(RESPONSABLE,)` en las dos
+    semanticas, y no incluye a ADMIN.
+    """
+    usuario = usuario or {}
+    if usuario.get('role') == 'admin':
+        return True
+    if cur is None or not obra:
+        return False
+    try:
+        from administracion_de_obra import es_admin_de_obra
+        return es_admin_de_obra(cur, usuario, obra)
+    except Exception:
+        return False                      # FAIL-CLOSED
 
 
-def ocupa(usuario, obj, posicion):
+def ocupa(usuario, obj, posicion, cur=None):
     if posicion == AUTOR:
         return es_el_autor(usuario, obj)
     if posicion == RESPONSABLE:
         return es_el_responsable(usuario, obj)
     if posicion == ADMIN:
-        return es_admin(usuario)
+        # La obra sale del PROPIO OBJETO: un RFI sabe de que obra es, asi que la
+        # administracion se resuelve contra esa y no contra ninguna otra.
+        return es_admin(usuario, cur, (obj or {}).get('project_id'))
     # Una posicion que no existe no puede darse por falsa en silencio: seria
     # una regla de gobierno que no gobierna nada y nadie lo notaria.
     raise ValueError('posición desconocida en el flujo: %r' % (posicion,))
 
 
-def alguna_de(usuario, obj, posiciones):
+def alguna_de(usuario, obj, posiciones, cur=None):
     """Si el usuario ocupa ALGUNA de las posiciones que la semantica declara."""
-    return any(ocupa(usuario, obj, p) for p in (posiciones or ()))
+    return any(ocupa(usuario, obj, p, cur) for p in (posiciones or ()))
 
 
 # ── Las reglas, evaluadas contra lo que declara CADA objeto ───────────────
 
-def puede_pasar_la_pelota(sem, usuario, obj):
-    return alguna_de(usuario, obj, sem.quien_pasa_la_pelota)
+def puede_pasar_la_pelota(sem, usuario, obj, cur=None):
+    return alguna_de(usuario, obj, sem.quien_pasa_la_pelota, cur)
 
 
-def puede_dictar_veredicto(sem, usuario, obj):
-    return alguna_de(usuario, obj, sem.quien_dicta_veredicto)
+def puede_dictar_veredicto(sem, usuario, obj, cur=None):
+    return alguna_de(usuario, obj, sem.quien_dicta_veredicto, cur)
 
 
-def puede_cerrar(sem, usuario, obj):
-    return alguna_de(usuario, obj, sem.quien_cierra)
+def puede_cerrar(sem, usuario, obj, cur=None):
+    return alguna_de(usuario, obj, sem.quien_cierra, cur)
 
 
-def puede_adoptar(sem, usuario, obj):
-    return alguna_de(usuario, obj, sem.quien_adopta)
+def puede_adoptar(sem, usuario, obj, cur=None):
+    return alguna_de(usuario, obj, sem.quien_adopta, cur)
 
 
 # ── Registros heredados ───────────────────────────────────────────────────

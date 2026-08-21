@@ -80,11 +80,19 @@ def verify_project_access(user_or_id, model_urn):
             user_id = user_or_id
             user_role = None
 
-        if user_role == 'admin':
-            return True
-
+        # ADMINISTRACION **DE ESTA OBRA**: Entity Admin, o Project Admin de
+        # `model_urn`. Antes cualquier `admin` daba True y con eso entraba en el
+        # expediente de obras de las que no era miembro.
         if not user_id:
             return False  # FAIL-CLOSED
+        try:
+            from administracion_de_obra import es_admin_de_obra as _adm
+            from db import get_db_connection as _gc
+            with _gc() as _c:
+                if _adm(_c.cursor(), {'id': user_id, 'role': user_role}, model_urn):
+                    return True
+        except Exception:
+            pass                          # sigue el camino normal de membresia
 
         # 1. Check in-memory cache (0ms)
         cache_key = (user_id, model_urn)
@@ -305,10 +313,14 @@ def _acceso_al_recurso(gcs_urn=None, node_id=None, version_id=None):
                             "error": "Enlace caducado o inválido"}), 403
         return jsonify({"success": False, "error": "Autenticación requerida"}), 401
     if user.get('role') == 'admin':
+        # ENTITY ADMIN: alcance global mientras 1 instancia = 1 cliente. El
+        # PROJECT ADMIN no sale por aqui -- sigue el camino normal, donde
+        # `permiso_documental` resuelve su autoridad SOBRE SU OBRA.
+        #
         # Los administradores TAMBIEN quedan registrados. Un registro de accesos
         # que se salta a quien mas puede no responde "quien tuvo acceso": deja
         # justo el hueco por el que se colo el incidente de agosto.
-        _anotar_acceso(user, None, 'sesión (admin)', gcs_urn, node_id)
+        _anotar_acceso(user, None, 'sesión (entity admin)', gcs_urn, node_id)
         return None
 
     # Se pregunta a TODAS las tablas que pueden poseer el objeto, no solo a
@@ -825,8 +837,17 @@ def _puede_descargar(user, parent_id, model_urn):
     """
     if not user:
         return False                      # fail-closed
-    if user.get('role') == 'admin':
-        return True
+    # Administracion DE ESTA OBRA. `get_effective_permission` ya la resuelve por
+    # dentro, pero este atajo evita la consulta al caso mayoritario -- y ahora
+    # pregunta por la obra en vez de por el rol global.
+    try:
+        from administracion_de_obra import es_admin_de_obra as _adm
+        from db import get_db_connection as _gc
+        with _gc() as _c:
+            if _adm(_c.cursor(), user, model_urn):
+                return True
+    except Exception:
+        pass
     try:
         from folder_permissions import get_effective_permission, PERMISSION_LEVELS
         eff = get_effective_permission(user.get('id'), parent_id, model_urn) or 'none'
@@ -3035,6 +3056,9 @@ def catalogo_de_idoneidad():
             # codigos que ya no se ofrecen solo confunde.
             u = getattr(g, 'current_user', None) or {}
             completo = None
+            # ENTITY ADMIN a proposito: `idoneidad_catalogo` es de la INSTANCIA,
+            # no de una obra. Quien administra una obra no decide los codigos de
+            # idoneidad de todas las demas.
             if u.get('role') == 'admin':
                 from idoneidad import asegurar_tabla
                 asegurar_tabla(cur)

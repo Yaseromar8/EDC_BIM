@@ -885,6 +885,8 @@ app.register_blueprint(projects_bp)
 app.register_blueprint(uploads_bp)
 from routes.directorio import directorio_bp
 app.register_blueprint(directorio_bp)   # directorio de obra y «Mi Trabajo»
+from routes.administracion import administracion_bp
+app.register_blueprint(administracion_bp)   # quien administra cada obra
 app.register_blueprint(audit_bp)      # la auditoria es DEL expediente, no del visor
 app.register_blueprint(partidas_bp, url_prefix='/api/partidas')
 app.register_blueprint(docs_cad_bp)   # ver DWG/Civil/IFC dentro de Documentos
@@ -980,6 +982,7 @@ def serve_map_file(filename):
 # que fallo se reintenta sola en el siguiente arranque. Servir la aplicacion
 # importa mas que completar una migracion accesoria.
 from db import ensure_file_nodes_table, ensure_ai_brain_schema, ensure_rfi_schema, ensure_redline_schema, ensure_partidas_schema, ensure_asset_user_data_table, ensure_project_identity_columns, ensure_reglas_del_redline
+import administracion_de_obra as _admin_obra
 from routes.presupuesto import ensure_presupuesto_schema
 from routes.inventory import ensure_extraction_jobs_table, ensure_inventory_identity
 from routes.civil_design_automation import ensure_civil_alignments_table
@@ -1021,6 +1024,7 @@ def _run_schema_setup():
         # Y las reglas del Red Line las ULTIMAS: sus claves ajenas apuntan a
         # `projects` y a `users`, que las crea `esquema_base` mas arriba.
         ('reglas_del_redline', ensure_reglas_del_redline),
+        ('administracion_de_obra', _admin_obra.asegurar_columna),
     ]
     if PERFIL_DESPLIEGUE != 'portal':
         # Las familias del visor solo se aseguran si sus modulos estan cargados.

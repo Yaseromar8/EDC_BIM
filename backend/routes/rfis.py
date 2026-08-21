@@ -265,8 +265,8 @@ def update_rfi(rfi_id):
                                     'code': 'RFI_CERRADO'}), 409
 
                 adopcion = flujo.necesita_adopcion(rfi)
-                permitido = (flujo.puede_adoptar(u, rfi) if adopcion
-                             else flujo.puede_pasar_la_pelota(u, rfi))
+                permitido = (flujo.puede_adoptar(u, rfi, cur) if adopcion
+                             else flujo.puede_pasar_la_pelota(u, rfi, cur))
                 if not permitido:
                     return jsonify({
                         'error': ('Solo quien creó el RFI o un administrador puede '
@@ -320,7 +320,7 @@ def update_rfi(rfi_id):
                                  'responderlo o cerrarlo.',
                         'code': 'NECESITA_ADOPCION'}), 409
                 if nuevo_estado == 'Respondido':
-                    if not flujo.puede_dictar_veredicto(u, rfi):
+                    if not flujo.puede_dictar_veredicto(u, rfi, cur):
                         return jsonify({
                             'error': 'Solo quien tiene el RFI puede responderlo.',
                             'code': 'NO_PUEDE_RESPONDER'}), 403
@@ -333,7 +333,7 @@ def update_rfi(rfi_id):
                     poner_sql('fecha_respuesta = CURRENT_TIMESTAMP')
                     historia.append(flujo.entrada('responded', actor, veredicto=veredicto))
                 elif nuevo_estado == 'Cerrado':
-                    if not flujo.puede_cerrar(u, rfi):
+                    if not flujo.puede_cerrar(u, rfi, cur):
                         return jsonify({
                             'error': 'Cierra el RFI quien lo creó, o un administrador.',
                             'code': 'NO_PUEDE_CERRAR'}), 403
@@ -361,7 +361,7 @@ def update_rfi(rfi_id):
                     poner(campo, data[campo] or None)
             if 'respuesta' in data and not nuevo_estado:
                 # Cambiar el veredicto sin cambiar de estado tambien es dictarlo.
-                if not flujo.puede_dictar_veredicto(u, rfi):
+                if not flujo.puede_dictar_veredicto(u, rfi, cur):
                     return jsonify({'error': 'Solo quien tiene el RFI puede responderlo.',
                                     'code': 'NO_PUEDE_RESPONDER'}), 403
                 poner('respuesta', data['respuesta'])
