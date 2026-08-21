@@ -1,13 +1,20 @@
-# MATRIZ DELTA ACC/PROCORE → ECD · REV.01
+# MATRIZ DELTA ACC/PROCORE → ECD · REV.02 FINAL
 
 **Fecha:** 21 de agosto de 2026 · Comparación de cierre contra la investigación ya hecha (docs 43–44).
 **Sin investigación nueva de fabricante. Sin código. Sin producción. Sin tocar la Controlled Window ni el mapa maestro.**
 
-> **REV.01** corrige cuatro clasificaciones de la primera entrega: Project
-> Membership (experiencia), Identity/Principal (operativa), la paridad operativa
-> global (partida en dos), y una afirmación sobre ACC que **nuestra propia
-> investigación no estableció** — retirada. Ninguna corrección impacta la
-> Controlled Window.
+> **REV.01** corrigió cuatro clasificaciones: Project Membership (experiencia),
+> Identity/Principal (operativa), la paridad operativa global (partida en dos), y
+> una afirmación sobre ACC que **nuestra propia investigación no estableció** —
+> retirada.
+>
+> **REV.02 FINAL** elimina las dos últimas inconsistencias internas: `ESTADO
+> REAL` tenía **dos semánticas implícitas** (capas marcadas `COMPLETE` con
+> experiencia 🟡) — ahora hay **una sola, definida abajo** —; y el foundation
+> documental incluía la capa 8, que está DEFER y no forma parte del backend
+> implementado.
+>
+> Ninguna corrección impacta la Controlled Window.
 
 **La pregunta que se responde:** ¿nuestro ECD **representa correctamente** las
 capas profesionales que la investigación ACC/Procore nos enseñó? — no si tenemos
@@ -21,6 +28,24 @@ ARCHITECTURAL  ¿el modelo conceptual está resuelto?
 OPERATIONAL    ¿el backend lo hace correctamente?
 EXPERIENCE     ¿se puede operar profesionalmente desde la interfaz?
 ```
+
+### `ESTADO REAL` — definición única *(REV.02)*
+
+`ESTADO REAL` es **el estado de la capa COMO PRODUCTO**, y es exactamente la
+suma de las tres paridades. No hay segunda lectura:
+
+```
+COMPLETE  ⇔  arq ✅  ∧  op ✅  ∧  exp ✅
+PARTIAL   ⇔  alguna de las tres no está en ✅
+DEFER     ⇔  capa deliberadamente no iniciada, con su trigger escrito
+             (no es un grado de avance: es una decisión)
+```
+
+Una capa con motor probado y sin interfaz operable **es PARTIAL**, por muy
+sólido que sea el motor: el producto es lo que una persona puede hacer. Las
+capas que bajan de `COMPLETE` a `PARTIAL` en esta revisión **no pierden nada de
+lo construido** — su arquitectura y su backend siguen en ✅, y así se lee en la
+tabla de §4.C.
 
 ---
 
@@ -40,7 +65,7 @@ EXPERIENCE     ¿se puede operar profesionalmente desde la interfaz?
 ### 2 · Account / Entity
 **Nos enseñó:** todo cuelga de una cuenta; el expediente tiene dueño institucional.
 **Objetivo ECD:** **1 instancia = 1 entidad** — la cuenta *es* el despliegue.
-**ESTADO REAL: COMPLETE** para el alcance actual (arq ✅ · op ✅ · exp 🟡).
+**ESTADO REAL: PARTIAL** — arq ✅ · op ✅ (para el alcance actual) · **exp 🟡**.
 **GAP REAL:** la entidad es **técnicamente implícita** y la UI no la nombra como objeto: se ven proyectos y usuarios, pero no «esta es la entidad, la administran estos, participan estas empresas».
 **¿BLOQUEA PILOTO?** NO — pero su **UX sí entra** en el baseline (§4). **TRIGGER:** capa 15.
 **DIFERENCIA DELIBERADA ECD:** una entidad por instancia en vez de multi-tenant. Menos flexible, radicalmente más simple de auditar: «¿quién pudo ver esto?» tiene respuesta acotada por construcción.
@@ -55,7 +80,7 @@ EXPERIENCE     ¿se puede operar profesionalmente desde la interfaz?
 ### 4 · Company
 **Nos enseñó:** las personas pertenecen a organizaciones, y eso importa en obra.
 **Objetivo ECD:** `users.company_id` — **global**, propiedad de la persona.
-**ESTADO REAL: COMPLETE** (arq ✅ · op ✅ · exp 🟡 — se edita en Participantes, pero la entidad no tiene vista de «empresas que participan»).
+**ESTADO REAL: PARTIAL** (arq ✅ · op ✅ · **exp 🟡** — se edita en Participantes, pero la entidad no tiene vista de «empresas que participan»).
 **GAP REAL:** vista de empresas a nivel entidad. **¿BLOQUEA PILOTO?** NO — entra en la UX de entidad del baseline.
 **DIFERENCIA DELIBERADA ECD:** la empresa es de la **persona** y es la misma en todas las obras; lo que cambia por obra es su **función** (capa 5). ACC mezcla ambas nociones en «Company» del proyecto.
 
@@ -69,14 +94,14 @@ EXPERIENCE     ¿se puede operar profesionalmente desde la interfaz?
 ### 6 · Entity Admin
 **Nos enseñó:** Account Admin custodia la cuenta; no es el que mantiene los servidores.
 **Objetivo ECD:** `users.role='admin'` — custodio de la instancia; alcance global mientras 1=1.
-**ESTADO REAL: COMPLETE** (arq ✅ · op ✅ · exp 🟡 — se cambia el rol desde «Usuarios del sistema»; falta la ficha que explique qué significa).
+**ESTADO REAL: PARTIAL** (arq ✅ · op ✅ · **exp 🟡** — se cambia el rol desde «Usuarios del sistema»; falta la ficha que explique qué significa).
 **GAP REAL:** adjudicación pendiente en producción (3 cuentas admin, una técnica). **¿BLOQUEA PILOTO?** **SÍ** — antes de un tercero, «¿quién pudo ver esto?» debe tener respuesta acotada. Es paso 14 de la ventana.
 **DIFERENCIA DELIBERADA ECD:** **SYSTEM OPERATOR fuera de la cadena** — separación que ACC/Procore no necesitan hacer explícita porque son SaaS; nosotros sí, y se declara en vez de fingir aislamiento.
 
 ### 7 · Project Admin
 **Nos enseñó:** administrar un proyecto es un rol propio, no una llave maestra.
 **Objetivo ECD:** `project_users.es_admin` — **es la fila de membresía**; nace FALSE, nadie hereda.
-**ESTADO REAL: COMPLETE** (arq ✅ · op ✅ · exp 🟡 — el control existe en Participantes; falta la ficha de persona y el flujo de alta).
+**ESTADO REAL: PARTIAL** (arq ✅ · op ✅ · **exp 🟡** — el control existe en Participantes; falta la ficha de persona y el flujo de alta).
 **GAP REAL:** experiencia parcial (marcado 🟡 en el mapa maestro). **¿BLOQUEA PILOTO?** NO por sí solo; su UX va con el baseline.
 **DIFERENCIA DELIBERADA ECD:** la administración **ES la membresía** — `project_users.es_admin`, una columna en la fila de participación: retirar de la obra retira la administración en el mismo acto, sin que nadie tenga que acordarse, y no puede existir un administrador que no sea miembro.
 *(REV.01 — retirada la afirmación «en ACC son objetos separados que pueden desincronizarse». Nuestra investigación estableció que ACC maneja el nivel de acceso **asociado al miembro del proyecto** — `Project member` / `Project administrator` —, no una separación entre objetos. Nuestra implementación se presenta por lo que es, sin apoyarse en un contraste que la investigación no soporta.)*
@@ -139,6 +164,24 @@ EXPERIENCE     ¿se puede operar profesionalmente desde la interfaz?
 **ESTADO REAL: DEFER** (semilla real: `DEPLOY_PROFILE portal|completo` activa módulos **por instancia**).
 **GAP REAL: NO.** **¿BLOQUEA PILOTO?** NO.
 **TRIGGER — apagado:** la primera cartera con obras que no usen los mismos módulos.
+
+### Recuento con la definición única *(REV.02)*
+
+```
+COMPLETE  3   Contractual Function (5) · Workflow (10) · Responsibility (11)
+PARTIAL   8   Identity (1) · Account/Entity (2) · Membership (3) · Company (4)
+              Entity Admin (6) · Project Admin (7) · Resource Permission (9)
+              Identity & Access UX (12)
+DEFER     5   Member Tool Access (8) · Permission Profiles (13)
+              Project Templates (14) · Account Roles (15) · Tool Activation (16)
+              ─────
+              16 capas
+```
+
+**Las ocho PARTIAL lo son por experiencia, no por motor** — salvo Identity (1),
+que además tiene gaps operativos reales, e Identity & Access UX (12), que es
+diseño cerrado sin implementar. Ninguna PARTIAL tiene su arquitectura sin
+resolver: la paridad arquitectónica sigue **alcanzada conceptualmente en 16/16**.
 
 ---
 
@@ -221,9 +264,10 @@ MODELO ACTIVO TOTAL     🟡 PARCIAL
                            pendiente de Identity & Access post-window
 ```
 
-**FOUNDATION DOCUMENTAL** — capas 3 a 11 en su dominio: membresía, empresa,
-función contractual, administración, permiso de recurso, workflow y
-responsabilidad. Backend completo y probado: **459 comprobaciones de batería +
+**FOUNDATION DOCUMENTAL** — **capas activas 3–7 y 9–11** en su dominio:
+membresía, empresa, función contractual, administración de entidad y de obra,
+permiso de recurso, workflow y responsabilidad. *(La capa 8, Member Tool Access,
+queda fuera: está DEFER y no forma parte del backend implementado — REV.02.)* Backend completo y probado: **459 comprobaciones de batería +
 890 de suite**. Pendiente únicamente de cruzar la ventana, que cierra sus dos
 ALERT vivos (permisos de carpeta rotos desde el 20-ago; enforce en log-only).
 
@@ -232,8 +276,9 @@ ALERT vivos (permisos de carpeta rotos desde el 20-ago; enforce en log-only).
 diagnosticados y no implementados (G5a, G6, G7, invariante de sesión), que
 viajan con la implementación de la capa 12, **post-window**.
 
-Decir «backend completo en las 11 capas activas» habría sido inexacto: es
-completo en la foundation documental, no en identidad.
+Decir «backend completo en las 11 capas activas» habría sido inexacto por dos
+motivos: no es completo en identidad, y las capas activas del foundation
+documental son **3–7 y 9–11** — ocho, no nueve: la 8 está DEFER.
 
 ## C · PARIDAD DE EXPERIENCIA
 
@@ -295,7 +340,7 @@ enciende: **se decide al definirlo, no ahora**.
 ```
                         YA ALCANZADO
     ├─ Paridad arquitectónica ...................... 16/16 capas
-    ├─ Foundation documental (backend) ............. capas 3–11, probadas
+    ├─ Foundation documental (backend) ............. capas 3–7 y 9–11, probadas
     │     (identidad: motor actual sí; modelo definitivo, post-window)
     ├─ Contractual Function ........................ capa propia, más que ACC/Procore
     ├─ Closest-wins + 3 sujetos (motor) ............ más explicable que ambos
@@ -334,8 +379,16 @@ implementación post-window · Member Tool Access = TRIGGER PROBABLE EN PILOTO �
 las demás capas DEFER. **Ninguna corrección impacta la Controlled Window**: los
 gaps reclasificados son todos post-window y no alteran su alcance congelado.
 
+**REV.02 no cambia:** paridad arquitectónica alcanzada conceptualmente ·
+`Controlled Window = ESTAMOS AQUÍ` · Identity & Access UX = diseño cerrado /
+implementación post-window · Resource Permission UX = gap pre-piloto · Member
+Tool Access = TRIGGER PROBABLE EN PILOTO · demás capas DEFER. Las capas que
+bajan a `PARTIAL` no pierden nada construido: su arquitectura y su backend
+siguen en ✅.
+
 ```
-MATRIZ DELTA ACC/PROCORE → ECD — REV.01 CERRADA
+MATRIZ DELTA ACC/PROCORE → ECD · REV.02 FINAL
+FUENTE DEFINITIVA DE PARIDAD
 ```
 
 **STOP.**
