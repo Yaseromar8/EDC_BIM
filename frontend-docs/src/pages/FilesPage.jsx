@@ -41,6 +41,7 @@ import DocumentViewer from '../components/DocumentViewer';
 // Cada uno se descarga solo cuando el usuario entra a ese módulo, en vez de
 // inflar el bundle inicial. Antes: 1 chunk de ~1.6 MB con TODO.
 const RedLineModule = lazy(() => import('../components/RedLineModule'));
+const RfiModule = lazy(() => import('../components/RfiModule'));
 const MultimediaModule = lazy(() => import('../components/MultimediaModule'));
 const GatewayPanel = lazy(() => import('../components/panels/GatewayPanel'));
 const QuarantineTable = lazy(() => import('../components/panels/QuarantineTable'));
@@ -288,6 +289,9 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 { titulo: 'Obra', items: [
                   { label: 'Archivos', mode: 'files', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5,5l2,2H20v12h-16V5H12.5 M13.17,3h-10.34A1.83,1.83,0,0,0,1,4.83v14.34A1.83,1.83,0,0,0,2.83,21h18.34A1.83,1.83,0,0,0,23,19.17V6.83A1.83,1.83,0,0,0,21.17,5H14.83Z"/></svg>, onClick: () => { fe.setSidebarView('files'); fe.switchMode(false); } },
                   { label: 'Fotos de campo', mode: 'multimedia', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>, onClick: () => fe.setSidebarView('multimedia') },
+                  // RFI: registro formal de consultas. Va antes de Red Line porque
+                  // es el objeto contractual; la observacion es interna.
+                  { label: 'RFI', mode: 'rfis', icon: <svg width="22" height="22" viewBox="0 0 24 24"><text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontWeight="bold" fontSize="11" fontFamily="sans-serif">RFI</text></svg>, onClick: () => fe.setSidebarView('rfis') },
                   { label: 'Red Line', mode: 'redlines', icon: <svg width="22" height="22" viewBox="0 0 24 24"><text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontWeight="bold" fontSize="14" fontFamily="sans-serif">RL</text></svg>, onClick: () => fe.setSidebarView('redlines') },
                   { label: 'Informes', mode: 'reports', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M9,17H7v-7h2V17z M13,17h-2V7h2V17z M17,17h-2v-4h2V17z"/></svg>, onClick: () => fe.setSidebarView('reports') },
                 ]},
@@ -385,6 +389,10 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         )}
 
         {/* RED LINES VIEW */}
+        {fe.sidebarView === 'rfis' && (
+          <RfiModule project={project} API={API} user={user} isAdmin={isAdmin} />
+        )}
+
         {fe.sidebarView === 'redlines' && (
           <RedLineModule project={project} API={API} user={user} isAdmin={isAdmin} />
         )}

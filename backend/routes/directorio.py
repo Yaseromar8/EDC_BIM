@@ -62,6 +62,51 @@ def listar_participantes(project_id):
         return jsonify({'error': str(e)}), 500
 
 
+@directorio_bp.route('/api/projects/<path:project_id>/miembros', methods=['GET'])
+def listar_miembros(project_id):
+    """Quien puede recibir un encargo en esta obra. Para los selectores.
+
+    POR QUE NO SIRVE LO QUE YA HABIA
+    --------------------------------
+    `GET /api/projects/<id>/users` (routes/auth.py:1032) devuelve solo IDS y
+    exige ser ADMINISTRADOR. Un residente que crea un RFI necesita elegir a
+    quien se lo dirige, y con esa ruta recibiria un 403.
+
+    Y `GET /api/users` tampoco vale: devuelve la instancia entera, incluidas
+    personas que no estan en esta obra. Un selector que ofrece a alguien a quien
+    luego el sistema va a rechazar --`abrir()` se niega a dar encargo a un no
+    miembro-- no es un selector: es una trampa.
+
+    Esta ruta la puede llamar cualquier MIEMBRO de la obra, y devuelve solo
+    miembros de esa obra. No amplia acceso a nada: son los nombres de las
+    personas con las que ya se comparte la obra.
+    """
+    obra = resolve_project_id(project_id)
+    if not obra:
+        return jsonify({'error': 'Obra no encontrada'}), 404
+    negativa = guardia_de_obra(obra, 'ver los miembros de esta obra')
+    if negativa:
+        return negativa
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT u.id, u.name, u.email, c.name, pc.funcion
+                  FROM project_users pu
+                  JOIN users u ON u.id = pu.user_id AND u.is_active
+             LEFT JOIN companies c ON c.id = u.company_id
+             LEFT JOIN project_companies pc
+                    ON pc.project_id = pu.project_id AND pc.company_id = u.company_id
+                 WHERE pu.project_id = %s
+                 ORDER BY u.name NULLS LAST, u.email
+            """, (obra,))
+            miembros = [{'id': r[0], 'name': r[1], 'email': r[2],
+                         'empresa': r[3], 'funcion': r[4]} for r in cur.fetchall()]
+        return jsonify({'project_id': obra, 'miembros': miembros}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @directorio_bp.route('/api/projects/<path:project_id>/participantes', methods=['POST'])
 def poner_participante(project_id):
     """Declara que una empresa participa en la obra con una funcion.

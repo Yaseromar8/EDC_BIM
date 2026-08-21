@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import PDFViewer from './PDFViewer';
+import useDocPreview from '../hooks/useDocPreview';
 
 const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
   // cfg define QUÉ tipo de incidencia es (endpoint, etiquetas, prefijo de
@@ -33,7 +34,11 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
     { key: 'codigo',      label: 'Código',      initW: 90 },
     { key: 'titulo',      label: 'Título',      initW: 320 },
     { key: 'estado',      label: 'Estado',      initW: 130 },
-    { key: 'respuesta',   label: 'Respuesta',   initW: 120 },
+    // «Veredicto», no «Respuesta»: la columna guarda Aceptado/Rechazado, no
+    // el texto de una respuesta -- eso vive en el PDF adjunto. Llamarla
+    // «Respuesta» engañaba a quien leía la tabla.
+    ...(cfg.usaDirectorio ? [{ key: 'vence_en', label: 'Vence', initW: 110 }] : []),
+    { key: 'respuesta',   label: cfg.etiquetaVeredicto || 'Respuesta', initW: 120 },
     { key: 'responsable', label: 'Responsable', initW: 170 },
     { key: 'fecha',       label: 'Fecha',       initW: 110 },
     { key: 'adjuntos',    label: 'Adjuntos',    initW: 100 },
@@ -72,16 +77,67 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
   const [nodesLoading, setNodesLoading] = useState(false);
   const [selectorPath, setSelectorPath] = useState([]);
 
-  // Responsable dropdown (persistido en localStorage)
+  // ── Responsable ────────────────────────────────────────────────────────
+  //
+  // Con `cfg.usaDirectorio`, sale de los MIEMBROS DE LA OBRA y lo que se manda
+  // es un `responsable_id`: una identidad del sistema.
+  //
+  // Antes salía de una lista en `localStorage` — un autocompletar PERSONAL, por
+  // navegador. Otra persona, en otro ordenador, veía otra lista; por eso los 25
+  // RFI reales tienen todos el mismo nombre tecleado a mano, y por eso no había
+  // ni un solo encargo de RFI: del texto no se deduce a quién le toca.
+  //
+  // Los módulos que todavía no se han migrado (Observaciones, hasta F1) siguen
+  // con la lista local: el interruptor está en su `cfg`, no aquí.
   const [showResponsableDropdown, setShowResponsableDropdown] = useState(false);
   const [newResponsableName, setNewResponsableName] = useState('');
+  const [miembros, setMiembros] = useState([]);
   const [responsableOptions, setResponsableOptions] = useState(() => {
+    if (cfg.usaDirectorio) return [];
     try {
       const saved = localStorage.getItem(cfg.storageKey);
       if (saved) return JSON.parse(saved);
     } catch(e) {}
     return [user?.name || 'Usuario'];
   });
+
+  useEffect(() => {
+    if (!cfg.usaDirectorio) return;
+    apiFetch(`${API}/api/projects/${encodeURIComponent(projectPrefix)}/miembros`)
+      .then(r => r.json())
+      .then(d => setMiembros(d.miembros || []))
+      .catch(() => setMiembros([]));
+  }, [projectPrefix, cfg.usaDirectorio]);
+
+  // ── Las reglas, espejo exactas de las del backend ──────────────────────
+  //
+  // Se repiten aquí SOLO para no ofrecer un botón que el servidor va a negar.
+  // La autoridad sigue siendo `flujo_de_rfi.py`: si estas se quedaran atrás, lo
+  // que pasaría es que la pantalla ofrecería de más y el usuario recibiría un
+  // 403 con su motivo — molesto, pero nunca una decisión equivocada.
+  const esElAutor = (r) => {
+    const a = String(r?.created_by || '').trim().toLowerCase();
+    return !!a && (a === String(user?.email || '').trim().toLowerCase()
+                || a === String(user?.name || '').trim().toLowerCase());
+  };
+  const esElResponsable = (r) => !!r?.responsable_id
+    && String(r.responsable_id) === String(user?.id || '');
+  const estaCerrado = (r) => r?.estado === 'Cerrado';
+
+  // Pasar la pelota es la operación ORDINARIA de un RFI: el autor, quien lo
+  // tiene, o un administrador. No lleva las puertas excepcionales de Reviews.
+  const puedePasarLaPelota = (r) => !estaCerrado(r)
+    && (esElAutor(r) || esElResponsable(r) || isAdmin);
+  // El veredicto lo dicta SOLO quien tiene el RFI. Ni el autor ni un admin: un
+  // veredicto que puede dictar quien preguntó no prueba nada.
+  const puedeDictarVeredicto = (r) => !estaCerrado(r) && esElResponsable(r);
+  const puedeCerrar = (r) => !estaCerrado(r) && (esElAutor(r) || isAdmin);
+  const necesitaAdopcion = (r) => !!r?.necesita_adopcion;
+
+  const nombreDe = (id) => {
+    const m = miembros.find(x => String(x.id) === String(id));
+    return m ? (m.name || m.email) : null;
+  };
 
   const addResponsable = () => {
     const name = newResponsableName.trim();
@@ -92,6 +148,22 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
     handleFieldChange('responsable', name);
     setNewResponsableName('');
     setShowResponsableDropdown(false);
+  };
+
+  // Cómo se ve el estado del FLUJO, que no es el `estado` del RFI: se calcula
+  // en el servidor al mirarlo y dice si alguien puede actuar de verdad.
+  const ETIQUETA_EVENTO = {
+    created: 'creado',
+    ball_in_court_changed: 'cambió de responsable',
+    adopted: 'incorporado al flujo',
+    estado: 'cambió de estado',
+    responded: 'respondido',
+    closed: 'cerrado',
+  };
+
+  const CHIP_FLUJO = {
+    BLOQUEADO:   { texto: 'Bloqueado',   bg: '#fee2e2', color: '#b91c1c' },
+    SIN_ASIGNAR: { texto: 'Sin asignar', bg: '#fef7e0', color: '#b06000' },
   };
 
   const STATES = [
@@ -154,18 +226,39 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
   const saveRfi = async (rfiId) => {
     setSaving(true);
     try {
-      const payload = { ...editFormData };
+      // SOLO LO QUE CAMBIÓ.
+      //
+      // Antes se mandaba el formulario entero en cada guardado. Con las reglas
+      // nuevas eso es un problema real: reenviar `respuesta` sin haberla tocado
+      // cuenta como dictar el veredicto, y a quien no tiene el RFI le devuelve
+      // un 403 por un campo que ni siquiera quería cambiar.
+      const original = rfis.find(r => r.id === rfiId) || {};
+      const payload = {};
+      Object.keys(editFormData).forEach(k => {
+        const antes = original[k];
+        const ahora = editFormData[k];
+        const igual = JSON.stringify(antes ?? null) === JSON.stringify(ahora ?? null);
+        if (!igual) payload[k] = ahora;
+      });
+      if (!Object.keys(payload).length) {
+        setEditingId(null); setShowResponsableDropdown(false); return;
+      }
       const res = await apiFetch(`${API}/${cfg.endpoint}/${rfiId}`, {
         method: 'PATCH',
         body: JSON.stringify(payload)
       });
-      if (res.ok) {
-        setRfis(prev => prev.map(r => r.id === rfiId ? { ...r, ...payload } : r));
-        setEditingId(null);
-        setShowResponsableDropdown(false);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // El backend explica QUÉ regla se incumplió; enseñarlo tal cual es más
+        // útil que un «no se pudo guardar».
+        toast.error(data.error || 'No se pudo guardar');
+        return;
       }
+      await fetchRfis();
+      setEditingId(null);
+      setShowResponsableDropdown(false);
     } catch (err) {
-      console.error('Error saving RFI:', err);
+      toast.error('No se pudo guardar');
     } finally {
       setSaving(false);
     }
@@ -476,8 +569,12 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
     setLoadingAdjuntoKey(key);
     // Obtener la URL firmada de Google Cloud segura usando nuestro token
     try {
+      // Un adjunto NUEVO abre su versión congelada; uno legacy, lo vivo.
       let url = `${API}/api/docs/signed-url?model_urn=${encodeURIComponent(projectPrefix)}`;
-      if (adj.id) {
+      if (adj.node_id) {
+        url += `&id=${adj.node_id}`;
+        if (adj.version_id) url += `&version_id=${encodeURIComponent(adj.version_id)}`;
+      } else if (adj.id) {
         url += `&id=${adj.id}`;
       } else if (adj.gcs_urn) {
         url += `&urn=${encodeURIComponent(adj.gcs_urn)}`;
@@ -488,7 +585,11 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
         const data = await res.json();
         if (data.success && data.url) {
           // Abrir ventana flotante en lugar de nueva pestaña
-          setPreviewFile({ name: adj.name, url: data.url, nodeId: adj.id || null });
+          const etiqueta = adj.version_id
+            ? ` · v${adj.version_number || '?'}`
+            : (adj.node_id || adj.id ? ' · versión actual' : '');
+          setPreviewFile({ name: (adj.name || '') + etiqueta, url: data.url,
+                           nodeId: adj.node_id || adj.id || null });
         } else {
           toast.error('Error: ' + (data.error || 'No se pudo generar la URL.'));
         }
@@ -579,7 +680,20 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
   };
 
   const linkSelectedFile = async (fileNode) => {
-    const newAdjunto = { id: fileNode.id, name: fileNode.name, gcs_urn: fileNode.gcs_urn };
+    // SE FIJA LA VERSIÓN, no el documento.
+    //
+    // Antes se guardaba solo el nodo, o sea «lo que haya hoy en ese fichero»:
+    // bastaba con que alguien subiera una revisión para que el RFI —con su
+    // número y su veredicto puestos— enseñara otra cosa. Es el mismo defecto
+    // que ya se corrigió en las entregas.
+    //
+    // Los adjuntos legacy (`{id, name, gcs_urn}`) se conservan tal cual y
+    // siguen abriendo la versión viva: no se convierten.
+    const newAdjunto = cfg.usaDirectorio
+      ? { node_id: fileNode.id, version_id: fileNode.current_version_id || null,
+          version_number: fileNode.version_number || null,
+          name: fileNode.name, rol: 'consulta' }
+      : { id: fileNode.id, name: fileNode.name, gcs_urn: fileNode.gcs_urn };
 
     if (editingId === activeRfiForLink?.id) {
       setEditFormData(prev => ({ ...prev, adjuntos: [...prev.adjuntos, newAdjunto] }));
@@ -724,7 +838,11 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                 const currentAdjuntos = isEditing ? editFormData.adjuntos : (rfi.adjuntos || []);
 
                 return (
-                  <tr key={rfi.id} style={{ borderBottom: '1px solid #eee', background: isEditing ? '#f4f6f9' : '#fff', transition: 'background 0.2s' }}>
+                  // Fragmento: bajo la fila del RFI pueden ir dos filas más --el
+                  // aviso del flujo y el historial-- y un `.map` sólo devuelve
+                  // un elemento raíz.
+                  <React.Fragment key={rfi.id}>
+                  <tr style={{ borderBottom: '1px solid #eee', background: isEditing ? '#f4f6f9' : '#fff', transition: 'background 0.2s' }}>
 
                     {/* CODIGO */}
                     <td style={{ padding: '3px 10px', fontWeight: 600, color: '#d32f2f', fontFamily: 'monospace', fontSize: 11 }}>
@@ -785,9 +903,28 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                       )}
                     </td>
 
-                    {/* RESPUESTA */}
+                    {/* PLAZO — días calendario, y se dice */}
+                    {cfg.usaDirectorio && (
+                      <td style={{ padding: '3px 10px' }}>
+                        {isEditing && puedePasarLaPelota(rfi) ? (
+                          <input
+                            type="date"
+                            value={(editFormData.vence_en || '').slice(0, 10)}
+                            onChange={e => handleFieldChange('vence_en', e.target.value || null)}
+                            title="Fecha límite (día calendario). No hay calendario de días hábiles: un plazo vence en la fecha indicada aunque caiga en fin de semana."
+                            style={{ padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12, width: '100%' }}
+                          />
+                        ) : (
+                          <span style={{ fontSize: 12, color: rfi.vence_en ? '#555' : '#bbb' }}>
+                            {rfi.vence_en ? new Date(rfi.vence_en).toLocaleDateString() : '—'}
+                          </span>
+                        )}
+                      </td>
+                    )}
+
+                    {/* VEREDICTO — sólo lo dicta quien tiene el RFI */}
                     <td style={{ padding: '3px 10px' }}>
-                      {isEditing ? (
+                      {isEditing && (!cfg.usaDirectorio || puedeDictarVeredicto(rfi)) ? (
                         <select
                           value={editFormData.respuesta || ''}
                           onChange={e => handleFieldChange('respuesta', e.target.value)}
@@ -837,7 +974,38 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                               background: '#fff', border: '1px solid #ddd', borderRadius: 6,
                               boxShadow: '0 4px 12px rgba(0,0,0,0.12)', maxHeight: 220, overflowY: 'auto', marginTop: 4
                             }}>
-                              {responsableOptions.map((name, i) => (
+                              {cfg.usaDirectorio && miembros.map((m) => (
+                                <div
+                                  key={m.id}
+                                  onClick={() => {
+                                    // Se manda la IDENTIDAD. El nombre viaja
+                                    // sólo como etiqueta visible.
+                                    handleFieldChange('responsable_id', m.id);
+                                    handleFieldChange('responsable', m.name || m.email);
+                                    setShowResponsableDropdown(false);
+                                  }}
+                                  style={{
+                                    padding: '8px 12px', fontSize: 13, cursor: 'pointer',
+                                    background: String(editFormData.responsable_id) === String(m.id) ? '#eef2f7' : '#fff',
+                                    borderBottom: '1px solid #f5f5f5'
+                                  }}
+                                  onMouseOver={e => e.currentTarget.style.background = '#f4f6f9'}
+                                  onMouseOut={e => e.currentTarget.style.background = String(editFormData.responsable_id) === String(m.id) ? '#eef2f7' : '#fff'}
+                                >
+                                  {m.name || m.email}
+                                  {(m.funcion || m.empresa) && (
+                                    <span style={{ color: '#999', fontSize: 11 }}>
+                                      {' · '}{m.funcion || m.empresa}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                              {cfg.usaDirectorio && !miembros.length && (
+                                <div style={{ padding: '10px 12px', fontSize: 12, color: '#999' }}>
+                                  Esta obra todavía no tiene miembros a los que dirigirlo.
+                                </div>
+                              )}
+                              {!cfg.usaDirectorio && responsableOptions.map((name, i) => (
                                 <div
                                   key={i}
                                   onClick={() => { handleFieldChange('responsable', name); setShowResponsableDropdown(false); }}
@@ -852,7 +1020,10 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                                   {name}
                                 </div>
                               ))}
-                              {/* ── + Agregar nuevo responsable ── */}
+                              {/* ── + Agregar nuevo responsable ──
+                                  Sólo sin directorio. Con él, teclear un nombre
+                                  suelto es exactamente el defecto que se quita. */}
+                              {!cfg.usaDirectorio && (
                               <div style={{ padding: '8px 10px', borderTop: '1px solid #eee', display: 'flex', gap: 6 }}>
                                 <input
                                   type="text"
@@ -870,6 +1041,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                                   +
                                 </button>
                               </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -990,6 +1162,69 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                     </td>
 
                   </tr>
+
+                  {/* ── AVISO DEL FLUJO ────────────────────────────────────
+                      Una segunda fila bajo el RFI cuando hay algo que decir:
+                      que está bloqueado, o que viene del registro anterior y
+                      todavía no tiene responsable del sistema. Antes esto no
+                      se veía en ninguna parte y el usuario descubría la regla
+                      al chocar con un 403. */}
+                  {cfg.usaDirectorio && (rfi.flujo === 'BLOQUEADO' || necesitaAdopcion(rfi)) && (
+                    <tr>
+                      <td colSpan={COL_DEFS.length + 2} style={{ padding: '0 10px 8px' }}>
+                        <div role="alert" style={{
+                          background: rfi.flujo === 'BLOQUEADO' ? '#fff1f2' : '#fffbeb',
+                          border: `1px solid ${rfi.flujo === 'BLOQUEADO' ? '#fecdd3' : '#fde68a'}`,
+                          color: rfi.flujo === 'BLOQUEADO' ? '#9f1239' : '#92400e',
+                          borderRadius: 6, padding: '8px 11px', fontSize: 12
+                        }}>
+                          {necesitaAdopcion(rfi) ? (
+                            <>
+                              <b>Viene del registro anterior.</b> Su responsable es
+                              sólo el texto «{rfi.responsable || '—'}». Asigna a un
+                              miembro de la obra antes de responderlo o cerrarlo.
+                              {rfi.responsable && (
+                                <div style={{ marginTop: 4, opacity: .8 }}>
+                                  El texto original se conserva en el registro.
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <><b>Este {cfg.singular} no puede avanzar.</b>{rfi.flujo_motivo ? ` ${rfi.flujo_motivo}` : ''}</>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+
+                  {/* ── HISTORIAL ──────────────────────────────────────────
+                      Quién lo asignó, quién lo respondió y con qué veredicto,
+                      quién lo cerró. Se muestra al editar, que es cuando
+                      alguien está mirando de cerca. */}
+                  {cfg.usaDirectorio && isEditing && (rfi.historial || []).length > 0 && (
+                    <tr>
+                      <td colSpan={COL_DEFS.length + 2} style={{ padding: '0 10px 10px' }}>
+                        <div style={{ background: '#fafbfc', border: '1px solid #eee', borderRadius: 6, padding: '8px 11px' }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#5f6368', letterSpacing: '.3px', textTransform: 'uppercase', marginBottom: 6 }}>
+                            Historial
+                          </div>
+                          {(rfi.historial || []).map((h, i) => (
+                            <div key={i} style={{ fontSize: 12, color: '#555', padding: '2px 0' }}>
+                              <span style={{ color: '#999' }}>
+                                {h.at ? new Date(h.at).toLocaleString() : ''}
+                              </span>
+                              {' · '}<b>{h.by || '—'}</b>{' · '}
+                              {ETIQUETA_EVENTO[h.event] || h.event}
+                              {h.veredicto ? ` (${h.veredicto})` : ''}
+                              {h.a_nombre ? ` → ${h.a_nombre}` : ''}
+                              {h.responsable_texto ? ` — venía de «${h.responsable_texto}»` : ''}
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })
             )}

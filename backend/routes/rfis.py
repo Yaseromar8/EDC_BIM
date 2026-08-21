@@ -127,7 +127,12 @@ def get_rfis(model_urn):
             cur.execute('SELECT %s FROM doc_rfis WHERE model_urn = %%s '
                         ' ORDER BY created_at DESC' % _COLS, (model_urn,))
             datos = [_con_flujo(cur, _fila(r)) for r in cur.fetchall()]
-        return jsonify(datos), 200
+        # `{"results": [...]}`, que es el contrato que la interfaz ya esperaba.
+        # Al reescribir este fichero lo cambie a una lista pelada sin ninguna
+        # razon, y como el modulo no estaba montado nadie lo noto: la lista
+        # habria salido vacia el dia que se encendiera. Y `doc_redlines`, que
+        # comparte el mismo componente, sigue con este contrato.
+        return jsonify({'results': datos}), 200
     except Exception as e:
         logger.error('GET /api/rfis: %s', e)
         return jsonify({'error': str(e)}), 500

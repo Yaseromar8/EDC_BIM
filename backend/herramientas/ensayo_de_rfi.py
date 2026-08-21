@@ -160,6 +160,23 @@ def main():
             return 1
         rfi = r.get_json()['rfi']
         _paso(rfi['codigo'] == 'RFI-001', 'y numera desde 001', rfi['codigo'])
+
+        # EL CONTRATO DE LA LISTA. Se comprueba porque ya se rompio una vez: al
+        # reescribir el modulo se cambio `{"results": [...]}` por una lista
+        # pelada, y como la interfaz no estaba montada nadie lo noto -- la lista
+        # habria salido vacia el dia que se encendiera. Un ensayo que solo crea
+        # y consulta la base no ve lo que ve un cliente HTTP.
+        r = cliente(sesion_autor).get('/api/rfis/%s' % OBRA)
+        cuerpo = r.get_json()
+        _paso(r.status_code == 200 and isinstance(cuerpo, dict)
+              and isinstance(cuerpo.get('results'), list),
+              'la lista respeta el contrato {"results": [...]}',
+              str(cuerpo)[:60])
+        _paso(any(x['id'] == rfi['id'] for x in (cuerpo or {}).get('results', [])),
+              'y el RFI recien creado aparece en ella')
+        uno = next((x for x in cuerpo['results'] if x['id'] == rfi['id']), {})
+        _paso(uno.get('flujo') == 'SIN_ASIGNAR' and 'necesita_adopcion' in uno,
+              'con su estado de flujo calculado', str(uno.get('flujo')))
         _paso(rfi['project_id'] == OBRA, 'con su obra canonica guardada')
         _paso(all(len(enc.mi_trabajo(cur, g[q])) == 0
                   for q in ('autor', 'proyectista', 'supervisor')),
