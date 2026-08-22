@@ -79,6 +79,20 @@ Admin, (c) nombrar a dos, para que ninguno sea el único.
 
 ---
 
+# PRINCIPIO DE RETIRADA — fijado por el propietario (22-ago-2026)
+
+```
+sin actividad probatoria  ->  se puede PURGAR      (la fila no prueba nada)
+con actividad probatoria  ->  NUNCA se purga: se DESACTIVA
+                              la identidad y sus actos se conservan
+```
+
+Es la diferencia entre la cuenta 21 (purgada: cero actos) y la 22 (jamás
+purgable: sus actos son la evidencia de la ventana). La desactivación existe
+para proteger el rastro de quien HIZO algo; donde no hay rastro, no protege nada.
+
+---
+
 # FICHAS · 7 identidades (todas las que existen)
 
 ## id 2 · Yaser Omar — `omarsanchezh8@gmail.com`
@@ -166,7 +180,7 @@ Admin, (c) nombrar a dos, para que ninguno sea el único.
 | POR QUÉ EXISTE | Residuo de la ventana: su enlace se cerró sin copiar y no había forma de reemitirlo (defecto que se corrigió después, `556820a`) |
 | RIESGO | Ninguno: tras G5a no es reclamable ni por enlace ni por Google |
 | RECOMENDACIÓN TÉCNICA | **Purgar** («Eliminar invitación»): nunca fue reclamada, no hay rastro que conservar, y limpia el padrón |
-| **DECISIÓN DEL PROPIETARIO** | [vacío] |
+| **DECISIÓN DEL PROPIETARIO** | ✅ **PURGADA (22-ago-2026) · CUENTA 1/7** — preflight sobre las 9 FK reales de `users` + 8 referencias por texto: todo cero. Los 4 `auth_events` sobreviven (`auth_events` no tiene FK a `users`) y registran acciones *sobre* la cuenta, no *de* ella. Ejecutada como purga humana explícita, con el asiento `usuario_borrado` escrito ANTES del DELETE para que sobreviviera a la fila. Verificado: 0 filas, correo libre, 0 huérfanos, integridad intacta |
 
 ## id 22 · YASER HUAMANI — `omarsanchezh8+prueba1@gmail.com`
 
@@ -180,7 +194,7 @@ Admin, (c) nombrar a dos, para que ninguno sea el único.
 | POR QUÉ EXISTE | Usuario de prueba nº 1: aportó **toda** la evidencia EXP de la ventana (409/404/400/200, RFI-001, RL-001, TR-001, RV-002) |
 | RIESGO | Ninguno: su autoridad muere con la obra de prueba, y no toca el expediente real |
 | RECOMENDACIÓN TÉCNICA | **Conservar mientras dure la estabilización.** Su retirada va atada a la decisión sobre la obra de prueba, post-estabilización |
-| **DECISIÓN DEL PROPIETARIO** | [vacío] |
+| **DECISIÓN DEL PROPIETARIO** | ✅ **CONSERVAR TEMPORALMENTE · CUENTA 2/7** — activa, miembro y Project Admin **solo** de la obra de prueba, sin Entity Admin ni acceso a PQT8_TALARA. No se toca empresa, función, membresías ni privilegios durante la estabilización salvo que lo exija una prueba congelada. **REVISIÓN: al cerrar Production Stabilization**, junto con la obra de prueba (A: entorno permanente de QA · B: archivar y retirar · C: otro tratamiento justificado). **No decidido todavía si será cuenta permanente de QA.** Si algún día se retira: **NUNCA purgar** — tiene actividad probatoria material |
 
 ---
 
