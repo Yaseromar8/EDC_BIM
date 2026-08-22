@@ -173,6 +173,23 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
     Devuelve el nombre del nivel (`none`, `viewer`, …). Con `con_motivo=True`
     devuelve `(nivel, motivo)`, para que la interfaz pueda explicar POR QUE --
     un permiso que no se puede explicar se acaba concediendo «por si acaso».
+
+    EL MOTIVO ES UN DICCIONARIO, no una frase: la interfaz tiene que poder
+    señalar la CARPETA GANADORA y el SUJETO GANADOR, no solo repetir un texto.
+
+        {'regla': 'sujeto' | 'admin_de_obra' | 'defecto' | 'sin_identidad'
+                            | 'recurso_inexistente',
+         'carpeta_id': …,          la carpeta cuya regla decidió (None si no aplica)
+         'sujeto_tipo': …,         USER | COMPANY | CONTRACTUAL_FUNCTION
+         'sujeto_id': …,           el id/código con el que la regla le alcanza
+         'saltos': n,              0 = la carpeta del propio recurso
+         'desplazados': […],       las reglas del MISMO nivel que perdieron por
+                                   precedencia -- lo que hace visible la regla
+         'texto': '…'}             una frase, para quien solo quiera leerla
+
+    Esto NO cambia la resolución: son los mismos datos que el bucle ya tenía
+    en la mano cuando decidía. Explicar y decidir siguen siendo una sola
+    pasada, para que no puedan contradecirse.
     """
     usuario = usuario or {}
     # POLITICA ADMINISTRATIVA EXPLICITA, no un bypass accidental.
@@ -187,11 +204,20 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
     # posiciones del flujo, y ahi el administrador nunca responde por otro.
     from administracion_de_obra import es_admin_de_obra as _adm
     if _adm(cur, usuario, model_urn):
-        return ('admin', 'administrador de esta obra') if con_motivo else 'admin'
+        return (('admin', {'regla': 'admin_de_obra', 'carpeta_id': None,
+                           'sujeto_tipo': None, 'sujeto_id': None, 'saltos': None,
+                           'desplazados': [],
+                           'texto': 'administra esta obra: atraviesa los permisos '
+                                    'de carpeta, y solo los de esta obra'})
+                if con_motivo else 'admin')
 
     sujetos = sujetos_de(cur, usuario, model_urn)
     if USER not in sujetos:
-        return ('none', 'sesión sin identidad') if con_motivo else 'none'
+        return (('none', {'regla': 'sin_identidad', 'carpeta_id': None,
+                          'sujeto_tipo': None, 'sujeto_id': None, 'saltos': None,
+                          'desplazados': [],
+                          'texto': 'sesión sin identidad'})
+                if con_motivo else 'none')
 
     # Se parte de la CARPETA del recurso. Un fichero no lleva permisos propios:
     # los lleva la carpeta que lo contiene, y de ahi hacia arriba.
@@ -199,7 +225,11 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
                 " WHERE id::text = %s AND model_urn = %s", (str(node_id), str(model_urn)))
     fila = cur.fetchone()
     if not fila:
-        return ('none', 'el recurso no existe en esta obra') if con_motivo else 'none'
+        return (('none', {'regla': 'recurso_inexistente', 'carpeta_id': None,
+                          'sujeto_tipo': None, 'sujeto_id': None, 'saltos': None,
+                          'desplazados': [],
+                          'texto': 'el recurso no existe en esta obra'})
+                if con_motivo else 'none')
     actual = fila[1] if fila[2] == 'FILE' else fila[0]
 
     visto, saltos = set(), 0
@@ -228,7 +258,24 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
             for tipo in PRECEDENCIA:
                 if tipo in reglas:
                     if con_motivo:
-                        return reglas[tipo], 'regla de %s en esta carpeta o la más cercana' % tipo
+                        # Las del MISMO nivel que perdieron por precedencia. Es
+                        # el dato que convierte «tienes viewer» en «tienes
+                        # viewer PORQUE tu regla personal desplaza a la de tu
+                        # empresa, aqui mismo».
+                        desplazados = [{'sujeto_tipo': t, 'nivel': reglas[t]}
+                                       for t in PRECEDENCIA
+                                       if t in reglas and t != tipo]
+                        return reglas[tipo], {
+                            'regla': 'sujeto',
+                            'carpeta_id': str(actual),
+                            'sujeto_tipo': tipo,
+                            'sujeto_id': sujetos.get(tipo),
+                            'saltos': saltos - 1,
+                            'desplazados': desplazados,
+                            'texto': ('regla de %s en %s' % (
+                                tipo, 'esta misma carpeta' if saltos == 1
+                                else 'una carpeta superior')),
+                        }
                     return reglas[tipo]
 
         cur.execute("SELECT parent_id FROM file_nodes WHERE id = %s", (actual,))
@@ -238,7 +285,14 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
     # NINGUNA regla en toda la cadena: manda el perfil global, como DEFECTO.
     por_defecto = GLOBAL_ROLE_TO_PERMISSION.get(usuario.get('role') or 'viewer', 'none')
     if con_motivo:
-        return por_defecto, 'sin ninguna regla en la cadena: perfil del sistema'
+        return por_defecto, {
+            'regla': 'defecto', 'carpeta_id': None,
+            'sujeto_tipo': None, 'sujeto_id': None, 'saltos': saltos,
+            'desplazados': [],
+            'texto': ('ninguna regla le alcanza en toda la cadena de carpetas: '
+                      'manda su perfil del sistema (%s)'
+                      % (usuario.get('role') or 'viewer')),
+        }
     return por_defecto
 
 

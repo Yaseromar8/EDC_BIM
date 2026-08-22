@@ -2515,8 +2515,17 @@ def set_folder_permission_endpoint():
     permission_level = data.get('permission_level')
     model_urn = data.get('model_urn', 'global')
     
-    if not folder_id or not user_email or not permission_level:
-        return jsonify({"success": False, "error": "Faltan parámetros (folder_id, user_email, permission_level)"}), 400
+    # CAPA 9: una regla puede dirigirse a una PERSONA, una EMPRESA o una
+    # FUNCION CONTRACTUAL -- los tres sujetos que el motor ya resuelve. El
+    # camino por `user_email` se conserva tal cual: es el que usa la pantalla
+    # anterior y el que prueban las baterias existentes.
+    sujeto_tipo = (data.get('sujeto_tipo') or '').strip().upper() or None
+    sujeto_id = data.get('sujeto_id')
+
+    if not folder_id or not permission_level:
+        return jsonify({"success": False, "error": "Faltan parámetros (folder_id, permission_level)"}), 400
+    if not sujeto_tipo and not user_email:
+        return jsonify({"success": False, "error": "Falta el sujeto de la regla (sujeto_tipo + sujeto_id, o user_email)"}), 400
         
     from flask import g
     current_user = getattr(g, 'current_user', None)
@@ -2529,6 +2538,39 @@ def set_folder_permission_endpoint():
     
     try:
         from db import get_db_connection
+        from folder_permissions import set_permiso_de_sujeto
+        granted_by = current_user.get('id') if current_user else None
+
+        if sujeto_tipo:
+            # El sujeto se VALIDA contra la realidad antes de escribir: una
+            # regla dirigida a una empresa que no existe, o a una funcion
+            # inventada, seria una fila que no alcanza a nadie y que nadie
+            # entiende al leerla despues.
+            from permiso_documental import USER as _U, COMPANY as _C, FUNCTION as _F
+            from directorio_de_obra import FUNCIONES
+            sid = str(sujeto_id or '').strip()
+            if not sid:
+                return jsonify({"success": False, "error": "Falta sujeto_id"}), 400
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                if sujeto_tipo == _U:
+                    cur.execute("SELECT 1 FROM users WHERE id::text = %s", (sid,))
+                    if not cur.fetchone():
+                        return jsonify({"success": False, "error": "Esa persona no existe."}), 404
+                elif sujeto_tipo == _C:
+                    cur.execute("SELECT 1 FROM companies WHERE id::text = %s", (sid,))
+                    if not cur.fetchone():
+                        return jsonify({"success": False, "error": "Esa empresa no existe."}), 404
+                elif sujeto_tipo == _F:
+                    if sid not in FUNCIONES:
+                        return jsonify({"success": False,
+                                        "error": "Función contractual desconocida: %s" % sid}), 400
+                else:
+                    return jsonify({"success": False,
+                                    "error": "Sujeto inválido: %s" % sujeto_tipo}), 400
+            set_permiso_de_sujeto(folder_id, sujeto_tipo, sid, permission_level, granted_by)
+            return jsonify({"success": True, "message": "Permisos actualizados correctamente."}), 200
+
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id FROM users WHERE email = %s", (user_email,))
@@ -2536,10 +2578,9 @@ def set_folder_permission_endpoint():
             if not row:
                 return jsonify({"success": False, "error": f"Usuario no encontrado: {user_email}"}), 404
             target_user_id = row[0]
-            
-        granted_by = current_user.get('id') if current_user else None
+
         set_folder_permission(folder_id, target_user_id, permission_level, granted_by, model_urn)
-        
+
         return jsonify({"success": True, "message": "Permisos actualizados correctamente."}), 200
     except ValueError as ve:
         return jsonify({"success": False, "error": str(ve)}), 400
@@ -2576,6 +2617,152 @@ def remove_folder_permission_endpoint():
             return jsonify({"success": False, "error": "Permiso no encontrado."}), 404
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+@documents_bp.route('/api/docs/permiso-efectivo', methods=['GET'])
+def permiso_efectivo_endpoint():
+    """QUE permiso tiene una persona sobre un recurso, y POR QUE.
+
+    POR QUE ESTA RUTA ES PARTE DEL PRODUCTO Y NO UNA HERRAMIENTA
+    -----------------------------------------------------------
+    Con CLOSEST-WINS y tres clases de sujeto, la tabla de una carpeta ya no
+    contesta «¿puede Ana entrar aqui?»: la regla que decide puede estar tres
+    carpetas mas arriba y llegarle por su EMPRESA. Un administrador que no
+    puede comprobarlo acaba concediendo de mas «por si acaso» -- que es
+    exactamente como se pierde el control de un expediente.
+
+    La respuesta la da EL MOTOR, en la misma pasada con la que decidiria de
+    verdad (`permiso_efectivo(con_motivo=True)`). No hay una segunda logica
+    que explique lo que otra decide: eso acabaria mintiendo el dia que
+    divergieran.
+    """
+    from flask import g
+    node_id = request.args.get('node_id')
+    model_urn = request.args.get('model_urn', 'global')
+    user_id = request.args.get('user_id')
+    if not node_id or not user_id:
+        return jsonify({"success": False, "error": "Faltan node_id y user_id"}), 400
+
+    quien = getattr(g, 'current_user', None)
+    if not verify_project_access(quien, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso al proyecto."}), 403
+    # Consultar el permiso AJENO es un acto administrativo: dice quien alcanza
+    # que, y eso es informacion de control de acceso. Mismo minimo que ver la
+    # tabla de permisos de la carpeta.
+    from folder_permissions import (check_folder_permission, PERMISSION_LABELS,
+                                    ETIQUETA_SUJETO, ETIQUETA_FUNCION)
+    rbac = check_folder_permission(quien, node_id, model_urn, 'admin',
+                                   'consultar el permiso de otra persona')
+    if rbac:
+        return rbac
+
+    try:
+        from db import get_db_connection
+        import permiso_documental as _pd
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT id, name, email, role FROM users WHERE id::text = %s",
+                        (str(user_id),))
+            u = cur.fetchone()
+            if not u:
+                return jsonify({"success": False, "error": "Esa persona no existe."}), 404
+            persona = {'id': u[0], 'name': u[1], 'email': u[2], 'role': u[3]}
+
+            nivel, motivo = _pd.permiso_efectivo(cur, persona, model_urn, node_id,
+                                                 con_motivo=True)
+            # Con que identidades le alcanza una regla en ESTA obra: es lo que
+            # hace comprensible que gane su empresa y no el.
+            sujetos = _pd.sujetos_de(cur, persona, model_urn)
+            empresa = None
+            if sujetos.get(_pd.COMPANY):
+                cur.execute("SELECT name FROM companies WHERE id::text = %s",
+                            (sujetos[_pd.COMPANY],))
+                f = cur.fetchone()
+                empresa = f[0] if f else None
+
+            # La CARPETA GANADORA con nombre, no un UUID: el administrador
+            # tiene que reconocerla en su arbol.
+            carpeta = None
+            if motivo.get('carpeta_id'):
+                cur.execute("SELECT name FROM file_nodes WHERE id::text = %s",
+                            (motivo['carpeta_id'],))
+                f = cur.fetchone()
+                carpeta = {'id': motivo['carpeta_id'], 'nombre': f[0] if f else None}
+
+        return jsonify({
+            "success": True,
+            "persona": {'id': persona['id'], 'name': persona['name'],
+                        'email': persona['email'], 'perfil': persona['role']},
+            "alcanzable_por": {
+                'USER': sujetos.get(_pd.USER),
+                'COMPANY': empresa,
+                'CONTRACTUAL_FUNCTION': ETIQUETA_FUNCION.get(
+                    sujetos.get(_pd.FUNCTION), sujetos.get(_pd.FUNCTION)),
+            },
+            "nivel": nivel,
+            "nivel_label": PERMISSION_LABELS.get(nivel, nivel),
+            "denegado": nivel == 'none',
+            "motivo": motivo,
+            "carpeta_ganadora": carpeta,
+            "sujeto_ganador_label": ETIQUETA_SUJETO.get(motivo.get('sujeto_tipo')),
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@documents_bp.route('/api/docs/sujetos-concedibles', methods=['GET'])
+def sujetos_concedibles_endpoint():
+    """A QUIEN se le puede conceder en esta obra: personas, empresas, funciones.
+
+    Un cuadro de texto donde escribir un correo obliga a saberselo de memoria y
+    permite dirigir una regla a alguien que no participa en la obra. Esto
+    ofrece lo que existe AQUI -- y las funciones contractuales salen todas, de
+    la lista cerrada, porque conceder a una funcion que todavia no ejerce
+    nadie es un acto legitimo (y su alcance futuro se advierte en la pantalla).
+    """
+    from flask import g
+    model_urn = request.args.get('model_urn', 'global')
+    quien = getattr(g, 'current_user', None)
+    if not verify_project_access(quien, model_urn):
+        return jsonify({"success": False, "error": "No tienes acceso al proyecto."}), 403
+    node_id = request.args.get('folder_id')
+    if not node_id:
+        return jsonify({"success": False, "error": "Falta folder_id"}), 400
+    from folder_permissions import check_folder_permission, ETIQUETA_FUNCION
+    rbac = check_folder_permission(quien, node_id, model_urn, 'admin',
+                                   'ver a quién se puede conceder')
+    if rbac:
+        return rbac
+    try:
+        from db import get_db_connection, resolve_project_id
+        from directorio_de_obra import FUNCIONES
+        obra = resolve_project_id(model_urn) or model_urn
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""SELECT u.id, u.name, u.email, c.name
+                             FROM project_users pu
+                             JOIN users u ON u.id = pu.user_id AND u.is_active
+                        LEFT JOIN companies c ON c.id = u.company_id
+                            WHERE pu.project_id = %s
+                            ORDER BY u.name NULLS LAST, u.email""", (str(obra),))
+            personas = [{'sujeto_id': str(r[0]), 'nombre': r[1] or (r[2] or '').split('@')[0],
+                         'detalle': r[2], 'empresa': r[3]} for r in cur.fetchall()]
+            cur.execute("""SELECT c.id, c.name, pc.funcion
+                             FROM project_companies pc
+                             JOIN companies c ON c.id = pc.company_id
+                            WHERE pc.project_id = %s
+                            ORDER BY c.name""", (str(obra),))
+            empresas = [{'sujeto_id': str(r[0]), 'nombre': r[1],
+                         'detalle': ('Participa como %s'
+                                     % ETIQUETA_FUNCION.get(r[2], r[2]))}
+                        for r in cur.fetchall()]
+        funciones = [{'sujeto_id': f, 'nombre': ETIQUETA_FUNCION.get(f, f),
+                      'detalle': 'Toda empresa que participe con esta función'}
+                     for f in FUNCIONES]
+        return jsonify({"success": True, "personas": personas,
+                        "empresas": empresas, "funciones": funciones}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 @documents_bp.route('/api/docs/download_folder_urls', methods=['GET'])
 def download_folder_urls():

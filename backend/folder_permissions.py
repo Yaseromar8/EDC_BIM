@@ -378,33 +378,131 @@ def set_folder_permission(folder_node_id, user_id, permission_level, granted_by,
         return result[0] if result else None
 
 
-def list_folder_permissions(folder_node_id):
+def set_permiso_de_sujeto(folder_node_id, sujeto_tipo, sujeto_id,
+                          permission_level, granted_by):
+    """Concede a CUALQUIERA de los tres sujetos que el motor resuelve.
+
+    `set_folder_permission` solo sabe escribir reglas de PERSONA: lleva
+    'USER' literal y resuelve el conflicto por `(carpeta, user_id)`, clave que
+    una regla de empresa --con `user_id` nulo-- no puede usar. Se conserva
+    intacta porque hay codigo que la llama; esta es la que entiende sujetos.
+
+    La unicidad es la del indice `uq_fp_sujeto (carpeta, sujeto_tipo,
+    sujeto_id)`: conceder dos veces al mismo sujeto en la misma carpeta
+    ACTUALIZA el nivel, no acumula filas -- si no, la tabla tendria dos
+    verdades para la misma pregunta y el motor leeria una al azar.
     """
-    Lista todos los usuarios con permisos explícitos en una carpeta.
-    Retorna lista de dicts con info del usuario y su nivel.
+    if permission_level not in PERMISSION_LEVELS:
+        raise ValueError(f"Nivel inválido: {permission_level}. "
+                         f"Válidos: {list(PERMISSION_LEVELS.keys())}")
+    if sujeto_tipo not in ('USER', 'COMPANY', 'CONTRACTUAL_FUNCTION'):
+        raise ValueError('Sujeto inválido: %s' % sujeto_tipo)
+    if not str(sujeto_id or '').strip():
+        raise ValueError('Una regla sin sujeto no alcanzaria a nadie')
+    sujeto_id = str(sujeto_id).strip()
+
+    # `user_id` se rellena SOLO en las reglas de persona: es la columna que la
+    # clave ajena y el codigo antiguo siguen usando. Para empresa y funcion va
+    # nula a proposito -- no hay ningun usuario al que apunte.
+    user_id = int(sujeto_id) if sujeto_tipo == 'USER' else None
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO folder_permissions (folder_node_id, user_id, permission_level,
+                                            granted_by, sujeto_tipo, sujeto_id)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (folder_node_id, sujeto_tipo, sujeto_id)
+            DO UPDATE SET permission_level = EXCLUDED.permission_level,
+                          granted_by = EXCLUDED.granted_by,
+                          updated_at = CURRENT_TIMESTAMP
+            RETURNING id
+        """, (folder_node_id, user_id, permission_level, granted_by,
+              sujeto_tipo, sujeto_id))
+        fila = cursor.fetchone()
+        conn.commit()
+        return fila[0] if fila else None
+
+
+ETIQUETA_SUJETO = {
+    'USER': 'Persona',
+    'COMPANY': 'Empresa',
+    'CONTRACTUAL_FUNCTION': 'Función contractual',
+}
+
+ETIQUETA_FUNCION = {
+    'ENTIDAD': 'Entidad', 'SUPERVISION': 'Supervisión',
+    'CONTRATISTA': 'Contratista', 'PROYECTISTA': 'Proyectista', 'OTRO': 'Otro',
+}
+
+
+def list_folder_permissions(folder_node_id):
+    """TODAS las reglas de una carpeta: de persona, de empresa y de función.
+
+    ESTA CONSULTA ESCONDIA REGLAS. Hacia `JOIN users ON fp.user_id = u.id`, y
+    una regla de EMPRESA o de FUNCION lleva `user_id` NULO por construccion:
+    el INNER JOIN las descartaba. La pantalla de permisos --la unica que
+    responde «quien tiene acceso a esta carpeta»-- habria contestado que no
+    hay nadie mientras una empresa entera entraba por una regla invisible.
+    Un permiso que no se ve no se puede retirar.
+
+    El sujeto se resuelve a una ETIQUETA legible sin inventar nada: la persona
+    por `users`, la empresa por `companies`, y la funcion por su codigo de la
+    lista cerrada.
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT fp.id, fp.user_id, u.name, u.email, fp.permission_level,
-                   g.name as granted_by_name, fp.created_at
-            FROM folder_permissions fp
-            JOIN users u ON fp.user_id = u.id
-            LEFT JOIN users g ON fp.granted_by = g.id
-            WHERE fp.folder_node_id = %s
-            ORDER BY fp.permission_level DESC, u.name
+            SELECT fp.id,
+                   COALESCE(fp.sujeto_tipo, 'USER')                    AS sujeto_tipo,
+                   COALESCE(fp.sujeto_id, fp.user_id::text)            AS sujeto_id,
+                   fp.permission_level, g.name AS granted_by_name, fp.created_at,
+                   u.name, u.email, c.name AS empresa
+              FROM folder_permissions fp
+         LEFT JOIN users u
+                ON u.id::text = COALESCE(fp.sujeto_id, fp.user_id::text)
+               AND COALESCE(fp.sujeto_tipo, 'USER') = 'USER'
+         LEFT JOIN companies c
+                ON c.id::text = fp.sujeto_id
+               AND fp.sujeto_tipo = 'COMPANY'
+         LEFT JOIN users g ON fp.granted_by = g.id
+             WHERE fp.folder_node_id = %s
+             ORDER BY CASE COALESCE(fp.sujeto_tipo, 'USER')
+                        WHEN 'USER' THEN 1 WHEN 'COMPANY' THEN 2 ELSE 3 END,
+                      fp.permission_level DESC
         """, (folder_node_id,))
-        rows = cursor.fetchall()
-        return [{
+        filas = cursor.fetchall()
+
+    fuera = []
+    for r in filas:
+        tipo, sid = r[1], r[2]
+        if tipo == 'USER':
+            nombre = r[6] or (r[7] or '').split('@')[0] or ('usuario %s' % sid)
+            detalle = r[7]
+        elif tipo == 'COMPANY':
+            nombre = r[8] or ('empresa %s' % sid)
+            detalle = 'Todas las personas de esta empresa'
+        else:
+            nombre = ETIQUETA_FUNCION.get(sid, sid)
+            detalle = ('Toda empresa que participe con esta función '
+                       '— incluidas las que se incorporen después')
+        fuera.append({
             'id': r[0],
-            'user_id': r[1],
-            'user_name': r[2],
-            'user_email': r[3],
-            'permission_level': r[4],
-            'permission_label': PERMISSION_LABELS.get(r[4], r[4]),
-            'granted_by': r[5],
-            'created_at': str(r[6]) if r[6] else None
-        } for r in rows]
+            'sujeto_tipo': tipo,
+            'sujeto_id': sid,
+            'sujeto_etiqueta': ETIQUETA_SUJETO.get(tipo, tipo),
+            'sujeto_nombre': nombre,
+            'sujeto_detalle': detalle,
+            # Se conservan los nombres viejos: hay pantalla y pruebas que los leen.
+            'user_id': int(sid) if tipo == 'USER' and str(sid).isdigit() else None,
+            'user_name': nombre,
+            'user_email': r[7] if tipo == 'USER' else None,
+            'permission_level': r[3],
+            'permission_label': PERMISSION_LABELS.get(r[3], r[3]),
+            'granted_by': r[4],
+            'created_at': str(r[5]) if r[5] else None,
+        })
+    return fuera
 
 
 def remove_folder_permission(permission_id):
