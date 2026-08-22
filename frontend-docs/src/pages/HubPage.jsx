@@ -1,35 +1,52 @@
-// HubPage — selector de producto.
+// HubPage — selector de producto, bajo la marca madre ALEPHIA.
 //
 // Criterio: sobrio. Sin eslóganes, sin descripciones, sin animaciones de
-// entrada. Dos fichas con el nombre del producto y nada más — quien llega aquí
-// ya sabe qué es cada cosa. Detrás de ambas, una única luz difusa que centra la
-// mirada. Es una bifurcación de dos caminos: se entra, se elige y se sale.
+// entrada. Fichas con el nombre del producto y nada más — quien llega aquí
+// ya sabe qué es cada cosa. Detrás, una única luz difusa que centra la
+// mirada. Es una bifurcación de caminos: se entra, se elige y se sale.
+//
+// Identidad (ETAPA 3): fondo Ink, profundidad en Navy, logo oficial blanco,
+// Signal SOLO en interacción (hover, foco). La jerarquía la hacen la
+// tipografía y el espacio, no colores por producto ni brillos.
 import React, { useState } from 'react';
 import { API, VISOR_URL } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import MiTrabajo from '../components/MiTrabajo';
 import SegundoFactorPanel from '../components/SegundoFactorPanel';
 
-const ACCENT = 'var(--accent)';
+// Paleta oficial ALEPHIA (03_Web). El Hub es zona oscura: Ink de fondo,
+// Navy como profundidad, Signal únicamente cuando el usuario interactúa.
+const INK = '#0B0E12';
+const NAVY = '#153754';
+const SIGNAL = '#3E6F91';
 
-function ProductCard({ icon, title, onClick, locked = false, lockNote }) {
+function ProductCard({ icon, producto, onClick, locked = false, lockNote }) {
   const [hover, setHover] = useState(false);
-  const active = hover && !locked;
+  const [foco, setFoco] = useState(false);
+  const active = (hover || foco) && !locked;
   return (
     <div
+      role="button"
+      tabIndex={locked ? -1 : 0}
       onClick={locked ? undefined : onClick}
+      onKeyDown={e => { if (!locked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick?.(); } }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onFocus={() => setFoco(true)}
+      onBlur={() => setFoco(false)}
       style={{
         width: 250, maxWidth: '88vw', padding: '30px 26px',
-        // Translúcida a propósito: la luz del fondo se cuela por debajo.
-        background: active ? 'rgba(28,32,39,0.82)' : 'rgba(17,19,24,0.72)',
-        border: `1px solid ${active ? 'rgba(120,140,175,0.45)' : 'rgba(255,255,255,0.09)'}`,
-        borderRadius: 12,
+        // Translúcida a propósito: la luz Navy del fondo se cuela por debajo.
+        background: active ? 'rgba(17,28,42,0.85)' : 'rgba(11,14,18,0.72)',
+        // La interacción es Signal; el reposo, un borde neutro casi invisible.
+        border: `1px solid ${active ? 'rgba(62,111,145,0.60)' : 'rgba(255,255,255,0.09)'}`,
+        outline: 'none',
+        boxShadow: foco ? `0 0 0 3px rgba(62,111,145,0.30)` : 'none',
+        borderRadius: 10,
         backdropFilter: 'blur(6px)',
         cursor: locked ? 'default' : 'pointer',
         opacity: locked ? 0.5 : 1,
-        transition: 'background .18s, border-color .18s',
+        transition: 'background .18s, border-color .18s, box-shadow .18s',
       }}
     >
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? '#cfd6e0' : '#8b94a1'}
@@ -37,7 +54,12 @@ function ProductCard({ icon, title, onClick, locked = false, lockNote }) {
         {icon}
       </svg>
       <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <span style={{ fontSize: 17, fontWeight: 600, color: '#e9ecf1', letterSpacing: -0.2 }}>{title}</span>
+        {/* MARCA + PRODUCTO en un solo renglón, jerarquía tipográfica:
+            ALEPHIA sereno, el producto con el peso. Sin colores por producto. */}
+        <span style={{ fontSize: 16, letterSpacing: -0.1, color: '#e9ecf1' }}>
+          <span style={{ fontWeight: 400, opacity: 0.78 }}>ALEPHIA </span>
+          <span style={{ fontWeight: 700 }}>{producto}</span>
+        </span>
         {!locked && (
           <span style={{ fontSize: 15, color: '#cfd6e0', opacity: active ? 1 : 0, transition: 'opacity .18s' }}>→</span>
         )}
@@ -75,16 +97,15 @@ export default function HubPage({ user, onChooseDocs, onLogout }) {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#0b0d10', color: '#e9ecf1' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: INK, color: '#e9ecf1' }}>
 
-      <header style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', flexShrink: 0, borderBottom: '1px solid #16191e' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 14, fontWeight: 600 }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <rect x="2.5" y="2.5" width="19" height="19" rx="5" fill={ACCENT} />
-            <path d="M7 8.5l5 8 5-8" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          ECD<span style={{ color: '#79818d', fontWeight: 400 }}>&nbsp;Vision</span>
-        </div>
+      <header style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', flexShrink: 0, borderBottom: '1px solid rgba(21,55,84,0.55)' }}>
+        {/* Marca madre: logo horizontal oficial en blanco (01_Master_Vector),
+            nunca redibujado. 28px de alto ⇒ ~126px, sobre el mínimo de 120px;
+            cabe entero incluso en móvil, así que el símbolo suelto queda para
+            espacios realmente compactos (favicon, launcher). */}
+        <img src="/brand/ALEPHIA_Logo_Horizontal_White.svg" alt="ALEPHIA"
+             style={{ height: 28, width: 'auto', display: 'block' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
         <button onClick={() => setVerSeguridad(true)} style={{ background: 'none', border: 'none', color: '#79818d', fontSize: 13, cursor: 'pointer', padding: 0 }}>
           Seguridad
@@ -99,14 +120,15 @@ export default function HubPage({ user, onChooseDocs, onLogout }) {
 
       <main style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 24px 64px', overflow: 'hidden' }}>
 
-        {/* Una sola luz detrás de las dos fichas. No decora: sitúa el centro de
-            la pantalla y hace que las tarjetas floten sobre algo. */}
+        {/* Una sola luz detrás de las fichas. No decora: sitúa el centro de
+            la pantalla y hace que las tarjetas floten sobre algo. La luz es
+            NAVY — la profundidad de la marca — no un azul cualquiera. */}
         <div aria-hidden style={{
           position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
           width: 'min(1100px, 130vw)', height: 'min(760px, 95vh)', pointerEvents: 'none',
           background: [
-            'radial-gradient(closest-side, rgba(64,96,168,0.34), rgba(44,68,124,0.20) 45%, rgba(24,36,70,0.09) 68%, transparent 82%)',
-            'radial-gradient(closest-side, rgba(120,150,210,0.13), transparent 58%)',
+            'radial-gradient(closest-side, rgba(21,55,84,0.55), rgba(21,55,84,0.28) 45%, rgba(21,55,84,0.10) 68%, transparent 82%)',
+            'radial-gradient(closest-side, rgba(62,111,145,0.10), transparent 58%)',
           ].join(','),
           filter: 'blur(26px)',
         }} />
@@ -122,17 +144,20 @@ export default function HubPage({ user, onChooseDocs, onLogout }) {
               administradores» que había aquí era de antes de que existiera el
               perímetro por obra — hacía de la administración la llave de las
               herramientas, que son cosas distintas. */}
+          {/* ALEPHIA Docs = el portal documental (esta app). Nombre de
+              producto solo si la función existe de verdad: hoy son estas dos. */}
           <ProductCard
-            title="Documentos"
+            producto="Docs"
             icon={<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="8" y1="13" x2="16" y2="13" /><line x1="8" y1="17" x2="16" y2="17" /></>}
             onClick={onChooseDocs}
           />
-          {/* Solo si esta instancia tiene visor contratado. Sin VITE_VISOR_URL
+          {/* ALEPHIA View = el visor 3D, entrada funcional independiente.
+              Solo si esta instancia tiene visor contratado. Sin VITE_VISOR_URL
               la ficha no existe: antes llevaba al visor del PROVEEDOR con un
               ticket SSO de la entidad en la URL. Ver helpers.js. */}
           {VISOR_URL && (
             <ProductCard
-              title="Visor 3D"
+              producto="View"
               icon={<><path d="M12 2l8.66 5v10L12 22l-8.66-5V7L12 2z" /><path d="M12 22V12" /><path d="M3.5 7L12 12l8.5-5" /></>}
               onClick={openVisor}
             />
