@@ -1222,36 +1222,64 @@ def get_project_users(project_id):
 
 @auth_bp.route('/api/projects/<project_id>/users', methods=['POST'])
 def update_project_users(project_id):
-    """Actualiza la lista de usuarios asignados a un proyecto (reemplazo total)"""
+    """Actualiza la lista de usuarios asignados a un proyecto — POR DIFERENCIA.
+
+    Antes era un reemplazo total: DELETE de toda la membresía + INSERT de las
+    casillas marcadas. Eso tenía dos efectos que nadie pedía:
+
+      · `es_admin` se PERDÍA en cada guardado — el INSERT no lo lleva y nace
+        FALSE. Cualquier «Guardar Accesos» posterior a nombrar administradores
+        de obra los degradaba en silencio: exactamente lo que no puede pasar
+        después de la adjudicación.
+      · `assigned_at` se reescribía para todos, borrando la fecha real de
+        incorporación (pasó con la obra real el 22-ago: cuatro fechas
+        históricas → la misma marca de esa noche).
+
+    Ahora se calcula la diferencia: se BORRAN solo los que salen, se INSERTAN
+    solo los que entran, y a quien se queda no se le toca la fila — ni su
+    es_admin, ni su fecha. Retirar de la obra sigue retirando la
+    administración en el mismo acto (la fila desaparece), que es la regla.
+    """
     denied = _require_admin("asignar usuarios a un proyecto")
     if denied:
         return denied
     try:
         data = request.get_json()
         user_ids = data.get('user_ids', [])
-        
+
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            
-            # 1. Borrar asignaciones actuales
-            cursor.execute('DELETE FROM project_users WHERE project_id = %s', (project_id,))
-            
-            # 2. Insertar nuevas asignaciones (solo si son usuarios reales y no admins, aunque el front ya filtra)
+
+            cursor.execute('SELECT user_id FROM project_users WHERE project_id = %s',
+                           (project_id,))
+            actuales = {r[0] for r in cursor.fetchall()}
+
+            # Solo usuarios reales y no Entity Admin (el Entity Admin no
+            # necesita membresía y el front ya lo filtra).
+            deseados = set()
             if user_ids:
-                # Filtrar para asegurar que los IDs existen y no son de administradores
-                # (Opcional, pero recomendado para robustez)
-                cursor.execute('SELECT id FROM users WHERE id IN %s AND role != %s', (tuple(user_ids), 'admin'))
-                valid_ids = [r[0] for r in cursor.fetchall()]
-                
-                for u_id in valid_ids:
-                    cursor.execute('''
-                        INSERT INTO project_users (project_id, user_id)
-                        VALUES (%s, %s)
-                        ON CONFLICT DO NOTHING
-                    ''', (project_id, u_id))
-            
+                cursor.execute('SELECT id FROM users WHERE id IN %s AND role != %s',
+                               (tuple(user_ids), 'admin'))
+                deseados = {r[0] for r in cursor.fetchall()}
+
+            salen = actuales - deseados
+            entran = deseados - actuales
+
+            if salen:
+                cursor.execute('DELETE FROM project_users WHERE project_id = %s '
+                               '  AND user_id = ANY(%s)', (project_id, list(salen)))
+            for u_id in entran:
+                cursor.execute('''
+                    INSERT INTO project_users (project_id, user_id)
+                    VALUES (%s, %s)
+                    ON CONFLICT DO NOTHING
+                ''', (project_id, u_id))
+
             conn.commit()
-            return jsonify({'success': True}), 200
+            return jsonify({'success': True,
+                            'entraron': sorted(entran),
+                            'salieron': sorted(salen),
+                            'se_quedaron': len(actuales & deseados)}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

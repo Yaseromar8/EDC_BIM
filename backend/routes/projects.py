@@ -437,6 +437,12 @@ def create_hub_project(hub_id):
                                          'referencias de la obra: %s' % e}), 500
             conn.commit()
 
+            # La obra existe DESDE YA: sin esto, el resolver la ignoraba hasta
+            # 5 minutos (TTL) y el perimetro respondia 403 PROJECT_UNRESOLVED
+            # a su propio creador.
+            from db import invalidar_resolver_de_obras
+            invalidar_resolver_de_obras()
+
             # Auto-crear estructura profesional estilo ACC (ISO 19650)
             try:
                 from file_system_db import resolve_path_to_node_id
@@ -681,6 +687,8 @@ def restaurar_project(project_id):
                 return jsonify({'success': True, 'ya_estaba_activa': True}), 200
             cursor.execute("UPDATE projects SET status = 'active' WHERE id = %s", (project_id,))
             conn.commit()
+        from db import invalidar_resolver_de_obras
+        invalidar_resolver_de_obras()
         _auditar('obra_restaurada', project_id, f"nombre='{_nombre}'")
         return jsonify({'success': True}), 200
     except Exception as e:

@@ -1287,6 +1287,18 @@ _project_resolver_cache = {'map': None, 'ts': 0}
 _PROJECT_RESOLVER_TTL = 300  # 5 min
 
 
+def invalidar_resolver_de_obras():
+    """Tira el cache del resolver. Llamar al CREAR o restaurar una obra.
+
+    Sin esto, una obra recien creada era irresoluble hasta 5 minutos: el
+    perimetro respondia 403 PROJECT_UNRESOLVED a su propio creador. El TTL
+    protege del coste por peticion; crear una obra es un acto raro y merece
+    ver su efecto al instante.
+    """
+    _project_resolver_cache['map'] = None
+    _project_resolver_cache['ts'] = 0
+
+
 def _variantes_de_urn(valor):
     """Formas en que el mismo modelo llega escrito desde los clientes.
 

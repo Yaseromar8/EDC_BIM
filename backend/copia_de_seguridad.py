@@ -67,6 +67,15 @@ def _conexion():
 
 
 def tablas(cursor):
+    """Las tablas que entran en la copia: TODO `public` menos PRESCINDIBLES.
+
+    EXCLUSION DECLARADA — `ai_brain` NO SE COPIA. Es una decision, no un
+    descuido: ese esquema guarda derivados de la IA (hoy `feedback_buffer`,
+    59 filas el 21-ago-2026) que se pueden regenerar y no forman parte del
+    expediente contractual. La aceptacion quedo registrada en el PASO 1 de la
+    ventana del 22-ago (doc 65). Si algun dia `ai_brain` guarda algo que NO se
+    pueda regenerar, primero se cambia esta funcion y despues se escribe eso.
+    """
     cursor.execute("""
         SELECT table_name FROM information_schema.tables
          WHERE table_schema = 'public' AND table_type = 'BASE TABLE'

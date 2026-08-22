@@ -81,7 +81,14 @@ def test_el_guion_que_escribia_sigue_siendo_un_guion():
         cuerpo = f.read()
     # Sigue siendo peligroso: escribe al importarse.
     assert 'INSERT INTO' in cuerpo or 'photo_evidences' in cuerpo
-    import conftest as raiz
+    # El conftest de la RAIZ se carga POR RUTA: importarlo por nombre solo
+    # funcionaba si la raiz estaba en sys.path -- verdad a veces, segun desde
+    # donde se lanzara pytest. Un test de higiene no puede ser el flaky.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        'conftest_de_la_raiz', os.path.join(_RAIZ, 'conftest.py'))
+    raiz = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(raiz)
     assert raiz._es_guion(guion), \
         'test_tracking.py ya no lo detecta el candado: volveria a escribir en la base'
 

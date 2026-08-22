@@ -82,7 +82,6 @@ const T = {
         dfaAyuda: 'Si perdiste el teléfono, usa uno de tus códigos de recuperación.',
         dfaErr: 'El código no es válido o ha caducado. Vuelve a intentarlo.',
         dfaObligatorio: 'Esta cuenta necesita verificación en dos pasos para entrar. Pide al administrador que la active.',
-        volver: 'Volver al acceso',
         idioma: 'English',
     },
     en: {
@@ -126,7 +125,6 @@ const T = {
         creando: 'Creating…',
         errDistintas: 'Passwords do not match.',
         errCorta: 'Password must be at least 8 characters.',
-        volver: 'Back to sign in',
         idioma: 'Español',
     },
 };

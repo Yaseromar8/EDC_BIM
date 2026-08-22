@@ -207,6 +207,13 @@ POLITICAS_POR_BLUEPRINT = {
     'directorio': _SESION,
     'redlines_bp': _SESION, 'geo_control': _SESION, 'pdf_tools': _SESION,
     'auth': _SESION, 'projects': _SESION,
+    # Administración por obra: exige sesión aquí; QUIÉN administra QUÉ lo
+    # deciden por dentro `guardia_de_obra` + `guardia_administrativa` (es la
+    # separación Entity/Project Admin, que no cabe en un rol global).
+    'administracion': _SESION,
+    # Plan de entrega (MIDP/TIDP): sesión + guardia de obra por dentro; las
+    # escrituras además comprueban administración donde toca.
+    'plan_entregas': _SESION,
     # Herramientas de mantenimiento: solo administracion
     'audit': _ADMIN,   # 'diagnostics' y 'photo_diag' se retiraron: eran de diagnostico temporal
 }

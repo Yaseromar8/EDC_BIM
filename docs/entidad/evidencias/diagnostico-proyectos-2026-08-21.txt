@@ -1,0 +1,37 @@
+DIAGNOSTICO DE PROYECTOS · 2026-08-21 17:19 · base postgres · 34.86.206.187
+sesion de SOLO LECTURA
+
+── PROYECTOS ──
+projects: 9 fila(s)
+   HOSPITAL_MATUCANA                        archived   b.proj_hospital_matucana_60637
+   HOSPITAL_MATUCANA                        archived   b.proj_hospital_matucana_60635
+   HOSPITAL_MATUCANA                        archived   b.proj_hospital_matucana_60638
+   HOSPITAL_MATUCANA                        archived   b.proj_hospital_matucana_60633
+   obra pirata                              active     b.proj_obra_pirata_24032
+   PQT8_INTERFERENCIAS                      active     b.proj_pqt8_interferencias_485
+   PQT8_TALARA                              active     1
+   Proyectos GeneralesProyecto de Prueba    archived   b.proj_proyectos_generalesproy
+   Test Project                             archived   b.proj_test_project_86461
+
+── CUENTAS ──
+   id=2    omarsanchezh8@gmail.com              Yaser Omar             rol=admin    activa=sí alta=2026-02-22
+   id=17   fabian230209@gmail.com               Fabian Serrano         rol=user     activa=sí alta=2026-05-13
+   id=18   walterdavidcorreamorocho79@gmail.com (Invitado pendiente)   rol=user     activa=sí alta=2026-07-24
+   id=19   yaseromarsanchez8@gmail.com          yaser omar 02          rol=user     activa=sí alta=2026-07-24
+   id=20   zhangwenqing@powerchina.cn           (Invitado pendiente)   rol=user     activa=sí alta=2026-08-06
+
+── MEMBRESIAS (project_users) ──
+   1                              -> id=17   fabian230209@gmail.com
+   1                              -> id=18   walterdavidcorreamorocho79@gmail.com
+   1                              -> id=19   yaseromarsanchez8@gmail.com
+   1                              -> id=20   zhangwenqing@powerchina.cn
+   b.proj_pqt8_interferencias_485 -> id=17   fabian230209@gmail.com
+
+── EL EXPEDIENTE DEBAJO ──
+   file_nodes         3051
+   file_versions      2853
+   doc_rfis             25
+   doc_redlines         33
+   transmittals          1
+   activity_log       1071
+   project_ref           0

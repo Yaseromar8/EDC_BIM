@@ -837,9 +837,15 @@ def _puede_descargar(user, parent_id, model_urn):
     """
     if not user:
         return False                      # fail-closed
-    # Administracion DE ESTA OBRA. `get_effective_permission` ya la resuelve por
-    # dentro, pero este atajo evita la consulta al caso mayoritario -- y ahora
-    # pregunta por la obra en vez de por el rol global.
+    # Administracion. El Entity Admin se decide SIN base de datos (es el rol de
+    # la sesion): comprobarlo primero ahorra la conexion en el caso mayoritario
+    # -- y ademas era la fuente de un test intermitente: el atajo abria conexion
+    # antes de esta comprobacion, y sin pool el admin caia a los permisos de
+    # carpeta en vez de a su respuesta.
+    from administracion_de_obra import es_entity_admin as _es_ea
+    if _es_ea(user):
+        return True
+    # Administracion DE ESTA OBRA (si vive en la base, hay que preguntarla).
     try:
         from administracion_de_obra import es_admin_de_obra as _adm
         from db import get_db_connection as _gc
