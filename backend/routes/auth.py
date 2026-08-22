@@ -923,6 +923,71 @@ def manage_users():
             return jsonify({'error': str(e)}), 500
 
 
+@auth_bp.route('/api/users/<int:user_id>/ficha', methods=['GET'])
+@requiere_rol('admin')
+def ficha_de_persona(user_id):
+    """P4 · La escalera de una persona, en una sola lectura transversal.
+
+    persona -> entidad -> sus obras -> empresa -> funcion por obra -> que
+    administra. SOLO LECTURA a proposito: cada dato se EDITA donde vive (el rol
+    en Usuarios, la empresa y la funcion en Participantes, la administracion en
+    su obra). Esta ruta junta lo que ya existe; no crea una via de edicion
+    paralela que desincronizaria las pantallas.
+
+    Solo Entity Admin: es la vista transversal de la ENTIDAD sobre una persona
+    (todas sus obras a la vez). Un miembro ve a sus companeros por obra en
+    /miembros, que es su alcance.
+    """
+    denied = _require_admin("ver la ficha de una persona")
+    if denied:
+        return denied
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT u.id, u.name, u.email, u.role,
+                       COALESCE(u.is_active, TRUE), (u.password_hash = ''),
+                       u.created_at, u.last_login_at, u.totp_activo,
+                       c.id, c.name, j.name
+                  FROM users u
+             LEFT JOIN companies c ON c.id = u.company_id
+             LEFT JOIN job_titles j ON j.id = u.job_title_id
+                 WHERE u.id = %s""", (user_id,))
+            f = cur.fetchone()
+            if not f:
+                return jsonify({'error': 'Usuario no encontrado'}), 404
+
+            # Sus obras, con la funcion DERIVADA de su empresa en cada una --
+            # la funcion es del par (empresa, obra), nunca de la persona.
+            cur.execute("""
+                SELECT p.id, p.name, pu.es_admin, pu.assigned_at, pc.funcion
+                  FROM project_users pu
+                  JOIN projects p ON p.id = pu.project_id
+             LEFT JOIN users u ON u.id = pu.user_id
+             LEFT JOIN project_companies pc
+                    ON pc.project_id = pu.project_id AND pc.company_id = u.company_id
+                 WHERE pu.user_id = %s
+                 ORDER BY p.name""", (user_id,))
+            obras = [{'id': r[0], 'name': r[1], 'administra': bool(r[2]),
+                      'desde': r[3].isoformat() if r[3] else None,
+                      'funcion_contractual': r[4]} for r in cur.fetchall()]
+
+        return jsonify({
+            'id': f[0], 'name': f[1], 'email': f[2],
+            'perfil_del_sistema': f[3],
+            'es_entity_admin': f[3] == 'admin',
+            'activa': bool(f[4]), 'pendiente': bool(f[5]),
+            'alta': f[6].isoformat() if f[6] else None,
+            'ultimo_acceso': f[7].isoformat() if f[7] else None,
+            'dos_pasos': bool(f[8]),
+            'empresa': {'id': f[9], 'name': f[10]} if f[9] else None,
+            'cargo': f[11],
+            'obras': obras,
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @auth_bp.route('/api/auth/sesiones/cerrar-otras', methods=['POST'])
 def cerrar_otras_sesiones():
     """G4a · Cierra TODAS mis sesiones menos esta. El botón de «Mi cuenta».

@@ -7,6 +7,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../utils/apiFetch';
 import { confirmAction } from '../utils/confirm';
 import { API, formatDate, getInitials } from '../utils/helpers';
+import FichaDePersona from '../components/FichaDePersona';
 
 // ─── USERS TAB ───
 function UsersTab() {
@@ -19,6 +20,7 @@ function UsersTab() {
   // Enlace de invitacion recien emitido. Sin el, la persona no puede reclamar
   // su cuenta: reclamarla ya no basta con conocer el correo.
   const [invitacion, setInvitacion] = useState(null);
+  const [fichaDe, setFichaDe] = useState(null);   // P4: id de la persona abierta
   const [copiado, setCopiado] = useState(false);
 
   const fetchUsers = useCallback(async () => {
@@ -122,7 +124,11 @@ function UsersTab() {
           <tbody style={{ display: 'table-row-group' }}>
             {users.map(u => (
               <tr key={u.id}>
-                <td style={{ fontWeight: 500, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 150 }}>{u.name}</td>
+                <td style={{ fontWeight: 500, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 150 }}>
+                  {/* P4: el nombre abre la ficha transversal (solo lectura). */}
+                  <span onClick={() => setFichaDe(u.id)} title="Ver ficha de la persona"
+                        style={{ cursor: 'pointer', color: 'var(--link)' }}>{u.name}</span>
+                </td>
                 <td style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 200 }} title={u.email}>{u.email}</td>
                 <td style={{ fontSize: 13, color: '#555', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 100 }}>{u.company_name}</td>
                 <td style={{ fontSize: 13, color: '#555', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 100 }}>{u.job_title_name}</td>
@@ -168,6 +174,10 @@ function UsersTab() {
           </tbody>
         </table>
       }
+      {fichaDe !== null && (
+        <FichaDePersona userId={fichaDe} onClose={() => setFichaDe(null)} />
+      )}
+
       {showCreate && invitacion && (
         <div className="modal-overlay" onClick={cerrarInvitacion}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
