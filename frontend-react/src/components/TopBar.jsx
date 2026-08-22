@@ -182,8 +182,11 @@ const TopBar = ({
                     title="Clic para inicio / Mantener para IA"
                     style={{ position: 'relative' }}
                 >
+                    {/* Espacio compacto de marca ⇒ SÍMBOLO oficial (blanco sobre
+                        cabecera oscura), como manda el manual: 28px ≥ mínimo de
+                        24px. Los gestos (clic=inicio, mantener=IA) no cambian. */}
                     <div className={`logo-wrapper ${activePanel === 'search' ? 'ai-active-glow' : ''}`}>
-                        <img src="/logo.png" alt="Logo" style={{ height: '28px', transform: 'scale(1.5)', display: 'block', zIndex: 2, position: 'relative' }} />
+                        <img src="/brand/ALEPHIA_Symbol_White.svg" alt="ALEPHIA" style={{ height: '28px', width: 'auto', display: 'block', zIndex: 2, position: 'relative' }} />
                     </div>
 
                     {selectedProject && (
