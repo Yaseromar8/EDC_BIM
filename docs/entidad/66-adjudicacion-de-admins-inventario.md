@@ -239,3 +239,25 @@ PROJECT ADMIN OBRA REAL: nadie — Decisión B revocada; se reabre cuando el
 Verificado tras el barrido: 0 huérfanos en las 4 tablas con FK · integridad
 intacta (26 RFIs · 34 RL · 2 transmittals · 2854 versiones) · salud ok 6/6.
 Cada acto con su asiento en `auth_events`, escrito ANTES de ejecutar.
+
+---
+
+# NOTA DE ESTADO — fijada por el propietario al aceptar el cierre (22-ago-2026)
+
+```
+PQT8_TALARA con 0 miembros
+  = estado TRANSITORIO de estabilización
+  ≠ diseño objetivo ACC/Procore
+```
+
+Cuando se incorporen participantes reales, **no se resolverá dando más alcance
+al Entity Admin**. Se usará la cadena definida, en su orden:
+
+```
+IDENTITY → PROJECT MEMBERSHIP → COMPANY → CONTRACTUAL FUNCTION
+        → PROJECT ADMIN si corresponde → RESOURCE PERMISSION
+```
+
+Las siete adjudicaciones quedan **CONGELADAS**: no se reabren salvo nueva
+evidencia. Toda incorporación futura (Walter, Zhang u otros) será **invitación
+nueva**, nunca reactivación de vínculos antiguos.
