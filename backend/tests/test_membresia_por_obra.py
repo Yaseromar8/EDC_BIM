@@ -15,6 +15,8 @@ la figura que en ACC/Procore gestiona el padrón de su proyecto. Reglas fijas:
     admin da el mismo 409 que quitarle la administración, salvo Entity Admin.
 """
 import importlib
+import io
+import os
 
 import pytest
 from flask import Flask
@@ -207,3 +209,38 @@ def test_el_entity_admin_si_puede_retirar_al_ultimo(entorno):
     estado['admins_de_obra'] = 1
     estado['es_entity'] = True
     assert c.delete('/api/projects/OBRA/miembros/5').status_code == 200
+
+
+# ── El contrato de la pantalla ───────────────────────────────────────────────
+#
+# Este defecto NO lo vio la suite: lo vio la interfaz real. La lista de
+# candidatos se pedia UNA vez al abrir el panel, asi que tras retirar a
+# alguien seguia diciendo «no hay nadie incorporable» -- justo de la persona
+# que acababa de volverse incorporable. Queda fijado aqui.
+
+PORTAL = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    'frontend-docs', 'src')
+
+
+def _participantes():
+    return io.open(os.path.join(PORTAL, 'components', 'ParticipantesModule.jsx'),
+                   encoding='utf-8').read()
+
+
+def test_retirar_invalida_la_lista_de_candidatos():
+    texto = _participantes()
+    retirar = texto[texto.index('async function retirarPersona'):]
+    retirar = retirar[:retirar.index('async function ponerAdminDeObra')]
+    assert 'setCandidatos(null)' in retirar, (
+        'retirar a alguien no invalida la lista de candidatos: el panel '
+        'seguira diciendo que esa persona no es incorporable')
+
+
+def test_el_panel_repide_la_lista_cuando_se_invalida():
+    texto = _participantes()
+    # El efecto que trae candidatos tiene que DEPENDER de `candidatos` y
+    # guardarse contra el bucle -- si no, ponerla a null no la repide.
+    assert 'candidatos !== null' in texto, 'sin guardia: el efecto se repetiria en bucle'
+    assert '[addAbierto, obra, candidatos]' in texto, (
+        'el efecto no depende de `candidatos`: invalidarla no la repide')
