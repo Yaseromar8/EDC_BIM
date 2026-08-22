@@ -40,7 +40,32 @@ Opciones — (a) statu quo aceptando el riesgo con la copia diaria como respaldo
 (b) un segundo Entity Admin de confianza, (c) documentar un procedimiento de
 emergencia y aceptarlo formalmente.
 
-### B · ¿QUIÉN DEBE ADMINISTRAR PQT8_TALARA (obra `1`)?
+### B · ¿QUIÉN DEBE ADMINISTRAR PQT8_TALARA? — **DECIDIDO (22-ago-2026)**
+
+```
+ADJUDICADO
+  Project Admin de la obra 1 ... Fabián Serrano · id 17
+  CONDICIÓN PREVIA ............. 2FA ACTIVO antes del nombramiento
+
+ESTADO: DECIDIDO · EJECUCIÓN RETENIDA POR LA CONDICIÓN
+  comprobación previa ejecutada 22-ago: 4 de 5 controles en regla;
+  se detiene en «2FA activo» (medido: totp_activo=false, 0 códigos)
+
+SEPARACIÓN PRESERVADA
+  id 2  · Omar    Entity Admin SI · Project Admin de la obra 1: innecesario
+                  (ya la alcanza por ámbito de entidad)
+  id 17 · Fabián  Entity Admin NO · Project Admin de la obra 1: SI, tras 2FA
+                  -> ningún privilegio de entidad, ni ahora ni por esto
+  id 19           cuenta de PRUEBA: no será autoridad de la obra real
+```
+
+**La condición de 2FA es POLÍTICA DE SEGURIDAD ADOPTADA por el propietario para
+administradores de obra real — no una exigencia del modelo ACC/Procore**, que no
+dice nada del segundo factor. Se comprueba en
+`herramientas/nombrar_admin_de_obra.py`, que se niega a escribir si falta.
+
+*Contexto original de la decisión:*
+
 Administra **una obra**: su directorio, sus permisos documentales, sus rescates
 de flujo. Vive en `project_users.es_admin` — es la fila de membresía, así que
 retirar de la obra retira la administración en el mismo acto.
