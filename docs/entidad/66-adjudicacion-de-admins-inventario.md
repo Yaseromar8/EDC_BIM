@@ -139,7 +139,7 @@ para proteger el rastro de quien HIZO algo; donde no hay rastro, no protege nada
 | POR QUÉ EXISTE | Se le invitó a la obra real hace un mes |
 | RIESGO | Bajo: su enlace de 14 días **ya caducó** y, tras el cierre G5a, una cuenta retirada tampoco sería reclamable. Es ruido en el padrón, no una puerta |
 | RECOMENDACIÓN TÉCNICA | Decidir si sigue en el proyecto: **sí → «Copiar enlace»** (reemisión, ya existe el botón); **no → «Retirar acceso»** (desactiva, conserva rastro) |
-| **DECISIÓN DEL PROPIETARIO** | [vacío] |
+| **DECISIÓN DEL PROPIETARIO** | ⏸ **PENDIENTE DE DECISIÓN · CUENTA 4/7 (22-ago-2026)** — motivo: la vigencia de su participación es un hecho organizacional que no debe inferirse técnicamente. Riesgo técnico inmediato: **bajo** (enlace caducado; G5a cierra reclamo y Google). Estado conservado EXACTO: sin reemitir, sin retirar, sin desactivar, sin purgar. **Rutas ya definidas** — SIGUE: reemitir → reclamar → completar empresa/función → mantener membresía · NO SIGUE: retirar membresía → desactivar → conservar rastro → no purgar automáticamente. No bloquea el resto del PASO 14 |
 
 ## id 19 · yaser omar 02 — `yaseromarsanchez8@gmail.com`
 
