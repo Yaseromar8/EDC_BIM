@@ -4151,7 +4151,7 @@ const Viewer = ({
                 pdf.setFont('helvetica', 'bold');
                 pdf.setFontSize(8);
                 pdf.setTextColor(...C.accent);
-                pdf.text('VISIION', pageW - 12, 16, { align: 'right' });
+                pdf.text('ALEPHIA', pageW - 12, 16, { align: 'right' });
 
                 // ══════════════════════════════════════════════════
                 //  LAYOUT PRINCIPAL
@@ -4446,7 +4446,7 @@ const Viewer = ({
                 pdf.setFont('helvetica', 'normal');
                 pdf.setFontSize(6.5);
                 pdf.setTextColor(...C.textLight);
-                pdf.text('VISIION  ·  Plataforma Digital de Construcción', marginX, footerY + 1);
+                pdf.text('ALEPHIA View  ·  Inteligencia para proyectos e infraestructura', marginX, footerY + 1);
                 pdf.text(`Ficha Técnica  ·  ${dateStr}`, pageW / 2, footerY + 1, { align: 'center' });
                 pdf.text('Página 1 de 1', pageW - marginX, footerY + 1, { align: 'right' });
 
