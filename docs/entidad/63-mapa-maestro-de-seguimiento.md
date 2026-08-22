@@ -87,14 +87,14 @@ MODELO OBJETIVO DEFINIDO                            ✅  docs 45–46 · 54
                │
       PRE-WINDOW                                    ✅  docs 47–53 · 62
                ↓
-      ╔══════════════════════════════════════════╗
-      ║ CONTROLLED WINDOW          ⏳            ║
-      ║ ← ESTAMOS AQUÍ OPERATIVAMENTE            ║
-      ║   PENDIENTE DE EJECUCIÓN — la orden y    ║
-      ║   la fecha son del propietario (doc 53)  ║
-      ╚══════════════════════════════════════════╝
+      CONTROLLED WINDOW                                 ✅  ejecutada 22-ago-2026
+               │                                        criterios §7 del doc 53: 7/7
+               │                                        con evidencia (doc 65)
                ↓
-      PRODUCTION STABILIZATION                          smoke sostenido · adjudicación de
+      ╔══════════════════════════════════════════╗
+      ║ PRODUCTION STABILIZATION   ⏳            ║
+      ║ ← ESTAMOS AQUÍ OPERATIVAMENTE            ║
+      ╚══════════════════════════════════════════╝                          smoke sostenido · adjudicación de
                ↓                                        admins · sembrar project_ref
       IMPLEMENTAR IDENTITY & ACCESS UX                  orden: adenda 57 §4 + notas 59–61
                ↓                                        (G5a → G7 → G1–G3 → pantallas; G4b aparte)
@@ -112,14 +112,18 @@ MODELO OBJETIVO DEFINIDO                            ✅  docs 45–46 · 54
 
 ```
 ESTAMOS AQUÍ:
-CONTROLLED WINDOW — PENDIENTE DE EJECUCIÓN
+PRODUCTION STABILIZATION — la ventana se ejecutó el 22-ago-2026 y se declaró
+exitosa con los siete criterios del doc 53 §7 en evidencia (doc 65)
 ```
 
-Todo lo anterior a la ventana está cerrado y verificado (checkpoint doc 62:
-alcance congelado, 38 commits de payload, IMPACTO: NO). Todo lo posterior tiene
-su lugar en la ruta de B y **no se adelanta**: ni Identity & Access UX se
-implementa, ni Resource Permission UX se abre, hasta cruzar la ventana y su
-estabilización.
+Dentro de la estabilización quedan, por orden: PASO 14 — adjudicación de
+admins (decisión humana del propietario, cuenta por cuenta) · sembrar
+`project_ref` (obras legadas resuelven por el camino antiguo; el 403
+`PROJECT_UNRESOLVED` medido lo confirma fail-closed) · smoke sostenido unos
+días. La implementación de Identity & Access UX quedó ARRANCADA durante la
+propia ventana por orden del propietario (retiro de la compuerta + G5a/G6 +
+tramo de invitaciones, commits 31791e4·5b8f1a4·556820a) y continúa tras la
+estabilización según la adenda 57 §4.
 
 ---
 
