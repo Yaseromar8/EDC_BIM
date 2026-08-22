@@ -140,8 +140,8 @@
 
 .dm-tree-item.active {
     background: rgba(59, 130, 246, 0.12);
-    color: #60a5fa;
-    border-left-color: #3b82f6;
+    color: var(--alephia-interactive-hover);
+    border-left-color: var(--alephia-interactive);
 }
 
 .dm-tree-item .folder-icon {
@@ -174,7 +174,7 @@
 
 .dm-breadcrumb {
     cursor: pointer;
-    color: #60a5fa;
+    color: var(--alephia-interactive-hover);
     transition: color 0.15s;
 }
 
@@ -216,12 +216,12 @@
 }
 
 .dm-btn-primary {
-    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    background: linear-gradient(135deg, var(--alephia-interactive), #2563eb);
     color: #fff;
 }
 
 .dm-btn-primary:hover {
-    background: linear-gradient(135deg, #60a5fa, #3b82f6);
+    background: linear-gradient(135deg, var(--alephia-interactive-hover), var(--alephia-interactive));
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
@@ -394,7 +394,7 @@
     width: 20px;
     height: 20px;
     border: 2px solid rgba(255, 255, 255, 0.1);
-    border-top-color: #3b82f6;
+    border-top-color: var(--alephia-interactive);
     border-radius: 50%;
     animation: dm-spin 0.6s linear infinite;
 }
@@ -448,7 +448,7 @@
 }
 
 .dm-modal input:focus {
-    border-color: #3b82f6;
+    border-color: var(--alephia-interactive);
 }
 
 .dm-modal-actions {
@@ -460,7 +460,7 @@
 
 /* Upload drag zone */
 .dm-dropzone-active {
-    outline: 2px dashed #3b82f6;
+    outline: 2px dashed var(--alephia-interactive);
     outline-offset: -4px;
     background: rgba(59, 130, 246, 0.05) !important;
 }

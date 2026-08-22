@@ -535,7 +535,7 @@ function FilterConfigurator({
             <button className="secondary-btn" onClick={() => onReset?.()} style={{ background: 'transparent', border: '1px solid #444', color: '#ccc', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
               Reset Default
             </button>
-            <button className="primary-btn" onClick={handleSave} style={{ background: '#3b82f6', border: 'none', color: 'white', padding: '8px 24px', borderRadius: '4px', fontWeight: 600, cursor: 'pointer' }}>
+            <button className="primary-btn" onClick={handleSave} style={{ background: 'var(--alephia-interactive)', border: 'none', color: 'white', padding: '8px 24px', borderRadius: '4px', fontWeight: 600, cursor: 'pointer' }}>
               Update
             </button>
           </div>
@@ -4246,7 +4246,7 @@ function App() {
                     onClick={() => setTrackingPlacementMode(prev => !prev)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
-                      background: trackingPlacementMode ? '#bd8585' : '#7e9bbd', color: '#fff',
+                      background: trackingPlacementMode ? '#bd8585' : 'var(--alephia-interactive)', color: '#fff',
                       border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: 'pointer',
                       transition: 'all 0.15s ease'
                     }}
@@ -4511,7 +4511,7 @@ function App() {
                       title={isNativeAR() ? 'Realidad Aumentada (ARCore)' : 'Realidad Aumentada (ensayo, sin cámara real)'}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', height: 26,
-                        background: '#7e9bbd', color: '#fff', border: 'none', borderRadius: 6,
+                        background: 'var(--alephia-interactive)', color: '#fff', border: 'none', borderRadius: 6,
                         fontWeight: 700, fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap',
                       }}
                     >
@@ -4717,7 +4717,7 @@ function App() {
                           <div style={{ textAlign: 'center', padding: 20 }}>
                             <div style={{ fontSize: '3rem' }}>📄</div>
                             <p>Vista previa no disponible para {openedDoc.type}</p>
-                            <a href={openedDoc.url} target="_blank" rel="noreferrer" style={{ color: '#7e9bbd' }}>Descargar Archivo</a>
+                            <a href={openedDoc.url} target="_blank" rel="noreferrer" style={{ color: 'var(--alephia-interactive-hover)' }}>Descargar Archivo</a>
                           </div>
                         )}
                       </div>
@@ -4776,7 +4776,7 @@ function App() {
                               <div style={{ flex: 1 }}>
                                 <div style={{ fontWeight: '500', fontSize: '0.9rem', color: '#111' }}>{doc.name}</div>
                               </div>
-                              <div style={{ color: '#7e9bbd', fontSize: '1.2rem' }}>›</div>
+                              <div style={{ color: 'var(--alephia-text-muted)', fontSize: '1.2rem' }}>›</div>
                             </li>
                           ))}
                         </ul>

@@ -41,7 +41,7 @@ body,
   left: 0;
   bottom: 0;
   width: 64px;
-  background: #3A3A3A;
+  background: var(--alephia-surface-raised);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
@@ -79,7 +79,7 @@ body,
     padding: 0 !important;
     border-right: none !important;
     border-top: 1px solid rgba(255, 255, 255, 0.15);
-    background: #1e1e1e !important;
+    background: var(--alephia-surface) !important;
     z-index: 3000 !important;
   }
 
@@ -249,12 +249,12 @@ body,
 
 .rail-button:hover,
 .rail-button:focus-visible {
-  color: #3aa0ff;
+  color: var(--alephia-interactive);
   background: transparent;
 }
 
 .rail-button.active {
-  color: #3aa0ff;
+  color: var(--alephia-interactive);
   background: transparent;
 }
 
@@ -382,7 +382,7 @@ body,
 }
 
 .build-upload-btn:hover {
-  border-color: #60a5fa;
+  border-color: var(--alephia-interactive-hover);
   background: rgba(96, 165, 250, 0.08);
 }
 
@@ -448,7 +448,7 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #60a5fa;
+  color: var(--alephia-interactive-hover);
 }
 
 .build-card-info {
@@ -491,7 +491,7 @@ body,
   left: 0;
   width: 100vw;
   height: calc(100vh - 48px);
-  background-color: #0f1116;
+  background-color: var(--alephia-bg);
   display: flex;
   overflow: hidden;
   z-index: 0;
@@ -565,7 +565,7 @@ body,
   border-radius: 0;
   border: none;
   border-left: 1px solid #444;
-  background: #202020;
+  background: var(--alephia-surface);
   box-shadow: none;
   transform: none;
   z-index: 1;
@@ -614,7 +614,7 @@ body,
 
 .dock-toggle-btn:hover {
   background: rgba(58, 160, 255, 0.2);
-  color: #3aa0ff;
+  color: var(--alephia-interactive);
   border-color: rgba(58, 160, 255, 0.4);
 }
 
@@ -628,7 +628,7 @@ body,
 
 .doc-header {
   height: 40px;
-  background: #2a2a2a;
+  background: var(--alephia-surface-raised);
   border-bottom: 1px solid #444;
   display: flex;
   justify-content: space-between;
@@ -700,7 +700,7 @@ body,
 .import-button {
   background: transparent;
   border: 1px solid rgba(58, 160, 255, 0.7);
-  color: #3aa0ff;
+  color: var(--alephia-interactive);
   padding: 4px 10px;
   border-radius: 999px;
   cursor: pointer;
@@ -717,7 +717,7 @@ body,
   border-radius: 999px;
   padding: 4px 12px;
   background: transparent;
-  color: #3aa0ff;
+  color: var(--alephia-interactive);
   cursor: pointer;
 }
 
@@ -800,7 +800,7 @@ body,
 }
 
 .filters-shell {
-  background: #2a2a2a;
+  background: var(--alephia-surface-raised);
   /* Tandem-like dark gray */
   border: none;
   border-radius: 0;
@@ -855,7 +855,7 @@ body,
 
 .icon-button:hover {
   background: rgba(58, 160, 255, 0.2);
-  color: #3aa0ff;
+  color: var(--alephia-interactive);
 }
 
 .icon-button.ghost {
@@ -995,13 +995,13 @@ body,
 }
 
 .filters-value-label input:checked+span {
-  color: #3aa0ff;
+  color: var(--alephia-interactive);
   /* Blue text when checked, matching Tandem */
   font-weight: 500;
 }
 
 .filters-value-label input {
-  accent-color: #3aa0ff;
+  accent-color: var(--alephia-interactive);
   width: 14px;
   height: 14px;
   margin: 0;
@@ -1018,7 +1018,7 @@ body,
 .filters-more-btn {
   border: none;
   background: transparent;
-  color: #3aa0ff;
+  color: var(--alephia-interactive);
   font-size: 11px;
   cursor: pointer;
   align-self: flex-start;
@@ -1275,8 +1275,8 @@ body,
 }
 
 .primary-btn {
-  background: #3aa0ff;
-  color: #0f1116;
+  background: var(--alephia-interactive);
+  color: var(--alephia-bg);
 }
 
 .primary-btn:disabled {
@@ -1329,7 +1329,7 @@ body,
 }
 
 .modal-primary {
-  background: #3aa0ff;
+  background: var(--alephia-interactive);
   color: #fff;
 }
 
@@ -1438,8 +1438,8 @@ body,
 }
 
 .sprite-controls button.active {
-  border-color: #3aa0ff;
-  color: #3aa0ff;
+  border-color: var(--alephia-interactive);
+  color: var(--alephia-interactive);
 }
 
 .sprite-list {
@@ -1460,8 +1460,8 @@ body,
 }
 
 .sprite-list button.active {
-  border-color: #3aa0ff;
-  color: #3aa0ff;
+  border-color: var(--alephia-interactive);
+  color: var(--alephia-interactive);
 }
 
 .docs-scroll {
@@ -1487,7 +1487,7 @@ body,
 .add-docs-button {
   margin-top: 12px;
   border: none;
-  background: #3aa0ff;
+  background: var(--alephia-interactive);
   color: #fff;
   padding: 6px 12px;
   border-radius: 999px;
@@ -1508,7 +1508,7 @@ body,
 }
 
 .docs-accordion li.active {
-  border-color: #3aa0ff;
+  border-color: var(--alephia-interactive);
 }
 
 .accordion-trigger {
@@ -1582,7 +1582,7 @@ body,
 .doc-preview-placeholder button {
   margin-top: 12px;
   border: none;
-  background: #3aa0ff;
+  background: var(--alephia-interactive);
   color: #fff;
   padding: 6px 12px;
   border-radius: 999px;
@@ -1609,8 +1609,8 @@ body,
 }
 
 .modal-tabs button.active {
-  color: #3aa0ff;
-  border-color: #3aa0ff;
+  color: var(--alephia-interactive);
+  border-color: var(--alephia-interactive);
 }
 
 .modal-body.upload {
@@ -1658,7 +1658,7 @@ body,
 
 .icon-button.active {
   background: rgba(58, 160, 255, 0.25);
-  color: #3aa0ff;
+  color: var(--alephia-interactive);
   border-color: rgba(58, 160, 255, 0.4);
 }
 
@@ -1803,7 +1803,7 @@ div[class*="bim360-visual-style-group"] * {
   width: 14px;
   height: 14px;
   border: 1px solid #555;
-  background-color: #2a2a2a;
+  background-color: var(--alephia-surface-raised);
   border-radius: 2px;
   cursor: pointer;
   position: relative;

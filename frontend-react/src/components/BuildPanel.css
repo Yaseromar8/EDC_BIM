@@ -22,7 +22,7 @@
 
 .build-panel-info {
     background: rgba(56, 58, 62, 0.4);
-    border-left: 3px solid #3b82f6;
+    border-left: 3px solid var(--alephia-interactive);
     color: #d1d5db;
     margin: 10px 14px;
     padding: 10px;
@@ -35,7 +35,7 @@
 
 /* Pins List Badges */
 .pin-index-badge {
-    background: #3b82f6;
+    background: var(--alephia-interactive);
     color: white;
     font-size: 10px;
     font-weight: 700;
@@ -59,12 +59,12 @@
 
 .selected-indicator {
     margin-left: auto;
-    color: #3b82f6;
+    color: var(--alephia-interactive);
 }
 
 .simple-item.selected {
     background: rgba(59, 130, 246, 0.15);
-    border-left: 2px solid #3b82f6;
+    border-left: 2px solid var(--alephia-interactive);
 }
 
 /* Import/Upload Button Area */
@@ -97,7 +97,7 @@
     align-items: center;
     justify-content: center;
     padding: 10px 16px;
-    background: #3b82f6;
+    background: var(--alephia-interactive);
     /* Blue to match accent */
     color: white;
     border-radius: 6px;

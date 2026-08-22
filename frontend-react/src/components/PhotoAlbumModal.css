@@ -150,7 +150,7 @@
 
 .album-filter-toggle.active {
     background: rgba(59, 130, 246, 0.15);
-    color: #60a5fa;
+    color: var(--alephia-interactive-hover);
 }
 
 /* --- Filter Bar --- */
@@ -241,7 +241,7 @@
 }
 
 .filter-group input[type="date"]:focus {
-    border-color: #3b82f6;
+    border-color: var(--alephia-interactive);
 }
 
 .filter-clear-btn {
@@ -283,7 +283,7 @@
 }
 
 .album-search-input:focus {
-    border-color: #3b82f6;
+    border-color: var(--alephia-interactive);
 }
 
 .album-search-input::placeholder {
@@ -293,7 +293,7 @@
 .text-btn {
     background: none;
     border: none;
-    color: #60a5fa;
+    color: var(--alephia-interactive-hover);
     text-decoration: none;
     cursor: pointer;
     margin-top: 8px;
@@ -442,7 +442,7 @@
 /* --- Title Edit --- */
 .album-title-input {
     background: rgba(255,255,255,0.06);
-    border: 1px solid #3b82f6;
+    border: 1px solid var(--alephia-interactive);
     color: #fff;
     font-size: 13px;
     font-weight: 600;
@@ -466,7 +466,7 @@
 }
 
 .confirm-btn {
-    background: #3b82f6;
+    background: var(--alephia-interactive);
     border: none;
     color: white;
     padding: 2px 8px;

@@ -100,8 +100,8 @@
 }
 .import-tab-btn:hover { color: #bbb; }
 .import-tab-btn.active {
-  color: #3b9eff;
-  border-bottom-color: #3b9eff;
+  color: var(--alephia-interactive);
+  border-bottom-color: var(--alephia-interactive);
 }
 .import-tab-btn:disabled { opacity: 0.4; pointer-events: none; }
 
@@ -144,7 +144,7 @@
   box-sizing: border-box;
 }
 .import-input:focus {
-  border-color: #3b9eff;
+  border-color: var(--alephia-interactive);
   outline: none;
 }
 .import-input::placeholder { color: #555; }
@@ -164,7 +164,7 @@
 }
 .import-dropzone:hover,
 .import-dropzone.hover {
-  border-color: #3b9eff;
+  border-color: var(--alephia-interactive);
   background: rgba(59, 158, 255, 0.04);
 }
 .import-dropzone.has-file {
@@ -193,7 +193,7 @@
   color: #666;
 }
 .import-ext-highlight {
-  color: #3b9eff;
+  color: var(--alephia-interactive);
 }
 
 /* File Selected State */
@@ -297,7 +297,7 @@
 }
 .import-phase-option:hover,
 .import-phase-option.active {
-  background: #3b9eff;
+  background: var(--alephia-interactive);
   color: #fff;
 }
 
@@ -315,7 +315,7 @@
   box-sizing: border-box;
 }
 .import-phase-input:focus {
-  border-color: #3b9eff;
+  border-color: var(--alephia-interactive);
   outline: none;
 }
 .import-phase-input::placeholder { color: #555; }
@@ -367,7 +367,7 @@
   width: 36px;
   height: 36px;
   border: 3px solid rgba(59, 158, 255, 0.15);
-  border-top-color: #3b9eff;
+  border-top-color: var(--alephia-interactive);
   border-radius: 50%;
   animation: importSpin 0.8s linear infinite;
 }
@@ -392,7 +392,7 @@
 
 .import-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #3b9eff 0%, #60b4ff 100%);
+  background: linear-gradient(90deg, var(--alephia-interactive) 0%, #60b4ff 100%);
   border-radius: 4px;
   transition: width 0.4s ease;
 }
@@ -452,7 +452,7 @@
 }
 .import-selector-option:hover,
 .import-selector-option.active {
-  background: #3b9eff;
+  background: var(--alephia-interactive);
   color: #fff;
 }
 
@@ -493,7 +493,7 @@
   min-height: 36px;
 }
 .import-file-inline.extracting {
-  border-color: #3b9eff33;
+  border-color: var(--alephia-interactive)33;
   background: linear-gradient(90deg, rgba(59,158,255,0.06) 0%, #111318 100%);
 }
 .import-file-inline-name {
@@ -507,7 +507,7 @@
 }
 .import-file-inline-pct {
   font-size: 12px;
-  color: #3b9eff;
+  color: var(--alephia-interactive);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   min-width: 32px;
@@ -555,7 +555,7 @@
 }
 
 .import-civil-card.active {
-  border-color: #3b9eff;
+  border-color: var(--alephia-interactive);
   background: rgba(59, 158, 255, 0.1);
   box-shadow: 0 0 0 1px rgba(59, 158, 255, 0.18) inset;
 }
@@ -662,7 +662,7 @@
 .import-btn-cancel:disabled { opacity: 0.4; pointer-events: none; }
 
 .import-btn-primary {
-  background: #3b9eff;
+  background: var(--alephia-interactive);
   border: none;
   color: #fff;
   padding: 7px 24px;

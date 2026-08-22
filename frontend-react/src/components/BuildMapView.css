@@ -58,7 +58,7 @@
 }
 
 .ctx-btn-primary.blue {
-    background-color: #3b82f6;
+    background-color: var(--alephia-interactive);
 }
 
 .ctx-btn-primary.blue:hover {

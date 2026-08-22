@@ -13,8 +13,8 @@
 
 .refresh-btn {
     background: rgba(58, 160, 255, 0.2);
-    border: 1px solid #3aa0ff;
-    color: #3aa0ff;
+    border: 1px solid var(--alephia-interactive);
+    color: var(--alephia-interactive);
     padding: 6px 12px;
     border-radius: 4px;
     font-size: 0.8rem;
@@ -23,7 +23,7 @@
 }
 
 .refresh-btn:hover:not(:disabled) {
-    background: #3aa0ff;
+    background: var(--alephia-interactive);
     color: white;
 }
 
@@ -84,7 +84,7 @@
 .activity-user {
     font-size: 0.85rem;
     font-weight: 600;
-    color: #3aa0ff;
+    color: var(--alephia-interactive);
 }
 
 .activity-date {

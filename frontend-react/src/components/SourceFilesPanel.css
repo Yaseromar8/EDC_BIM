@@ -234,7 +234,7 @@
 .sfp-version-badge {
     font-size: 10px;
     font-weight: 600;
-    color: #3b9eff;
+    color: var(--alephia-interactive);
     background: rgba(59, 158, 255, 0.12);
     padding: 1px 6px;
     border-radius: 3px;
@@ -247,7 +247,7 @@
 .sfp-version-badge-detail {
     font-size: 10px;
     font-weight: 600;
-    color: #3b9eff;
+    color: var(--alephia-interactive);
     background: rgba(59, 158, 255, 0.12);
     padding: 1px 6px;
     border-radius: 3px;
@@ -260,7 +260,7 @@
     font-size: 9px;
     font-weight: 700;
     color: #fff;
-    background: #3b9eff;
+    background: var(--alephia-interactive);
     padding: 1px 5px;
     border-radius: 3px;
     margin-left: auto;
@@ -274,7 +274,7 @@
     justify-content: space-between;
     padding: 6px 12px 6px 40px;
     background: rgba(59, 158, 255, 0.06);
-    border-left: 3px solid #3b9eff;
+    border-left: 3px solid var(--alephia-interactive);
     animation: sfp-banner-slide-in 0.3s ease-out;
 }
 
@@ -288,14 +288,14 @@
 }
 
 .sfp-update-banner-text .sfp-icon {
-    color: #3b9eff;
+    color: var(--alephia-interactive);
     flex-shrink: 0;
 }
 
 .sfp-update-banner-btn {
     background: transparent;
     border: none;
-    color: #3b9eff;
+    color: var(--alephia-interactive);
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;

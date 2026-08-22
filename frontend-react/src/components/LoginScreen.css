@@ -12,7 +12,7 @@
     --cta-line-fuerte: #3A4B5C;
     --cta-text: #F2F5F8;
     --cta-muted: #A8B3BF;
-    --cta-primary: #1473E6;
+    --cta-primary: var(--alephia-interactive);
     --cta-primary-alto: #2C87F5;
     --cta-warn: #F5A524;
     --cta-danger: #FF6B6B;
