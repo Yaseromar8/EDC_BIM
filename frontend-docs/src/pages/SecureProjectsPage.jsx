@@ -75,14 +75,15 @@ function UsersTab() {
   // conserva y la purga NUNCA se ofrece desde esta pantalla: queda como acto
   // humano explícito y separado (?purgar=1), fuera de la interfaz.
   const handleRevocar = async (id) => {
-    if (!await confirmAction({ title: 'Revocar invitación', message: 'La cuenta pendiente se desactiva y su enlace deja de poder reclamarse. Podrás reactivarla y reemitir el enlace más adelante.', confirmText: 'Revocar', danger: true })) return;
+    if (!await confirmAction({ title: 'Revocar invitación', message: 'La cuenta pendiente se desactiva y su enlace deja de poder reclamarse. Podrás reinvitarla más adelante: un enlace nuevo, los anteriores quedan muertos.', confirmText: 'Revocar', danger: true })) return;
     await apiFetch(`${API}/api/users/${id}`, { method: 'DELETE' });
     fetchUsers();
   };
 
   // El enlace solo se muestra una vez al invitar. Si se perdió, se reemite:
-  // el token es firmado y sin estado, otro enlace para la misma cuenta
-  // pendiente es tan seguro como el primero.
+  // Reinvitar = re-invitacion de la maquina de estados (doc 58): emite un
+  // enlace de la GENERACION nueva -- los anteriores dejan de valer -- y si la
+  // invitacion estaba revocada, la resucita en el mismo acto.
   const handleReinvitar = async (u) => {
     setError('');
     try {
@@ -151,14 +152,24 @@ function UsersTab() {
                   {/* Protección por ROL, no por correo hardcodeado: cualquier admin
                       queda protegido (antes solo un email concreto, y si ese usuario
                       cambiaba de correo el sistema quedaba sin candado). */}
-                  {u.role !== 'admin' && u.activo === false && (
+                  {/* Dos verbos, dos naturalezas (doc 58): REACTIVAR deshace la
+                      suspensión de una CUENTA; una invitación revocada no se
+                      "reactiva" — se REINVITA (enlace de generación nueva, y
+                      la deja pendiente otra vez). El backend además lo exige:
+                      reactivar responde 409 INVITACION_REVOCADA. */}
+                  {u.role !== 'admin' && u.activo === false && !u.pendiente && (
                     <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 11 }} onClick={(e) => { e.stopPropagation(); handleReactivar(u.id); }} title="Devolver el acceso; el rastro se conservó">
                       Reactivar
                     </button>
                   )}
+                  {u.role !== 'admin' && u.activo === false && u.pendiente && (
+                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 11 }} onClick={(e) => { e.stopPropagation(); handleReinvitar(u); }} title="Emitir un enlace nuevo: la invitación vuelve a quedar pendiente">
+                      Reinvitar
+                    </button>
+                  )}
                   {u.role !== 'admin' && u.activo !== false && u.pendiente && (
-                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 11, marginRight: 6 }} onClick={(e) => { e.stopPropagation(); handleReinvitar(u); }} title="Volver a mostrar el enlace de invitación">
-                      Copiar enlace
+                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 11, marginRight: 6 }} onClick={(e) => { e.stopPropagation(); handleReinvitar(u); }} title="Emitir un enlace nuevo; los anteriores dejan de valer">
+                      Reinvitar
                     </button>
                   )}
                   {u.role !== 'admin' && u.activo !== false && (

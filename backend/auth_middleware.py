@@ -293,6 +293,13 @@ def validate_session(token):
                   -- sesiones, pero si esa revocacion fallara su token seguiria
                   -- sirviendo hasta 7 dias.
                   AND COALESCE(u.is_active, TRUE)
+                  -- Invariante permanente del perimetro (doc 61 §3.a):
+                  -- SESION VALIDA => CUENTA ACTIVADA. Ningun emisor legitimo
+                  -- crea sesion para una no-activada (login exige hash =>
+                  -- activada; register y Google fijan activated_at en el
+                  -- mismo acto), asi que esto no rechaza nada legitimo: cierra
+                  -- la sesion historica de una cuenta que quedara PENDIENTE.
+                  AND u.activated_at IS NOT NULL
             ''', (hash_de_token(token),))
             row = cursor.fetchone()
             if row:

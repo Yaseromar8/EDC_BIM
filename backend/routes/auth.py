@@ -309,7 +309,7 @@ def google_auth():
             cursor.execute('''
                 SELECT u.id, u.name, u.email, u.role,
                        c.name as company_name, j.name as job_title_name,
-                       u.password_hash, COALESCE(u.is_active, TRUE)
+                       COALESCE(u.is_active, TRUE), u.activated_at
                 FROM users u
                 LEFT JOIN companies c ON u.company_id = c.id
                 LEFT JOIN job_titles j ON u.job_title_id = j.id
@@ -327,26 +327,42 @@ def google_auth():
                 #   · una invitacion PENDIENTE se "reclamaba" por Google sin el
                 #     enlace del administrador, y la cuenta quedaba a medias:
                 #     sin nombre real, sin contraseña, pero con sesion.
-                if not user[7]:
+                if not user[6]:
                     # Mismo mensaje generico que el login por contraseña: no se
                     # confirma a un retirado que su cuenta existe.
                     registrar_evento('login_desactivado', email=email, user_id=user[0])
                     return jsonify({'error': 'Correo o contraseña incorrectos'}), 401
-                if not user[6]:
-                    return jsonify({
-                        'error': 'Esta cuenta tiene una invitación pendiente. '
-                                 'Actívala con el enlace que te envió el administrador.',
-                        'code': 'INVITE_REQUIRED'}), 403
-                # Usuario existe, iniciar sesión
+                nombre = user[1]
+                if user[7] is None:
+                    # G5b (doc 58): la PRIMERA entrada Google de una invitación
+                    # activa ES la activación -- Google verificó que el titular
+                    # del correo invitado es quien entra, que es exactamente lo
+                    # que prueba el enlace de invitación. Se fija activated_at
+                    # (y con él mueren TODOS los tokens de invitación: el
+                    # reclamo exige activated_at IS NULL) y se toma el nombre
+                    # real de Google en lugar del marcador de posición.
+                    if not nombre or nombre == '(Invitado pendiente)':
+                        nombre = name
+                    cursor.execute('''UPDATE users SET activated_at = NOW(), name = %s
+                                       WHERE id = %s''', (nombre, user[0]))
+                    conn.commit()
+                    registrar_evento('cuenta_activada', email=email, user_id=user[0],
+                                     detalle='primera entrada con Google (G5b)')
+                # Toda entrada por Google deja asiento: el rastro de accesos no
+                # puede depender de la puerta que se use (login_ok era solo de
+                # la puerta de contraseña, y la evidencia positiva de G7 se
+                # alimenta de estos eventos).
+                registrar_evento('login_ok', email=email, user_id=user[0],
+                                 detalle='con Google')
                 return jsonify({
                     'id': user[0],
-                    'name': user[1],
+                    'name': nombre,
                     'email': user[2],
                     # La cuarta columna es el rol; user[4] es la compañía y
                     # hacía que un admin autenticado con Google perdiera acceso.
                     'role': user[3],
-                    'company': user[5],
-                    'job_title': user[6],
+                    'company': user[4],
+                    'job_title': user[5],
                     'session_token': create_session(user[0])
                 }), 200
             else:
@@ -653,12 +669,13 @@ def register():
             cursor = conn.cursor()
             
             # Verificar si el email ya existe y su estado
-            cursor.execute('SELECT id, password_hash, role, COALESCE(is_active, TRUE) '
+            cursor.execute('SELECT id, password_hash, role, COALESCE(is_active, TRUE), '
+                           '       activated_at, COALESCE(invitacion_gen, 0) '
                            '  FROM users WHERE email = %s', (email,))
             existing_user = cursor.fetchone()
 
             if existing_user:
-                u_id, u_hash, u_role, u_activo = existing_user
+                u_id, u_hash, u_role, u_activo, u_activada, u_gen = existing_user
                 # INVITACION RETIRADA: el enlace firmado sigue siendo valido
                 # criptograficamente durante 14 dias, pero si el administrador
                 # desactivo la cuenta, retiro la invitacion. Sin esto, el
@@ -671,7 +688,11 @@ def register():
                         'error': 'Esta invitación fue retirada. Pide al '
                                  'administrador que te invite de nuevo.',
                         'code': 'INVITACION_RETIRADA'}), 403
-                if not u_hash: # Es una invitación pendiente
+                if u_activada is None: # PENDIENTE de verdad (doc 58 §B.3):
+                    # la pendencia es activated_at NULL, no el hash vacio -- una
+                    # cuenta activada por Google tiene hash vacio y NO es
+                    # reclamable: con la guardia vieja, un token aun vigente
+                    # sobreescribia nombre, empresa y clave de una cuenta VIVA.
                     # Reclamar exige el token firmado que emitio el admin al
                     # invitar. Antes bastaba con conocer el correo, y ademas se
                     # heredaba el rol invitado (admin incluido): toma de cuenta.
@@ -682,8 +703,23 @@ def register():
                                      + (f' ({motivo})' if motivo else '.'),
                             'code': 'INVITE_REQUIRED'
                         }), 403
+                    # LA GENERACION (doc 59 §3): el token lleva la generacion
+                    # con la que se emitio; solo la VIGENTE reclama. Reemitir o
+                    # revocar+reinvitar incrementa la generacion y mata todo
+                    # token anterior POR IGUALDAD DE ENTEROS -- sin relojes.
+                    # Transicion: un token sin `gen` cuenta como 0 y solo casa
+                    # con filas nunca reemitidas; la excepcion muere sola a los
+                    # 14 dias con la caducidad del token.
+                    if int(datos.get('gen') or 0) != int(u_gen or 0):
+                        return jsonify({
+                            'error': 'Este enlace fue sustituido por uno más nuevo. '
+                                     'Usa el último que te enviaron, o pide otro.',
+                            'code': 'INVITACION_SUSTITUIDA'}), 403
+                    # El reclamo FIJA activated_at: es el acto de activacion, y
+                    # con el mueren todos los tokens (one-shot de verdad).
                     cursor.execute('''
-                        UPDATE users SET name=%s, password_hash=%s, company_id=%s, job_title_id=%s
+                        UPDATE users SET name=%s, password_hash=%s, company_id=%s, job_title_id=%s,
+                               activated_at = NOW()
                         WHERE id=%s
                     ''', (name, hashed_pw, company_id, job_title_id, u_id))
                     conn.commit()
@@ -814,7 +850,7 @@ def manage_users():
                     SELECT u.id, u.name, u.email, u.role, u.created_at,
                            c.name as company_name, j.name as job_title_name,
                            COALESCE(u.is_active, TRUE) as activo,
-                           (u.password_hash = '') as pendiente
+                           (u.activated_at IS NULL) as pendiente
                     FROM users u
                     LEFT JOIN companies c ON u.company_id = c.id
                     LEFT JOIN job_titles j ON u.job_title_id = j.id
@@ -877,9 +913,16 @@ def manage_users():
                     return jsonify({'error': 'El email ya existe o ya fue invitado'}), 400
                     
                 correo = email.strip().lower()
+                # La fila nace en generacion 1 y el token la lleva consigo
+                # (doc 59 §3): reclamar exige gen(token)=gen(fila), asi que
+                # reemitir o revocar+reinvitar (gen++) mata este enlace por
+                # igualdad de enteros. El ROL viaja solo en la fila -- el
+                # reclamo responde con el rol de la fila, nunca del token, y
+                # un token viejo ya no puede "recordar" un rol que el admin
+                # cambio despues de emitirlo (doc 59 §4).
                 cursor.execute('''
-                    INSERT INTO users (name, email, password_hash, role)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO users (name, email, password_hash, role, invitacion_gen)
+                    VALUES (%s, %s, %s, %s, 1)
                 ''', ('(Invitado pendiente)', correo, '', role))
                 conn.commit()
 
@@ -887,7 +930,7 @@ def manage_users():
                 # Sin el, reclamar la cuenta solo exigia conocer el correo.
                 # Mientras no haya envio de correo (F3), el admin copia este
                 # enlace y lo hace llegar por su medio.
-                token = emitir(PROPOSITO_INVITACION, {'email': correo, 'role': role})
+                token = emitir(PROPOSITO_INVITACION, {'email': correo, 'gen': 1})
                 # G1 · el correo de invitacion. `mailer` degrada con gracia: sin
                 # RESEND_API_KEY devuelve enviado=False y el enlace copiable
                 # sigue siendo el camino -- exactamente el comportamiento que
@@ -946,7 +989,7 @@ def ficha_de_persona(user_id):
             cur = conn.cursor()
             cur.execute("""
                 SELECT u.id, u.name, u.email, u.role,
-                       COALESCE(u.is_active, TRUE), (u.password_hash = ''),
+                       COALESCE(u.is_active, TRUE), (u.activated_at IS NULL),
                        u.created_at, u.last_login_at, u.totp_activo,
                        c.id, c.name, j.name
                   FROM users u
@@ -1024,9 +1067,15 @@ def reemitir_invitacion(user_id):
     firmado y sin estado, así que emitir otro para la misma cuenta pendiente es
     exactamente tan seguro como el primero.
 
-    Solo invitaciones sin reclamar (password_hash vacío) y activas: una cuenta
-    reclamada no se «reinvita» (tiene contraseña y dueño), y una retirada
-    primero se reactiva — decisión aparte, con su propio rastro.
+    Solo INVITACIONES (activated_at NULL): una cuenta activada no se
+    «reinvita» — tiene dueño (por contraseña o por Google). Y esta ruta ES la
+    re-invitación de la máquina de estados (doc 58): sobre una invitación
+    REVOCADA la resucita en el mismo acto (`is_active=TRUE` + gen++), porque
+    «reactivar» es de cuentas suspendidas, no de invitaciones.
+
+    LA GENERACIÓN: cada reemisión incrementa `invitacion_gen` en la misma
+    transacción y el token nuevo la lleva; el reclamo exige igualdad, así que
+    todo enlace anterior muere aquí — sin relojes, sin estado en el token.
     """
     denied = _require_admin("reemitir una invitación")
     if denied:
@@ -1034,26 +1083,29 @@ def reemitir_invitacion(user_id):
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT email, role, (password_hash = %s), '
+            cursor.execute('SELECT email, (activated_at IS NULL), '
                            '       COALESCE(is_active, TRUE) '
-                           '  FROM users WHERE id = %s', ('', user_id))
+                           '  FROM users WHERE id = %s', (user_id,))
             fila = cursor.fetchone()
             if not fila:
                 return jsonify({'error': 'Usuario no encontrado'}), 404
-            correo, rol, pendiente, activa = fila
-            if not pendiente:
-                return jsonify({'error': 'Esa cuenta ya fue reclamada: no hay '
+            correo, invitacion, activa = fila
+            if not invitacion:
+                return jsonify({'error': 'Esa cuenta ya está activada: no hay '
                                          'invitación que reemitir.',
                                 'code': 'YA_RECLAMADA'}), 409
-            if not activa:
-                return jsonify({'error': 'Esa invitación está retirada. '
-                                         'Reactívala antes de reemitir el enlace.',
-                                'code': 'INVITACION_RETIRADA'}), 409
+            cursor.execute('UPDATE users SET is_active = TRUE, '
+                           '       invitacion_gen = COALESCE(invitacion_gen, 0) + 1 '
+                           ' WHERE id = %s RETURNING invitacion_gen', (user_id,))
+            gen = cursor.fetchone()[0]
+            conn.commit()
 
-        token = emitir(PROPOSITO_INVITACION, {'email': correo, 'role': rol})
+        token = emitir(PROPOSITO_INVITACION, {'email': correo, 'gen': gen})
         sesion = getattr(g, 'current_user', None) or {}
         registrar_evento('invitacion_reemitida', user_id=user_id, email=correo,
-                         detalle=f"por admin {sesion.get('id', '?')}")
+                         detalle=("gen=" + str(gen)
+                                  + ('' if activa else ' · resucita invitación revocada')
+                                  + " · por admin " + str(sesion.get('id', '?'))))
         _enlace = f"{_origen_del_cliente()}/registro?invite={token}"
         _avisado, _detalle = mailer.enviar(
             correo,
@@ -1090,14 +1142,24 @@ def reactivar_usuario(user_id):
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT COALESCE(is_active, TRUE) FROM users WHERE id = %s',
-                           (user_id,))
+            cursor.execute('SELECT COALESCE(is_active, TRUE), activated_at '
+                           '  FROM users WHERE id = %s', (user_id,))
             fila = cursor.fetchone()
             if not fila:
                 return jsonify({'error': 'Usuario no encontrado'}), 404
             if fila[0]:
                 return jsonify({'error': 'Esa cuenta ya está activa.',
                                 'code': 'YA_ACTIVA'}), 409
+            # REACTIVACIÓN = SUSPENDIDA→ACTIVADA, y nada más (doc 58): una
+            # invitación revocada no se "reactiva" -- reactivarla la dejaría
+            # PENDIENTE con los tokens viejos aún casando por generación. Su
+            # camino es la re-invitación (reinvitar: is_active + gen++).
+            if fila[1] is None:
+                return jsonify({'error': 'Es una invitación revocada, no una '
+                                         'cuenta suspendida. Usa «Reinvitar»: '
+                                         'emite un enlace nuevo y la deja '
+                                         'pendiente otra vez.',
+                                'code': 'INVITACION_REVOCADA'}), 409
             cursor.execute('UPDATE users SET is_active = TRUE WHERE id = %s',
                            (user_id,))
             conn.commit()

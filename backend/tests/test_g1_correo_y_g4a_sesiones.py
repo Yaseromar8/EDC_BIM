@@ -27,7 +27,8 @@ def entorno(monkeypatch):
                         (correos.append({'a': destino, 'asunto': asunto, 'enlace': enlace}),
                          (True, 'enviado'))[1])
 
-    estado = {'existe': None, 'pendiente_activa': ('p@obra.pe', 'user', True, True)}
+    # (email, invitacion=activated_at NULL, activa) — la forma G7 de reinvitar
+    estado = {'existe': None, 'pendiente_activa': ('p@obra.pe', True, True)}
 
     class Cursor:
         def __init__(self): self.ultimo = None
@@ -37,7 +38,9 @@ def entorno(monkeypatch):
             s = (self.ultimo or ('',))[0].upper()
             if 'SELECT ID FROM USERS WHERE EMAIL' in s:
                 return estado['existe']
-            if 'SELECT EMAIL, ROLE, (PASSWORD_HASH =' in s:
+            if 'RETURNING INVITACION_GEN' in s:
+                return (2,)
+            if 'SELECT EMAIL, (ACTIVATED_AT IS NULL)' in s:
                 return estado['pendiente_activa']
             return None
 
