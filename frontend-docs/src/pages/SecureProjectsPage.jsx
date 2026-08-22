@@ -63,8 +63,38 @@ function UsersTab() {
   };
 
   const handleDelete = async (id) => {
-    if (!await confirmAction({ title: 'Eliminar usuario', message: 'El usuario perderá el acceso a la plataforma.', confirmText: 'Eliminar', danger: true })) return;
+    if (!await confirmAction({ title: 'Retirar acceso', message: 'La cuenta se desactiva y sus sesiones se cierran. El rastro de lo que hizo se conserva, y puedes reactivarla después.', confirmText: 'Retirar', danger: true })) return;
     await apiFetch(`${API}/api/users/${id}`, { method: 'DELETE' });
+    fetchUsers();
+  };
+
+  // Una invitación sin reclamar no tiene rastro que conservar: purgarla es
+  // borrar una fila vacía, y libera el correo para volver a invitar.
+  const handlePurge = async (id) => {
+    if (!await confirmAction({ title: 'Eliminar invitación', message: 'La invitación no fue reclamada: se elimina definitivamente y ese correo queda libre para invitarse de nuevo.', confirmText: 'Eliminar', danger: true })) return;
+    await apiFetch(`${API}/api/users/${id}?purgar=1`, { method: 'DELETE' });
+    fetchUsers();
+  };
+
+  // El enlace solo se muestra una vez al invitar. Si se perdió, se reemite:
+  // el token es firmado y sin estado, otro enlace para la misma cuenta
+  // pendiente es tan seguro como el primero.
+  const handleReinvitar = async (u) => {
+    setError('');
+    try {
+      const res = await apiFetch(`${API}/api/users/${u.id}/reinvitar`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'No se pudo reemitir.'); return; }
+      setShowCreate(true);
+      setInvitacion({
+        email: u.email,
+        url: `${window.location.origin}/?invite=${encodeURIComponent(data.invite_token || '')}`,
+      });
+    } catch { setError('No se pudo reemitir.'); }
+  };
+
+  const handleReactivar = async (id) => {
+    await apiFetch(`${API}/api/users/${id}/reactivar`, { method: 'POST' });
     fetchUsers();
   };
 
@@ -97,14 +127,33 @@ function UsersTab() {
                   <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: 11, background: u.role === 'admin' ? 'var(--bg-active)' : 'var(--bg-secondary)', color: u.role === 'admin' ? 'var(--accent)' : 'var(--text-secondary)' }}>
                     {u.role.toUpperCase()}
                   </span>
+                  {/* El estado de la CUENTA, que la base siempre distinguió y la
+                      pantalla no: sin esto, una invitación sin reclamar y un
+                      acceso retirado parecían «un usuario más». */}
+                  {u.activo === false && (
+                    <span style={{ marginLeft: 6, padding: '2px 8px', borderRadius: 12, fontSize: 11, background: '#f3f4f6', color: '#6b7280' }}>DESACTIVADO</span>
+                  )}
+                  {u.activo !== false && u.pendiente && (
+                    <span style={{ marginLeft: 6, padding: '2px 8px', borderRadius: 12, fontSize: 11, background: '#fff8e6', color: '#b45309' }}>PENDIENTE</span>
+                  )}
                 </td>
                 <td>{formatDate(u.created_at)}</td>
-                <td>
+                <td style={{ whiteSpace: 'nowrap' }}>
                   {/* Protección por ROL, no por correo hardcodeado: cualquier admin
                       queda protegido (antes solo un email concreto, y si ese usuario
                       cambiaba de correo el sistema quedaba sin candado). */}
-                  {u.role !== 'admin' && (
-                    <button className="btn-icon" onClick={(e) => { e.stopPropagation(); handleDelete(u.id); }} title="Retirar acceso">
+                  {u.role !== 'admin' && u.activo === false && (
+                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 11 }} onClick={(e) => { e.stopPropagation(); handleReactivar(u.id); }} title="Devolver el acceso; el rastro se conservó">
+                      Reactivar
+                    </button>
+                  )}
+                  {u.role !== 'admin' && u.activo !== false && u.pendiente && (
+                    <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 11, marginRight: 6 }} onClick={(e) => { e.stopPropagation(); handleReinvitar(u); }} title="Volver a mostrar el enlace de invitación">
+                      Copiar enlace
+                    </button>
+                  )}
+                  {u.role !== 'admin' && u.activo !== false && (
+                    <button className="btn-icon" onClick={(e) => { e.stopPropagation(); u.pendiente ? handlePurge(u.id) : handleDelete(u.id); }} title={u.pendiente ? 'Eliminar la invitación (no fue reclamada)' : 'Retirar acceso'}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                       </svg>

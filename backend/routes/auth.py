@@ -808,9 +808,13 @@ def manage_users():
                 es_admin = bool(sesion and sesion.get('role') == 'admin')
                 _uid = (sesion or {}).get('id')
 
+                # Las dos ultimas columnas van AL FINAL a proposito: la rama
+                # no-admin indexa r[0]/r[1] y no debe moverse.
                 _COLUMNAS = '''
                     SELECT u.id, u.name, u.email, u.role, u.created_at,
-                           c.name as company_name, j.name as job_title_name
+                           c.name as company_name, j.name as job_title_name,
+                           COALESCE(u.is_active, TRUE) as activo,
+                           (u.password_hash = '') as pendiente
                     FROM users u
                     LEFT JOIN companies c ON u.company_id = c.id
                     LEFT JOIN job_titles j ON u.job_title_id = j.id
@@ -839,7 +843,11 @@ def manage_users():
                         users.append({
                             'id': r[0], 'name': r[1], 'email': r[2], 'role': r[3],
                             'created_at': r[4].isoformat() if r[4] else None,
-                            'company_name': r[5] or 'N/A', 'job_title_name': r[6] or 'N/A'
+                            'company_name': r[5] or 'N/A', 'job_title_name': r[6] or 'N/A',
+                            # Para que la pantalla distinga lo que la base ya
+                            # distinguia: invitacion sin reclamar y acceso
+                            # retirado no son "un usuario mas".
+                            'activo': bool(r[7]), 'pendiente': bool(r[8]),
                         })
                     else:
                         users.append({'id': r[0], 'name': r[1]})
@@ -898,6 +906,95 @@ def manage_users():
                 }), 201
         except Exception as e:
             return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/api/users/<int:user_id>/reinvitar', methods=['POST'])
+@requiere_rol('admin')
+def reemitir_invitacion(user_id):
+    """Vuelve a emitir el enlace de una invitación PENDIENTE.
+
+    El enlace solo se muestra una vez al invitar; si se cierra el modal sin
+    copiarlo, esa invitación quedaba muerta: no había forma de recuperarlo y el
+    correo quedaba quemado (re-invitar responde «ya existe»). El token es
+    firmado y sin estado, así que emitir otro para la misma cuenta pendiente es
+    exactamente tan seguro como el primero.
+
+    Solo invitaciones sin reclamar (password_hash vacío) y activas: una cuenta
+    reclamada no se «reinvita» (tiene contraseña y dueño), y una retirada
+    primero se reactiva — decisión aparte, con su propio rastro.
+    """
+    denied = _require_admin("reemitir una invitación")
+    if denied:
+        return denied
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT email, role, (password_hash = %s), '
+                           '       COALESCE(is_active, TRUE) '
+                           '  FROM users WHERE id = %s', ('', user_id))
+            fila = cursor.fetchone()
+            if not fila:
+                return jsonify({'error': 'Usuario no encontrado'}), 404
+            correo, rol, pendiente, activa = fila
+            if not pendiente:
+                return jsonify({'error': 'Esa cuenta ya fue reclamada: no hay '
+                                         'invitación que reemitir.',
+                                'code': 'YA_RECLAMADA'}), 409
+            if not activa:
+                return jsonify({'error': 'Esa invitación está retirada. '
+                                         'Reactívala antes de reemitir el enlace.',
+                                'code': 'INVITACION_RETIRADA'}), 409
+
+        token = emitir(PROPOSITO_INVITACION, {'email': correo, 'role': rol})
+        sesion = getattr(g, 'current_user', None) or {}
+        registrar_evento('invitacion_reemitida', user_id=user_id, email=correo,
+                         detalle=f"por admin {sesion.get('id', '?')}")
+        return jsonify({
+            'success': True,
+            'invite_token': token,
+            'invite_url': f"{_origen_del_cliente()}/registro?invite={token}",
+            'nota': 'Comparte este enlace con la persona invitada. Caduca en 14 días.'
+        }), 200
+    except Exception as e:
+        print(f"[auth] error reemitiendo invitación: {e}")
+        return jsonify({'error': 'No se pudo reemitir la invitación.'}), 500
+
+
+@auth_bp.route('/api/users/<int:user_id>/reactivar', methods=['POST'])
+@requiere_rol('admin')
+def reactivar_usuario(user_id):
+    """Devuelve el acceso a una cuenta desactivada. El espejo de retirarlo.
+
+    Retirar desactiva (conservando el rastro); esto lo deshace, con su propio
+    asiento. Sin esta puerta, la única «reactivación» posible era purgar la
+    fila y volver a invitar — que destruye el rastro que la desactivación
+    existía para conservar.
+    """
+    denied = _require_admin("reactivar un usuario")
+    if denied:
+        return denied
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT COALESCE(is_active, TRUE) FROM users WHERE id = %s',
+                           (user_id,))
+            fila = cursor.fetchone()
+            if not fila:
+                return jsonify({'error': 'Usuario no encontrado'}), 404
+            if fila[0]:
+                return jsonify({'error': 'Esa cuenta ya está activa.',
+                                'code': 'YA_ACTIVA'}), 409
+            cursor.execute('UPDATE users SET is_active = TRUE WHERE id = %s',
+                           (user_id,))
+            conn.commit()
+        sesion = getattr(g, 'current_user', None) or {}
+        registrar_evento('usuario_reactivado', user_id=user_id,
+                         detalle=f"por admin {sesion.get('id', '?')}")
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        print(f"[auth] error reactivando usuario: {e}")
+        return jsonify({'error': 'No se pudo reactivar la cuenta.'}), 500
+
 
 @auth_bp.route('/api/users/<int:user_id>', methods=['DELETE'])
 @requiere_rol('admin')
