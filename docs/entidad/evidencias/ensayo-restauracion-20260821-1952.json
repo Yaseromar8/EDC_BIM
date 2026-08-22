@@ -1,0 +1,12 @@
+{
+  "cuando": "2026-08-21 19:52:46",
+  "copia": "ecd_20260822_003443.copia.gz",
+  "base_ensayo": "ecd_ensayo_20260821_195207",
+  "tablas": 90,
+  "filas": 83425,
+  "descuadres": [],
+  "en_cuarentena": {
+    "pdf_markups": 1
+  },
+  "veredicto": "RESTAURABLE"
+}
