@@ -86,6 +86,7 @@ SIN_CUBRIR = {
     # No manejan datos de obra: el detector las marca por consultar users/projects.
     ('routes/auth.py', '/api/auth/google'): 'ruta de autenticacion, no toca datos de obra',
     ('routes/auth.py', '/api/auth/forgot-password'): 'ruta de autenticacion, no toca datos de obra',
+    ('routes/auth.py', '/api/auth/sesiones/cerrar-otras'): 'G4a: actua SOLO sobre las sesiones de quien llama (exige sesion y no recibe user_id); no toca datos de obra',
     # Por diseno no pueden acotarse a UNA obra: son las que listan o dan acceso.
     ('routes/projects.py', '/api/projects'): 'LISTA obras; filtra por project_users y devuelve vacio al anonimo',
     ('routes/projects.py', '/api/hubs/<hub_id>/projects'): 'lista obras de un hub; mismo filtro por pertenencia',

@@ -13,6 +13,7 @@ import { API, VISOR_URL } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import MiTrabajo from '../components/MiTrabajo';
 import SegundoFactorPanel from '../components/SegundoFactorPanel';
+import MiCuentaPanel from '../components/MiCuentaPanel';
 
 // Paleta oficial ALEPHIA (03_Web). El Hub es zona oscura: Ink de fondo,
 // Navy como profundidad, Signal únicamente cuando el usuario interactúa.
@@ -72,7 +73,9 @@ function ProductCard({ icon, producto, onClick, locked = false, lockNote }) {
 }
 
 export default function HubPage({ user, onChooseDocs, onLogout }) {
-  const [verSeguridad, setVerSeguridad] = useState(false);
+  // P6 v1: «Mi cuenta» (contraseña · 2FA · sesiones). El panel del segundo
+  // factor se conserva tal cual y se abre DESDE Mi cuenta.
+  const [panel, setPanel] = useState(null); // null | 'cuenta' | '2fa'
 
   const rawName = String(user?.name || user?.username || user?.email || '').trim();
   const first = rawName ? rawName.split(/[@\s._]+/)[0] : '';
@@ -107,8 +110,8 @@ export default function HubPage({ user, onChooseDocs, onLogout }) {
         <img src="/brand/ALEPHIA_Logo_Horizontal_White.svg" alt="ALEPHIA"
              style={{ height: 28, width: 'auto', display: 'block' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-        <button onClick={() => setVerSeguridad(true)} style={{ background: 'none', border: 'none', color: '#79818d', fontSize: 13, cursor: 'pointer', padding: 0 }}>
-          Seguridad
+        <button onClick={() => setPanel('cuenta')} style={{ background: 'none', border: 'none', color: '#79818d', fontSize: 13, cursor: 'pointer', padding: 0 }}>
+          Mi cuenta
         </button>
         <button onClick={onLogout} style={{ background: 'none', border: 'none', color: '#79818d', fontSize: 13, cursor: 'pointer', padding: 0 }}>
           Cerrar sesión
@@ -116,7 +119,11 @@ export default function HubPage({ user, onChooseDocs, onLogout }) {
         </div>
       </header>
 
-      {verSeguridad && <SegundoFactorPanel onClose={() => setVerSeguridad(false)} />}
+      {panel === 'cuenta' && (
+        <MiCuentaPanel user={user} onClose={() => setPanel(null)}
+                       onAbrir2FA={() => setPanel('2fa')} />
+      )}
+      {panel === '2fa' && <SegundoFactorPanel onClose={() => setPanel('cuenta')} />}
 
       <main style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 24px 64px', overflow: 'hidden' }}>
 

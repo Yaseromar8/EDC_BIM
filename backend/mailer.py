@@ -25,7 +25,7 @@ from app_logging import get_logger
 logger = get_logger('mailer')
 
 RESEND_API_KEY = os.getenv('RESEND_API_KEY', '').strip()
-MAIL_FROM = os.getenv('MAIL_FROM', 'COTA <onboarding@resend.dev>').strip()
+MAIL_FROM = os.getenv('MAIL_FROM', 'ALEPHIA <onboarding@resend.dev>').strip()
 _URL = 'https://api.resend.com/emails'
 
 

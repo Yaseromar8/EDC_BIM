@@ -888,8 +888,23 @@ def manage_users():
                 # Mientras no haya envio de correo (F3), el admin copia este
                 # enlace y lo hace llegar por su medio.
                 token = emitir(PROPOSITO_INVITACION, {'email': correo, 'role': role})
+                # G1 · el correo de invitacion. `mailer` degrada con gracia: sin
+                # RESEND_API_KEY devuelve enviado=False y el enlace copiable
+                # sigue siendo el camino -- exactamente el comportamiento que
+                # habia, pero ahora con intento de envio y con la verdad en la
+                # respuesta ('avisado'), para que la pantalla no prometa
+                # entregas que no ocurrieron.
+                _enlace = f"{_origen_del_cliente()}/registro?invite={token}"
+                _avisado, _detalle = mailer.enviar(
+                    correo,
+                    'Te invitaron a ALEPHIA',
+                    'Tienes una invitación',
+                    'Te invitaron a la plataforma de gestión documental de la obra. '
+                    'Crea tu cuenta con este mismo correo. El enlace caduca en 14 días.',
+                    enlace=_enlace, texto_boton='Crear mi cuenta')
                 return jsonify({
                     'success': True,
+                    'avisado': _avisado,
                     'invite_token': token,
                     # EL ENLACE APUNTA AL PORTAL, NO AL BACKEND.
                     # Antes se construia con `request.host_url`, que es el host
@@ -906,6 +921,31 @@ def manage_users():
                 }), 201
         except Exception as e:
             return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/api/auth/sesiones/cerrar-otras', methods=['POST'])
+def cerrar_otras_sesiones():
+    """G4a · Cierra TODAS mis sesiones menos esta. El botón de «Mi cuenta».
+
+    La semántica ya estaba implementada y rodada: `revoke_all_sessions` con
+    `excepto` es lo que usa el cambio de contraseña desde siempre. Lo que no
+    existía era una RUTA para hacerlo sin cambiar la contraseña — el caso real
+    es la tablet de obra perdida: se cierra todo desde el teléfono y la
+    contraseña, si se quiere, se cambia después con calma.
+
+    Solo actúa sobre la sesión de quien llama. No recibe user_id: cerrarle las
+    sesiones a OTRO es otra figura (la suspensión, de Entity Admin) y otra ruta.
+    """
+    sesion = getattr(g, 'current_user', None)
+    if not sesion:
+        return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
+    actual = request.headers.get('Authorization', '')
+    actual = actual[7:] if actual.startswith('Bearer ') else None
+    cerradas = revoke_all_sessions(sesion.get('id'), excepto=actual)
+    registrar_evento('sesiones_cerradas_por_usuario', user_id=sesion.get('id'),
+                     email=sesion.get('email'),
+                     detalle=f'cerro {cerradas} sesiones desde Mi cuenta')
+    return jsonify({'success': True, 'sesiones_cerradas': cerradas}), 200
 
 
 @auth_bp.route('/api/users/<int:user_id>/reinvitar', methods=['POST'])
@@ -949,8 +989,17 @@ def reemitir_invitacion(user_id):
         sesion = getattr(g, 'current_user', None) or {}
         registrar_evento('invitacion_reemitida', user_id=user_id, email=correo,
                          detalle=f"por admin {sesion.get('id', '?')}")
+        _enlace = f"{_origen_del_cliente()}/registro?invite={token}"
+        _avisado, _detalle = mailer.enviar(
+            correo,
+            'Tu invitación a ALEPHIA, reemitida',
+            'Tienes una invitación',
+            'El administrador volvió a emitir tu enlace de acceso. Crea tu '
+            'cuenta con este mismo correo. El enlace caduca en 14 días.',
+            enlace=_enlace, texto_boton='Crear mi cuenta')
         return jsonify({
             'success': True,
+            'avisado': _avisado,
             'invite_token': token,
             'invite_url': f"{_origen_del_cliente()}/registro?invite={token}",
             'nota': 'Comparte este enlace con la persona invitada. Caduca en 14 días.'
