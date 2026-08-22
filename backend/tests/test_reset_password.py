@@ -29,8 +29,11 @@ def entorno(monkeypatch):
     monkeypatch.setattr(ra.mailer, 'enviar',
                         lambda **kw: (correos.append(kw), (True, 'enviado'))[1])
 
-    # Fila del usuario: id, name, password_hash  /  y para reset: email, name
-    estado = {'usuario': (7, 'Ana Torres', 'scrypt:hash-existente'), 'updates': []}
+    # Fila del usuario: id, name, password_hash, activo / para reset: email,
+    # name, password_hash, activo. La cuarta columna llego con el cierre de
+    # is_active en las puertas de entrada; la huella del hash llego con el
+    # reset de un solo uso.
+    estado = {'usuario': (7, 'Ana Torres', 'scrypt:hash-existente', True), 'updates': []}
 
     class Cursor:
         def __init__(self): self.ultimo = None
@@ -44,7 +47,7 @@ def entorno(monkeypatch):
                 return estado['usuario']
             if 'SELECT email, name' in sql:
                 u = estado['usuario']
-                return ('ana@contratista.com', u[1]) if u else None
+                return ('ana@contratista.com', u[1], u[2], u[3]) if u else None
             return None
 
     class Conn:
@@ -82,7 +85,7 @@ def test_correo_vacio_no_revienta(entorno):
 def test_invitacion_pendiente_no_recibe_reset(entorno):
     """password_hash vacio = invitacion sin reclamar: no hay nada que restablecer."""
     c, correos, estado, _ = entorno
-    estado['usuario'] = (9, 'Invitado', '')
+    estado['usuario'] = (9, 'Invitado', '', True)
     c.post('/api/auth/forgot-password', json={'email': 'pendiente@contratista.com'})
     assert not correos
 
@@ -98,7 +101,10 @@ def test_cuenta_existente_recibe_un_enlace(entorno):
 
 def _token_valido(ra, uid=7, email='ana@contratista.com'):
     from enlaces_firmados import emitir, PROPOSITO_RESET
-    return emitir(PROPOSITO_RESET, {'uid': uid, 'email': email})
+    # La huella de la contraseña vigente viaja en el token desde el cierre de
+    # "un solo uso": sin ella, el canje lo rechaza (como a un token ya usado).
+    return emitir(PROPOSITO_RESET, {'uid': uid, 'email': email,
+                                    'huella': ra._huella_de_hash('scrypt:hash-existente')})
 
 
 def test_token_de_otro_proposito_no_sirve(entorno):

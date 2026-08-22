@@ -10,9 +10,29 @@ from auth_middleware import (create_session, revoke_session, revoke_all_sessions
 from rate_limit import limite, clave_por_correo
 from enlaces_firmados import emitir, leer, PROPOSITO_INVITACION, PROPOSITO_RESET, PROPOSITO_2FA
 from password_policy import validar as validar_password
+import hashlib
 import mailer
 
 auth_bp = Blueprint('auth', __name__)
+
+
+def _huella_de_hash(password_hash):
+    """Huella corta del hash de contraseña VIGENTE, para tokens de un solo uso.
+
+    El enlace de restablecimiento es un token firmado sin estado: nada en la
+    base recuerda que ya se uso, asi que valia durante toda su hora de vida
+    aunque la contraseña ya se hubiera cambiado con el. Prometia un solo uso y
+    no lo era.
+
+    En vez de una tabla de tokens quemados (estado nuevo, limpieza, DDL), el
+    token lleva dentro esta huella del hash ACTUAL: al canjearse, la contraseña
+    cambia, el hash cambia, y todos los enlaces emitidos antes dejan de casar.
+    Un solo uso de verdad, sin una fila nueva en ninguna parte.
+
+    Es un fragmento de SHA-256 del hash almacenado -- no revela la contraseña
+    (eso ya lo garantiza el propio hash) y viaja solo dentro del token firmado.
+    """
+    return hashlib.sha256((password_hash or '').encode('utf-8')).hexdigest()[:16]
 
 
 def _origenes_permitidos():
@@ -287,16 +307,36 @@ def google_auth():
             
             # Buscar si el usuario ya existe
             cursor.execute('''
-                SELECT u.id, u.name, u.email, u.role, 
-                       c.name as company_name, j.name as job_title_name
+                SELECT u.id, u.name, u.email, u.role,
+                       c.name as company_name, j.name as job_title_name,
+                       u.password_hash, COALESCE(u.is_active, TRUE)
                 FROM users u
                 LEFT JOIN companies c ON u.company_id = c.id
                 LEFT JOIN job_titles j ON u.job_title_id = j.id
                 WHERE u.email = %s
             ''', (email,))
             user = cursor.fetchone()
-            
+
             if user:
+                # LA PUERTA DE GOOGLE RESPETA EL MISMO ESTADO DE CUENTA QUE LA
+                # DE CONTRASEÑA. Este camino no miraba ni is_active ni si la
+                # cuenta seguia pendiente:
+                #
+                #   · un usuario DESACTIVADO con Gmail entraba igual -- la
+                #     retirada de acceso solo cerraba la puerta de contraseña;
+                #   · una invitacion PENDIENTE se "reclamaba" por Google sin el
+                #     enlace del administrador, y la cuenta quedaba a medias:
+                #     sin nombre real, sin contraseña, pero con sesion.
+                if not user[7]:
+                    # Mismo mensaje generico que el login por contraseña: no se
+                    # confirma a un retirado que su cuenta existe.
+                    registrar_evento('login_desactivado', email=email, user_id=user[0])
+                    return jsonify({'error': 'Correo o contraseña incorrectos'}), 401
+                if not user[6]:
+                    return jsonify({
+                        'error': 'Esta cuenta tiene una invitación pendiente. '
+                                 'Actívala con el enlace que te envió el administrador.',
+                        'code': 'INVITE_REQUIRED'}), 403
                 # Usuario existe, iniciar sesión
                 return jsonify({
                     'id': user[0],
@@ -480,20 +520,25 @@ def forgot_password():
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT id, name, password_hash FROM users WHERE email = %s', (correo,))
+            cursor.execute('SELECT id, name, password_hash, COALESCE(is_active, TRUE) '
+                           '  FROM users WHERE email = %s', (correo,))
             fila = cursor.fetchone()
     except Exception as e:
         print(f"[auth] forgot-password: error de BD: {e}")
         return respuesta
 
-    # Sin cuenta, o invitacion pendiente (password_hash vacio): no hay nada que
-    # restablecer. Se responde igual, sin decirlo.
-    if not fila or not fila[2]:
+    # Sin cuenta, invitacion pendiente (password_hash vacio) o cuenta
+    # desactivada: no hay nada que restablecer. Se responde igual, sin decirlo
+    # -- a quien se le retiro el acceso tampoco se le confirma que existio.
+    if not fila or not fila[2] or not fila[3]:
         return respuesta
 
     user_id, nombre = fila[0], fila[1]
     try:
-        token = emitir(PROPOSITO_RESET, {'uid': user_id, 'email': correo})
+        # La huella ata el enlace a la contraseña VIGENTE: canjearlo la cambia
+        # y con eso mata este enlace y cualquier otro emitido antes.
+        token = emitir(PROPOSITO_RESET, {'uid': user_id, 'email': correo,
+                                         'huella': _huella_de_hash(fila[2])})
     except Exception as e:
         # Si no se puede ni firmar, el flujo entero es inservible. Se responde
         # 500 A PROPOSITO: peor que no recibir el correo es que la pantalla diga
@@ -538,10 +583,27 @@ def reset_password():
             # El token lleva el correo dentro y va firmado: se exige que ambos
             # sigan casando, para que un cambio de correo invalide los enlaces
             # emitidos antes.
-            cursor.execute('SELECT email, name FROM users WHERE id = %s', (user_id,))
+            cursor.execute('SELECT email, name, password_hash, '
+                           '       COALESCE(is_active, TRUE) '
+                           '  FROM users WHERE id = %s', (user_id,))
             fila = cursor.fetchone()
             if not fila or (fila[0] or '').lower() != (correo or '').lower():
                 return jsonify({'error': 'El enlace ya no es válido. Pide uno nuevo.'}), 400
+
+            # Cuenta desactivada: el mismo mensaje generico. Restablecer la
+            # clave de una cuenta retirada no reabre nada (el login la frena),
+            # pero tampoco se le da al enlace una apariencia de exito.
+            if not fila[3]:
+                return jsonify({'error': 'El enlace ya no es válido. Pide uno nuevo.'}), 400
+
+            # UN SOLO USO. El token trae la huella de la contraseña vigente al
+            # emitirse; si ya no casa -- porque este mismo enlace ya se canjeo,
+            # o porque la clave cambio por otra via -- el enlace esta muerto.
+            # Los tokens de antes de esta version no traen huella: tambien
+            # mueren, que es el lado seguro de la migracion.
+            if contenido.get('huella') != _huella_de_hash(fila[2]):
+                return jsonify({'error': 'El enlace ya se usó o caducó. Pide uno nuevo.',
+                                'code': 'TOKEN_USADO'}), 400
 
             # Con el nombre real delante: la política también rechaza que la
             # contraseña sea el propio nombre del usuario.
@@ -591,11 +653,24 @@ def register():
             cursor = conn.cursor()
             
             # Verificar si el email ya existe y su estado
-            cursor.execute('SELECT id, password_hash, role FROM users WHERE email = %s', (email,))
+            cursor.execute('SELECT id, password_hash, role, COALESCE(is_active, TRUE) '
+                           '  FROM users WHERE email = %s', (email,))
             existing_user = cursor.fetchone()
-            
+
             if existing_user:
-                u_id, u_hash, u_role = existing_user
+                u_id, u_hash, u_role, u_activo = existing_user
+                # INVITACION RETIRADA: el enlace firmado sigue siendo valido
+                # criptograficamente durante 14 dias, pero si el administrador
+                # desactivo la cuenta, retiro la invitacion. Sin esto, el
+                # reclamo ignoraba is_active y una invitacion "retirada" se
+                # reclamaba igual -- con sesion incluida.
+                if not u_activo:
+                    registrar_evento('reclamo_de_invitacion_retirada',
+                                     email=email, user_id=u_id)
+                    return jsonify({
+                        'error': 'Esta invitación fue retirada. Pide al '
+                                 'administrador que te invite de nuevo.',
+                        'code': 'INVITACION_RETIRADA'}), 403
                 if not u_hash: # Es una invitación pendiente
                     # Reclamar exige el token firmado que emitio el admin al
                     # invitar. Antes bastaba con conocer el correo, y ademas se
