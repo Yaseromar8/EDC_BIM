@@ -40,7 +40,19 @@ Opciones — (a) statu quo aceptando el riesgo con la copia diaria como respaldo
 (b) un segundo Entity Admin de confianza, (c) documentar un procedimiento de
 emergencia y aceptarlo formalmente.
 
-### B · ¿QUIÉN DEBE ADMINISTRAR PQT8_TALARA? — **DECIDIDO (22-ago-2026)**
+### B · ¿QUIÉN DEBE ADMINISTRAR PQT8_TALARA? — **REVOCADA Y RESUELTA POR EL BARRIDO FINAL (22-ago-2026)**
+
+```
+DECISIÓN VIGENTE: el propietario administra la obra real VÍA ENTITY ADMIN.
+La adjudicación a Fabián (con condición de 2FA) quedó REVOCADA en el barrido
+final: las cuentas de terceros reales salen del padrón porque no pueden
+participar en pruebas en tiempo real. La obra 1 queda con 0 miembros; solo
+la alcanza el Entity Admin. Cuando el proyecto incorpore participantes
+reales, esta pregunta se reabre con el flujo de Identity & Access mejorado.
+```
+
+*Decisión anterior (revocada), conservada como historia:*
+
 
 ```
 ADJUDICADO
@@ -109,7 +121,7 @@ para proteger el rastro de quien HIZO algo; donde no hay rastro, no protege nada
 | POR QUÉ EXISTE | Es el propietario y constructor de la instancia |
 | RIESGO | **Punto único de administración de la entidad** (ver pregunta A) |
 | RECOMENDACIÓN TÉCNICA | Conservar. Decidir sucesión. No darle Project Admin de nada: ya lo alcanza todo, y duplicarlo enturbia el rastro |
-| **DECISIÓN DEL PROPIETARIO** | [vacío] |
+| **DECISIÓN DEL PROPIETARIO** | ✅ **CONSERVADA — único Entity Admin** (Decisión A, opción D): recuperación de emergencia cerrada (doc 69); segundo custodio obligatorio antes del piloto externo |
 
 ## id 17 · Fabian Serrano — `fabian230209@gmail.com`
 
@@ -125,7 +137,7 @@ para proteger el rastro de quien HIZO algo; donde no hay rastro, no protege nada
 | POR QUÉ EXISTE | Colaborador real del proyecto |
 | RIESGO | Ninguno nuevo. El riesgo es *no* decidir: la obra real sigue sin administrador propio |
 | RECOMENDACIÓN TÉCNICA | **Único candidato con historial** para Project Admin de la obra `1`. Es decisión de confianza, no técnica. Si se nombra: pedirle 2FA antes |
-| **DECISIÓN DEL PROPIETARIO** | [vacío] |
+| **DECISIÓN DEL PROPIETARIO** | ✅ **DESACTIVADA · BARRIDO FINAL (22-ago-2026, ejecutada)** — tercero real que no puede participar en pruebas en tiempo real. Retiradas sus 2 membresías, su permiso de carpeta (concesión de acceso, no acto histórico) y sus 4 sesiones; `is_active=false`. **Identidad y asientos CONSERVADOS** (uso real desde mayo → jamás purgable). La candidatura a Project Admin queda **revocada** con la Decisión B. Reactivable con un clic si algún día vuelve |
 
 ## id 18 · Walter Correa — `walterdavidcorreamorocho79@gmail.com`
 
@@ -139,7 +151,7 @@ para proteger el rastro de quien HIZO algo; donde no hay rastro, no protege nada
 | POR QUÉ EXISTE | Se le invitó a la obra real hace un mes |
 | RIESGO | Bajo: su enlace de 14 días **ya caducó** y, tras el cierre G5a, una cuenta retirada tampoco sería reclamable. Es ruido en el padrón, no una puerta |
 | RECOMENDACIÓN TÉCNICA | Decidir si sigue en el proyecto: **sí → «Copiar enlace»** (reemisión, ya existe el botón); **no → «Retirar acceso»** (desactiva, conserva rastro) |
-| **DECISIÓN DEL PROPIETARIO** | ⏸ **PENDIENTE DE DECISIÓN · CUENTA 4/7 (22-ago-2026)** — motivo: la vigencia de su participación es un hecho organizacional que no debe inferirse técnicamente. Riesgo técnico inmediato: **bajo** (enlace caducado; G5a cierra reclamo y Google). Estado conservado EXACTO: sin reemitir, sin retirar, sin desactivar, sin purgar. **Rutas ya definidas** — SIGUE: reemitir → reclamar → completar empresa/función → mantener membresía · NO SIGUE: retirar membresía → desactivar → conservar rastro → no purgar automáticamente. No bloquea el resto del PASO 14 |
+| **DECISIÓN DEL PROPIETARIO** | ✅ **PURGADA · BARRIDO FINAL (22-ago-2026, ejecutada)** — supersede el estado PENDIENTE: el propietario decide que los terceros salen del padrón. Preflight: 0 sesiones, 0 actos, 0 referencias (solo su membresía nunca usada). Purga humana explícita con asiento previo; el correo queda libre para una invitación futura real |
 
 ## id 19 · yaser omar 02 — `yaseromarsanchez8@gmail.com`
 
@@ -167,7 +179,7 @@ para proteger el rastro de quien HIZO algo; donde no hay rastro, no protege nada
 | POR QUÉ EXISTE | Contratista externo real — **la primera identidad genuinamente de tercero** de la plataforma |
 | RIESGO | Ninguno técnico. El riesgo es de calendario: cuando llegue el piloto externo, esta invitación caducada será la primera fricción, y su alta es la primera prueba real de Identity & Access UX |
 | RECOMENDACIÓN TÉCNICA | Decidir el **momento**. Mientras tanto, dejarla como está. Cuando toque: reemitir enlace y acompañar el alta; declarar su función contractual en la obra |
-| **DECISIÓN DEL PROPIETARIO** | [vacío] |
+| **DECISIÓN DEL PROPIETARIO** | ✅ **PURGADA · BARRIDO FINAL (22-ago-2026, ejecutada)** — preflight: 0 en todo. Su incorporación real, si llega, será una **invitación nueva** con el flujo de Identity & Access mejorado — mejor primera experiencia que revivir un enlace muerto de agosto |
 
 ## id 21 · (Invitado pendiente) — `yaser.sanchez.h@uni.pe`
 
@@ -202,3 +214,28 @@ para proteger el rastro de quien HIZO algo; donde no hay rastro, no protege nada
 «ADMIN», «Antigravity Diagnostic», «cli-omar», 315 asientos sin autor) son texto
 histórico de `activity_log` anterior a la identidad numérica: no son cuentas
 vivas y, por la regla de los históricos, **no se reconstruyen ni se reatribuyen**.
+
+---
+
+# ADJUDICACIÓN CERRADA — RESULTADO FINAL (22-ago-2026)
+
+```
+PADRÓN: 4 cuentas, todas bajo control del propietario
+  id 2  · omarsanchezh8@gmail.com          Entity Admin · 2FA · activa
+  id 17 · fabian230209@gmail.com           DESACTIVADA (identidad conservada)
+  id 19 · yaseromarsanchez8@gmail.com      QA/evidencia · obra de prueba
+  id 22 · omarsanchezh8+prueba1@gmail.com  QA/evidencia · admin de la obra de prueba
+
+OBRAS
+  PQT8_TALARA ......... 0 miembros — la administra el Entity Admin
+  obra de prueba ...... 19 (miembro) + 22 (admin)
+
+PURGADAS: 21 (uni.pe) · 18 (Walter) · 20 (Zhang) — cero actividad las tres
+ENTITY ADMIN: id 2, único; emergencia cerrada; 2º custodio = gate pre-piloto
+PROJECT ADMIN OBRA REAL: nadie — Decisión B revocada; se reabre cuando el
+  proyecto incorpore participantes reales, con Identity & Access mejorado
+```
+
+Verificado tras el barrido: 0 huérfanos en las 4 tablas con FK · integridad
+intacta (26 RFIs · 34 RL · 2 transmittals · 2854 versiones) · salud ok 6/6.
+Cada acto con su asiento en `auth_events`, escrito ANTES de ejecutar.
