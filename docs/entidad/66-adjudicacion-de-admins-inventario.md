@@ -153,7 +153,7 @@ para proteger el rastro de quien HIZO algo; donde no hay rastro, no protege nada
 | POR QUÉ EXISTE | Sujeto de pruebas del propietario; hoy fue la mitad independiente de la evidencia de capa 10 |
 | RIESGO | Confunde el padrón ante un tercero: dos cuentas de la misma persona. Y **es miembro de la obra real** sin ser una persona distinta |
 | RECOMENDACIÓN TÉCNICA | Declararla cuenta de pruebas (renombrar cuando exista edición de perfil) **o** retirarla de la obra `1` dejándola solo en la de prueba. No nombrarla admin |
-| **DECISIÓN DEL PROPIETARIO** | [vacío] |
+| **DECISIÓN DEL PROPIETARIO** | ✅ **RETIRADA DE LA OBRA 1, CONSERVADA EN LA DE PRUEBA · CUENTA 3/7 (22-ago-2026, ejecutada)** — `RETIRAR MEMBRESÍA ≠ RETIRAR IDENTIDAD`: la cuenta sigue activa y sus actos (RV-002, TR-001) atribuibles. Verificado en vivo con su propia sesión: obra real 200→**403 PROJECT_FORBIDDEN** al instante, obra de prueba 200, listado solo la de prueba. Queda como **CUENTA QA / EVIDENCIA**, alcance = obra de prueba exclusivamente; destino final junto con la 22 y la obra al cierre de estabilización. Asiento `membresia_retirada` en auth_events |
 
 ## id 20 · Zhang Wenqing — `zhangwenqing@powerchina.cn`
 
