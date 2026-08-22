@@ -99,7 +99,7 @@ export default function HubPage({ user, onChooseDocs, onLogout }) {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: INK, color: '#e9ecf1' }}>
 
-      <header style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', flexShrink: 0, borderBottom: '1px solid rgba(21,55,84,0.55)' }}>
+      <header style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '0 24px', flexShrink: 0, borderBottom: '1px solid rgba(21,55,84,0.55)' }}>
         {/* Marca madre: logo horizontal oficial en blanco (01_Master_Vector),
             nunca redibujado. 28px de alto ⇒ ~126px, sobre el mínimo de 120px;
             cabe entero incluso en móvil, así que el símbolo suelto queda para
