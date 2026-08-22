@@ -74,8 +74,31 @@ ALTER ROLE ecd_migrator  WITH PASSWORD :'mig_pw';
 
 -- Ninguno de los dos necesita crear bases ni roles, ni saltarse las politicas
 -- de fila. Decirlo explicitamente evita heredar privilegios por descuido.
-ALTER ROLE ecd_app       NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
-ALTER ROLE ecd_migrator  NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+--
+-- SIN `NOSUPERUSER` NI `NOBYPASSRLS`, Y NO ES UN DESCUIDO (21-ago-2026)
+-- ---------------------------------------------------
+-- Con `NOSUPERUSER` aqui, este guion NO SE PUEDE EJECUTAR en Cloud SQL:
+--
+--     ERROR: permission denied to alter role
+--     DETALLE: Only roles with the SUPERUSER attribute may change the
+--              SUPERUSER attribute.
+--     DETALLE: Only roles with the BYPASSRLS attribute may change the
+--              BYPASSRLS attribute.
+--
+-- Porque el `postgres` de Cloud SQL NO es superusuario NI tiene BYPASSRLS
+-- (medido en E2: rolsuper=f, rolbypassrls=f), y PostgreSQL exige tener cada uno
+-- de esos atributos para poder cambiarlo -- incluso para ponerlo en NO, que es
+-- lo que ya vale por defecto. Los dos fallos aparecieron uno tras otro al
+-- ensayar contra un fixture con las mismas limitaciones.
+--
+-- Quitarlo no afloja nada, por dos razones:
+--   1. `CREATE ROLE ... LOGIN` de arriba ya los crea NOSUPERUSER: es el defecto.
+--   2. En Cloud SQL es inalcanzable en los dos sentidos: quien ejecuta esto no
+--      es superusuario, asi que NO PUEDE conceder ese atributo a nadie. La
+--      clausula no protegia de nada alli; solo impedia ejecutar el guion.
+-- La comprobacion del final sigue imprimiendo `rolsuper`, que es donde se ve.
+ALTER ROLE ecd_app       NOCREATEDB NOCREATEROLE;
+ALTER ROLE ecd_migrator  NOCREATEDB NOCREATEROLE;
 
 -- Quien ejecuta la migracion tiene que ser miembro del rol al que va a ceder
 -- los objetos: obligatorio desde PostgreSQL 16, y en Cloud SQL 'postgres' no es
