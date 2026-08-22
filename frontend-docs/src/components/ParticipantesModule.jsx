@@ -149,13 +149,18 @@ export default function ParticipantesModule({ project, isAdmin }) {
     return m;
   }, [empresas]);
 
+  // `candidatos === null` significa «hay que (re)pedirla»: asi, cualquier acto
+  // que cambie el padron de la obra solo tiene que ponerla a null. Sin esto la
+  // lista se pedia UNA vez al abrir el panel y se quedaba rancia -- retirar a
+  // alguien y abrir el panel seguia diciendo «no hay nadie incorporable»
+  // cuando esa persona ya era, precisamente, incorporable.
   useEffect(() => {
-    if (!addAbierto || !obra) return;
+    if (!addAbierto || !obra || candidatos !== null) return;
     apiFetch(`${API}/api/projects/${encodeURIComponent(obra)}/candidatos`)
       .then(r => r.json().then(d => r.ok ? d : Promise.reject(d.error)))
       .then(d => setCandidatos(d.candidatos || []))
       .catch(() => { setCandidatos([]); toast.error('No se pudieron cargar los candidatos.'); });
-  }, [addAbierto, obra]);
+  }, [addAbierto, obra, candidatos]);
 
   const candidatoElegido = useMemo(
     () => (candidatos || []).find(x => String(x.id) === String(addPersona)) || null,
@@ -294,6 +299,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || 'No se pudo retirar');
       toast.success(`${p.name || p.email} ya no participa en esta obra`);
+      setCandidatos(null);   // quien sale vuelve a ser incorporable
       await cargar();
     } catch (e) {
       toast.error(e.message);
