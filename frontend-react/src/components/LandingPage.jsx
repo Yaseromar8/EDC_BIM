@@ -349,14 +349,12 @@ const LandingPage = ({ onSelectProject, user }) => {
             {/* ── Top Bar ──────────────────────────────────────────────────── */}
             <header className="acc-topbar">
                 <div className="acc-topbar-left">
+                    {/* MARCA (logo oficial blanco, cabecera oscura) + PRODUCTO.
+                        El proyecto se elige abajo — no se mezcla aquí. */}
                     <div className="acc-logo">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                            <rect x="2" y="2" width="9" height="9" rx="1.5" fill="#5f7fa3" />
-                            <rect x="13" y="2" width="9" height="9" rx="1.5" fill="#5f7fa3" opacity="0.6" />
-                            <rect x="2" y="13" width="9" height="9" rx="1.5" fill="#5f7fa3" opacity="0.6" />
-                            <rect x="13" y="13" width="9" height="9" rx="1.5" fill="#5f7fa3" opacity="0.3" />
-                        </svg>
-                        <span>VISOR ECD</span>
+                        <img src="/brand/ALEPHIA_Logo_Horizontal_White.svg" alt="ALEPHIA"
+                             style={{ height: 26, width: 'auto', display: 'block' }} />
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.72)', letterSpacing: '0.4px', paddingLeft: 10, borderLeft: '1px solid rgba(255,255,255,0.25)' }}>View</span>
                     </div>
                     <nav className="acc-topnav">
                         {/* "Inicio" = volver al Hub (elegir producto). El atajo
