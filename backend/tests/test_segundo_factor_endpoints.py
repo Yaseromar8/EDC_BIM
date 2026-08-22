@@ -118,8 +118,14 @@ def entorno(monkeypatch):
             elif 'SELECT totp_secreto, COALESCE(totp_activo' in s:
                 self._devolver = (estado['secreto'], estado['totp_activo'])
             elif 'u.totp_secreto' in s:
-                self._devolver = (estado['id'], estado['name'], estado['email'],
-                                  estado['rol'], 'Contratista', 'BIM', estado['secreto'])
+                # La consulta real lleva AND COALESCE(u.is_active, TRUE): una
+                # cuenta desactivada entre la contraseña y el canje NO devuelve
+                # fila. El doble lo honra para poder probarlo (E2E-5).
+                if not estado['activa']:
+                    self._devolver = None
+                else:
+                    self._devolver = (estado['id'], estado['name'], estado['email'],
+                                      estado['rol'], 'Contratista', 'BIM', estado['secreto'])
             elif 'COALESCE(totp_activo, FALSE) FROM users' in s:
                 self._devolver = (estado['totp_activo'],)
 
@@ -194,6 +200,19 @@ def test_el_codigo_correcto_canjea_el_desafio_por_una_sesion(entorno):
     assert r.status_code == 200, r.get_json()
     assert r.get_json()['session_token'] == 'sesion-de-7'
     assert r.get_json()['email'] == 'ana@contratista.com'
+
+
+def test_desactivada_entre_la_password_y_el_canje_no_abre(entorno):
+    # E2E-5: el desafio 2FA vive unos minutos; si el admin retira la cuenta en
+    # ese intervalo, el canje NO puede terminar en sesion. La guardia es el
+    # AND COALESCE(u.is_active, TRUE) de la consulta del canje.
+    c, e, _ra = entorno
+    desafio = c.post('/api/auth/login',
+                     json={'email': 'ana@contratista.com', 'password': CLAVE}).get_json()['desafio']
+    e['activa'] = False   # la retirada ocurre entre las dos llamadas
+    r = c.post('/api/auth/2fa/verify', json={'desafio': desafio, 'codigo': _codigo_ahora()})
+    assert r.status_code == 401
+    assert 'session_token' not in (r.get_json() or {})
 
 
 def test_un_codigo_equivocado_no_abre(entorno):

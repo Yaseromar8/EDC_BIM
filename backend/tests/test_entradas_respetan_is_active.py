@@ -56,6 +56,8 @@ def entorno(monkeypatch):
             f = estado['fila']
             if 'SELECT ID, PASSWORD_HASH, ROLE, COALESCE(IS_ACTIVE' in s:
                 # registro/reclamo (B.2): + activated_at, invitacion_gen
+                if estado.get('sin_fila'):
+                    return None
                 return (f[0], f[2], f[3], f[4], f[5], f[6])
             if 'SELECT ID, NAME, PASSWORD_HASH, COALESCE(IS_ACTIVE' in s:
                 # emision del reset
@@ -63,6 +65,9 @@ def entorno(monkeypatch):
             if 'SELECT EMAIL, NAME, PASSWORD_HASH,' in s:
                 # canje del reset
                 return (CORREO, f[1], f[2], f[4])
+            if 'U.PASSWORD_HASH,' in s and 'LEFT JOIN COMPANIES' in s:
+                # puerta de contraseña (login)
+                return (f[0], f[1], CORREO, f[2], f[3], None, None, f[4])
             if 'FROM USERS U' in s and 'LEFT JOIN COMPANIES' in s:
                 # puerta de Google: ...is_active, activated_at
                 return (f[0], f[1], CORREO, f[3], None, None, f[4], f[5])
@@ -160,6 +165,68 @@ def test_un_token_de_otra_generacion_no_reclama(entorno):
         'password': 'Clave-Fuerte-2026!', 'invite_token': token,
     })
     assert r.status_code == 200, r.get_json()
+
+
+def test_un_token_de_otro_correo_no_reclama(entorno):
+    # E2E-1: el enlace es de UNA persona. Con el token de vecina@ no se
+    # reclama la cuenta de persona@ aunque el enlace sea autentico.
+    ra, c, estado = entorno
+    _pendiente(estado)
+    token = ra.emitir(ra.PROPOSITO_INVITACION, {'email': 'vecina@obra.pe', 'gen': 0})
+    r = c.post('/api/auth/register', json={
+        'name': 'Persona', 'email': CORREO,
+        'password': 'Clave-Fuerte-2026!', 'invite_token': token,
+    })
+    assert r.status_code == 403
+    assert r.get_json().get('code') == 'INVITE_REQUIRED'
+    assert estado['updates'] == []
+
+
+def test_sin_invitacion_no_hay_autorregistro(entorno):
+    # E2E-2: la politica de no-autorregistro, probada por fuera. Un correo
+    # que NO existe en el padron no puede crearse cuenta, con o sin token.
+    ra, c, estado = entorno
+    estado['sin_fila'] = True
+    r = c.post('/api/auth/register', json={
+        'name': 'Colado', 'email': 'nadie@fuera.pe',
+        'password': 'Clave-Fuerte-2026!',
+    })
+    assert r.status_code == 403
+    assert 'invitación' in r.get_json().get('error', '')
+    assert estado['updates'] == []
+
+
+def test_password_debil_la_rechaza_el_servidor(entorno):
+    # E2E-3: el minimo vive en el SERVIDOR, no en la pantalla. Ni siquiera se
+    # consulta la base: muere antes.
+    ra, c, estado = entorno
+    _pendiente(estado)
+    token = ra.emitir(ra.PROPOSITO_INVITACION, {'email': CORREO, 'gen': 0})
+    r = c.post('/api/auth/register', json={
+        'name': 'Persona', 'email': CORREO,
+        'password': 'abc', 'invite_token': token,
+    })
+    assert r.status_code == 400
+    assert r.get_json().get('code') == 'PASSWORD_DEBIL'
+    assert estado['updates'] == []
+
+
+# ── Puerta de contraseña ─────────────────────────────────────────────────────
+
+def test_login_no_deja_entrar_a_un_desactivado(entorno):
+    # E2E-5: la contraseña CORRECTA de una cuenta retirada no abre, y el
+    # mensaje es el generico — no se confirma a un retirado que su cuenta
+    # existe.
+    from werkzeug.security import generate_password_hash
+    ra, c, estado = entorno
+    estado['fila'][2] = generate_password_hash('Clave-Fuerte-2026!')
+    estado['fila'][4] = False
+    r = c.post('/api/auth/login', json={'email': CORREO,
+                                        'password': 'Clave-Fuerte-2026!'})
+    assert r.status_code == 401
+    assert 'incorrectos' in r.get_json().get('error', '')
+    assert 'session_token' not in (r.get_json() or {})
+    assert 'login_desactivado' in estado['eventos']
 
 
 # ── Puerta de Google ─────────────────────────────────────────────────────────
