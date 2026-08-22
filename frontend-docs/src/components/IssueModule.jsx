@@ -588,7 +588,12 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
           const etiqueta = adj.version_id
             ? ` · v${adj.version_number || '?'}`
             : (adj.node_id || adj.id ? ' · versión actual' : '');
-          setPreviewFile({ name: (adj.name || '') + etiqueta, url: data.url,
+          // EL NOMBRE VA LIMPIO Y LA ETIQUETA APARTE. Pegar « · versión
+          // actual» al nombre rompia la deteccion de tipo, que mira
+          // `name.endsWith('.pdf')`: con el sufijo NINGUN pdf de RFI ni de
+          // Red Line se previsualizaba -- caian todos en «vista previa no
+          // disponible para este tipo de archivo».
+          setPreviewFile({ name: (adj.name || ''), etiqueta, url: data.url,
                            nodeId: adj.node_id || adj.id || null });
         } else {
           toast.error('Error: ' + (data.error || 'No se pudo generar la URL.'));
@@ -1488,6 +1493,11 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
                   {!isPdf && !isImage && !isVideo && <FileIcon />}
                   <span style={{ fontSize: 14, fontWeight: 500, maxWidth: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {previewFile.name}
+                    {/* La version se ve, pero NO forma parte del nombre: el
+                        tipo de archivo se detecta por la extension. */}
+                    {previewFile.etiqueta && (
+                      <span style={{ color: '#9aa0a6', fontWeight: 400 }}>{previewFile.etiqueta}</span>
+                    )}
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

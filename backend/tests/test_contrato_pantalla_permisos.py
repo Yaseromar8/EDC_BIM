@@ -77,3 +77,32 @@ def test_la_tabla_dice_reglas_no_usuarios():
     panel = _leer('FolderPermissionsPanel.jsx')
     assert 'regla en esta carpeta' in panel
     assert 'usuario con acceso' not in panel
+
+
+# ── Vista previa de adjuntos (RFI · Red Line) ────────────────────────────────
+#
+# Encontrado en producción el 22-ago-2026, minutos antes de una demo: NINGÚN
+# PDF adjunto a un RFI o a un Red Line se previsualizaba. La causa no estaba
+# en el visor de PDF sino en el NOMBRE: se guardaba «documento.pdf · versión
+# actual», y la detección de tipo mira `name.endsWith('.pdf')`. Con el sufijo
+# pegado, todo adjunto caía en «vista previa no disponible para este tipo de
+# archivo» — incluidos los PDF, que son casi todos.
+
+def _issue():
+    return io.open(os.path.join(PORTAL, 'IssueModule.jsx'), encoding='utf-8').read()
+
+
+def test_el_nombre_del_adjunto_no_lleva_la_etiqueta_de_version():
+    s = _issue()
+    assert "name: (adj.name || '') + etiqueta" not in s, (
+        'la etiqueta de versión volvió a pegarse al nombre: rompe la '
+        'detección de tipo y ningún PDF se previsualiza')
+    assert "name: (adj.name || ''), etiqueta" in s, (
+        'el nombre y la etiqueta deben viajar en campos separados')
+
+
+def test_la_deteccion_de_tipo_mira_la_extension_real():
+    s = _issue()
+    assert "lowerName.endsWith('.pdf')" in s
+    # Y la etiqueta se sigue viendo, en la cabecera, sin contaminar el nombre.
+    assert 'previewFile.etiqueta' in s
