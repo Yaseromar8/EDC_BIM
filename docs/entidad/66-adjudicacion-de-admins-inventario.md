@@ -10,7 +10,26 @@ ficha termina en `DECISIÓN DEL PROPIETARIO: [vacío]`.
 Según el organigrama congelado, **`ENTITY ADMIN ≠ PROJECT ADMIN`**: son dos
 figuras distintas y se deciden por separado.
 
-### A · ¿QUIÉN DEBE SER ENTITY ADMIN?
+### A · ¿QUIÉN DEBE SER ENTITY ADMIN? — **DECIDIDO (22-ago-2026)**
+
+```
+AHORA
+  único Entity Admin ....... id 2 · omarsanchezh8@gmail.com
+  segundo custodio ......... NO por ahora
+  recuperación de emergencia PREPARADA Y PROBADA EN DIAGNÓSTICO -> doc 69
+
+PRE-PILOT
+  segundo Entity Admin ..... OBLIGATORIO antes del piloto externo
+  candidato ................ Fabián (id 17), sin adjudicar
+  condiciones .............. cuenta reclamada y activa · 2FA activo · identidad
+                             humana conocida · necesidad real de custodia DE
+                             ENTIDAD · aceptación explícita del propietario
+
+ESTADO: DECIDIDO   (opción D: «C ahora + B antes del piloto externo»)
+```
+
+*Contexto original de la decisión:*
+
 Custodia la **instancia**: crea y archiva obras, administra el padrón de
 usuarios, el catálogo de la entidad y el triaje de seguridad. Alcance global
 mientras `1 instancia = 1 entidad`.
