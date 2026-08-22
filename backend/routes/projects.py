@@ -193,9 +193,12 @@ def list_hubs():
                 GROUP BY h.id
                 ORDER BY h.name
             """)
+            # Las filas, ANTES de reutilizar el cursor. Ver el comentario largo
+            # en `list_all_projects`: `mapa_de_escritura` ejecuta su propio
+            # SELECT sobre este mismo cursor y lo agota.
+            rows = cursor.fetchall()
             from referencias_de_obra import mapa_de_escritura
             _escritura = mapa_de_escritura(cursor)
-            rows = cursor.fetchall()
             hubs = [{
                 "id": r[0], "name": r[1], "region": r[2],
                 "logo_url": r[3],
@@ -299,9 +302,24 @@ def list_all_projects():
             query += " ORDER BY h.name, p.name"
             
             cursor.execute(query, params)
+            # LAS FILAS SE LEEN ANTES DE VOLVER A USAR EL CURSOR.
+            #
+            # Estaba al reves: `mapa_de_escritura(cursor)` ejecuta su propio
+            # SELECT sobre ESTE MISMO cursor y lo agota con su fetchall(). Para
+            # cuando se pedian las obras, el cursor ya no las tenia: devolvia el
+            # resultado de `project_ref`.
+            #
+            # Con `project_ref` VACIA --como quedo en produccion al crearla el
+            # bootstrap del 20-ago-2026-- eso son CERO filas, y la pantalla de
+            # aterrizaje decia «No hay proyectos» con un 200 OK y sin un solo
+            # error. Reproducido contra produccion: la misma consulta da 3 filas
+            # leida bien y 0 con la secuencia de antes.
+            #
+            # Y con `project_ref` POBLADA habria sido peor: filas de dos columnas
+            # donde el codigo de abajo pide hasta r[13]. Un 500.
+            rows = cursor.fetchall()
             from referencias_de_obra import mapa_de_escritura
             _escritura = mapa_de_escritura(cursor)
-            rows = cursor.fetchall()
             projects = [{
                 "id": r[0], "hub_id": r[1], "name": r[2], "description": r[3],
                 "model_urn": r[4], "thumbnail_url": r[5], "status": r[6],
@@ -340,9 +358,12 @@ def list_hub_projects(hub_id):
                 WHERE hub_id = %s AND status != 'archived'
                 ORDER BY name
             """, (hub_id,))
+            # Las filas, ANTES de reutilizar el cursor. Ver el comentario largo
+            # en `list_all_projects`: `mapa_de_escritura` ejecuta su propio
+            # SELECT sobre este mismo cursor y lo agota.
+            rows = cursor.fetchall()
             from referencias_de_obra import mapa_de_escritura
             _escritura = mapa_de_escritura(cursor)
-            rows = cursor.fetchall()
             projects = [{
                 "id": r[0], "hub_id": r[1], "name": r[2], "description": r[3],
                 "model_urn": r[4], "thumbnail_url": r[5], "status": r[6],
