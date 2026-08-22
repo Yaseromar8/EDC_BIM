@@ -154,3 +154,222 @@ def nombrar_admin_de_obra(project_id, user_id):
                         'es_admin': quiere, 'alcance': 'esta obra'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# =========================================================================
+#  P5 · MEMBRESÍA DE ESTA OBRA — incorporar y retirar personas
+# =========================================================================
+#  «La ruta existía sin pantalla» (doc 55 §P5): la única forma de meter a
+#  alguien en una obra era el reemplazo-por-lista de Entity Admin
+#  (POST /api/projects/<id>/users). Estas rutas hacen la membresía operable
+#  DESDE LA OBRA y con la autoridad de la obra: guardia_administrativa
+#  (Entity Admin O administrador de ESTA obra), que es exactamente la figura
+#  que en ACC/Procore gestiona el padrón de su proyecto. Nada aquí ensancha
+#  Entity Admin.
+#
+#  La cadena que el propietario fijó: PERSONA → EMPRESA → FUNCIÓN
+#  CONTRACTUAL → MEMBRESÍA → ¿PROJECT ADMIN? Cada eslabón se escribe donde
+#  vive (empresa en users, función en project_companies, membresía aquí);
+#  estas rutas solo tocan la MEMBRESÍA — la pantalla compone la cadena.
+
+
+@administracion_bp.route('/api/projects/<path:project_id>/candidatos',
+                         methods=['GET'])
+def candidatos_de_obra(project_id):
+    """Quién puede incorporarse a esta obra. El directorio de incorporación.
+
+    POR QUÉ UNA RUTA PROPIA Y NO GET /api/users
+    -------------------------------------------
+    El padrón entero es del Entity Admin (lista de objetivos de phishing); a
+    los demás, /api/users solo les da compañeros de obra. Pero el que
+    ADMINISTRA UNA OBRA necesita elegir a quién incorporar de la entidad —
+    la misma tensión que ACC resuelve dándole al Project Admin el directorio
+    de la cuenta SOLO en el acto de añadir miembros. Esto es eso: visible
+    únicamente para quien pasa `guardia_administrativa`, y devuelve solo lo
+    incorporable (activos, no miembros ya, sin Entity Admins — que alcanzan
+    todas las obras sin membresía).
+
+    Los PENDIENTES sí salen (con su marca): incorporar a un invitado antes
+    de que active es el flujo normal de arranque de una obra.
+    """
+    obra = resolve_project_id(project_id)
+    if not obra:
+        return jsonify({'error': 'Obra no encontrada'}), 404
+    negativa = guardia_de_obra(obra, 'ver esta obra')
+    if negativa:
+        return negativa
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            negativa = _adm.guardia_administrativa(
+                cur, _usuario(), obra, 'incorporar personas a esta obra')
+            if negativa:
+                return negativa
+            cur.execute("""
+                SELECT u.id, u.name, u.email, c.name, u.company_id,
+                       (u.activated_at IS NULL) AS pendiente
+                  FROM users u
+             LEFT JOIN companies c ON c.id = u.company_id
+                 WHERE COALESCE(u.is_active, TRUE)
+                   AND u.role <> 'admin'
+                   AND u.id NOT IN (SELECT user_id FROM project_users
+                                     WHERE project_id = %s)
+                 ORDER BY u.name NULLS LAST, u.email
+            """, (obra,))
+            gente = [{'id': r[0], 'name': r[1], 'email': r[2],
+                      'empresa': r[3], 'company_id': r[4],
+                      'pendiente': bool(r[5])} for r in cur.fetchall()]
+        return jsonify({'project_id': obra, 'candidatos': gente}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@administracion_bp.route('/api/projects/<path:project_id>/miembros',
+                         methods=['POST'])
+def incorporar_miembro(project_id):
+    """Incorpora UNA persona a esta obra. El acto de membresía, con nombre.
+
+    Es deliberadamente de una en una: la incorporación es un acto que se
+    audita por persona («quién metió a quién y cuándo»), no un estado que se
+    sincroniza por lista. El reemplazo-por-lista de Entity Admin sigue
+    existiendo para lo suyo; esto es el flujo de obra.
+
+    QUÉ NO HACE: no toca empresa, ni función contractual, ni permisos de
+    carpeta, ni concede administración. Solo nace la fila de membresía
+    (es_admin FALSE, assigned_at ahora) — el resto de la cadena se decide en
+    sus propios controles.
+    """
+    obra = resolve_project_id(project_id)
+    if not obra:
+        return jsonify({'error': 'Obra no encontrada'}), 404
+    negativa = guardia_de_obra(obra, 'administrar esta obra')
+    if negativa:
+        return negativa
+
+    d = request.get_json(silent=True) or {}
+    if not d.get('user_id'):
+        return jsonify({'error': 'Falta user_id'}), 400
+    uid = int(d['user_id'])
+
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            negativa = _adm.guardia_administrativa(
+                cur, _usuario(), obra, 'incorporar personas a esta obra')
+            if negativa:
+                return negativa
+
+            cur.execute('SELECT role, COALESCE(is_active, TRUE) '
+                        '  FROM users WHERE id = %s', (uid,))
+            fila = cur.fetchone()
+            if not fila:
+                return jsonify({'error': 'Esa persona no existe'}), 404
+            if fila[0] == 'admin':
+                # No es un capricho: la membresía de un Entity Admin sería una
+                # fila mentirosa — su alcance no sale de ella y retirársela no
+                # le quitaría nada.
+                return jsonify({
+                    'error': 'El Administrador de la entidad alcanza todas '
+                             'las obras sin membresía: no hay nada que '
+                             'incorporar.',
+                    'code': 'ENTITY_ADMIN_SIN_MEMBRESIA'}), 409
+            if not fila[1]:
+                return jsonify({
+                    'error': 'Esa cuenta está desactivada. Reactívala (o '
+                             'reinvítala) antes de incorporarla a una obra.',
+                    'code': 'CUENTA_RETIRADA'}), 409
+
+            cur.execute("""INSERT INTO project_users (project_id, user_id)
+                           VALUES (%s, %s)
+                           ON CONFLICT DO NOTHING RETURNING user_id""",
+                        (obra, uid))
+            ya_estaba = cur.fetchone() is None
+            conn.commit()
+            if not ya_estaba:
+                try:
+                    from db import log_activity
+                    log_activity(obra, 'miembro_incorporado', 'user',
+                                 entity_id=str(uid),
+                                 performed_by=(_usuario().get('email')
+                                               or _usuario().get('name')))
+                except Exception:
+                    pass
+        return jsonify({'project_id': obra, 'user_id': uid,
+                        'ya_estaba': ya_estaba}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@administracion_bp.route('/api/projects/<path:project_id>/miembros/<int:user_id>',
+                         methods=['DELETE'])
+def retirar_miembro(project_id, user_id):
+    """Retira a una persona DE ESTA OBRA. RETIRAR MEMBRESÍA ≠ RETIRAR IDENTIDAD.
+
+    La cuenta sigue viva, sus actos históricos (RFIs, revisiones, redlines,
+    asientos) quedan exactamente donde están. Lo que muere es lo que era de
+    esta obra y era CONCESIÓN, no historia:
+
+      · la fila de membresía — y con ella la administración de obra, porque
+        es_admin vive en esa fila (la forma de la tabla, no una regla);
+      · sus permisos de carpeta EN ESTA OBRA (precedente del PASO 14:
+        «concesión de acceso, no acto histórico»).
+
+    Y nadie deja la obra sin administrador por descuido: retirar al último
+    administrador la bloquea el mismo 409 que retirarle la administración —
+    salvo que lo haga el Entity Admin, que puede volver a nombrar.
+    """
+    obra = resolve_project_id(project_id)
+    if not obra:
+        return jsonify({'error': 'Obra no encontrada'}), 404
+    negativa = guardia_de_obra(obra, 'administrar esta obra')
+    if negativa:
+        return negativa
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            negativa = _adm.guardia_administrativa(
+                cur, _usuario(), obra, 'retirar personas de esta obra')
+            if negativa:
+                return negativa
+
+            cur.execute('SELECT COALESCE(es_admin, FALSE) FROM project_users '
+                        ' WHERE project_id = %s AND user_id = %s', (obra, user_id))
+            fila = cur.fetchone()
+            if not fila:
+                return jsonify({'error': 'Esa persona no participa en esta obra.',
+                                'code': 'NO_ES_MIEMBRO'}), 404
+            if fila[0]:
+                cur.execute('SELECT count(*) FROM project_users '
+                            ' WHERE project_id = %s AND es_admin', (obra,))
+                if (cur.fetchone() or [0])[0] <= 1 and not _adm.es_entity_admin(_usuario()):
+                    return jsonify({
+                        'error': 'Es el único administrador de esta obra. '
+                                 'Nombra a otro antes de retirarlo.',
+                        'code': 'ULTIMO_ADMIN_DE_OBRA'}), 409
+
+            # Las concesiones de carpeta de ESTA obra (por model_urn, que es
+            # como el expediente cuelga de la obra). Se cuentan para el asiento.
+            cur.execute("""
+                DELETE FROM folder_permissions fp
+                 USING file_nodes fn, projects p
+                 WHERE fp.folder_node_id = fn.id
+                   AND fn.model_urn = p.model_urn
+                   AND p.id = %s AND fp.user_id = %s
+            """, (obra, user_id))
+            permisos_fuera = cur.rowcount or 0
+            cur.execute('DELETE FROM project_users WHERE project_id = %s '
+                        '  AND user_id = %s', (obra, user_id))
+            conn.commit()
+            try:
+                from db import log_activity
+                log_activity(obra, 'miembro_retirado', 'user',
+                             entity_id=str(user_id),
+                             performed_by=(_usuario().get('email')
+                                           or _usuario().get('name')))
+            except Exception:
+                pass
+        return jsonify({'project_id': obra, 'user_id': user_id,
+                        'permisos_de_carpeta_retirados': permisos_fuera,
+                        'nota': 'La identidad y sus actos históricos se conservan.'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

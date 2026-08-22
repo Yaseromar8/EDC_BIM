@@ -94,6 +94,18 @@ export default function ParticipantesModule({ project, isAdmin }) {
   const [nuevaEmpresa, setNuevaEmpresa] = useState('');
   const [nuevaFuncion, setNuevaFuncion] = useState('CONTRATISTA');
 
+  // ── «Añadir persona a esta obra» (P5) ──
+  // La cadena completa en un panel: PERSONA → EMPRESA (si no tiene) →
+  // FUNCIÓN de esa empresa aquí (si no está declarada) → MEMBRESÍA →
+  // ¿ADMINISTRA? Cada eslabón se escribe donde vive; el panel solo compone.
+  const [addAbierto, setAddAbierto] = useState(false);
+  const [candidatos, setCandidatos] = useState(null);   // null = sin cargar
+  const [addPersona, setAddPersona] = useState('');
+  const [addEmpresa, setAddEmpresa] = useState('');
+  const [addFuncion, setAddFuncion] = useState('');
+  const [addAdmin, setAddAdmin] = useState(false);
+  const [incorporando, setIncorporando] = useState(false);
+
   const cargar = useCallback(async () => {
     if (!obra) return;
     setCargando(true);
@@ -136,6 +148,23 @@ export default function ParticipantesModule({ project, isAdmin }) {
     empresas.forEach(e => { m[e.company_id] = e.funcion; });
     return m;
   }, [empresas]);
+
+  useEffect(() => {
+    if (!addAbierto || !obra) return;
+    apiFetch(`${API}/api/projects/${encodeURIComponent(obra)}/candidatos`)
+      .then(r => r.json().then(d => r.ok ? d : Promise.reject(d.error)))
+      .then(d => setCandidatos(d.candidatos || []))
+      .catch(() => { setCandidatos([]); toast.error('No se pudieron cargar los candidatos.'); });
+  }, [addAbierto, obra]);
+
+  const candidatoElegido = useMemo(
+    () => (candidatos || []).find(x => String(x.id) === String(addPersona)) || null,
+    [candidatos, addPersona]);
+  // La empresa FINAL de la persona: la suya, o la elegida en el panel si no tiene.
+  const empresaFinal = candidatoElegido
+    ? (candidatoElegido.company_id ?? (addEmpresa ? Number(addEmpresa) : null))
+    : null;
+  const empresaSinFuncionAqui = empresaFinal != null && !empresas.some(e => e.company_id === empresaFinal);
 
   // ── Escrituras ──────────────────────────────────────────────────────────
 
@@ -197,6 +226,81 @@ export default function ParticipantesModule({ project, isAdmin }) {
     }
   }
 
+
+  // La cadena, en orden y diciendo la verdad: si un eslabón falla, se dice
+  // CUÁL, y se recarga para enseñar el estado real que quedó.
+  async function incorporar() {
+    if (!candidatoElegido) return;
+    const quien = candidatoElegido.name || candidatoElegido.email;
+    setIncorporando(true);
+    let paso = 'incorporar a ' + quien;
+    try {
+      let r = await apiFetch(`${API}/api/projects/${encodeURIComponent(obra)}/miembros`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: candidatoElegido.id }),
+      });
+      let d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'No se pudo');
+
+      if (!candidatoElegido.company_id && addEmpresa) {
+        paso = 'guardar la empresa de ' + quien;
+        r = await apiFetch(`${API}/api/projects/${encodeURIComponent(obra)}/miembros/${candidatoElegido.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ company_id: Number(addEmpresa) }),
+        });
+        d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || 'No se pudo');
+      }
+      if (empresaSinFuncionAqui && addFuncion) {
+        paso = 'declarar la función de la empresa en esta obra';
+        r = await apiFetch(`${API}/api/projects/${encodeURIComponent(obra)}/participantes`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ company_id: empresaFinal, funcion: addFuncion }),
+        });
+        d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || 'No se pudo');
+      }
+      if (addAdmin) {
+        paso = 'concederle la administración de esta obra';
+        r = await apiFetch(`${API}/api/projects/${encodeURIComponent(obra)}/miembros/${candidatoElegido.id}/admin`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ es_admin: true }),
+        });
+        d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || 'No se pudo');
+      }
+      toast.success(`${quien} participa en esta obra`);
+      setAddPersona(''); setAddEmpresa(''); setAddFuncion(''); setAddAdmin(false);
+      setAddAbierto(false); setCandidatos(null);
+    } catch (e) {
+      toast.error(`No se pudo ${paso}: ${e.message}`);
+    } finally {
+      setIncorporando(false);
+      await cargar();
+    }
+  }
+
+  async function retirarPersona(p) {
+    if (!window.confirm(
+      `¿Retirar a ${p.name || p.email} de esta obra?\n\n` +
+      'Deja de ser miembro (y de administrarla, si administraba) y pierde sus ' +
+      'permisos de carpeta de ESTA obra. Su cuenta sigue viva y sus actos ' +
+      'históricos —RFIs, revisiones, asientos— quedan donde están.')) return;
+    setGuardando('persona:' + p.id);
+    try {
+      const r = await apiFetch(
+        `${API}/api/projects/${encodeURIComponent(obra)}/miembros/${p.id}`,
+        { method: 'DELETE' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'No se pudo retirar');
+      toast.success(`${p.name || p.email} ya no participa en esta obra`);
+      await cargar();
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setGuardando(null);
+    }
+  }
 
   // ── Nombrar / retirar administrador DE ESTA OBRA ────────────────────────
   //
@@ -370,10 +474,112 @@ export default function ParticipantesModule({ project, isAdmin }) {
       )}
 
       {/* ── PERSONAS ────────────────────────────────────────────────────── */}
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#5f6368', letterSpacing: '.4px',
-                    textTransform: 'uppercase', marginBottom: 10 }}>
-        Personas de la obra
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#5f6368', letterSpacing: '.4px',
+                      textTransform: 'uppercase' }}>
+          Personas de la obra
+        </div>
+        {isAdmin && !addAbierto && (
+          <button onClick={() => setAddAbierto(true)}
+                  style={{ padding: '6px 14px', border: '1px solid var(--accent)',
+                           background: 'var(--accent)', color: '#fff', borderRadius: 5,
+                           fontSize: 12.5, cursor: 'pointer' }}>
+            + Añadir persona a esta obra
+          </button>
+        )}
       </div>
+
+      {isAdmin && addAbierto && (
+        <div style={{ border: '1px solid #e3e6ea', borderRadius: 8, padding: '14px 16px',
+                      marginBottom: 16, background: '#fafbfc', maxWidth: 760 }}>
+          {/* LA CADENA, VISIBLE: persona → empresa → función → membresía →
+              ¿administra? Cada dato se guarda donde vive; este panel solo
+              evita cinco viajes por cinco pantallas. */}
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#444', marginBottom: 10 }}>
+            Incorporar a una persona de la entidad
+          </div>
+
+          {candidatos === null ? (
+            <div style={{ fontSize: 12.5, color: '#888' }}>Cargando candidatos…</div>
+          ) : candidatos.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: '#777' }}>
+              No hay nadie incorporable: toda la entidad ya participa aquí (o
+              está pendiente de invitar en Usuarios).
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <select value={addPersona}
+                        onChange={e => { setAddPersona(e.target.value); setAddEmpresa(''); setAddFuncion(''); }}
+                        style={{ padding: '6px 8px', border: '1px solid #ddd', borderRadius: 5,
+                                 fontSize: 13, minWidth: 230 }}>
+                  <option value="">Elegir persona…</option>
+                  {candidatos.map(x => (
+                    <option key={x.id} value={x.id}>
+                      {(x.name || x.email) + (x.empresa ? ` — ${x.empresa}` : ' — sin empresa')
+                        + (x.pendiente ? ' · PENDIENTE' : '')}
+                    </option>
+                  ))}
+                </select>
+
+                {candidatoElegido && !candidatoElegido.company_id && (
+                  <select value={addEmpresa} onChange={e => { setAddEmpresa(e.target.value); setAddFuncion(''); }}
+                          title="La empresa es de la persona: quedará en su perfil, la misma en todas las obras"
+                          style={{ padding: '6px 8px', border: '1px solid #ddd', borderRadius: 5,
+                                   fontSize: 13, minWidth: 170 }}>
+                    <option value="">Su empresa… (opcional)</option>
+                    {catalogo.map(cx => <option key={cx.id} value={cx.id}>{cx.name}</option>)}
+                  </select>
+                )}
+
+                {candidatoElegido && empresaSinFuncionAqui && (
+                  <select value={addFuncion} onChange={e => setAddFuncion(e.target.value)}
+                          title="La función es de la empresa EN ESTA OBRA — no concede permisos"
+                          style={{ padding: '6px 8px', border: '1px solid #ddd', borderRadius: 5,
+                                   fontSize: 13 }}>
+                    <option value="">Función de su empresa aquí… (opcional)</option>
+                    {(funciones.length ? funciones : Object.keys(ETIQUETA_FUNCION)).map(f => (
+                      <option key={f} value={f}>{ETIQUETA_FUNCION[f] || f}</option>
+                    ))}
+                  </select>
+                )}
+
+                {candidatoElegido && (
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                                  fontSize: 12.5, color: '#555', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={addAdmin}
+                           onChange={e => setAddAdmin(e.target.checked)} />
+                    administra esta obra
+                  </label>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
+                <button disabled={!candidatoElegido || incorporando}
+                        onClick={incorporar}
+                        style={{ padding: '6px 16px', border: '1px solid var(--accent)',
+                                 background: candidatoElegido ? 'var(--accent)' : '#f4f4f5',
+                                 color: candidatoElegido ? '#fff' : '#aaa', borderRadius: 5,
+                                 fontSize: 13, cursor: candidatoElegido ? 'pointer' : 'default' }}>
+                  {incorporando ? 'Incorporando…' : 'Incorporar'}
+                </button>
+                <button onClick={() => { setAddAbierto(false); setCandidatos(null);
+                                         setAddPersona(''); setAddEmpresa(''); setAddFuncion(''); setAddAdmin(false); }}
+                        style={{ padding: '6px 12px', border: '1px solid #ddd', background: '#fff',
+                                 color: '#666', borderRadius: 5, fontSize: 13, cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+                {candidatoElegido && candidatoElegido.pendiente && (
+                  <span style={{ fontSize: 11.5, color: '#b45309' }}>
+                    Invitación sin activar: verá la obra cuando active su cuenta.
+                  </span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {(sinEmpresa > 0 || empresasNoDeclaradas.length > 0) && (
         <div role="note" style={{ background: '#fffbeb', border: '1px solid #fde68a',
@@ -406,6 +612,7 @@ export default function ParticipantesModule({ project, isAdmin }) {
               propósito: son dos cosas distintas y confundirlas fue el problema.
               El perfil es de la entidad; esto es de esta obra y solo de esta. */}
           <th style={{ padding: '9px 12px', textAlign: 'left' }}>Administra esta obra</th>
+          {isAdmin && <th style={{ padding: '9px 12px', width: 40 }} />}
         </tr></thead>
         <tbody>
           {personas.map(p => (
@@ -414,7 +621,13 @@ export default function ParticipantesModule({ project, isAdmin }) {
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
                   <Iniciales texto={p.name || p.email} />
                   <span>
-                    <div style={{ fontWeight: 500 }}>{p.name || '—'}</div>
+                    <div style={{ fontWeight: 500 }}>{p.name || '—'}
+                      {p.pendiente && (
+                        <span style={{ marginLeft: 7, padding: '1px 7px', borderRadius: 10,
+                                       fontSize: 10.5, fontWeight: 600,
+                                       background: '#fff8e6', color: '#b45309' }}>PENDIENTE</span>
+                      )}
+                    </div>
                     <div style={{ fontSize: 11.5, color: '#999' }}>{p.email}</div>
                   </span>
                 </span>
@@ -470,6 +683,18 @@ export default function ParticipantesModule({ project, isAdmin }) {
                   </span>
                 )}
               </td>
+              {isAdmin && (
+                <td style={{ padding: '11px 12px' }}>
+                  {/* El Entity Admin no tiene fila de membresía que retirar. */}
+                  {p.role !== 'admin' && (
+                    <button onClick={() => retirarPersona(p)}
+                            disabled={guardando === 'persona:' + p.id}
+                            title="Retirar de esta obra (la cuenta y su historia se conservan)"
+                            style={{ border: 'none', background: 'none', cursor: 'pointer',
+                                     color: '#c0392b', fontSize: 15 }}>×</button>
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

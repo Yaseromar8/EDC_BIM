@@ -100,7 +100,8 @@ def listar_miembros(project_id):
             # las personas con las que comparte obra.
             cur.execute("""
                 SELECT u.id, u.name, u.email, c.name, pc.funcion, u.company_id,
-                       u.role, COALESCE(pu.es_admin, FALSE)
+                       u.role, COALESCE(pu.es_admin, FALSE),
+                       (u.activated_at IS NULL) AS pendiente
                   FROM project_users pu
                   JOIN users u ON u.id = pu.user_id AND u.is_active
              LEFT JOIN companies c ON c.id = u.company_id
@@ -114,7 +115,10 @@ def listar_miembros(project_id):
                          'company_id': r[5], 'role': r[6],
                          # ADMINISTRACION DE ESTA OBRA. No es el rol global: una
                          # persona puede administrar esta obra y ninguna otra.
-                         'es_admin_de_obra': bool(r[7])} for r in cur.fetchall()]
+                         'es_admin_de_obra': bool(r[7]),
+                         # Invitada y aun sin activar: la obra tambien enseña
+                         # el estado real, no solo el padron de la entidad.
+                         'pendiente': bool(r[8])} for r in cur.fetchall()]
         return jsonify({'project_id': obra, 'miembros': miembros}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
