@@ -458,11 +458,10 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
             title="Volver al inicio (elegir producto)"
             style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: onBackToHub ? 'pointer' : 'default' }}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-label="ECD-VISIION">
-              <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="#fff"/>
-              <path d="M7 8.5l5 8 5-8" stroke="#2b333d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <span style={{ letterSpacing: '0.3px' }}>ECD<span style={{ opacity: 0.7, fontWeight: 600 }}>-VISIION</span></span>
+            {/* Cabecera oscura (Ink) ⇒ versión blanca del logo oficial,
+                como manda el manual. «Docs» es el producto, no la marca. */}
+            <img src="/brand/ALEPHIA_Logo_Horizontal_White.svg" alt="ALEPHIA" style={{ height: 28, width: 'auto', display: 'block' }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.72)', letterSpacing: '0.4px', paddingLeft: 10, borderLeft: '1px solid rgba(255,255,255,0.25)' }}>Docs</span>
           </span>
         </div>
         <div className="header-right">

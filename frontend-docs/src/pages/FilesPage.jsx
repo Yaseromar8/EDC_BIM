@@ -227,12 +227,13 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
       {/* ─── HEADER ─── */}
       <header className="acc-top-header" style={{ height: 48, borderBottom: '1px solid #e7e9ee', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', flexShrink: 0 }}>
         <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div className="module-selector" onClick={onBack} title="Cambiar proyecto" style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontWeight: 700 }}>
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-label="ECD-VISIION">
-              <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" style={{ fill: 'var(--accent)' }}/>
-              <path d="M7 8.5l5 8 5-8" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <span style={{ fontSize: 15, letterSpacing: '0.3px', color: '#2b333d' }}>ECD<span style={{ color: 'var(--accent)', fontWeight: 600 }}>-VISIION</span></span>
+          {/* MARCA (logo oficial, sin redibujar) · PRODUCTO (Docs). El
+              proyecto ya se muestra aparte, a la derecha de este bloque.
+              Logo de 01_Master_Vector: 28px de alto ⇒ ~126px de ancho,
+              sobre el mínimo digital de 120px que fija el manual. */}
+          <div className="module-selector" onClick={onBack} title="Cambiar proyecto" style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <img src="/brand/ALEPHIA_Logo_Horizontal_Navy.svg" alt="ALEPHIA" style={{ height: 28, width: 'auto', display: 'block' }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--alephia-steel)', letterSpacing: '0.4px', paddingLeft: 10, borderLeft: '1px solid var(--border)' }}>Docs</span>
           </div>
           {/* Atajo al Visor 3D sin pasar por el Hub: apagado por DOCS_VISOR_SHORTCUT. */}
           {DOCS_VISOR_SHORTCUT && <>

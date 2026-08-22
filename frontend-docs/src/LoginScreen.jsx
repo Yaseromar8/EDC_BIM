@@ -21,10 +21,12 @@ const BACKEND_URL = Capacitor.isNativePlatform()
         || (window.location.hostname === 'localhost' ? 'http://localhost:3000' : ''));
 
 // ── IDENTIDAD ────────────────────────────────────────────────────────────────
-// El producto necesita nombre propio: la pantalla anterior mostraba literalmente
-// la marca de Revizto. Cambia estas dos líneas y cambia toda la identidad.
-const MARCA = 'COTA';
-const MARCA_BAJADA = 'Plataforma de obra';
+// ALEPHIA es la MARCA (logo oficial de 01_Master_Vector, nunca redibujado);
+// «Docs» es el PRODUCTO; el proyecto (PIE_OBRA) es el PROYECTO. Tres niveles
+// distintos que no se mezclan en un solo texto.
+const MARCA = 'ALEPHIA';
+const MARCA_BAJADA = 'Docs · Gestión documental';
+const LOGO_BLANCO = '/brand/ALEPHIA_Logo_Horizontal_White.svg';
 
 // Vídeo de la obra real (dron, SEM 30), servido desde public/ y no desde un CDN
 // ajeno. Solo se carga en pantalla ancha: en la tablet de campo son 6,5 MB de
@@ -150,13 +152,11 @@ const IconoOjo = ({ abierto }) => (
 
 const Marca = () => (
     <div className="cta-marca">
-        {/* Mira topográfica: la identidad es tipográfica, el glifo solo acompaña. */}
-        <svg className="cta-marca__glifo" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-            <circle cx="12" cy="12" r="8.5" /><line x1="12" y1="1.5" x2="12" y2="7" />
-            <line x1="12" y1="17" x2="12" y2="22.5" /><line x1="1.5" y1="12" x2="7" y2="12" />
-            <line x1="17" y1="12" x2="22.5" y2="12" /><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
-        </svg>
-        <span className="cta-marca__texto">{MARCA}</span>
+        {/* Logo oficial en blanco sobre la zona oscura — del paquete de marca,
+            nunca redibujado ni reinterpretado. 32px de alto (clase header del
+            CSS de marca); el ancho resultante supera el mínimo de 120px. */}
+        <img className="cta-marca__logo" src={LOGO_BLANCO} alt={MARCA}
+             style={{ height: 32, width: 'auto', display: 'block' }} />
     </div>
 );
 

@@ -1,6 +1,7 @@
 /* ==========================================
-   ECD-VISIION — GESTIÓN DOCUMENTAL
-   Tema "Azul técnico" · profesional · sin decoración
+   ALEPHIA Docs — GESTIÓN DOCUMENTAL
+   Identidad ALEPHIA v1.0 · profesional · sin decoración
+   Paquete de marca: ALEPHIA_Brand_v1_0 (03_Web es la fuente de tokens)
 
    LA REGLA: los grises hacen el 95% del trabajo. El azul aparece en tres
    sitios y en ninguno más — la acción principal, dónde estás, y el foco del
@@ -20,13 +21,27 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
+  /* ══ ALEPHIA · tokens oficiales (03_Web/alephia-brand.css, v1.0) ══════
+     Fuente única de marca. El resto del tema DERIVA de aquí; nadie usa
+     estos valores en crudo fuera de este bloque. Steel y Signal son
+     colores de MARCA/ACENTO: no sustituyen a la rampa de grises. */
+  --alephia-navy: #153754;
+  --alephia-ink: #0B0E12;
+  --alephia-steel: #5C7182;
+  --alephia-signal: #3E6F91;
+  --alephia-mist: #F3F6F8;
+  --alephia-white: #FFFFFF;
+
   /* ── Rampa de neutros ───────────────────────────────────────────────
      Todo gris de la aplicación sale de aquí. Si necesitas un gris que no
-     está en esta lista, casi seguro que ya existe uno que hace ese papel. */
+     está en esta lista, casi seguro que ya existe uno que hace ese papel.
+     Con ALEPHIA solo cambian DOS anclas: 100 = Mist exacto (antes
+     #f1f3f5, indistinguible a ojo) y 900 = Ink (antes #1a2027). Los
+     demás grises siguen siendo grises de verdad. */
   --neutral-0: #ffffff;
   --neutral-25: #fbfcfd;
   --neutral-50: #f8f9fa;
-  --neutral-100: #f1f3f5;
+  --neutral-100: var(--alephia-mist);
   --neutral-200: #e3e6ea;
   --neutral-300: #cbd2d9;
   --neutral-400: #98a2ad;
@@ -34,49 +49,52 @@
   --neutral-600: #4a5561;
   --neutral-700: #343d47;
   --neutral-800: #262e37;
-  --neutral-900: #1a2027;
+  --neutral-900: var(--alephia-ink);
 
   /* ── Fondos ── */
   --bg-primary: var(--neutral-0);
   --bg-secondary: var(--neutral-50);
   --bg-tertiary: var(--neutral-100);
   --bg-hover: var(--neutral-100);
-  --bg-active: #eef3f9;
-  /* Azul muy claro: "estás aquí" */
-  --bg-selected: #eef3f9;
-  --overlay: rgba(26, 32, 39, 0.45);
-  /* Fondo de modal */
+  --bg-active: #edf3f8;
+  /* tinte de Navy al ~7% sobre blanco; antes era el tinte del azul viejo */
+  --bg-selected: #edf3f8;
+  --overlay: rgba(11, 14, 18, 0.45);
 
   /* ── Bordes ── */
   --border: var(--neutral-200);
   --border-hover: var(--neutral-300);
   --border-strong: var(--neutral-300);
   --divider: var(--neutral-100);
-  /* Separador entre filas, más tenue que un borde */
 
-  /* ── Texto (con su contraste sobre blanco medido) ── */
+  /* ── Texto ── */
   --text-primary: var(--neutral-900);
-  /* 16,4:1 — AAA */
+  /* Ink sobre blanco: 19,7:1 */
   --text-secondary: var(--neutral-600);
-  /* 7,60:1 — AAA */
+  /* 7,0:1 */
   --text-muted: var(--neutral-500);
-  /* 4,95:1 sobre blanco, 4,70:1 sobre --bg-secondary — AA */
+  /* 4,9:1 — se conserva el gris: Steel daría 4,6:1, o sea PEOR. Steel no
+     es un gris de texto; es marca. */
   --text-disabled: var(--neutral-400);
-  /* 2,86:1 — NO usar para texto que haya que leer, sólo para deshabilitado */
   --text-inverse: var(--neutral-0);
 
-  /* ── Acento: un solo azul, tres usos ── */
-  --accent: #1c4e80;
-  /* 8,57:1 sobre blanco — sirve de texto y de fondo de botón */
-  --accent-hover: #163f66;
-  --accent-soft: #4a7cb0;
-  --bg-accent: #eef3f9;
-  --border-accent: #b8cee4;
+  /* ── Acento = ALEPHIA Navy · interacción = ALEPHIA Signal ──
+     Navy sobre blanco: 12,4:1 (el azul anterior daba ~7,5:1). El foco y
+     los enlaces van en Signal porque Signal ES el color de interacción
+     de la marca; 5,4:1 sobre blanco, AA para texto normal. */
+  --accent: var(--alephia-navy);
+  --accent-hover: #0f2940;
+  --accent-soft: var(--alephia-signal);
+  --bg-accent: #edf3f8;
+  --border-accent: #b7c8d6;
   --text-on-accent: #ffffff;
-  --focus-ring: 0 0 0 3px rgba(28, 78, 128, 0.22);
-  --link: var(--accent);
+  /* 12,4:1 */
+  --focus-ring: 0 0 0 3px rgba(62, 111, 145, 0.30);
+  --link: var(--alephia-signal);
 
-  /* ── Semántico: fuerte, y sólo cuando hay algo que decir ── */
+  /* ── Semántico: fuerte, y sólo cuando hay algo que decir ──
+     INTACTO con el cambio de marca: estos colores codifican información
+     del producto (error, éxito, aviso) y no pertenecen a la identidad. */
   --danger: #b3261e;
   /* 6,54:1 */
   --danger-hover: #8f1e17;
@@ -108,8 +126,8 @@
   /* Alias histórico: no hay naranja en este tema */
 
   --radius: 4px;
-  --shadow: 0 1px 2px rgba(26, 32, 39, 0.06);
-  --shadow-raised: 0 4px 12px rgba(26, 32, 39, 0.10);
+  --shadow: 0 1px 2px rgba(11, 14, 18, 0.06);
+  --shadow-raised: 0 4px 12px rgba(11, 14, 18, 0.10);
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
