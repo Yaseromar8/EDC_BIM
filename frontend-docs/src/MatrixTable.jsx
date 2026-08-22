@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { FixedSizeList as List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { ESTADOS } from './utils/estadosECD';
@@ -31,28 +32,64 @@ const ReviewStatusControl = ({ item, isAdmin, onStatusChange }) => {
   const cfg = STATUS_CONFIG[st] || STATUS_CONFIG.WIP;
   const transitions = VALID_TRANSITIONS[st] || [];
   const [showDrop, setShowDrop] = useState(false);
+  // Coordenadas de pantalla del menú. Ver el comentario del portal, abajo.
+  const [pos, setPos] = useState(null);
   const dropRef = useRef(null);
+  const menuRef = useRef(null);
+
+  // ALTO ESTIMADO del menú, para decidir si cabe debajo del botón. Es
+  // `transiciones × alto de fila + bordes`: no hace falta medirlo porque las
+  // filas son de tamaño fijo y como mucho hay dos transiciones.
+  const altoMenu = transitions.length * 33 + 10;
+
+  const situar = useCallback(() => {
+    const b = dropRef.current;
+    if (!b) return;
+    const r = b.getBoundingClientRect();
+    // Si no cabe debajo, se abre HACIA ARRIBA. Sin esto, en la última fila de
+    // una tabla llena el menú nacía fuera de la ventana.
+    const cabeDebajo = window.innerHeight - r.bottom >= altoMenu + 8;
+    setPos({
+      left: Math.min(r.left, window.innerWidth - 150),
+      top: cabeDebajo ? r.bottom + 4 : r.top - altoMenu - 4,
+    });
+  }, [altoMenu]);
 
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (dropRef.current && !dropRef.current.contains(e.target)) {
-        setShowDrop(false);
-      }
+    if (!showDrop) return;
+
+    const fueraDeAmbos = (e) =>
+      !(dropRef.current && dropRef.current.contains(e.target)) &&
+      !(menuRef.current && menuRef.current.contains(e.target));
+
+    const alPulsarFuera = (e) => { if (fueraDeAmbos(e)) setShowDrop(false); };
+    // EL MENÚ VA EN COORDENADAS DE PANTALLA, así que si la lista se desplaza
+    // o la ventana cambia de tamaño dejaría de estar sobre su botón. Se cierra:
+    // reposicionarlo mientras rueda la lista virtualizada da un menú que
+    // persigue al cursor sobre una fila que ya no es la suya.
+    const alMover = () => setShowDrop(false);
+
+    document.addEventListener('mousedown', alPulsarFuera);
+    // `true` = fase de captura: el scroll de react-window no burbujea.
+    window.addEventListener('scroll', alMover, true);
+    window.addEventListener('resize', alMover);
+    return () => {
+      document.removeEventListener('mousedown', alPulsarFuera);
+      window.removeEventListener('scroll', alMover, true);
+      window.removeEventListener('resize', alMover);
     };
-
-    if (showDrop) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showDrop]);
 
   return (
-    <div ref={dropRef} style={{ position: 'relative' }}>
+    <div style={{ position: 'relative' }}>
       <button
+        ref={dropRef}
         onClick={(e) => {
           e.stopPropagation();
-          if (isAdmin && transitions.length > 0) setShowDrop(!showDrop);
+          if (!isAdmin || transitions.length === 0) return;
+          if (showDrop) { setShowDrop(false); return; }
+          situar();
+          setShowDrop(true);
         }}
         style={{
           background: cfg.bg,
@@ -77,19 +114,26 @@ const ReviewStatusControl = ({ item, isAdmin, onStatusChange }) => {
         {item.codigo_idoneidad ? ` · ${item.codigo_idoneidad}` : ''}
         {isAdmin && transitions.length > 0 ? ' ▾' : ''}
       </button>
-      {showDrop && (
+      {/* EL MENÚ SE DIBUJA FUERA DE LA TABLA, EN EL BODY.
+          Estaba `position:absolute` dentro de la fila, y la fila vive dentro
+          del scroller de react-window -- que recorta lo que se sale. Resultado:
+          el desplegable existía, respondía y no se veía, así que un documento
+          no se podía sacar de Borrador desde la pantalla. Un portal con
+          coordenadas de pantalla es lo único que escapa de un contenedor con
+          scroll; `absolute` no puede, por muchos z-index que se le pongan. */}
+      {showDrop && pos && createPortal(
         <div
+          ref={menuRef}
           style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            zIndex: 9999,
+            position: 'fixed',
+            top: pos.top,
+            left: pos.left,
+            zIndex: 10000,
             background: '#fff',
             border: '1px solid #e5e7eb',
             borderRadius: 6,
             boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
             minWidth: 130,
-            marginTop: 4,
             overflow: 'hidden',
           }}
         >
@@ -132,7 +176,8 @@ const ReviewStatusControl = ({ item, isAdmin, onStatusChange }) => {
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
