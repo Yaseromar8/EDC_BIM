@@ -62,11 +62,14 @@ export default function App() {
   // Se muestra SIEMPRE al iniciar sesión. Usa sessionStorage para no reaparecer
   // en cada recarga mientras trabajas (se limpia al cerrar el tab o hacer logout).
   const [enteredDocs, setEnteredDocs] = useState(() => sessionStorage.getItem('ecd_entered_docs') === '1');
-  // Documentos (CDE) es exclusivo de administradores. El gate se aplica tanto en
-  // la ficha del Hub como aquí en el router, para que un flag viejo en
-  // sessionStorage no cuele a un no-admin al explorador.
-  const isAdmin = (user?.role || '').toLowerCase() === 'admin';
-  const chooseDocs = () => { if (!isAdmin) return; sessionStorage.setItem('ecd_entered_docs', '1'); setEnteredDocs(true); };
+  // DOCUMENTOS YA NO ES EXCLUSIVO DE ADMINISTRADORES. La frontera es la
+  // MEMBRESÍA: el listado de proyectos sale filtrado por sesión desde el
+  // servidor, y dentro de cada obra manda `mi-administracion` (por obra) más
+  // las guardias de cada ruta. El gate por `user.role` que había aquí hacía de
+  // «ser admin de la entidad» la llave de las herramientas — administración y
+  // acceso a herramientas son cosas distintas, y confundirlas dejaba a todo
+  // miembro de obra sin expediente.
+  const chooseDocs = () => { sessionStorage.setItem('ecd_entered_docs', '1'); setEnteredDocs(true); };
   const logoutFull = () => { sessionStorage.removeItem('ecd_entered_docs'); logout(); };
   // Volver al Hub (clic en el logo): el Hub es la ÚNICA puerta entre productos —
   // dentro de Docs no hay puentes directos al visor (sin fugas de navegación).
@@ -166,9 +169,7 @@ export default function App() {
 
   // Hub de producto: SIEMPRE tras el login (hasta elegir Documentos en esta
   // sesión). "Visor 3D" navega fuera (a la otra app) llevando la sesión.
-  // El Hub se muestra si no ha elegido Documentos, o si un no-admin llega con un
-  // flag heredado (nunca debe ver el explorador de documentos).
-  if (!enteredDocs || !isAdmin) {
+  if (!enteredDocs) {
     return (
       <HubPage
         user={user}

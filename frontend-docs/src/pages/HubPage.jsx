@@ -51,7 +51,6 @@ function ProductCard({ icon, title, onClick, locked = false, lockNote }) {
 
 export default function HubPage({ user, onChooseDocs, onLogout }) {
   const [verSeguridad, setVerSeguridad] = useState(false);
-  const isAdmin = (user?.role || '').toLowerCase() === 'admin';
 
   const rawName = String(user?.name || user?.username || user?.email || '').trim();
   const first = rawName ? rawName.split(/[@\s._]+/)[0] : '';
@@ -117,12 +116,16 @@ export default function HubPage({ user, onChooseDocs, onLogout }) {
         </h1>
 
         <div style={{ position: 'relative', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 16 }}>
+          {/* Documentos, abierta a todo el que inicia sesión: dentro, el listado
+              sale filtrado por MEMBRESÍA desde el servidor, y lo administrativo
+              lo decide `mi-administracion` obra por obra. El candado «Solo
+              administradores» que había aquí era de antes de que existiera el
+              perímetro por obra — hacía de la administración la llave de las
+              herramientas, que son cosas distintas. */}
           <ProductCard
             title="Documentos"
             icon={<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="8" y1="13" x2="16" y2="13" /><line x1="8" y1="17" x2="16" y2="17" /></>}
             onClick={onChooseDocs}
-            locked={!isAdmin}
-            lockNote="Solo administradores"
           />
           {/* Solo si esta instancia tiene visor contratado. Sin VITE_VISOR_URL
               la ficha no existe: antes llevaba al visor del PROVEEDOR con un
