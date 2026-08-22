@@ -145,3 +145,51 @@ primero (`TRIGGER ACTIVADO`) y se decide — no se implementa por reflejo.
 *Vista A = estructura. Vista B = avance. Mantener las dos al día es parte del
 cierre de cada fase futura: una fase no está cerrada hasta que este mapa lo
 dice.*
+
+---
+
+# D · ESTADO ACC/PROCORE — actualizado 22-ago-2026 (bloque de estabilización)
+
+Solo se mueve lo que tiene evidencia nueva medida hoy.
+
+```
+ #  CAPA                          ARQ  OP  EXP   ESTADO
+ 01 Identity / Principal           ✅  🟡  🟡   PARTIAL   op mejora: G5a×3 + G6 cerrados
+ 02 Account / Entity               ✅  ✅  🟡   PARTIAL   sin cambio (falta vista de entidad)
+ 03 Project Membership             ✅  ✅  🟡   PARTIAL   op REFORZADO: Accesos ya no destruye
+ 04 Company                        ✅  ✅  🟡   PARTIAL   sin cambio
+ 05 Contractual Function           ✅  ✅  ✅   COMPLETE  sin cambio
+ 06 Entity Admin                   ✅  ✅  🟡   PARTIAL   sin cambio (adjudicación abierta)
+ 07 Project Admin                  ✅  ✅  🟡   PARTIAL   op REFORZADO: es_admin sobrevive al guardado
+ 08 Member Tool Access             ✅   —   —   DEFER     trigger apagado; posición limpia
+ 09 Resource Permission            ✅  ✅  🟡   PARTIAL   sin cambio — sigue el gap real
+ 10 Workflow Authorization         ✅  ✅  ✅   COMPLETE  ⬆ RECUPERADA con evidencia
+ 11 Responsibility / BIC           ✅  ✅  ✅   COMPLETE  sin cambio
+ 12 Identity & Access UX           ✅  🟡  🟡   ACTIVE    tramo invitaciones en producción
+```
+
+**Movimientos con su evidencia:**
+
+- **Capa 10 → COMPLETE.** RV-002: autor 22 crea, **revisor 19 aprueba**, el
+  documento transita (`review_approve` + `cambio_de_estado` a la misma hora,
+  cada acto con su identidad). Independencia demostrada en los dos sentidos: el
+  producto **negó** al autor-único-revisor (`400 REVISION_SIN_INDEPENDENCIA`) y
+  **aceptó** al par independiente. Ningún Entity Admin en el flujo. Con esto,
+  los cuatro flujos (RFI · Red Line · Transmittals · Reviews) tienen evidencia
+  EXP con usuarios no-Entity-Admin.
+- **Capas 3 y 7: OP reforzado, EXP sin cambio.** Guardar Accesos ya no borra
+  `es_admin` ni `assigned_at` (verificado en producción). No suben de PARTIAL
+  porque su carencia era y sigue siendo de experiencia (P5, ficha de persona).
+- **Capa 3, prueba nueva:** el miembro 19 ve **2 obras de 10** — el filtrado por
+  membresía, medido con sesión real.
+- **Capa 1: OP mejora pero NO sube.** Cerrados G5a (las tres puertas respetan
+  `is_active`) y G6 (reset de un solo uso). Queda G7 (`activated_at` +
+  `invitacion_gen`) y el invariante de sesión: siguen 🟡.
+- **Capa 8 sigue DEFER con trigger APAGADO.** Nadie ha pedido acceso distinto
+  por herramienta. Su posición quedó limpia al retirar la compuerta.
+
+**Ninguna otra capa cambia**: 02, 04, 06, 09 y 12 conservan su estado — no hubo
+evidencia nueva sobre ellas y la ejecución de producto sigue retenida.
+
+---
+

@@ -1,114 +1,146 @@
 # PASO 14 · ADJUDICACIÓN DE ADMINS — INVENTARIO PARA DECISIÓN
 
-**Preparado el 22-ago-2026 durante PRODUCTION STABILIZATION. No se ha cambiado
-ninguna cuenta.** Cada fila termina en `DECISIÓN DEL PROPIETARIO: [vacío]` — la
-decisión es humana, cuenta por cuenta, y la ejecuta quien decide.
-
-Contexto de autoridad hoy: **1 solo Entity Admin** (custodio de la instancia) y
-**la obra real (`1` · PQT8_TALARA) sin ningún Project Admin nombrado** — toda su
-administración recae en el Entity Admin. La pregunta central del paso es esa:
-¿quién administra la obra real?
+**Medido en producción el 22-ago-2026. No se ha cambiado ninguna cuenta.** Cada
+ficha termina en `DECISIÓN DEL PROPIETARIO: [vacío]`.
 
 ---
 
-## CUENTA 2 · omarsanchezh8@gmail.com («Yaser Omar»)
+# LAS DOS PREGUNTAS, SEPARADAS
+
+Según el organigrama congelado, **`ENTITY ADMIN ≠ PROJECT ADMIN`**: son dos
+figuras distintas y se deciden por separado.
+
+### A · ¿QUIÉN DEBE SER ENTITY ADMIN?
+Custodia la **instancia**: crea y archiva obras, administra el padrón de
+usuarios, el catálogo de la entidad y el triaje de seguridad. Alcance global
+mientras `1 instancia = 1 entidad`.
+
+**Hoy: una sola cuenta (id 2).** Es un **punto único**: si se pierde, la entidad
+queda sin custodio y recuperarla exigiría intervención directa en base de datos.
+Opciones — (a) statu quo aceptando el riesgo con la copia diaria como respaldo,
+(b) un segundo Entity Admin de confianza, (c) documentar un procedimiento de
+emergencia y aceptarlo formalmente.
+
+### B · ¿QUIÉN DEBE ADMINISTRAR PQT8_TALARA (obra `1`)?
+Administra **una obra**: su directorio, sus permisos documentales, sus rescates
+de flujo. Vive en `project_users.es_admin` — es la fila de membresía, así que
+retirar de la obra retira la administración en el mismo acto.
+
+**Hoy: NADIE.** La obra real tiene 4 miembros y los 4 con `es_admin = false`;
+toda su administración recae en el Entity Admin por alcance global. Opciones —
+(a) statu quo (tú administras vía Entity), (b) nombrar a un miembro Project
+Admin, (c) nombrar a dos, para que ninguno sea el único.
+
+*La respuesta a B no condiciona la de A, ni al revés.*
+
+---
+
+# FICHAS · 7 identidades (todas las que existen)
+
+## id 2 · Yaser Omar — `omarsanchezh8@gmail.com`
 
 | | |
 |---|---|
-| ESTADO ACTUAL | Activa, reclamada, **2FA activo** (única cuenta con TOTP) |
-| ENTITY ADMIN | **SÍ** (la única) |
-| MEMBRESÍAS | Ninguna (el Entity Admin no la necesita: alcance global) |
+| ESTADO | Activa · reclamada (alta 22-feb-2026) |
+| ROLE / ENTITY ADMIN | `admin` · **SÍ** (la única) |
+| MEMBRESÍAS | Ninguna (el alcance global no la necesita) |
 | PROJECT ADMIN | — |
-| INVITACIÓN | Reclamada (alta 22-feb-2026) |
-| USO REAL | Diario; 258 asientos como correo + 457 como «Yaser Omar» (asientos antiguos por nombre); último acceso hoy |
-| RIESGO DE DEJARLA ASÍ | **Punto único de administración**: si esta cuenta se pierde, la entidad queda sin custodio (recuperarla exigiría intervención en BD). Ante un tercero, «¿quién pudo ver esto?» = esta cuenta, acotado ✓ |
-| RECOMENDACIÓN TÉCNICA | Conservar como Entity Admin. Decidir **sucesión**: o un segundo Entity Admin de confianza, o el procedimiento de emergencia documentado (restaurador de BD). No nombrarla Project Admin de nada — ya lo alcanza todo |
+| EMPRESA · FUNCIÓN | Sin empresa · sin función contractual |
+| **2FA** | **ACTIVO** — la única cuenta con segundo factor |
+| ÚLTIMO USO | Hoy · 258 asientos con su correo (+457 antiguos como «Yaser Omar») |
+| POR QUÉ EXISTE | Es el propietario y constructor de la instancia |
+| RIESGO | **Punto único de administración de la entidad** (ver pregunta A) |
+| RECOMENDACIÓN TÉCNICA | Conservar. Decidir sucesión. No darle Project Admin de nada: ya lo alcanza todo, y duplicarlo enturbia el rastro |
 | **DECISIÓN DEL PROPIETARIO** | [vacío] |
 
-## CUENTA 17 · fabian230209@gmail.com («Fabian Serrano»)
+## id 17 · Fabian Serrano — `fabian230209@gmail.com`
 
 | | |
 |---|---|
-| ESTADO ACTUAL | Activa, reclamada, sin 2FA |
-| ENTITY ADMIN | No |
-| MEMBRESÍAS | **obra 1 (PQT8_TALARA)** + PQT8_INTERFERENCIAS |
-| PROJECT ADMIN | No (fue nombrado y retirado en 4 s durante la ventana, como prueba tuya; revertido) |
-| INVITACIÓN | Reclamada (13-may-2026) |
-| USO REAL | Real y reciente (último acceso 20-ago) — la única persona ajena a ti con uso sostenido |
-| RIESGO DE DEJARLA ASÍ | Ninguno nuevo. Si la obra real necesita un administrador que no seas tú, es el único candidato con historial |
-| RECOMENDACIÓN TÉCNICA | **Candidato natural a Project Admin de la obra 1** si quieres delegar su administración (decisión de confianza, no técnica). Si se nombra: pedirle 2FA |
+| ESTADO | Activa · reclamada (13-may-2026) |
+| ROLE / ENTITY ADMIN | `user` · No |
+| MEMBRESÍAS | **obra `1` (PQT8_TALARA)** + `PQT8_INTERFERENCIAS` |
+| PROJECT ADMIN | No |
+| EMPRESA · FUNCIÓN | **INTERFERENCIAS** · SUPERVISIÓN (declarada en la obra de prueba) |
+| 2FA | No |
+| ÚLTIMO USO | **22-ago** — la única persona además del propietario con uso sostenido |
+| POR QUÉ EXISTE | Colaborador real del proyecto |
+| RIESGO | Ninguno nuevo. El riesgo es *no* decidir: la obra real sigue sin administrador propio |
+| RECOMENDACIÓN TÉCNICA | **Único candidato con historial** para Project Admin de la obra `1`. Es decisión de confianza, no técnica. Si se nombra: pedirle 2FA antes |
 | **DECISIÓN DEL PROPIETARIO** | [vacío] |
 
-## CUENTA 18 · walterdavidcorreamorocho79@gmail.com
+## id 18 · Walter Correa — `walterdavidcorreamorocho79@gmail.com`
 
 | | |
 |---|---|
-| ESTADO ACTUAL | Activa pero **PENDIENTE** (invitación del 24-jul jamás reclamada, hash vacío) |
-| ENTITY ADMIN | No · PROJECT ADMIN | No |
-| MEMBRESÍAS | obra 1 (asignada sin haber entrado nunca) |
-| USO REAL | **Cero** — nunca inició sesión |
-| RIESGO DE DEJARLA ASÍ | Bajo (tras el cierre G5a una pendiente retirada ya no es reclamable; esta sigue activa y su enlace de 14 días **ya caducó** — hoy nadie puede reclamarla sin reemisión) |
-| RECOMENDACIÓN TÉCNICA | Decidir si Walter sigue siendo parte del proyecto: **si sí → reemitir enlace** (botón «Copiar enlace» ya existe); **si no → retirar** (desactivar; el rastro se conserva) |
+| ESTADO | Activa pero **INVITACIÓN PENDIENTE** (24-jul-2026, jamás reclamada) |
+| ROLE / ENTITY ADMIN | `user` · No · PROJECT ADMIN: No |
+| MEMBRESÍAS | obra `1` (asignada sin haber entrado nunca) |
+| EMPRESA · FUNCIÓN | **SINOHYDRO** · sin función declarada |
+| ÚLTIMO USO | **Nunca inició sesión** |
+| POR QUÉ EXISTE | Se le invitó a la obra real hace un mes |
+| RIESGO | Bajo: su enlace de 14 días **ya caducó** y, tras el cierre G5a, una cuenta retirada tampoco sería reclamable. Es ruido en el padrón, no una puerta |
+| RECOMENDACIÓN TÉCNICA | Decidir si sigue en el proyecto: **sí → «Copiar enlace»** (reemisión, ya existe el botón); **no → «Retirar acceso»** (desactiva, conserva rastro) |
 | **DECISIÓN DEL PROPIETARIO** | [vacío] |
 
-## CUENTA 19 · yaseromarsanchez8@gmail.com («yaser omar 02»)
+## id 19 · yaser omar 02 — `yaseromarsanchez8@gmail.com`
 
 | | |
 |---|---|
-| ESTADO ACTUAL | Activa, reclamada, sin 2FA — **tu segunda cuenta** |
-| ENTITY ADMIN | No · PROJECT ADMIN | No |
-| MEMBRESÍAS | obra 1 |
-| USO REAL | Como sujeto de pruebas tuyas (últ. acceso 20-ago); destinataria del TR-001 de prueba |
-| RIESGO DE DEJARLA ASÍ | Confunde el padrón ante un tercero (dos cuentas de la misma persona con roles distintos) |
-| RECOMENDACIÓN TÉCNICA | Conservarla **declarada como cuenta de pruebas del propietario** (renombrar a algo inequívoco cuando exista edición de perfil), o retirarla si ya no la usas. No nombrarla admin de nada |
+| ESTADO | Activa · reclamada (24-jul-2026) — **segunda cuenta del propietario** |
+| ROLE / ENTITY ADMIN | `user` · No · PROJECT ADMIN: No |
+| MEMBRESÍAS | obra `1` + **obra de prueba** (añadida hoy para la evidencia de Reviews) |
+| EMPRESA · FUNCIÓN | Sin empresa · sin función |
+| ÚLTIMO USO | Hoy — **revisor de RV-002**, destinataria de TR-001 |
+| POR QUÉ EXISTE | Sujeto de pruebas del propietario; hoy fue la mitad independiente de la evidencia de capa 10 |
+| RIESGO | Confunde el padrón ante un tercero: dos cuentas de la misma persona. Y **es miembro de la obra real** sin ser una persona distinta |
+| RECOMENDACIÓN TÉCNICA | Declararla cuenta de pruebas (renombrar cuando exista edición de perfil) **o** retirarla de la obra `1` dejándola solo en la de prueba. No nombrarla admin |
 | **DECISIÓN DEL PROPIETARIO** | [vacío] |
 
-## CUENTA 20 · zhangwenqing@powerchina.cn
+## id 20 · Zhang Wenqing — `zhangwenqing@powerchina.cn`
 
 | | |
 |---|---|
-| ESTADO ACTUAL | Activa pero **PENDIENTE** (invitación del 6-ago, jamás reclamada; enlace caducado) |
-| ENTITY ADMIN | No · PROJECT ADMIN | No |
-| MEMBRESÍAS | obra 1 |
-| USO REAL | **Cero** — y es el contratista externo real (SINOHYDRO/PowerChina): la primera identidad genuinamente de tercero |
-| RIESGO DE DEJARLA ASÍ | El del olvido: cuando llegue el piloto, esta invitación caducada será la primera fricción |
-| RECOMENDACIÓN TÉCNICA | Decidir el MOMENTO de incorporar al contratista (¿pre-piloto?). Cuando toque: reemitir enlace y acompañar el alta. Mientras: dejarla como está |
+| ESTADO | Activa pero **INVITACIÓN PENDIENTE** (6-ago-2026, jamás reclamada) |
+| ROLE / ENTITY ADMIN | `user` · No · PROJECT ADMIN: No |
+| MEMBRESÍAS | obra `1` |
+| EMPRESA · FUNCIÓN | **S&P** · sin función declarada |
+| ÚLTIMO USO | **Nunca inició sesión** |
+| POR QUÉ EXISTE | Contratista externo real — **la primera identidad genuinamente de tercero** de la plataforma |
+| RIESGO | Ninguno técnico. El riesgo es de calendario: cuando llegue el piloto externo, esta invitación caducada será la primera fricción, y su alta es la primera prueba real de Identity & Access UX |
+| RECOMENDACIÓN TÉCNICA | Decidir el **momento**. Mientras tanto, dejarla como está. Cuando toque: reemitir enlace y acompañar el alta; declarar su función contractual en la obra |
 | **DECISIÓN DEL PROPIETARIO** | [vacío] |
 
-## CUENTA 21 · yaser.sanchez.h@uni.pe
+## id 21 · (Invitado pendiente) — `yaser.sanchez.h@uni.pe`
 
 | | |
 |---|---|
-| ESTADO ACTUAL | **RETIRADA** (desactivada el 22-ago tras perderse su enlace sin copiar) y PENDIENTE |
-| USO REAL | Cero; residuo de la ventana |
-| RIESGO DE DEJARLA ASÍ | Ninguno (tras G5a, una retirada no es reclamable ni entra por Google) |
-| RECOMENDACIÓN TÉCNICA | **Purgar** («Eliminar invitación» — nunca fue reclamada, no hay rastro que conservar) para limpiar el padrón |
+| ESTADO | **RETIRADA** (`is_active=false`, 22-ago) y pendiente |
+| ROLE / ENTITY ADMIN | `user` · No · PROJECT ADMIN: No · **Sin membresías** |
+| EMPRESA · FUNCIÓN | — |
+| ÚLTIMO USO | Nunca |
+| POR QUÉ EXISTE | Residuo de la ventana: su enlace se cerró sin copiar y no había forma de reemitirlo (defecto que se corrigió después, `556820a`) |
+| RIESGO | Ninguno: tras G5a no es reclamable ni por enlace ni por Google |
+| RECOMENDACIÓN TÉCNICA | **Purgar** («Eliminar invitación»): nunca fue reclamada, no hay rastro que conservar, y limpia el padrón |
 | **DECISIÓN DEL PROPIETARIO** | [vacío] |
 
-## CUENTA 22 · omarsanchezh8+prueba1@gmail.com («YASER HUAMANI»)
+## id 22 · YASER HUAMANI — `omarsanchezh8+prueba1@gmail.com`
 
 | | |
 |---|---|
-| ESTADO ACTUAL | Activa, reclamada hoy — usuario de prueba nº 1 de la ventana |
-| ENTITY ADMIN | No |
-| MEMBRESÍAS | **obra de prueba [ADMIN]** — Project Admin de ZZ PRUEBA VENTANA, y de nada más |
-| USO REAL | Toda la evidencia EXP de la ventana (409/404/400/200, RFI-001, RL-001, TR-001) |
-| RIESGO DE DEJARLA ASÍ | Ninguno mientras exista la obra de prueba; su alcance muere con ella |
-| RECOMENDACIÓN TÉCNICA | **Conservar mientras dure la estabilización** (aún debe la evidencia Reviews de capa 10). Su retirada va atada a la decisión sobre la obra de prueba, post-estabilización |
+| ESTADO | Activa · reclamada (22-ago) |
+| ROLE / ENTITY ADMIN | `user` · No |
+| MEMBRESÍAS | **obra de prueba [PROJECT ADMIN]** — y de nada más |
+| EMPRESA · FUNCIÓN | **SINOHYDRO** · sin función declarada |
+| ÚLTIMO USO | Hoy — autor de RV-002 |
+| POR QUÉ EXISTE | Usuario de prueba nº 1: aportó **toda** la evidencia EXP de la ventana (409/404/400/200, RFI-001, RL-001, TR-001, RV-002) |
+| RIESGO | Ninguno: su autoridad muere con la obra de prueba, y no toca el expediente real |
+| RECOMENDACIÓN TÉCNICA | **Conservar mientras dure la estabilización.** Su retirada va atada a la decisión sobre la obra de prueba, post-estabilización |
 | **DECISIÓN DEL PROPIETARIO** | [vacío] |
 
 ---
 
-## LAS DOS DECISIONES QUE ORDENAN TODO LO DEMÁS
-
-1. **¿Quién administra la obra 1 (PQT8_TALARA)?** Hoy: nadie salvo el Entity
-   Admin. Opciones: tú mismo vía Entity (statu quo, válido), o nombrar a
-   Fabián (17) Project Admin.
-2. **¿Sucesión del Entity Admin?** Hoy es un punto único. Opciones: segundo
-   Entity Admin de confianza, o documentar el procedimiento de emergencia y
-   aceptar el riesgo con la copia diaria como respaldo.
-
-*Identidades del rastro antiguas («Admin», «ADMIN», «Antigravity Diagnostic»,
-«cli-omar», 315 asientos sin autor): son texto histórico en `activity_log`
-anterior a la identidad numérica. No corresponden a cuentas vivas y, por la
-regla de los históricos, no se reconstruyen ni se reatribuyen.*
+**No hay más identidades.** Las que aparecen en el rastro antiguo («Admin»,
+«ADMIN», «Antigravity Diagnostic», «cli-omar», 315 asientos sin autor) son texto
+histórico de `activity_log` anterior a la identidad numérica: no son cuentas
+vivas y, por la regla de los históricos, **no se reconstruyen ni se reatribuyen**.
