@@ -156,9 +156,20 @@ def sujetos_de(cur, usuario, model_urn):
     empresa = fila[0] if fila else None
     if empresa:
         fuera[COMPANY] = str(empresa)
+        # `project_companies` guarda el `projects.id` CANONICO; aqui llega el
+        # `model_urn` de las carpetas, que es OTRO identificador (en la obra de
+        # prueba: 'proyectos/ZZ_...' vs 'b.proj_zz_...'). Sin resolverlo, la
+        # consulta no casaba nunca y una regla de FUNCION no alcanzaba a NADIE
+        # por el camino de documentos -- se escribia bien y no se aplicaba.
+        # Encontrado en la EXP de capa 9 con conflicto real, no en las suites:
+        # los dobles usaban el mismo id para las dos cosas. Mismo patron que
+        # ya practica `es_admin_de_obra`: resolver, y fail-closed si no se
+        # puede (no aparecer la funcion CONCEDE menos, nunca mas).
+        from db import resolve_project_id
+        obra = resolve_project_id(str(model_urn)) or str(model_urn)
         cur.execute("""SELECT funcion FROM project_companies
                         WHERE project_id = %s AND company_id = %s""",
-                    (str(model_urn), int(empresa)))
+                    (str(obra), int(empresa)))
         f = cur.fetchone()
         if f and f[0]:
             fuera[FUNCTION] = f[0]

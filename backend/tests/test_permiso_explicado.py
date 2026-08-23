@@ -36,7 +36,10 @@ ARBOL = {
     'acta.pdf':  ('privado', 'FILE'),
 }
 
-OBRA = 'b.proj_prueba'
+# La obra tiene DOS identificadores, como en produccion: las carpetas viven
+# bajo el model_urn y project_companies bajo el projects.id canonico.
+OBRA = 'proyectos/OBRA_DE_PRUEBA'
+CANONICA = 'b.proj_prueba'
 
 
 @pytest.fixture
@@ -63,7 +66,11 @@ def motor(monkeypatch):
             if 'SELECT COMPANY_ID FROM USERS' in s:
                 self._filas = [(estado['empresa'],)] if estado['empresa'] else [(None,)]
             elif 'FROM PROJECT_COMPANIES' in s:
-                self._filas = [(estado['funcion'],)] if estado['funcion'] else []
+                # Como la tabla real: guarda el projects.id CANONICO. Si la
+                # consulta llega con el model_urn sin resolver, NO casa -- que
+                # es exactamente el defecto que la EXP encontro en produccion.
+                if str(p[0]) == CANONICA and estado['funcion']:
+                    self._filas = [(estado['funcion'],)]
             elif 'SELECT ID, PARENT_ID, NODE_TYPE FROM FILE_NODES' in s:
                 nodo = str(p[0])
                 if nodo in ARBOL and str(p[1]) == OBRA:
@@ -95,6 +102,9 @@ def motor(monkeypatch):
 
     monkeypatch.setattr('administracion_de_obra.es_admin_de_obra',
                         lambda cur, u, obra: estado['es_admin_de_obra'])
+    import db
+    monkeypatch.setattr(db, 'resolve_project_id',
+                        lambda x: CANONICA if x in (OBRA, CANONICA) else None)
 
     return pd, Cursor(), estado
 
@@ -317,6 +327,21 @@ def test_el_motivo_siempre_trae_las_claves_que_la_pantalla_pinta(motor):
         _n, motivo = pd.permiso_efectivo(cur, persona, OBRA, 'acta.pdf',
                                          con_motivo=True)
         assert claves <= set(motivo), 'faltan claves en %r' % (motivo,)
+
+
+def test_la_funcion_alcanza_aunque_la_carpeta_viva_bajo_otro_identificador(motor):
+    """EL DEFECTO DE LA EXP (22-ago): `sujetos_de` consultaba
+    project_companies con el model_urn de las carpetas sin resolverlo al
+    projects.id canonico. La consulta no casaba nunca: una regla de FUNCION se
+    escribia bien y NO ALCANZABA A NADIE por el camino de documentos. Los
+    dobles no lo vieron porque usaban el mismo id para las dos cosas; este
+    fixture ya no lo permite."""
+    pd, cur, e = motor
+    e['reglas'] = {'privado': {pd.FUNCTION: 'view_markup'}}
+    nivel, motivo = _resolver(pd, cur)
+    assert nivel == 'view_markup', (
+        'la regla de funcion no alcanzo: sujetos_de no resolvio el id canonico')
+    assert motivo['sujeto_tipo'] == pd.FUNCTION
 
 
 # ── Lo que perdió POR DISTANCIA (hace visible closest-wins) ──────────────────
