@@ -178,6 +178,23 @@ except Exception:
 
 # ─── HUBS (Municipalidades / Accounts) ───────────────────────────────────────
 
+# EL PORTAL TIENE SU PROPIO CAMINO, Y NO ES NEGOCIABLE
+# ------------------------------------------------------
+# `/api/hubs` esta declarado DOS veces en este producto: aqui (municipalidades
+# de la entidad, en nuestra base) y en server.py contra Autodesk (cuentas APS).
+# `_ruta_del_visor` las separa... solo cuando DEPLOY_PROFILE=portal. En
+# produccion el perfil es `completo` --un backend sirve portal y visor--, asi
+# que la de APS gana por orden de registro y el portal recibia cuentas de
+# Autodesk donde esperaba municipalidades: el desplegable de «Crear proyecto»
+# salia VACIO y la obra nacia colgada del hub de respaldo.
+#
+# Medido el 23-ago-2026 creando la obra del piloto por la interfaz real.
+#
+# La solucion no es adivinar el formato en el navegador --eso mostraria las
+# cuentas de Autodesk como si fueran municipalidades--: es que el portal pida
+# LO SUYO por un camino que no puede chocar con nada. `/api/hubs` se conserva
+# para no romper a quien ya lo llama en perfil portal.
+@projects_bp.route('/api/portal/hubs', methods=['GET'])
 @projects_bp.route('/api/hubs', methods=['GET'])
 def list_hubs():
     """Lista todas las municipalidades/cuentas activas con cuenta de proyectos."""

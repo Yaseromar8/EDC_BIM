@@ -193,3 +193,43 @@ evidencia nueva sobre ellas y la ejecución de producto sigue retenida.
 
 ---
 
+---
+
+# E · ESTADO ACC/PROCORE — actualizado 23-ago-2026 (cierre de capas 12, P5 y 9)
+
+Re-medición completa tras tres veredictos con EXP en producción. El detalle y
+la evidencia de cada movimiento viven en los docs **72** (capa 12), **75**
+(capa 9 + distancia al piloto) y **76** (decisiones de gate).
+
+```
+ #  CAPA                          ARQ  OP  EXP   ESTADO
+ 01 Identity / Principal           ✅  ✅  ✅   COMPLETE  ⬆ G7 entero + matriz E2E 10/10 (doc 71) + EXP prod
+ 02 Account / Entity               ✅  ✅  🟡   PARTIAL   falta vista de entidad consolidada — UX POLISH
+ 03 Project Membership             ✅  ✅  ✅   COMPLETE  ⬆ P5 operable desde la obra, verificado en prod
+ 04 Company                        ✅  ✅  ✅   COMPLETE  ⬆ empresa por interfaz (asignada y revertida en la EXP)
+ 05 Contractual Function           ✅  ✅  ✅   COMPLETE  reforzada: sus reglas de permiso ya APLICAN (31acf1f)
+ 06 Entity Admin                   ✅  ✅  ✅   COMPLETE  ⬆ PASO 14 cerrado; 2º custodio = gate humano, no capa
+ 07 Project Admin                  ✅  ✅  ✅   COMPLETE  ⬆ guardia_administrativa gobierna membresía y permisos
+ 08 Member Tool Access             ✅   —   —   DEFER     sin trigger (re-confirmado 23-ago)
+ 09 Resource Permission            ✅  ✅  ✅   COMPLETE  ⬆ doc 75: tres sujetos + inspector explicable
+ 10 Workflow Authorization         ✅  ✅  ✅   COMPLETE  sin cambio
+ 11 Responsibility / BIC           ✅  ✅  ✅   COMPLETE  sin cambio
+ 12 Identity & Access UX           ✅  ✅  ✅   COMPLETE  ⬆ doc 72
+```
+
+**Única PARTIAL: la 02.** Todo lo que la compone funciona por partes
+(Usuarios, catálogo de empresas, configuración); falta la pantalla que las
+reúne. No bloquea el piloto.
+
+## Correcciones al doc 75 (medidas el 23-ago, honestidad de mapa)
+
+El doc 75 declaró la distancia al piloto sin dos cosas que aparecieron al
+montar la pista real del piloto por la interfaz:
+
+| Hallazgo | Clase | Estado |
+|---|---|---|
+| **El correo de invitación no se envía en producción**: no hay `RESEND_API_KEY`. G1 degrada con gracia al enlace copiable — correcto como diseño, insuficiente para un externo, que espera un correo y no un enlace por WhatsApp | **SHOULD HAVE del piloto** (sube desde «no listado») | ABIERTO — configurar la clave en Render |
+| **`/api/hubs` chocaba**: dos rutas (municipalidades locales vs cuentas APS) y con `DEPLOY_PROFILE=completo` ganaba la de Autodesk; el desplegable de «Crear proyecto» salía vacío y la obra nacía colgada del hub de respaldo | Defecto real de producto | **CERRADO** — el portal pide `/api/portal/hubs`, con contrato que lo fija |
+
+Ninguno mueve una capa de estado: el primero es configuración de entorno, el
+segundo era un choque de caminos entre los dos productos del mismo backend.

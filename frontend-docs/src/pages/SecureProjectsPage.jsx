@@ -412,7 +412,11 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const hRes = await apiFetch(`${API}/api/hubs`);
+      // `/api/portal/hubs`, no `/api/hubs`: ese camino esta declarado dos
+      // veces en el producto (municipalidades aqui, cuentas de Autodesk en el
+      // visor) y con DEPLOY_PROFILE=completo ganaba la de APS -- el
+      // desplegable de «Crear proyecto» salia vacio. Ver routes/projects.py.
+      const hRes = await apiFetch(`${API}/api/portal/hubs`);
       if (hRes.ok) { const hData = await hRes.json(); setHubs(hData.hubs || []); }
       const res = await apiFetch(`${API}/api/projects?user_id=${user.id}&role=${user.role}`);
       if (res.ok) { const data = await res.json(); setProjects(Array.isArray(data) ? data : (data.projects || [])); }
