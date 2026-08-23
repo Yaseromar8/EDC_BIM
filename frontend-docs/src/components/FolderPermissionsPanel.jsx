@@ -200,11 +200,37 @@ function PermisoEfectivo({ folder, modelUrn, apiBaseUrl }) {
                 {m.saltos === 0
                   ? ' (esta misma carpeta).'
                   : ` (${m.saltos} nivel${m.saltos === 1 ? '' : 'es'} por encima).`}
+                {/* DESPLAZÓ (misma carpeta): perdieron por ESPECIFICIDAD. */}
                 {m.desplazados && m.desplazados.length > 0 && (
-                  <div style={{ marginTop: 5, color: '#64748b' }}>
-                    En esa misma carpeta también le alcanzaban reglas de{' '}
-                    {m.desplazados.map(d => d.sujeto_tipo === 'COMPANY' ? 'empresa' : 'función').join(' y ')}
-                    , pero la más específica manda.
+                  <div style={{ marginTop: 6, paddingLeft: 10, borderLeft: '2px solid #e2e8f0', color: '#64748b' }}>
+                    <b style={{ color: '#475569' }}>Desplazó, en esa misma carpeta:</b>
+                    {m.desplazados.map((d, i) => (
+                      <div key={i}>
+                        {d.sujeto_label || d.sujeto_tipo} = {d.nivel_label || d.nivel}
+                      </div>
+                    ))}
+                    <div style={{ fontSize: 11.5, marginTop: 2 }}>
+                      Motivo: al mismo nivel, la regla más específica manda —
+                      Persona &gt; Empresa &gt; Función contractual.
+                    </div>
+                  </div>
+                )}
+                {/* DESPLAZÓ (carpetas de arriba): perdieron por DISTANCIA.
+                    Es la mitad que hace visible closest-wins: sin esto, el
+                    «Editar» de la carpeta padre parece mandar, y no manda. */}
+                {m.desplazados_lejanos && m.desplazados_lejanos.length > 0 && (
+                  <div style={{ marginTop: 6, paddingLeft: 10, borderLeft: '2px solid #e2e8f0', color: '#64748b' }}>
+                    <b style={{ color: '#475569' }}>Desplazó, en carpetas superiores:</b>
+                    {m.desplazados_lejanos.map((d, i) => (
+                      <div key={i}>
+                        {d.sujeto_label || d.sujeto_tipo} = {d.nivel_label || d.nivel} en{' '}
+                        <b>{d.carpeta_nombre || '—'}</b>
+                      </div>
+                    ))}
+                    <div style={{ fontSize: 11.5, marginTop: 2 }}>
+                      Motivo: la regla de la carpeta más cercana tiene precedencia;
+                      las de arriba no se aplican, aunque concedan más.
+                    </div>
                   </div>
                 )}
               </>

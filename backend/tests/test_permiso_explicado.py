@@ -317,3 +317,80 @@ def test_el_motivo_siempre_trae_las_claves_que_la_pantalla_pinta(motor):
         _n, motivo = pd.permiso_efectivo(cur, persona, OBRA, 'acta.pdf',
                                          con_motivo=True)
         assert claves <= set(motivo), 'faltan claves en %r' % (motivo,)
+
+
+# ── Lo que perdió POR DISTANCIA (hace visible closest-wins) ──────────────────
+#
+# El caso que un administrador no entiende sin ayuda: ve «Editar» concedido a
+# su empresa en la carpeta del proyecto, y la persona tiene «Ver y descargar».
+# La regla de arriba no se aplica — y hasta que el inspector no lo dijo, la
+# reacción natural era volver a conceder, esta vez de más.
+
+def test_relata_la_regla_de_arriba_que_no_se_aplica(motor):
+    pd, cur, e = motor
+    e['reglas'] = {'privado': {pd.USER: 'view_download'},
+                   'obra': {pd.COMPANY: 'edit'}}
+    nivel, motivo = _resolver(pd, cur)
+    assert nivel == 'view_download'
+    assert motivo['carpeta_id'] == 'privado'
+    # …y cuenta que arriba había una regla de empresa que quedó desplazada.
+    assert motivo['desplazados_lejanos'] == [
+        {'carpeta_id': 'obra', 'sujeto_tipo': pd.COMPANY, 'nivel': 'edit', 'saltos': 2}]
+
+
+def test_relata_varias_carpetas_desplazadas_en_orden(motor):
+    pd, cur, e = motor
+    e['reglas'] = {'privado': {pd.USER: 'viewer'},
+                   'contrato': {pd.COMPANY: 'view_markup'},
+                   'obra': {pd.FUNCTION: 'admin'}}
+    nivel, motivo = _resolver(pd, cur)
+    assert nivel == 'viewer'
+    assert [d['carpeta_id'] for d in motivo['desplazados_lejanos']] == ['contrato', 'obra']
+    assert [d['nivel'] for d in motivo['desplazados_lejanos']] == ['view_markup', 'admin']
+
+
+def test_en_cada_carpeta_desplazada_se_relata_la_que_habria_ganado(motor):
+    """Si una carpeta superior tiene dos reglas que le alcanzan, la que se
+    cuenta es la que HABRÍA ganado allí (por precedencia), no las dos: es la
+    que el administrador cree que manda."""
+    pd, cur, e = motor
+    e['reglas'] = {'privado': {pd.USER: 'viewer'},
+                   'obra': {pd.USER: 'admin', pd.COMPANY: 'edit'}}
+    _nivel, motivo = _resolver(pd, cur)
+    assert motivo['desplazados_lejanos'] == [
+        {'carpeta_id': 'obra', 'sujeto_tipo': pd.USER, 'nivel': 'admin', 'saltos': 2}]
+
+
+def test_sin_nada_por_encima_la_lista_va_vacia(motor):
+    pd, cur, e = motor
+    e['reglas'] = {'privado': {pd.USER: 'edit'}}
+    _nivel, motivo = _resolver(pd, cur)
+    assert motivo['desplazados_lejanos'] == []
+
+
+def test_relatar_no_cambia_la_decision_con_reglas_por_encima(motor):
+    """EL CONTRATO QUE PROTEGE EL MOTOR: seguir recorriendo la cadena para
+    explicar no puede alterar el nivel. Se compara con y sin motivo."""
+    pd, cur, e = motor
+    for reglas in [
+        {'privado': {pd.USER: 'viewer'}, 'obra': {pd.COMPANY: 'admin'}},
+        {'privado': {pd.USER: 'none'}, 'contrato': {pd.USER: 'admin'}},
+        {'contrato': {pd.FUNCTION: 'viewer'}, 'obra': {pd.USER: 'admin'}},
+        {'privado': {pd.COMPANY: 'edit'}, 'contrato': {pd.USER: 'none'},
+         'obra': {pd.FUNCTION: 'admin'}},
+    ]:
+        e['reglas'] = reglas
+        solo = pd.permiso_efectivo(cur, PERSONA, OBRA, 'acta.pdf')
+        con, _m = _resolver(pd, cur)
+        assert solo == con, 'relatar cambió la decisión con %r' % (reglas,)
+
+
+def test_una_regla_de_arriba_que_no_le_alcanza_no_se_relata(motor):
+    """NEGATIVA: arriba hay una regla, pero es de OTRA empresa. No le desplaza
+    nada porque nunca le habría alcanzado."""
+    pd, cur, e = motor
+    e['empresa'] = 4
+    e['reglas'] = {'privado': {(pd.USER, '7'): 'viewer'},
+                   'obra': {(pd.COMPANY, '99'): 'admin'}}
+    _nivel, motivo = _resolver(pd, cur)
+    assert motivo['desplazados_lejanos'] == []

@@ -2688,6 +2688,23 @@ def permiso_efectivo_endpoint():
                 f = cur.fetchone()
                 carpeta = {'id': motivo['carpeta_id'], 'nombre': f[0] if f else None}
 
+            # Las carpetas de las reglas DESPLAZADAS POR DISTANCIA, tambien con
+            # nombre: «COMPANY = Editar en /Proyecto» explica; el mismo dato con
+            # un UUID no le dice nada a nadie.
+            lejanos = motivo.get('desplazados_lejanos') or []
+            if lejanos:
+                ids = [d['carpeta_id'] for d in lejanos]
+                cur.execute("SELECT id::text, name FROM file_nodes "
+                            " WHERE id::text = ANY(%s)", (ids,))
+                nombres = {a: b for a, b in cur.fetchall()}
+                for d in lejanos:
+                    d['carpeta_nombre'] = nombres.get(d['carpeta_id'])
+                    d['nivel_label'] = PERMISSION_LABELS.get(d['nivel'], d['nivel'])
+                    d['sujeto_label'] = ETIQUETA_SUJETO.get(d['sujeto_tipo'])
+            for d in (motivo.get('desplazados') or []):
+                d['nivel_label'] = PERMISSION_LABELS.get(d['nivel'], d['nivel'])
+                d['sujeto_label'] = ETIQUETA_SUJETO.get(d['sujeto_tipo'])
+
         return jsonify({
             "success": True,
             "persona": {'id': persona['id'], 'name': persona['name'],

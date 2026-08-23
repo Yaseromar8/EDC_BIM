@@ -184,7 +184,10 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
          'sujeto_id': …,           el id/código con el que la regla le alcanza
          'saltos': n,              0 = la carpeta del propio recurso
          'desplazados': […],       las reglas del MISMO nivel que perdieron por
-                                   precedencia -- lo que hace visible la regla
+                                   precedencia (USER > COMPANY > FUNCTION)
+         'desplazados_lejanos': […]  las de carpetas SUPERIORES que le alcanzaban
+                                   y perdieron por DISTANCIA -- lo que hace
+                                   visible closest-wins
          'texto': '…'}             una frase, para quien solo quiera leerla
 
     Esto NO cambia la resolución: son los mismos datos que el bucle ya tenía
@@ -206,7 +209,7 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
     if _adm(cur, usuario, model_urn):
         return (('admin', {'regla': 'admin_de_obra', 'carpeta_id': None,
                            'sujeto_tipo': None, 'sujeto_id': None, 'saltos': None,
-                           'desplazados': [],
+                           'desplazados': [], 'desplazados_lejanos': [],
                            'texto': 'administra esta obra: atraviesa los permisos '
                                     'de carpeta, y solo los de esta obra'})
                 if con_motivo else 'admin')
@@ -215,7 +218,7 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
     if USER not in sujetos:
         return (('none', {'regla': 'sin_identidad', 'carpeta_id': None,
                           'sujeto_tipo': None, 'sujeto_id': None, 'saltos': None,
-                          'desplazados': [],
+                          'desplazados': [], 'desplazados_lejanos': [],
                           'texto': 'sesión sin identidad'})
                 if con_motivo else 'none')
 
@@ -227,12 +230,19 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
     if not fila:
         return (('none', {'regla': 'recurso_inexistente', 'carpeta_id': None,
                           'sujeto_tipo': None, 'sujeto_id': None, 'saltos': None,
-                          'desplazados': [],
+                          'desplazados': [], 'desplazados_lejanos': [],
                           'texto': 'el recurso no existe en esta obra'})
                 if con_motivo else 'none')
     actual = fila[1] if fila[2] == 'FILE' else fila[0]
 
+    # `ganador` se fija UNA sola vez, en la primera carpeta con regla. Cuando
+    # se pide explicacion el recorrido NO se corta ahi: sigue subiendo para
+    # recoger lo que quedo desplazado por distancia. Como el ganador ya esta
+    # decidido, seguir mirando no puede cambiarlo -- explicar y decidir siguen
+    # siendo la misma pasada.
     visto, saltos = set(), 0
+    ganador = None
+    desplazados_lejanos = []
     while actual is not None and saltos < _MAX_SALTOS:
         if actual in visto:
             break
@@ -257,7 +267,9 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
             # aditiva, y es justo lo que impedia reservar una carpeta.
             for tipo in PRECEDENCIA:
                 if tipo in reglas:
-                    if con_motivo:
+                    if not con_motivo:
+                        return reglas[tipo]
+                    if ganador is None:
                         # Las del MISMO nivel que perdieron por precedencia. Es
                         # el dato que convierte «tienes viewer» en «tienes
                         # viewer PORQUE tu regla personal desplaza a la de tu
@@ -265,30 +277,47 @@ def permiso_efectivo(cur, usuario, model_urn, node_id, con_motivo=False):
                         desplazados = [{'sujeto_tipo': t, 'nivel': reglas[t]}
                                        for t in PRECEDENCIA
                                        if t in reglas and t != tipo]
-                        return reglas[tipo], {
+                        ganador = (reglas[tipo], {
                             'regla': 'sujeto',
                             'carpeta_id': str(actual),
                             'sujeto_tipo': tipo,
                             'sujeto_id': sujetos.get(tipo),
                             'saltos': saltos - 1,
                             'desplazados': desplazados,
+                            'desplazados_lejanos': desplazados_lejanos,
                             'texto': ('regla de %s en %s' % (
                                 tipo, 'esta misma carpeta' if saltos == 1
                                 else 'una carpeta superior')),
-                        }
-                    return reglas[tipo]
+                        })
+                    else:
+                        # Ya hay ganador: esta carpeta esta MAS ARRIBA y su
+                        # regla no se aplica. Se anota la que habria ganado
+                        # aqui -- es la que el administrador cree que manda
+                        # cuando ve «Editar» en la carpeta padre.
+                        desplazados_lejanos.append({
+                            'carpeta_id': str(actual),
+                            'sujeto_tipo': tipo,
+                            'nivel': reglas[tipo],
+                            'saltos': saltos - 1,
+                        })
+                    break
 
         cur.execute("SELECT parent_id FROM file_nodes WHERE id = %s", (actual,))
         s = cur.fetchone()
         actual = s[0] if s else None
 
     # NINGUNA regla en toda la cadena: manda el perfil global, como DEFECTO.
+    if ganador is not None:
+        # El recorrido termino de relatar. `desplazados_lejanos` es la misma
+        # lista que el motivo ya lleva dentro, asi que sale completa.
+        return ganador
+
     por_defecto = GLOBAL_ROLE_TO_PERMISSION.get(usuario.get('role') or 'viewer', 'none')
     if con_motivo:
         return por_defecto, {
             'regla': 'defecto', 'carpeta_id': None,
             'sujeto_tipo': None, 'sujeto_id': None, 'saltos': saltos,
-            'desplazados': [],
+            'desplazados': [], 'desplazados_lejanos': [],
             'texto': ('ninguna regla le alcanza en toda la cadena de carpetas: '
                       'manda su perfil del sistema (%s)'
                       % (usuario.get('role') or 'viewer')),
