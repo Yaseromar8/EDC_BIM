@@ -711,6 +711,15 @@ def register():
                     # con filas nunca reemitidas; la excepcion muere sola a los
                     # 14 dias con la caducidad del token.
                     if int(datos.get('gen') or 0) != int(u_gen or 0):
+                        # DEJA ASIENTO. Un reclamo con un enlace de otra
+                        # generacion es informacion: puede ser el titular
+                        # usando un enlace viejo -- lo normal-- o alguien
+                        # probando un enlace filtrado. Sin registro, las dos
+                        # cosas son invisibles por igual.
+                        registrar_evento('reclamo_con_enlace_sustituido',
+                                         email=email, user_id=u_id,
+                                         detalle='gen(token)=%s vs gen(fila)=%s'
+                                                 % (datos.get('gen'), u_gen))
                         return jsonify({
                             'error': 'Este enlace fue sustituido por uno más nuevo. '
                                      'Usa el último que te enviaron, o pide otro.',

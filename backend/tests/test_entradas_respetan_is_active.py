@@ -157,6 +157,9 @@ def test_un_token_de_otra_generacion_no_reclama(entorno):
     assert r.status_code == 403
     assert r.get_json().get('code') == 'INVITACION_SUSTITUIDA'
     assert estado['updates'] == []
+    # Y deja asiento: un enlace de otra generacion puede ser el titular con un
+    # enlace viejo, o alguien probando uno filtrado. Sin registro son iguales.
+    assert 'reclamo_con_enlace_sustituido' in estado['eventos']
 
     # ...y el de la generacion VIGENTE si reclama.
     token = ra.emitir(ra.PROPOSITO_INVITACION, {'email': CORREO, 'gen': 2})

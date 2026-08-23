@@ -62,6 +62,17 @@ export default function App() {
   // Se muestra SIEMPRE al iniciar sesión. Usa sessionStorage para no reaparecer
   // en cada recarga mientras trabajas (se limpia al cerrar el tab o hacer logout).
   const [enteredDocs, setEnteredDocs] = useState(() => sessionStorage.getItem('ecd_entered_docs') === '1');
+
+  // El destinatario de una invitacion presente en la URL, si la hay. Solo
+  // para AVISAR: el token va firmado y aqui no se decide nada con el.
+  const [invitacionPendiente, setInvitacionPendiente] = useState(() => {
+    try {
+      const t = new URLSearchParams(window.location.search).get('invite');
+      if (!t) return null;
+      const carga = JSON.parse(atob(t.split('.')[0].replace(/-/g, '+').replace(/_/g, '/')));
+      return carga && carga.email ? { email: carga.email } : null;
+    } catch { return null; }
+  });
   // DOCUMENTOS YA NO ES EXCLUSIVO DE ADMINISTRADORES. La frontera es la
   // MEMBRESÍA: el listado de proyectos sale filtrado por sesión desde el
   // servidor, y dentro de cada obra manda `mi-administracion` (por obra) más
@@ -165,6 +176,57 @@ export default function App() {
   // ── Route Resolution ──
   if (!user) {
     return <LoginScreen onLogin={saveUser} />;
+  }
+
+  // UNA INVITACIÓN NO SE PIERDE POR TENER OTRA SESIÓN ABIERTA.
+  //
+  // `?invite=` solo lo lee LoginScreen, y LoginScreen solo aparece si NO hay
+  // sesión. Abrir el enlace con una sesión viva aterrizaba en el Hub de quien
+  // ya estaba dentro: la invitación se ignoraba EN SILENCIO y parecía que
+  // había funcionado. Es el peor de los fallos — un éxito aparente: el
+  // invitado cree que ya está dentro, el administrador cree que la invitación
+  // se usó, y la cuenta sigue sin reclamar.
+  //
+  // Medido con el propietario el 23-ago-2026 («ese link me abre directamente
+  // Docs y View»).
+  if (invitacionPendiente && invitacionPendiente.email !== user.email) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', background: '#0B0E12', padding: 24 }}>
+        <div style={{ maxWidth: 470, background: '#11161d', color: '#e9ecf1',
+                      border: '1px solid rgba(255,255,255,0.09)', borderRadius: 10,
+                      padding: '26px 28px' }}>
+          <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 600 }}>
+            Esta invitación no es para tu sesión
+          </h2>
+          <p style={{ margin: '0 0 8px', fontSize: 13.5, lineHeight: 1.6, color: '#c3cad3' }}>
+            Estás dentro como <b>{user.email}</b>, y esta invitación es para{' '}
+            <b>{invitacionPendiente.email}</b>.
+          </p>
+          <p style={{ margin: '0 0 20px', fontSize: 13.5, lineHeight: 1.6, color: '#c3cad3' }}>
+            Para activarla hay que cerrar esta sesión. El enlace <b>no se gasta
+            por abrirlo</b>: seguirá siendo válido.
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button onClick={logoutFull}
+                    style={{ padding: '9px 16px', borderRadius: 6, border: 'none',
+                             background: '#3E6F91', color: '#fff', fontSize: 13,
+                             cursor: 'pointer' }}>
+              Cerrar sesión y activar la invitación
+            </button>
+            <button onClick={() => {
+                      window.history.replaceState({}, '', window.location.pathname);
+                      setInvitacionPendiente(null);
+                    }}
+                    style={{ padding: '9px 16px', borderRadius: 6, fontSize: 13,
+                             border: '1px solid rgba(255,255,255,0.18)',
+                             background: 'transparent', color: '#c3cad3', cursor: 'pointer' }}>
+              Seguir como {user.email}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Hub de producto: SIEMPRE tras el login (hasta elegir Documentos en esta
