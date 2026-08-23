@@ -20,6 +20,7 @@ import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
+import { confirmAction } from '../utils/confirm';
 
 const ROLES = [
   { valor: 'viewer', etiqueta: 'Ver' },
@@ -58,12 +59,33 @@ export function RolDeMiembro({ miembro, isAdmin, onCambiado }) {
     if (nuevo === rol) return;
     const daAdmin = nuevo === 'admin';
     const quitaAdmin = rol === 'admin' && nuevo !== 'admin';
-    if (daAdmin && !window.confirm(
-      `¿Hacer administrador a ${miembro.name || miembro.email}?\n\n` +
-      'Un administrador ve y administra TODO: obras, miembros, documentos y configuración.')) return;
-    if (quitaAdmin && !window.confirm(
-      `¿Quitar el rol de administrador a ${miembro.name || miembro.email}?\n\n` +
-      'Dejará de poder administrar miembros, obras y configuración.')) return;
+    // EL DIALOGO ES DEL PRODUCTO, NO DEL NAVEGADOR.
+    //
+    // Esto usaba `window.confirm`, y Chrome lo SUPRIME cuando una pagina ya
+    // mostro varios dialogos (o el usuario marco "impedir mas dialogos").
+    // Suprimido devuelve `false`, asi que el cambio se cancelaba EN SILENCIO:
+    // el desplegable volvia solo a su valor anterior y no habia forma de
+    // saber por que. Medido el 23-ago-2026 intentando nombrar al segundo
+    // custodio de la entidad -- el acto quedo bloqueado sin un solo mensaje,
+    // y no habia manera de distinguirlo de un permiso denegado.
+    //
+    // `confirmAction` es el modal del propio producto (utils/confirm.jsx), el
+    // mismo que ya usan retirar acceso y revocar invitacion: no lo puede
+    // suprimir el navegador y se ve igual en todas partes.
+    if (daAdmin && !await confirmAction({
+      title: 'Hacer administrador',
+      message: `${miembro.name || miembro.email} pasara a ver y administrar TODO: `
+             + 'obras, miembros, documentos y configuracion de la entidad. '
+             + 'Su sesion se cerrara para que el cambio surta efecto.',
+      confirmText: 'Hacer administrador',
+    })) return;
+    if (quitaAdmin && !await confirmAction({
+      title: 'Quitar administrador',
+      message: `${miembro.name || miembro.email} dejara de poder administrar `
+             + 'miembros, obras y configuracion.',
+      confirmText: 'Quitar administrador',
+      danger: true,
+    })) return;
 
     setCambiando(true);
     try {

@@ -38,6 +38,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
+// El dialogo es del PRODUCTO: `window.confirm` lo suprime Chrome
+// cuando la pagina ya mostro varios, y suprimido = cancelado en
+// silencio. Ver el comentario largo en RolDeMiembro.jsx.
+import { confirmAction } from '../utils/confirm';
 
 const COLOR_FUNCION = {
   ENTIDAD:     { fondo: '#eef2ff', borde: '#c7d2fe', texto: '#3730a3' },
@@ -192,11 +196,13 @@ export default function ParticipantesModule({ project, isAdmin }) {
   }
 
   async function quitarEmpresa(companyId, nombre) {
-    if (!window.confirm(
-      `¿Quitar a ${nombre} del directorio de esta obra?\n\n` +
-      'Deja de constar su función contractual aquí. No borra la empresa, no ' +
-      'saca a nadie de la obra y no cambia ningún RFI, Red Line ni revisión ya ' +
-      'registrados.')) return;
+    if (!await confirmAction({
+      title: 'Quitar del directorio',
+      message: `${nombre} deja de constar con función contractual en esta obra. `
+             + 'No borra la empresa, no saca a nadie de la obra y no cambia ningún '
+             + 'RFI, Red Line ni revisión ya registrados.',
+      confirmText: 'Quitar',
+    })) return;
     setGuardando('empresa:' + companyId);
     try {
       const r = await apiFetch(
@@ -286,11 +292,15 @@ export default function ParticipantesModule({ project, isAdmin }) {
   }
 
   async function retirarPersona(p) {
-    if (!window.confirm(
-      `¿Retirar a ${p.name || p.email} de esta obra?\n\n` +
-      'Deja de ser miembro (y de administrarla, si administraba) y pierde sus ' +
-      'permisos de carpeta de ESTA obra. Su cuenta sigue viva y sus actos ' +
-      'históricos —RFIs, revisiones, asientos— quedan donde están.')) return;
+    if (!await confirmAction({
+      title: 'Retirar de esta obra',
+      message: `${p.name || p.email} deja de ser miembro (y de administrarla, si `
+             + 'administraba) y pierde sus permisos de carpeta de ESTA obra. Su '
+             + 'cuenta sigue viva y sus actos históricos —RFIs, revisiones, '
+             + 'asientos— quedan donde están.',
+      confirmText: 'Retirar',
+      danger: true,
+    })) return;
     setGuardando('persona:' + p.id);
     try {
       const r = await apiFetch(
@@ -317,10 +327,13 @@ export default function ParticipantesModule({ project, isAdmin }) {
   // histórico. Es una casilla en la fila de participación y nada más.
   async function ponerAdminDeObra(persona, quiere) {
     if (!obra) return;
-    if (!quiere && !window.confirm(
-      `¿Retirar a ${persona.name || persona.email} la administración de esta obra?\n\n`
-      + 'Seguirá participando en la obra y conservará sus permisos de carpeta. '
-      + 'Lo que pierde es administrarla.')) return;
+    if (!quiere && !await confirmAction({
+      title: 'Retirar la administración de esta obra',
+      message: `${persona.name || persona.email} seguirá participando en la obra y `
+             + 'conservará sus permisos de carpeta. Lo que pierde es administrarla.',
+      confirmText: 'Retirar administración',
+      danger: true,
+    })) return;
     setGuardando('admin:' + persona.id);
     try {
       const r = await apiFetch(

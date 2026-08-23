@@ -101,3 +101,40 @@ def test_los_dos_vocabularios_siguen_existiendo():
             con_funcion += funcion
     assert con_perfil >= 1, 'ya no se encuentra el selector de perfil (Usuarios)'
     assert con_funcion >= 1, 'ya no se encuentra el selector de función (Participantes)'
+
+
+# ── Los diálogos de actos críticos son del PRODUCTO, no del navegador ────────
+#
+# `window.confirm` lo SUPRIME Chrome cuando una página ya mostró varios
+# diálogos (o el usuario marcó «impedir más diálogos»). Suprimido devuelve
+# `false`: el acto se cancela EN SILENCIO y el control vuelve solo a su valor
+# anterior, indistinguible de un permiso denegado.
+#
+# Medido el 23-ago-2026: el nombramiento del segundo custodio de la entidad
+# quedó bloqueado exactamente así, sin un solo mensaje. `confirmAction`
+# (utils/confirm.jsx) es el modal del producto y no lo puede suprimir nadie.
+
+CRITICOS = ('RolDeMiembro.jsx', 'ParticipantesModule.jsx',
+            'FolderPermissionsPanel.jsx')
+
+
+def test_ningun_acto_critico_depende_del_dialogo_del_navegador():
+    culpables = []
+    for fichero in CRITICOS:
+        ruta = os.path.join(PORTAL, 'components', fichero)
+        if not os.path.exists(ruta):
+            continue
+        for n, linea in enumerate(io.open(ruta, encoding='utf-8').read().split('\n'), 1):
+            # Se ignoran los comentarios: explican por qué ya no se usa.
+            if 'window.confirm' in linea and not linea.strip().startswith('//'):
+                culpables.append('%s:%d' % (fichero, n))
+    assert not culpables, (
+        'estos actos volverían a cancelarse en silencio si Chrome suprime el '
+        'diálogo: %s' % culpables)
+
+
+def test_el_anfitrion_del_dialogo_esta_montado():
+    """Sin `<ConfirmHost />` en la raíz, `confirmAction` degrada al
+    `window.confirm` de siempre — y con él vuelve el fallo silencioso."""
+    main = io.open(os.path.join(PORTAL, 'main.jsx'), encoding='utf-8').read()
+    assert '<ConfirmHost />' in main
