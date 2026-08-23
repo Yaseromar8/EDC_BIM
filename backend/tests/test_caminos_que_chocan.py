@@ -60,3 +60,25 @@ def test_el_mecanismo_de_separacion_sigue_documentado():
     servidor = _leer(BACKEND, 'server.py')
     assert 'def _ruta_del_visor' in servidor
     assert "PERFIL_DESPLIEGUE == 'portal'" in servidor
+
+
+# ── La misma familia: la pantalla lee una clave que la ruta no devuelve ──────
+#
+# Tres defectos de esta clase aparecieron en agosto, todos SILENCIOSOS:
+#   · /api/hubs        la pantalla leía `hubs`, ganaba la ruta APS con `data[]`
+#   · login Google     índices corridos: 'job_title' traía el password_hash
+#   · /api/docs/folder la ruta devuelve `id`, la pantalla leía `folder_id` y
+#                      caía al respaldo `newPath` -- una CADENA DE RUTA donde
+#                      va el UUID del nodo. El árbol guardaba una identidad
+#                      falsa hasta el siguiente refresco.
+#
+# Ninguno rompe nada visiblemente: por eso hacen falta contratos.
+
+def test_la_creacion_de_carpeta_lee_la_clave_que_la_ruta_devuelve():
+    nodo = _leer(PORTAL, 'components', 'FolderNode.jsx')
+    assert 'data.id ||' in nodo, (
+        'FolderNode volvió a leer solo `folder_id`: la ruta devuelve `id` y '
+        'el árbol se queda con la ruta de texto en vez del UUID')
+    documentos = _leer(BACKEND, 'routes', 'documents.py')
+    assert '"success": True, "id": str(node_id)' in documentos, (
+        'la ruta cambió la clave que devuelve: revisa FolderNode')

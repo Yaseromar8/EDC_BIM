@@ -80,7 +80,12 @@ export default function FolderNode({
       });
       if (res.ok) {
         const data = await res.json();
-        const realId = data.folder_id || newPath;
+        // LA RUTA DEVUELVE `id`, NO `folder_id`. Leer la clave equivocada
+        // hacia caer al respaldo --`newPath`, una CADENA DE RUTA-- y el arbol
+        // se quedaba con eso donde va el UUID del nodo: hasta el siguiente
+        // refresco, la carpeta recien creada llevaba una identidad falsa.
+        // `folder_id` se conserva por si alguna ruta antigua aun lo devuelve.
+        const realId = data.id || data.folder_id || newPath;
         if (cacheMethods) cacheMethods.commitCreate(nodeId, tempId, realId);
         if (onGlobalRefresh) onGlobalRefresh();
       } else {
