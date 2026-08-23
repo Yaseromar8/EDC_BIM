@@ -25,11 +25,20 @@ principal (contraseña/2FA) — no cubre la indisponibilidad de la persona.
 Un custodio tercero (Walter/Zhang u otro) queda como opción futura vía
 invitación NUEVA, según lo congelado en PASO 14.
 
-**Ejecución:** el nombramiento (rol `user` → `admin`) lo ejecuta el
-propietario en la pantalla «Usuarios del sistema» — el asistente preparó
-la pantalla y verificó condiciones, y el clasificador de seguridad bloqueó
-—correctamente— que la escalación de privilegios se ejecutara por script.
-El acto queda en manos de quien debe hacerlo.
+**Ejecución: HECHA el 23-ago-2026, 16:22** por el propietario en «Usuarios
+del sistema». Verificado en base: `role = admin`, asiento
+`rol_cambiado: user -> admin`, **0 sesiones activas** de esa cuenta (la
+revocación es parte del cambio, no un efecto colateral) y **2 Entity Admins
+activos** en la entidad. El clasificador de seguridad bloqueó —correctamente—
+que la escalación se ejecutara por script; el acto quedó donde debía.
+
+**El acto estuvo bloqueado dos intentos por un defecto del producto**, no por
+permisos: `RolDeMiembro` pedía confirmación con `window.confirm`, que Chrome
+suprime tras varios diálogos, y suprimido devuelve «cancelado» — el cambio se
+abortaba EN SILENCIO y el desplegable volvía solo. Corregido en `2a4b9be`
+(modal propio del producto) junto con otros tres actos que compartían la
+fragilidad. Un acto de gobierno de la entidad no puede depender de un diálogo
+que el navegador puede decidir no mostrar.
 
 **Consecuencias conocidas del nombramiento** (por diseño, no sorpresas):
 - El cambio de rol **revoca las sesiones** de id 19 (regla general).
@@ -56,8 +65,7 @@ El acto queda en manos de quien debe hacerlo.
 ## 3 · ESTADO DEL GATE TRAS ESTE DOCUMENTO
 
 ```
-MUST HAVE 1 · Segundo custodio      DECIDIDO — pendiente SOLO el clic del
-                                    nombramiento por el propietario
+MUST HAVE 1 · Segundo custodio      ✅ CERRADO (23-ago 16:22, verificado)
 MUST HAVE 2 · GO estabilización     ✅ CERRADO (opción C registrada)
 MUST HAVE 3 · Primera invitación    ÚNICO ACTO RESTANTE: crear la obra del
                                     piloto (opción C) e invitar a la
@@ -65,5 +73,7 @@ MUST HAVE 3 · Primera invitación    ÚNICO ACTO RESTANTE: crear la obra del
                                     designe
 ```
 
-Con el clic del nombramiento hecho, el EXTERNAL PILOT GATE queda abierto a
-falta únicamente de **nombre y correo del primer invitado externo**.
+Con el nombramiento hecho, **los dos MUST-HAVE de gobierno están cerrados**.
+El EXTERNAL PILOT GATE queda a falta únicamente de **ejecutar la primera
+invitación** (la pista está montada: doc 77) y, para un externo real, de
+configurar el envío de correo (`RESEND_API_KEY`, SHOULD HAVE).
