@@ -22,6 +22,10 @@ export default function AccesoAHerramientas({ obra, persona, onClose }) {
   const [filas, setFilas] = useState(null);
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(null);
+  // CAPA 13 · aplicar un perfil es un ACTO que deja escrita esta misma
+  // configuracion. Se ofrece aqui porque es aqui donde se ve el resultado.
+  const [perfiles, setPerfiles] = useState([]);
+  const [aplicando, setAplicando] = useState(false);
 
   const cargar = async () => {
     setError('');
@@ -38,6 +42,35 @@ export default function AccesoAHerramientas({ obra, persona, onClose }) {
   };
 
   useEffect(() => { cargar(); }, [obra, persona?.id]);
+
+  useEffect(() => {
+    // El catalogo de perfiles es de la entidad; si no se puede leer (por
+    // ejemplo, quien administra la obra no es Entity Admin) simplemente no
+    // se ofrece aplicar -- el resto de la pantalla sigue funcionando.
+    apiFetch(`${API}/api/perfiles-de-acceso`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d && d.perfiles) setPerfiles(d.perfiles); })
+      .catch(() => {});
+  }, []);
+
+  const aplicarPerfil = async (perfilId) => {
+    if (!perfilId) return;
+    setAplicando(true);
+    try {
+      const r = await apiFetch(
+        `${API}/api/projects/${encodeURIComponent(obra)}/miembros/${persona.id}/aplicar-perfil`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ perfil_id: Number(perfilId) }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'No se pudo aplicar.');
+      toast.success(`Perfil «${d.perfil.nombre}» aplicado`);
+      await cargar();
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setAplicando(false);
+    }
+  };
 
   const cambiar = async (h, permitido) => {
     setGuardando(h.codigo);
@@ -131,6 +164,29 @@ export default function AccesoAHerramientas({ obra, persona, onClose }) {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {perfiles.length > 0 && (
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px dashed #e2e8f0' }}>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: '#888',
+                          letterSpacing: '.04em', marginBottom: 6 }}>
+              APLICAR UN PERFIL
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <select defaultValue="" disabled={aplicando}
+                      onChange={e => { aplicarPerfil(e.target.value); e.target.value = ''; }}
+                      style={{ flex: 1, padding: '6px 8px', border: '1px solid #ddd',
+                               borderRadius: 5, fontSize: 13 }}>
+                <option value="">Elegir perfil…</option>
+                {perfiles.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+            </div>
+            <div style={{ fontSize: 11.5, color: '#98a1ab', marginTop: 6, lineHeight: 1.5 }}>
+              Deja escrita la configuración del perfil sobre las casillas de arriba.
+              A partir de ahí manda lo que se vea aquí: si el perfil cambia mañana,
+              esta persona <b>no</b> cambia.
+            </div>
           </div>
         )}
 

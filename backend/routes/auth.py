@@ -1850,3 +1850,139 @@ def dfa_estado():
     except Exception as e:
         print(f'[2fa] estado: {e}')
         return jsonify({'error': 'No se pudo consultar el estado.'}), 500
+
+
+@auth_bp.route('/api/perfiles-de-acceso', methods=['GET', 'POST'])
+@requiere_rol('admin')
+def perfiles_de_acceso():
+    """CAPA 13 · el CATÁLOGO de perfiles de la entidad. Leer y crear.
+
+    El catálogo es de la ENTIDAD y vive aquí, con fuero de Entity Admin.
+    APLICAR un perfil es un acto DE OBRA y vive en routes/administracion.py
+    con la autoridad de la obra: son dos cosas distintas y tienen dueños
+    distintos.
+
+    (Este texto va en el docstring y no en un comentario suelto entre rutas:
+    el tripwire de cobertura atribuye el texto que hay entre dos rutas a la
+    ANTERIOR, y una prosa colgada ahí la hacía parecer una ruta con datos de
+    obra sin guardia. La herramienta tenía razón en avisar.)
+    """
+    denied = _require_admin("administrar los perfiles de acceso")
+    if denied:
+        return denied
+    import perfiles_de_acceso as pa
+    if request.method == 'GET':
+        try:
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                return jsonify({'perfiles': pa.listar(cur)}), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    d = request.get_json(silent=True) or {}
+    nombre = (d.get('nombre') or '').strip()
+    if not nombre:
+        return jsonify({'error': 'El perfil necesita un nombre.'}), 400
+    # Se normaliza AL GUARDAR, no al aplicar: un perfil que nombra una
+    # herramienta inexistente es una promesa incumplible, y descubrirlo en el
+    # momento de aplicar dejaria a alguien mal configurado y sin aviso.
+    herramientas = pa.normalizar(d.get('herramientas'))
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT id FROM perfiles_de_acceso WHERE LOWER(nombre) = LOWER(%s)',
+                        (nombre,))
+            if cur.fetchone():
+                return jsonify({'error': 'Ya existe un perfil con ese nombre.',
+                                'code': 'PERFIL_DUPLICADO'}), 409
+            import json as _json
+            sesion = getattr(g, 'current_user', None) or {}
+            cur.execute("""INSERT INTO perfiles_de_acceso
+                                (nombre, descripcion, herramientas, creado_por)
+                           VALUES (%s, %s, %s::jsonb, %s) RETURNING id""",
+                        (nombre, (d.get('descripcion') or '').strip() or None,
+                         _json.dumps(herramientas),
+                         sesion.get('email') or sesion.get('name')))
+            nuevo = cur.fetchone()[0]
+            conn.commit()
+        return jsonify({'id': nuevo, 'nombre': nombre,
+                        'herramientas': herramientas}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/api/perfiles-de-acceso/<int:perfil_id>', methods=['PUT', 'DELETE'])
+@requiere_rol('admin')
+def editar_perfil_de_acceso(perfil_id):
+    """Editar o borrar un perfil.
+
+    LO QUE NO PASA AL EDITARLO: nadie cambia de accesos. Un perfil se APLICA;
+    no gobierna. Quien ya lo llevaba conserva lo que tiene escrito en la capa
+    08 -- son SUS accesos, no la proyección viva de una plantilla que alguien
+    editó ayer. Para propagar hay que RE-APLICARLO, que es un acto con autor
+    y fecha. La respuesta dice a cuántos afectaría, para que se vea.
+    """
+    denied = _require_admin("administrar los perfiles de acceso")
+    if denied:
+        return denied
+    import perfiles_de_acceso as pa
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            actual = pa.leer(cur, perfil_id)
+            if not actual:
+                return jsonify({'error': 'Perfil no encontrado'}), 404
+
+            if request.method == 'DELETE':
+                # Borrar un perfil NO cambia el acceso de nadie: lo que
+                # tienen ya esta escrito en la capa 08 y sigue vigente. La FK
+                # pone `perfil_aplicado` a NULL: se pierde la procedencia, no
+                # la configuracion.
+                afectados = pa.afectados_por(cur, perfil_id)
+                cur.execute('DELETE FROM perfiles_de_acceso WHERE id = %s', (perfil_id,))
+                conn.commit()
+                return jsonify({'success': True,
+                                'perdieron_la_procedencia': len(afectados),
+                                'nota': 'Sus accesos NO cambian: siguen escritos '
+                                        'en el acceso a herramientas de cada obra.'}), 200
+
+            d = request.get_json(silent=True) or {}
+            nombre = (d.get('nombre') or actual['nombre']).strip()
+            herramientas = (pa.normalizar(d.get('herramientas'))
+                            if 'herramientas' in d else actual['herramientas'])
+            import json as _json
+            cur.execute("""UPDATE perfiles_de_acceso
+                              SET nombre = %s, descripcion = %s, herramientas = %s::jsonb
+                            WHERE id = %s""",
+                        (nombre, (d.get('descripcion') if 'descripcion' in d
+                                  else actual['descripcion']),
+                         _json.dumps(herramientas), perfil_id))
+            afectados = pa.afectados_por(cur, perfil_id)
+            conn.commit()
+        return jsonify({
+            'id': perfil_id, 'nombre': nombre, 'herramientas': herramientas,
+            'miembros_con_este_perfil': len(afectados),
+            'nota': 'Editar el perfil NO cambia a quien ya lo llevaba: '
+                    'sus accesos son suyos. Re-aplícalo donde quieras propagarlo.',
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/api/perfiles-de-acceso/<int:perfil_id>/afectados', methods=['GET'])
+@requiere_rol('admin')
+def afectados_por_perfil(perfil_id):
+    """Quién lleva este perfil puesto, y en qué obra."""
+    denied = _require_admin("ver los miembros de un perfil")
+    if denied:
+        return denied
+    import perfiles_de_acceso as pa
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            if not pa.leer(cur, perfil_id):
+                return jsonify({'error': 'Perfil no encontrado'}), 404
+            return jsonify({'perfil_id': perfil_id,
+                            'miembros': pa.afectados_por(cur, perfil_id)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

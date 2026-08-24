@@ -8,6 +8,7 @@ import { apiFetch } from '../utils/apiFetch';
 import { confirmAction } from '../utils/confirm';
 import { API, formatDate, getInitials } from '../utils/helpers';
 import FichaDePersona from '../components/FichaDePersona';
+import PerfilesDeAcceso from '../components/PerfilesDeAcceso';
 
 // ─── USERS TAB ───
 function UsersTab() {
@@ -420,6 +421,7 @@ function TagsTab() {
   return (
     // maxWidth: sin tope, cada tarjeta ocupaba media pantalla en monitores anchos
     // (filas estiradas, había que alejar el zoom). wrap: en tablet se apilan.
+    <>
     <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', maxWidth: 1040 }}>
       <div style={{ flex: '1 1 380px', minWidth: 300, background: '#fff', borderRadius: 6, padding: 18, border: '1px solid #ddd' }}>
         <h3 style={{ marginBottom: 14, fontSize: 15 }}>Empresas</h3>
@@ -454,6 +456,13 @@ function TagsTab() {
         <table className="data-table"><tbody>{jobTitles.map(j => (<tr key={j.id}><td>{j.name}</td><td style={{ width: 50 }}><button className="btn-icon" title="Borrar cargo" onClick={() => handleDeleteJob(j.id)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg></button></td></tr>))}</tbody></table>
       </div>
     </div>
+    {/* CAPA 13 · el catálogo de perfiles es de la ENTIDAD, y vive junto al
+        resto del catálogo de entidad. Aplicarlos es un acto de OBRA y está
+        en Participantes: son dos cosas distintas, con dueños distintos. */}
+    <div style={{ maxWidth: 1040, marginTop: 24 }}>
+      <PerfilesDeAcceso />
+    </div>
+    </>
   );
 }
 

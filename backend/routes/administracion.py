@@ -589,3 +589,64 @@ def cambiar_acceso_a_herramienta(project_id, user_id, codigo):
                         'etiqueta': hdo.etiqueta(codigo)}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@administracion_bp.route('/api/projects/<path:project_id>/miembros/<int:user_id>'
+                         '/aplicar-perfil', methods=['POST'])
+def aplicar_perfil_a_miembro(project_id, user_id):
+    """CAPA 13 · aplica un perfil a esta persona EN ESTA OBRA.
+
+    APLICAR es un acto DE OBRA (autoridad de la obra), aunque el catálogo de
+    perfiles sea de la entidad. Y es un acto, no un vínculo: escribe filas
+    normales de la capa 08 y ahí termina. Después manda esa tabla — el perfil
+    no vuelve a consultarse para decidir nada, y editarlo mañana no cambiará
+    lo que esta persona tiene hoy.
+    """
+    obra = resolve_project_id(project_id)
+    if not obra:
+        return jsonify({'error': 'Obra no encontrada'}), 404
+    negativa = guardia_de_obra(obra, 'administrar esta obra')
+    if negativa:
+        return negativa
+
+    d = request.get_json(silent=True) or {}
+    if not d.get('perfil_id'):
+        return jsonify({'error': 'Falta perfil_id'}), 400
+
+    import perfiles_de_acceso as pa
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            negativa = _adm.guardia_administrativa(
+                cur, _usuario(), obra, 'aplicar perfiles de acceso')
+            if negativa:
+                return negativa
+            perfil = pa.leer(cur, int(d['perfil_id']))
+            if not perfil:
+                return jsonify({'error': 'Perfil no encontrado'}), 404
+            cur.execute('SELECT 1 FROM project_users WHERE project_id = %s '
+                        '  AND user_id = %s', (str(obra), user_id))
+            if not cur.fetchone():
+                return jsonify({'error': 'Esa persona no participa en esta obra. '
+                                         'Incorpórala primero.',
+                                'code': 'NO_ES_MIEMBRO'}), 404
+            quien = (_usuario().get('email') or _usuario().get('name') or '?')
+            escrito = pa.aplicar(cur, perfil, obra, user_id, quien)
+            conn.commit()
+            try:
+                from db import log_activity
+                log_activity(obra, 'perfil_de_acceso_aplicado', 'user',
+                             entity_id='%s:perfil-%s' % (user_id, perfil['id']),
+                             performed_by=quien)
+            except Exception:
+                pass
+        return jsonify({
+            'project_id': obra, 'user_id': user_id,
+            'perfil': {'id': perfil['id'], 'nombre': perfil['nombre']},
+            'aplicado': escrito,
+            'nota': 'A partir de aquí manda el acceso a herramientas de esta '
+                    'persona: el perfil dejó la configuración y no vuelve a '
+                    'decidir. Editarlo después no la cambiará.',
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
