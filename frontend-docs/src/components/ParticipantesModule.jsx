@@ -42,6 +42,7 @@ import { apiFetch } from '../utils/apiFetch';
 // cuando la pagina ya mostro varios, y suprimido = cancelado en
 // silencio. Ver el comentario largo en RolDeMiembro.jsx.
 import { confirmAction } from '../utils/confirm';
+import AccesoAHerramientas from './AccesoAHerramientas';
 
 const COLOR_FUNCION = {
   ENTIDAD:     { fondo: '#eef2ff', borde: '#c7d2fe', texto: '#3730a3' },
@@ -109,6 +110,10 @@ export default function ParticipantesModule({ project, isAdmin }) {
   const [addFuncion, setAddFuncion] = useState('');
   const [addAdmin, setAddAdmin] = useState(false);
   const [incorporando, setIncorporando] = useState(false);
+
+  // CAPA 08 · a que herramientas entra cada persona AQUI. Se abre desde su
+  // fila: es un dato suyo EN ESTA OBRA, no una configuracion global.
+  const [herramientasDe, setHerramientasDe] = useState(null);
 
   const cargar = useCallback(async () => {
     if (!obra) return;
@@ -703,7 +708,16 @@ export default function ParticipantesModule({ project, isAdmin }) {
                 )}
               </td>
               {isAdmin && (
-                <td style={{ padding: '11px 12px' }}>
+                <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
+                  {/* CAPA 08: a que herramientas entra. Separado de retirar y
+                      de la administracion: son tres cosas distintas. */}
+                  <button onClick={() => setHerramientasDe(p)}
+                          title="A qué herramientas entra en esta obra"
+                          style={{ border: '1px solid #ddd', background: '#fff',
+                                   borderRadius: 4, padding: '3px 9px', fontSize: 11.5,
+                                   color: '#4d6a8f', cursor: 'pointer', marginRight: 6 }}>
+                    Herramientas
+                  </button>
                   {/* El Entity Admin no tiene fila de membresía que retirar. */}
                   {p.role !== 'admin' && (
                     <button onClick={() => retirarPersona(p)}
@@ -718,6 +732,11 @@ export default function ParticipantesModule({ project, isAdmin }) {
           ))}
         </tbody>
       </table>
+
+      {herramientasDe && (
+        <AccesoAHerramientas obra={obra} persona={herramientasDe}
+                             onClose={() => setHerramientasDe(null)} />
+      )}
 
       {isAdmin && (
         <div style={{ fontSize: 11.5, color: '#999', marginTop: 14, maxWidth: 720 }}>
