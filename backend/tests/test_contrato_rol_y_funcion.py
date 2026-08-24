@@ -138,3 +138,33 @@ def test_el_anfitrion_del_dialogo_esta_montado():
     `window.confirm` de siempre — y con él vuelve el fallo silencioso."""
     main = io.open(os.path.join(PORTAL, 'main.jsx'), encoding='utf-8').read()
     assert '<ConfirmHost />' in main
+
+
+# ── El mínimo de contraseña es UNO, no dos ──────────────────────────────────
+#
+# Medido el 23-ago-2026: la pantalla validaba 8 caracteres y el servidor exige
+# 10. Una clave de 8 o 9 pasaba el control local PARA QUE el servidor la
+# rechazara — el peor reparto posible: la validación de la pantalla no ahorra
+# el viaje y además miente. Y era lo primero que veía un invitado.
+
+def test_el_minimo_de_clave_de_la_pantalla_es_el_del_servidor():
+    politica = io.open(os.path.join(os.path.dirname(PORTAL), '..', 'backend',
+                                    'password_policy.py'), encoding='utf-8').read()
+    servidor = int(re.search(r'LARGO_MINIMO\s*=\s*(\d+)', politica).group(1))
+    login = io.open(os.path.join(PORTAL, 'LoginScreen.jsx'), encoding='utf-8').read()
+    pantalla = int(re.search(r'const MIN_CLAVE\s*=\s*(\d+)', login).group(1))
+    assert pantalla == servidor, (
+        'la pantalla dice %d y el servidor exige %d: el usuario descubriría la '
+        'regla a base de rechazos' % (pantalla, servidor))
+    # Y el número no se repite a mano por ahí suelto.
+    assert 'al menos 8 caracteres' not in login
+    assert 'clave.length < 8' not in login
+
+
+def test_la_politica_se_dice_antes_del_rechazo():
+    """Donde se ELIGE una contraseña nueva (crear cuenta, restablecer), las
+    reglas se ven de entrada. En el inicio de sesión normal no: ahí la clave ya
+    existe y la pista sería ruido."""
+    login = io.open(os.path.join(PORTAL, 'LoginScreen.jsx'), encoding='utf-8').read()
+    assert 'clavePista' in login
+    assert '{pideRepetir && <p className="cta-pista">{t.clavePista}</p>}' in login

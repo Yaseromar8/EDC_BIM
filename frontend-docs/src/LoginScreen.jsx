@@ -34,6 +34,12 @@ const LOGO_BLANCO = '/brand/ALEPHIA_Logo_Horizontal_White.svg';
 const VIDEO_OBRA = '/login-obra.mp4';
 const PIE_OBRA = 'Drenaje pluvial · Talara, Piura';
 
+// El minimo de contrasena. Tiene que ser EL MISMO que
+// `backend/password_policy.LARGO_MINIMO`: si la pantalla acepta menos, el
+// servidor rechaza igual y el usuario descubre la regla a base de rechazos.
+// `test_contrato_rol_y_funcion` ata los dos numeros.
+const MIN_CLAVE = 10;
+
 // El backend en plan gratuito de Render se duerme: el primer arranque tarda
 // ~50 s. Pasado este umbral se explica en vez de dejar unos puntos suspensivos.
 const MS_AVISO_DESPERTANDO = 8000;
@@ -72,7 +78,10 @@ const T = {
         crear: 'Crear cuenta',
         creando: 'Creando…',
         errDistintas: 'Las contraseñas no coinciden.',
-        errCorta: 'La contraseña debe tener al menos 8 caracteres.',
+        errCorta: `La contraseña debe tener al menos ${MIN_CLAVE} caracteres.`,
+        clavePista: `Al menos ${MIN_CLAVE} caracteres. No puede contener tu nombre `
+                  + 'ni tu correo, ni ser una secuencia como "12345678". '
+                  + 'Una frase corta es fácil de recordar y difícil de adivinar.',
         // Segundo factor
         dfaTitulo: 'Verificación en dos pasos',
         dfaSub: 'Escribe el código de 6 cifras de tu aplicación de autenticación.',
@@ -124,7 +133,10 @@ const T = {
         crear: 'Create account',
         creando: 'Creating…',
         errDistintas: 'Passwords do not match.',
-        errCorta: 'Password must be at least 8 characters.',
+        errCorta: `Password must be at least ${MIN_CLAVE} characters.`,
+        clavePista: `At least ${MIN_CLAVE} characters. It cannot contain your name `
+                  + 'or your email, nor be a sequence like "12345678". '
+                  + 'A short phrase is easy to remember and hard to guess.',
         idioma: 'Español',
     },
 };
@@ -290,7 +302,7 @@ const LoginScreen = ({ onLogin }) => {
     const registrar = async (e) => {
         e.preventDefault();
         if (enviando || !nombre.trim() || !correo.trim() || !clave) return;
-        if (clave.length < 8) { setError(t.errCorta); return; }
+        if (clave.length < MIN_CLAVE) { setError(t.errCorta); return; }
         if (clave !== clave2) { setError(t.errDistintas); return; }
         const { ok, estado, datos } = await pedir('/api/auth/register', {
             name: nombre.trim(), email: correo.trim(), password: clave, invite_token: invitacion,
@@ -484,6 +496,10 @@ const LoginScreen = ({ onLogin }) => {
                                     <IconoOjo abierto={verClave} />
                                 </button>
                             </div>
+                            {/* La politica se dice ANTES, no despues del rechazo.
+                                Solo donde se ELIGE una clave nueva: en el inicio
+                                de sesion normal seria ruido -- la clave ya existe. */}
+                            {pideRepetir && <p className="cta-pista">{t.clavePista}</p>}
                         </div>
                         )}
 
