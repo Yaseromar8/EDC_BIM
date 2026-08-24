@@ -9,6 +9,7 @@ import { confirmAction } from '../utils/confirm';
 import { API, formatDate, getInitials } from '../utils/helpers';
 import FichaDePersona from '../components/FichaDePersona';
 import PerfilesDeAcceso from '../components/PerfilesDeAcceso';
+import FacultadesDeEntidad from '../components/FacultadesDeEntidad';
 
 // ─── USERS TAB ───
 function UsersTab() {
@@ -461,6 +462,12 @@ function TagsTab() {
         en Participantes: son dos cosas distintas, con dueños distintos. */}
     <div style={{ maxWidth: 1040, marginTop: 24 }}>
       <PerfilesDeAcceso />
+    </div>
+    {/* CAPA 15 · delegacion acotada de la ENTIDAD. Vive aqui, en la pestaña
+        de entidad, y no en ninguna obra: una facultad de cuenta no
+        administra ninguna obra concreta. */}
+    <div style={{ maxWidth: 1040 }}>
+      <FacultadesDeEntidad />
     </div>
     </>
   );

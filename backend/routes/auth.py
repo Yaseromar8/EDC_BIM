@@ -90,13 +90,22 @@ def registrar_evento(evento, email=None, user_id=None, detalle=None):
         print(f"[auth] no se pudo registrar el evento {evento}: {e}")
 
 
-def _require_admin(accion="esta acción"):
+def _require_admin(accion="esta acción", facultad=None):
     """Guard de administrador para gestión de usuarios.
 
     Estos endpoints (invitar/eliminar usuarios y asignar accesos a proyectos)
     confiaban SOLO en que el frontend escondiera el botón — sin validar el rol
     en el servidor. Expuestos en producción eso permitía escalada de privilegios
     (crear un usuario con role='admin'). Mismo patrón que routes/documents.py.
+
+    CAPA 15 · DELEGACIÓN ACOTADA. Con `facultad`, el acto lo puede ejecutar
+    también quien tenga ESA facultad de entidad — sin ser Entity Admin. Aquí
+    y no repetido en veinte rutas: una tabla de facultades que nadie consulta
+    es decoración, y una comprobación esparcida se olvida en la mitad de los
+    sitios.
+
+    Sin `facultad` el guard sigue exigiendo Entity Admin, que es lo correcto
+    para lo que no se delega (repartir facultades, entre otras cosas).
     """
     user = getattr(g, 'current_user', None)
     if not user:
@@ -105,9 +114,19 @@ def _require_admin(accion="esta acción"):
         # '/api/projects', asi que un anonimo pasaba este guard. Un guard nunca
         # debe asumir que otro ya comprobo: si no hay sesion, aqui se corta.
         return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
-    if user.get('role') != 'admin':
-        return jsonify({'error': f'Solo los administradores pueden {accion}.'}), 403
-    return None
+    if user.get('role') == 'admin':
+        return None
+    if facultad:
+        try:
+            import roles_de_entidad as _rde
+            with get_db_connection() as _cn:
+                if _rde.puede(_cn.cursor(), user, facultad):
+                    return None
+        except Exception as e:
+            # FAIL-CLOSED: esto es autorizacion. Si no se puede comprobar la
+            # facultad, no se concede.
+            print('[capa15] no se pudo comprobar la facultad: %s' % str(e)[:120])
+    return jsonify({'error': f'Solo los administradores pueden {accion}.'}), 403
 
 @solo_con_ddl
 def ensure_users_tables():
@@ -901,7 +920,7 @@ def manage_users():
             return jsonify({'error': str(e)}), 500
             
     elif request.method == 'POST':
-        denied = _require_admin("invitar usuarios")
+        denied = _require_admin("invitar usuarios", facultad='gestionar_usuarios')
         if denied:
             return denied
         try:
@@ -1086,7 +1105,7 @@ def reemitir_invitacion(user_id):
     transacción y el token nuevo la lleva; el reclamo exige igualdad, así que
     todo enlace anterior muere aquí — sin relojes, sin estado en el token.
     """
-    denied = _require_admin("reemitir una invitación")
+    denied = _require_admin("reemitir una invitación", facultad='gestionar_usuarios')
     if denied:
         return denied
     try:
@@ -1145,7 +1164,7 @@ def reactivar_usuario(user_id):
     fila y volver a invitar — que destruye el rastro que la desactivación
     existía para conservar.
     """
-    denied = _require_admin("reactivar un usuario")
+    denied = _require_admin("reactivar un usuario", facultad='gestionar_usuarios')
     if denied:
         return denied
     try:
@@ -1330,7 +1349,7 @@ def manage_companies():
         except Exception as e:
             return jsonify({'error': str(e)}), 500
     elif request.method == 'POST':
-        denied = _require_admin("crear empresas en el catálogo de la entidad")
+        denied = _require_admin("crear empresas en el catálogo de la entidad", facultad='gestionar_empresas')
         if denied:
             return denied
         try:
@@ -1374,7 +1393,7 @@ def delete_company(company_id):
     en su pantalla), y borrar es lo último. El 409 dice exactamente qué
     queda.
     """
-    denied = _require_admin("borrar empresas del catálogo de la entidad")
+    denied = _require_admin("borrar empresas del catálogo de la entidad", facultad='gestionar_empresas')
     if denied:
         return denied
     try:
@@ -1466,7 +1485,7 @@ def manage_job_titles():
         # Mismo fuero que las empresas: el catalogo es de la entidad, y estas
         # rutas nacieron exigiendo solo sesion -- cualquier usuario podia
         # escribir en el.
-        denied = _require_admin("crear cargos en el catálogo de la entidad")
+        denied = _require_admin("crear cargos en el catálogo de la entidad", facultad='gestionar_empresas')
         if denied:
             return denied
         try:
@@ -1488,7 +1507,7 @@ def manage_job_titles():
 
 @auth_bp.route('/api/job_titles/<int:job_id>', methods=['DELETE'])
 def delete_job_title(job_id):
-    denied = _require_admin("borrar cargos del catálogo de la entidad")
+    denied = _require_admin("borrar cargos del catálogo de la entidad", facultad='gestionar_empresas')
     if denied:
         return denied
     try:
@@ -1867,7 +1886,7 @@ def perfiles_de_acceso():
     ANTERIOR, y una prosa colgada ahí la hacía parecer una ruta con datos de
     obra sin guardia. La herramienta tenía razón en avisar.)
     """
-    denied = _require_admin("administrar los perfiles de acceso")
+    denied = _require_admin("administrar los perfiles de acceso", facultad='gestionar_perfiles')
     if denied:
         return denied
     import perfiles_de_acceso as pa
@@ -1922,7 +1941,7 @@ def editar_perfil_de_acceso(perfil_id):
     editó ayer. Para propagar hay que RE-APLICARLO, que es un acto con autor
     y fecha. La respuesta dice a cuántos afectaría, para que se vea.
     """
-    denied = _require_admin("administrar los perfiles de acceso")
+    denied = _require_admin("administrar los perfiles de acceso", facultad='gestionar_perfiles')
     if denied:
         return denied
     import perfiles_de_acceso as pa
@@ -1973,7 +1992,7 @@ def editar_perfil_de_acceso(perfil_id):
 @requiere_rol('admin')
 def afectados_por_perfil(perfil_id):
     """Quién lleva este perfil puesto, y en qué obra."""
-    denied = _require_admin("ver los miembros de un perfil")
+    denied = _require_admin("ver los miembros de un perfil", facultad='gestionar_perfiles')
     if denied:
         return denied
     import perfiles_de_acceso as pa
@@ -1984,5 +2003,107 @@ def afectados_por_perfil(perfil_id):
                 return jsonify({'error': 'Perfil no encontrado'}), 404
             return jsonify({'perfil_id': perfil_id,
                             'miembros': pa.afectados_por(cur, perfil_id)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/api/roles-de-entidad', methods=['GET'])
+@requiere_rol('admin')
+def catalogo_de_facultades():
+    """CAPA 15 · el catálogo de facultades y quién las tiene.
+
+    REPARTIR FACULTADES NO SE DELEGA: solo el Entity Admin, siempre. Si un
+    delegado pudiera concederse facultades a sí mismo o dárselas a otros, la
+    delegación acotada sería una escalada silenciosa hacia el poder total —
+    exactamente lo que esta capa existe para evitar.
+    """
+    denied = _require_admin("ver las facultades de la entidad")
+    if denied:
+        return denied
+    import roles_de_entidad as rde
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""SELECT r.user_id, u.name, u.email, r.facultad, r.concedida_en
+                             FROM roles_de_entidad r
+                             JOIN users u ON u.id = r.user_id
+                            WHERE COALESCE(u.is_active, TRUE)
+                            ORDER BY u.name NULLS LAST, r.facultad""")
+            por_persona = {}
+            for uid, nombre, correo, facultad, cuando in cur.fetchall():
+                p = por_persona.setdefault(uid, {
+                    'user_id': uid, 'nombre': nombre, 'email': correo,
+                    'facultades': []})
+                p['facultades'].append(facultad)
+            # Los Entity Admin, aparte y sin filas: las tienen TODAS por
+            # definicion. Mezclarlos con los delegados sugeriria que su poder
+            # sale de esta tabla y que borrar filas se lo quita.
+            cur.execute("""SELECT id, name, email FROM users
+                            WHERE role = 'admin' AND COALESCE(is_active, TRUE)
+                            ORDER BY name NULLS LAST""")
+            custodios = [{'user_id': r[0], 'nombre': r[1], 'email': r[2]}
+                         for r in cur.fetchall()]
+        return jsonify({
+            'catalogo': rde.catalogo_publico(),
+            'delegados': sorted(por_persona.values(),
+                                key=lambda p: (p['nombre'] or p['email'] or '').lower()),
+            'entity_admins': custodios,
+            'nota': 'Los administradores de la entidad tienen todas las facultades '
+                    'por definición y no aparecen como delegados.',
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/api/users/<int:user_id>/facultades/<facultad>', methods=['PUT'])
+@requiere_rol('admin')
+def cambiar_facultad(user_id, facultad):
+    """Concede o retira UNA facultad de entidad. Solo el Entity Admin.
+
+    QUÉ NO HACE, y es la línea que define la capa: no administra ninguna obra
+    concreta (eso es capa 07), no abre ninguna herramienta (capa 08) y no
+    concede ni un documento (capa 09). Una facultad de cuenta es un acto de
+    ENTIDAD y termina ahí.
+    """
+    denied = _require_admin("repartir facultades de la entidad")
+    if denied:
+        return denied
+    import roles_de_entidad as rde
+    if facultad not in rde.CODIGOS:
+        return jsonify({'error': 'Facultad desconocida: %s' % facultad,
+                        'code': 'FACULTAD_DESCONOCIDA'}), 400
+    d = request.get_json(silent=True) or {}
+    if 'concedida' not in d:
+        return jsonify({'error': 'Falta concedida (true o false)'}), 400
+    quiere = bool(d.get('concedida'))
+    sesion = getattr(g, 'current_user', None) or {}
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT role, COALESCE(is_active, TRUE) FROM users WHERE id = %s",
+                        (user_id,))
+            fila = cur.fetchone()
+            if not fila:
+                return jsonify({'error': 'Esa persona no existe'}), 404
+            if not fila[1]:
+                return jsonify({'error': 'Esa cuenta está desactivada.',
+                                'code': 'CUENTA_RETIRADA'}), 409
+            if fila[0] == 'admin':
+                # Darle facultades a un Entity Admin no significa nada: ya las
+                # tiene todas. Escribir la fila sugeriria que su poder sale de
+                # aqui y que retirarla se lo quita -- y no es cierto.
+                return jsonify({
+                    'error': 'Es Administrador de la entidad: ya tiene todas las '
+                             'facultades. Para acotarlas, primero cambia su perfil '
+                             'del sistema.',
+                    'code': 'ES_ENTITY_ADMIN'}), 409
+            queda = rde.fijar(cur, user_id, facultad,
+                              quiere, sesion.get('email') or sesion.get('name'))
+            conn.commit()
+        registrar_evento('facultad_concedida' if queda else 'facultad_retirada',
+                         user_id=user_id,
+                         detalle='%s · por admin %s' % (facultad, sesion.get('id', '?')))
+        return jsonify({'user_id': user_id, 'facultad': facultad,
+                        'concedida': queda}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
