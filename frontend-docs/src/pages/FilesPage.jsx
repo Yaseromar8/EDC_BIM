@@ -22,6 +22,16 @@ import { pedirIdoneidad } from '../utils/idoneidad';
 
 // ── Ligeros (siempre presentes en el flujo de Archivos) → carga inmediata ──
 import DeleteModal from '../components/modals/DeleteModal';
+import HerramientasDeObra from '../components/HerramientasDeObra';
+
+// CAPA 16 · el menu no puede ofrecer una herramienta apagada: seria prometer
+// lo que el servidor va a negar con 403. `modo` es el `sidebarView` de cada
+// entrada del menu; el codigo es el del catalogo del backend.
+const HERRAMIENTA_DE_MODO = {
+  rfis: 'rfi', redlines: 'redlines', reviews: 'reviews',
+  transmittals: 'transmittals', plan: 'plan_entregas', sets: 'conjuntos',
+  multimedia: 'fotos',
+};
 import NewFolderModal from '../components/modals/NewFolderModal';
 import ShareModal from '../components/modals/ShareModal';
 import MoveModal from '../components/modals/MoveModal';
@@ -346,7 +356,19 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   { label: 'Configuración', mode: 'settings', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>, onClick: () => fe.setSidebarView('settings') },
                   ] : []),
                 ]},
-              ].map((grupo, gi) => (
+              ]
+                // CAPA 16 · lo apagado NO SE OFRECE. El servidor ya lo niega
+                // con 403; ensenar la pestaña seria prometer lo que el
+                // producto no hace. Esto no autoriza nada -- solo deja de
+                // mentir. Mientras el estado no ha llegado, no se esconde
+                // nada: mejor una pestaña de mas un instante que un menu que
+                // parpadea.
+                .map(grupo => ({ ...grupo, items: grupo.items.filter(it => {
+                  const cod = HERRAMIENTA_DE_MODO[it.mode];
+                  return !cod || fe.herramientasDeObra?.[cod] !== false;
+                }) }))
+                .filter(grupo => grupo.items.length > 0)
+                .map((grupo, gi) => (
                 <li key={grupo.titulo} style={{ marginBottom: gi < 2 ? 10 : 0 }}>
                   {globalSidebarWidth > 100 && (
                     <div style={{ padding: '8px 12px 4px', fontSize: 11, color: '#9aa0a6', letterSpacing: '0.04em' }}>
@@ -521,6 +543,10 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 <span style={{ color: '#888', fontWeight: 500 }}>Creado:</span><span style={{ color: '#333' }}>{project.created_at ? new Date(project.created_at).toLocaleDateString() : '—'}</span>
               </div>
             </div>
+            {/* CAPA 16 · qué herramientas EXISTEN en esta obra. La leen todos
+                (la interfaz no debe ofrecer pestañas que van a dar 403);
+                cambiarlas es del administrador de la obra. */}
+            <HerramientasDeObra projectPrefix={projectPrefix} isAdmin={isAdmin} />
             {isAdmin && <AttributesAdmin projectPrefix={projectPrefix} />}
             {isAdmin && <SharesManager projectPrefix={projectPrefix} />}
             <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8, padding: 24, marginBottom: 20 }}>

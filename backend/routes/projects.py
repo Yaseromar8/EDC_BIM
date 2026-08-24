@@ -452,6 +452,25 @@ def create_hub_project(hub_id):
                 conn.rollback()
                 return jsonify({'error': 'No se pudieron registrar las '
                                          'referencias de la obra: %s' % e}), 500
+
+            # CAPA 16: la obra nace con sus herramientas DECLARADAS, no
+            # implicitas. Sin filas, su estado seria «lo que diga el catalogo»
+            # y no habria nada que auditar ni que leer en la base. Se siembran
+            # con el valor por defecto de cada herramienta.
+            try:
+                import herramientas_de_obra as hdo
+                for h in hdo.CATALOGO:
+                    cursor.execute(
+                        """INSERT INTO project_tools
+                                (project_id, herramienta, activa, cambiado_por)
+                           VALUES (%s, %s, %s, %s)
+                           ON CONFLICT (project_id, herramienta) DO NOTHING""",
+                        (str(proj_id), h['codigo'], h['por_defecto'], 'alta de obra'))
+            except Exception as e:
+                # No tumba el alta: sin filas la obra funciona con el catalogo.
+                # Pero se anota, porque su estado deja de ser auditable.
+                print('[capa16] no se sembraron herramientas de %s: %s' % (proj_id, e))
+
             conn.commit()
 
             # La obra existe DESDE YA: sin esto, el resolver la ignoraba hasta

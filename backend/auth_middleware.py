@@ -866,4 +866,41 @@ def init_auth_middleware(app):
         except Exception as e:
             logger.error(f"authz error (fail-open): {e}")  # nunca bloquear por bug del authz
 
+        # ── CAPA 16 · TOOL ACTIVATION ─────────────────────────────────────
+        # ¿Existe esta herramienta EN ESTA OBRA? Nada que ver con quién eres:
+        # apagada, la herramienta no existe para NADIE del proyecto — tampoco
+        # para el Entity Admin, que la enciende (acto explícito y auditado) si
+        # la necesita. Si pudiera atravesarla, «apagada» no significaría nada.
+        #
+        # Va DESPUÉS de la comprobación de membresía y ANTES del handler: una
+        # sola compuerta en el punto donde la obra ya está resuelta. Repetirla
+        # ruta por ruta es como se olvidan la mitad.
+        #
+        # Las rutas de ADMINISTRACIÓN de las herramientas nunca se gobiernan a
+        # sí mismas: si no, apagar una sería irreversible desde la interfaz.
+        try:
+            import herramientas_de_obra as _hdo
+            _cod = _hdo.herramienta_de_ruta(path)
+            if _cod:
+                _obra = _request_project_id()
+                if _obra:
+                    from db import get_db_connection as _gdb
+                    with _gdb() as _cn:
+                        _cur = _cn.cursor()
+                        if not _hdo.esta_activa(_cur, _obra, _cod):
+                            logger.warning('[capa16 BLOQUEA] herramienta=%s obra=%s %s %s',
+                                           _cod, _obra, metodo, path)
+                            return jsonify({
+                                'error': 'La herramienta «%s» no está habilitada en '
+                                         'esta obra. Un administrador puede '
+                                         'activarla en la configuración de la obra.'
+                                         % _hdo.etiqueta(_cod),
+                                'code': 'HERRAMIENTA_NO_ACTIVA',
+                                'herramienta': _cod}), 403
+        except Exception as e:
+            # Igual que el authz de arriba: un fallo de esta capa no puede
+            # tumbar la obra. La autorización real (membresía, permisos) ya
+            # decidió antes y sigue siendo fail-closed en su sitio.
+            logger.error('[capa16] error (fail-open): %s', e)
+
         return None

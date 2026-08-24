@@ -93,6 +93,11 @@ export function useFileExplorer(project, user) {
   // ── Misc UI State ──
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [sidebarView, setSidebarView] = useState('files');
+
+  // CAPA 16 · TOOL ACTIVATION: que herramientas EXISTEN en esta obra. Lo lee
+  // el menu para no ofrecer lo que el servidor va a negar. No autoriza nada:
+  // la compuerta real vive en el middleware.
+  const [herramientasDeObra, setHerramientasDeObra] = useState(null);
   const [membersList, setMembersList] = useState([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -110,6 +115,19 @@ export function useFileExplorer(project, user) {
 
   // ── Chunked Upload Engine ──
   const { methods: cacheMethods, cacheVersion } = useFolderCache(API, projectPrefix);
+
+  // El estado de las herramientas se pide UNA vez por obra. Si falla se queda
+  // en null y el menu no esconde nada: preferimos ofrecer de mas (el servidor
+  // niega igual, con un mensaje que explica) a esconder una herramienta viva
+  // por un fallo de red.
+  useEffect(() => {
+    let vigente = true;
+    apiFetch(`${API}/api/projects/${encodeURIComponent(projectPrefix)}/herramientas`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (vigente && d && d.estado) setHerramientasDeObra(d.estado); })
+      .catch(() => {});
+    return () => { vigente = false; };
+  }, [projectPrefix]);
   const chunkedUpload = useChunkedUpload(API, projectPrefix, user, {
     onUploadComplete: () => {
       cacheMethods.invalidateAll();
@@ -616,6 +634,7 @@ export function useFileExplorer(project, user) {
     // Misc
     profileMenuOpen, setProfileMenuOpen,
     sidebarView, setSidebarView,
+    herramientasDeObra,
     membersList, setMembersList,
     membersLoading, setMembersLoading,
     collapseSignal, setCollapseSignal,

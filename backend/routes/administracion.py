@@ -373,3 +373,100 @@ def retirar_miembro(project_id, user_id):
                         'nota': 'La identidad y sus actos históricos se conservan.'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# =========================================================================
+#  CAPA 16 · TOOL ACTIVATION — qué herramientas existen en esta obra
+# =========================================================================
+#  Estas rutas NUNCA se gobiernan a sí mismas: si apagar «RFI» apagara
+#  también la pantalla que lo enciende, la operación sería irreversible
+#  desde la interfaz. La compuerta del middleware solo mira las rutas de
+#  DATOS de cada herramienta.
+
+
+@administracion_bp.route('/api/projects/<path:project_id>/herramientas',
+                         methods=['GET'])
+def herramientas_de_la_obra(project_id):
+    """Qué herramientas están habilitadas aquí, y el catálogo completo.
+
+    La puede leer cualquier MIEMBRO: la interfaz necesita saber qué pestañas
+    ofrecer, y ofrecer una que va a devolver 403 es prometer lo que el
+    producto no hace. Cambiarlas es otra cosa (abajo, con autoridad).
+    """
+    obra = resolve_project_id(project_id)
+    if not obra:
+        return jsonify({'error': 'Obra no encontrada'}), 404
+    negativa = guardia_de_obra(obra, 'ver esta obra')
+    if negativa:
+        return negativa
+    try:
+        import herramientas_de_obra as hdo
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            estado = hdo.estado_de_obra(cur, obra)
+        return jsonify({
+            'project_id': obra,
+            'estado': estado,
+            'catalogo': hdo.catalogo_publico(),
+            # DOCUMENTOS no aparece: es el substrato del producto y no se
+            # apaga (diferencia deliberada con ACC, ver el módulo).
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@administracion_bp.route('/api/projects/<path:project_id>/herramientas/<codigo>',
+                         methods=['PUT'])
+def cambiar_herramienta(project_id, codigo):
+    """Enciende o apaga UNA herramienta en esta obra. Acto administrativo.
+
+    QUÉ CONCEDE Y QUÉ NO: cambia la DISPONIBILIDAD de la herramienta para
+    toda la obra. No toca la membresía de nadie, ni sus permisos de carpeta,
+    ni su autoridad en los flujos. Apagar no borra NADA de lo ya registrado
+    —los RFI existentes siguen ahí— solo deja de poder usarse hasta que se
+    vuelva a encender: es configuración, no destrucción.
+    """
+    obra = resolve_project_id(project_id)
+    if not obra:
+        return jsonify({'error': 'Obra no encontrada'}), 404
+    negativa = guardia_de_obra(obra, 'administrar esta obra')
+    if negativa:
+        return negativa
+
+    import herramientas_de_obra as hdo
+    if codigo not in hdo.CODIGOS:
+        return jsonify({'error': 'Herramienta desconocida: %s' % codigo,
+                        'code': 'HERRAMIENTA_DESCONOCIDA'}), 400
+    d = request.get_json(silent=True) or {}
+    if 'activa' not in d:
+        return jsonify({'error': 'Falta activa (true o false)'}), 400
+    quiere = bool(d.get('activa'))
+
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            negativa = _adm.guardia_administrativa(
+                cur, _usuario(), obra, 'activar o desactivar herramientas')
+            if negativa:
+                return negativa
+            quien = (_usuario().get('email') or _usuario().get('name') or '?')
+            cur.execute("""INSERT INTO project_tools
+                                (project_id, herramienta, activa, cambiado_por)
+                           VALUES (%s, %s, %s, %s)
+                           ON CONFLICT (project_id, herramienta)
+                           DO UPDATE SET activa = EXCLUDED.activa,
+                                         cambiado_por = EXCLUDED.cambiado_por,
+                                         cambiado_en = CURRENT_TIMESTAMP""",
+                        (str(obra), codigo, quiere, quien))
+            conn.commit()
+            try:
+                from db import log_activity
+                log_activity(obra,
+                             'herramienta_activada' if quiere else 'herramienta_desactivada',
+                             'tool', entity_id=codigo, performed_by=quien)
+            except Exception:
+                pass
+        return jsonify({'project_id': obra, 'herramienta': codigo,
+                        'activa': quiere, 'etiqueta': hdo.etiqueta(codigo)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
