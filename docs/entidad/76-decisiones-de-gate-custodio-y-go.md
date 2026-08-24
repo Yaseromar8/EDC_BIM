@@ -77,3 +77,33 @@ Con el nombramiento hecho, **los dos MUST-HAVE de gobierno están cerrados**.
 El EXTERNAL PILOT GATE queda a falta únicamente de **ejecutar la primera
 invitación** (la pista está montada: doc 77) y, para un externo real, de
 configurar el envío de correo (`RESEND_API_KEY`, SHOULD HAVE).
+
+---
+
+## ANEXO · 24-ago-2026 — REACTIVACIÓN AUTORIZADA POR EL PROPIETARIO
+
+```
+actor:  Entity Admin (el propietario)
+cuenta: id 17 · Fabián Serrano
+```
+
+No es incidente ni anomalía: decisión expresa del propietario, registrada a
+su orden. La verificación pedida — que reactivar NO restaurara nada de lo
+retirado en PASO 14 — se cumplió en los cinco puntos, medida en base:
+
+| Propiedad | Resultado |
+|---|---|
+| Membresías anteriores | **NO restauradas** — las 2 actuales (PQT8_INTERFERENCIAS, PQT8_TALARA) son incorporaciones NUEVAS del propietario, `assigned_at` 13:32:53/59, posteriores a la reactivación (13:32:15) |
+| Permisos de carpeta | **0** |
+| Project Admin | **NO** (`es_admin=false` en ambas filas) |
+| Entity Admin | **NO** (sigue `user`) |
+| Sesiones antiguas | **NO** — las 4 revocadas en PASO 14 siguen muertas; la única viva nació del `login_ok` de hoy |
+
+Rastro completo (auth_events): `login_desactivado` ×2 → `usuario_reactivado`
+→ `login_ok`. Cada puerta se comportó como está diseñada. Queda demostrada
+con caso real la regla: **REACTIVAR IDENTIDAD ≠ RESTAURAR MEMBRESÍAS ≠
+RESTAURAR PERMISOS ≠ RESTAURAR ADMINISTRACIÓN.**
+
+Nota de estado: con Fabián activo y con membresías, el padrón deja el estado
+transitorio del PASO 14 por decisión del propietario. PQT8_TALARA vuelve a
+tener un participante humano real.
