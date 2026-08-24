@@ -897,6 +897,24 @@ def init_auth_middleware(app):
                                          % _hdo.etiqueta(_cod),
                                 'code': 'HERRAMIENTA_NO_ACTIVA',
                                 'herramienta': _cod}), 403
+
+                        # ── CAPA 08 · MEMBER TOOL ACCESS ──────────────────
+                        # La herramienta EXISTE aqui (la 16 acaba de decirlo).
+                        # Ahora: ¿entra ESTE miembro? Es el escalon siguiente,
+                        # no un sustituto -- y el de dentro (permiso de
+                        # recurso) sigue decidiendo despues, en su sitio.
+                        import acceso_a_herramientas as _ath
+                        if not _ath.puede_entrar(_cur, user, _obra, _cod):
+                            logger.warning('[capa08 BLOQUEA] user=%s herramienta=%s '
+                                           'obra=%s %s %s',
+                                           user.get('id'), _cod, _obra, metodo, path)
+                            return jsonify({
+                                'error': 'No tienes acceso a «%s» en esta obra. '
+                                         'Un administrador de la obra puede '
+                                         'concedértelo en Participantes.'
+                                         % _hdo.etiqueta(_cod),
+                                'code': 'SIN_ACCESO_A_HERRAMIENTA',
+                                'herramienta': _cod}), 403
         except Exception as e:
             # Igual que el authz de arriba: un fallo de esta capa no puede
             # tumbar la obra. La autorización real (membresía, permisos) ya

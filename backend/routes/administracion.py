@@ -470,3 +470,122 @@ def cambiar_herramienta(project_id, codigo):
                         'activa': quiere, 'etiqueta': hdo.etiqueta(codigo)}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# =========================================================================
+#  CAPA 08 · MEMBER TOOL ACCESS — quién entra a una herramienta habilitada
+# =========================================================================
+#  El escalón entre la MEMBRESÍA (capa 03) y el PERMISO DE RECURSO (capa 09).
+#  Ni sustituye a la activación de la obra (capa 16: apagada no entra nadie)
+#  ni concede un solo documento.
+
+
+@administracion_bp.route('/api/projects/<path:project_id>/miembros/<int:user_id>/herramientas',
+                         methods=['GET'])
+def herramientas_del_miembro(project_id, user_id):
+    """A qué herramientas entra ESTA persona en ESTA obra.
+
+    Devuelve las dos capas por separado, sin mezclarlas: `activa_en_la_obra`
+    (capa 16) y `acceso_del_miembro` (capa 08). Presentarlas fundidas en un
+    solo booleano sería justo el atajo que borra la distinción — y quien
+    administra necesita saber si una herramienta le falta a alguien porque
+    está apagada para todos o porque se la retiraron a él.
+    """
+    obra = resolve_project_id(project_id)
+    if not obra:
+        return jsonify({'error': 'Obra no encontrada'}), 404
+    negativa = guardia_de_obra(obra, 'administrar esta obra')
+    if negativa:
+        return negativa
+    try:
+        import herramientas_de_obra as hdo
+        import acceso_a_herramientas as ath
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            negativa = _adm.guardia_administrativa(
+                cur, _usuario(), obra, 'ver el acceso a herramientas de un miembro')
+            if negativa:
+                return negativa
+            cur.execute('SELECT 1 FROM project_users WHERE project_id = %s '
+                        '  AND user_id = %s', (str(obra), user_id))
+            if not cur.fetchone():
+                return jsonify({'error': 'Esa persona no participa en esta obra.',
+                                'code': 'NO_ES_MIEMBRO'}), 404
+            activas = hdo.estado_de_obra(cur, obra)
+            del_miembro = ath.estado_de_miembro(cur, obra, user_id)
+        return jsonify({
+            'project_id': obra, 'user_id': user_id,
+            'herramientas': [{
+                'codigo': h['codigo'], 'etiqueta': h['etiqueta'],
+                'activa_en_la_obra': activas.get(h['codigo'], True),
+                'acceso_del_miembro': del_miembro.get(h['codigo'], True),
+                # EFECTIVO = las dos cosas. Se da calculado para que la
+                # pantalla no lo recomponga a su manera, pero las dos
+                # razones viajan aparte y se pueden explicar.
+                'efectivo': bool(activas.get(h['codigo'], True)
+                                 and del_miembro.get(h['codigo'], True)),
+            } for h in hdo.CATALOGO],
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@administracion_bp.route('/api/projects/<path:project_id>/miembros/<int:user_id>'
+                         '/herramientas/<codigo>', methods=['PUT'])
+def cambiar_acceso_a_herramienta(project_id, user_id, codigo):
+    """Concede o retira a ESTA persona el acceso a UNA herramienta, aquí.
+
+    QUÉ NO HACE: no la mete ni la saca de la obra, no toca su empresa ni su
+    función contractual, no le da ni le quita un documento, y no enciende la
+    herramienta si está apagada para todos. Solo este escalón.
+    """
+    obra = resolve_project_id(project_id)
+    if not obra:
+        return jsonify({'error': 'Obra no encontrada'}), 404
+    negativa = guardia_de_obra(obra, 'administrar esta obra')
+    if negativa:
+        return negativa
+
+    import herramientas_de_obra as hdo
+    import acceso_a_herramientas as ath
+    if codigo not in hdo.CODIGOS:
+        return jsonify({'error': 'Herramienta desconocida: %s' % codigo,
+                        'code': 'HERRAMIENTA_DESCONOCIDA'}), 400
+    d = request.get_json(silent=True) or {}
+    if 'permitido' not in d:
+        return jsonify({'error': 'Falta permitido (true o false)'}), 400
+    quiere = bool(d.get('permitido'))
+
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            negativa = _adm.guardia_administrativa(
+                cur, _usuario(), obra, 'cambiar el acceso a herramientas')
+            if negativa:
+                return negativa
+            cur.execute('SELECT 1 FROM project_users WHERE project_id = %s '
+                        '  AND user_id = %s', (str(obra), user_id))
+            if not cur.fetchone():
+                # No se puede conceder acceso a una herramienta a quien no
+                # participa: seria una fila que no alcanza a nadie y que ademas
+                # sugiere un acceso que la membresia niega antes.
+                return jsonify({'error': 'Esa persona no participa en esta obra. '
+                                         'Incorpórala primero.',
+                                'code': 'NO_ES_MIEMBRO'}), 404
+            quien = (_usuario().get('email') or _usuario().get('name') or '?')
+            queda = ath.fijar(cur, obra, user_id, codigo, quiere, quien)
+            conn.commit()
+            try:
+                from db import log_activity
+                log_activity(obra,
+                             'acceso_herramienta_concedido' if queda
+                             else 'acceso_herramienta_retirado',
+                             'user', entity_id='%s:%s' % (user_id, codigo),
+                             performed_by=quien)
+            except Exception:
+                pass
+        return jsonify({'project_id': obra, 'user_id': user_id,
+                        'herramienta': codigo, 'permitido': queda,
+                        'etiqueta': hdo.etiqueta(codigo)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
