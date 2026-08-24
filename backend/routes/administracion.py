@@ -650,3 +650,71 @@ def aplicar_perfil_a_miembro(project_id, user_id):
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# =========================================================================
+#  CAPA 14 · PROJECT TEMPLATES — configuración de obra, reproducible
+# =========================================================================
+
+
+@administracion_bp.route('/api/projects/<path:project_id>/aplicar-plantilla',
+                         methods=['POST'])
+def aplicar_plantilla(project_id):
+    """Escribe la configuración de una plantilla en ESTA obra.
+
+    Pensado para una obra RECIÉN CREADA: escribe carpetas, herramientas,
+    empresas e idoneidad. Las carpetas se crean con IDENTIDAD NUEVA —
+    reutilizar los ids del origen haría que dos obras compartieran nodos y el
+    aislamiento se rompería en el acto.
+
+    NO trae miembros ni permisos: la gente entra por invitación y membresía,
+    nunca por herencia de una plantilla.
+    """
+    obra = resolve_project_id(project_id)
+    if not obra:
+        return jsonify({'error': 'Obra no encontrada'}), 404
+    negativa = guardia_de_obra(obra, 'administrar esta obra')
+    if negativa:
+        return negativa
+
+    d = request.get_json(silent=True) or {}
+    if not d.get('plantilla_id'):
+        return jsonify({'error': 'Falta plantilla_id'}), 400
+
+    import plantillas_de_obra as pdo
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            negativa = _adm.guardia_administrativa(
+                cur, _usuario(), obra, 'aplicar una plantilla a esta obra')
+            if negativa:
+                return negativa
+            cur.execute('SELECT nombre, molde FROM plantillas_de_obra WHERE id = %s',
+                        (int(d['plantilla_id']),))
+            fila = cur.fetchone()
+            if not fila:
+                return jsonify({'error': 'Plantilla no encontrada'}), 404
+            nombre_plantilla, molde = fila[0], (fila[1] or {})
+
+            cur.execute('SELECT model_urn FROM projects WHERE id = %s', (str(obra),))
+            f2 = cur.fetchone()
+            if not f2 or not f2[0]:
+                return jsonify({'error': 'La obra no tiene expediente asociado.'}), 409
+            model_urn = f2[0]
+
+            quien = (_usuario().get('email') or _usuario().get('name') or '?')
+            creado = pdo.aplicar(cur, molde, obra, model_urn, quien)
+            conn.commit()
+            try:
+                from db import log_activity
+                log_activity(obra, 'plantilla_aplicada', 'project',
+                             entity_id=str(d['plantilla_id']), performed_by=quien)
+            except Exception:
+                pass
+        return jsonify({
+            'project_id': obra, 'plantilla': nombre_plantilla, 'creado': creado,
+            'nota': 'Se creó la configuración. La obra no tiene documentos, actos '
+                    'ni miembros de la plantilla: eso se incorpora aquí.',
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

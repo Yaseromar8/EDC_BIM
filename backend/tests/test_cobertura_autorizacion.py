@@ -87,6 +87,13 @@ SIN_CUBRIR = {
     ('routes/auth.py', '/api/auth/google'): 'ruta de autenticacion, no toca datos de obra',
     ('routes/auth.py', '/api/auth/forgot-password'): 'ruta de autenticacion, no toca datos de obra',
     ('routes/auth.py', '/api/auth/sesiones/cerrar-otras'): 'G4a: actua SOLO sobre las sesiones de quien llama (exige sesion y no recibe user_id); no toca datos de obra',
+    # CAPA 14: borrar una PLANTILLA no toca ninguna obra -- una plantilla es un
+    # molde congelado en la entidad, y las obras creadas con ella no cambian al
+    # borrarla. Su guardia es de ENTIDAD (`roles_de_entidad.guardia` con
+    # `gestionar_obras`, fail-closed). El detector la marca por vecindad con
+    # rutas de obra. CAPTURAR, que SI lee la estructura de una obra concreta,
+    # lleva `guardia_de_obra` ademas de la facultad -- y por eso no esta aqui.
+    ('routes/auth.py', '/api/plantillas-de-obra/<int:plantilla_id>'): 'CAPA 14: borra un molde de la ENTIDAD; no lee ni escribe ninguna obra. Guardia de entidad fail-closed (gestionar_obras)',
     # Por diseno no pueden acotarse a UNA obra: son las que listan o dan acceso.
     ('routes/projects.py', '/api/projects'): 'LISTA obras; filtra por project_users y devuelve vacio al anonimo',
     ('routes/projects.py', '/api/hubs/<hub_id>/projects'): 'lista obras de un hub; mismo filtro por pertenencia',

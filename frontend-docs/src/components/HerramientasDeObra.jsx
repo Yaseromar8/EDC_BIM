@@ -23,6 +23,12 @@ export default function HerramientasDeObra({ projectPrefix, isAdmin }) {
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(null);
 
+  // CAPA 14 · aplicar una plantilla a ESTA obra. Vive junto a las
+  // herramientas porque es aqui donde su efecto se ve primero -- y porque
+  // aplicarla es un acto de OBRA, aunque el molde sea de la entidad.
+  const [plantillas, setPlantillas] = useState([]);
+  const [aplicandoPlantilla, setAplicandoPlantilla] = useState(false);
+
   const cargar = async () => {
     setError('');
     try {
@@ -40,6 +46,36 @@ export default function HerramientasDeObra({ projectPrefix, isAdmin }) {
   };
 
   useEffect(() => { if (projectPrefix) cargar(); }, [projectPrefix]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    // El catalogo es de la entidad: si esta persona no puede leerlo,
+    // simplemente no se ofrece aplicar. El resto de la pantalla sigue.
+    apiFetch(`${API}/api/plantillas-de-obra`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d && d.plantillas) setPlantillas(d.plantillas); })
+      .catch(() => {});
+  }, [isAdmin]);
+
+  const aplicarPlantilla = async (id) => {
+    if (!id) return;
+    setAplicandoPlantilla(true);
+    try {
+      const r = await apiFetch(
+        `${API}/api/projects/${encodeURIComponent(projectPrefix)}/aplicar-plantilla`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plantilla_id: Number(id) }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'No se pudo aplicar.');
+      toast.success(`Plantilla «${d.plantilla}» aplicada: `
+        + `${d.creado.carpetas} carpetas · ${d.creado.empresas} empresas`);
+      await cargar();
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setAplicandoPlantilla(false);
+    }
+  };
 
   const cambiar = async (codigo, quiere, etiqueta) => {
     setGuardando(codigo);
@@ -134,6 +170,32 @@ export default function HerramientasDeObra({ projectPrefix, isAdmin }) {
         El <b>expediente documental</b> no aparece aquí: es la base sobre la que se
         apoyan las demás y no se apaga.
       </p>
+
+      {isAdmin && plantillas.length > 0 && (
+        <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px dashed #e2e8f0' }}>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: '#888',
+                        letterSpacing: '.04em', marginBottom: 6 }}>
+            APLICAR UNA PLANTILLA A ESTA OBRA
+          </div>
+          <select defaultValue="" disabled={aplicandoPlantilla}
+                  onChange={e => { aplicarPlantilla(e.target.value); e.target.value = ''; }}
+                  style={{ width: '100%', maxWidth: 380, padding: '6px 8px',
+                           border: '1px solid #ddd', borderRadius: 5, fontSize: 13 }}>
+            <option value="">Elegir plantilla…</option>
+            {plantillas.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.nombre} — {p.contiene?.carpetas} carpetas
+              </option>
+            ))}
+          </select>
+          <div style={{ fontSize: 11.5, color: '#98a1ab', marginTop: 6, maxWidth: 680,
+                        lineHeight: 1.5 }}>
+            Crea la <b>configuración</b>: carpetas, herramientas, empresas y códigos de
+            idoneidad. <b>No trae documentos, ni historia, ni miembros</b> — la gente se
+            incorpora en Participantes. Pensado para una obra recién creada.
+          </div>
+        </div>
+      )}
     </div>
   );
 }

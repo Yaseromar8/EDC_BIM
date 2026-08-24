@@ -10,6 +10,7 @@ import { API, formatDate, getInitials } from '../utils/helpers';
 import FichaDePersona from '../components/FichaDePersona';
 import PerfilesDeAcceso from '../components/PerfilesDeAcceso';
 import FacultadesDeEntidad from '../components/FacultadesDeEntidad';
+import PlantillasDeObra from '../components/PlantillasDeObra';
 
 // ─── USERS TAB ───
 function UsersTab() {
@@ -355,7 +356,7 @@ function ActividadTab() {
   );
 }
 
-function TagsTab() {
+function TagsTab({ obras = [] }) {
   const [companies, setCompanies] = useState([]);
   const [jobTitles, setJobTitles] = useState([]);
   const [newCompany, setNewCompany] = useState('');
@@ -468,6 +469,11 @@ function TagsTab() {
         administra ninguna obra concreta. */}
     <div style={{ maxWidth: 1040 }}>
       <FacultadesDeEntidad />
+    </div>
+    {/* CAPA 14 · el catalogo de moldes es de la ENTIDAD. Aplicarlos es un
+        acto de cada obra y esta en su Configuracion. */}
+    <div style={{ maxWidth: 1040 }}>
+      <PlantillasDeObra obras={obras} />
     </div>
     </>
   );
@@ -655,7 +661,7 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
                 </table>
               )}
           </>
-        ) : activeTab === 'users' ? (<UsersTab />) : activeTab === 'actividad' ? (<ActividadTab />) : (<TagsTab />)}
+        ) : activeTab === 'users' ? (<UsersTab />) : activeTab === 'actividad' ? (<ActividadTab />) : (<TagsTab obras={projects} />)}
       </div>
 
       {/* CREATE PROJECT MODAL */}

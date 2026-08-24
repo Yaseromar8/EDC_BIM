@@ -2107,3 +2107,113 @@ def cambiar_facultad(user_id, facultad):
                         'concedida': queda}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@auth_bp.route('/api/plantillas-de-obra', methods=['GET', 'POST'])
+def plantillas_de_obra():
+    """El catálogo de plantillas de la entidad, y capturar una nueva.
+
+    CAPTURAR es leer la CONFIGURACIÓN de una obra: estructura de carpetas
+    (vacía), herramientas activas, empresas con su función, y vocabulario de
+    idoneidad. No lee ni un documento, ni un acto, ni un miembro.
+    """
+    import plantillas_de_obra as pdo
+    import roles_de_entidad as rde
+    from flask import g as _g
+    u = getattr(_g, 'current_user', None) or {}
+
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            # El catálogo de plantillas es de la ENTIDAD: mismo fuero que los
+            # perfiles (capa 13), delegable con `gestionar_obras`.
+            negativa = rde.guardia(cur, u, 'gestionar_obras',
+                                   'administrar las plantillas de obra')
+            if negativa:
+                return negativa
+
+            if request.method == 'GET':
+                cur.execute("""SELECT id, nombre, descripcion, molde, origen_obra, creada_en
+                                 FROM plantillas_de_obra ORDER BY nombre""")
+                salida = []
+                for r in cur.fetchall():
+                    molde = r[3] or {}
+                    salida.append({
+                        'id': r[0], 'nombre': r[1], 'descripcion': r[2],
+                        'origen_obra': r[4], 'creada_en': str(r[5]) if r[5] else None,
+                        # Un resumen de lo que trae, para poder elegir sin abrirla.
+                        'contiene': {
+                            'carpetas': len(molde.get('carpetas') or []),
+                            'herramientas_activas': sum(
+                                1 for v in (molde.get('herramientas') or {}).values() if v),
+                            'empresas': len(molde.get('empresas') or []),
+                            'codigos_idoneidad': len(molde.get('idoneidad') or []),
+                        },
+                    })
+                return jsonify({'plantillas': salida,
+                                'partes': list(pdo.PARTES)}), 200
+
+            d = request.get_json(silent=True) or {}
+            nombre = (d.get('nombre') or '').strip()
+            origen = d.get('desde_obra')
+            if not nombre or not origen:
+                return jsonify({'error': 'Faltan nombre y desde_obra'}), 400
+            obra = resolve_project_id(origen)
+            if not obra:
+                return jsonify({'error': 'Obra de origen no encontrada'}), 404
+            # LA FACULTAD DE ENTIDAD AUTORIZA A HACER PLANTILLAS, NO A MIRAR
+            # DENTRO DE OBRAS AJENAS. Capturar lee la estructura de ESA obra, y
+            # los nombres de carpeta dicen cosas («05_Reclamaciones»,
+            # «Litigio_X»). Se exige acceso a la obra de origen, igual que para
+            # cualquier otra lectura suya.
+            from perimetro_de_obra import guardia_de_obra as _guardia_obra
+            negativa_obra = _guardia_obra(obra, 'capturar una plantilla de esta obra')
+            if negativa_obra:
+                return negativa_obra
+            cur.execute('SELECT id FROM plantillas_de_obra WHERE LOWER(nombre) = LOWER(%s)',
+                        (nombre,))
+            if cur.fetchone():
+                return jsonify({'error': 'Ya existe una plantilla con ese nombre.',
+                                'code': 'PLANTILLA_DUPLICADA'}), 409
+
+            molde = pdo.capturar(cur, obra)
+            import json as _json
+            cur.execute("""INSERT INTO plantillas_de_obra
+                                (nombre, descripcion, molde, origen_obra, creada_por)
+                           VALUES (%s, %s, %s::jsonb, %s, %s) RETURNING id""",
+                        (nombre, (d.get('descripcion') or '').strip() or None,
+                         _json.dumps(molde), str(obra),
+                         u.get('email') or u.get('name')))
+            nueva = cur.fetchone()[0]
+            conn.commit()
+        return jsonify({
+            'id': nueva, 'nombre': nombre,
+            'capturado': {k: len(v) for k, v in molde.items()},
+            'nota': 'Se capturó la CONFIGURACIÓN. No se copiaron documentos, '
+                    'actos, auditoría ni miembros: eso es historia de esa obra.',
+        }), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/api/plantillas-de-obra/<int:plantilla_id>', methods=['DELETE'])
+def borrar_plantilla(plantilla_id):
+    """Borra una plantilla. No toca ninguna obra creada a partir de ella:
+    lo que se creó ya es suyo."""
+    import roles_de_entidad as rde
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            from flask import g as _g
+            negativa = rde.guardia(cur, getattr(_g, 'current_user', None) or {}, 'gestionar_obras',
+                                   'borrar plantillas de obra')
+            if negativa:
+                return negativa
+            cur.execute('DELETE FROM plantillas_de_obra WHERE id = %s RETURNING id',
+                        (plantilla_id,))
+            if not cur.fetchone():
+                return jsonify({'error': 'Plantilla no encontrada'}), 404
+            conn.commit()
+        return jsonify({'success': True,
+                        'nota': 'Las obras creadas con ella no cambian.'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
