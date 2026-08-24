@@ -78,3 +78,29 @@ En **Archivos** → clic derecho en la carpeta → **Configuración de permisos*
    aparecía inerte.
 3. **P1/P2** (login e activación con identidad propia): UX POLISH aplazado
    por el propietario. Mejoran la primera impresión del externo; no bloquean.
+
+---
+
+## CIERRE · 24-ago-2026 — EL CICLO COMPLETO, EJECUTADO
+
+La activación la ejecutó el asistente por decisión expresa del propietario
+(cuenta de prueba desechable; la clave quedó en el historial de la sesión a
+sabiendas y no debe reutilizarse jamás). El camino usado fue EXACTAMENTE el
+del externo: `POST /api/auth/register` con el enlace de la generación
+vigente, sin ningún atajo de servidor.
+
+| Verificación | Resultado |
+|---|---|
+| Activación | `activated_at = 24-ago 16:23:01` · nombre «Piloto Uno» · gen 5 · con contraseña |
+| **One-shot** | el MISMO enlace, reintentado → `400 · ya está registrado y activo` |
+| **Aislamiento** | con la sesión del piloto, `/api/projects` devuelve UNA obra: `PILOTO EXTERNO 2026` — ni PQT8, ni ZZ, ni el resto de la entidad |
+| Sesión | `/api/auth/me` → piloto1, rol `user`; el invariante «sesión ⇒ activada» la acepta |
+| De paso | la política de contraseñas rechazó el primer intento del propio asistente («no puede contener tu nombre») — el servidor no distingue quién teclea |
+
+```
+EXTERNAL PILOT GATE → ABIERTO
+```
+
+Los tres MUST-HAVE están cerrados. Invitar al primer externo REAL es ahora
+ejecutar este mismo runbook con su nombre y su correo — más la
+`RESEND_API_KEY` si debe recibir la invitación por correo.
