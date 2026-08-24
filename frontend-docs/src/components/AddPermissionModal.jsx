@@ -51,6 +51,7 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
   const [error, setError] = useState(null);
   const [isOpen, setIsOpen] = useState(false);
   const [catalogo, setCatalogo] = useState(null);
+  const [errorCatalogo, setErrorCatalogo] = useState('');
 
   const dropdownRef = useRef(null);
 
@@ -65,10 +66,19 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
   }, [dropdownRef]);
 
   useEffect(() => {
+    // VACIO Y ROTO NO SON LO MISMO: un catalogo vacio por un fallo de carga se
+    // lee como «no hay a quien conceder», y eso da por bueno un reparto que
+    // nadie ha comprobado. El fallo se dice.
+    setErrorCatalogo('');
     apiFetch(`${apiBaseUrl}/api/docs/sujetos-concedibles?folder_id=${folder.id}&model_urn=${encodeURIComponent(modelUrn)}`)
-      .then(r => r.json())
-      .then(d => setCatalogo(d.success ? d : { personas: [], empresas: [], funciones: [] }))
-      .catch(() => setCatalogo({ personas: [], empresas: [], funciones: [] }));
+      .then(r => r.json().then(d => (r.ok && d.success !== false)
+        ? d
+        : Promise.reject(new Error(d.error || 'No se pudo cargar a quién conceder.'))))
+      .then(d => setCatalogo(d))
+      .catch(e => {
+        setCatalogo({ personas: [], empresas: [], funciones: [] });
+        setErrorCatalogo(e.message || 'No se pudo cargar a quién conceder.');
+      });
   }, [folder?.id, modelUrn, apiBaseUrl]);
 
   // Niveles EXACTOS que reconoce el backend (folder_permissions.PERMISSION_LEVELS).
@@ -135,6 +145,12 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
             {error && <div className="error-alert">{error}</div>}
+            {errorCatalogo && (
+              <div className="error-alert" role="alert">
+                {errorCatalogo} <b>La lista está incompleta</b>, no vacía: no
+                concedas dando por hecho que no hay nadie más.
+              </div>
+            )}
 
             <div className="form-group">
               <label>¿A quién?</label>
@@ -163,7 +179,9 @@ export default function AddPermissionModal({ folder, modelUrn, apiBaseUrl, onClo
                       style={{ width: '100%', padding: '8px', border: '1px solid #ddd',
                                borderRadius: 5, fontSize: 13 }}>
                 <option value="">
-                  {catalogo === null ? 'Cargando…' : `Elegir ${sujetoActual.label.toLowerCase()}…`}
+                  {errorCatalogo ? 'No se pudo cargar'
+                    : catalogo === null ? 'Cargando…'
+                    : `Elegir ${sujetoActual.label.toLowerCase()}…`}
                 </option>
                 {opciones.map(o => (
                   <option key={o.sujeto_id} value={o.sujeto_id}>

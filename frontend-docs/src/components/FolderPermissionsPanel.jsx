@@ -132,12 +132,19 @@ function PermisoEfectivo({ folder, modelUrn, apiBaseUrl }) {
   const [quien, setQuien] = useState('');
   const [res, setRes] = useState(null);
   const [cargando, setCargando] = useState(false);
+  // VACIO Y ROTO NO SON LO MISMO. Si la carga falla y se deja la lista vacia,
+  // el administrador lee «no hay nadie» -- y en una pantalla de permisos esa
+  // lectura equivocada empuja a conceder de mas.
+  const [falloLista, setFalloLista] = useState('');
 
   useEffect(() => {
+    setFalloLista('');
     apiFetch(`${apiBaseUrl}/api/docs/sujetos-concedibles?folder_id=${folder.id}&model_urn=${encodeURIComponent(modelUrn)}`)
-      .then(r => r.json())
+      .then(r => r.json().then(d => (r.ok && d.success !== false)
+        ? d
+        : Promise.reject(new Error(d.error || 'No se pudo cargar la lista de personas.'))))
       .then(d => setPersonas(d.personas || []))
-      .catch(() => setPersonas([]));
+      .catch(e => { setPersonas([]); setFalloLista(e.message || 'No se pudo cargar la lista de personas.'); });
   }, [folder?.id, modelUrn, apiBaseUrl]);
 
   useEffect(() => {
@@ -157,10 +164,20 @@ function PermisoEfectivo({ folder, modelUrn, apiBaseUrl }) {
                     textTransform: 'uppercase', marginBottom: 8 }}>
         Comprobar el permiso de una persona
       </div>
+      {falloLista && (
+        <div role="alert" style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 5,
+                                   background: '#fef2f2', border: '1px solid #fecaca',
+                                   color: '#991b1b', fontSize: 12.3 }}>
+          {falloLista} <b>La lista está incompleta</b>, no vacía.
+        </div>
+      )}
       <select value={quien} onChange={e => setQuien(e.target.value)}
+              disabled={Boolean(falloLista)}
               style={{ width: '100%', padding: '7px 8px', border: '1px solid #ddd',
                        borderRadius: 5, fontSize: 13 }}>
-        <option value="">Elegir persona de la obra…</option>
+        <option value="">
+          {falloLista ? 'No se pudo cargar' : 'Elegir persona de la obra…'}
+        </option>
         {personas.map(p => (
           <option key={p.sujeto_id} value={p.sujeto_id}>
             {p.nombre}{p.empresa ? ` — ${p.empresa}` : ''}

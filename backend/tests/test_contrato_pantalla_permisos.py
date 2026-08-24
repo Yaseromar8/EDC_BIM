@@ -106,3 +106,27 @@ def test_la_deteccion_de_tipo_mira_la_extension_real():
     assert "lowerName.endsWith('.pdf')" in s
     # Y la etiqueta se sigue viendo, en la cabecera, sin contaminar el nombre.
     assert 'previewFile.etiqueta' in s
+
+
+# ── En permisos, «vacío» y «roto» no pueden verse igual ─────────────────────
+#
+# Las dos pantallas de control de acceso convertían un fallo de carga en una
+# lista vacía. El administrador lee «no hay a quien conceder», da por bueno un
+# reparto que nadie comprobó — o concede de más «por si acaso», que es
+# exactamente como se pierde el control de un expediente.
+
+def test_el_selector_del_inspector_distingue_fallo_de_vacio():
+    panel = _leer('FolderPermissionsPanel.jsx')
+    assert 'falloLista' in panel
+    assert 'La lista está incompleta' in panel
+    assert '.catch(() => setPersonas([]))' not in panel, (
+        'volvió el catch que convierte un fallo en «no hay nadie»')
+
+
+def test_el_modal_de_conceder_distingue_fallo_de_vacio():
+    modal = _leer('AddPermissionModal.jsx')
+    assert 'errorCatalogo' in modal
+    assert 'La lista está incompleta' in modal
+    # El texto vive en JSX multilinea: se normaliza el espacio antes de buscar.
+    plano = ' '.join(modal.split())
+    assert 'no concedas dando por hecho que no hay nadie' in plano
