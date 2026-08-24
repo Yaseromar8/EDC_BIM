@@ -359,6 +359,21 @@ function TagsTab() {
   const [newCompany, setNewCompany] = useState('');
   const [newJobTitle, setNewJobTitle] = useState('');
 
+  // La vista de ENTIDAD: cada empresa con su contexto (personas, obras y
+  // función, reglas de permiso que la nombran). Sin esto la pestaña era una
+  // lista de nombres — y borrar uno parecía inocuo cuando no lo era.
+  const [resumen, setResumen] = useState({});
+  const fetchResumen = async () => {
+    try {
+      const r = await apiFetch(`${API}/api/entidad/empresas`);
+      if (!r.ok) return;
+      const d = await r.json();
+      const m = {};
+      (d.empresas || []).forEach(e => { m[e.id] = e; });
+      setResumen(m);
+    } catch { /* el catálogo pelado sigue sirviendo */ }
+  };
+
   const fetchTags = async () => {
     try {
       const rc = await apiFetch(`${API}/api/companies`);
@@ -368,20 +383,39 @@ function TagsTab() {
     } catch (e) { console.error(e); }
   };
 
-  useEffect(() => { fetchTags(); }, []);
+  useEffect(() => { fetchTags(); fetchResumen(); }, []);
 
   const handleAddCompany = async () => {
     if (!newCompany.trim()) return;
-    await apiFetch(`${API}/api/companies`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newCompany }) });
-    setNewCompany(''); fetchTags();
+    const r = await apiFetch(`${API}/api/companies`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newCompany }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast.error(d.error || 'No se pudo crear.'); return; }
+    setNewCompany(''); fetchTags(); fetchResumen();
   };
   const handleAddJobTitle = async () => {
     if (!newJobTitle.trim()) return;
-    await apiFetch(`${API}/api/job_titles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newJobTitle }) });
+    const r = await apiFetch(`${API}/api/job_titles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newJobTitle }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast.error(d.error || 'No se pudo crear.'); return; }
     setNewJobTitle(''); fetchTags();
   };
-  const handleDeleteComp = async (id) => { if (!await confirmAction({ title: 'Borrar empresa', message: 'Se eliminará esta empresa del catálogo.', confirmText: 'Borrar', danger: true })) return; await apiFetch(`${API}/api/companies/${id}`, { method: 'DELETE' }); fetchTags(); };
-  const handleDeleteJob = async (id) => { if (!await confirmAction({ title: 'Borrar cargo', message: 'Se eliminará este cargo del catálogo.', confirmText: 'Borrar', danger: true })) return; await apiFetch(`${API}/api/job_titles/${id}`, { method: 'DELETE' }); fetchTags(); };
+  const handleDeleteComp = async (id) => {
+    if (!await confirmAction({ title: 'Borrar empresa', message: 'Se eliminará esta empresa del catálogo.', confirmText: 'Borrar', danger: true })) return;
+    // El servidor ahora se NIEGA si la empresa tiene gente, participaciones o
+    // reglas de permiso (borrarla degradaría permisos en silencio). Esa
+    // negativa se enseña tal cual: dice exactamente qué retirar primero.
+    const r = await apiFetch(`${API}/api/companies/${id}`, { method: 'DELETE' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) toast.error(d.error || 'No se pudo borrar.');
+    fetchTags(); fetchResumen();
+  };
+  const handleDeleteJob = async (id) => {
+    if (!await confirmAction({ title: 'Borrar cargo', message: 'Se eliminará este cargo del catálogo.', confirmText: 'Borrar', danger: true })) return;
+    const r = await apiFetch(`${API}/api/job_titles/${id}`, { method: 'DELETE' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) toast.error(d.error || 'No se pudo borrar.');
+    fetchTags();
+  };
 
   return (
     // maxWidth: sin tope, cada tarjeta ocupaba media pantalla en monitores anchos
@@ -393,7 +427,23 @@ function TagsTab() {
           <input className="adsk-input" placeholder="Nueva Empresa" value={newCompany} onChange={e => setNewCompany(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddCompany()} />
           <button className="btn btn-primary" onClick={handleAddCompany}>Añadir</button>
         </div>
-        <table className="data-table"><tbody>{companies.map(c => (<tr key={c.id}><td>{c.name}</td><td style={{ width: 50 }}><button className="btn-icon" title="Borrar empresa" onClick={() => handleDeleteComp(c.id)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg></button></td></tr>))}</tbody></table>
+        <table className="data-table"><tbody>{companies.map(c => (<tr key={c.id}><td>
+          <div style={{ fontWeight: 500 }}>{c.name}</div>
+          {/* El contexto que convierte la lista en un directorio de cuenta:
+              sin él, borrar un nombre parece inocuo cuando puede dejar a
+              media obra sin su función contractual. */}
+          {resumen[c.id] && (
+            <div style={{ fontSize: 11.5, color: '#8a939e', marginTop: 2 }}>
+              {resumen[c.id].personas} persona{resumen[c.id].personas !== 1 ? 's' : ''}
+              {resumen[c.id].obras.length > 0 && (
+                <> · {resumen[c.id].obras.map(o => `${o.obra} (${o.funcion})`).join(' · ')}</>
+              )}
+              {resumen[c.id].reglas_de_permiso > 0 && (
+                <> · {resumen[c.id].reglas_de_permiso} regla{resumen[c.id].reglas_de_permiso !== 1 ? 's' : ''} de permiso</>
+              )}
+            </div>
+          )}
+        </td><td style={{ width: 50 }}><button className="btn-icon" title={resumen[c.id] && (resumen[c.id].personas || resumen[c.id].obras.length || resumen[c.id].reglas_de_permiso) ? 'En uso: retira antes sus referencias' : 'Borrar empresa'} onClick={() => handleDeleteComp(c.id)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg></button></td></tr>))}</tbody></table>
       </div>
       <div style={{ flex: '1 1 380px', minWidth: 300, background: '#fff', borderRadius: 6, padding: 18, border: '1px solid #ddd' }}>
         <h3 style={{ marginBottom: 14, fontSize: 15 }}>Cargos</h3>
@@ -529,7 +579,7 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
         <div className="tabs">
           <span className={`tab ${activeTab === 'projects' ? 'active' : ''}`} onClick={() => setActiveTab('projects')}>Proyectos</span>
           {isAdmin && <span className={`tab ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>Usuarios</span>}
-          {isAdmin && <span className={`tab ${activeTab === 'tags' ? 'active' : ''}`} onClick={() => setActiveTab('tags')}>Etiquetas</span>}
+          {isAdmin && <span className={`tab ${activeTab === 'tags' ? 'active' : ''}`} onClick={() => setActiveTab('tags')}>Empresas y cargos</span>}
           {isAdmin && <span className={`tab ${activeTab === 'actividad' ? 'active' : ''}`} onClick={() => setActiveTab('actividad')}>Actividad</span>}
         </div>
         {activeTab === 'projects' ? (

@@ -1314,6 +1314,13 @@ def cambiar_rol(user_id):
 
 @auth_bp.route('/api/companies', methods=['GET', 'POST'])
 def manage_companies():
+    """El catálogo de EMPRESAS de la entidad.
+
+    LEER es de cualquiera (los selectores de Participantes lo usan y la
+    política lo declara público-en-lectura). ESCRIBIR es del Entity Admin:
+    el catálogo es de la entidad, no de una obra — estas rutas nacieron sin
+    esa distinción y cualquier sesión podía crear y borrar empresas.
+    """
     if request.method == 'GET':
         try:
             with get_db_connection() as conn:
@@ -1323,27 +1330,125 @@ def manage_companies():
         except Exception as e:
             return jsonify({'error': str(e)}), 500
     elif request.method == 'POST':
+        denied = _require_admin("crear empresas en el catálogo de la entidad")
+        if denied:
+            return denied
         try:
-            name = request.get_json().get('name')
-            if not name: return jsonify({'error': 'Nombre es requerido'}), 400
-            
+            name = (request.get_json().get('name') or '').strip()
+            if not name:
+                return jsonify({'error': 'Nombre es requerido'}), 400
             with get_db_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute('INSERT INTO companies (name) VALUES (%s) RETURNING id', (name.strip(),))
+                # SIN DUPLICADOS, sin distinguir mayúsculas: dos «SINOHYDRO»
+                # hacen que el selector de Participantes elija la equivocada, y
+                # las reglas de permiso por empresa apunten a una mitad.
+                cursor.execute('SELECT id, name FROM companies WHERE LOWER(name) = LOWER(%s)',
+                               (name,))
+                ya = cursor.fetchone()
+                if ya:
+                    return jsonify({'error': 'Ya existe la empresa «%s».' % ya[1],
+                                    'code': 'EMPRESA_DUPLICADA', 'id': ya[0]}), 409
+                cursor.execute('INSERT INTO companies (name) VALUES (%s) RETURNING id', (name,))
                 new_id = cursor.fetchone()[0]
                 conn.commit()
-                return jsonify({'id': new_id, 'name': name.strip()}), 201
+                return jsonify({'id': new_id, 'name': name}), 201
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
 @auth_bp.route('/api/companies/<int:company_id>', methods=['DELETE'])
 def delete_company(company_id):
+    """Borra una empresa del catálogo — SOLO si nada la referencia.
+
+    Antes borraba a ciegas, y el borrado arrastraba en silencio:
+
+      · `users.company_id` → NULL: su gente quedaba «sin empresa», y sin
+        empresa NO HAY función contractual derivada — las reglas de permiso
+        por EMPRESA y por FUNCIÓN dejaban de alcanzarles. Borrar un nombre
+        del catálogo degradaba permisos sin que nadie lo viera.
+      · `project_companies` → CASCADE: la participación (y su función) en
+        cada obra desaparecía.
+      · `folder_permissions` con sujeto COMPANY quedaba apuntando a una
+        empresa muerta: una regla huérfana que ya no alcanza a nadie.
+
+    La regla de la casa: primero se retira lo que la referencia (cada cosa
+    en su pantalla), y borrar es lo último. El 409 dice exactamente qué
+    queda.
+    """
+    denied = _require_admin("borrar empresas del catálogo de la entidad")
+    if denied:
+        return denied
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            cursor.execute('SELECT count(*) FROM users WHERE company_id = %s '
+                           '  AND COALESCE(is_active, TRUE)', (company_id,))
+            personas = cursor.fetchone()[0]
+            cursor.execute('SELECT count(*) FROM project_companies WHERE company_id = %s',
+                           (company_id,))
+            obras = cursor.fetchone()[0]
+            cursor.execute("SELECT count(*) FROM folder_permissions "
+                           " WHERE sujeto_tipo = 'COMPANY' AND sujeto_id = %s",
+                           (str(company_id),))
+            reglas = cursor.fetchone()[0]
+            if personas or obras or reglas:
+                partes = []
+                if personas:
+                    partes.append('%d persona%s' % (personas, 's' if personas != 1 else ''))
+                if obras:
+                    partes.append('participa en %d obra%s' % (obras, 's' if obras != 1 else ''))
+                if reglas:
+                    partes.append('%d regla%s de permiso' % (reglas, 's' if reglas != 1 else ''))
+                return jsonify({
+                    'error': 'No se puede borrar: tiene %s. Retira primero esas '
+                             'referencias — borrar la empresa las degradaría en '
+                             'silencio.' % ', '.join(partes),
+                    'code': 'EMPRESA_EN_USO',
+                    'personas': personas, 'obras': obras, 'reglas': reglas}), 409
             cursor.execute('DELETE FROM companies WHERE id = %s', (company_id,))
             conn.commit()
             return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@auth_bp.route('/api/entidad/empresas', methods=['GET'])
+@requiere_rol('admin')
+def resumen_de_empresas():
+    """LA VISTA DE ENTIDAD (capa 02): cada empresa con su contexto real.
+
+    El catálogo pelado (GET /api/companies) sirve a los selectores; esta
+    ruta responde la pregunta del administrador de la entidad: «¿quién es
+    esta empresa AQUÍ?» — cuánta gente tiene, en qué obras participa y con
+    qué función, y cuántas reglas de permiso la nombran. Es lo que separa
+    una lista de nombres de un directorio de cuenta.
+    """
+    denied = _require_admin("ver el directorio de empresas de la entidad")
+    if denied:
+        return denied
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT c.id, c.name,
+                       (SELECT count(*) FROM users u
+                         WHERE u.company_id = c.id AND COALESCE(u.is_active, TRUE)),
+                       (SELECT count(*) FROM folder_permissions fp
+                         WHERE fp.sujeto_tipo = 'COMPANY' AND fp.sujeto_id = c.id::text)
+                  FROM companies c ORDER BY c.name
+            """)
+            empresas = {r[0]: {'id': r[0], 'name': r[1], 'personas': r[2],
+                               'reglas_de_permiso': r[3], 'obras': []}
+                        for r in cur.fetchall()}
+            cur.execute("""
+                SELECT pc.company_id, p.name, pc.funcion
+                  FROM project_companies pc
+                  JOIN projects p ON p.id = pc.project_id
+                 ORDER BY p.name
+            """)
+            for cid, obra, funcion in cur.fetchall():
+                if cid in empresas:
+                    empresas[cid]['obras'].append({'obra': obra, 'funcion': funcion})
+        return jsonify({'empresas': sorted(empresas.values(),
+                                           key=lambda e: e['name'].lower())}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1358,24 +1463,48 @@ def manage_job_titles():
         except Exception as e:
             return jsonify({'error': str(e)}), 500
     elif request.method == 'POST':
+        # Mismo fuero que las empresas: el catalogo es de la entidad, y estas
+        # rutas nacieron exigiendo solo sesion -- cualquier usuario podia
+        # escribir en el.
+        denied = _require_admin("crear cargos en el catálogo de la entidad")
+        if denied:
+            return denied
         try:
-            name = request.get_json().get('name')
-            if not name: return jsonify({'error': 'Nombre es requerido'}), 400
-            
+            name = (request.get_json().get('name') or '').strip()
+            if not name:
+                return jsonify({'error': 'Nombre es requerido'}), 400
             with get_db_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute('INSERT INTO job_titles (name) VALUES (%s) RETURNING id', (name.strip(),))
+                cursor.execute('SELECT id FROM job_titles WHERE LOWER(name) = LOWER(%s)', (name,))
+                if cursor.fetchone():
+                    return jsonify({'error': 'Ese cargo ya existe.',
+                                    'code': 'CARGO_DUPLICADO'}), 409
+                cursor.execute('INSERT INTO job_titles (name) VALUES (%s) RETURNING id', (name,))
                 new_id = cursor.fetchone()[0]
                 conn.commit()
-                return jsonify({'id': new_id, 'name': name.strip()}), 201
+                return jsonify({'id': new_id, 'name': name}), 201
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
 @auth_bp.route('/api/job_titles/<int:job_id>', methods=['DELETE'])
 def delete_job_title(job_id):
+    denied = _require_admin("borrar cargos del catálogo de la entidad")
+    if denied:
+        return denied
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            # Borrar un cargo en uso dejaba fichas con el cargo en blanco, EN
+            # SILENCIO (FK SET NULL). Se retira primero de las personas.
+            cursor.execute('SELECT count(*) FROM users WHERE job_title_id = %s '
+                           '  AND COALESCE(is_active, TRUE)', (job_id,))
+            en_uso = cursor.fetchone()[0]
+            if en_uso:
+                return jsonify({'error': 'No se puede borrar: %d persona%s lo '
+                                         'tiene%s como cargo.' % (
+                                             en_uso, 's' if en_uso != 1 else '',
+                                             'n' if en_uso != 1 else ''),
+                                'code': 'CARGO_EN_USO'}), 409
             cursor.execute('DELETE FROM job_titles WHERE id = %s', (job_id,))
             conn.commit()
             return jsonify({'success': True}), 200
