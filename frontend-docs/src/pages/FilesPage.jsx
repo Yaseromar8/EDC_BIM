@@ -30,6 +30,7 @@ import HerramientasDeObra from '../components/HerramientasDeObra';
 const HERRAMIENTA_DE_MODO = {
   rfis: 'rfi', redlines: 'redlines', reviews: 'reviews',
   transmittals: 'transmittals', submittals: 'submittals',
+  planos: 'planos',
   plan: 'plan_entregas', sets: 'conjuntos',
   multimedia: 'fotos',
 };
@@ -56,6 +57,7 @@ const ParticipantesModule = lazy(() => import('../components/ParticipantesModule
 const BusquedaGlobalModule = lazy(() => import('../components/BusquedaGlobalModule'));
 const RfiModule = lazy(() => import('../components/RfiModule'));
 const SubmittalsModule = lazy(() => import('../components/SubmittalsModule'));
+const PlanosModule = lazy(() => import('../components/PlanosModule'));
 const MultimediaModule = lazy(() => import('../components/MultimediaModule'));
 const GatewayPanel = lazy(() => import('../components/panels/GatewayPanel'));
 const QuarantineTable = lazy(() => import('../components/panels/QuarantineTable'));
@@ -329,6 +331,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   { label: 'Revisiones', mode: 'reviews', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>, onClick: () => fe.setSidebarView('reviews') },
                   { label: 'Transmittals', mode: 'transmittals', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>, onClick: () => fe.setSidebarView('transmittals') },
                   { label: 'Submittals', mode: 'submittals', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>, onClick: () => fe.setSidebarView('submittals') },
+                  { label: 'Planos', mode: 'planos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/></svg>, onClick: () => fe.setSidebarView('planos') },
                   { label: 'Plan de entrega', mode: 'plan', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11H3v10h6V11z"/><path d="M15 3H9v18h6V3z"/><path d="M21 7h-6v14h6V7z"/></svg>, onClick: () => fe.setSidebarView('plan') },
                   { label: 'Conjuntos', mode: 'sets', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>, onClick: () => fe.setSidebarView('sets') },
                 ]},
@@ -465,6 +468,10 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
         {fe.sidebarView === 'submittals' && (
           <SubmittalsModule project={project} API={API} user={user} isAdmin={isAdmin} />
+        )}
+
+        {fe.sidebarView === 'planos' && (
+          <PlanosModule project={project} API={API} user={user} isAdmin={isAdmin} />
         )}
 
         {/* MULTIMEDIA VIEW */}
