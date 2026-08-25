@@ -186,10 +186,20 @@ su resometimiento, apuntando a la anterior por `revision_de`. El índice único 
 | perímetro del ajeno (5 rutas) | 403 en las cinco |
 | los 4 submittals antiguos | texto intacto, **sin enlazar** |
 
-**No probado, y se declara:** que un documento de **otra obra** no se pueda
-clavar como revisión. La guardia existe en el código y su prueba unitaria pasa,
-pero en producción no había ningún documento de otra obra accesible con las
-identidades de QA, así que la comprobación **contra el servicio** no se ejecutó.
+**Quedó declarado como no probado** que un documento de **otra obra** no se
+pueda clavar como revisión: en producción no había ningún documento de otra obra
+accesible con las identidades de QA.
+
+**COMPLETADO el mismo 25-ago**, durante las negativas de GAP 02 (doc 89).
+Apareció de forma natural un documento de `proyectos/PQT8_TALARA` y se ejecutó
+lo que faltaba, contra el servicio desplegado:
+
+```
+    revisión de sección con documento de otra obra  →  409 OTRA_OBRA
+    leer encabezado de documento de otra obra       →  409 OTRA_OBRA
+```
+
+Ya no queda `PROD EXP ❌`.
 
 ---
 
@@ -217,9 +227,14 @@ respetó: la migración 18 entró primero y el despliegue no rompió nada.
 
 ### Veredicto
 
-**GAP 05 · ESPECIFICACIONES COMO OBJETO — COMPLETE**, con una ausencia
-declarada: la comprobación de «documento de otra obra» no se ejecutó contra el
-servicio desplegado por falta de datos, solo en pruebas unitarias.
+**GAP 05 · ESPECIFICACIONES COMO OBJETO — COMPLETE**, ya sin ausencias: la
+comprobación de «documento de otra obra» se ejecutó contra el servicio el mismo
+día (doc 89).
+
+**Corregido después de cerrar:** `routes/specs.py` importaba `from storage
+import get_blob_data` y **ese módulo no existe** — el `except` lo convertía en un
+error educado y el OCR del encabezado estaba muerto. Lo destapó el tripwire
+`test_imports_inventados`, escrito a raíz de este mismo fallo (doc 89 §2.3).
 
 **Fuera a propósito** (no son este gap): comparación de revisiones palabra por
 palabra, y extracción automática de la tabla de contenidos para crear todas las
