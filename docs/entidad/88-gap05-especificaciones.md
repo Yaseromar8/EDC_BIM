@@ -110,9 +110,10 @@ plano pero no emitir su primera revisión**. `POST /api/planos/<pid>/revisiones`
 existe desde GAP 02 y no la llamaba nadie. GAP 02 se declaró COMPLETE porque su
 EXP fue contra la API directamente.
 
-Se creó `SelectorDeDocumento.jsx` como componente compartido y se usa en
-Especificaciones. **La pantalla de Planos sigue sin usarlo**: queda señalado
-como tarea propia, no arreglado de tapadillo dentro de otro gap.
+Se creó `SelectorDeDocumento.jsx` como componente compartido y se usó primero en
+Especificaciones. **Corregido el mismo día en Planos** tras la revisión del
+propietario: ver doc 89, donde además se descubrió que el selector deducía la
+ruta del nombre de la obra y salía vacío.
 
 ---
 
