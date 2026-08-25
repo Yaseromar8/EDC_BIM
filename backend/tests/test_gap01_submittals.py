@@ -412,3 +412,35 @@ def test_ningun_fallo_de_encargo_puede_tumbar_un_acto_contractual():
         cuerpo = fuente.split(helper)[1].split('\ndef ')[0]
         assert 'try:' in cuerpo and 'except' in cuerpo, (
             '%s tiene que tragarse su propio fallo' % helper)
+
+
+# ── LA CONCILIACION DE CIERRE ENCONTRO ESTO ────────────────────────────────
+
+def test_spec_y_paquete_se_pueden_FILTRAR_no_solo_guardar():
+    """Guardar `spec_seccion` y `paquete` sin poder agrupar por ellos era tener
+    el DATO y no la CAPACIDAD. En una obra con doscientos submittals la pregunta
+    que se hace es «ensename los de la seccion 05 52 13», no «todos»."""
+    fuente = io.open(os.path.join(RAIZ, 'routes', 'submittals.py'), encoding='utf-8').read()
+    cuerpo = fuente.split('def listar')[1].split('\ndef ')[0]
+    for campo in ('spec_seccion', 'paquete', 'estado'):
+        assert "request.args.get('%s')" % campo in cuerpo, 'no se puede filtrar por %s' % campo
+    # Y se devuelven las agrupaciones QUE EXISTEN, no una lista inventada.
+    assert 'spec_secciones' in cuerpo and 'paquetes' in cuerpo
+
+
+def test_el_revisor_puede_DEVOLVER_documentos():
+    """Su respuesta no puede ser solo texto: devuelve el documento marcado, el
+    sello, la observacion escrita."""
+    fuente = io.open(os.path.join(RAIZ, 'routes', 'submittals.py'), encoding='utf-8').read()
+    cuerpo = fuente.split('def responder')[1].split('\ndef ')[0]
+    assert "data.get('adjuntos')" in cuerpo
+    assert 'de_revision' in cuerpo, 'hay que distinguir lo sometido de lo devuelto'
+
+
+def test_lo_sometido_NO_se_sustituye_por_lo_devuelto():
+    """Si el adjunto del revisor pisara el del contratista, el veredicto dejaria
+    de recaer sobre lo que se leyo -- que es la razon de congelar al enviar."""
+    fuente = io.open(os.path.join(RAIZ, 'routes', 'submittals.py'), encoding='utf-8').read()
+    cuerpo = fuente.split('def responder')[1].split('\ndef ')[0]
+    assert 'adjuntos.append' in cuerpo, 'tiene que ANADIR, no reemplazar'
+    assert "adjuntos = list(s['adjuntos'] or [])" in cuerpo

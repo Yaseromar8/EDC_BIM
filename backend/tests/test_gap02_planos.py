@@ -296,3 +296,41 @@ def test_la_herramienta_existe_y_gobierna_su_ruta():
     assert 'planos' in hdo.CODIGOS
     assert hdo.herramienta_de_ruta('/api/planos') == 'planos'
     assert hdo.herramienta_de_ruta('/api/planos/7/revisiones') == 'planos'
+
+
+# ── LA CONCILIACION DE CIERRE ENCONTRO ESTO ────────────────────────────────
+
+def test_el_markup_personal_publicado_TIENE_RUTAS_no_solo_columnas():
+    """LO QUE LA CONCILIACION CONTRA EL BENCHMARK ENCONTRO:
+
+    La migracion 14 anadio `publicado`, `publicado_en` y `publicado_por` a
+    `pdf_markups` -- y NINGUNA ruta las usaba. La capacidad estaba MUERTA:
+    columnas en la base, cero comportamiento. Es exactamente el caso que la
+    regla del proyecto llama «existe en el backend no cuenta como implementado»,
+    y habria pasado por buena porque el ARQ/OP/EXP del flujo principal iba en
+    verde.
+
+    Ahora: el listado FILTRA y publicar es un acto propio.
+    """
+    fuente = io.open(os.path.join(RAIZ, 'routes', 'pdf_tools.py'), encoding='utf-8').read()
+    assert 'publicado OR created_by' in fuente, (
+        'el listado tiene que ensenar lo publicado MAS lo propio sin publicar')
+    assert "/publicar'" in fuente, 'falta el acto de publicar'
+
+
+def test_el_filtro_de_visibilidad_va_en_el_SQL():
+    """Traer lo ajeno sin publicar y descartarlo en Python ya seria haberlo
+    enviado por la red."""
+    fuente = io.open(os.path.join(RAIZ, 'routes', 'pdf_tools.py'), encoding='utf-8').read()
+    cuerpo = fuente.split('def list_markups')[1].split('\ndef ')[0]
+    assert 'publicado OR created_by' in cuerpo
+    assert 'WHERE file_node_id' in cuerpo
+
+
+def test_solo_el_autor_publica_su_marca():
+    """Publicar es firmar que esa marca ya es para todos, y esa firma es de
+    quien la hizo. Un administrador tampoco publica por el."""
+    fuente = io.open(os.path.join(RAIZ, 'routes', 'pdf_tools.py'), encoding='utf-8').read()
+    cuerpo = fuente.split('def publicar_markup')[1].split('\ndef ')[0]
+    assert 'AND created_by = %s' in cuerpo, 'cualquiera podria publicar la marca de otro'
+    assert "role" not in cuerpo, 'el admin no publica por su autor'

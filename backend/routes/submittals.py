@@ -154,6 +154,13 @@ def listar():
     if not obra:
         return jsonify({'error': 'No se pudo determinar la obra.',
                         'code': 'PROJECT_UNRESOLVED'}), 400
+    # AGRUPAR POR SPEC Y POR PAQUETE, que es para lo que los dos fabricantes
+    # los tienen. Guardarlos sin poder filtrar por ellos era tener el DATO y no
+    # la CAPACIDAD -- en una obra con doscientos submittals, «ensename los de
+    # la seccion 05 52 13» es la pregunta que se hace, no «ensenamelos todos».
+    spec = (request.args.get('spec_seccion') or '').strip() or None
+    paquete = (request.args.get('paquete') or '').strip() or None
+    estado = (request.args.get('estado') or '').strip() or None
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -161,8 +168,24 @@ def listar():
             # tiene varios. Filtrar por alias escondería submittals de la misma
             # obra creados bajo otro.
             cur.execute('SELECT %s FROM doc_submittals WHERE project_id = %%s '
-                        ' ORDER BY codigo DESC, revision DESC' % _COLS, (obra,))
-            return jsonify({'submittals': [_fila(r) for r in cur.fetchall()]})
+                        '   AND (%%s IS NULL OR spec_seccion = %%s) '
+                        '   AND (%%s IS NULL OR paquete = %%s) '
+                        '   AND (%%s IS NULL OR estado = %%s) '
+                        ' ORDER BY codigo DESC, revision DESC' % _COLS,
+                        (obra, spec, spec, paquete, paquete, estado, estado))
+            filas = [_fila(r) for r in cur.fetchall()]
+            # Y las agrupaciones QUE EXISTEN, para que la pantalla ofrezca solo
+            # las que tienen contenido en vez de una lista inventada.
+            cur.execute("""SELECT spec_seccion, count(*) FROM doc_submittals
+                            WHERE project_id = %s AND spec_seccion IS NOT NULL
+                            GROUP BY spec_seccion ORDER BY spec_seccion""", (obra,))
+            specs = [{'codigo': r[0], 'cuantos': r[1]} for r in cur.fetchall()]
+            cur.execute("""SELECT paquete, count(*) FROM doc_submittals
+                            WHERE project_id = %s AND paquete IS NOT NULL
+                            GROUP BY paquete ORDER BY paquete""", (obra,))
+            paquetes = [{'nombre': r[0], 'cuantos': r[1]} for r in cur.fetchall()]
+            return jsonify({'submittals': filas,
+                            'spec_secciones': specs, 'paquetes': paquetes})
     except Exception as e:
         logger.error('listar submittals: %s', e)
         return jsonify({'error': 'No se pudo listar.'}), 500
@@ -467,8 +490,22 @@ def responder(sid):
                                          % rev.etiqueta_del_paso(pasos[i]),
                                 'code': 'NO_ES_TU_PASO'}), 403
 
+            # EL REVISOR DEVUELVE ALGO, no solo texto: el documento marcado,
+            # el sello, la observacion escrita. Se anade a `adjuntos` con quien
+            # y en que paso -- NUNCA se sustituye lo sometido, porque entonces
+            # el veredicto dejaria de recaer sobre lo que se leyo.
+            adjuntos = list(s['adjuntos'] or [])
+            devueltos = data.get('adjuntos') or []
+            for a in devueltos:
+                adjuntos.append({**(a if isinstance(a, dict) else {'nombre': a}),
+                                 'de_revision': True, 'paso': i, 'por': _actor()})
+            if devueltos:
+                cur.execute('UPDATE doc_submittals SET adjuntos = %s WHERE id = %s',
+                            (json.dumps(adjuntos), sid))
+
             hist = s['history'] + [reg.entrada(
                 'step_answered', _actor(), step=i, veredicto=veredicto,
+                adjuntos=len(devueltos) or None,
                 comentario=(data.get('comentario') or '').strip() or None)]
 
             # UN VEREDICTO QUE EXIGE REVISION CORTA LA CADENA. Seguir pasando a

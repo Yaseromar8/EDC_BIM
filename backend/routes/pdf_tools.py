@@ -117,17 +117,32 @@ def list_markups():
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
-            if page:
-                cur.execute("""SELECT id, page, kind, geometry, style, text_content, created_by, created_at
-                               FROM pdf_markups WHERE file_node_id = %s AND page = %s ORDER BY id""",
-                            (node_id, page))
-            else:
-                cur.execute("""SELECT id, page, kind, geometry, style, text_content, created_by, created_at
-                               FROM pdf_markups WHERE file_node_id = %s ORDER BY id""", (node_id,))
+            # GAP 02 · PERSONAL vs PUBLICADO.
+            #
+            # Cada quien ve LO PUBLICADO y ADEMAS LO SUYO todavia sin publicar.
+            # Un markup es primero un BORRADOR de quien lo dibuja: si cada trazo
+            # tentativo apareciera para toda la obra en el acto, la gente
+            # dejaria de marcar sobre el plano y volveria a las capturas de
+            # pantalla por WhatsApp -- que es exactamente lo que este producto
+            # existe para evitar.
+            #
+            # El filtro va en el SQL y no en Python: traer lo ajeno sin publicar
+            # y descartarlo despues ya seria haberlo enviado por la red.
+            autor = _user().get('name') or ''
+            cond = 'AND page = %s' if page else ''
+            params = [node_id] + ([page] if page else []) + [autor]
+            cur.execute("""SELECT id, page, kind, geometry, style, text_content,
+                                  created_by, created_at, publicado, publicado_en
+                             FROM pdf_markups
+                            WHERE file_node_id = %s """ + cond + """
+                              AND (publicado OR created_by = %s)
+                            ORDER BY id""", params)
             rows = [{
                 "id": r[0], "page": r[1], "kind": r[2], "geometry": r[3],
                 "style": r[4] or {}, "text": r[5], "created_by": r[6],
-                "created_at": r[7].isoformat() if r[7] else None
+                "created_at": r[7].isoformat() if r[7] else None,
+                "publicado": bool(r[8]),
+                "publicado_en": r[9].isoformat() if r[9] else None,
             } for r in cur.fetchall()]
         return jsonify({"success": True, "markups": rows})
     except Exception as e:
@@ -183,6 +198,45 @@ def delete_markup(markup_id):
             return jsonify({"success": False, "error": "No encontrado o sin permiso"}), 403
         return jsonify({"success": True})
     except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@pdf_tools_bp.route('/api/pdf/markups/<int:markup_id>/publicar', methods=['POST'])
+def publicar_markup(markup_id):
+    """Publicar es un ACTO, y solo de su autor.
+
+    No se publica «al guardar» ni con un interruptor global: quien dibujo la
+    marca decide cuando deja de ser su borrador. Un administrador tampoco
+    publica por el -- publicar es firmar que esa marca ya es para todos, y esa
+    firma es de quien la hizo.
+
+    Despublicar SI se permite: retirar del plano una marca propia que ya no
+    aplica es lo contrario de reescribir la historia -- la marca sigue siendo
+    suya y sigue existiendo, solo deja de proponerse a los demas.
+    """
+    negativa = guardia_de_recurso('pdf_markups', markup_id)
+    if negativa:
+        return negativa
+    quiere = bool((request.get_json(silent=True) or {}).get('publicado', True))
+    autor = _user().get('name') or ''
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""UPDATE pdf_markups
+                              SET publicado = %s,
+                                  publicado_en = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE NULL END,
+                                  publicado_por = CASE WHEN %s THEN %s ELSE NULL END
+                            WHERE id = %s AND created_by = %s
+                        RETURNING publicado""",
+                        (quiere, quiere, quiere, _user().get('id'), markup_id, autor))
+            fila = cur.fetchone()
+            conn.commit()
+        if not fila:
+            return jsonify({"success": False,
+                            "error": "Solo el autor de la marca puede publicarla o retirarla."}), 403
+        return jsonify({"success": True, "publicado": fila[0]})
+    except Exception as e:
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 

@@ -28,6 +28,10 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
   const [abierto, setAbierto] = useState(null);
   const [revisiones, setRevisiones] = useState({});
   const [creando, setCreando] = useState(false);
+  // LOS SETS son el ACTO DE EMITIR: «la entrega del 15 de marzo». Existían en
+  // el backend y no en pantalla, y un dato que no se puede consultar no es una
+  // capacidad — es una columna.
+  const [sets, setSets] = useState([]);
 
   const urn = project?.model_urn || project?.urn;
 
@@ -57,6 +61,14 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
       .then(d => { if (d) setDisciplinas(d.disciplinas || []); })
       .catch(() => {});
   }, [API]);
+
+  useEffect(() => {
+    if (!urn) return;
+    apiFetch(`${API}/api/planos/sets?model_urn=${encodeURIComponent(urn)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d) setSets(d.sets || []); })
+      .catch(() => {});
+  }, [API, urn]);
 
   const verRevisiones = async (pid) => {
     if (abierto === pid) { setAbierto(null); return; }
@@ -212,6 +224,26 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
           </div>
         ))}
       </div>
+
+      {sets.length > 0 && (
+        <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px dashed #e2e8f0' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#8a9199',
+                        letterSpacing: '.04em', marginBottom: 7 }}>
+            EMISIONES · qué se entregó y cuándo
+          </div>
+          {sets.map(x => (
+            <div key={x.id} style={{ display: 'flex', alignItems: 'center', gap: 10,
+                                     padding: '6px 0', fontSize: 12.5, color: '#5f6b76',
+                                     borderBottom: '1px solid #f2f4f6' }}>
+              <b style={{ color: '#1f2933' }}>{x.nombre}</b>
+              {x.emitido_en && <span style={{ color: '#98a1ab' }}>{x.emitido_en.slice(0, 10)}</span>}
+              <span style={{ marginLeft: 'auto', color: '#98a1ab' }}>
+                {x.revisiones} {x.revisiones === 1 ? 'lámina' : 'láminas'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {creando && (
         <ModalNuevoPlano API={API} urn={urn} disciplinas={disciplinas}

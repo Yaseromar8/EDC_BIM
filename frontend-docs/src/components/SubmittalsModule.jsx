@@ -44,6 +44,10 @@ export default function SubmittalsModule({ project, API, user, isAdmin }) {
   const [abierto, setAbierto] = useState(null);
   const [creando, setCreando] = useState(false);
   const [ocupado, setOcupado] = useState(false);
+  // FILTRAR POR SPEC Y POR PAQUETE. En una obra con doscientos submittals la
+  // pregunta que se hace es «enséñame los de la sección 05 52 13», no «todos».
+  const [agrup, setAgrup] = useState({ spec_secciones: [], paquetes: [] });
+  const [filtro, setFiltro] = useState({ spec_seccion: '', paquete: '' });
 
   const urn = project?.model_urn || project?.urn;
 
@@ -51,17 +55,23 @@ export default function SubmittalsModule({ project, API, user, isAdmin }) {
     if (!urn) return;
     setError('');
     try {
-      const r = await apiFetch(`${API}/api/submittals?model_urn=${encodeURIComponent(urn)}`);
+      const q = new URLSearchParams({ model_urn: urn });
+      if (filtro.spec_seccion) q.set('spec_seccion', filtro.spec_seccion);
+      if (filtro.paquete) q.set('paquete', filtro.paquete);
+      const r = await apiFetch(`${API}/api/submittals?${q}`);
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'No se pudo cargar.');
       setLista(d.submittals || []);
+      // Solo las agrupaciones QUE EXISTEN: ofrecer una lista inventada haría
+      // que el usuario filtrara por algo que nunca devuelve nada.
+      setAgrup({ spec_secciones: d.spec_secciones || [], paquetes: d.paquetes || [] });
     } catch (e) {
       // Vacío y roto no son lo mismo: si esto falla, no se puede leer
       // «no hay submittals» — se dice que no se pudo cargar.
       setLista([]);
       setError(e.message || 'No se pudo cargar la lista.');
     }
-  }, [API, urn]);
+  }, [API, urn, filtro]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -113,6 +123,28 @@ export default function SubmittalsModule({ project, API, user, isAdmin }) {
         <h2 style={{ margin: 0, fontSize: 17, fontWeight: 650, color: '#1f2933' }}>
           Submittals
         </h2>
+        {agrup.spec_secciones.length > 0 && (
+          <select value={filtro.spec_seccion}
+                  onChange={e => setFiltro(f => ({ ...f, spec_seccion: e.target.value }))}
+                  style={{ padding: '5px 8px', border: '1px solid #dfe3e8',
+                           borderRadius: 5, fontSize: 12.5, color: '#5f6b76' }}>
+            <option value="">Toda especificación</option>
+            {agrup.spec_secciones.map(x => (
+              <option key={x.codigo} value={x.codigo}>{x.codigo} ({x.cuantos})</option>
+            ))}
+          </select>
+        )}
+        {agrup.paquetes.length > 0 && (
+          <select value={filtro.paquete}
+                  onChange={e => setFiltro(f => ({ ...f, paquete: e.target.value }))}
+                  style={{ padding: '5px 8px', border: '1px solid #dfe3e8',
+                           borderRadius: 5, fontSize: 12.5, color: '#5f6b76' }}>
+            <option value="">Todo paquete</option>
+            {agrup.paquetes.map(x => (
+              <option key={x.nombre} value={x.nombre}>{x.nombre} ({x.cuantos})</option>
+            ))}
+          </select>
+        )}
         <button type="button" disabled={ocupado}
                 onClick={() => setCreando(true)}
                 style={{ marginLeft: 'auto', padding: '7px 14px', borderRadius: 6,
