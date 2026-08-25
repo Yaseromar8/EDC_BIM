@@ -83,13 +83,33 @@ def capturar(cur, obra):
     molde['empresas'] = [{'company_id': r[0], 'funcion': r[1]} for r in cur.fetchall()]
 
     # ── Códigos de idoneidad: el vocabulario del expediente ──
+    #
+    # CON SAVEPOINT, y no con un `except` a secas. En PostgreSQL una sentencia
+    # que falla ABORTA LA TRANSACCIÓN ENTERA: tragarse el error deja el cursor
+    # envenenado y todo lo que venga después falla con «current transaction is
+    # aborted» — un fallo que aparece LEJOS de su causa y cuesta horas.
+    # Medido en la EXP de esta capa: la columna se llama `etiqueta`, no
+    # `descripcion`, y el except silencioso convirtió una consulta opcional en
+    # una captura rota.
+    #
+    # El SAVEPOINT acota el daño: si la consulta opcional falla, se deshace
+    # SOLO ella y la captura continúa.
+    molde['idoneidad'] = []
     try:
-        cur.execute("""SELECT codigo, descripcion FROM idoneidad_catalogo
-                        WHERE model_urn = (SELECT model_urn FROM projects WHERE id = %s)""",
+        cur.execute('SAVEPOINT antes_de_idoneidad')
+        cur.execute("""SELECT codigo, etiqueta, familia FROM idoneidad_catalogo
+                        WHERE model_urn = (SELECT model_urn FROM projects WHERE id = %s)
+                          AND COALESCE(activo, TRUE)""",
                     (str(obra),))
-        molde['idoneidad'] = [{'codigo': r[0], 'descripcion': r[1]} for r in cur.fetchall()]
-    except Exception:
-        molde['idoneidad'] = []
+        molde['idoneidad'] = [{'codigo': r[0], 'etiqueta': r[1], 'familia': r[2]}
+                              for r in cur.fetchall()]
+        cur.execute('RELEASE SAVEPOINT antes_de_idoneidad')
+    except Exception as e:
+        logger.warning('[plantilla] sin códigos de idoneidad: %s', str(e)[:120])
+        try:
+            cur.execute('ROLLBACK TO SAVEPOINT antes_de_idoneidad')
+        except Exception:
+            pass
 
     return molde
 
@@ -156,12 +176,24 @@ def aplicar(cur, molde, obra_destino, model_urn_destino, quien):
 
     # ── Vocabulario de idoneidad ──
     for i in (molde.get('idoneidad') or []):
+        # Mismo criterio que al capturar: SAVEPOINT, no `except` a secas. Un
+        # código que no entre no puede llevarse por delante las carpetas y las
+        # herramientas ya escritas.
         try:
-            cur.execute("""INSERT INTO idoneidad_catalogo (model_urn, codigo, descripcion)
-                           VALUES (%s, %s, %s) ON CONFLICT DO NOTHING""",
-                        (model_urn_destino, i['codigo'], i.get('descripcion')))
+            cur.execute('SAVEPOINT antes_de_un_codigo')
+            cur.execute("""INSERT INTO idoneidad_catalogo
+                                (model_urn, codigo, etiqueta, familia)
+                           VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING""",
+                        (model_urn_destino, i['codigo'], i.get('etiqueta'),
+                         i.get('familia')))
+            cur.execute('RELEASE SAVEPOINT antes_de_un_codigo')
             creado['idoneidad'] += 1
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning('[plantilla] código «%s» no se pudo crear: %s',
+                           i.get('codigo'), str(e)[:100])
+            try:
+                cur.execute('ROLLBACK TO SAVEPOINT antes_de_un_codigo')
+            except Exception:
+                pass
 
     return creado

@@ -164,3 +164,67 @@ def test_el_modulo_no_importa_nada_de_historia():
                       'folder_permissions', 'acceso_a_herramientas'):
         assert prohibido not in importados, (
             'plantillas_de_obra importa %s' % prohibido)
+
+
+# ── El defecto que la EXP encontró: transacción envenenada ──────────────────
+#
+# `capturar` consultaba `idoneidad_catalogo` con una columna que no existe
+# (`descripcion`; la real es `etiqueta`) y se tragaba el error con un `except`
+# a secas. En PostgreSQL una sentencia que falla ABORTA LA TRANSACCIÓN
+# ENTERA: el cursor quedaba envenenado y TODO lo que viniera después fallaba
+# con «current transaction is aborted» — lejos de su causa, y costando horas.
+
+class _CurConSavepoints:
+    """Doble que se comporta como PostgreSQL de verdad: una sentencia fallida
+    aborta la transacción hasta que se vuelve a un SAVEPOINT."""
+    def __init__(self, rompe_en=''):
+        self.abortada = False
+        self.rompe_en = rompe_en
+        self.sql = []
+    def execute(self, sql, params=None):
+        s = ' '.join(sql.split()).upper()
+        self.sql.append(s)
+        if s.startswith('ROLLBACK TO SAVEPOINT'):
+            self.abortada = False
+            return
+        if s.startswith(('SAVEPOINT', 'RELEASE SAVEPOINT')):
+            return
+        if self.abortada:
+            raise RuntimeError('current transaction is aborted')
+        if self.rompe_en and self.rompe_en in s:
+            self.abortada = True
+            raise RuntimeError('column does not exist')
+    def fetchall(self):
+        return []
+    def fetchone(self):
+        return None
+
+
+def test_una_consulta_opcional_rota_no_envenena_la_captura():
+    """Con SAVEPOINT, el fallo de la parte opcional se deshace SOLO a ella."""
+    import plantillas_de_obra as pdo
+    cur = _CurConSavepoints(rompe_en='IDONEIDAD_CATALOGO')
+    molde = pdo.capturar(cur, 'b.proj_x')
+    assert molde['idoneidad'] == []
+    assert cur.abortada is False, 'la transacción quedó envenenada'
+    assert any(s.startswith('ROLLBACK TO SAVEPOINT') for s in cur.sql), (
+        'sin ROLLBACK TO SAVEPOINT, el cursor queda inservible para el llamador')
+
+
+def test_un_codigo_que_no_entra_no_tumba_lo_ya_escrito():
+    import plantillas_de_obra as pdo
+    cur = _CurConSavepoints(rompe_en='INSERT INTO IDONEIDAD_CATALOGO')
+    molde = {'carpetas': [], 'herramientas': {'rfi': True},
+             'empresas': [], 'idoneidad': [{'codigo': 'A1', 'etiqueta': 'Apto'}]}
+    creado = pdo.aplicar(cur, molde, 'b.proj_n', 'proyectos/N', 'a@o.pe')
+    assert creado['herramientas'] == 1, 'lo ya escrito debe sobrevivir'
+    assert creado['idoneidad'] == 0
+    assert cur.abortada is False
+
+
+def test_se_usan_las_columnas_REALES_de_idoneidad():
+    """`descripcion` no existe en esa tabla: son `etiqueta` y `familia`."""
+    fuente = io.open(os.path.join(RAIZ, 'plantillas_de_obra.py'), encoding='utf-8').read()
+    codigo = '\n'.join(l for l in fuente.split('\n') if not l.strip().startswith('#'))
+    assert 'etiqueta' in codigo and 'familia' in codigo
+    assert 'idoneidad_catalogo (model_urn, codigo, descripcion)' not in codigo
