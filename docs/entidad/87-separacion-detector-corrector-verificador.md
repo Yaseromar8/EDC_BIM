@@ -191,29 +191,152 @@ El número sigue siendo una alarma gruesa. La protección es la familia.
 
 ---
 
-## 6 · ESTADO Y LO QUE FALTA
+## 6 · EL INCIDENTE DE DESPLIEGUE, PORQUE ENSEÑA ALGO
+
+El backend se desplegó **antes** de que corriera la migración 17 —que quedó
+bloqueada tres veces por el clasificador de permisos—. Medido contra el servicio
+en vivo con esa combinación:
+
+| ruta | resultado |
+|---|---|
+| `GET /api/issues/catalogo` | 200 — no toca la base |
+| `GET /api/issues?model_urn=…` | **500** |
+
+`doc_issues` tenía 28 columnas y `_COLS` leía una que no existía. La migración la
+ejecutó el propietario a mano y el servicio volvió a 200 sin reiniciar: es solo
+esquema.
+
+**La regla que queda escrita:** cuando una migración añade una columna que el
+código nuevo *lee*, la migración va **antes** del despliegue. Al revés no es un
+despliegue degradado — es un 500 en toda la superficie del objeto.
+
+---
+
+## 7 · EXP — TRES PERSONAS REALES, CONTRA PRODUCCIÓN
+
+Reparto, elegido para que las negativas signifiquen algo:
+
+```
+    DETECTOR   id 24  qa.manager   y ADEMÁS ADMINISTRADOR DE OBRA
+    CORRIGE    id 23  piloto1
+    VERIFICA   id 25  qa.revisor   NO es administrador
+```
+
+Que el detector sea además admin es el caso más duro: si `detector_id` heredara
+autoridad de cierre por algún resquicio, con ese usuario se vería. Y que el
+verificador **no** sea admin obliga a que su permiso venga de la designación y no
+del cargo.
+
+### 7.1 · Las negativas al nacer
+
+| acto | resultado |
+|---|---|
+| punch sin verificador | 409 `SIN_VERIFICADOR` |
+| punch con verificador = responsable | 409 `VERIFICADOR_ES_RESPONSABLE` |
+| punch sin lámina | 409 `SIN_UBICACION` |
+| verificador de fuera de la obra | 409 `VERIFICADOR_NO_MIEMBRO` |
+
+### 7.2 · El ciclo, con la pelota cambiando de manos
+
+`ISS-007` nace `detectó=24 · corrige=23 · verifica=25`, y la pelota va a 23.
+Tras corregir: 23 se queda con **0** encargos y 25 recibe *«Verificar la
+corrección de ISS-007»*. Tras cerrar: los tres a 0.
+
+### 7.3 · Quién cierra — la prueba de fuego
+
+| quién intenta verificar | resultado |
+|---|---|
+| quien corrigió (23) | **403** `NO_PUEDE_VERIFICAR` |
+| **el detector (24), que además es ADMIN DE OBRA** | **403** `NO_PUEDE_VERIFICAR` |
+| alguien de fuera de la obra | 403 `PROJECT_FORBIDDEN` |
+| rechazar sin motivo | 400 `SIN_MOTIVO` |
+| el verificador designado (25) | **200** |
+| reverificar lo ya cerrado | 409 `TRANSICION_INVALIDA` |
+
+La segunda fila es el resultado que se buscaba: **el detector no cierra ni siendo
+administrador de la obra.** Antes de esta pasada, cerraba por las dos vías.
+
+Rechazo → la pelota vuelve a 23 con *«Volver a corregir»*. Historial final:
+
+```
+    detected    qa.manager     corrected  piloto1
+    reopened    qa.revisor     corrected  piloto1     verified  qa.revisor
+```
+
+### 7.4 · Perímetro
+
+Quien no está en la obra recibe **403** en las cinco: listar, ver, levantar,
+cerrar y autorizar la excepción.
+
+### 7.5 · Sin verificador designado — los dos caminos
+
+`ISS-008` (CALIDAD, sin designar): al corregirse **la pelota no se adjudica
+sola** —0 encargos para todos—. Quien corrigió: 403. Un tercero no admin: 403.
+El administrador de obra: 200. La deuda queda visible, no adjudicada.
+
+### 7.6 · La excepción, escrita
+
+`ISS-009`: el responsable intentando concedérsela a sí mismo → 403. Un no admin →
+403. El admin sin motivo → 400. Con motivo → 200, y entonces el responsable se
+autoverifica. Lo que queda en el expediente:
+
+```
+    self_verification_allowed   qa.manager   «Frente aislado sin supervisión
+                                              hasta el lunes; se acepta que el
+                                              propio ejecutor certifique…»
+    verified                    piloto1
+```
+
+Quién la autorizó, con qué motivo y quién se autoverificó: las tres cosas
+legibles.
+
+### 7.7 · Regresión acotada de GAP 03
+
+Acta `PL-008` con un punto no conforme → `No liberado` → **`ISS-010`,
+tipo `NO_CONFORMIDAD`, origen `PROTOCOLO`**, `detectó=25 · corrige=23 ·
+verifica=25`, `redline_id = None`. Ciclo completo: el inspector no puede
+corregir (403), la contrata corrige, la contrata no puede cerrar (403), el
+inspector verifica. El acta sigue diciendo `No conforme`: cerrar el issue no
+reescribe lo que se comprobó aquel día.
+
+**Cero Red Lines nuevos**, medido en la base y no por la API —el contador vía API
+devolvía `None`, y comparar `None` con `None` no prueba nada—:
+
+```
+    total de Red Lines .................. 40, igual que antes
+    Red Line más reciente de toda la base  25-ago 16:10:27   (los 6 de QA, cerrados)
+    la regresión corrió a las ........... 19:43 – 19:46
+```
+
+### 7.8 · Invariantes medidas sobre los 10 issues
+
+```
+    corregidos sin verificador (deuda visible) ......... 0
+    cerrados por quien corrigió SIN autorización ....... 0
+    cerrados por el detector no designado .............. 0
+```
+
+---
+
+## 8 · ESTADO
 
 | pieza | estado |
 |---|---|
 | Arquitectura de las tres identidades | ✅ |
 | Backend (semántica, permisos, BIC, auditoría) | ✅ |
-| Pantalla `PunchModule` | ✅ compila (21,8 kB) |
-| Suite completa | ✅ **1230 en verde** |
-| Migración 17 · **ensayo** | ✅ contra producción en transacción revertida: backfill 6/6, 0 choques, la restricción muerde, idempotente, producción intacta |
-| Migración 17 · **pase real** | ⛔ **PENDIENTE** |
-| Backend desplegado | ⛔ **NO RESPONDE** |
-| EXP Issue Core · EXP Punch | ⏳ bloqueadas por lo anterior |
-| Regresión acotada de GAP 03 | ⏳ bloqueada por lo anterior |
-
-### El orden importa
-
-La migración 17 tiene que correr **antes** del despliegue del backend: el código
-nuevo lee `verificador_id`, y producción todavía no tiene esa columna. Al revés,
-el servicio arrancaría contra un esquema que no le sirve.
+| Pantalla `PunchModule` | ✅ |
+| Suite completa | ✅ 1230 en verde |
+| Migración 17 en producción | ✅ backfill 6/6, 0 choques, restricción activa |
+| EXP Issue Core | ✅ |
+| EXP Punch | ✅ |
+| EXP autoverificación | ✅ |
+| Regresión acotada de GAP 03 | ✅ |
 
 ### Veredicto
 
-**GAP 11 · ISSUE CORE — ARQ ✅ · OP ✅ · EXP ⏳**
-**GAP 04 · PUNCH — ⏳** (no COMPLETE: sin EXP no hay estado real)
+**GAP 11 · ISSUE CORE — ARQ ✅ · OP ✅ · EXP ✅**
+**GAP 04 · PUNCH — COMPLETE**
+
 **GAP 11 completo — sigue ⏳**, como se acordó: campos personalizados, causa
-raíz, estados y tipos configurables, taxonomías y automatización siguen fuera.
+raíz, estados y tipos configurables, taxonomías y automatización genérica siguen
+fuera a propósito.
