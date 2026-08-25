@@ -23,7 +23,19 @@ import { apiFetch } from '../utils/apiFetch';
 
 export default function SelectorDeDocumento({ API, project, titulo, ayuda,
                                               onElegir, onCerrar }) {
-  const raiz = `proyectos/${(project?.name || '').replace(/ /g, '_')}`;
+  // EL URN DE LA OBRA, NO UNA RUTA DEDUCIDA DE SU NOMBRE.
+  //
+  // La primera versión construía `proyectos/<NOMBRE_CON_GUIONES>`, copiado de
+  // `IssueModule`. Conduciendo la interfaz de verdad contra producción se vio
+  // que el selector salía VACÍO: los documentos de esa obra viven bajo su id
+  // canónico (`b.proj_…`) y con la ruta deducida el expediente devolvía cero
+  // carpetas y cero ficheros. La ruta deducida solo acierta cuando el nombre
+  // de la obra coincide con la carpeta, que es una coincidencia y no una regla.
+  //
+  // Se conserva la deducción como último recurso, para una obra que solo tenga
+  // el árbol antiguo.
+  const raiz = project?.model_urn || project?.urn
+            || `proyectos/${(project?.name || '').replace(/ /g, '_')}`;
   const [ruta, setRuta] = useState([{ id: null, name: project?.name || 'Obra', path: raiz + '/' }]);
   const [nodos, setNodos] = useState([]);
   const [cargando, setCargando] = useState(true);
