@@ -115,12 +115,20 @@ def test_lo_ya_escalado_no_se_duplica():
     assert [n for n, _ in pro.items_a_escalar(items)] == [1]
 
 
-def test_un_fallo_al_escalar_NO_tumba_la_firma():
+def test_un_fallo_al_escalar_NO_tumba_la_firma_NI_SE_PIERDE():
     """El acta ya dice que hay un no conforme. Perder la firma por no poder
-    crear un Red Line seria cambiar un problema pequeno por uno grande."""
+    crear un Red Line seria cambiar un problema pequeno por uno grande.
+
+    PERO LA RESPONSABILIDAD TAMPOCO SE PIERDE: el fallo se escribe en el propio
+    item, se audita, y aparece en la deuda operativa. Las seis condiciones
+    completas viven en `test_gap03_generalizable_y_escalado.py`; aqui solo se
+    fija que este manejador no volvio a la version que se lo tragaba.
+    """
     cuerpo = _rutas().split('def _escalar')[1].split('\ndef ')[0]
     assert 'except Exception' in cuerpo
-    assert 'logger.warning' in cuerpo
+    assert 'logger.error' in cuerpo, 'un escalado fallido no es un aviso, es un error'
+    assert "'escalado': 'ERROR'" in cuerpo, 'la deuda se escribe en el acta'
+    assert 'ESCALATION_FAILED' in cuerpo, 'y se audita'
 
 
 # ── LO QUE UN ITEM PUEDE EXIGIR ────────────────────────────────────────────

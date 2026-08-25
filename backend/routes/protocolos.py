@@ -77,6 +77,14 @@ def _fila(r):
         'sin_comprobar': len([i for i in items
                               if (i or {}).get('resultado', 'Pendiente') == 'Pendiente'
                               and (i or {}).get('tipo', 'conformidad') == 'conformidad']),
+        # LA DEUDA DE ESCALADO, EN CADA LECTURA. Un no conforme conciliado es
+        # el que TIENE `redline_id`; cualquier otro es responsabilidad que
+        # todavia no se ha reclamado a nadie, y eso se ve o se pierde.
+        'escalado_pendiente': len([i for i in items
+                                   if (i or {}).get('resultado') == 'No conforme'
+                                   and not (i or {}).get('redline_id')]),
+        'escalado_con_error': len([i for i in items
+                                   if (i or {}).get('escalado') == 'ERROR']),
     }
 
 
@@ -399,11 +407,14 @@ def firmar(aid):
                         (json.dumps(hist), aid))
             conn.commit()
 
-            escalados = _escalar(cur, conn, aid) if veredicto == pro.NO_LIBERADO else []
+            escalados, fallidos = ((_escalar(cur, conn, aid))
+                                   if veredicto == pro.NO_LIBERADO else ([], []))
             log_activity(a['model_urn'], 'SIGN', 'ACTA', str(aid), a['codigo'],
-                         _actor(), {'veredicto': veredicto, 'escalados': len(escalados)})
+                         _actor(), {'veredicto': veredicto, 'escalados': len(escalados),
+                                    'escalado_fallido': len(fallidos)})
             salida = _leer(cur, aid)
             salida['escalados'] = escalados
+            salida['escalado_fallido'] = fallidos
             return jsonify(salida)
     except Exception as e:
         logger.error('firmar acta %s: %s', aid, e)
@@ -413,49 +424,100 @@ def firmar(aid):
 def _escalar(cur, conn, aid):
     """Cada punto NO CONFORME sin escalar se convierte en un Red Line.
 
-    UN FALLO AQUI NO TUMBA LA FIRMA: el acta ya dice que hay un no conforme, y
-    `POST /escalar` puede reintentarlo. Perder la firma por no poder crear un
-    Red Line seria cambiar un problema pequeno por uno grande.
+    LA FIRMA NO SE PIERDE, PERO LA RESPONSABILIDAD TAMPOCO
+    -------------------------------------------------------
+    La primera version envolvia TODOS los items en un solo `try` y hacia
+    `conn.rollback()` al fallar. Tres defectos en una linea:
+
+      · si el item 2 fallaba, los items 3 en adelante NI SE INTENTABAN;
+      · el rollback DESCARTABA los Red Lines que si se habian creado;
+      · y no quedaba ni una senal de que faltaba escalar algo. La firma
+        sobrevivia y la responsabilidad se perdia EN SILENCIO, que es
+        exactamente lo que no se puede permitir.
+
+    Ahora cada item se escala DENTRO DE SU PROPIO SAVEPOINT y guarda su
+    resultado en el propio item:
+
+        escalado = 'HECHO'      con `redline_id` -- conciliado
+        escalado = 'ERROR'      con `escalado_error` y `escalado_intentos`
+                                -> queda como DEUDA OPERATIVA visible
+
+    El reintento es IDEMPOTENTE: `items_a_escalar` salta los que ya llevan
+    `redline_id`, asi que llamar a `/escalar` diez veces no crea diez Red
+    Lines. Y un item solo se considera conciliado cuando ese id existe.
     """
     import flujo_de_redline as rl
-    creados = []
-    try:
-        a = _leer(cur, aid)
-        items = list(a['items'])
-        for n, item in pro.items_a_escalar(items):
-            titulo = ('%s · %s' % (a['codigo'], (item.get('texto') or 'Punto no conforme')))[:180]
-            for intento in range(5):
+    creados, fallidos = [], []
+    a = _leer(cur, aid)
+    if not a:
+        return creados, fallidos
+    items = list(a['items'])
+    hubo_cambio = False
+
+    for n, item in pro.items_a_escalar(items):
+        titulo = ('%s · %s' % (a['codigo'], (item.get('texto') or 'Punto no conforme')))[:180]
+        ultimo_error = ''
+        for intento in range(5):
+            try:
+                cur.execute('SAVEPOINT escalado_item')
                 codigo = reg.siguiente_codigo(cur, rl.SEMANTICA, a['project_id'])
+                cur.execute(
+                    'INSERT INTO doc_redlines (model_urn, codigo, titulo, created_by, '
+                    '                          project_id, estado, responsable_id, '
+                    '                          vence_en, historial) '
+                    'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id::text',
+                    (a['model_urn'], codigo, titulo, _actor(), a['project_id'],
+                     'Emitido', a['responsable_id'], a['vence_en'],
+                     json.dumps([reg.entrada('created', _actor(), codigo=codigo,
+                                             desde_acta=a['codigo'], punto=n)])))
+                rid = cur.fetchone()[0]
+                cur.execute('RELEASE SAVEPOINT escalado_item')
+                items[n] = {**item, 'redline_id': rid, 'redline_codigo': codigo,
+                            'escalado': 'HECHO', 'escalado_error': None,
+                            'escalado_intentos': intento + 1}
+                creados.append({'item': n, 'redline_id': rid, 'codigo': codigo})
+                hubo_cambio = True
+                break
+            except Exception as e:
+                ultimo_error = str(e)[:200]
                 try:
-                    cur.execute('SAVEPOINT escalado')
-                    cur.execute(
-                        'INSERT INTO doc_redlines (model_urn, codigo, titulo, created_by, '
-                        '                          project_id, estado, responsable_id, historial) '
-                        'VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id::text',
-                        (a['model_urn'], codigo, titulo, _actor(), a['project_id'],
-                         'Emitido', a['responsable_id'],
-                         json.dumps([reg.entrada('created', _actor(), codigo=codigo,
-                                                 desde_acta=a['codigo'])])))
-                    rid = cur.fetchone()[0]
-                    cur.execute('RELEASE SAVEPOINT escalado')
-                    items[n] = {**item, 'redline_id': rid, 'redline_codigo': codigo}
-                    creados.append({'item': n, 'redline_id': rid, 'codigo': codigo})
-                    break
+                    cur.execute('ROLLBACK TO SAVEPOINT escalado_item')
                 except Exception:
-                    cur.execute('ROLLBACK TO SAVEPOINT escalado')
-                    if intento == 4:
-                        raise
-        if creados:
+                    pass
+        else:
+            # LA DEUDA SE ESCRIBE EN EL ACTA. Un fallo que solo va al log es un
+            # fallo que nadie vera: el log lo lee quien ya sospecha algo.
+            items[n] = {**item, 'escalado': 'ERROR',
+                        'escalado_error': ultimo_error,
+                        'escalado_intentos': (item.get('escalado_intentos') or 0) + 5}
+            fallidos.append({'item': n, 'error': ultimo_error})
+            hubo_cambio = True
+            logger.error('[acta %s] no se pudo escalar el punto %d: %s', aid, n, ultimo_error)
+
+    if hubo_cambio:
+        try:
             cur.execute('UPDATE doc_actas SET items = %s WHERE id = %s',
                         (json.dumps(items), aid))
             conn.commit()
-    except Exception as e:
-        logger.warning('[acta %s] escalado incompleto: %s', aid, e)
+        except Exception as e:
+            logger.error('[acta %s] no se pudo guardar el estado del escalado: %s', aid, e)
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+    # AUDITORIA DEL FALLO, y no solo del exito. Si el escalado falla, eso ES un
+    # hecho del expediente: alguien tiene que poder ver que la obra quedo con
+    # una no conformidad sin reclamar a nadie.
+    if fallidos:
         try:
-            conn.rollback()
+            log_activity(a['model_urn'], 'ESCALATION_FAILED', 'ACTA', str(aid),
+                         a['codigo'], _actor(),
+                         {'puntos': [f['item'] for f in fallidos],
+                          'error': fallidos[0]['error']})
         except Exception:
             pass
-    return creados
+    return creados, fallidos
 
 
 @protocolos_bp.route('/actas/<int:aid>/escalar', methods=['POST'])
@@ -472,8 +534,48 @@ def reintentar_escalado(aid):
         if a['estado'] not in (pro.NO_LIBERADO,):
             return jsonify({'error': 'Solo un acta NO LIBERADA tiene algo que escalar.',
                             'code': 'NADA_QUE_ESCALAR'}), 409
-        creados = _escalar(cur, conn, aid)
-    return jsonify({'escalados': creados})
+        creados, fallidos = _escalar(cur, conn, aid)
+    return jsonify({'escalados': creados, 'fallidos': fallidos,
+                    'conciliado': not fallidos})
+
+
+@protocolos_bp.route('/deuda-escalado', methods=['GET'])
+def deuda_de_escalado():
+    """LAS NO CONFORMIDADES QUE NADIE ESTA RECLAMANDO.
+
+    Es la lista que hace que un fallo de escalado sea DEUDA OPERATIVA y no una
+    perdida silenciosa. Un acta no liberada cuyo punto no conforme no llego a
+    convertirse en Red Line es una obra con un defecto registrado y sin
+    responsable ni plazo -- exactamente lo que el escalado existe para impedir.
+
+    Se considera conciliado UNICAMENTE cuando el punto tiene `redline_id`. El
+    estado 'ERROR' explica por que fallo; su ausencia no absuelve a nadie.
+    """
+    obra = resolve_project_id(request.args.get('model_urn') or '')
+    if not obra:
+        return jsonify({'error': 'model_urn es obligatorio'}), 400
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("""SELECT id, codigo, titulo, estado, items, firmada_en
+                         FROM doc_actas
+                        WHERE project_id = %s AND estado = 'No liberado'
+                        ORDER BY codigo DESC""", (obra,))
+        deuda = []
+        for aid, codigo, titulo, estado, items, firmada in cur.fetchall():
+            sin = [{'punto': n, 'texto': (i or {}).get('texto'),
+                    'estado': (i or {}).get('escalado') or 'PENDIENTE',
+                    'error': (i or {}).get('escalado_error'),
+                    'intentos': (i or {}).get('escalado_intentos') or 0}
+                   for n, i in enumerate(items or [])
+                   if (i or {}).get('resultado') == 'No conforme'
+                   and not (i or {}).get('redline_id')]
+            if sin:
+                deuda.append({'acta_id': str(aid), 'codigo': codigo, 'titulo': titulo,
+                              'firmada_en': firmada.isoformat() if firmada else None,
+                              'sin_escalar': sin})
+    return jsonify({'deuda': deuda,
+                    'total_puntos': sum(len(d['sin_escalar']) for d in deuda),
+                    'conciliado': not deuda})
 
 
 @protocolos_bp.route('/actas/<int:aid>/anular', methods=['POST'])
