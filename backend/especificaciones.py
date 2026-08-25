@@ -129,20 +129,36 @@ def titulo_sugerido(numero):
 # convención en la otra -- convertirlas sería inventarle al contrato una
 # codificación que no usa.
 
-_MASTERFORMAT = re.compile(r'^(\d{2})[\s\-]?(\d{2})[\s\-]?(\d{2})$')
+_COMPACTO = re.compile(r'^\d{6}$')
 _PARTIDA = re.compile(r'^(\d{1,2})(?:\.(\d{1,2}))+$')
 
 
 def normalizar_seccion(numero):
+    """LOS BLOQUES SE RELLENAN A DOS DIGITOS, uno a uno.
+
+    La primera version solo reconocia bloques que YA venian con dos digitos, y
+    dejaba pasar `3 30 00` tal cual. La EXP contra produccion lo encontro:
+    `3 30 00` y `033000` --la misma exigencia-- creaban DOS secciones, y el
+    numero dejaba de ser la identidad justo en la forma que mas se teclea.
+
+    Rellenar no es convertir: `3 30 00` y `03 30 00` son el mismo numero escrito
+    con y sin el cero a la izquierda. Lo que sigue sin convertirse es una
+    convencion en la otra: la partida se queda en partida.
+    """
     crudo = re.sub(r'\s+', ' ', str(numero or '').strip())
     if not crudo:
         return ''
-    compacto = crudo.replace(' ', '').replace('-', '')
-    m = _MASTERFORMAT.match(compacto)
-    if m and '.' not in crudo:
-        return '%s %s %s' % m.groups()
+    # La partida primero: los puntos la hacen inconfundible.
     if _PARTIDA.match(crudo):
         return '.'.join(p.zfill(2) for p in crudo.split('.'))
+    # MasterFormat en bloques: tres grupos numericos de uno o dos digitos.
+    bloques = re.split(r'[\s\-]+', crudo)
+    if len(bloques) == 3 and all(b.isdigit() and len(b) <= 2 for b in bloques):
+        return ' '.join(b.zfill(2) for b in bloques)
+    # MasterFormat compacto: seis digitos seguidos.
+    compacto = crudo.replace(' ', '').replace('-', '')
+    if _COMPACTO.match(compacto):
+        return '%s %s %s' % (compacto[:2], compacto[2:4], compacto[4:6])
     return crudo.upper()
 
 

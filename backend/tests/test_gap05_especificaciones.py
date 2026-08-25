@@ -125,13 +125,31 @@ def test_el_numero_de_seccion_admite_LAS_DOS_convenciones():
     """MasterFormat y partida conviven, y las dos son legitimas. Convertir una
     en la otra seria inventarle al contrato una codificacion que no usa."""
     import especificaciones as esp
-    for crudo in ('03 30 00', '033000', '03-30-00', ' 03 30 00 '):
+    # LOS BLOQUES SE RELLENAN A DOS DIGITOS. Lo encontro la EXP contra
+    # produccion el 25-ago-2026: la primera version solo reconocia bloques que
+    # YA venian con dos digitos, asi que '3 30 00' pasaba tal cual y '033000'
+    # creaba una SEGUNDA seccion para la misma exigencia. El numero dejaba de
+    # ser la identidad justo en la forma que mas se teclea.
+    for crudo in ('03 30 00', '033000', '03-30-00', ' 03 30 00 ',
+                  '3 30 00', '3-30-0'):
         assert esp.normalizar_seccion(crudo) == '03 30 00', crudo
     assert esp.normalizar_seccion('3.2.1') == '03.02.01'
     assert esp.normalizar_seccion('03.02.01') == '03.02.01'
     # Lo que no encaja en ninguna se respeta tal cual, en mayusculas.
     assert esp.normalizar_seccion('ET-CONCRETO') == 'ET-CONCRETO'
     assert esp.normalizar_seccion('') == ''
+    # Rellenar NO es convertir: la partida se queda en partida.
+    assert esp.normalizar_seccion('3.2.1') != esp.normalizar_seccion('3 2 1')
+
+
+def test_todas_las_formas_de_escribir_un_numero_son_LA_MISMA_seccion():
+    """La invariante que la EXP demostro rota. Si vuelve a romperse, dos
+    personas registran la misma exigencia dos veces y cada una somete
+    materiales contra la suya."""
+    import especificaciones as esp
+    formas = ('3 30 00', '033000', '03 30 00', '03-30-00', '3-30-0', ' 3 30 0 ')
+    assert len({esp.normalizar_seccion(f) for f in formas}) == 1, {
+        f: esp.normalizar_seccion(f) for f in formas}
 
 
 def test_la_division_se_deduce_pero_NO_se_impone():
