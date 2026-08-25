@@ -201,7 +201,7 @@ export default function EspecificacionesModule({ project, API, user, isAdmin }) 
       ))}
 
       {abierta && (
-        <PanelSeccion s={abierta} API={API} project={project}
+        <PanelSeccion s={abierta} API={API} project={project} urn={urn}
                       onCerrar={() => setAbierta(null)}
                       onCambio={() => { setAbierta(null); cargar(); }} />
       )}
@@ -272,10 +272,16 @@ function FilaSeccion({ s, onAbrir, onSometer }) {
   );
 }
 
-function PanelSeccion({ s, API, project, onCerrar, onCambio }) {
+function PanelSeccion({ s, API, project, urn, onCerrar, onCambio }) {
   const [revisiones, setRevisiones] = useState(null);
   const [eligiendo, setEligiendo] = useState(false);
   const [ocupado, setOcupado] = useState(false);
+  // EL JUEGO DE EMISION. Igual que en planos: una revision puede emitirse
+  // suelta o dentro de una entrega, y saber en cual salio es lo que permite
+  // responder «que se entrego el 12 de marzo».
+  const [sets, setSets] = useState([]);
+  const [setId, setSetId] = useState('');
+  const [setNuevo, setSetNuevo] = useState('');
 
   useEffect(() => {
     apiFetch(`${API}/api/specs/secciones/${s.id}/revisiones`)
@@ -284,6 +290,31 @@ function PanelSeccion({ s, API, project, onCerrar, onCambio }) {
       .catch(() => setRevisiones([]));
   }, [API, s.id]);
 
+  const cargarSets = useCallback(() => {
+    if (!urn) return;
+    apiFetch(`${API}/api/specs/sets?model_urn=${encodeURIComponent(urn)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d) setSets(d.sets || []); })
+      .catch(() => {});
+  }, [API, urn]);
+  useEffect(() => { cargarSets(); }, [cargarSets]);
+
+  const crearSet = async () => {
+    if (!setNuevo.trim()) return;
+    try {
+      const r = await apiFetch(`${API}/api/specs/sets`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_urn: urn, nombre: setNuevo.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'No se pudo crear la emisión.');
+      toast.success(`Emisión «${d.nombre}» creada`);
+      setSetId(d.id);
+      setSetNuevo('');
+      cargarSets();
+    } catch (e) { toast.error(e.message); }
+  };
+
   const emitir = async (doc) => {
     setEligiendo(false);
     setOcupado(true);
@@ -291,7 +322,8 @@ function PanelSeccion({ s, API, project, onCerrar, onCambio }) {
       const r = await apiFetch(`${API}/api/specs/secciones/${s.id}/revisiones`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_node_id: doc.file_node_id,
-                               file_version_id: doc.file_version_id }),
+                               file_version_id: doc.file_version_id,
+                               set_id: setId || undefined }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'No se pudo emitir.');
@@ -317,6 +349,27 @@ function PanelSeccion({ s, API, project, onCerrar, onCambio }) {
                            color: '#98a1ab', cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
         <h3 style={{ margin: '8px 0 14px', fontSize: 16.5, fontWeight: 650 }}>{s.titulo}</h3>
+
+        <div style={{ display: 'flex', gap: 7, marginBottom: 9, flexWrap: 'wrap' }}>
+          <select value={setId} onChange={e => setSetId(e.target.value)}
+                  style={{ ...CAJA, height: 34, padding: '0 8px', fontSize: 12.5,
+                           background: '#fff', minWidth: 170 }}>
+            <option value="">Emisión: — suelta —</option>
+            {sets.map(x => (
+              <option key={x.id} value={x.id}>{x.nombre} ({x.revisiones})</option>
+            ))}
+          </select>
+          <input value={setNuevo} onChange={e => setSetNuevo(e.target.value)}
+                 placeholder="Nueva emisión — «Absolución de consultas 2»"
+                 style={{ ...CAJA, flex: 1, minWidth: 180, height: 34, padding: '0 10px',
+                          fontSize: 12.5 }} />
+          <button type="button" onClick={crearSet} disabled={!setNuevo.trim()}
+                  style={{ ...CAJA, padding: '0 12px', background: '#fff', fontSize: 12.5,
+                           cursor: setNuevo.trim() ? 'pointer' : 'not-allowed',
+                           color: '#3E6F91' }}>
+            Crear
+          </button>
+        </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
           <button type="button" onClick={() => setEligiendo(true)} disabled={ocupado}

@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../utils/apiFetch';
+import SelectorDeDocumento from './SelectorDeDocumento';
 
 const COLOR_REVISION = {
   'Vigente':  { fondo: '#e8f5ec', texto: '#1e6b3a', borde: '#bfe3cc' },
@@ -28,6 +29,10 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
   const [abierto, setAbierto] = useState(null);
   const [revisiones, setRevisiones] = useState({});
   const [creando, setCreando] = useState(false);
+  // EMITIR REVISION. Faltaba: la pantalla creaba la identidad del plano y no
+  // tenia forma de decir QUE DOCUMENTO vale, que es justo la pregunta que el
+  // objeto existe para responder.
+  const [emitiendo, setEmitiendo] = useState(null);
   // LOS SETS son el ACTO DE EMITIR: «la entrega del 15 de marzo». Existían en
   // el backend y no en pantalla, y un dato que no se puede consultar no es una
   // capacidad — es una columna.
@@ -171,9 +176,23 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
             {abierto === p.id && (
               <div style={{ borderTop: '1px solid #f0f2f4', background: '#fbfcfd',
                             padding: '10px 14px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#8a9199',
-                              letterSpacing: '.04em', marginBottom: 7 }}>
-                  HISTORIA DEL PLANO
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10,
+                              marginBottom: 9, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#8a9199',
+                                letterSpacing: '.04em' }}>
+                    HISTORIA DEL PLANO
+                  </div>
+                  <button type="button"
+                          onClick={e => { e.stopPropagation(); setEmitiendo(p); }}
+                          style={{ marginLeft: 'auto', padding: '5px 12px', borderRadius: 6,
+                                   border: 'none', background: 'var(--accent, #3E6F91)',
+                                   color: '#fff', fontSize: 12, fontWeight: 600,
+                                   cursor: 'pointer' }}>
+                    Emitir revisión
+                  </button>
+                  <span style={{ fontSize: 11, color: '#98a1ab' }}>
+                    la nueva pasa a vigente y la anterior queda superada
+                  </span>
                 </div>
                 {!revisiones[p.id] && (
                   <div style={{ fontSize: 12.5, color: '#98a1ab' }}>Cargando…</div>
@@ -249,6 +268,18 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
         <ModalNuevoPlano API={API} urn={urn} disciplinas={disciplinas}
                          onCerrar={() => setCreando(false)}
                          onCreado={() => { setCreando(false); cargar(); }} />
+      )}
+
+      {emitiendo && (
+        <ModalEmitirRevision API={API} urn={urn} project={project} plano={emitiendo}
+                             sets={sets}
+                             onCerrar={() => setEmitiendo(null)}
+                             onEmitida={() => {
+                               const pid = emitiendo.id;
+                               setEmitiendo(null);
+                               setRevisiones(r => { const n = { ...r }; delete n[pid]; return n; });
+                               cargar();
+                             }} />
       )}
     </div>
   );
@@ -334,6 +365,212 @@ function ModalNuevoPlano({ API, urn, disciplinas, onCerrar, onCreado }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── EMITIR UNA REVISIÓN ────────────────────────────────────────────────────
+//
+// LO QUE ESTE MODAL VIENE A ARREGLAR
+// GAP 02 se declaró COMPLETE con su EXP ejecutada contra la API. La pantalla
+// creaba la identidad del plano y no tenía forma de emitir una revisión: la
+// ruta existía en el backend desde el primer día y no la llamaba nadie. Un
+// usuario real no podía responder desde la interfaz la única pregunta que este
+// objeto existe para responder — cuál es la lámina vigente en obra.
+//
+// «Existe en el backend» no cuenta como implementado.
+//
+// EL CAJETÍN SE LEE AL ELEGIR EL DOCUMENTO, y lo que devuelve es una
+// SUGERENCIA: un número de revisión mal leído se propaga a las observaciones,
+// a los submittals y al acta de recepción, y para cuando se nota ya está en un
+// documento firmado. Por eso rellena el campo y no lo bloquea. Y si el cajetín
+// dice un número de plano DISTINTO, se avisa y no se corrige solo: puede ser
+// que se haya elegido el documento equivocado, y eso hay que verlo.
+function ModalEmitirRevision({ API, urn, project, plano, sets, onCerrar, onEmitida }) {
+  const [doc, setDoc] = useState(null);
+  const [eligiendo, setEligiendo] = useState(false);
+  const [leyendo, setLeyendo] = useState(false);
+  const [aviso, setAviso] = useState('');
+  const [f, setF] = useState({ codigo_revision: '', set_id: '', motivo: '' });
+  const [setNuevo, setSetNuevo] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  const elegir = async (d) => {
+    setEligiendo(false);
+    setDoc(d);
+    setLeyendo(true);
+    setAviso('');
+    try {
+      const r = await apiFetch(API + '/api/planos/leer-cajetin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_node_id: d.file_node_id }),
+      });
+      const sug = await r.json();
+      if (!r.ok) throw new Error(sug.error || 'No se pudo leer el cajetín.');
+      if (sug.aviso) setAviso(sug.aviso);
+      if (sug.revision) {
+        setF(p => ({ ...p, codigo_revision: p.codigo_revision || sug.revision }));
+      }
+      if (sug.numero && sug.numero.toUpperCase() !== (plano.numero || '').toUpperCase()) {
+        setAviso('El cajetín dice «' + sug.numero + '» y este plano es «'
+               + plano.numero + '». Comprueba que es el documento correcto '
+               + 'antes de emitir.');
+      }
+    } catch (e) {
+      setAviso(e.message);
+    } finally {
+      setLeyendo(false);
+    }
+  };
+
+  const crearSet = async () => {
+    if (!setNuevo.trim()) return;
+    try {
+      const r = await apiFetch(API + '/api/planos/sets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_urn: urn, nombre: setNuevo.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'No se pudo crear la emisión.');
+      toast.success('Emisión «' + d.nombre + '» creada');
+      setF(p => ({ ...p, set_id: d.id }));
+      setSetNuevo('');
+    } catch (e) {
+      toast.error(e.message);
+    }
+  };
+
+  const emitir = async () => {
+    if (!doc) {
+      toast.error('Elige el documento: una revisión sin soporte no es una revisión.');
+      return;
+    }
+    setEnviando(true);
+    try {
+      const r = await apiFetch(API + '/api/planos/' + plano.id + '/revisiones', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file_node_id: doc.file_node_id,
+          file_version_id: doc.file_version_id,
+          codigo_revision: f.codigo_revision.trim() || undefined,
+          set_id: f.set_id || undefined,
+          motivo: f.motivo.trim() || undefined,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'No se pudo emitir.');
+      toast.success('Revisión ' + d.codigo + ' vigente'
+                  + (d.supera_a ? ' — la anterior queda superada' : ''));
+      onEmitida();
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const CAJA = { border: '1px solid #dfe3e8', borderRadius: 6, boxSizing: 'border-box' };
+
+  return (
+    <div onClick={onCerrar} style={{ position: 'fixed', inset: 0, background: 'rgba(15,20,26,.45)',
+                                     display: 'flex', alignItems: 'center',
+                                     justifyContent: 'center', zIndex: 1000 }}>
+      <div onClick={e => e.stopPropagation()}
+           style={{ background: '#fff', borderRadius: 10, padding: 24, width: 520,
+                    maxWidth: '92vw', maxHeight: '88vh', overflowY: 'auto',
+                    boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 650 }}>
+          Emitir revisión de {plano.numero}
+        </h3>
+        <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#78838f', lineHeight: 1.5 }}>
+          {plano.titulo}. La nueva revisión pasa a ser la <b>vigente</b> y la
+          anterior queda <b>superada</b>, en el mismo acto — nunca hay dos vigentes.
+        </p>
+
+        <button type="button" onClick={() => setEligiendo(true)}
+                style={{ ...CAJA, width: '100%', padding: '10px 12px', background: '#fafbfc',
+                         cursor: 'pointer', textAlign: 'left', fontSize: 12.5,
+                         marginBottom: 10, color: doc ? '#1f2933' : '#78838f' }}>
+          {doc ? '📄 ' + doc.nombre + (doc.version ? ' · v' + doc.version : '')
+               : '📄 Elegir la lámina en el expediente *'}
+        </button>
+        {leyendo && (
+          <div style={{ fontSize: 12, color: '#78838f', marginBottom: 10 }}>
+            Leyendo el cajetín…
+          </div>
+        )}
+        {aviso && (
+          <div style={{ ...CAJA, borderColor: '#f0d9a0', background: '#fffaf0',
+                        padding: '8px 11px', marginBottom: 10, fontSize: 12,
+                        color: '#8a5a12', lineHeight: 1.5 }}>{aviso}</div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+          <div style={{ flex: '0 0 130px' }}>
+            <label style={{ display: 'block', fontSize: 11.5, color: '#5f6b76',
+                            marginBottom: 4 }}>Revisión</label>
+            <input value={f.codigo_revision}
+                   onChange={e => setF(p => ({ ...p, codigo_revision: e.target.value }))}
+                   placeholder="automática"
+                   style={{ ...CAJA, width: '100%', height: 36, padding: '0 10px',
+                            fontSize: 13, fontFamily: 'ui-monospace, monospace' }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ display: 'block', fontSize: 11.5, color: '#5f6b76',
+                            marginBottom: 4 }}>Emisión (opcional)</label>
+            <select value={f.set_id}
+                    onChange={e => setF(p => ({ ...p, set_id: e.target.value }))}
+                    style={{ ...CAJA, width: '100%', height: 36, padding: '0 8px',
+                             fontSize: 13, background: '#fff' }}>
+              <option value="">— suelta —</option>
+              {(sets || []).map(x => (
+                <option key={x.id} value={x.id}>{x.nombre}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <p style={{ margin: '0 0 10px', fontSize: 11.5, color: '#98a1ab', lineHeight: 1.5 }}>
+          Si dejas la revisión en blanco se continúa la serie que el plano ya usa
+          —letras o números—: la convención la fija el contrato, no la plataforma.
+        </p>
+
+        <div style={{ display: 'flex', gap: 7, marginBottom: 12 }}>
+          <input value={setNuevo} onChange={e => setSetNuevo(e.target.value)}
+                 placeholder="Nueva emisión — «Entrega 3, expediente técnico»"
+                 style={{ ...CAJA, flex: 1, height: 34, padding: '0 10px', fontSize: 12.5 }} />
+          <button type="button" onClick={crearSet} disabled={!setNuevo.trim()}
+                  style={{ ...CAJA, padding: '0 12px', background: '#fff', fontSize: 12.5,
+                           cursor: setNuevo.trim() ? 'pointer' : 'not-allowed',
+                           color: '#3E6F91' }}>
+            Crear
+          </button>
+        </div>
+
+        <input value={f.motivo} onChange={e => setF(p => ({ ...p, motivo: e.target.value }))}
+               placeholder="Motivo del cambio (opcional, queda en la historia)"
+               style={{ ...CAJA, width: '100%', height: 36, padding: '0 10px',
+                        fontSize: 13, marginBottom: 18 }} />
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button type="button" onClick={onCerrar} disabled={enviando}
+                  style={{ ...CAJA, padding: '8px 14px', background: '#fff',
+                           fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+          <button type="button" onClick={emitir} disabled={enviando || !doc}
+                  style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
+                           background: doc ? 'var(--accent, #3E6F91)' : '#cfd6dd',
+                           color: '#fff', fontSize: 13, fontWeight: 600,
+                           cursor: enviando ? 'wait' : (doc ? 'pointer' : 'not-allowed') }}>
+            {enviando ? 'Emitiendo…' : 'Emitir revisión'}
+          </button>
+        </div>
+      </div>
+
+      {eligiendo && (
+        <SelectorDeDocumento API={API} project={project}
+                             titulo={'Elegir la lámina de ' + plano.numero}
+                             ayuda="La revisión apunta a este documento y fija su versión: si mañana alguien sube otra, esta revisión seguirá diciendo lo que decía hoy."
+                             onElegir={elegir} onCerrar={() => setEligiendo(false)} />
+      )}
     </div>
   );
 }

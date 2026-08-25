@@ -240,27 +240,55 @@ def leer_encabezado():
     nodo = data.get('file_node_id')
     if not nodo:
         return jsonify({'error': 'Hace falta el documento.'}), 400
+
+    # `gcs_manager`, que es el modulo que EXISTE. La primera version importaba
+    # `storage`, un nombre que me invente sin comprobarlo -- el mismo error que
+    # ya habia matado la lectura de cajetin de GAP 02, y por el mismo camino: el
+    # `except` lo convertia en una respuesta educada y la funcionalidad quedaba
+    # muerta sin que nada lo delatara. Lo caza ahora
+    # `test_ninguna_ruta_importa_modulos_ni_simbolos_INVENTADOS`.
     try:
-        from storage import get_blob_data
+        from gcs_manager import get_blob_data
+    except ImportError:
+        return jsonify({'error': 'Lectura de especificaciones no disponible en este '
+                                 'despliegue.', 'code': 'SIN_LECTOR'}), 501
+    try:
         with get_db_connection() as conn:
             cur = conn.cursor()
-            cur.execute('SELECT model_urn, current_version_id FROM file_nodes WHERE id=%s',
-                        (nodo,))
+            # El nodo, su obra y su URN de almacenamiento en UNA consulta: son
+            # la misma pregunta y separarlas deja una ventana entre comprobar
+            # el permiso y leer el fichero.
+            cur.execute("""SELECT n.model_urn, v.gcs_urn
+                             FROM file_nodes n
+                        LEFT JOIN file_versions v ON v.id = n.current_version_id
+                            WHERE n.id = %s""", (nodo,))
             fn = cur.fetchone()
-            if not fn:
-                return jsonify({'error': 'Ese documento no existe.'}), 404
-            if resolve_project_id(fn[0]) != obra:
-                return jsonify({'error': 'Ese documento pertenece a otra obra.',
-                                'code': 'OTRA_OBRA'}), 409
-        datos, _mime = get_blob_data(str(nodo))
+        if not fn:
+            return jsonify({'error': 'Ese documento no existe.'}), 404
+        if resolve_project_id(fn[0]) != obra:
+            return jsonify({'error': 'Ese documento pertenece a otra obra.',
+                            'code': 'OTRA_OBRA'}), 409
+        if not fn[1]:
+            return jsonify({'error': 'Ese documento no tiene versión actual.'}), 404
+        datos, _mime = get_blob_data(fn[1])
         if not datos:
-            return jsonify({'error': 'No se pudo leer el documento.'}), 502
+            return jsonify({'numero': None, 'revision': None, 'titulo': None,
+                            'division': None, 'tiene_texto': False,
+                            'aviso': 'No se pudo descargar el documento.'})
         if isinstance(datos, str):
             datos = base64.b64decode(datos)
-        return jsonify(esp.leer_encabezado(datos))
+        sug = esp.leer_encabezado(datos)
+        if not sug['tiene_texto']:
+            sug['aviso'] = ('Este PDF no tiene capa de texto —probablemente es un '
+                            'escaneo—. Hay que teclear el número y el título.')
+        return jsonify(sug)
     except Exception as e:
-        logger.error('leer encabezado: %s', e)
-        return jsonify({'error': 'No se pudo leer el documento.'}), 500
+        # No es un error del usuario: es que no se pudo leer. Se dice, y la
+        # pantalla sigue dejando teclear.
+        logger.warning('leer encabezado de %s: %s', nodo, e)
+        return jsonify({'numero': None, 'revision': None, 'titulo': None,
+                        'division': None, 'tiene_texto': False,
+                        'aviso': 'No se pudo leer el encabezado. Teclea los datos.'})
 
 
 @specs_bp.route('', methods=['POST'])
