@@ -64,6 +64,7 @@ RECURSOS = {
     'doc_planos':        ('id', 'model_urn'),
     'doc_actas':         ('id', 'model_urn'),
     'doc_issues':        ('id', 'model_urn'),
+    'doc_spec_secciones': ('id', 'model_urn'),
     'doc_sets':          ('id', 'model_urn'),
     # El documento en si. Comprobar contra el NODO es mas fuerte que fiarse del
     # model_urn que manda el cliente: el nodo dice de que obra es de verdad.

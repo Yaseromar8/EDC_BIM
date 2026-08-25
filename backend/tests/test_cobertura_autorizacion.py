@@ -99,6 +99,12 @@ SIN_CUBRIR = {
     ('routes/projects.py', '/api/hubs/<hub_id>/projects'): 'lista obras de un hub; mismo filtro por pertenencia',
     ('routes/projects.py', '/api/projects/join'): 'canjea un codigo de invitacion; aun no hay obra. Protegida con limite de intentos y codigo de `secrets` de 8 caracteres',
     ('server.py', '/api/inventory/schema'): 'catalogo de campos, igual para todas las obras',
+    # GAP 05. Devuelve el catalogo MasterFormat sugerido, que es una constante
+    # del codigo: ni lee ni escribe nada. El detector la marca porque su
+    # docstring explica que la estructura la fija el contrato de cada obra --y
+    # esa frase tiene que quedarse, porque es la decision de diseno del gap--.
+    # Se declara aqui en vez de reescribir la prosa para esquivar al detector.
+    ('routes/specs.py', '/catalogo'): 'catalogo de divisiones SUGERIDAS, constante del codigo, igual para todas las obras; no consulta la base',
     ('routes/documents.py', '/api/docs/shared/<share_id>'): 'enlace compartido: el permiso lo da el propio share, no la pertenencia',
     ('routes/pins.py', '/uploads/pins/<path:filename>'): 'exige sesion o permiso firmado del fichero, pero no acota por obra',
     # PENDIENTE: reciben un identificador cuya obra hay que deducir consultando

@@ -51,7 +51,7 @@ submittals_bp = Blueprint('submittals_bp', __name__)
 S = sem.SEMANTICA
 
 _COLS = ('id, project_id, model_urn, codigo, titulo, descripcion, spec_seccion, '
-         'spec_titulo, paquete, autor_id, responsable_id, created_by, steps, '
+         'spec_titulo, spec_section_id, paquete, autor_id, responsable_id, created_by, steps, '
          'current_step, paso_vence_en, estado, veredicto, veredicto_en, '
          'veredicto_por, revision, revision_de, adjuntos, distribucion, '
          'history, vence_en, created_at, enviado_en, cerrado_en, cerrado_por')
@@ -72,22 +72,29 @@ def _fila(r):
     return {
         'id': str(r[0]), 'project_id': r[1], 'model_urn': r[2], 'codigo': r[3],
         'titulo': r[4], 'descripcion': r[5],
-        'spec_seccion': r[6], 'spec_titulo': r[7], 'paquete': r[8],
-        'autor_id': r[9], 'responsable_id': r[10], 'created_by': r[11],
-        'steps': r[12] or [], 'current_step': r[13],
-        'paso_vence_en': r[14].isoformat() if r[14] else None,
-        'estado': r[15], 'veredicto': r[16],
-        'veredicto_en': r[17].isoformat() if r[17] else None,
-        'veredicto_por': r[18],
-        'revision': r[19], 'revision_de': str(r[20]) if r[20] else None,
-        'adjuntos': r[21] or [], 'distribucion': r[22] or [],
-        'history': r[23] or [],
-        'vence_en': r[24].isoformat() if r[24] else None,
-        'created_at': r[25].isoformat() if r[25] else None,
-        'enviado_en': r[26].isoformat() if r[26] else None,
-        'cerrado_en': r[27].isoformat() if r[27] else None,
-        'cerrado_por': r[28],
-        'habilita_instalacion': sem.habilita_instalacion(r[16]),
+        # LA ESPECIFICACION, EN DOS FORMAS Y A PROPOSITO. `spec_seccion` es lo
+        # que alguien ESCRIBIO --y sigue siendo la unica verdad de los
+        # submittals anteriores a GAP 05--; `spec_section_id` es el enlace a la
+        # seccion de verdad, con su revision vigente. Un submittal puede tener
+        # solo el texto, y eso no lo hace invalido: lo hace no enlazado.
+        'spec_seccion': r[6], 'spec_titulo': r[7],
+        'spec_section_id': str(r[8]) if r[8] else None,
+        'paquete': r[9],
+        'autor_id': r[10], 'responsable_id': r[11], 'created_by': r[12],
+        'steps': r[13] or [], 'current_step': r[14],
+        'paso_vence_en': r[15].isoformat() if r[15] else None,
+        'estado': r[16], 'veredicto': r[17],
+        'veredicto_en': r[18].isoformat() if r[18] else None,
+        'veredicto_por': r[19],
+        'revision': r[20], 'revision_de': str(r[21]) if r[21] else None,
+        'adjuntos': r[22] or [], 'distribucion': r[23] or [],
+        'history': r[24] or [],
+        'vence_en': r[25].isoformat() if r[25] else None,
+        'created_at': r[26].isoformat() if r[26] else None,
+        'enviado_en': r[27].isoformat() if r[27] else None,
+        'cerrado_en': r[28].isoformat() if r[28] else None,
+        'cerrado_por': r[29],
+        'habilita_instalacion': sem.habilita_instalacion(r[17]),
     }
 
 
@@ -242,14 +249,16 @@ def crear():
                     cur.execute("""
                         INSERT INTO doc_submittals
                             (project_id, model_urn, codigo, titulo, descripcion,
-                             spec_seccion, spec_titulo, paquete, autor_id,
-                             responsable_id, created_by, adjuntos, vence_en, history)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                             spec_seccion, spec_titulo, spec_section_id, paquete,
+                             autor_id, responsable_id, created_by, adjuntos,
+                             vence_en, history)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                         RETURNING id
                     """, (obra, model_urn, codigo, titulo,
                           (data.get('descripcion') or '').strip() or None,
                           (data.get('spec_seccion') or '').strip() or None,
                           (data.get('spec_titulo') or '').strip() or None,
+                          data.get('spec_section_id') or None,
                           (data.get('paquete') or '').strip() or None,
                           autor_id, data.get('responsable_id'), _actor(),
                           json.dumps(data.get('adjuntos') or []),

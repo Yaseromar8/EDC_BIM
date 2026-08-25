@@ -30,7 +30,8 @@ def test_el_catalogo_es_una_lista_cerrada():
     import herramientas_de_obra as hdo
     assert set(hdo.CODIGOS) == {
         'rfi', 'redlines', 'reviews', 'transmittals', 'submittals', 'planos',
-        'protocolos', 'issues', 'plan_entregas', 'conjuntos', 'fotos', 'visor'}
+        'especificaciones', 'protocolos', 'issues', 'plan_entregas',
+        'conjuntos', 'fotos', 'visor'}
     # DOCUMENTOS no está: es el substrato del producto y no se apaga.
     # Diferencia deliberada con ACC, documentada en el módulo.
     assert 'documentos' not in hdo.CODIGOS
@@ -47,6 +48,7 @@ def test_cada_ruta_cae_en_su_herramienta():
     assert hdo.herramienta_de_ruta('/api/plan/importar') == 'plan_entregas'
     assert hdo.herramienta_de_ruta('/api/sets/1/items') == 'conjuntos'
     assert hdo.herramienta_de_ruta('/api/pins') == 'fotos'
+    assert hdo.herramienta_de_ruta('/api/specs/secciones/4/revisiones') == 'especificaciones'
     assert hdo.herramienta_de_ruta('/api/modelos/publicar-desde-ecd') == 'visor'
 
 

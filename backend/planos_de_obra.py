@@ -61,6 +61,8 @@ teclea. Se dice, en vez de fingir que funciona siempre.
 
 import re
 
+import revisiones_de_documento as rev
+
 from app_logging import get_logger
 
 logger = get_logger('planos')
@@ -171,32 +173,15 @@ def leer_cajetin(pdf_bytes, pagina=0):
 
 
 # ── NUMERACION ────────────────────────────────────────────────────────────
+#
+# LA MECANICA YA NO VIVE AQUI. `normalizar_numero` y `siguiente_revision` eran
+# genericas --no saben que es un plano-- y GAP 05 necesitaba exactamente las
+# mismas para las secciones de especificacion. Copiarlas habria creado dos
+# verdades que divergen el dia que alguien arregle un fallo en una sola.
+#
+# Se conservan los nombres de aqui porque son los que usa el resto del modulo
+# de planos y son los correctos EN ESTE VOCABULARIO: en un plano se dice
+# «numero de plano», no «identidad de documento».
 
-def normalizar_numero(numero):
-    """El numero de plano es una IDENTIDAD: se normaliza para que 'pl-est-104',
-    'PL-EST-104 ' y 'PL EST 104' no sean tres planos distintos."""
-    if not numero:
-        return ''
-    return re.sub(r'[\s_]+', '-', str(numero).strip().upper()).strip('-')
-
-
-def siguiente_revision(codigos_existentes):
-    """La siguiente revision de la serie, respetando la que ya se use.
-
-    Dos convenciones conviven en obra publica: letras (A, B, C…) y numeros
-    (00, 01, 02…). No se impone una: se continua LA QUE EL PLANO YA USA, porque
-    la convencion la fija el contrato, no la plataforma.
-    """
-    codigos = [str(c).strip().upper() for c in (codigos_existentes or []) if c]
-    if not codigos:
-        return 'A'
-    numericos = [c for c in codigos if c.isdigit()]
-    if numericos and len(numericos) == len(codigos):
-        return '%02d' % (max(int(c) for c in numericos) + 1)
-    letras = [c for c in codigos if len(c) == 1 and c.isalpha()]
-    if letras:
-        ultima = max(letras)
-        if ultima != 'Z':
-            return chr(ord(ultima) + 1)
-    # Serie que no encaja en ninguna convencion: no se adivina.
-    return None
+normalizar_numero = rev.normalizar_identidad
+siguiente_revision = rev.siguiente_revision
