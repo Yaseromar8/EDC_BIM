@@ -156,8 +156,14 @@ def leer_cajetin():
     corte = guardia_de_recurso('file_nodes', nodo)
     if corte:
         return corte
+    # `get_blob_data`, que es la que EXISTE. La primera version importaba
+    # `descargar_bytes`, un nombre que me invente sin comprobarlo: el import
+    # fallaba, el `except ImportError` lo convertia en un 501 educado, y la
+    # lectura de cajetin quedaba MUERTA sin que nada lo delatara. Lo encontro
+    # la EXP en produccion, no la suite -- porque el fallo estaba en el nombre
+    # de un modulo que las pruebas no cargan.
     try:
-        from gcs_manager import descargar_bytes
+        from gcs_manager import get_blob_data
     except ImportError:
         return jsonify({'error': 'Lectura de cajetín no disponible en este despliegue.',
                         'code': 'SIN_LECTOR'}), 501
@@ -170,7 +176,11 @@ def leer_cajetin():
             fila = cur.fetchone()
         if not fila:
             return jsonify({'error': 'Ese documento no tiene versión actual.'}), 404
-        datos = descargar_bytes(fila[0])
+        datos, _mime = get_blob_data(fila[0])
+        if not datos:
+            return jsonify({'numero': None, 'revision': None, 'titulo': None,
+                            'tiene_texto': False,
+                            'aviso': 'No se pudo descargar el documento.'})
         sug = pl.leer_cajetin(datos)
         if not sug['tiene_texto']:
             sug['aviso'] = ('Este PDF no tiene capa de texto —probablemente es un '

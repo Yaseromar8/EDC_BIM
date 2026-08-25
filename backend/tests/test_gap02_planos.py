@@ -125,6 +125,48 @@ def test_el_cajetin_devuelve_sugerencias_y_dice_si_no_habia_texto():
     assert r['numero'] is None
 
 
+def test_lo_que_el_manejador_importa_EXISTE_de_verdad():
+    """EL DEFECTO QUE ESTA PRUEBA NACE PARA IMPEDIR, encontrado por la EXP en
+    producción el 25-ago-2026:
+
+        POST /api/planos/leer-cajetin  ->  501 SIN_LECTOR
+
+    El manejador importaba `descargar_bytes` de `gcs_manager` — un nombre que
+    me inventé sin comprobarlo. El import fallaba, el `except ImportError` lo
+    convertía en un 501 educado, y la lectura de cajetín quedaba MUERTA sin
+    que nada lo delatara: ni la suite, porque no carga ese módulo, ni el
+    usuario, porque el mensaje parecía una limitación del despliegue.
+
+    UN `except ImportError` QUE DEVUELVE UNA RESPUESTA AMABLE ES UN SITIO
+    PERFECTO PARA QUE UN ERROR DE ESCRITURA VIVA PARA SIEMPRE. Por eso se
+    comprueba el símbolo contra el módulo real, sin importarlo.
+    """
+    import ast
+    import re
+    fuente = _rutas()
+    modulos = {}
+    for m in re.finditer(r'from\s+(\w+)\s+import\s+([\w, ]+)', fuente):
+        modulos.setdefault(m.group(1), set()).update(
+            s.strip() for s in m.group(2).split(','))
+    faltan = []
+    for modulo, simbolos in modulos.items():
+        camino = os.path.join(RAIZ, modulo + '.py')
+        if not os.path.exists(camino):
+            continue                      # de terceros o de un paquete
+        arbol = ast.parse(io.open(camino, encoding='utf-8').read())
+        definidos = {n.name for n in ast.walk(arbol)
+                     if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+        definidos |= {t.id for n in ast.walk(arbol) if isinstance(n, ast.Assign)
+                      for t in n.targets if isinstance(t, ast.Name)}
+        for s in simbolos:
+            if s and s not in definidos:
+                faltan.append('%s.%s' % (modulo, s))
+    assert not faltan, (
+        'el manejador importa símbolos que NO existen: %s\n'
+        'Un `except ImportError` los convertiría en un error educado y la '
+        'funcionalidad quedaría muerta sin que nadie lo notara.' % faltan)
+
+
 def test_la_lectura_del_cajetin_nunca_escribe_nada():
     """Es una sugerencia para una persona, no una fuente de datos."""
     fuente = _rutas()
