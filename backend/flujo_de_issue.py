@@ -83,6 +83,12 @@ CODIGOS_TIPO = tuple(c for c, _ in TIPOS)
 # observación de calidad o seguridad puede levantarse antes de saber de quién es.
 EXIGEN_RESPONSABLE = (PUNCH, NO_CONFORMIDAD)
 
+# Los que EXIGEN verificador DESIGNADO al nacer. En un PUNCH las tres personas
+# son distintas por naturaleza --registra quien recorre, corrige el contratista,
+# aprueba la supervision-- y dejar el verificador sin designar obligaria a
+# elegirlo despues, que es como el detector acababa heredando el cierre.
+EXIGEN_VERIFICADOR = (PUNCH,)
+
 # Los que nacen ANCLADOS a un plano. Un punch se levanta recorriendo la obra
 # con la lámina en la mano: sin decir dónde, no se puede ir a corregirlo.
 EXIGEN_UBICACION = (PUNCH,)
@@ -133,37 +139,51 @@ def puede_corregir(usuario, issue):
 
 
 def puede_verificar(usuario, issue, es_admin_de_obra=False):
-    """Verifica QUIEN NO CORRIGIÓ. Devuelve (puede, motivo_si_no).
+    """Verifica EL VERIFICADOR DESIGNADO. Devuelve (puede, motivo_si_no).
 
     LA INVARIANTE DEL OBJETO. Sin ella «verificado» significa «el responsable
     dice que ya está», que es lo mismo que no verificar.
 
-    La excepción `autoverificacion` es un dato del issue, puesta por un
-    administrador de obra con motivo y auditada. No se infiere de nada.
+    EL DETECTOR NO HEREDA AUTORIDAD DE CIERRE
+    ------------------------------------------
+    La primera versión concedía la verificación a `autor_id`. Parecía razonable
+    porque en una NO CONFORMIDAD de protocolo las dos personas coinciden: el
+    inspector que la detecta es quien comprueba que se levantó. Pero en un PUNCH
+    de recepción NO coinciden —registra quien recorre la obra, corrige el
+    contratista, aprueba la SUPERVISIÓN— y ahí el detector se convertía en
+    autoridad de cierre por inferencia, sin que nadie lo hubiera decidido.
+
+    Ahora el verificador es un PAPEL DESIGNADO Y PERSISTIDO (`verificador_id`).
+    Cuando detector y verificador son la misma persona, es porque alguien lo
+    escribió así, no porque el código lo dedujera.
     """
     issue = issue or {}
     uid = (usuario or {}).get('id')
     if not uid:
         return False, 'sesión sin identidad'
-    es_el_responsable = uid == issue.get('responsable_id')
 
     # LA EXCEPCIÓN, PRIMERO Y APARTE. Existe precisamente para que el CORRECTOR
     # pueda verificar lo suyo cuando un administrador lo ha autorizado por
-    # escrito. Comprobarla después de exigir «detector o admin» la dejaba
-    # inservible: un responsable que no fuera ninguna de las dos cosas quedaba
-    # bloqueado igual, y la autorización no autorizaba nada.
-    if es_el_responsable:
+    # escrito. Comprobarla al final la dejaba inservible.
+    if uid == issue.get('responsable_id'):
         if issue.get('autoverificacion'):
             return True, ''
         return False, ('quien corrige no verifica su propia corrección; hace falta '
                        'una autorización explícita de autoverificación')
 
-    # Verifica quien lo detectó, o un administrador de la obra. No cualquiera:
-    # un tercero sin relación con el issue no aporta garantía ninguna.
-    if (uid == issue.get('autor_id')) or es_admin_de_obra:
+    designado = issue.get('verificador_id')
+    if designado:
+        if uid == designado:
+            return True, ''
+        return False, ('la verificación le corresponde al verificador designado '
+                       'de este issue')
+
+    # Sin verificador designado, solo un administrador de la obra. NO el
+    # detector: dejarle cerrar sería volver a promoverlo en silencio.
+    if es_admin_de_obra:
         return True, ''
-    return False, ('la verificación la hace quien detectó el defecto o un '
-                   'administrador de la obra')
+    return False, ('este issue no tiene verificador designado; hasta que se le '
+                   'asigne uno, solo un administrador de la obra puede verificarlo')
 
 
 # ── EVIDENCIA ──────────────────────────────────────────────────────────────

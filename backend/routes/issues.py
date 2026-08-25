@@ -43,7 +43,7 @@ S = iss.SEMANTICA
 
 _COLS = ('id, project_id, model_urn, codigo, tipo, titulo, descripcion, '
          'revision_id, ubicacion, progresiva, autor_id, responsable_id, '
-         'verificado_por, created_by, estado, vence_en, evidencia, '
+         'verificador_id, verificado_por, created_by, estado, vence_en, evidencia, '
          'evidencia_correccion, autoverificacion, autoverificacion_motivo, '
          'origen_tipo, origen_id, history, creado_en, corregido_en, '
          'verificado_en, cerrado_en')
@@ -59,24 +59,34 @@ def _actor():
 
 
 def _fila(r):
+    # A QUIEN LE TOCA AHORA, calculado POR LA MISMA FUNCION que reparte los
+    # encargos. La pantalla necesita ensenarlo, y si lo dedujera por su cuenta
+    # tendriamos dos versiones de la regla: la que manda los avisos y la que
+    # dibuja la lista. Divergirian en el primer estado nuevo.
+    a_quien, _asunto, _v = _enc.deudor_de_issue(None, (r[0], r[3], r[5], r[15],
+                                                       r[10], r[11], r[12], r[16]))
     return {
+        'a_quien_le_toca': a_quien,
         'id': str(r[0]), 'project_id': r[1], 'model_urn': r[2], 'codigo': r[3],
         'tipo': r[4], 'tipo_etiqueta': iss.etiqueta_tipo(r[4]),
         'titulo': r[5], 'descripcion': r[6],
         'revision_id': str(r[7]) if r[7] else None,
         'ubicacion': r[8], 'progresiva': r[9],
-        'autor_id': r[10], 'responsable_id': r[11], 'verificado_por': r[12],
-        'created_by': r[13], 'estado': r[14],
-        'vence_en': r[15].isoformat() if r[15] else None,
-        'evidencia': r[16] or [], 'evidencia_correccion': r[17] or [],
-        'autoverificacion': bool(r[18]), 'autoverificacion_motivo': r[19],
-        'origen_tipo': r[20], 'origen_id': r[21],
-        'history': r[22] or [],
-        'creado_en': r[23].isoformat() if r[23] else None,
-        'corregido_en': r[24].isoformat() if r[24] else None,
-        'verificado_en': r[25].isoformat() if r[25] else None,
-        'cerrado_en': r[26].isoformat() if r[26] else None,
-        'cerrado': iss.esta_cerrado(r[14]),
+        # LAS TRES IDENTIDADES, SEPARADAS. `verificador_id` es el PAPEL --a
+        # quien le toca-- y `verificado_por` el HECHO --quien firmo--.
+        'autor_id': r[10], 'responsable_id': r[11],
+        'verificador_id': r[12], 'verificado_por': r[13],
+        'created_by': r[14], 'estado': r[15],
+        'vence_en': r[16].isoformat() if r[16] else None,
+        'evidencia': r[17] or [], 'evidencia_correccion': r[18] or [],
+        'autoverificacion': bool(r[19]), 'autoverificacion_motivo': r[20],
+        'origen_tipo': r[21], 'origen_id': r[22],
+        'history': r[23] or [],
+        'creado_en': r[24].isoformat() if r[24] else None,
+        'corregido_en': r[25].isoformat() if r[25] else None,
+        'verificado_en': r[26].isoformat() if r[26] else None,
+        'cerrado_en': r[27].isoformat() if r[27] else None,
+        'cerrado': iss.esta_cerrado(r[15]),
     }
 
 
@@ -121,7 +131,9 @@ def catalogo():
     return jsonify({
         'tipos': [{'codigo': c, 'etiqueta': e,
                    'exige_responsable': c in iss.EXIGEN_RESPONSABLE,
-                   'exige_ubicacion': c in iss.EXIGEN_UBICACION} for c, e in iss.TIPOS],
+                   'exige_ubicacion': c in iss.EXIGEN_UBICACION,
+                   'exige_verificador': c in iss.EXIGEN_VERIFICADOR}
+                  for c, e in iss.TIPOS],
         'estados': list(iss.ESTADOS),
         'vivos': list(iss.VIVOS),
     })
@@ -197,6 +209,19 @@ def crear():
                                  'a corregir.' % iss.etiqueta_tipo(tipo),
                         'code': 'SIN_RESPONSABLE'}), 409
 
+    verificador = data.get('verificador_id')
+    if tipo in iss.EXIGEN_VERIFICADOR and not verificador:
+        return jsonify({'error': 'Un %s exige un verificador designado: registra uno, '
+                                 'corrige otro y aprueba el cierre un tercero. Sin '
+                                 'designarlo, el cierre acabaria recayendo en quien '
+                                 'detecto el defecto.' % iss.etiqueta_tipo(tipo),
+                        'code': 'SIN_VERIFICADOR'}), 409
+    if verificador and responsable and int(verificador) == int(responsable):
+        return jsonify({'error': 'El verificador no puede ser el mismo que corrige. '
+                                 'La autoverificacion existe, pero se autoriza aparte '
+                                 'y con motivo escrito.',
+                        'code': 'VERIFICADOR_ES_RESPONSABLE'}), 409
+
     revision_id = data.get('revision_id')
     if tipo in iss.EXIGEN_UBICACION and not revision_id:
         return jsonify({'error': 'Un punch se levanta sobre una lámina concreta: '
@@ -218,12 +243,15 @@ def crear():
                 if f[0] != obra:
                     return jsonify({'error': 'Esa revisión pertenece a otra obra.',
                                     'code': 'OTRA_OBRA'}), 409
-            if responsable:
+            for quien, uid_ in (('responsable', responsable),
+                                ('verificador', verificador)):
+                if not uid_:
+                    continue
                 cur.execute('SELECT 1 FROM project_users WHERE project_id=%s AND user_id=%s',
-                            (obra, int(responsable)))
+                            (obra, int(uid_)))
                 if not cur.fetchone():
-                    return jsonify({'error': 'El responsable no es miembro de esta obra.',
-                                    'code': 'RESPONSABLE_NO_MIEMBRO'}), 409
+                    return jsonify({'error': 'El %s no es miembro de esta obra.' % quien,
+                                    'code': '%s_NO_MIEMBRO' % quien.upper()}), 409
 
             for intento in range(5):
                 codigo = reg.siguiente_codigo(cur, S, obra)
@@ -232,15 +260,17 @@ def crear():
                     cur.execute("""INSERT INTO doc_issues
                         (project_id, model_urn, codigo, tipo, titulo, descripcion,
                          revision_id, ubicacion, progresiva, autor_id, responsable_id,
-                         created_by, vence_en, evidencia, origen_tipo, origen_id, history)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                         verificador_id, created_by, vence_en, evidencia,
+                         origen_tipo, origen_id, history)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                         RETURNING id""",
                         (obra, data.get('model_urn'), codigo, tipo, titulo,
                          (data.get('descripcion') or '').strip() or None,
                          revision_id,
                          (data.get('ubicacion') or '').strip() or None,
                          (data.get('progresiva') or '').strip() or None,
-                         autor, responsable, _actor(), data.get('vence_en') or None,
+                         autor, responsable, verificador, _actor(),
+                         data.get('vence_en') or None,
                          json.dumps(data.get('evidencia') or []),
                          data.get('origen_tipo'), data.get('origen_id'),
                          json.dumps([reg.entrada('detected', _actor(), codigo=codigo,
@@ -309,13 +339,21 @@ def corregir(iid):
                        comentario=(data.get('comentario') or '').strip() or None)
             # LA PELOTA PASA A QUIEN VERIFICA. El responsable ya hizo lo suyo.
             _cerrar_pelota(cur, iid)
+            # AL VERIFICADOR DESIGNADO, no al detector. Si no hay ninguno, el
+            # issue queda SIN deuda y visible en la lista de los que necesitan
+            # que alguien la asigne: es preferible una deuda visible a una
+            # responsabilidad adjudicada sola.
             try:
-                eid = _enc.abrir(cur, 'ISSUE', iid,
-                                 'Verificar la corrección de %s: %s' % (d['codigo'], d['titulo']),
-                                 destino_usuario=d['autor_id'],
-                                 vence_en=d['vence_en'], creado_por=_actor())
-                if eid:
-                    _enc.avisar(cur, eid)
+                if d['verificador_id']:
+                    eid = _enc.abrir(cur, 'ISSUE', iid,
+                                     'Verificar la corrección de %s: %s'
+                                     % (d['codigo'], d['titulo']),
+                                     destino_usuario=d['verificador_id'],
+                                     vence_en=d['vence_en'], creado_por=_actor())
+                    if eid:
+                        _enc.avisar(cur, eid)
+                else:
+                    logger.warning('[issue %s] corregido y SIN verificador designado', iid)
             except Exception as e:
                 logger.warning('[issue %s] sin encargo de verificacion: %s', iid, str(e)[:120])
             conn.commit()

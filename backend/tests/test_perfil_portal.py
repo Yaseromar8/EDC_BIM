@@ -150,6 +150,33 @@ def test_el_recorte_es_real(rutas_portal):
         % (len(rutas_portal), TECHO))
 
 
+def test_el_guardia_POR_FAMILIA_dispara_aunque_el_total_este_bajo_el_techo():
+    """LO QUE EL PROPIETARIO EXIGIO COMPROBAR al aceptar el techo 220 -> 260.
+
+    El numero es una alarma gruesa. La proteccion REAL es la de familias, y
+    tiene que disparar aunque el total quepa de sobra bajo el techo: si el
+    portal reimportara el visor, el 4D o la IA, eso NO es «crecer», es que el
+    recorte dejo de recortar.
+
+    Se simula la fuga: una lista de rutas PEQUEÑA --muy por debajo de 260-- pero
+    con una ruta de cada familia excluida. El guardia tiene que verlas.
+    """
+    fuga = ['/api/activity', '/api/docs/list', '/api/auth/login',
+            '/api/inventory', '/api/lob/datasets', '/api/ai/preguntar']
+    assert len(fuga) < 260, 'la simulacion tiene que estar MUY por debajo del techo'
+    de_mas = sorted({r for r in fuga
+                     if any(r.startswith(p) for p in DEL_VISOR)
+                     and not any(r.startswith(c) for c in EN_EL_MAPA_PERO_CORTADAS)})
+    assert de_mas, (
+        'el guardia por familia NO vio la fuga: con 6 rutas y tres familias '
+        'excluidas dentro, deberia haber saltado. Si esto pasa, el techo '
+        'numerico se habria convertido en la unica proteccion -- que es justo '
+        'lo que no puede ocurrir.')
+    # Y nombra CUALES, no solo que las hay.
+    assert any('/api/inventory' in r or '/api/lob' in r or '/api/ai' in r
+               for r in de_mas), de_mas
+
+
 def test_las_rutas_del_visor_declaradas_sobre_la_app_no_se_sirven():
     """Las que NO viven en un blueprint hay que probarlas por COMPORTAMIENTO.
 

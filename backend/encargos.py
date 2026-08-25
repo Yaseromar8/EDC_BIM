@@ -492,31 +492,42 @@ def deudor_de_issue(cur, fila):
 
         Abierto     el RESPONSABLE: tiene que corregir
         Reabierto   el RESPONSABLE: la verificacion lo rechazo
-        Corregido   QUIEN DETECTO: tiene que verificar la correccion
+        Corregido   el VERIFICADOR DESIGNADO: tiene que comprobar la correccion
         Verificado  nadie
         Anulado     nadie
 
-    Que en `Corregido` la deuda pase al detector es lo que impide que un issue
-    se quede parado: sin eso, el responsable declara corregido y el defecto
+    Que en `Corregido` la deuda pase a OTRO es lo que impide que un issue se
+    quede parado: sin eso, el responsable declara corregido y el defecto
     desaparece de todas las bandejas sin que nadie lo haya comprobado.
     """
-    iid, codigo, titulo, estado, autor_id, responsable_id, vence = fila
+    (iid, codigo, titulo, estado, autor_id, responsable_id,
+     verificador_id, vence) = fila
     estado = (estado or '').strip()
     if estado in ('Abierto', 'Reabierto'):
         if not responsable_id:
             return None, '', None
         return (responsable_id, 'Corregir %s: %s' % (codigo or 'ISS', titulo or ''), vence)
     if estado == 'Corregido':
-        if not autor_id:
+        # AL VERIFICADOR DESIGNADO, no al detector. La primera version mandaba
+        # la pelota a `autor_id`, y eso convertia a quien ENCUENTRA el defecto
+        # en quien AUTORIZA su cierre -- por inferencia, sin que nadie lo
+        # hubiera decidido. En una no conformidad coinciden; en un punch de
+        # recepcion no, y ahi el error se veia.
+        #
+        # Sin verificador designado NO se inventa uno: el issue queda sin deuda
+        # y aparece en la lista de los que necesitan que alguien lo asigne. Es
+        # preferible una deuda visible a una responsabilidad adjudicada sola.
+        if not verificador_id:
             return None, '', None
-        return (autor_id,
+        return (verificador_id,
                 'Verificar la correccion de %s: %s' % (codigo or 'ISS', titulo or ''),
                 vence)
     return None, '', None
 
 
 _SQL_ISSUES_VIVOS = """
-    SELECT id, codigo, titulo, estado, autor_id, responsable_id, vence_en, project_id
+    SELECT id, codigo, titulo, estado, autor_id, responsable_id, verificador_id,
+           vence_en, project_id
       FROM doc_issues WHERE estado IN ('Abierto','Reabierto','Corregido')
 """
 
@@ -677,7 +688,8 @@ def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
 
     if tipo == 'ISSUE':
         cur.execute("""SELECT id, codigo, titulo, estado, autor_id, responsable_id,
-                              vence_en FROM doc_issues WHERE id::text = %s""",
+                              verificador_id, vence_en
+                         FROM doc_issues WHERE id::text = %s""",
                     (str(objeto_id),))
         fila = cur.fetchone()
         if not fila:
@@ -872,8 +884,8 @@ def _faltantes(cur):
     try:
         cur.execute(_SQL_ISSUES_VIVOS)
         for fila in cur.fetchall():
-            obra = fila[7]
-            uid, asunto, vence = deudor_de_issue(cur, fila[:7])
+            obra = fila[8]
+            uid, asunto, vence = deudor_de_issue(cur, fila[:8])
             if not uid:
                 continue
             cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',

@@ -466,6 +466,31 @@ def _escalar(cur, conn, aid):
     items = list(a['items'])
     hubo_cambio = False
 
+    # ── LA REGLA DE LAS TRES IDENTIDADES, EXPLICITA Y PERSISTIDA ───────────
+    #
+    # Para una NO CONFORMIDAD de protocolo:
+    #
+    #     DETECTOR    = quien levanto y firmo el acta (el inspector)
+    #     RESPONSABLE = el responsable del acta (quien tiene que corregir)
+    #     VERIFICADOR = el MISMO inspector que la detecto
+    #
+    # Que detector y verificador coincidan AQUI es correcto y profesional: quien
+    # encontro el punto no conforme es quien sabe comprobar que se levanto. Pero
+    # se ESCRIBE, no se deduce. La version anterior lo dejaba a la inferencia del
+    # manejador --la pelota iba a `autor_id` por defecto-- y esa misma inferencia
+    # aplicada a un PUNCH convertia al que recorre la obra en autoridad de
+    # cierre. Una coincidencia declarada es una decision; una inferida es un
+    # acoplamiento esperando a romperse en el siguiente tipo.
+    #
+    # Y si el inspector fuera ademas el responsable, NO se designa: se deja nulo
+    # y lo resuelve un administrador. Rellenarlo crearia el conflicto que
+    # `ck_issues_verificador_designado_distinto` existe para impedir.
+    verificador = a['autor_id']
+    if a['responsable_id'] and verificador == a['responsable_id']:
+        verificador = None
+        logger.warning('[acta %s] el inspector es tambien el responsable: los issues '
+                       'nacen SIN verificador designado', aid)
+
     for n, item in pro.items_a_escalar(items):
         titulo = ('%s - %s' % (a['codigo'], (item.get('texto') or 'Punto no conforme')))[:180]
         ultimo_error = ''
@@ -476,14 +501,16 @@ def _escalar(cur, conn, aid):
                 cur.execute(
                     """INSERT INTO doc_issues
                          (project_id, model_urn, codigo, tipo, titulo, descripcion,
-                          ubicacion, progresiva, autor_id, responsable_id, created_by,
-                          vence_en, evidencia, origen_tipo, origen_id, history)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                          ubicacion, progresiva, autor_id, responsable_id,
+                          verificador_id, created_by, vence_en, evidencia,
+                          origen_tipo, origen_id, history)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     RETURNING id""",
                     (a['project_id'], a['model_urn'], codigo, iss.NO_CONFORMIDAD,
                      titulo, (item.get('observacion') or '').strip() or None,
                      a['ubicacion'], a['progresiva'],
-                     a['autor_id'], a['responsable_id'], _actor(), a['vence_en'],
+                     a['autor_id'], a['responsable_id'], verificador,
+                     _actor(), a['vence_en'],
                      json.dumps(item.get('fotos') or []),
                      'PROTOCOLO', str(aid),
                      json.dumps([reg.entrada('detected', _actor(), codigo=codigo,

@@ -31,6 +31,7 @@ const HERRAMIENTA_DE_MODO = {
   rfis: 'rfi', redlines: 'redlines', reviews: 'reviews',
   transmittals: 'transmittals', submittals: 'submittals',
   planos: 'planos', protocolos: 'protocolos',
+  punch: 'issues',
   plan: 'plan_entregas', sets: 'conjuntos',
   multimedia: 'fotos',
 };
@@ -59,6 +60,9 @@ const RfiModule = lazy(() => import('../components/RfiModule'));
 const SubmittalsModule = lazy(() => import('../components/SubmittalsModule'));
 const PlanosModule = lazy(() => import('../components/PlanosModule'));
 const ProtocolosModule = lazy(() => import('../components/ProtocolosModule'));
+// `PunchModule`, no `IssueModule`: ese nombre ya es el componente generico
+// de RFI y Red Line. RED LINE != ISSUE quedo congelado el 25-ago-2026.
+const PunchModule = lazy(() => import('../components/PunchModule'));
 const MultimediaModule = lazy(() => import('../components/MultimediaModule'));
 const GatewayPanel = lazy(() => import('../components/panels/GatewayPanel'));
 const QuarantineTable = lazy(() => import('../components/panels/QuarantineTable'));
@@ -334,6 +338,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   { label: 'Submittals', mode: 'submittals', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>, onClick: () => fe.setSidebarView('submittals') },
                   { label: 'Planos', mode: 'planos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/></svg>, onClick: () => fe.setSidebarView('planos') },
                   { label: 'Protocolos', mode: 'protocolos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3 5-5"/><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4"/></svg>, onClick: () => fe.setSidebarView('protocolos') },
+                  { label: 'Issues y punch', mode: 'punch', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>, onClick: () => fe.setSidebarView('punch') },
                   { label: 'Plan de entrega', mode: 'plan', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11H3v10h6V11z"/><path d="M15 3H9v18h6V3z"/><path d="M21 7h-6v14h6V7z"/></svg>, onClick: () => fe.setSidebarView('plan') },
                   { label: 'Conjuntos', mode: 'sets', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>, onClick: () => fe.setSidebarView('sets') },
                 ]},
@@ -478,6 +483,10 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
         {fe.sidebarView === 'protocolos' && (
           <ProtocolosModule project={project} API={API} user={user} isAdmin={isAdmin} />
+        )}
+
+        {fe.sidebarView === 'punch' && (
+          <PunchModule project={project} API={API} user={user} isAdmin={isAdmin} />
         )}
 
         {/* MULTIMEDIA VIEW */}

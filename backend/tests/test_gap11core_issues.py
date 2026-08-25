@@ -78,11 +78,14 @@ def test_quien_corrige_NO_verifica_su_propia_correccion():
     assert 'no verifica su propia' in motivo
 
 
-def test_verifica_quien_detecto_o_un_admin_de_obra():
+def test_verifica_EL_DESIGNADO_y_no_quien_detecto():
+    """CAMBIO DEL 25-ago-2026. Antes verificaba `autor_id`, y eso convertia a
+    quien ENCUENTRA el defecto en quien AUTORIZA su cierre, por inferencia."""
     import flujo_de_issue as iss
-    d = {'autor_id': 1, 'responsable_id': 2, 'autoverificacion': False}
-    assert iss.puede_verificar({'id': 1}, d)[0], 'quien detecto'
-    assert iss.puede_verificar({'id': 9}, d, es_admin_de_obra=True)[0], 'admin de obra'
+    d = {'autor_id': 1, 'responsable_id': 2, 'verificador_id': 7,
+         'autoverificacion': False}
+    assert iss.puede_verificar({'id': 7}, d)[0], 'el verificador designado'
+    assert not iss.puede_verificar({'id': 1}, d)[0], 'el detector NO'
     assert not iss.puede_verificar({'id': 9}, d)[0], 'un tercero cualquiera NO'
 
 
@@ -213,10 +216,11 @@ def test_la_pelota_sigue_al_ciclo():
     issue se quede parado: sin eso, el responsable declara corregido y el
     defecto desaparece de todas las bandejas sin que nadie lo compruebe."""
     import encargos as enc
-    fila = lambda est: (1, 'ISS-001', 'Fisura', est, 5, 9, None)
+    fila = lambda est: (1, 'ISS-001', 'Fisura', est, 5, 9, 7, None)
     assert enc.deudor_de_issue(None, fila('Abierto'))[0] == 9, 'corrige el responsable'
     assert enc.deudor_de_issue(None, fila('Reabierto'))[0] == 9, 'vuelve al responsable'
-    assert enc.deudor_de_issue(None, fila('Corregido'))[0] == 5, 'verifica el detector'
+    assert enc.deudor_de_issue(None, fila('Corregido'))[0] == 7, (
+        'verifica EL DESIGNADO (7), no el detector (5)')
     for cerrado in ('Verificado', 'Anulado'):
         assert enc.deudor_de_issue(None, fila(cerrado))[0] is None, cerrado
 
@@ -283,9 +287,13 @@ def test_una_revision_de_otra_obra_no_se_puede_anclar():
     assert 'OTRA_OBRA' in cuerpo
 
 
-def test_el_responsable_tiene_que_ser_miembro_de_la_obra():
+def test_responsable_y_verificador_tienen_que_ser_MIEMBROS():
+    """Los dos: designar como verificador a alguien de fuera de la obra sería
+    poner el cierre en manos de quien no puede ni entrar a mirarlo."""
     cuerpo = _rutas().split('def crear')[1].split('\ndef ')[0]
-    assert 'RESPONSABLE_NO_MIEMBRO' in cuerpo
+    assert "'%s_NO_MIEMBRO' % quien.upper()" in cuerpo
+    assert "('responsable', responsable)" in cuerpo
+    assert "('verificador', verificador)" in cuerpo
 
 
 def test_no_hay_ninguna_ruta_que_escriba_el_estado_a_mano():
@@ -301,3 +309,87 @@ def test_la_herramienta_existe_y_gobierna_su_ruta():
     import herramientas_de_obra as hdo
     assert 'issues' in hdo.CODIGOS
     assert hdo.herramienta_de_ruta('/api/issues/7/verificar') == 'issues'
+
+
+def _sql_ver():
+    return io.open(os.path.join(RAIZ, 'sql', '17_issue_verificador.sql'),
+                   encoding='utf-8').read()
+
+
+# ══ EL VERIFICADOR ES UNA IDENTIDAD PROPIA ═════════════════════════════════
+#
+# DEFECTO QUE ESTA SECCION NACE PARA IMPEDIR: la primera version tenia DOS
+# identidades y media --autor_id, responsable_id, y `verificado_por` que es un
+# REGISTRO y no un PAPEL--. Sin verificador designado, el manejador tenia que
+# elegir a alguien y eligio al detector: la pelota de `Corregido` iba a
+# `autor_id` y `puede_verificar` le daba autoridad de cierre.
+#
+# En una NO CONFORMIDAD las dos personas coinciden y el error no se veia. En un
+# PUNCH no coinciden --registra quien recorre, corrige el contratista, aprueba
+# la supervision-- y ahi el tercero se inventaba.
+
+def test_las_TRES_identidades_existen_por_separado():
+    sql = _sql_ver()
+    assert 'verificador_id INTEGER' in sql
+    assert 'fk_issues_verificador_designado' in sql
+    fuente = _rutas()
+    for campo in ('autor_id', 'responsable_id', 'verificador_id', 'verificado_por'):
+        assert campo in fuente, 'falta %s' % campo
+
+
+def test_el_DETECTOR_no_hereda_autoridad_de_cierre():
+    """`detector_id` guarda quien encontro el defecto y NO se convierte en
+    autoridad de cierre."""
+    import flujo_de_issue as iss
+    d = {'autor_id': 1, 'responsable_id': 2, 'verificador_id': 7,
+         'autoverificacion': False}
+    assert not iss.puede_verificar({'id': 1}, d)[0]
+    assert iss.puede_verificar({'id': 7}, d)[0]
+
+
+def test_sin_verificador_designado_solo_un_ADMIN_cierra():
+    """No el detector: dejarle cerrar seria volver a promoverlo en silencio."""
+    import flujo_de_issue as iss
+    d = {'autor_id': 1, 'responsable_id': 2, 'verificador_id': None,
+         'autoverificacion': False}
+    assert not iss.puede_verificar({'id': 1}, d)[0]
+    assert iss.puede_verificar({'id': 9}, d, es_admin_de_obra=True)[0]
+
+
+def test_la_pelota_de_CORREGIDO_va_al_verificador_designado():
+    import encargos as enc
+    f = lambda est, ver: (1, 'ISS-001', 'x', est, 5, 9, ver, None)
+    assert enc.deudor_de_issue(None, f('Corregido', 7))[0] == 7
+    # Sin designado NO se inventa uno: deuda visible antes que adjudicada sola.
+    assert enc.deudor_de_issue(None, f('Corregido', None))[0] is None
+
+
+def test_un_PUNCH_exige_verificador_designado():
+    import flujo_de_issue as iss
+    assert iss.PUNCH in iss.EXIGEN_VERIFICADOR
+    cuerpo = _rutas().split('def crear')[1].split('\\ndef ')[0]
+    assert 'SIN_VERIFICADOR' in cuerpo
+
+
+def test_no_se_puede_nacer_con_responsable_igual_a_verificador():
+    """Antes solo se comprobaba AL VERIFICAR, asi que el choque aparecia al
+    final -- cuando ya no hay a quien reasignar sin tocar el registro."""
+    sql = _sql_ver()
+    assert 'ck_issues_verificador_designado_distinto' in sql
+    assert 'verificador_id <> responsable_id' in sql
+    cuerpo = _rutas().split('def crear')[1].split('\\ndef ')[0]
+    assert 'VERIFICADOR_ES_RESPONSABLE' in cuerpo
+
+
+def test_el_escalado_de_GAP03_DECLARA_la_regla_y_no_la_infiere():
+    """Para una no conformidad detector y verificador SI coinciden, y es
+    correcto -- pero se escribe. Una coincidencia declarada es una decision;
+    una inferida es un acoplamiento esperando a romperse en el siguiente tipo."""
+    fuente = io.open(os.path.join(RAIZ, 'routes', 'protocolos.py'),
+                     encoding='utf-8').read()
+    cuerpo = fuente.split('def _escalar')[1].split('\\ndef ')[0]
+    assert "verificador = a['autor_id']" in cuerpo
+    assert 'verificador_id' in cuerpo
+    # Y si el inspector fuera tambien el responsable, no se designa.
+    assert "verificador == a['responsable_id']" in cuerpo
+    assert 'verificador = None' in cuerpo
