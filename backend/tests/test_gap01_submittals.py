@@ -335,6 +335,48 @@ def test_cada_acto_que_escribe_pasa_por_la_guardia_de_recurso():
     assert not sin_guardia, 'rutas sobre un recurso sin guardia: %s' % sin_guardia
 
 
+def test_el_manifiesto_congelado_conoce_el_tipo_SUBMITTAL():
+    """EL DEFECTO QUE ESTA PRUEBA NACE PARA IMPEDIR, y que tumbó el arranque en
+    producción el 25-ago-2026:
+
+        restricciones : 509 de 510  *** FALTAN 1 ***
+        · restriccion encargos check ((objeto_tipo = any (array['review',
+          'rfi','redline','transmittal'])))
+        ==> Exited with status 1
+
+    `bootstrap_esquema.py --verificar` compara la base viva contra
+    `esquema_objetos.txt`. La migración 13 REEMPLAZÓ `ck_encargos_tipo`, así que
+    el objeto que el manifiesto esperaba dejó de existir y el servicio se negó a
+    arrancar — correctamente: un esquema que no es el que el código espera no se
+    sirve.
+
+    LA REGLA QUE ESTO FIJA, y que no era obvia:
+        AÑADIR una tabla por migración  ->  el manifiesto NO se toca
+                                            (ninguna de las cinco tablas de las
+                                             capas 16/08/13/15/14 está en él)
+        MODIFICAR un objeto que el manifiesto YA declara  ->  hay que
+                                            actualizarlo, o el arranque cae.
+
+    Se comprueba contra `encargos._CHECKS`, que es la fuente de verdad del
+    código, y no contra una copia literal: así las dos no pueden divergir.
+    """
+    import re
+    import encargos as enc
+    manifiesto = io.open(os.path.join(RAIZ, 'esquema_objetos.txt'),
+                         encoding='utf-8').read()
+    linea = next((l for l in manifiesto.splitlines()
+                  if l.startswith('restriccion\tencargos check ((objeto_tipo')), None)
+    assert linea, 'el manifiesto ya no declara el CHECK de objeto_tipo'
+
+    en_manifiesto = set(re.findall(r"'([a-z]+)'::text", linea))
+    en_codigo = {t.lower() for t in enc.TIPOS}
+    assert en_manifiesto == en_codigo, (
+        'el manifiesto congelado y `encargos.TIPOS` no dicen lo mismo.\n'
+        '  manifiesto: %s\n  codigo:     %s\n'
+        'El arranque verifica el esquema contra el manifiesto: si divergen, el '
+        'servicio NO arranca.' % (sorted(en_manifiesto), sorted(en_codigo)))
+
+
 def test_toda_tabla_guardada_esta_declarada_en_RECURSOS():
     """EL DEFECTO QUE ESTA PRUEBA NACE PARA IMPEDIR, y que encontro la revision
     de este mismo gap ANTES de desplegar:
