@@ -898,6 +898,12 @@ app.register_blueprint(reviews_bp)
 from routes.plan_entregas import plan_bp
 from routes.transmittals import transmittals_bp, ensure_transmittals_table
 app.register_blueprint(transmittals_bp)
+# GAP 01. Va en el perfil PORTAL --no en el completo-- porque la pantalla
+# de Submittals vive en `frontend-docs`, que es lo que el portal sirve.
+# Registrarlo del otro lado dejaba la pantalla llamando a rutas que su
+# propio backend no monta; lo cazó `test_el_portal_no_pierde_ninguna_llamada`.
+from routes.submittals import submittals_bp
+app.register_blueprint(submittals_bp, url_prefix='/api/submittals')
 app.register_blueprint(plan_bp)
 from routes.attributes import attributes_bp, ensure_attributes_tables
 app.register_blueprint(attributes_bp)

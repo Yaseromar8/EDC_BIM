@@ -47,7 +47,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-TIPOS = ('REVIEW', 'RFI', 'REDLINE', 'TRANSMITTAL')
+TIPOS = ('REVIEW', 'RFI', 'REDLINE', 'TRANSMITTAL', 'SUBMITTAL')
 
 # De donde sale cada objeto: (tabla, columna de alcance). El id se compara
 # siempre en texto, porque unos son SERIAL y otros UUID.
@@ -56,6 +56,7 @@ _ORIGEN = {
     'RFI':         ('doc_rfis', 'model_urn'),
     'REDLINE':     ('doc_redlines', 'model_urn'),
     'TRANSMITTAL': ('transmittals', 'model_urn'),
+    'SUBMITTAL':   ('doc_submittals', 'model_urn'),
 }
 
 _TABLA = """
@@ -85,7 +86,7 @@ _CLAVES = (
 
 _CHECKS = (
     ('ck_encargos_tipo',
-     "CHECK (objeto_tipo IN ('REVIEW','RFI','REDLINE','TRANSMITTAL'))"),
+     "CHECK (objeto_tipo IN ('REVIEW','RFI','REDLINE','TRANSMITTAL','SUBMITTAL'))"),
     ('ck_encargos_estado',
      "CHECK (estado IN ('abierto','cerrado'))"),
     # Un encargo sin destinatario no es un encargo.
@@ -480,6 +481,72 @@ def _acuso(acuses, email, nombre, user_id=None):
     return False
 
 
+def deudor_de_submittal(cur, fila):
+    """A QUIEN le toca un submittal AHORA, y por que. (uid, asunto, vence).
+
+    UNA SOLA FUNCION PARA LAS DOS MITADES DE LA CONCILIACION. `_sigue_debiendose`
+    y `_faltantes` la llaman las dos, y por eso no pueden discrepar. Escribir dos
+    criterios «parecidos» es exactamente lo que hizo OSCILAR la conciliacion del
+    RFI en su dia --se reabria lo que la otra mitad declaraba sobrante-- y ese
+    error no se repite aqui.
+
+    `fila` = (id, codigo, titulo, estado, responsable_id, steps, current_step,
+              paso_vence_en, vence_en)
+
+    LA PELOTA, ESTADO POR ESTADO:
+        Borrador     NADIE. Es el banco de trabajo del contratista, no una deuda.
+                     Llenar la bandeja de alguien con sus propios borradores
+                     convierte «lo que me toca» en ruido, y una bandeja con
+                     ruido deja de mirarse.
+        Enviado      el MANAGER: tiene que distribuirlo a revision.
+        En revision  el REVISOR DEL PASO ACTUAL, resuelto por `flujo_de_revision`
+                     --el mismo modulo que usa el manejador-- y no por su cuenta.
+        Respondido   el MANAGER: tiene que cerrarlo y distribuir el veredicto.
+        Cerrado      nadie.
+        Anulado      nadie.
+    """
+    (sid, codigo, titulo, estado, responsable_id,
+     steps, paso, paso_vence, vence) = fila
+    estado = (estado or '').strip()
+
+    if estado == 'Enviado':
+        if not responsable_id:
+            return None, '', None
+        return (responsable_id,
+                'Distribuir a revision %s: %s' % (codigo or 'SUB', titulo or ''),
+                vence)
+
+    if estado == 'En revision':
+        import flujo_de_revision as _flujo
+        try:
+            uid, _motivo = _flujo.revisor_del_paso(cur, (steps or [])[paso or 0])
+        except IndexError:
+            return None, '', None
+        if not uid:
+            return None, '', None
+        return (uid,
+                'Revisar %s: %s (paso %d)' % (codigo or 'SUB', titulo or '',
+                                              (paso or 0) + 1),
+                paso_vence)
+
+    if estado == 'Respondido':
+        if not responsable_id:
+            return None, '', None
+        return (responsable_id,
+                'Cerrar y distribuir %s: %s' % (codigo or 'SUB', titulo or ''),
+                vence)
+
+    return None, '', None
+
+
+_SQL_SUBMITTALS_VIVOS = """
+    SELECT id, codigo, titulo, estado, responsable_id, steps, current_step,
+           paso_vence_en, vence_en, project_id
+      FROM doc_submittals
+     WHERE estado IN ('Enviado','En revision','Respondido')
+"""
+
+
 def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
     """¿El OBJETO dice que esto se sigue debiendo? None si no se puede saber.
 
@@ -517,6 +584,24 @@ def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
             uid, _motivo = _flujo.revisor_del_paso(cur, (steps or [])[paso or 0])
         except Exception:
             return True
+        return uid == destino_usuario
+
+    if tipo == 'SUBMITTAL':
+        cur.execute("""SELECT id, codigo, titulo, estado, responsable_id, steps,
+                              current_step, paso_vence_en, vence_en
+                         FROM doc_submittals WHERE id::text = %s""",
+                    (str(objeto_id),))
+        fila = cur.fetchone()
+        if not fila:
+            return None
+        uid, _asunto, _vence = deudor_de_submittal(cur, fila)
+        if uid is None:
+            return False
+        if destino_usuario is None:
+            return True
+        # Y ademas tiene que ser QUIEN LO DEBE HOY: si el submittal avanzo de
+        # paso y el encargo del revisor anterior quedo abierto, esa persona ya
+        # no lo debe. Mismo razonamiento que en REVIEW.
         return uid == destino_usuario
 
     if tipo == 'TRANSMITTAL':
@@ -655,6 +740,37 @@ def _faltantes(cur):
                 faltan.append(('REDLINE', str(rid), uid,
                                _rl.SEMANTICA.asunto_encargo % (codigo or 'RL', titulo or ''),
                                vence))
+    except Exception:
+        cur.connection.rollback()
+
+    # Submittals vivos: quien los deba HOY deberia tener su encargo.
+    #
+    # Las dos direcciones desde el primer dia, porque este registro nacio con
+    # identidad estructurada (`autor_id`, `responsable_id`, pasos con `user_id`)
+    # y no arrastra el texto libre que dejo al RFI a medias.
+    try:
+        cur.execute(_SQL_SUBMITTALS_VIVOS)
+        for fila in cur.fetchall():
+            obra = fila[9]
+            uid, asunto, vence = deudor_de_submittal(cur, fila[:9])
+            if not uid:
+                bloqueadas.append(('SUBMITTAL', str(fila[0]), fila[1] or '',
+                                   'no se puede determinar a quien le toca'))
+                continue
+            # Si quien lo debe ya no esta en la obra, el submittal esta
+            # BLOQUEADO: no es una divergencia reparable --`abrir()` se negaria,
+            # porque un encargo no da acceso-- sino un asunto que necesita a una
+            # persona. Mismo criterio que el RFI y el Red Line.
+            cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
+                        (str(obra), uid))
+            if not cur.fetchone():
+                bloqueadas.append(('SUBMITTAL', str(fila[0]), fila[1] or '',
+                                   'quien lo debe ya no pertenece a la obra'))
+                continue
+            cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='SUBMITTAL' AND objeto_id=%s "
+                        "   AND destino_usuario=%s AND estado='abierto'", (str(fila[0]), uid))
+            if not cur.fetchone():
+                faltan.append(('SUBMITTAL', str(fila[0]), uid, asunto, vence))
     except Exception:
         cur.connection.rollback()
 

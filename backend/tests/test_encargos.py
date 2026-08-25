@@ -110,9 +110,18 @@ def test_no_se_abre_un_encargo_sobre_un_objeto_inexistente():
 
 
 def test_no_se_abre_un_encargo_de_un_tipo_o_funcion_desconocidos():
+    """El tipo de ejemplo era 'SUBMITTAL' hasta que el submittal EXISTIO (GAP 01).
+
+    Se cambia por uno que de verdad no se sabe cotejar. La invariante que este
+    test protege no ha cambiado ni un ápice: lo que no se sabe interpretar no se
+    escribe. Lo que cambió es cuál es el ejemplo honesto de «desconocido» — y
+    dejarlo en SUBMITTAL habría convertido el guardia en un test que pasa por
+    casualidad.
+    """
     import encargos as enc
     cur = CursorFalso()
-    assert enc.abrir(cur, 'SUBMITTAL', '1', 'x', destino_usuario=1) is None
+    assert 'PUNCH' not in enc.TIPOS, 'elige otro ejemplo: este ya existe'
+    assert enc.abrir(cur, 'PUNCH', '1', 'x', destino_usuario=1) is None
     assert enc.abrir(cur, 'RFI', '1', 'x', destino_funcion='JEFAZO') is None
     assert not cur.escrituras
 
@@ -267,7 +276,11 @@ def test_no_se_concilia_un_tipo_que_no_se_sabe_cotejar():
     linea, para una base antigua que no tenga la restriccion.
     """
     import encargos as enc
-    cur = _CursorGuion([('DISTINCT objeto_tipo', [('SUBMITTAL',)])])
+    # Mismo cambio de ejemplo que arriba: 'SUBMITTAL' dejó de ser desconocido
+    # cuando se implementó GAP 01, y un guardia cuyo ejemplo el sistema ya sabe
+    # cotejar deja de guardar nada.
+    assert 'PUNCH' not in enc.TIPOS, 'elige otro ejemplo: este ya existe'
+    cur = _CursorGuion([('DISTINCT objeto_tipo', [('PUNCH',)])])
     with pytest.raises(enc.TipoNoInterpretable):
         enc.divergencias(cur)
 

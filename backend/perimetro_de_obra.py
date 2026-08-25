@@ -53,6 +53,11 @@ RECURSOS = {
     'saved_views':       ('id', 'project_id'),
     'doc_reviews':       ('id', 'model_urn'),
     'transmittals':      ('id', 'model_urn'),
+    # GAP 01. Sin esta linea `obra_del_recurso` LANZA ValueError --no devuelve
+    # None-- y las seis rutas del submittal responderian 500 en vez de guardar
+    # nada. Se registra AQUI y no en el manejador: una guardia que cada ruta
+    # declara por su cuenta es como se olvidan la mitad.
+    'doc_submittals':    ('id', 'model_urn'),
     'doc_sets':          ('id', 'model_urn'),
     # El documento en si. Comprobar contra el NODO es mas fuerte que fiarse del
     # model_urn que manda el cliente: el nodo dice de que obra es de verdad.
