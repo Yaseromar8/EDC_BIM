@@ -231,3 +231,26 @@ def test_levantar_un_acta_NO_exige_ser_administrador():
     cuerpo = _rutas().split('def levantar_acta')[1].split('\ndef ')[0]
     assert 'guardia_administrativa' not in cuerpo
     assert 'guardia_de_obra' in cuerpo
+
+
+def test_el_escalado_ABRE_LA_PELOTA_del_red_line():
+    """LO QUE LA EXP ENCONTRO: el Red Line nacia con responsable y SIN encargo.
+
+    Un Red Line con responsable pero sin encargo existe y NADIE LO DEBE: no
+    aparece en «lo que me toca», asi que nadie lo mira hasta que alguien lo
+    busca. La conciliacion lo repararia mas tarde, pero «mas tarde» no es
+    «genera BIC» -- entre medias hay una no conformidad de obra sin nadie
+    encima.
+    """
+    cuerpo = _escalar_fuente()
+    assert "_enc.abrir(cur, 'REDLINE', rid" in cuerpo
+    assert "destino_usuario=a['responsable_id']" in cuerpo
+    assert "vence_en=a['vence_en']" in cuerpo, 'el plazo del acta viaja al encargo'
+
+
+def test_un_fallo_de_encargo_no_pierde_el_red_line():
+    """El error contrario: perder el Red Line por no poder abrir su encargo.
+    El Red Line ya existe y la conciliacion recogera el encargo."""
+    cuerpo = _escalar_fuente()
+    trozo = cuerpo.split("_enc.abrir(cur, 'REDLINE'")[0][-400:]
+    assert 'try:' in trozo, 'el encargo tiene que ir en su propio try'

@@ -487,6 +487,30 @@ def _escalar(cur, conn, aid):
                                              desde_acta=a['codigo'], punto=n)])))
                 rid = cur.fetchone()[0]
                 cur.execute('RELEASE SAVEPOINT escalado_item')
+
+                # LA PELOTA, EN EL MISMO ACTO. Un Red Line con responsable pero
+                # sin encargo existe y NADIE LO DEBE: no aparece en «lo que me
+                # toca», asi que nadie lo mira hasta que alguien lo busca.
+                #
+                # La conciliacion lo repararia mas tarde --`_faltantes` los
+                # detecta--, pero «mas tarde» no es «genera BIC»: entre medias
+                # hay una no conformidad de obra sin nadie encima.
+                #
+                # Va en su propio try: si el encargo falla, el Red Line ya
+                # existe y la conciliacion lo recogera. Perder el Red Line por
+                # no poder abrir su encargo seria el error contrario.
+                try:
+                    if a['responsable_id']:
+                        eid = _enc.abrir(cur, 'REDLINE', rid,
+                                         'Levantar %s: %s' % (codigo, titulo),
+                                         destino_usuario=a['responsable_id'],
+                                         vence_en=a['vence_en'], creado_por=_actor())
+                        if eid:
+                            _enc.avisar(cur, eid)
+                except Exception as e:
+                    logger.warning('[acta %s] Red Line %s creado sin encargo: %s',
+                                   aid, codigo, str(e)[:120])
+
                 items[n] = {**item, 'redline_id': rid, 'redline_codigo': codigo,
                             'escalado': 'HECHO', 'escalado_error': None,
                             'escalado_intentos': intento + 1}
