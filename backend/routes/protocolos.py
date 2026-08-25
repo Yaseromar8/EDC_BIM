@@ -31,6 +31,7 @@ from administracion_de_obra import guardia_administrativa
 from perimetro_de_obra import guardia_de_obra, guardia_de_recurso
 import encargos as _enc
 import flujo_de_protocolo as pro
+import flujo_de_issue as iss
 import flujo_de_registro as reg
 
 logger = logging.getLogger('protocolos')
@@ -83,6 +84,7 @@ def _fila(r):
         # todavia no se ha reclamado a nadie, y eso se ve o se pierde.
         'escalado_pendiente': len([i for i in items
                                    if (i or {}).get('resultado') == 'No conforme'
+                                   and not (i or {}).get('issue_id')
                                    and not (i or {}).get('redline_id')]),
         'escalado_con_error': len([i for i in items
                                    if (i or {}).get('escalado') == 'ERROR']),
@@ -437,31 +439,26 @@ def firmar(aid):
 
 
 def _escalar(cur, conn, aid):
-    """Cada punto NO CONFORME sin escalar se convierte en un Red Line.
+    """Cada punto NO CONFORME sin escalar se convierte en un ISSUE.
 
-    LA FIRMA NO SE PIERDE, PERO LA RESPONSABILIDAD TAMPOCO
-    -------------------------------------------------------
-    La primera version envolvia TODOS los items en un solo `try` y hacia
-    `conn.rollback()` al fallar. Tres defectos en una linea:
+    EN ISSUE, Y YA NO EN RED LINE
+    ------------------------------
+    La primera version creaba Red Lines, y era un error semantico que la
+    auditoria del doc 86 demostro: el Red Line es la MODIFICACION DEL PROYECTO
+    --un croquis firmado, `...-RL-SKT-...`-- y su veredicto acepta o rechaza esa
+    modificacion. Un punto no conforme NO es una modificacion: es una CONDICION
+    DETECTADA QUE HAY QUE CORREGIR Y VERIFICAR.
 
-      · si el item 2 fallaba, los items 3 en adelante NI SE INTENTABAN;
-      · el rollback DESCARTABA los Red Lines que si se habian creado;
-      · y no quedaba ni una senal de que faltaba escalar algo. La firma
-        sobrevivia y la responsabilidad se perdia EN SILENCIO, que es
-        exactamente lo que no se puede permitir.
+        RED LINE  = modificacion / croquis de cambio de proyecto
+        ISSUE     = condicion detectada que exige correccion + verificacion
 
-    Ahora cada item se escala DENTRO DE SU PROPIO SAVEPOINT y guarda su
-    resultado en el propio item:
+    Congelado por el propietario el 25-ago-2026. El Red Line no vuelve a usarse
+    como contenedor generico de defectos.
 
-        escalado = 'HECHO'      con `redline_id` -- conciliado
-        escalado = 'ERROR'      con `escalado_error` y `escalado_intentos`
-                                -> queda como DEUDA OPERATIVA visible
-
-    El reintento es IDEMPOTENTE: `items_a_escalar` salta los que ya llevan
-    `redline_id`, asi que llamar a `/escalar` diez veces no crea diez Red
-    Lines. Y un item solo se considera conciliado cuando ese id existe.
+    LO QUE NO CAMBIA: la firma no se revierte, cada punto se escala en su propio
+    SAVEPOINT, el fallo queda escrito en el item y auditado, y el reintento es
+    idempotente. Solo cambia A QUE OBJETO apunta.
     """
-    import flujo_de_redline as rl
     creados, fallidos = [], []
     a = _leer(cur, aid)
     if not a:
@@ -470,51 +467,50 @@ def _escalar(cur, conn, aid):
     hubo_cambio = False
 
     for n, item in pro.items_a_escalar(items):
-        titulo = ('%s · %s' % (a['codigo'], (item.get('texto') or 'Punto no conforme')))[:180]
+        titulo = ('%s - %s' % (a['codigo'], (item.get('texto') or 'Punto no conforme')))[:180]
         ultimo_error = ''
         for intento in range(5):
             try:
                 cur.execute('SAVEPOINT escalado_item')
-                codigo = reg.siguiente_codigo(cur, rl.SEMANTICA, a['project_id'])
+                codigo = reg.siguiente_codigo(cur, iss.SEMANTICA, a['project_id'])
                 cur.execute(
-                    'INSERT INTO doc_redlines (model_urn, codigo, titulo, created_by, '
-                    '                          project_id, estado, responsable_id, '
-                    '                          vence_en, historial) '
-                    'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id::text',
-                    (a['model_urn'], codigo, titulo, _actor(), a['project_id'],
-                     'Emitido', a['responsable_id'], a['vence_en'],
-                     json.dumps([reg.entrada('created', _actor(), codigo=codigo,
+                    """INSERT INTO doc_issues
+                         (project_id, model_urn, codigo, tipo, titulo, descripcion,
+                          ubicacion, progresiva, autor_id, responsable_id, created_by,
+                          vence_en, evidencia, origen_tipo, origen_id, history)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    RETURNING id""",
+                    (a['project_id'], a['model_urn'], codigo, iss.NO_CONFORMIDAD,
+                     titulo, (item.get('observacion') or '').strip() or None,
+                     a['ubicacion'], a['progresiva'],
+                     a['autor_id'], a['responsable_id'], _actor(), a['vence_en'],
+                     json.dumps(item.get('fotos') or []),
+                     'PROTOCOLO', str(aid),
+                     json.dumps([reg.entrada('detected', _actor(), codigo=codigo,
+                                             tipo=iss.NO_CONFORMIDAD,
                                              desde_acta=a['codigo'], punto=n)])))
-                rid = cur.fetchone()[0]
+                iid = cur.fetchone()[0]
                 cur.execute('RELEASE SAVEPOINT escalado_item')
 
-                # LA PELOTA, EN EL MISMO ACTO. Un Red Line con responsable pero
-                # sin encargo existe y NADIE LO DEBE: no aparece en «lo que me
-                # toca», asi que nadie lo mira hasta que alguien lo busca.
-                #
-                # La conciliacion lo repararia mas tarde --`_faltantes` los
-                # detecta--, pero «mas tarde» no es «genera BIC»: entre medias
-                # hay una no conformidad de obra sin nadie encima.
-                #
-                # Va en su propio try: si el encargo falla, el Red Line ya
-                # existe y la conciliacion lo recogera. Perder el Red Line por
-                # no poder abrir su encargo seria el error contrario.
+                # LA PELOTA, EN EL MISMO ACTO. Un issue con responsable pero sin
+                # encargo existe y NADIE LO DEBE. Va en su propio try: si el
+                # encargo falla, el issue ya existe y la conciliacion lo recoge.
                 try:
                     if a['responsable_id']:
-                        eid = _enc.abrir(cur, 'REDLINE', rid,
-                                         'Levantar %s: %s' % (codigo, titulo),
+                        eid = _enc.abrir(cur, 'ISSUE', iid,
+                                         'Corregir %s: %s' % (codigo, titulo),
                                          destino_usuario=a['responsable_id'],
                                          vence_en=a['vence_en'], creado_por=_actor())
                         if eid:
                             _enc.avisar(cur, eid)
                 except Exception as e:
-                    logger.warning('[acta %s] Red Line %s creado sin encargo: %s',
+                    logger.warning('[acta %s] issue %s creado sin encargo: %s',
                                    aid, codigo, str(e)[:120])
 
-                items[n] = {**item, 'redline_id': rid, 'redline_codigo': codigo,
+                items[n] = {**item, 'issue_id': str(iid), 'issue_codigo': codigo,
                             'escalado': 'HECHO', 'escalado_error': None,
                             'escalado_intentos': intento + 1}
-                creados.append({'item': n, 'redline_id': rid, 'codigo': codigo})
+                creados.append({'item': n, 'issue_id': str(iid), 'codigo': codigo})
                 hubo_cambio = True
                 break
             except Exception as e:
@@ -524,8 +520,6 @@ def _escalar(cur, conn, aid):
                 except Exception:
                     pass
         else:
-            # LA DEUDA SE ESCRIBE EN EL ACTA. Un fallo que solo va al log es un
-            # fallo que nadie vera: el log lo lee quien ya sospecha algo.
             items[n] = {**item, 'escalado': 'ERROR',
                         'escalado_error': ultimo_error,
                         'escalado_intentos': (item.get('escalado_intentos') or 0) + 5}
@@ -545,9 +539,6 @@ def _escalar(cur, conn, aid):
             except Exception:
                 pass
 
-    # AUDITORIA DEL FALLO, y no solo del exito. Si el escalado falla, eso ES un
-    # hecho del expediente: alguien tiene que poder ver que la obra quedo con
-    # una no conformidad sin reclamar a nadie.
     if fallidos:
         try:
             log_activity(a['model_urn'], 'ESCALATION_FAILED', 'ACTA', str(aid),
@@ -557,25 +548,6 @@ def _escalar(cur, conn, aid):
         except Exception:
             pass
     return creados, fallidos
-
-
-@protocolos_bp.route('/actas/<int:aid>/escalar', methods=['POST'])
-def reintentar_escalado(aid):
-    """Reintenta el escalado de los no conformes que quedaron sin Red Line."""
-    corte = guardia_de_recurso('doc_actas', aid)
-    if corte:
-        return corte
-    with get_db_connection() as conn:
-        cur = conn.cursor()
-        a = _leer(cur, aid)
-        if not a:
-            return jsonify({'error': 'No existe.'}), 404
-        if a['estado'] not in (pro.NO_LIBERADO,):
-            return jsonify({'error': 'Solo un acta NO LIBERADA tiene algo que escalar.',
-                            'code': 'NADA_QUE_ESCALAR'}), 409
-        creados, fallidos = _escalar(cur, conn, aid)
-    return jsonify({'escalados': creados, 'fallidos': fallidos,
-                    'conciliado': not fallidos})
 
 
 @protocolos_bp.route('/deuda-escalado', methods=['GET'])
@@ -607,6 +579,7 @@ def deuda_de_escalado():
                     'intentos': (i or {}).get('escalado_intentos') or 0}
                    for n, i in enumerate(items or [])
                    if (i or {}).get('resultado') == 'No conforme'
+                   and not (i or {}).get('issue_id')
                    and not (i or {}).get('redline_id')]
             if sin:
                 deuda.append({'acta_id': str(aid), 'codigo': codigo, 'titulo': titulo,

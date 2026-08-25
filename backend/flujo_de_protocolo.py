@@ -31,13 +31,22 @@ lo está.
 
 LO NO CONFORME NO SE QUEDA DENTRO DEL ACTA
 -------------------------------------------
-Procore escala un ítem fallado a una Observación. Aquí escala a **RED LINE**,
-que es el objeto de observación que este producto ya tiene, con su responsable,
-su plazo y su cierre. No se inventa un objeto nuevo para lo mismo: un defecto
-que vive solo dentro del acta no tiene a quién reclamarle ni cuándo.
+Procore escala un ítem fallado a una Observación. Aquí escala a **ISSUE**, con
+su responsable, su plazo, su corrección y su verificación.
 
-    ítem NO CONFORME  ──▶  Red Line con responsable y plazo
+    ítem NO CONFORME  ──▶  ISSUE(tipo=NO_CONFORMIDAD)
                            (y el acta guarda a cuál escaló)
+
+CORRECCIÓN SEMÁNTICA DEL 25-ago-2026: la primera versión escalaba a **Red
+Line**, y era un error. El Red Line es la MODIFICACIÓN DEL PROYECTO —un croquis
+firmado— y su veredicto acepta o rechaza esa modificación; un punto no conforme
+no es una modificación, es una condición que hay que corregir y verificar. La
+auditoría del doc 86 lo demostró y el propietario congeló la separación:
+
+    RED LINE ≠ ISSUE
+
+Los puntos escalados ANTES del cambio conservan su `redline_id` y no se
+reescriben: falsificar cómo ocurrieron sería peor que la incoherencia.
 
 LA FIRMA ES UNA IDENTIDAD, NO UN NOMBRE ESCRITO
 ------------------------------------------------
@@ -156,12 +165,17 @@ def exigencias_incumplidas(items):
 def items_a_escalar(items):
     """Los ítems no conformes que TODAVIA no escalaron. [(indice, item)].
 
-    Escalar es crear un Red Line: un defecto que vive solo dentro del acta no
+    Escalar es crear un ISSUE (tipo NO_CONFORMIDAD): un defecto que vive solo dentro del acta no
     tiene a quién reclamarle ni cuándo. Los que ya escalaron llevan
-    `redline_id` y no se duplican.
+    `issue_id` y no se duplican.
     """
+    # Se reconoce TAMBIEN `redline_id`: los puntos escalados ANTES del cambio
+    # semantico del 25-ago-2026 lo llevan. Reescribirlos seria falsificar como
+    # ocurrieron; reconocerlos evita escalarlos dos veces.
     return [(n, i) for n, i in enumerate(items or [])
-            if (i or {}).get('resultado') == NO_CONFORME and not (i or {}).get('redline_id')]
+            if (i or {}).get('resultado') == NO_CONFORME
+            and not (i or {}).get('issue_id')
+            and not (i or {}).get('redline_id')]
 
 
 # ── LA SEMANTICA, declarada como DATO ──────────────────────────────────────

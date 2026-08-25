@@ -30,7 +30,7 @@ def test_el_catalogo_es_una_lista_cerrada():
     import herramientas_de_obra as hdo
     assert set(hdo.CODIGOS) == {
         'rfi', 'redlines', 'reviews', 'transmittals', 'submittals', 'planos',
-        'protocolos', 'plan_entregas', 'conjuntos', 'fotos', 'visor'}
+        'protocolos', 'issues', 'plan_entregas', 'conjuntos', 'fotos', 'visor'}
     # DOCUMENTOS no está: es el substrato del producto y no se apaga.
     # Diferencia deliberada con ACC, documentada en el módulo.
     assert 'documentos' not in hdo.CODIGOS

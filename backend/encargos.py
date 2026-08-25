@@ -47,7 +47,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-TIPOS = ('REVIEW', 'RFI', 'REDLINE', 'TRANSMITTAL', 'SUBMITTAL', 'PROTOCOLO')
+TIPOS = ('REVIEW', 'RFI', 'REDLINE', 'TRANSMITTAL', 'SUBMITTAL', 'PROTOCOLO', 'ISSUE')
 
 # De donde sale cada objeto: (tabla, columna de alcance). El id se compara
 # siempre en texto, porque unos son SERIAL y otros UUID.
@@ -58,6 +58,7 @@ _ORIGEN = {
     'TRANSMITTAL': ('transmittals', 'model_urn'),
     'SUBMITTAL':   ('doc_submittals', 'model_urn'),
     'PROTOCOLO':   ('doc_actas', 'model_urn'),
+    'ISSUE':       ('doc_issues', 'model_urn'),
 }
 
 _TABLA = """
@@ -87,7 +88,7 @@ _CLAVES = (
 
 _CHECKS = (
     ('ck_encargos_tipo',
-     "CHECK (objeto_tipo IN ('REVIEW','RFI','REDLINE','TRANSMITTAL','SUBMITTAL','PROTOCOLO'))"),
+     "CHECK (objeto_tipo IN ('REVIEW','RFI','REDLINE','TRANSMITTAL','SUBMITTAL','PROTOCOLO','ISSUE'))"),
     ('ck_encargos_estado',
      "CHECK (estado IN ('abierto','cerrado'))"),
     # Un encargo sin destinatario no es un encargo.
@@ -482,6 +483,44 @@ def _acuso(acuses, email, nombre, user_id=None):
     return False
 
 
+def deudor_de_issue(cur, fila):
+    """A QUIEN le toca un issue AHORA. (uid, asunto, vence).
+
+    UNA SOLA FUNCION PARA LAS DOS MITADES, como en submittal y protocolo.
+
+    LA PELOTA CAMBIA DE MANOS CON EL CICLO, y eso es lo propio de este objeto:
+
+        Abierto     el RESPONSABLE: tiene que corregir
+        Reabierto   el RESPONSABLE: la verificacion lo rechazo
+        Corregido   QUIEN DETECTO: tiene que verificar la correccion
+        Verificado  nadie
+        Anulado     nadie
+
+    Que en `Corregido` la deuda pase al detector es lo que impide que un issue
+    se quede parado: sin eso, el responsable declara corregido y el defecto
+    desaparece de todas las bandejas sin que nadie lo haya comprobado.
+    """
+    iid, codigo, titulo, estado, autor_id, responsable_id, vence = fila
+    estado = (estado or '').strip()
+    if estado in ('Abierto', 'Reabierto'):
+        if not responsable_id:
+            return None, '', None
+        return (responsable_id, 'Corregir %s: %s' % (codigo or 'ISS', titulo or ''), vence)
+    if estado == 'Corregido':
+        if not autor_id:
+            return None, '', None
+        return (autor_id,
+                'Verificar la correccion de %s: %s' % (codigo or 'ISS', titulo or ''),
+                vence)
+    return None, '', None
+
+
+_SQL_ISSUES_VIVOS = """
+    SELECT id, codigo, titulo, estado, autor_id, responsable_id, vence_en, project_id
+      FROM doc_issues WHERE estado IN ('Abierto','Reabierto','Corregido')
+"""
+
+
 def deudor_de_protocolo(cur, fila):
     """A QUIEN le toca un acta AHORA. (uid, asunto, vence).
 
@@ -635,6 +674,18 @@ def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
         # paso y el encargo del revisor anterior quedo abierto, esa persona ya
         # no lo debe. Mismo razonamiento que en REVIEW.
         return uid == destino_usuario
+
+    if tipo == 'ISSUE':
+        cur.execute("""SELECT id, codigo, titulo, estado, autor_id, responsable_id,
+                              vence_en FROM doc_issues WHERE id::text = %s""",
+                    (str(objeto_id),))
+        fila = cur.fetchone()
+        if not fila:
+            return None
+        uid, _a, _v = deudor_de_issue(cur, fila)
+        if uid is None:
+            return False
+        return True if destino_usuario is None else uid == destino_usuario
 
     if tipo == 'PROTOCOLO':
         cur.execute("""SELECT id, codigo, titulo, estado, autor_id, vence_en
@@ -814,6 +865,27 @@ def _faltantes(cur):
                         "   AND destino_usuario=%s AND estado='abierto'", (str(fila[0]), uid))
             if not cur.fetchone():
                 faltan.append(('SUBMITTAL', str(fila[0]), uid, asunto, vence))
+    except Exception:
+        cur.connection.rollback()
+
+    # Issues vivos: quien tiene que actuar AHORA los debe.
+    try:
+        cur.execute(_SQL_ISSUES_VIVOS)
+        for fila in cur.fetchall():
+            obra = fila[7]
+            uid, asunto, vence = deudor_de_issue(cur, fila[:7])
+            if not uid:
+                continue
+            cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
+                        (str(obra), uid))
+            if not cur.fetchone():
+                bloqueadas.append(('ISSUE', str(fila[0]), fila[1] or '',
+                                   'quien lo debe ya no pertenece a la obra'))
+                continue
+            cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='ISSUE' AND objeto_id=%s "
+                        "   AND destino_usuario=%s AND estado='abierto'", (str(fila[0]), uid))
+            if not cur.fetchone():
+                faltan.append(('ISSUE', str(fila[0]), uid, asunto, vence))
     except Exception:
         cur.connection.rollback()
 

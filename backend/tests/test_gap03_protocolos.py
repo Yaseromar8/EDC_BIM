@@ -97,15 +97,25 @@ def test_no_liberado_exige_motivo():
 
 # ── LO NO CONFORME NO SE QUEDA DENTRO ──────────────────────────────────────
 
-def test_un_no_conforme_escala_a_RED_LINE_y_no_a_un_objeto_nuevo():
-    """Un defecto que vive solo dentro del acta no tiene a quien reclamarle ni
-    cuando. Se reutiliza el objeto de observacion que ya existe."""
-    fuente = _rutas()
-    assert 'import flujo_de_redline' in fuente
-    assert 'INSERT INTO doc_redlines' in fuente
-    # Y no se inventa una tabla de defectos paralela.
-    assert 'CREATE TABLE' not in fuente
+def test_un_no_conforme_escala_a_ISSUE_y_no_a_RED_LINE():
+    """CORRECCION SEMANTICA DEL 25-ago-2026 (doc 86).
 
+    La primera version escalaba a Red Line, y era un error: el Red Line es la
+    MODIFICACION DEL PROYECTO --un croquis firmado-- y su veredicto acepta o
+    rechaza esa modificacion. Un punto no conforme no es una modificacion: es
+    una condicion que hay que CORREGIR y VERIFICAR.
+
+        RED LINE != ISSUE   (congelado por el propietario)
+    """
+    fuente = _rutas()
+    assert 'import flujo_de_issue as iss' in fuente
+    assert 'INSERT INTO doc_issues' in fuente
+    assert 'iss.NO_CONFORMIDAD' in fuente
+    # Y ya NO crea Red Lines.
+    assert 'INSERT INTO doc_redlines' not in fuente, (
+        'el Red Line no vuelve a usarse como contenedor generico de defectos')
+    # Ni se inventa una tabla de defectos paralela.
+    assert 'CREATE TABLE' not in fuente
 
 def test_lo_ya_escalado_no_se_duplica():
     import flujo_de_protocolo as pro

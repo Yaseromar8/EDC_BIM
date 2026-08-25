@@ -130,10 +130,24 @@ def test_el_perfil_portal_no_arrastra_al_visor(rutas_portal):
 
 
 def test_el_recorte_es_real(rutas_portal):
-    """Mas que un numero: si el recorte deja de recortar, esto lo dice."""
-    assert len(rutas_portal) < 220, (
-        'el perfil portal sirve %d rutas: eso ya no es un perimetro reducido'
-        % len(rutas_portal))
+    """Mas que un numero: si el recorte deja de recortar, esto lo dice.
+
+    EL TECHO SE SUBIO UNA VEZ, Y CON MOTIVO. Estaba en 220 y la Fase III le
+    anadio al portal cuatro herramientas del producto documental --submittals,
+    planos, protocolos e issues/punch--, unas 40 rutas. El portal ES el CDE:
+    que crezca por ahi es exactamente lo que la fase persigue.
+
+    Lo que este guardia protege NO es el numero: es que el portal no vuelva a
+    arrastrar el visor, el 4D o la IA. Eso lo vigila
+    `test_el_perfil_portal_no_arrastra_al_visor`, que mira POR FAMILIA y no por
+    cuenta. Este se queda como alarma gruesa: si un dia salta, la pregunta no es
+    «subimos el techo» sino «que se colo».
+    """
+    TECHO = 260
+    assert len(rutas_portal) < TECHO, (
+        'el perfil portal sirve %d rutas (techo %d): antes de subirlo, mira QUE '
+        'se anadio -- si es una familia entera, el recorte dejo de recortar'
+        % (len(rutas_portal), TECHO))
 
 
 def test_las_rutas_del_visor_declaradas_sobre_la_app_no_se_sirven():
