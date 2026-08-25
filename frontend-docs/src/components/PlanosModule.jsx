@@ -75,10 +75,11 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
       .catch(() => {});
   }, [API, urn]);
 
-  const verRevisiones = async (pid) => {
-    if (abierto === pid) { setAbierto(null); return; }
-    setAbierto(pid);
-    if (revisiones[pid]) return;
+  // TRAER SIEMPRE, sin mirar la cache. La separacion importa: `verRevisiones`
+  // usa la cache para no repetir la llamada al abrir y cerrar, pero despues de
+  // EMITIR hay que volver a pedirlas -- borrar la cache sin recargar dejaba el
+  // panel en «Cargando…» para siempre, porque nadie volvia a llamar.
+  const traerRevisiones = useCallback(async (pid) => {
     try {
       const r = await apiFetch(`${API}/api/planos/${pid}/revisiones`);
       const d = await r.json();
@@ -87,6 +88,13 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
     } catch (e) {
       toast.error(e.message);
     }
+  }, [API]);
+
+  const verRevisiones = async (pid) => {
+    if (abierto === pid) { setAbierto(null); return; }
+    setAbierto(pid);
+    if (revisiones[pid]) return;
+    await traerRevisiones(pid);
   };
 
   if (planos === null) {
@@ -277,7 +285,7 @@ export default function PlanosModule({ project, API, user, isAdmin }) {
                              onEmitida={() => {
                                const pid = emitiendo.id;
                                setEmitiendo(null);
-                               setRevisiones(r => { const n = { ...r }; delete n[pid]; return n; });
+                               traerRevisiones(pid);
                                cargar();
                              }} />
       )}
