@@ -45,15 +45,27 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    /* El video es atmosfera, no protagonista (mismo criterio que Docs). */
-    filter: saturate(0.25) contrast(1.02);
+    /* Atmosfera VIVA, mismo criterio que Docs. saturate(.25) encadenado con un
+       velo al 94 % dejaba la obra en un gris plano sin movimiento perceptible. */
+    filter: saturate(.78) contrast(1.08) brightness(1.03);
 }
 
 .cta-obra__velo {
     position: absolute;
     inset: 0;
+    /* Dos trabajos separados: tinte suave para unificar con la paleta, y banda
+       oscura ANCLADA ABAJO para proteger el logo y la ficha. Oscurecer el cuadro
+       entero para leer dos lineas era pagar todo el plano por el 15 % con texto.
+       El primer gradiente cose la costura con el panel solido de la derecha. */
     background:
-        linear-gradient(180deg, rgba(11, 14, 18, .42) 0%, rgba(21, 55, 84, .38) 45%, rgba(11, 14, 18, .94) 100%);
+        linear-gradient(90deg, transparent 76%, rgba(11, 14, 18, .55) 100%),
+        linear-gradient(180deg,
+            rgba(11, 14, 18, .28) 0%,
+            rgba(11, 14, 18, .08) 24%,
+            rgba(21, 55, 84, .12) 50%,
+            rgba(11, 14, 18, .55) 72%,
+            rgba(11, 14, 18, .90) 88%,
+            rgba(11, 14, 18, .95) 100%);
 }
 
 .cta-obra__pie {
@@ -161,7 +173,8 @@
 .cta-campo input:focus {
     outline: none;
     border-color: var(--cta-primary);
-    box-shadow: 0 0 0 3px rgba(20, 115, 230, .25);
+    /* Signal (#3E6F91): ultimo resto del azul #1473E6 de la paleta vieja. */
+    box-shadow: 0 0 0 3px rgba(62, 111, 145, .32);
 }
 
 .cta-campo input:disabled { opacity: .6; cursor: not-allowed; }

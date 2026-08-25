@@ -45,19 +45,38 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    /* El vídeo de obra es ATMÓSFERA, no protagonista: desaturado casi a
-       gris para que el velo Ink/Navy de encima lo lleve a la paleta. */
-    filter: saturate(0.25) contrast(1.02);
+    /* El vídeo es ATMÓSFERA, pero atmósfera VIVA. La versión anterior
+       encadenaba saturate(.25) con un velo que llegaba al 94 %: entre las dos
+       cosas la obra quedaba en un gris plano, sin movimiento perceptible.
+       Aquí se desatura lo justo para que entre en paleta —no para matarla— y
+       se levanta un punto el contraste, que es lo que devuelve la sensación
+       de profundidad en un plano aéreo de tierra. */
+    filter: saturate(.78) contrast(1.08) brightness(1.03);
 }
 
 .cta-obra__velo {
     position: absolute;
     inset: 0;
-    /* Velo de marca: Ink dominante con un tinte Navy en la zona media.
-       Más fuerte que el anterior a propósito — el fotograma no compite
-       con el logo ni con el texto. */
+    /* DOS TRABAJOS DISTINTOS, Y ANTES SE HACÍAN CON UNA SOLA CAPA PLANA:
+         1) unificar el fotograma con la paleta  → tinte suave, arriba y en medio
+         2) proteger el logo y la ficha          → banda oscura ANCLADA ABAJO
+
+       Oscurecer la imagen entera para poder leer dos líneas de texto es pagar
+       todo el cuadro por el 15 % donde vive el texto. La banda arranca al 72 %
+       y ya está al 90 % cuando el texto empieza: contraste medido 7,6:1 para
+       la ficha incluso contra un fotograma BLANCO — el peor caso posible.
+
+       El segundo gradiente cose la costura con el panel sólido de la derecha,
+       que antes era un corte a cuchillo entre vídeo y color plano. */
     background:
-        linear-gradient(180deg, rgba(11, 14, 18, .42) 0%, rgba(21, 55, 84, .38) 45%, rgba(11, 14, 18, .94) 100%);
+        linear-gradient(90deg, transparent 76%, rgba(11, 14, 18, .55) 100%),
+        linear-gradient(180deg,
+            rgba(11, 14, 18, .28) 0%,
+            rgba(11, 14, 18, .08) 24%,
+            rgba(21, 55, 84, .12) 50%,
+            rgba(11, 14, 18, .55) 72%,
+            rgba(11, 14, 18, .90) 88%,
+            rgba(11, 14, 18, .95) 100%);
 }
 
 .cta-obra__pie {
@@ -165,7 +184,10 @@
 .cta-campo input:focus {
     outline: none;
     border-color: var(--cta-primary);
-    box-shadow: 0 0 0 3px rgba(20, 115, 230, .25);
+    /* Signal (#3E6F91), no el azul #1473E6 del diseño anterior: era el único
+       resto de la paleta vieja que la pasada de identidad no llegó a cambiar,
+       y solo se veía con el campo enfocado. */
+    box-shadow: 0 0 0 3px rgba(62, 111, 145, .32);
 }
 
 .cta-campo input:disabled { opacity: .6; cursor: not-allowed; }
