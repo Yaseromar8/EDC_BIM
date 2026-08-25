@@ -47,7 +47,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-TIPOS = ('REVIEW', 'RFI', 'REDLINE', 'TRANSMITTAL', 'SUBMITTAL')
+TIPOS = ('REVIEW', 'RFI', 'REDLINE', 'TRANSMITTAL', 'SUBMITTAL', 'PROTOCOLO')
 
 # De donde sale cada objeto: (tabla, columna de alcance). El id se compara
 # siempre en texto, porque unos son SERIAL y otros UUID.
@@ -57,6 +57,7 @@ _ORIGEN = {
     'REDLINE':     ('doc_redlines', 'model_urn'),
     'TRANSMITTAL': ('transmittals', 'model_urn'),
     'SUBMITTAL':   ('doc_submittals', 'model_urn'),
+    'PROTOCOLO':   ('doc_actas', 'model_urn'),
 }
 
 _TABLA = """
@@ -86,7 +87,7 @@ _CLAVES = (
 
 _CHECKS = (
     ('ck_encargos_tipo',
-     "CHECK (objeto_tipo IN ('REVIEW','RFI','REDLINE','TRANSMITTAL','SUBMITTAL'))"),
+     "CHECK (objeto_tipo IN ('REVIEW','RFI','REDLINE','TRANSMITTAL','SUBMITTAL','PROTOCOLO'))"),
     ('ck_encargos_estado',
      "CHECK (estado IN ('abierto','cerrado'))"),
     # Un encargo sin destinatario no es un encargo.
@@ -481,6 +482,37 @@ def _acuso(acuses, email, nombre, user_id=None):
     return False
 
 
+def deudor_de_protocolo(cur, fila):
+    """A QUIEN le toca un acta AHORA. (uid, asunto, vence).
+
+    UNA SOLA FUNCION PARA LAS DOS MITADES, igual que en el submittal y por la
+    misma razon: dos criterios «parecidos» hacen OSCILAR la conciliacion.
+
+    `fila` = (id, codigo, titulo, estado, autor_id, vence_en)
+
+    UN BORRADOR AQUI SI ES DEUDA, y en el submittal NO. La diferencia es real,
+    no una incoherencia: el borrador de un submittal es preparacion sin reloj
+    --nadie espera--, mientras que un acta a medias es una INSPECCION EMPEZADA
+    que esta bloqueando una actividad. Un encofrado sin liberar detiene el
+    vaciado, y eso tiene que aparecer en «lo que me toca».
+
+        Borrador   el AUTOR: fue a campo y no termino de comprobar
+        los demas  nadie: el acta ya tiene veredicto
+    """
+    sid, codigo, titulo, estado, autor_id, vence = fila
+    if (estado or '').strip() != 'Borrador' or not autor_id:
+        return None, '', None
+    return (autor_id,
+            'Completar y firmar %s: %s' % (codigo or 'PL', titulo or ''),
+            vence)
+
+
+_SQL_ACTAS_VIVAS = """
+    SELECT id, codigo, titulo, estado, autor_id, vence_en, project_id
+      FROM doc_actas WHERE estado = 'Borrador'
+"""
+
+
 def deudor_de_submittal(cur, fila):
     """A QUIEN le toca un submittal AHORA, y por que. (uid, asunto, vence).
 
@@ -603,6 +635,17 @@ def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
         # paso y el encargo del revisor anterior quedo abierto, esa persona ya
         # no lo debe. Mismo razonamiento que en REVIEW.
         return uid == destino_usuario
+
+    if tipo == 'PROTOCOLO':
+        cur.execute("""SELECT id, codigo, titulo, estado, autor_id, vence_en
+                         FROM doc_actas WHERE id::text = %s""", (str(objeto_id),))
+        fila = cur.fetchone()
+        if not fila:
+            return None
+        uid, _a, _v = deudor_de_protocolo(cur, fila)
+        if uid is None:
+            return False
+        return True if destino_usuario is None else uid == destino_usuario
 
     if tipo == 'TRANSMITTAL':
         cur.execute('SELECT acuses FROM transmittals WHERE id::text = %s', (str(objeto_id),))
@@ -771,6 +814,27 @@ def _faltantes(cur):
                         "   AND destino_usuario=%s AND estado='abierto'", (str(fila[0]), uid))
             if not cur.fetchone():
                 faltan.append(('SUBMITTAL', str(fila[0]), uid, asunto, vence))
+    except Exception:
+        cur.connection.rollback()
+
+    # Actas a medias: quien las levanto las debe.
+    try:
+        cur.execute(_SQL_ACTAS_VIVAS)
+        for fila in cur.fetchall():
+            obra = fila[6]
+            uid, asunto, vence = deudor_de_protocolo(cur, fila[:6])
+            if not uid:
+                continue
+            cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
+                        (str(obra), uid))
+            if not cur.fetchone():
+                bloqueadas.append(('PROTOCOLO', str(fila[0]), fila[1] or '',
+                                   'quien la levanto ya no pertenece a la obra'))
+                continue
+            cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='PROTOCOLO' AND objeto_id=%s "
+                        "   AND destino_usuario=%s AND estado='abierto'", (str(fila[0]), uid))
+            if not cur.fetchone():
+                faltan.append(('PROTOCOLO', str(fila[0]), uid, asunto, vence))
     except Exception:
         cur.connection.rollback()
 

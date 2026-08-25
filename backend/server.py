@@ -906,6 +906,8 @@ from routes.submittals import submittals_bp
 app.register_blueprint(submittals_bp, url_prefix='/api/submittals')
 from routes.planos import planos_bp
 app.register_blueprint(planos_bp, url_prefix='/api/planos')
+from routes.protocolos import protocolos_bp
+app.register_blueprint(protocolos_bp, url_prefix='/api/protocolos')
 app.register_blueprint(plan_bp)
 from routes.attributes import attributes_bp, ensure_attributes_tables
 app.register_blueprint(attributes_bp)

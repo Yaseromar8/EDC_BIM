@@ -235,7 +235,7 @@ _SUFIJO = re.compile(r'(\d+)\s*$')
 # La tabla la fija la `Semantica` del objeto, NUNCA la peticion. Va interpolada
 # porque un nombre de tabla no puede ser un parametro de consulta, y por eso se
 # comprueba antes contra la lista cerrada de tablas conocidas.
-_TABLAS = ('doc_rfis', 'doc_redlines', 'doc_submittals')
+_TABLAS = ('doc_rfis', 'doc_redlines', 'doc_submittals', 'doc_actas')
 
 _MAX_SUFIJO = ("SELECT COALESCE(MAX(NULLIF(substring(codigo from %s), '')::bigint), 0)"
                "  FROM {tabla} WHERE project_id = %s")

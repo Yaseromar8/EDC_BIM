@@ -1087,7 +1087,7 @@ restriccion	element_docs not null url
 restriccion	element_docs primary key (id)
 restriccion	encargos check (((destino_usuario is not null) or (destino_funcion is not null)))
 restriccion	encargos check ((estado = any (array['abierto'::text, 'cerrado'::text])))
-restriccion	encargos check ((objeto_tipo = any (array['review'::text, 'rfi'::text, 'redline'::text, 'transmittal'::text, 'submittal'::text])))
+restriccion	encargos check ((objeto_tipo = any (array['review'::text, 'rfi'::text, 'redline'::text, 'transmittal'::text, 'submittal'::text, 'protocolo'::text])))
 restriccion	encargos foreign key (destino_usuario) references users(id) on delete cascade
 restriccion	encargos foreign key (project_id) references projects(id) on delete cascade
 restriccion	encargos not null asunto
