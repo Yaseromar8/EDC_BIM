@@ -205,3 +205,29 @@ def test_el_red_line_hereda_responsable_y_plazo_del_acta():
     cuerpo = _escalar_fuente()
     assert "a['responsable_id']" in cuerpo
     assert "a['vence_en']" in cuerpo
+
+
+# ── LA QUE SE ESCAPO, Y QUE LA CONCILIACION ENCONTRO ──────────────────────
+
+def test_solo_un_ADMINISTRADOR_DE_OBRA_define_un_protocolo():
+    """La plantilla es LO QUE LA SUPERVISION EXIGE COMPROBAR.
+
+    Si cualquier miembro pudiera crearla, el contratista estaria definiendo los
+    criterios con los que se le inspecciona a el mismo — y el acta dejaria de
+    probar nada aunque todos sus puntos salieran conformes.
+
+    El fabricante enuncia la misma regla («you must be a project administrator
+    to create form templates»); aqui tiene una razon mas fuerte, porque el
+    protocolo AUTORIZA O IMPIDE una actividad.
+    """
+    cuerpo = _rutas().split('def crear_plantilla')[1].split('\ndef ')[0]
+    assert 'guardia_administrativa' in cuerpo, (
+        'cualquier miembro podria definir el protocolo con el que se le inspecciona')
+
+
+def test_levantar_un_acta_NO_exige_ser_administrador():
+    """Quien va a campo a comprobar es el inspector, no el administrador.
+    Confundir las dos cosas dejaria las liberaciones paradas."""
+    cuerpo = _rutas().split('def levantar_acta')[1].split('\ndef ')[0]
+    assert 'guardia_administrativa' not in cuerpo
+    assert 'guardia_de_obra' in cuerpo

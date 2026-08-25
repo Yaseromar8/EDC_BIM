@@ -27,6 +27,7 @@ import logging
 from flask import Blueprint, g, jsonify, request
 
 from db import get_db_connection, log_activity, resolve_project_id
+from administracion_de_obra import guardia_administrativa
 from perimetro_de_obra import guardia_de_obra, guardia_de_recurso
 import encargos as _enc
 import flujo_de_protocolo as pro
@@ -137,7 +138,21 @@ def crear_plantilla():
     if not obra:
         return jsonify({'error': 'No se pudo determinar la obra.',
                         'code': 'PROJECT_UNRESOLVED'}), 400
+    # SOLO UN ADMINISTRADOR DE LA OBRA DEFINE UN PROTOCOLO, y no cualquier
+    # miembro. La plantilla es LO QUE LA SUPERVISION EXIGE COMPROBAR: si el
+    # contratista pudiera crearla, estaria definiendo los criterios con los que
+    # se le inspecciona a el mismo -- y el acta dejaria de probar nada aunque
+    # todos sus puntos salieran conformes.
+    #
+    # Es la misma regla que el fabricante enuncia («you must be a project
+    # administrator to create form templates»), y aqui tiene una razon mas
+    # fuerte: aqui el protocolo AUTORIZA O IMPIDE una actividad.
     corte = guardia_de_obra(obra, 'crear un protocolo')
+    if corte:
+        return corte
+    with get_db_connection() as _c:
+        corte = guardia_administrativa(_c.cursor(), _usuario(), obra,
+                                       'definir un protocolo de esta obra')
     if corte:
         return corte
 
