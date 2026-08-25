@@ -904,6 +904,8 @@ app.register_blueprint(transmittals_bp)
 # propio backend no monta; lo cazó `test_el_portal_no_pierde_ninguna_llamada`.
 from routes.submittals import submittals_bp
 app.register_blueprint(submittals_bp, url_prefix='/api/submittals')
+from routes.planos import planos_bp
+app.register_blueprint(planos_bp, url_prefix='/api/planos')
 app.register_blueprint(plan_bp)
 from routes.attributes import attributes_bp, ensure_attributes_tables
 app.register_blueprint(attributes_bp)

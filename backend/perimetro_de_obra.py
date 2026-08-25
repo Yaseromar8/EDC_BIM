@@ -58,6 +58,10 @@ RECURSOS = {
     # nada. Se registra AQUI y no en el manejador: una guardia que cada ruta
     # declara por su cuenta es como se olvidan la mitad.
     'doc_submittals':    ('id', 'model_urn'),
+    # GAP 02. El plano guarda por su propia obra; el PDF al que apunta lo sigue
+    # guardando `file_nodes`, que es quien tiene la autoridad sobre el permiso
+    # de recurso. Dos guardias sobre dos cosas distintas, no una duplicada.
+    'doc_planos':        ('id', 'model_urn'),
     'doc_sets':          ('id', 'model_urn'),
     # El documento en si. Comprobar contra el NODO es mas fuerte que fiarse del
     # model_urn que manda el cliente: el nodo dice de que obra es de verdad.
