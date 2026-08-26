@@ -17,3 +17,20 @@ createRoot(document.getElementById('root')).render(
     <IdoneidadHost />
   </StrictMode>,
 )
+
+/**
+ * GAP 07 · EL SERVICE WORKER.
+ *
+ * Se registra DESPUES de pintar, y si falla no se dice nada: su unico trabajo
+ * es que la app abra sin cobertura. Un aviso de «no se pudo registrar el
+ * service worker» no le sirve a nadie en una obra, y bloquear el arranque por
+ * eso seria cambiar una degradacion por una caida.
+ *
+ * `sw-campo.js` NO cachea `/api/*`. El motivo esta escrito alli, y es el punto
+ * que impide que una respuesta vieja se lea como el estado de la obra.
+ */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw-campo.js').catch(() => {});
+  });
+}

@@ -17,6 +17,8 @@ import { useColumnResize, useSidebarResize, useVersionPanelResize } from '../hoo
 import { API, getInitials, getAuthHeaders, formatSize, formatDate, DOCS_VISOR_SHORTCUT } from '../utils/helpers';
 import { renderFileIconSop } from '../utils/fileIcons';
 import { apiFetch } from '../utils/apiFetch';
+import * as campo from '../offline/captura';
+import { engancharDisparadores } from '../offline/sincronizador';
 import { confirmAction } from '../utils/confirm';
 import { pedirIdoneidad } from '../utils/idoneidad';
 
@@ -32,6 +34,12 @@ const HERRAMIENTA_DE_MODO = {
   transmittals: 'transmittals', submittals: 'submittals',
   planos: 'planos', protocolos: 'protocolos',
   punch: 'issues',
+  // GAP 07. La cola de campo NO es una herramienta aparte: es la cola de
+  // dos que ya existen. Por eso lleva las DOS -- si alguien tiene issues
+  // pero no protocolos, su trabajo pendiente tiene que seguir siendo
+  // visible, y al reves igual. Esconderla dejaria capturas atrapadas en
+  // el dispositivo sin pantalla desde donde subirlas.
+  campo: ['issues', 'protocolos'],
   specs: 'especificaciones',
   // GAP 06. Los flujos viven DENTRO de la herramienta `reviews`: configurar
   // cómo se revisa no es otra capacidad que se activa aparte.
@@ -67,6 +75,7 @@ const ProtocolosModule = lazy(() => import('../components/ProtocolosModule'));
 // `PunchModule`, no `IssueModule`: ese nombre ya es el componente generico
 // de RFI y Red Line. RED LINE != ISSUE quedo congelado el 25-ago-2026.
 const PunchModule = lazy(() => import('../components/PunchModule'));
+const SincronizacionModule = lazy(() => import('../components/SincronizacionModule'));
 const EspecificacionesModule = lazy(() => import('../components/EspecificacionesModule'));
 const FlujosDeRevisionModule = lazy(() => import('../components/FlujosDeRevisionModule'));
 const MultimediaModule = lazy(() => import('../components/MultimediaModule'));
@@ -158,6 +167,23 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   // ═══════════════════════════════════════
   const fe = useFileExplorer(project, user);
   const [showGateway, setShowGateway] = React.useState(false);
+
+  // GAP 07 · LA COLA SUBE AUNQUE NADIE ESTE MIRANDOLA.
+  //
+  // Los disparadores se enganchan AQUI y no en la pantalla de campo. Si
+  // vivieran alli, la cola solo subiria mientras alguien tuviera esa pestaña
+  // abierta -- y quien captura en obra cierra la app y se va. Vuelve la
+  // cobertura en la caseta, el móvil no está en esa pantalla, y el trabajo se
+  // quedaria dentro sin que nadie entendiera por que.
+  //
+  // `obtenerContexto` se pasa como FUNCION, no como valor: cuando se dispare
+  // --minutos u horas despues-- tiene que leer la identidad de ESE momento, no
+  // la de cuando se engancho. Si se hubiera cambiado de cuenta entretanto, la
+  // cola que sube es la del que esta dentro ahora.
+  React.useEffect(() => {
+    if (!project || !user?.id) return undefined;
+    return engancharDisparadores(API, () => campo.contextoDe(user, project));
+  }, [project, user]);
   
   const vh = useVersionHistory(fe.projectPrefix, user, {
     onRefresh: () => fe.triggerRefresh()
@@ -347,6 +373,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   { label: 'Especificaciones', mode: 'specs', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h7"/></svg>, onClick: () => fe.setSidebarView('specs') },
                   { label: 'Protocolos', mode: 'protocolos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3 5-5"/><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4"/></svg>, onClick: () => fe.setSidebarView('protocolos') },
                   { label: 'Issues y punch', mode: 'punch', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>, onClick: () => fe.setSidebarView('punch') },
+                  { label: 'Trabajo de campo', mode: 'campo', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16"/><path d="M12 4v10"/><path d="M8 8l4-4 4 4"/><circle cx="12" cy="18" r="1"/></svg>, onClick: () => fe.setSidebarView('campo') },
                   { label: 'Plan de entrega', mode: 'plan', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11H3v10h6V11z"/><path d="M15 3H9v18h6V3z"/><path d="M21 7h-6v14h6V7z"/></svg>, onClick: () => fe.setSidebarView('plan') },
                   { label: 'Conjuntos', mode: 'sets', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>, onClick: () => fe.setSidebarView('sets') },
                 ]},
@@ -386,7 +413,11 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 // parpadea.
                 .map(grupo => ({ ...grupo, items: grupo.items.filter(it => {
                   const cod = HERRAMIENTA_DE_MODO[it.mode];
-                  return !cod || fe.herramientasDeObra?.[cod] !== false;
+                  if (!cod) return true;
+                  // Una entrada puede depender de VARIAS herramientas: basta con
+                  // que una siga encendida para que tenga sentido ofrecerla.
+                  const codigos = Array.isArray(cod) ? cod : [cod];
+                  return codigos.some(c => fe.herramientasDeObra?.[c] !== false);
                 }) }))
                 .filter(grupo => grupo.items.length > 0)
                 .map((grupo, gi) => (
@@ -495,6 +526,10 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
         {fe.sidebarView === 'punch' && (
           <PunchModule project={project} API={API} user={user} isAdmin={isAdmin} />
+        )}
+
+        {fe.sidebarView === 'campo' && (
+          <SincronizacionModule project={project} usuario={user} />
         )}
 
         {fe.sidebarView === 'specs' && (

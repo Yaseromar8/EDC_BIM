@@ -406,3 +406,140 @@ def test_la_semantica_del_protocolo_NO_se_reescribe_en_sync():
     assert 'pro.RESULTADOS' in fuente
     assert 'pro.veredicto_que_corresponde' in fuente
     assert 'pro.BORRADOR' in fuente
+
+
+# ══ 9 · LAS VERSIONES HISTORICAS FORMAN PARTE DE LA INTENCION ══════════════
+#
+# Lo que alguien comprobo en obra lo comprobo contra UN documento concreto. Al
+# sincronizar, el servidor NO puede sustituir ese documento por el vigente:
+# haria decir a esa persona algo que no dijo.
+
+def test_el_acta_declara_CONTRA_QUE_VERSION_se_lleno():
+    """Un acta que no dice contra que version se lleno es irreconstruible. Se
+    rechaza en vez de suponer que fue la de hoy."""
+    cuerpo = _cuerpo('_protocolo_create')
+    assert "p.get('protocolo_version')" in cuerpo, (
+        'la version tiene que venir del acto, no leerse de la plantilla')
+    assert 'SIN_VERSION_DE_PLANTILLA' in cuerpo
+    # Y se comprueba ANTES de tocar nada.
+    assert (cuerpo.index('SIN_VERSION_DE_PLANTILLA')
+            < cuerpo.index('INSERT INTO doc_actas'))
+
+
+def test_una_version_que_ya_no_se_puede_reconstruir_es_CONFLICTO():
+    """No rechazo: nadie hizo nada mal. Y no aplicarlo contra la vigente: eso
+    reinterpretaria respuestas ajenas. Es una decision de persona."""
+    cuerpo = _cuerpo('_protocolo_create')
+    assert 'VERSION_DE_PLANTILLA_NO_RECONSTRUIBLE' in cuerpo
+    i = cuerpo.index('VERSION_DE_PLANTILLA_NO_RECONSTRUIBLE')
+    antes = cuerpo[:i]
+    assert 'sync.en_conflicto(' in antes[-500:], (
+        'una version irreconstruible NO es un rechazo ni un exito')
+    # Y se le dice al usuario que estaba viendo y que hay ahora.
+    assert "'version_vigente'" in cuerpo and "'version_usada'" in cuerpo
+
+
+def test_la_version_NO_se_toma_de_la_plantilla_vigente():
+    """El bug que esta prueba impide: `version = pl[2]`. Silencioso, comodo, y
+    convierte un acta de la v1 en un acta de la v2 sin que nadie lo note."""
+    cuerpo = _cuerpo('_protocolo_create')
+    guardado = cuerpo.split('INSERT INTO doc_actas')[1][:900]
+    assert 'version_pedida' in guardado, (
+        'lo que se guarda tiene que ser la version que se uso en campo')
+
+
+def test_el_anclaje_del_issue_conserva_la_revision_VISTA_EN_CAMPO():
+    """Si mientras no habia cobertura salio una revision nueva, la observacion
+    NO se muda a ella: se levanto sobre una lamina concreta."""
+    cuerpo = _cuerpo('_issue_create')
+    assert "revision_id = p.get('revision_id')" in cuerpo
+    # NUNCA se busca la vigente para sustituirla.
+    assert 'vigente' not in cuerpo.lower().split('revision_id')[1][:600], (
+        'no se puede reanclar a la revision vigente')
+    assert 'es_vigente' not in cuerpo
+
+
+def test_una_revision_mas_nueva_NO_convierte_la_observacion_en_CONFLICTO():
+    """Nadie hizo nada incompatible. Marcarlo conflicto obligaria a decidir algo
+    que no hay que decidir, y la gente acaba descartando trabajo bueno."""
+    cuerpo = _cuerpo('_issue_create')
+    trozo = cuerpo.split("revision_id = p.get('revision_id')")[1].split('for intento')[0]
+    assert 'en_conflicto' not in trozo, (
+        'el anclaje historico no es un conflicto')
+    # Lo unico que se comprueba de esa revision es que sea de ESTA obra.
+    assert "'REVISION_NO_EXISTE'" in trozo
+    assert "'OTRA_OBRA'" in trozo
+
+
+def test_el_anclaje_que_se_GUARDA_es_el_comprobado():
+    """Comprobar una cosa y guardar otra seria peor que no comprobar: daria
+    confianza falsa."""
+    cuerpo = _cuerpo('_issue_create')
+    guardado = cuerpo.split('INSERT INTO doc_issues')[1]
+    assert "p.get('revision_id')" not in guardado, (
+        'se vuelve a leer del payload en vez de usar el ya validado')
+    assert 'revision_id,' in guardado
+
+
+# ══ 10 · EL CASO EXTERNO MAS DURO ══════════════════════════════════════════
+#
+#   la foto sube  ->  la respuesta se pierde  ->  el movil reintenta
+#
+# Lo que se defiende: que ese reintento RECUPERE el resultado en vez de crear
+# un segundo objeto.
+
+def test_la_evidencia_se_CONSULTA_antes_de_subirse():
+    """Preguntar primero es lo que convierte un reintento a ciegas en una
+    consulta con respuesta. Subir primero duplicaria."""
+    cuerpo = _cuerpo('subir_evidencia')
+    i_consulta = cuerpo.index('gcs.describir_blob')
+    i_subida = cuerpo.index('gcs.upload_file_to_gcs')
+    assert i_consulta < i_subida, (
+        'se sube antes de preguntar: un reintento crearia otro objeto')
+    assert "'ya_existia': True" in cuerpo
+
+
+def test_si_el_almacen_NO_RESPONDE_no_se_finge_que_no_existe():
+    """«No pude preguntar» y «no existe» son cosas distintas. Confundirlas
+    convierte una consulta fallida en una subida duplicada."""
+    cuerpo = _cuerpo('subir_evidencia')
+    assert 'ALMACEN_NO_RESPONDE' in cuerpo
+    assert '503' in cuerpo
+
+
+def test_el_nombre_del_objeto_NO_lo_elige_el_movil():
+    """Si lo eligiera, dos reintentos podrian escribir en sitios distintos y la
+    idempotencia externa se acabaria."""
+    cuerpo = _cuerpo('subir_evidencia')
+    assert 'sync.nombre_del_objeto_externo(obra, operation_id)' in cuerpo
+    assert "request.form.get('objeto_externo')" not in cuerpo
+    assert "request.form.get('destino')" not in cuerpo
+
+
+def test_subir_la_foto_NO_la_convierte_en_evidencia_del_issue():
+    """EXISTE EL OBJETO EXTERNO ≠ LA OPERACION SE APLICO. Vincularla aqui se
+    saltaria la revalidacion del acto."""
+    cuerpo = _cuerpo('subir_evidencia')
+    assert 'UPDATE doc_issues' not in cuerpo
+    assert 'INSERT INTO doc_issues' not in cuerpo
+    assert 'conn.commit()' not in cuerpo, (
+        'esta ruta no escribe estado de negocio')
+
+
+def test_subir_evidencia_pasa_por_las_MISMAS_capas_que_el_acto():
+    """Un binario en la carpeta de una obra es entrar en esa obra."""
+    cuerpo = _cuerpo('subir_evidencia')
+    assert '_puede_operar_en_la_obra(' in cuerpo
+    assert "_usuario().get('id')" in cuerpo
+    assert 'resolve_project_id' in cuerpo
+    # Y ANTES de tocar el almacen.
+    assert cuerpo.index('_puede_operar_en_la_obra') < cuerpo.index('describir_blob')
+
+
+def test_una_subida_fallida_NO_se_responde_como_exito():
+    """Devolver el nombre de un objeto que quiza no existe haria que el movil
+    borrara su copia local."""
+    cuerpo = _cuerpo('subir_evidencia')
+    assert 'SUBIDA_FALLIDA' in cuerpo
+    assert '502' in cuerpo
+    assert 'EVIDENCIA_DEMASIADO_GRANDE' in cuerpo

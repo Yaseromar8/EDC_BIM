@@ -382,3 +382,34 @@ def descargar_a_fichero(blob_name, destino):
     blob.download_to_file(destino)
     destino.flush()
     return destino.tell()
+
+
+def describir_blob(blob_name):
+    """¿Existe ya este objeto en el almacén? Devuelve sus datos o None.
+
+    GAP 07 · Es lo que hace RECUPERABLE una subida cuyo desenlace se perdió.
+
+    Cuando un móvil sube una evidencia y la respuesta no llega, el objeto puede
+    estar ya arriba. Sin poder PREGUNTAR, el reintento tendría dos salidas
+    igual de malas: subir otra vez —duplicando— o no subir —perdiéndola—. Como
+    el nombre es determinista (`evidencia/<obra>/<operation_id>`), preguntar
+    responde exactamente la pregunta que importa: ¿ocurrió aquello o no?
+
+    Devuelve None también si el almacén no responde. NO se puede interpretar
+    como «no existe»: quien llama tiene que distinguir las dos cosas, y por eso
+    esta función deja que la excepción suba cuando el fallo es del cliente.
+    """
+    bucket_name = os.environ.get("GCS_BUCKET_NAME")
+    if not bucket_name or bucket_name == "TU_BUCKET_AQUI":
+        raise ValueError("GCS_BUCKET_NAME no esta configurado correctamente en el .env")
+    client = get_storage_client()
+    blob = client.bucket(bucket_name).get_blob(blob_name)
+    if blob is None:
+        return None
+    return {
+        'nombre': blob.name,
+        'tamaño': blob.size or 0,
+        'tipo': blob.content_type,
+        'md5': blob.md5_hash,
+        'subido_en': blob.time_created.isoformat() if blob.time_created else None,
+    }

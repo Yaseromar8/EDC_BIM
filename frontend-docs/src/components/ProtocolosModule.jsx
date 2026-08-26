@@ -15,6 +15,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../utils/apiFetch';
+import * as campo from '../offline/captura';
 import { confirmAction } from '../utils/confirm';
 
 const COLOR = {
@@ -84,15 +85,34 @@ export default function ProtocolosModule({ project, API, user, isAdmin }) {
   const guardar = async () => {
     setOcupado(true);
     try {
-      const r = await apiFetch(`${API}/api/protocolos/actas/${abierta.id}/items`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: abierta.items }),
+      // Marcar los puntos es el acto que MAS ocurre sin cobertura: se recorre
+      // la instalación con el móvil en la mano. Va por la misma cola.
+      const ctx = campo.contextoDe(user, project);
+      if (!ctx) throw new Error('no se pudo identificar la obra');
+      const { modo, datos, veredicto } = await campo.capturar(API, ctx, {
+        object_type: campo.PROTOCOLO,
+        action: campo.SET_ITEMS,
+        // El acta ya existe en el servidor, así que su identidad local es la
+        // canónica: no hay nada que atar después.
+        local_object_id: `acta_${abierta.id}`,
+        server_object_id: String(abierta.id),
+        // El estado sobre el que se decidió marcar. Si otro firmó el acta
+        // mientras tanto, esto es lo que produce CONFLICTO en vez de machacar
+        // su firma.
+        base_version: abierta.estado,
+        payload: { items: abierta.items },
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'No se pudo guardar.');
-      setAbierta(d);
-      toast.success('Guardado');
-      await cargar();
+
+      if (modo === 'servidor') {
+        toast.success('Guardado');
+        await cargar();
+      } else if (veredicto) {
+        toast.error(veredicto.error || 'el servidor no lo aceptó');
+        await cargar();
+      } else {
+        toast.success('Guardado en este dispositivo. Subirá cuando haya cobertura.',
+                      { duration: 5000 });
+      }
     } catch (e) { toast.error(e.message); } finally { setOcupado(false); }
   };
 
@@ -343,6 +363,7 @@ export default function ProtocolosModule({ project, API, user, isAdmin }) {
 
       {levantando && (
         <ModalLevantar API={API} urn={urn} plantillas={plantillas}
+                       user={user} project={project}
                        onCerrar={() => setLevantando(false)}
                        onCreada={() => { setLevantando(false); cargar(); }} />
       )}
@@ -591,7 +612,7 @@ function ModalPlantilla({ API, urn, catalogo, onCerrar, onCreada }) {
   );
 }
 
-function ModalLevantar({ API, urn, plantillas, onCerrar, onCreada }) {
+function ModalLevantar({ API, urn, plantillas, user, project, onCerrar, onCreada }) {
   const [f, setF] = useState({ protocolo_id: '', titulo: '', ubicacion: '', progresiva: '' });
   const [guardando, setGuardando] = useState(false);
 
@@ -599,13 +620,39 @@ function ModalLevantar({ API, urn, plantillas, onCerrar, onCreada }) {
     if (!f.protocolo_id) { toast.error('Elige el protocolo.'); return; }
     setGuardando(true);
     try {
-      const r = await apiFetch(`${API}/api/protocolos/actas`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...f, model_urn: urn }),
+      // GAP 07 · LA SEGUNDA VERTICAL, SOBRE EL MISMO MOTOR.
+      //
+      // Mismo `operation_id`, misma cola, misma revalidación, misma
+      // idempotencia. Lo único distinto es qué se captura -- y eso es lo que
+      // demuestra que esto es infraestructura y no «offline para issues».
+      const ctx = campo.contextoDe(user, project);
+      if (!ctx) throw new Error('no se pudo identificar la obra');
+
+      // LA VERSION DE LA PLANTILLA VIAJA CON EL ACTA.
+      //
+      // Es la que esta persona tiene delante ahora mismo. Si la plantilla
+      // cambia mientras no hay cobertura, el servidor NO reinterpretará estas
+      // respuestas contra el cuestionario nuevo: devolverá CONFLICTO y lo
+      // decidirá una persona.
+      const pl = (plantillas || []).find(x => String(x.id) === String(f.protocolo_id));
+      const { modo, datos, veredicto } = await campo.capturar(API, ctx, {
+        object_type: campo.PROTOCOLO,
+        action: campo.CREATE,
+        local_object_id: campo.nuevoObjetoLocal(),
+        payload: { ...f, model_urn: urn,
+                   protocolo_version: (pl && pl.version) || 1 },
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'No se pudo levantar.');
-      toast.success(`${d.codigo} levantada · ${d.items.length} puntos`);
+
+      if (modo === 'servidor') {
+        const d = datos.canonical_result || {};
+        toast.success(`${d.codigo || ''} levantada · ${d.puntos || 0} puntos`);
+      } else if (veredicto) {
+        toast.error(veredicto.error || 'el servidor no lo aceptó');
+      } else {
+        toast.success('Acta guardada en este dispositivo. Puedes llenarla sin '
+                      + 'cobertura; subirá desde «Trabajo de campo».',
+                      { duration: 6000 });
+      }
       onCreada();
     } catch (e) { toast.error(e.message); } finally { setGuardando(false); }
   };

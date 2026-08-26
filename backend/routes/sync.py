@@ -54,6 +54,7 @@ import encargos as _enc
 import flujo_de_issue as iss
 import flujo_de_protocolo as pro
 import flujo_de_registro as reg
+import gcs_manager as gcs
 import herramientas_de_obra as _hdo
 import sincronizacion_de_campo as sync
 
@@ -172,6 +173,30 @@ def _issue_create(cur, obra, op):
                 'el %s que elegiste en campo ya no es miembro de esta obra'
                 % quien, '%s_NO_MIEMBRO' % quien.upper())
 
+    # EL ANCLAJE CONSERVA LA REVISION QUE SE VIO EN CAMPO.
+    #
+    # Si mientras no habia cobertura se emitio una revision mas nueva, la
+    # observacion NO se mueve a la vigente: se levanto sobre un soporte
+    # concreto y tiene que seguir diciendo sobre CUAL. Tampoco es un conflicto
+    # --nadie hizo nada incompatible-- asi que no se molesta a nadie con una
+    # decision que no hay que tomar.
+    #
+    # Lo unico que se comprueba es que esa revision sea de ESTA obra: sin eso se
+    # podria clavar una observacion sobre el plano de otra con solo conocer su
+    # id.
+    revision_id = p.get('revision_id')
+    if revision_id:
+        cur.execute("""SELECT pl.project_id FROM doc_plano_revisiones r
+                         JOIN doc_planos pl ON pl.id = r.plano_id
+                        WHERE r.id = %s""", (revision_id,))
+        f = cur.fetchone()
+        if not f:
+            return sync.rechazada(
+                'la lámina sobre la que anotaste esto ya no existe',
+                'REVISION_NO_EXISTE')
+        if str(f[0]) != str(obra):
+            return sync.rechazada('esa lámina pertenece a otra obra', 'OTRA_OBRA')
+
     for intento in range(5):
         codigo = reg.siguiente_codigo(cur, iss.SEMANTICA, obra)
         try:
@@ -185,7 +210,7 @@ def _issue_create(cur, obra, op):
                 RETURNING id""",
                 (obra, p.get('model_urn'), codigo, tipo, titulo,
                  (p.get('descripcion') or '').strip() or None,
-                 p.get('revision_id'),
+                 revision_id,
                  (p.get('ubicacion') or '').strip() or None,
                  (p.get('progresiva') or '').strip() or None,
                  _usuario().get('id'), responsable, verificador, _actor(),
@@ -394,6 +419,21 @@ def _protocolo_create(cur, obra, op):
     if not plantilla_id:
         return sync.rechazada('un acta se levanta sobre un protocolo concreto',
                               'SIN_PLANTILLA')
+
+    # LA VERSION FORMA PARTE DE LA INTENCION, no es un detalle del cliente.
+    #
+    # Quien marco los puntos en obra los marco contra UNA version concreta de la
+    # plantilla: la que tenia descargada. Si al sincronizar se usara la vigente,
+    # sus respuestas se reinterpretarian contra un cuestionario distinto -- y
+    # «conforme» en el punto 3 de la v1 puede ser otro punto en la v2. Eso es
+    # falsificar lo que alguien comprobo, con buena intencion.
+    version_pedida = p.get('protocolo_version')
+    if version_pedida is None:
+        return sync.rechazada(
+            'este acta no dice contra qué versión del protocolo se llenó. Sin '
+            'eso no se puede reconstruir lo que se comprobó.',
+            'SIN_VERSION_DE_PLANTILLA')
+
     # LA MISMA CONSULTA que el alta en linea (routes/protocolos.py): si las dos
     # leyeran columnas distintas, un acta levantada en campo y otra levantada en
     # la oficina guardarian cosas distintas de la MISMA plantilla.
@@ -404,6 +444,24 @@ def _protocolo_create(cur, obra, op):
         return sync.rechazada('ese protocolo ya no existe', 'PLANTILLA_NO_EXISTE')
     if str(pl[5]) != str(obra):
         return sync.rechazada('ese protocolo es de otra obra', 'OTRA_OBRA')
+
+    # NO SE USA LA VIGENTE POR COMODIDAD. Si la version que se llevo a obra ya
+    # no es la actual, hay que RECONSTRUIRLA; y si no se puede, es CONFLICTO.
+    #
+    # Hoy no se puede: `doc_protocolos` guarda una sola fila por plantilla y no
+    # hay historico de versiones. Tampoco hace falta todavia --no existe ruta
+    # para editar una plantilla, asi que `version` es siempre 1-- pero el dia
+    # que exista, esta comprobacion ya esta puesta y falla cerrado en vez de
+    # reinterpretar respuestas ajenas.
+    if int(version_pedida) != int(pl[2] or 1):
+        return sync.en_conflicto(
+            'llenaste este acta contra la versión %s del protocolo «%s» y la '
+            'vigente es la %s. Tus respuestas NO se reinterpretan contra otra '
+            'versión: se conservan tal cual para que decidas.'
+            % (version_pedida, pl[1], pl[2]),
+            'VERSION_DE_PLANTILLA_NO_RECONSTRUIBLE',
+            estado_servidor={'protocolo': pl[1], 'version_vigente': pl[2],
+                             'version_usada': version_pedida})
     if not pl[4]:
         return sync.rechazada(
             'ese protocolo se desactivó mientras estabas sin cobertura; las '
@@ -440,7 +498,13 @@ def _protocolo_create(cur, obra, op):
                  progresiva, items, estado, autor_id, responsable_id, created_by,
                  history)
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
-                (obra, p.get('model_urn'), codigo, plantilla_id, pl[1], pl[2],
+                # `version_pedida`, NO `pl[2]`: son el mismo numero aqui --la
+                # comprobacion de arriba lo garantiza-- pero lo que se guarda
+                # tiene que ser la version que se uso EN CAMPO. Si manana
+                # alguien afloja aquella comprobacion, esto seguira siendo
+                # cierto en vez de convertirse en una mentira silenciosa.
+                (obra, p.get('model_urn'), codigo, plantilla_id, pl[1],
+                 int(version_pedida),
                  (p.get('titulo') or pl[1] or '').strip(),
                  (p.get('ubicacion') or '').strip() or None,
                  (p.get('progresiva') or '').strip() or None,
@@ -563,6 +627,110 @@ def _registrar_indeterminada(op, obra, actor_id, actor_visible, error):
     except Exception as e2:
         logger.error('[sync] %s quedo INDETERMINADA SIN registrar: %s',
                      op.get('operation_id'), e2)
+
+
+# ══ LA RUTA DE LA EVIDENCIA ════════════════════════════════════════════════
+#
+# EL CASO EXTERNO MAS DURO, Y POR QUE ESTA RUTA ESTA SEPARADA DE `/api/sync`
+# ---------------------------------------------------------------------------
+# La secuencia que hay que sobrevivir es esta:
+#
+#     el movil sube la foto  ->  GCS la guarda  ->  la respuesta SE PIERDE
+#     el movil no sabe nada  ->  reintenta con el MISMO operation_id
+#
+# Si el nombre del objeto lo eligiera el movil o llevara un aleatorio, ese
+# reintento crearia un SEGUNDO objeto y la obra acabaria con la misma foto dos
+# veces --o, peor, con dos y sin saber cual es la buena--. Como el nombre se
+# deriva de `(obra, operation_id)`, el reintento apunta al mismo sitio y la
+# pregunta «¿ocurrio?» tiene respuesta: se le pregunta al almacen.
+#
+# POR ESO LO PRIMERO QUE HACE ESTA RUTA ES CONSULTAR, NO SUBIR.
+#
+# Y va aparte de `/api/sync` por una razon de forma: un lote de actos es JSON y
+# cabe en una peticion; ocho megas de foto no. Mezclarlos obligaria a que un
+# acta de 2 KB esperase a que subiera la foto de otro acto.
+#
+#     EXISTE EL OBJETO EXTERNO   ≠   LA OPERACION SE APLICO
+#
+# Esta ruta NO adjunta nada a ningun issue: dejar el objeto arriba no lo
+# convierte en evidencia contractual. Queda DESACOPLADO hasta que `/api/sync`
+# revalida el acto entero y lo vincula en la misma transaccion que el cambio.
+# Si aquel acto termina RECHAZADO o en CONFLICTO, el objeto se queda ahi sin
+# exponerse, con su nombre determinista para reconciliarlo o limpiarlo.
+
+MAX_EVIDENCIA = 32 * 1024 * 1024
+
+
+@sync_bp.route('/api/sync/evidencia', methods=['POST'])
+def subir_evidencia():
+    """Sube UNA evidencia bajo su nombre determinista. Idempotente de verdad."""
+    if not _usuario().get('id'):
+        return jsonify({'error': 'Autenticación requerida', 'code': 'NO_TOKEN'}), 401
+
+    operation_id = (request.form.get('operation_id') or '').strip()
+    if not operation_id:
+        return jsonify({'error': 'una evidencia pertenece a un acto concreto',
+                        'code': 'SIN_OPERATION_ID'}), 400
+
+    obra = resolve_project_id(request.form.get('project_id') or '')
+    if not obra:
+        return jsonify({'error': 'no se pudo determinar la obra',
+                        'code': 'PROJECT_UNRESOLVED'}), 400
+
+    # LAS MISMAS CAPAS 2 y 3 que el acto. Subir un binario a la carpeta de una
+    # obra es entrar en esa obra: que el fichero sea «solo una foto» no lo
+    # convierte en una operacion sin permiso.
+    with get_db_connection() as conn:
+        negada = _puede_operar_en_la_obra(
+            conn.cursor(), obra,
+            {'object_type': sync.ISSUE, 'action': sync.ADD_EVIDENCE})
+    if negada:
+        return jsonify({'error': negada.motivo, 'code': negada.code}), 403
+
+    objeto = sync.nombre_del_objeto_externo(obra, operation_id)
+
+    # 1 · PREGUNTAR PRIMERO. Si el objeto ya esta, este es un reintento de algo
+    # que si ocurrio: se devuelve lo que hay y no se sube nada.
+    try:
+        ya = gcs.describir_blob(objeto)
+    except Exception as e:
+        # No se pudo ni preguntar. Subir a ciegas seria seguro --el nombre es el
+        # mismo-- pero se responde con la verdad: no se sabe.
+        logger.error('[sync] no se pudo consultar %s: %s', objeto, e)
+        return jsonify({'error': 'no se pudo comprobar si esta evidencia ya '
+                                 'estaba subida; no se ha vuelto a intentar',
+                        'code': 'ALMACEN_NO_RESPONDE'}), 503
+    if ya:
+        return jsonify({'objeto_externo': objeto, 'ya_existia': True,
+                        'tamaño': ya['tamaño'], 'sha256': request.form.get('sha256'),
+                        'nota': 'esta evidencia ya estaba subida; no se ha '
+                                'duplicado'}), 200
+
+    fichero = request.files.get('file')
+    if not fichero or not fichero.filename:
+        return jsonify({'error': 'no llegó ningún fichero', 'code': 'SIN_FICHERO'}), 400
+    fichero.seek(0, 2)
+    tamaño = fichero.tell()
+    fichero.seek(0)
+    if tamaño > MAX_EVIDENCIA:
+        return jsonify({'error': 'esa evidencia pesa demasiado (máximo %d MB)'
+                                 % (MAX_EVIDENCIA // (1024 * 1024)),
+                        'code': 'EVIDENCIA_DEMASIADO_GRANDE'}), 413
+    if not tamaño:
+        return jsonify({'error': 'esa evidencia llegó vacía', 'code': 'FICHERO_VACIO'}), 400
+
+    # 2 · SUBIR. El nombre no lo elige el movil.
+    url = gcs.upload_file_to_gcs(fichero, objeto)
+    if not url:
+        # Fallo AL SUBIR. Puede que el objeto quedara a medias o no quedara
+        # nada; el reintento volvera a preguntar, y esa consulta es la que lo
+        # resuelve. No se responde 200 con un objeto que quiza no existe.
+        return jsonify({'error': 'no se pudo subir esta evidencia; sigue en tu '
+                                 'dispositivo y se reintentará',
+                        'code': 'SUBIDA_FALLIDA'}), 502
+
+    return jsonify({'objeto_externo': objeto, 'ya_existia': False,
+                    'tamaño': tamaño, 'sha256': request.form.get('sha256')}), 201
 
 
 # ══ LA RUTA ════════════════════════════════════════════════════════════════

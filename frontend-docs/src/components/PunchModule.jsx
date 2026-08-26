@@ -28,6 +28,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../utils/apiFetch';
+import * as campo from '../offline/captura';
 import { confirmAction } from '../utils/confirm';
 
 const COLOR_ESTADO = {
@@ -279,6 +280,7 @@ export default function PunchModule({ project, API, user, isAdmin }) {
       {creando && (
         <ModalLevantar API={API} urn={urn} catalogo={catalogo} miembros={miembros}
                        planos={planos} yo={user?.id}
+                       user={user} project={project}
                        onCerrar={() => setCreando(false)}
                        onCreado={() => { setCreando(false); cargar(); }} />
       )}
@@ -573,7 +575,8 @@ function PanelIssue({ d, API, user, isAdmin, nombres, onCerrar, onCambio }) {
 // Lo que cada tipo EXIGE lo dice el catálogo del servidor (`exige_responsable`,
 // `exige_verificador`, `exige_ubicacion`), no una lista escrita aquí. Si mañana
 // se añade un tipo, esta pantalla ya sabe pedirle lo suyo.
-function ModalLevantar({ API, urn, catalogo, miembros, planos, yo, onCerrar, onCreado }) {
+function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
+                        user, project, onCerrar, onCreado }) {
   const [f, setF] = useState({
     tipo: 'PUNCH', titulo: '', descripcion: '', responsable_id: '',
     verificador_id: '', revision_id: '', ubicacion: '', progresiva: '', vence_en: '',
@@ -599,19 +602,40 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo, onCerrar, onC
     }
     setGuardando(true);
     try {
-      const r = await apiFetch(`${API}/api/issues`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // GAP 07 · EL MISMO CAMINO CON Y SIN COBERTURA.
+      //
+      // Un punch se levanta EN OBRA, que es exactamente donde no hay señal. Si
+      // esta pantalla solo funcionara con red, la observación se apuntaría en
+      // una libreta y se pasaría al sistema por la noche -- o no se pasaría.
+      const ctx = campo.contextoDe(user, project);
+      if (!ctx) throw new Error('no se pudo identificar la obra');
+      const { modo, datos, veredicto } = await campo.capturar(API, ctx, {
+        object_type: campo.ISSUE,
+        action: campo.CREATE,
+        local_object_id: campo.nuevoObjetoLocal(),
+        payload: {
           ...f, model_urn: urn,
           responsable_id: f.responsable_id ? Number(f.responsable_id) : null,
           verificador_id: f.verificador_id ? Number(f.verificador_id) : null,
+          // EL ANCLAJE HISTORICO. Es la revisión que se está mirando AHORA, y
+          // sigue siendo esa aunque salga una más nueva mientras no haya red.
           revision_id: f.revision_id || null,
           vence_en: f.vence_en || null,
-        }),
+        },
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'No se pudo levantar.');
-      toast.success(`${d.codigo} levantado`);
+
+      if (modo === 'servidor') {
+        toast.success(`${(datos.canonical_result || {}).codigo || ''} levantado`);
+      } else if (veredicto) {
+        // El servidor decidió algo distinto de aceptarlo. No se disfraza de
+        // éxito ni de fallo de red: se dice lo que dijo.
+        toast.error(veredicto.error || 'el servidor no lo aceptó');
+      } else {
+        // GUARDADO AQUI, NO CONFIRMADO. La diferencia se dice, no se insinúa.
+        toast.success('Guardado en este dispositivo. Subirá cuando haya '
+                      + 'cobertura; míralo en «Trabajo de campo».',
+                      { duration: 6000 });
+      }
       onCreado();
     } catch (e) { toast.error(e.message); } finally { setGuardando(false); }
   };
