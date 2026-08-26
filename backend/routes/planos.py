@@ -24,6 +24,7 @@ from flask import Blueprint, g, jsonify, request
 from db import get_db_connection, log_activity, resolve_project_id
 from perimetro_de_obra import guardia_de_obra, guardia_de_recurso
 import planos_de_obra as pl
+import revisiones_de_documento as rev
 
 logger = logging.getLogger('planos')
 
@@ -69,6 +70,12 @@ def listar():
     if not obra:
         return jsonify({'error': 'No se pudo determinar la obra.',
                         'code': 'PROJECT_UNRESOLVED'}), 400
+    # DEFENSA EN PROFUNDIDAD. Hasta hoy esta ruta colgaba solo del control
+    # central, que depende de `ENFORCE_PROJECT_AUTHZ`: un control que depende de
+    # una variable no es un control. La hermana de especificaciones ya la tenia.
+    corte = guardia_de_obra(obra, 'ver los planos de esta obra')
+    if corte:
+        return corte
     disciplina = request.args.get('disciplina') or None
     try:
         with get_db_connection() as conn:
@@ -284,6 +291,13 @@ def emitir_revision(pid):
             if resolve_project_id(fn[0]) != obra:
                 return jsonify({'error': 'Ese documento pertenece a otra obra.',
                                 'code': 'OTRA_OBRA'}), 409
+
+            # LAS OTRA DOS CAPAS. `guardia_de_recurso` ya resolvio el aislamiento
+            # entre obras; faltaba TODO lo demas. Hasta el 25-ago-2026 bastaba con
+            # ser miembro para decidir que lamina vale en obra.
+            negado = rev.autoridad_para_emitir(cur, _usuario(), obra, urn, nodo, rev.PLANO)
+            if negado:
+                return negado
 
             cur.execute('SELECT codigo_revision FROM doc_plano_revisiones WHERE plano_id=%s',
                         (pid,))

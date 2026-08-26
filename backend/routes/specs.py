@@ -353,6 +353,10 @@ def crear():
 
             primera = None
             if nodo:
+                negado = rev.autoridad_para_emitir(cur, _usuario(), obra, model_urn,
+                                                   nodo, esp.SECCION)
+                if negado:
+                    return negado
                 rid, codigo, _ant = rev.emitir(
                     cur, esp.SECCION, sid, nodo,
                     file_version_id=data.get('file_version_id') or fn[1],
@@ -408,6 +412,14 @@ def emitir_revision(sid):
             if resolve_project_id(fn[0]) != obra:
                 return jsonify({'error': 'Ese documento pertenece a otra obra.',
                                 'code': 'OTRA_OBRA'}), 409
+
+            # El mismo acto y por tanto la misma autoridad. Dejar abierta una de
+            # las dos habria sido incoherente: la exigencia tambien decide contra
+            # que se compra.
+            negado = rev.autoridad_para_emitir(cur, _usuario(), obra, urn, nodo,
+                                               esp.SECCION)
+            if negado:
+                return negado
 
             rid, codigo, anterior = rev.emitir(
                 cur, esp.SECCION, sid, nodo,

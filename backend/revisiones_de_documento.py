@@ -140,3 +140,88 @@ def emitir(cur, revisable, padre_id, file_node_id, file_version_id=None,
         cur.execute('UPDATE %s SET superada_por_id=%%s WHERE id=%%s'
                     % revisable.tabla_revisiones, (rid, anterior[0]))
     return rid, codigo, (anterior[0] if anterior else None)
+
+
+# ── QUIEN PUEDE EMITIR UNA REVISION ────────────────────────────────────────
+#
+# EL HALLAZGO QUE ESTA FUNCION VIENE A CERRAR (25-ago-2026)
+# ---------------------------------------------------------
+# Emitir una revision no era un acto autorizado: bastaba con SER MIEMBRO DE LA
+# OBRA. `guardia_de_recurso` comprueba de que obra es el recurso --aislamiento
+# entre obras-- y ahi se acababa el control. Cualquier miembro podia declarar
+# que lamina vale en obra y dejar la anterior superada.
+#
+# Y no es un acto cualquiera. Emitir una revision:
+#
+#     crea la revision  ->  cambia cual es la VIGENTE  ->  marca SUPERADA la anterior
+#
+# Es decir, decide contra que documento se construye. Un contratista podia
+# cambiarlo, y el plano superado desaparecia de la vista sin que nadie lo
+# hubiera aprobado.
+#
+# LAS TRES CAPAS SE CONSERVAN SEPARADAS, que es lo que el propietario exigio:
+#
+#     AISLAMIENTO DE OBRA     ¿este recurso es de una obra a la que perteneces?
+#                             lo resuelve `guardia_de_recurso`, ANTES de llegar aqui.
+#     PERMISO DE RECURSO      ¿puedes publicar ESTE documento?
+#                             lo resuelve `check_folder_permission` con nivel `edit`.
+#     AUTORIZACION DE FLUJO   ¿te corresponde DECIDIR que vale en obra?
+#                             administrador de obra, o funcion contractual emisora.
+#
+# NINGUNA DE LAS TRES SOBRA, y por eso son tres y no una:
+#
+#   · Solo con permiso de recurso, un contratista con `edit` sobre su carpeta
+#     de trabajo podria declarar vigente lo que quisiera.
+#   · Solo con autorizacion de flujo, un administrador publicaria a ciegas un
+#     documento que ni siquiera puede abrir.
+#
+# NO SE HA INVENTADO NINGUN PERMISO NUEVO. `check_folder_permission`, la
+# escalera de seis niveles y `funcion_de` ya existian; lo que faltaba era
+# usarlos aqui.
+
+# QUIEN EMITE DOCUMENTACION DE PROYECTO, por funcion contractual.
+#
+# En obra publica la lamina la produce el PROYECTISTA y la emite para
+# construccion la ENTIDAD. La SUPERVISION revisa y el CONTRATISTA construye
+# contra lo emitido -- ninguno de los dos decide que version vale, y dejar que
+# lo decidieran invertiria la cadena contractual.
+#
+# Es una lista CERRADA a proposito. El dia que un contrato exija otra reparticion,
+# eso es una decision de producto que se toma y se escribe, no un campo que
+# alguien rellena en una pantalla.
+FUNCIONES_EMISORAS = ('ENTIDAD', 'PROYECTISTA')
+
+
+def autoridad_para_emitir(cur, usuario, obra, model_urn, file_node_id, revisable):
+    """None si puede emitir; (respuesta, codigo) si no.
+
+    Se llama DESPUES de `guardia_de_recurso`, que ya resolvio el aislamiento
+    entre obras. Aqui van las otras dos capas, en este orden: primero si puede
+    con el documento, despues si le corresponde decidir.
+    """
+    from flask import jsonify
+    from folder_permissions import check_folder_permission
+    from administracion_de_obra import es_admin_de_obra
+    import directorio_de_obra as dir_obra
+
+    # ── CAPA 2 · PERMISO DE RECURSO ────────────────────────────────────────
+    negado = check_folder_permission(
+        usuario, file_node_id, model_urn, 'edit',
+        'emitir una revisión de %s con este documento' % revisable.singular)
+    if negado:
+        return negado
+
+    # ── CAPA 3 · AUTORIZACION DE FLUJO ─────────────────────────────────────
+    if es_admin_de_obra(cur, usuario, obra):
+        return None
+    funcion = dir_obra.funcion_de(cur, obra, usuario.get('id'))
+    if funcion in FUNCIONES_EMISORAS:
+        return None
+    return jsonify({
+        'error': 'Emitir una revisión decide qué documento vale en obra y deja '
+                 'superado el anterior. Puede hacerlo un administrador de la obra '
+                 'o quien ejerce una función emisora (%s). Tu función en esta obra '
+                 'es %s.' % (' o '.join(FUNCIONES_EMISORAS), funcion or 'ninguna'),
+        'code': 'SIN_AUTORIDAD_DE_EMISION',
+        'funcion': funcion,
+    }), 403
