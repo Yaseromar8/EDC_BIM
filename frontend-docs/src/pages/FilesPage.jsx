@@ -33,6 +33,9 @@ const HERRAMIENTA_DE_MODO = {
   planos: 'planos', protocolos: 'protocolos',
   punch: 'issues',
   specs: 'especificaciones',
+  // GAP 06. Los flujos viven DENTRO de la herramienta `reviews`: configurar
+  // cómo se revisa no es otra capacidad que se activa aparte.
+  flujos: 'reviews',
   plan: 'plan_entregas', sets: 'conjuntos',
   multimedia: 'fotos',
 };
@@ -65,6 +68,7 @@ const ProtocolosModule = lazy(() => import('../components/ProtocolosModule'));
 // de RFI y Red Line. RED LINE != ISSUE quedo congelado el 25-ago-2026.
 const PunchModule = lazy(() => import('../components/PunchModule'));
 const EspecificacionesModule = lazy(() => import('../components/EspecificacionesModule'));
+const FlujosDeRevisionModule = lazy(() => import('../components/FlujosDeRevisionModule'));
 const MultimediaModule = lazy(() => import('../components/MultimediaModule'));
 const GatewayPanel = lazy(() => import('../components/panels/GatewayPanel'));
 const QuarantineTable = lazy(() => import('../components/panels/QuarantineTable'));
@@ -336,6 +340,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 ]},
                 { titulo: 'Entregas', items: [
                   { label: 'Revisiones', mode: 'reviews', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>, onClick: () => fe.setSidebarView('reviews') },
+                  { label: 'Flujos de revisión', mode: 'flujos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 9v6"/><path d="M13 6h5a2 2 0 0 1 2 2v3"/><path d="M13 18h5a2 2 0 0 0 2-2v-1"/></svg>, onClick: () => fe.setSidebarView('flujos') },
                   { label: 'Transmittals', mode: 'transmittals', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>, onClick: () => fe.setSidebarView('transmittals') },
                   { label: 'Submittals', mode: 'submittals', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>, onClick: () => fe.setSidebarView('submittals') },
                   { label: 'Planos', mode: 'planos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/></svg>, onClick: () => fe.setSidebarView('planos') },
@@ -494,6 +499,10 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
         {fe.sidebarView === 'specs' && (
           <EspecificacionesModule project={project} API={API} user={user} isAdmin={isAdmin} />
+        )}
+
+        {fe.sidebarView === 'flujos' && (
+          <FlujosDeRevisionModule project={project} API={API} user={user} isAdmin={isAdmin} />
         )}
 
         {/* MULTIMEDIA VIEW */}

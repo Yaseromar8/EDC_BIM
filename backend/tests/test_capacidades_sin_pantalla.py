@@ -42,6 +42,7 @@ HERRAMIENTAS = {
     'protocolos.py': '/api/protocolos',
     'issues.py': '/api/issues',
     'specs.py': '/api/specs',
+    'plantillas_revision.py': '/api/review-templates',
 }
 
 # Rutas de escritura que HOY no tienen camino desde la interfaz, cada una con su

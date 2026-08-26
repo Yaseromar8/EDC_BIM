@@ -21,10 +21,21 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
   const [idoneidad, setIdoneidad] = useState('');
   const [codigos, setCodigos] = useState([]);
   const [saving, setSaving] = useState(false);
+  // GAP 06 · aplicar una plantilla. `plantillaId` viaja al servidor, que vuelve
+  // a resolverla y sella la procedencia; los pasos que se ven aqui son solo la
+  // PREVISUALIZACION de lo que va a salir.
+  const [plantillas, setPlantillas] = useState([]);
+  const [plantillaId, setPlantillaId] = useState('');
+  const [avisoPlantilla, setAvisoPlantilla] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
     setTitle(''); setSteps([]); setFinalStatus('SHARED'); setIdoneidad('');
+    setPlantillaId(''); setAvisoPlantilla('');
+    apiFetch(`${API}/api/review-templates?model_urn=${encodeURIComponent(projectPrefix)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setPlantillas((d?.plantillas || []).filter(p => p.activa)))
+      .catch(() => setPlantillas([]));
     apiFetch(`${API}/api/users`).then(r => r.json())
       .then(d => setUsers(d.users || d || [])).catch(() => setUsers([]));
     // El catalogo de idoneidad es de la obra: lo que se audita es lo que diga
@@ -34,6 +45,43 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
   }, [isOpen, projectPrefix]);
 
   if (!isOpen) return null;
+
+  // Al elegir plantilla se PREVISUALIZA: una de entidad designa funciones, y
+  // hasta resolverlas contra los miembros de ESTA obra nadie sabe en quien
+  // caen. Enseñarlo antes evita descubrirlo con la revisión ya abierta y un
+  // encargo circulando.
+  const elegirPlantilla = async (id) => {
+    setPlantillaId(id);
+    setAvisoPlantilla('');
+    if (!id) { setSteps([]); return; }
+    try {
+      const r = await apiFetch(
+        `${API}/api/review-templates/${id}/resolver?model_urn=${encodeURIComponent(projectPrefix)}`);
+      const d = await r.json();
+      if (!r.ok) {
+        setSteps([]);
+        setAvisoPlantilla(d.error || 'No se pudo aplicar esta plantilla aquí.');
+        return;
+      }
+      setSteps((d.pasos || []).map(p => ({
+        id: p.user_id, name: p.name, email: p.email, dias: p.dias,
+        etiqueta: p.etiqueta, decision: p.decision, de_funcion: p.de_funcion,
+      })));
+    } catch (e) {
+      setSteps([]);
+      setAvisoPlantilla(e.message || 'No se pudo previsualizar.');
+    }
+  };
+
+  // SI SE TOCAN LOS PASOS, YA NO ES ESA PLANTILLA. Mantener la procedencia
+  // después de editar el flujo diría que la revisión siguió un molde que en
+  // realidad no siguió -- y eso es peor que no citar ninguno.
+  const soltarPlantilla = () => {
+    if (!plantillaId) return;
+    setPlantillaId('');
+    setAvisoPlantilla('Has cambiado los pasos: esta revisión ya no queda '
+                    + 'registrada como aplicación de esa plantilla.');
+  };
 
   const submit = async () => {
     if (!title.trim()) { toast.error('Ponle un título a la revisión'); return; }
@@ -53,16 +101,22 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
         method: 'POST',
         body: JSON.stringify({
           model_urn: projectPrefix, title: title.trim(), items,
+          // Con plantilla se manda SOLO su id y el servidor la resuelve: si se
+          // mandaran los pasos previsualizados, un cambio entre la vista previa
+          // y el envío pasaría inadvertido.
+          ...(plantillaId ? { plantilla_id: plantillaId } : {}),
           // `user_id` es la IDENTIDAD del revisor; `email` y `name` van como
           // instantanea de a quien se le pidio y con que nombre, aunque esa
           // persona se llame distinto dentro de dos anos. Antes solo se
           // mandaban esos dos, y quien podia firmar se decidia comparando
           // correo O NOMBRE: dos personas llamadas igual eran las dos
           // candidatas al mismo paso.
-          steps: steps.map(s => ({
-            user_id: s.id, email: s.email, name: s.name,
-            ...(s.dias ? { dias: Number(s.dias) } : {}),
-          })),
+          ...(plantillaId ? {} : {
+            steps: steps.map(s => ({
+              user_id: s.id, email: s.email, name: s.name,
+              ...(s.dias ? { dias: Number(s.dias) } : {}),
+            })),
+          }),
           final_status: finalStatus, codigo_idoneidad: idoneidad || undefined
         })
       });
@@ -100,6 +154,35 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
             </div>
           </div>
 
+          {plantillas.length > 0 && (
+            <div>
+              <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>
+                Flujo de revisión
+                <span style={{ fontWeight: 400, color: '#999', fontSize: 11 }}>
+                  {' '}· la revisión se queda con una copia; cambiar la plantilla después no la toca
+                </span>
+              </label>
+              <select value={plantillaId} onChange={e => elegirPlantilla(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid #ddd',
+                               borderRadius: 4, fontSize: 13, background: '#fff' }}>
+                <option value="">— a mano, paso a paso —</option>
+                {plantillas.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre} · v{p.version} · {(p.pasos || []).length} pasos
+                    {p.alcance === 'ENTIDAD' ? ' (de la entidad)' : ''}
+                  </option>
+                ))}
+              </select>
+              {avisoPlantilla && (
+                <div style={{ marginTop: 6, fontSize: 12, color: '#8a5a12',
+                              background: '#fffaf0', border: '1px solid #f0d9a0',
+                              borderRadius: 4, padding: '6px 9px', lineHeight: 1.5 }}>
+                  {avisoPlantilla}
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
             <label style={{ display: 'block', color: '#666', marginBottom: 6, fontWeight: 600 }}>
               Secuencia de revisores (en orden)
@@ -111,25 +194,31 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
               {steps.map((s, i) => (
                 <span key={s.id || s.email} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eef2f7', color: '#1a56a8', padding: '4px 10px', borderRadius: 14, fontSize: 12, fontWeight: 600 }}>
-                  {i + 1}. {s.name || s.email}
+                  {i + 1}. {s.etiqueta ? s.etiqueta + ' — ' : ''}{s.name || s.email}
+                  {s.decision && (
+                    <span title={s.de_funcion ? 'Sale de la función ' + s.de_funcion : ''}
+                          style={{ fontWeight: 700, fontSize: 10, opacity: .75 }}>
+                      {s.decision}
+                    </span>
+                  )}
                   {/* El plazo del paso. Se cuenta desde que EMPIEZA su turno,
                       no desde que se crea la revisión: cuando se crea no se
                       sabe cuándo le tocará al paso 3. Vacío = sin plazo. */}
                   <input
                     type="number" min="1" placeholder="d. cal." value={s.dias || ''}
-                    onChange={e => setSteps(prev => prev.map((x, j) =>
-                      j === i ? { ...x, dias: e.target.value } : x))}
+                    onChange={e => { soltarPlantilla(); setSteps(prev => prev.map((x, j) =>
+                      j === i ? { ...x, dias: e.target.value } : x)); }}
                     title="Días CALENDARIO de plazo para este paso (opcional). Son días naturales: no hay calendario de días hábiles, así que un plazo de 3 días vence en 3 días aunque caigan en fin de semana."
                     style={{ width: 52, border: '1px solid #c8d6e8', borderRadius: 8, padding: '1px 5px', fontSize: 11, color: '#1a56a8', background: '#fff' }}
                   />
-                  <button onClick={() => setSteps(prev => prev.filter((_x, j) => j !== i))} style={{ background: 'none', border: 'none', color: '#1a56a8', cursor: 'pointer', padding: 0, fontSize: 13 }}>×</button>
+                  <button onClick={() => { soltarPlantilla(); setSteps(prev => prev.filter((_x, j) => j !== i)); }} style={{ background: 'none', border: 'none', color: '#1a56a8', cursor: 'pointer', padding: 0, fontSize: 13 }}>×</button>
                 </span>
               ))}
               {!steps.length && <span style={{ color: '#aaa', fontSize: 12 }}>Haz clic en un usuario para añadirlo como paso…</span>}
             </div>
             <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid #eee', borderRadius: 4 }}>
               {users.filter(u => !steps.find(s => s.id === u.id)).map(u => (
-                <div key={u.email} onClick={() => setSteps(prev => [...prev, { id: u.id, email: u.email, name: u.name, dias: '' }])}
+                <div key={u.email} onClick={() => { soltarPlantilla(); setSteps(prev => [...prev, { id: u.id, email: u.email, name: u.name, dias: '' }]); }}
                   style={{ padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', borderBottom: '1px solid #f5f5f5' }}
                   onMouseOver={e => e.currentTarget.style.background = '#f4f6f9'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
                   <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{getInitials(u.name || u.email)}</span>
