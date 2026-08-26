@@ -592,3 +592,77 @@ def test_el_contexto_se_pasa_como_FUNCION_no_como_valor():
     s = _sin_comentarios(sincronizador())
     cuerpo = s.split('export function engancharDisparadores(')[1]
     assert 'const ctx = obtenerContexto()' in cuerpo
+
+
+# ══ 11 · EL PORTAL SE DESPLIEGA ANTES QUE EL BACKEND ═══════════════════════
+#
+# No es un accidente de un dia: es como esta montado el despliegue. Siempre hay
+# una ventana en la que el navegador tiene codigo mas nuevo que el servidor.
+
+def capacidades():
+    return _leer('src', 'offline', 'capacidades.js')
+
+
+def test_se_PREGUNTA_si_el_servidor_recibe_trabajo_de_campo():
+    """Un cliente que da por hecho que el servidor ya tiene sus rutas esta mal
+    construido para este despliegue."""
+    c = _sin_comentarios(capacidades())
+    assert 'export async function tieneSincronizacionDeCampo(' in c
+    assert "'/api/sync'" in c or '/api/sync`' in c
+    # 404 es la unica respuesta que significa «no esta aqui».
+    assert 'r.status !== 404' in c
+
+
+def test_ante_la_duda_la_respuesta_es_NO():
+    """Prometer offline sin poder cumplirlo se paga con trabajo perdido."""
+    c = _sin_comentarios(capacidades())
+    catch = c.split('} catch (e) {')[1].split('} finally')[0]
+    assert 'return false' in catch
+    assert '_respuesta = true' not in catch
+    # Y el «no se sabe» NO se cachea: puede que desplieguen entretanto.
+    assert '_respuesta = false' not in catch
+
+
+def test_si_el_servidor_no_lo_recibe_NO_SE_ENCOLA():
+    """Una cola que no puede vaciarse es peor que no tener cola: el inspector
+    cree que su jornada esta esperando, y no espera nada."""
+    c = _sin_comentarios(captura())
+    cuerpo = c.split('export async function capturar(')[1].split('\nexport ')[0]
+    guardia = cuerpo.split('tieneSincronizacionDeCampo(API)')[1].split('const operation_id')[0]
+    assert 'local.encolar' not in guardia
+    assert 'enLinea()' in guardia
+    # Y se comprueba ANTES de generar el operation_id: no se empieza un acto de
+    # cola que no va a poder existir.
+    assert cuerpo.index('tieneSincronizacionDeCampo') < cuerpo.index('const operation_id')
+
+
+def test_levantar_un_punch_y_un_acta_SIGUEN_FUNCIONANDO_sin_la_ruta_nueva():
+    """Durante la ventana de despliegue, lo que hoy funciona tiene que seguir
+    funcionando igual que ayer."""
+    pu = punch()
+    assert 'enLinea: async () =>' in pu
+    assert '/api/issues`' in pu
+    pr = protocolos()
+    assert pr.count('enLinea: async () =>') == 2, (
+        'falta el respaldo en levantar acta o en marcar puntos')
+    assert '/api/protocolos/actas`' in pr
+    assert '/items`' in pr
+
+
+def test_el_respaldo_se_DISTINGUE_de_una_sincronizacion():
+    """Si se contaran igual, un acto que fue por la ruta de siempre parecería
+    haber pasado por la cola -- y nadie sabria cual de los dos caminos se uso."""
+    c = captura()
+    assert 'sinCampo: true' in c
+    for m in (punch(), protocolos()):
+        assert 'sinCampo' in m
+
+
+def test_la_pestana_de_campo_NO_se_ofrece_si_el_servidor_no_la_sirve():
+    """Enseñarla contra un backend que aun no la tiene seria prometer que se
+    puede capturar sin cobertura cuando no se guardaria nada."""
+    f = _sin_comentarios(_leer('src', 'pages', 'FilesPage.jsx'))
+    assert 'tieneSincronizacionDeCampo(API)' in f
+    assert "if (it.mode === 'campo' && !hayCampo) return false;" in f
+    # Y nace en FALSE: mientras no se sepa, no se promete.
+    assert 'React.useState(false)' in f.split('const [hayCampo,')[1][:60]

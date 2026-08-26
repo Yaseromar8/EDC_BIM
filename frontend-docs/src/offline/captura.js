@@ -34,6 +34,7 @@
  */
 import { apiFetch } from '../utils/apiFetch';
 import * as local from './almacenLocal';
+import { tieneSincronizacionDeCampo } from './capacidades';
 
 export const ISSUE = 'ISSUE';
 export const PROTOCOLO = 'PROTOCOLO';
@@ -60,10 +61,28 @@ export function nuevoObjetoLocal() {
  */
 export async function capturar(API, ctx, {
   object_type, action, local_object_id, server_object_id,
-  payload, base_version, depende_de,
+  payload, base_version, depende_de, enLinea,
 }) {
   if (!ctx || !ctx.canonical_user_id || !ctx.project_id) {
     throw new Error('no se sabe de quién ni de qué obra es esta captura');
+  }
+
+  // ¿ESTE SERVIDOR SABE RECIBIR TRABAJO DE CAMPO?
+  //
+  // El portal se despliega solo; el backend, a mano. Siempre hay una ventana en
+  // la que el navegador tiene código más nuevo que el servidor, y en esa
+  // ventana `/api/sync` todavía no existe. Preguntarlo no es desconfianza: es
+  // la única forma de que levantar un punch siga funcionando durante esa hora.
+  //
+  // Y si no lo recibe, NO se encola. Una cola que no puede vaciarse es peor que
+  // no tener cola: el inspector cree que su jornada está esperando, y no espera
+  // nada.
+  if (!(await tieneSincronizacionDeCampo(API))) {
+    if (!enLinea) {
+      throw new Error('este servidor todavía no recibe trabajo de campo');
+    }
+    const res = await enLinea();
+    return { modo: 'servidor', datos: res, sinCampo: true };
   }
   const operation_id = local.uuid();
   // El reloj DEL DISPOSITIVO. Se conserva porque es lo único que se sabe de

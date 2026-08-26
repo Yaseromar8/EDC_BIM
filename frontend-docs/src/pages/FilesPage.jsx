@@ -19,6 +19,7 @@ import { renderFileIconSop } from '../utils/fileIcons';
 import { apiFetch } from '../utils/apiFetch';
 import * as campo from '../offline/captura';
 import { engancharDisparadores } from '../offline/sincronizador';
+import { tieneSincronizacionDeCampo } from '../offline/capacidades';
 import { confirmAction } from '../utils/confirm';
 import { pedirIdoneidad } from '../utils/idoneidad';
 
@@ -184,6 +185,19 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
     if (!project || !user?.id) return undefined;
     return engancharDisparadores(API, () => campo.contextoDe(user, project));
   }, [project, user]);
+
+  // ¿SIRVE ESTE SERVIDOR EL TRABAJO DE CAMPO?
+  //
+  // Mientras no se sepa, la pestaña NO se ofrece. El portal se despliega antes
+  // que el backend, y enseñar «Trabajo de campo» contra un servidor que aún no
+  // la tiene sería prometer que se puede capturar sin cobertura cuando lo único
+  // que pasaría es que no se guarda nada.
+  const [hayCampo, setHayCampo] = React.useState(false);
+  React.useEffect(() => {
+    let vivo = true;
+    tieneSincronizacionDeCampo(API).then(r => { if (vivo) setHayCampo(!!r); });
+    return () => { vivo = false; };
+  }, []);
   
   const vh = useVersionHistory(fe.projectPrefix, user, {
     onRefresh: () => fe.triggerRefresh()
@@ -412,6 +426,10 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                 // nada: mejor una pestaña de mas un instante que un menu que
                 // parpadea.
                 .map(grupo => ({ ...grupo, items: grupo.items.filter(it => {
+                  // Y la cola de campo, ademas, solo si el servidor la
+                  // recibe. Una pestaña que promete offline contra un backend
+                  // que no lo tiene es peor que no tenerla.
+                  if (it.mode === 'campo' && !hayCampo) return false;
                   const cod = HERRAMIENTA_DE_MODO[it.mode];
                   if (!cod) return true;
                   // Una entrada puede depender de VARIAS herramientas: basta con

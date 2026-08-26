@@ -89,7 +89,7 @@ export default function ProtocolosModule({ project, API, user, isAdmin }) {
       // la instalación con el móvil en la mano. Va por la misma cola.
       const ctx = campo.contextoDe(user, project);
       if (!ctx) throw new Error('no se pudo identificar la obra');
-      const { modo, datos, veredicto } = await campo.capturar(API, ctx, {
+      const { modo, datos, veredicto, sinCampo } = await campo.capturar(API, ctx, {
         object_type: campo.PROTOCOLO,
         action: campo.SET_ITEMS,
         // El acta ya existe en el servidor, así que su identidad local es la
@@ -101,9 +101,22 @@ export default function ProtocolosModule({ project, API, user, isAdmin }) {
         // su firma.
         base_version: abierta.estado,
         payload: { items: abierta.items },
+        enLinea: async () => {
+          const r = await apiFetch(`${API}/api/protocolos/actas/${abierta.id}/items`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: abierta.items }),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || 'No se pudo guardar.');
+          return d;
+        },
       });
 
-      if (modo === 'servidor') {
+      if (sinCampo) {
+        setAbierta(datos);
+        toast.success('Guardado');
+        await cargar();
+      } else if (modo === 'servidor') {
         toast.success('Guardado');
         await cargar();
       } else if (veredicto) {
@@ -635,15 +648,26 @@ function ModalLevantar({ API, urn, plantillas, user, project, onCerrar, onCreada
       // respuestas contra el cuestionario nuevo: devolverá CONFLICTO y lo
       // decidirá una persona.
       const pl = (plantillas || []).find(x => String(x.id) === String(f.protocolo_id));
-      const { modo, datos, veredicto } = await campo.capturar(API, ctx, {
+      const { modo, datos, veredicto, sinCampo } = await campo.capturar(API, ctx, {
         object_type: campo.PROTOCOLO,
         action: campo.CREATE,
         local_object_id: campo.nuevoObjetoLocal(),
         payload: { ...f, model_urn: urn,
                    protocolo_version: (pl && pl.version) || 1 },
+        enLinea: async () => {
+          const r = await apiFetch(`${API}/api/protocolos/actas`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...f, model_urn: urn }),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || 'No se pudo levantar.');
+          return d;
+        },
       });
 
-      if (modo === 'servidor') {
+      if (sinCampo) {
+        toast.success(`${datos.codigo} levantada · ${datos.items.length} puntos`);
+      } else if (modo === 'servidor') {
         const d = datos.canonical_result || {};
         toast.success(`${d.codigo || ''} levantada · ${d.puntos || 0} puntos`);
       } else if (veredicto) {

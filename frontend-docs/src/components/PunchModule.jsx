@@ -609,11 +609,7 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
       // una libreta y se pasaría al sistema por la noche -- o no se pasaría.
       const ctx = campo.contextoDe(user, project);
       if (!ctx) throw new Error('no se pudo identificar la obra');
-      const { modo, datos, veredicto } = await campo.capturar(API, ctx, {
-        object_type: campo.ISSUE,
-        action: campo.CREATE,
-        local_object_id: campo.nuevoObjetoLocal(),
-        payload: {
+      const cuerpo = {
           ...f, model_urn: urn,
           responsable_id: f.responsable_id ? Number(f.responsable_id) : null,
           verificador_id: f.verificador_id ? Number(f.verificador_id) : null,
@@ -621,10 +617,29 @@ function ModalLevantar({ API, urn, catalogo, miembros, planos, yo,
           // sigue siendo esa aunque salga una más nueva mientras no haya red.
           revision_id: f.revision_id || null,
           vence_en: f.vence_en || null,
+      };
+      const { modo, datos, veredicto, sinCampo } = await campo.capturar(API, ctx, {
+        object_type: campo.ISSUE,
+        action: campo.CREATE,
+        local_object_id: campo.nuevoObjetoLocal(),
+        payload: cuerpo,
+        // LA RUTA DE SIEMPRE, por si este servidor todavía no recibe campo.
+        // El portal se despliega antes que el backend, y durante esa ventana
+        // levantar un punch tiene que seguir funcionando igual que ayer.
+        enLinea: async () => {
+          const r = await apiFetch(`${API}/api/issues`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cuerpo),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || 'No se pudo levantar.');
+          return d;
         },
       });
 
-      if (modo === 'servidor') {
+      if (sinCampo) {
+        toast.success(`${datos.codigo} levantado`);
+      } else if (modo === 'servidor') {
         toast.success(`${(datos.canonical_result || {}).codigo || ''} levantado`);
       } else if (veredicto) {
         // El servidor decidió algo distinto de aceptarlo. No se disfraza de
