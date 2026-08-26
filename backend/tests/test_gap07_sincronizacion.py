@@ -78,30 +78,85 @@ def test_un_reenvio_DEVUELVE_lo_consolidado_y_no_reejecuta():
     assert not any('INSERT INTO doc_issues' in q for q in cur.qs)
 
 
-def test_la_reserva_es_PREVIA_al_acto():
-    """Sin ella habria una ventana en la que el acto surtio efecto sin quedar
-    registrado, y el reenvio lo aplicaria otra vez."""
-    cuerpo = _motor().split('def reservar')[1].split('\ndef ')[0]
-    assert 'ON CONFLICT (project_id, operation_id) DO NOTHING' in cuerpo, (
-        'comprobar con SELECT y despues insertar deja una ventana entre las dos '
-        'consultas; dos envios simultaneos del mismo movil la encuentran')
-    assert 'EN_CURSO' in cuerpo
+def test_CASO_A_no_tiene_reserva_previa_porque_seria_un_estado_IMPOSIBLE():
+    """DEMOSTRADO contra PostgreSQL el 26-ago-2026.
 
+    Si la reserva y el cierre confirman juntos --que es lo correcto cuando todo
+    el efecto esta en la base-- un fallo antes del COMMIT revierte LAS DOS
+    COSAS: no queda fila que observar. Se habia escrito un estado `EN_CURSO`
+    para ese caso y se retiro.
 
-def test_EN_CURSO_es_un_estado_del_servidor_y_esta_declarado():
+    Un estado imposible es peor que uno que falte: hace creer que se cubrio un
+    caso que en realidad no existe.
+    """
     import sincronizacion_de_campo as sync
-    assert sync.EN_CURSO in sync.ESTADOS
+    assert not hasattr(sync, 'EN_CURSO')
+    assert 'EN_CURSO' not in sync.ESTADOS
+    # `anotar` es el camino del caso A: registro y acto, misma transaccion.
+    cuerpo = _motor().split('def anotar')[1].split(chr(10) + 'def ')[0]
+    # Lo que importa no es que el docstring NOMBRE el commit --lo explica-- sino
+    # que la funcion no lo LLAME: el acto y su registro confirman juntos, y esa
+    # frontera la fija quien llama.
+    assert '.commit()' not in cuerpo
+    assert 'MISMA transaccion' in cuerpo
+
+
+def test_el_reintento_tras_el_COMMIT_devuelve_lo_consolidado():
+    """El escenario clasico: el COMMIT ocurrio y la respuesta al movil se
+    perdio. Comprobado tambien contra la base: el segundo INSERT choca con la
+    llave de idempotencia y la fila sigue apuntando al MISMO objeto."""
     sql = _sql()
-    assert "'EN_CURSO'" in sql
-    # Y una fila EN_CURSO no exige motivo: su desenlace todavia no se sabe.
-    assert "estado IN ('APLICADA','EN_CURSO') OR motivo IS NOT NULL" in sql
+    assert 'idx_sync_idempotencia' in sql
+    cuerpo = _motor().split('def ya_procesada')[1].split(chr(10) + 'def ')[0]
+    assert 'SELECT estado, server_object_id, resultado' in cuerpo
+    assert 'intentos = intentos + 1' in cuerpo
 
 
-def test_cerrar_va_en_la_MISMA_transaccion_que_el_acto():
-    cuerpo = _motor().split('def cerrar')[1].split('\ndef ')[0]
-    assert 'commit' not in cuerpo.lower(), (
-        'si `cerrar` hiciera commit por su cuenta, el acto y su registro '
-        'dejarian de ser atomicos')
+def test_INDETERMINADA_es_SOLO_del_caso_B_y_se_llama_por_lo_que_es():
+    """«No ejecutado» y «ejecutado, respuesta desconocida» son estados distintos,
+    y el movil tiene que poder distinguirlos."""
+    import sincronizacion_de_campo as sync
+    assert sync.INDETERMINADA in sync.ESTADOS
+    fuente = _motor()
+    assert 'NO EJECUTADO' in fuente and 'RESPUESTA PERDIDA' in fuente
+    d = sync.indeterminada('el almacen no contesto', objeto_externo='evidencia/o/op')
+    assert d.estado == sync.INDETERMINADA
+    assert d.server_object_id is None
+    assert d.resultado['objeto_externo'] == 'evidencia/o/op'
+
+
+def test_una_INDETERMINADA_no_puede_quedarse_en_el_limbo():
+    """Sin cuando empezo y sin diagnostico no hay por donde reconciliarla."""
+    sql = _sql()
+    assert 'iniciada_en' in sql and 'diagnostico' in sql
+    assert 'ck_sync_indeterminada_con_inicio' in sql
+    assert "estado <> 'INDETERMINADA' OR iniciada_en IS NOT NULL" in sql
+    # Y hay una cola por antiguedad, para que nadie tenga que acordarse.
+    assert 'idx_sync_indeterminadas' in sql
+    assert 'intentos' in sql
+
+
+def test_el_efecto_externo_tiene_SU_PROPIA_llave_idempotente():
+    """Es lo unico que permite reintentar una operacion de desenlace desconocido
+    sin arriesgarse a duplicar: se le PREGUNTA al almacen si el objeto existe,
+    en vez de suponerlo."""
+    import sincronizacion_de_campo as sync
+    a = sync.nombre_del_objeto_externo('obra-1', 'op-abc')
+    b = sync.nombre_del_objeto_externo('obra-1', 'op-abc')
+    assert a == b, 'el nombre tiene que ser determinista'
+    assert 'op-abc' in a and 'obra-1' in a
+    assert sync.nombre_del_objeto_externo('obra-1', 'op-otra') != a
+    assert 'objeto_externo' in _sql()
+
+
+def test_la_reserva_del_caso_B_confirma_POR_SU_CUENTA():
+    """Si fuera parte de la transaccion del acto, un fallo la revertiria y se
+    perderia la unica constancia de que se lanzo una subida que quiza ocurrio."""
+    cuerpo = _motor().split('def reservar_efecto_externo')[1].split(chr(10) + 'def ')[0]
+    assert 'ON CONFLICT (project_id, operation_id) DO NOTHING' in cuerpo
+    assert 'INDETERMINADA' in cuerpo
+    assert 'iniciada_en' in cuerpo or 'CURRENT_TIMESTAMP' in cuerpo
+    assert 'CONFIRMA POR SU CUENTA' in cuerpo
 
 
 # ══ 3 · EL SERVIDOR ES LA AUTORIDAD ════════════════════════════════════════

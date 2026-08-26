@@ -79,7 +79,20 @@ CREATE TABLE IF NOT EXISTS sync_operaciones (
     -- es un acto sobre algo que no existe.
     depende_de        UUID,
 
-    intentos          INTEGER     NOT NULL DEFAULT 1
+    intentos          INTEGER     NOT NULL DEFAULT 1,
+
+    -- ── SOLO PARA EL CASO B ───────────────────────────────────────────────
+    -- Cuando empezo el efecto externo y que se sabe de el. Sin estas dos, una
+    -- operacion INDETERMINADA no se puede reconciliar nunca: no habria ni por
+    -- donde empezar a preguntar.
+    iniciada_en       TIMESTAMP WITH TIME ZONE,
+    diagnostico       TEXT,
+    -- El NOMBRE DETERMINISTA del objeto externo, derivado de `operation_id`.
+    -- Es la llave de idempotencia DEL EFECTO EXTERNO: permite preguntarle al
+    -- almacen si la subida ocurrio, en vez de suponerlo. Sin ella no se podria
+    -- reintentar una operacion de desenlace desconocido sin arriesgarse a
+    -- duplicar.
+    objeto_externo    TEXT
 );
 
 DO $$ BEGIN
@@ -98,22 +111,41 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_idempotencia
     ON sync_operaciones(project_id, operation_id);
 
--- Estados del ACTO en el servidor. `PENDING` y `SYNCING` son del cliente y no
--- llegan aqui: aqui solo se anota lo que el servidor decidio.
+-- ═══ LOS ESTADOS, Y LOS DOS CASOS QUE NO SE PUEDEN CONFUNDIR ═══
 --
--- `EN_CURSO` NO estaba en el diseno inicial y hace falta. El acto se RESERVA
--- antes de ejecutarlo --insertando su fila-- y se cierra despues. Si el proceso
--- muriera en medio, la fila se queda en EN_CURSO: el reenvio ve que ese acto ya
--- se intento y NO lo repite, que es lo unico que importa. Sin la reserva previa
--- habria una ventana en la que el acto surtio efecto y no quedo registrado, y
--- el siguiente reenvio lo aplicaria otra vez -- justo lo que la idempotencia
--- viene a impedir.
+-- `PENDING` y `SYNCING` son del CLIENTE: describen una operacion que el
+-- servidor todavia no ha visto. Aqui solo se anota lo que el servidor decidio.
 --
--- Una fila EN_CURSO es una operacion cuyo desenlace nadie sabe. Se ve, se
--- cuenta y se reconcilia; no se limpia sola.
+-- CASO A · EFECTO ENTERAMENTE EN POSTGRESQL  (crear un issue, firmar un acta)
+--   Revalidacion, mutacion de dominio, resultado canonico y estado van en UNA
+--   transaccion. Y entonces:
+--
+--       crash ANTES del COMMIT    -> cero efecto durable; el reintento ejecuta
+--       crash DESPUES del COMMIT  -> la llave de idempotencia devuelve lo ya
+--                                    consolidado; el acto NO se repite
+--
+--   DEMOSTRADO contra esta misma base el 26-ago-2026, dentro de una transaccion
+--   revertida. Y con ello se demostro tambien que un estado intermedio de
+--   «reservado» NO SE OBSERVA NUNCA en este caso: si la reserva y el cierre
+--   confirman juntos, un fallo antes del COMMIT revierte las dos cosas y no
+--   queda fila que mirar. Se habia escrito uno --`EN_CURSO`-- y se retiro: era
+--   un estado imposible, que es peor que uno que falte.
+--
+-- CASO B · EFECTO FUERA DE LA BASE  (subir la foto de evidencia)
+--   La fila y el objeto del almacen NO son atomicos. Si la subida no responde,
+--   el efecto es DESCONOCIDO -- y eso NO es lo mismo que «no ejecutado»:
+--
+--       NO EJECUTADO                 se puede reintentar sin pensar
+--       EJECUTADO, RESPUESTA PERDIDA reintentar a ciegas duplicaria
+--
+--   El movil necesita poder distinguirlos, asi que el estado se llama por lo
+--   que es: `INDETERMINADA`. Lleva `iniciada_en` y `diagnostico` porque una
+--   operacion de desenlace desconocido sin cuando empezo ni que se sabe de ella
+--   no se puede reconciliar: se queda ahi para siempre.
 DO $$ BEGIN
     ALTER TABLE sync_operaciones ADD CONSTRAINT ck_sync_estado
-        CHECK (estado IN ('EN_CURSO','APLICADA','RECHAZADA','CONFLICTO','BLOQUEADA'));
+        CHECK (estado IN ('APLICADA','RECHAZADA','CONFLICTO','BLOQUEADA',
+                          'INDETERMINADA'));
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Lista CERRADA de objetos. La primera vertical son dos, y ampliarla es una
@@ -129,6 +161,14 @@ DO $$ BEGIN
         CHECK (action IN ('CREATE','SET_ITEMS','SIGN','ADD_EVIDENCE','MARK_CORRECTED'));
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+-- Una INDETERMINADA tiene que decir CUANDO empezo. Sin eso no hay forma de
+-- saber si lleva dos minutos o dos semanas, que es la diferencia entre esperar
+-- y reconciliar.
+DO $$ BEGIN
+    ALTER TABLE sync_operaciones ADD CONSTRAINT ck_sync_indeterminada_con_inicio
+        CHECK (estado <> 'INDETERMINADA' OR iniciada_en IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 -- Una operacion APLICADA tiene que decir SOBRE QUE quedo aplicada. Sin eso el
 -- cliente no puede atar su objeto local al canonico, y al reintentar volveria a
 -- crear.
@@ -141,7 +181,7 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 -- quien perdio su trabajo a adivinar si puede recuperarlo.
 DO $$ BEGIN
     ALTER TABLE sync_operaciones ADD CONSTRAINT ck_sync_negativa_con_motivo
-        CHECK (estado IN ('APLICADA','EN_CURSO') OR motivo IS NOT NULL);
+        CHECK (estado = 'APLICADA' OR motivo IS NOT NULL);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Para atar el objeto local al canonico sin recorrer la tabla entera.
@@ -149,5 +189,10 @@ CREATE INDEX IF NOT EXISTS idx_sync_objeto_local
     ON sync_operaciones(project_id, local_object_id);
 CREATE INDEX IF NOT EXISTS idx_sync_pendientes
     ON sync_operaciones(project_id, estado) WHERE estado <> 'APLICADA';
+
+-- Las de desenlace desconocido, por antiguedad: es la cola de reconciliacion.
+-- Existe para que nadie tenga que acordarse de mirarlas.
+CREATE INDEX IF NOT EXISTS idx_sync_indeterminadas
+    ON sync_operaciones(iniciada_en) WHERE estado = 'INDETERMINADA';
 
 COMMIT;

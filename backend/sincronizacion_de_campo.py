@@ -95,24 +95,44 @@ ACCIONES = tuple(sorted({a for v in ACTOS_DE.values() for a in v}))
 #
 # PENDING y SYNCING son del CLIENTE: describen una operacion que el servidor
 # todavia no ha visto. Aqui solo se anota lo que el servidor ya decidio.
-EN_CURSO = 'EN_CURSO'        # reservado; el desenlace todavia no se sabe
 APLICADA = 'APLICADA'
-RECHAZADA = 'RECHAZADA'      # no entra, y no se reintenta sola
-CONFLICTO = 'CONFLICTO'      # el servidor se movio; decide una persona
-BLOQUEADA = 'BLOQUEADA'      # su predecesora no salio adelante
-ESTADOS = (EN_CURSO, APLICADA, RECHAZADA, CONFLICTO, BLOQUEADA)
+RECHAZADA = 'RECHAZADA'          # no entra, y no se reintenta sola
+CONFLICTO = 'CONFLICTO'          # el servidor se movio; decide una persona
+BLOQUEADA = 'BLOQUEADA'          # su predecesora no salio adelante
+INDETERMINADA = 'INDETERMINADA'  # el efecto EXTERNO ocurrio o no; no se sabe
+ESTADOS = (APLICADA, RECHAZADA, CONFLICTO, BLOQUEADA, INDETERMINADA)
 
-# LA RESERVA PREVIA, y por que no basta con anotar al final.
+# ══ LOS DOS CASOS, Y POR QUE NO SE PUEDEN CONFUNDIR ═══════════════════════
 #
-# Si el acto se aplicara y el registro se escribiera despues, habria una ventana
-# --milisegundos, pero real-- en la que el acto surtio efecto sin quedar
-# registrado. El siguiente reenvio no encontraria nada y lo aplicaria OTRA VEZ,
-# que es exactamente lo que la idempotencia viene a impedir.
+# CASO A · EFECTO ENTERAMENTE EN POSTGRESQL   (crear un issue, firmar un acta)
 #
-# Por eso se RESERVA primero (`EN_CURSO`) y se cierra despues. Si el proceso
-# muere en medio, la fila se queda asi: el reenvio ve que ese acto ya se intento
-# y no lo repite. Que su desenlace sea desconocido es un problema mas pequeno
-# que duplicarlo, y ademas es VISIBLE.
+#   Revalidacion + mutacion + resultado canonico + estado, en UNA transaccion:
+#
+#       crash ANTES del COMMIT    -> cero efecto durable; el reintento ejecuta
+#       crash DESPUES del COMMIT  -> la llave de idempotencia devuelve lo ya
+#                                    consolidado; el acto NO se repite
+#
+#   DEMOSTRADO contra la base el 26-ago-2026 dentro de una transaccion
+#   revertida. Y con ello se demostro tambien que un estado intermedio de
+#   «reservado» NO SE OBSERVA NUNCA aqui: si la reserva y el cierre confirman
+#   juntos, un fallo antes del COMMIT revierte las dos cosas y no queda fila
+#   que mirar. Se habia escrito uno --`EN_CURSO`-- y se retiro. Un estado
+#   imposible es peor que uno que falte: hace creer que se cubrio un caso que
+#   en realidad no existe.
+#
+# CASO B · EFECTO FUERA DE LA BASE            (subir la foto de evidencia)
+#
+#   La fila y el objeto del almacen no son atomicos. Si la subida no responde,
+#   el efecto es DESCONOCIDO, y eso NO es «no ejecutado»:
+#
+#       NO EJECUTADO                    se reintenta sin pensar
+#       EJECUTADO, RESPUESTA PERDIDA    reintentar a ciegas duplicaria
+#
+#   El movil necesita distinguirlos, asi que el estado se llama por lo que es:
+#   INDETERMINADA. Y se puede SALIR de el sin adivinar, porque el objeto
+#   externo lleva un nombre DETERMINISTA derivado del `operation_id`: se le
+#   pregunta al almacen si existe. Eso es lo que permite reintentar sin
+#   duplicar.
 
 # Los que NO se reintentan solos. Reintentar un rechazo es insistir contra una
 # decision; reintentar un conflicto es pisar lo que otro hizo.
@@ -138,6 +158,29 @@ def bloqueada(motivo, code='DEPENDENCIA_NO_APLICADA'):
     return Desenlace(BLOQUEADA, None, None, motivo, code)
 
 
+def indeterminada(motivo, code='EFECTO_EXTERNO_DESCONOCIDO', objeto_externo=None):
+    """SOLO para el caso B. El efecto externo pudo ocurrir o no.
+
+    No es un fallo: es la respuesta honesta cuando el almacen no contesta. Lo
+    que la hace reconciliable --y no un limbo-- es que el objeto externo tiene
+    un nombre determinista: se le puede preguntar despues si existe.
+    """
+    return Desenlace(INDETERMINADA, None, {'objeto_externo': objeto_externo},
+                     motivo, code)
+
+
+def nombre_del_objeto_externo(project_id, operation_id):
+    """La llave de idempotencia DEL EFECTO EXTERNO.
+
+    Derivar el nombre del `operation_id` hace que subir dos veces escriba el
+    MISMO objeto --no dos-- y, sobre todo, permite PREGUNTAR si la subida
+    ocurrio en vez de suponerlo. Sin esto, una operacion de desenlace
+    desconocido no se podria reintentar nunca sin arriesgarse a duplicar la
+    evidencia.
+    """
+    return 'evidencia/%s/%s' % (project_id, operation_id)
+
+
 # ── LA LLAVE DE IDEMPOTENCIA ───────────────────────────────────────────────
 
 def ya_procesada(cur, project_id, operation_id):
@@ -160,38 +203,47 @@ def ya_procesada(cur, project_id, operation_id):
     return Desenlace(f[0], f[1], f[2], f[3], f[4])
 
 
-def reservar(cur, op, actor_id, actor_visible):
-    """Reserva el ACTO antes de ejecutarlo. True si la reserva es NUESTRA.
+def reservar_efecto_externo(cur, op, actor_id, actor_visible, objeto_externo):
+    """SOLO PARA EL CASO B. Deja constancia ANTES de tocar el almacen.
 
-    False significa que otro envio ya lo reservo: es un reenvio, y quien llama
-    tiene que devolver el desenlace guardado en vez de ejecutar.
+    True si la reserva es nuestra; False si otro envio ya la hizo --entonces es
+    un reenvio y hay que devolver lo guardado, no volver a subir--.
+
+    ESTA RESERVA CONFIRMA POR SU CUENTA, y ahi esta la diferencia con el caso A:
+    si fuera parte de la transaccion del acto, un fallo la revertiria y
+    perderiamos la unica constancia de que se lanzo una subida que quiza
+    ocurrio. En el caso A eso da igual --si no confirma, no paso nada-- pero
+    aqui no, porque el almacen no participa de nuestra transaccion.
 
     `ON CONFLICT DO NOTHING` hace de la llave de idempotencia una carrera que
-    solo gana uno. Comprobar antes con un SELECT y insertar despues dejaria una
-    ventana entre las dos consultas -- y dos envios simultaneos del mismo movil
+    gana uno solo. Comprobar con un SELECT y despues insertar dejaria una
+    ventana entre las dos consultas, y dos envios simultaneos del mismo movil
     reconectando no son hipoteticos: pasan cuando la red va y viene.
     """
     cur.execute("""INSERT INTO sync_operaciones
                      (operation_id, project_id, object_type, local_object_id,
                       action, payload, base_version, capturado_en,
-                      actor_id, actor_visible, estado, depende_de)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                      actor_id, actor_visible, estado, depende_de,
+                      iniciada_en, objeto_externo, motivo, code)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                           CURRENT_TIMESTAMP,%s,%s,%s)
               ON CONFLICT (project_id, operation_id) DO NOTHING
                    RETURNING id""",
                 (op['operation_id'], str(op['project_id']), op['object_type'],
                  op['local_object_id'], op['action'],
                  json.dumps(op.get('payload') or {}), op.get('base_version'),
-                 op.get('capturado_en'), actor_id, actor_visible, EN_CURSO,
-                 op.get('depende_de')))
+                 op.get('capturado_en'), actor_id, actor_visible, INDETERMINADA,
+                 op.get('depende_de'), objeto_externo,
+                 'subida de evidencia lanzada; desenlace todavia desconocido',
+                 'EFECTO_EXTERNO_EN_VUELO'))
     return cur.fetchone() is not None
 
 
-def cerrar(cur, project_id, operation_id, desenlace):
-    """Cierra la reserva con su desenlace. En la MISMA transaccion que el acto.
+def cerrar(cur, project_id, operation_id, desenlace, diagnostico=None):
+    """Cierra una reserva del CASO B con su desenlace, ya conocido.
 
-    Si esto y el acto no fueran atomicos, existiria un instante en que uno de
-    los dos ocurrio sin el otro: o un acto sin registrar --que se duplicaria al
-    reintentar-- o un registro de algo que no paso.
+    En el caso A no se usa: alli no hay reserva que cerrar, porque el acto y su
+    registro confirman juntos con `anotar`.
     """
     cur.execute("""UPDATE sync_operaciones
                       SET estado = %s, server_object_id = %s, resultado = %s,
@@ -200,15 +252,23 @@ def cerrar(cur, project_id, operation_id, desenlace):
                 (desenlace.estado, desenlace.server_object_id,
                  json.dumps(desenlace.resultado or {}), desenlace.motivo,
                  desenlace.code, str(project_id), str(operation_id)))
+    if diagnostico:
+        cur.execute('UPDATE sync_operaciones SET diagnostico = %s '
+                    ' WHERE project_id = %s AND operation_id = %s',
+                    (diagnostico, str(project_id), str(operation_id)))
 
 
 def anotar(cur, op, actor_id, actor_visible, desenlace):
-    """Deja escrito el desenlace. Nunca revienta el acto que acaba de aplicarse.
+    """EL CAMINO DEL CASO A: el registro va en la MISMA transaccion que el acto.
 
-    Si esto fallara DESPUES de aplicar, la operacion habria surtido efecto sin
-    quedar registrada -- y el siguiente reenvio la aplicaria otra vez. Por eso
-    va en la MISMA transaccion que el acto, y quien llama no hace commit hasta
-    tener las dos cosas.
+    No hay reserva previa, porque no hace falta y porque seria un estado
+    imposible de observar: si el COMMIT no llega se revierten las dos cosas y el
+    reintento vuelve a ejecutar con toda la razon; si llega, la llave de
+    idempotencia devuelve lo consolidado.
+
+    Quien llama NO hace commit hasta tener el acto y su registro. Separarlos
+    dejaria un instante en que uno ocurrio sin el otro: o un acto sin registrar
+    --que se duplicaria al reintentar-- o un registro de algo que no paso.
     """
     cur.execute("""INSERT INTO sync_operaciones
                      (operation_id, project_id, object_type, local_object_id,
