@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Banco · pantalla de campo</title>
+<style>body{margin:0;font-family:system-ui,sans-serif;background:#fff}</style>
+<div id="raiz"></div>
+<script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import * as local from '/src/offline/almacenLocal.js';
+import Pantalla from '/src/components/SincronizacionModule.jsx';
+
+const A = { canonical_user_id: '101', project_id: 'obra-1' };
+
+// Una jornada de campo con LOS SIETE desenlaces, para ver los siete de una vez.
+const casos = [
+  ['PENDIENTE',     'ISSUE',     'CREATE',         { titulo: 'Fisura en losa eje 4' }, null],
+  ['REINTENTABLE',  'ISSUE',     'ADD_EVIDENCE',   { titulo: 'Fisura en losa eje 4' },
+   { error: 'no se pudo procesar y no quedó nada hecho; vuelve a enviarlo' }],
+  ['BLOQUEADA',     'ISSUE',     'MARK_CORRECTED', { titulo: 'Junta sin sellar P-12' },
+   { error: 'la operación de la que depende terminó en CONFLICTO' }],
+  ['CONFLICTO',     'PROTOCOLO', 'SET_ITEMS',      { titulo: 'Vaciado zapata Z-08' },
+   { error: 'esta acta ya está en «Liberado»: lo que se comprobó quedó fijado',
+     conflict_state: { estado: 'Liberado', codigo: 'PR-014' } }],
+  ['RECHAZADA',     'ISSUE',     'CREATE',         { titulo: 'Desnivel en rampa' },
+   { error: 'el responsable que elegiste en campo ya no es miembro de esta obra' }],
+  ['INDETERMINADA', 'ISSUE',     'ADD_EVIDENCE',   { titulo: 'Corrosión en anclaje' },
+   { error: 'no se pudo saber si la evidencia llegó a subirse' }],
+  ['SINCRONIZADA',  'PROTOCOLO', 'CREATE',         { titulo: 'Encofrado muro M-3' }, null],
+];
+
+await new Promise(r => { const d = indexedDB.deleteDatabase('alephia_campo');
+                         d.onsuccess = d.onerror = d.onblocked = r; });
+
+let i = 0;
+for (const [estado, tipo, accion, payload, extra] of casos) {
+  i++;
+  const op = await local.encolar(A, {
+    operation_id: 'op-' + i, local_object_id: 'loc-' + i,
+    object_type: tipo, action: accion, payload,
+    capturado_en: new Date(Date.now() - i * 37 * 60000).toISOString(),
+  });
+  if (estado !== 'PENDIENTE') {
+    await local.marcar(op.operation_id, { estado, ...(extra || {}),
+                                          ultimo_error: (extra || {}).error });
+  }
+}
+// Trabajo de OTRA cuenta en el mismo dispositivo.
+await local.encolar({ canonical_user_id: '999', project_id: 'obra-1' }, {
+  operation_id: 'op-ajena', local_object_id: 'loc-ajena',
+  object_type: 'ISSUE', action: 'CREATE', payload: { titulo: 'de otro' } });
+
+await local.guardarSnapshot(A, 'protocolos', { plantillas: [{ id: '7', version: 1 }] });
+await local.guardarSnapshot(A, 'miembros', { users: [] });
+
+createRoot(document.getElementById('raiz')).render(
+  React.createElement(Pantalla, {
+    project: { id: 'obra-1', scope_escritura: 'obra-1', name: 'PQT8 Talara' },
+    usuario: { id: 101, email: 'inspector@obra.pe' },
+  })
+);
+</script>

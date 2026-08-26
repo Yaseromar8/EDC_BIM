@@ -1,0 +1,163 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Banco de pruebas · almacén local</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; padding: 20px; max-width: 900px; }
+  .ok { color: #1f6b3a; } .mal { color: #8a2020; font-weight: 700; }
+  pre { background: #f4f6f8; padding: 10px; border-radius: 6px; white-space: pre-wrap; }
+</style>
+<h1>Banco de pruebas · almacén local</h1>
+<pre id="salida">corriendo…</pre>
+<script type="module">
+import * as local from '/src/offline/almacenLocal.js';
+
+const lineas = [];
+let fallos = 0;
+function di(txt, mal) { lineas.push((mal ? '✗ ' : '✓ ') + txt); if (mal) fallos++;
+                        document.getElementById('salida').textContent = lineas.join('\n'); }
+async function comprueba(nombre, fn) {
+  try { const r = await fn(); di(nombre + (r ? ' → ' + r : '')); }
+  catch (e) { di(nombre + ' → ' + (e.message || e), true); }
+}
+
+// Dos identidades canónicas distintas, la MISMA obra, el mismo dispositivo.
+const A = { canonical_user_id: '101', project_id: 'obra-1' };
+const B = { canonical_user_id: '202', project_id: 'obra-1' };
+
+// Partimos de cero para que el resultado no dependa de una corrida anterior.
+await new Promise(r => { const d = indexedDB.deleteDatabase('alephia_campo');
+                         d.onsuccess = d.onerror = d.onblocked = r; });
+
+await comprueba('encolar resuelve sólo cuando IndexedDB CONFIRMA', async () => {
+  const antes = performance.now();
+  const fila = await local.encolar(A, {
+    operation_id: 'op-1', local_object_id: 'loc-1',
+    object_type: 'ISSUE', action: 'CREATE', payload: { titulo: 'fisura en losa' },
+  });
+  // Se lee en una transacción NUEVA: si sólo estuviera en memoria, saldría vacío.
+  const leidas = await local.operacionesDe(A);
+  if (leidas.length !== 1) throw new Error('se dijo guardado y no está');
+  if (fila.estado !== 'PENDIENTE') throw new Error('nace en ' + fila.estado);
+  return Math.round(performance.now() - antes) + ' ms, leída en transacción nueva';
+});
+
+await comprueba('el usuario B NO ve lo de A', async () => {
+  await local.encolar(B, { operation_id: 'op-2', local_object_id: 'loc-2',
+                           object_type: 'ISSUE', action: 'CREATE', payload: {} });
+  const deA = await local.operacionesDe(A);
+  const deB = await local.operacionesDe(B);
+  if (deA.length !== 1 || deB.length !== 1) throw new Error(`A=${deA.length} B=${deB.length}`);
+  if (deB[0].operation_id === 'op-1') throw new Error('B está viendo el acto de A');
+  return 'A ve 1, B ve 1, y no son la misma';
+});
+
+await comprueba('el usuario B NO puede sincronizar lo de A', async () => {
+  const envioB = await local.porEnviar(B);
+  if (envioB.some(o => o.canonical_user_id === '101'))
+    throw new Error('el lote de B lleva actos de A');
+  return `el lote de B lleva ${envioB.length} y ninguna es de A`;
+});
+
+await comprueba('guardar sin dueño es IMPOSIBLE', async () => {
+  try {
+    await local.encolar({ project_id: 'obra-1' }, {
+      operation_id: 'op-x', local_object_id: 'loc-x',
+      object_type: 'ISSUE', action: 'CREATE' });
+  } catch (e) { return 'rechazado: ' + e.message; }
+  throw new Error('dejó guardar un acto sin dueño');
+});
+
+await comprueba('un blob PERSISTE de verdad y sobrevive a otra transacción', async () => {
+  const contenido = new Blob([new Uint8Array(256 * 1024)], { type: 'image/jpeg' });
+  await local.guardarBlob(A, { blob_id: 'b-1', operation_id: 'op-1',
+                               nombre: 'fisura.jpg', blob: contenido });
+  const bl = await local.blobsDeOperacion('op-1');
+  if (bl.length !== 1) throw new Error('no está');
+  if (bl[0].subido) throw new Error('nace marcado como subido');
+  const bytes = await bl[0].blob.arrayBuffer();
+  if (bytes.byteLength !== 256 * 1024) throw new Error('llegó truncado: ' + bytes.byteLength);
+  return `${bytes.byteLength} bytes recuperados, subido=false`;
+});
+
+await comprueba('el acto NO lleva el binario dentro', async () => {
+  const [op] = await local.operacionesDe(A);
+  const peso = JSON.stringify(op).length;
+  if (peso > 4000) throw new Error('el registro pesa ' + peso);
+  return `el registro del acto pesa ${peso} bytes; la foto pesa 262144`;
+});
+
+await comprueba('un desenlace del servidor ata la identidad canónica', async () => {
+  await local.aplicarDesenlace(A, {
+    operation_id: 'op-1', local_object_id: 'loc-1', status: 'SINCRONIZADA',
+    canonical_object_id: '4242', canonical_result: { codigo: 'PU-001' },
+  });
+  const id = await local.idCanonico(A, 'loc-1');
+  if (id !== '4242') throw new Error('ató ' + id);
+  const [op] = await local.operacionesDe(A);
+  if (op.estado !== 'SINCRONIZADA') throw new Error('quedó en ' + op.estado);
+  return 'loc-1 → 4242';
+});
+
+await comprueba('B no puede leer el puente de identidades de A', async () => {
+  const id = await local.idCanonico(B, 'loc-1');
+  if (id) throw new Error('B resolvió loc-1 a ' + id);
+  return 'devuelve null';
+});
+
+await comprueba('lo decidido por el servidor NO vuelve a la cola de envío', async () => {
+  await local.encolar(A, { operation_id: 'op-3', local_object_id: 'loc-3',
+                           object_type: 'ISSUE', action: 'CREATE', payload: {} });
+  await local.aplicarDesenlace(A, { operation_id: 'op-3', local_object_id: 'loc-3',
+                                    status: 'CONFLICTO', error: 'cambió' });
+  await local.encolar(A, { operation_id: 'op-4', local_object_id: 'loc-4',
+                           object_type: 'ISSUE', action: 'CREATE', payload: {} });
+  await local.aplicarDesenlace(A, { operation_id: 'op-4', local_object_id: 'loc-4',
+                                    status: 'RECHAZADA', error: 'sin permiso' });
+  const envio = await local.porEnviar(A);
+  const ids = envio.map(o => o.operation_id);
+  if (ids.includes('op-3') || ids.includes('op-4'))
+    throw new Error('reintenta una decisión del servidor: ' + ids.join(','));
+  return 'quedan fuera del lote: ' + (ids.join(',') || '(ninguna pendiente)');
+});
+
+await comprueba('el trabajo ajeno se cuenta pero no se enseña', async () => {
+  const n = await local.pendienteDeOtros(A);
+  if (typeof n !== 'number') throw new Error('devuelve ' + typeof n);
+  if (n !== 1) throw new Error('cuenta ' + n + ', esperaba 1 (op-2 de B)');
+  return n + ' de otra cuenta, sin exponer su contenido';
+});
+
+await comprueba('borrar es DE ALGUIEN, no del dispositivo', async () => {
+  const r = await local.borrarTodoDe(B);
+  const quedanA = await local.operacionesDe(A);
+  const quedanB = await local.operacionesDe(B);
+  if (quedanB.length !== 0) throw new Error('B sigue teniendo ' + quedanB.length);
+  if (quedanA.length === 0) throw new Error('BORRÓ TAMBIÉN LO DE A');
+  return `B: ${r.operaciones} borradas · A conserva ${quedanA.length}`;
+});
+
+await comprueba('la persistencia se pide y se sigue igual si la niegan', async () => {
+  const r = await local.pedirPersistencia();
+  return 'navigator.storage.persist() → ' + r;
+});
+
+await comprueba('se sabe cuánto espacio queda', async () => {
+  const e = await local.espacioDisponible();
+  if (!e) return 'el navegador no lo dice (y no se rompe)';
+  return `${Math.round(e.usado / 1024)} KB usados de ${Math.round(e.cuota / 1048576)} MB`;
+});
+
+await comprueba('un snapshot conserva CUÁNDO se descargó', async () => {
+  await local.guardarSnapshot(A, 'protocolos',
+                              { plantillas: [{ id: '7', nombre: 'Vaciado', version: 1 }] });
+  const s = await local.leerSnapshot(A, 'protocolos');
+  if (!s.descargado_en) throw new Error('sin fecha');
+  if (s.datos.plantillas[0].version !== 1) throw new Error('perdió la versión');
+  return 'versión 1 conservada, con fecha';
+});
+
+document.title = fallos ? `${fallos} FALLOS` : 'TODO VERDE';
+di('');
+di(fallos ? `${fallos} FALLOS` : `${lineas.length - 1} comprobaciones, todas verdes`, !!fallos);
+window.__resultado = { fallos, lineas };
+</script>

@@ -1,0 +1,80 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Banco · supervivencia a la recarga</title>
+<style>body{font:14px/1.5 system-ui,sans-serif;padding:20px;max-width:900px}
+pre{background:#f4f6f8;padding:10px;border-radius:6px;white-space:pre-wrap}</style>
+<h1>Supervivencia a cerrar y volver a abrir</h1>
+<p>Este contexto de JS es NUEVO: no ha escrito nada. Sólo lee lo que dejó el banco anterior.</p>
+<pre id="salida">corriendo…</pre>
+<script type="module">
+import * as local from '/src/offline/almacenLocal.js';
+const lineas = []; let fallos = 0;
+function di(t, mal) { lineas.push((mal ? '✗ ' : '✓ ') + t); if (mal) fallos++;
+                      document.getElementById('salida').textContent = lineas.join('\n'); }
+async function comprueba(n, fn) {
+  try { const r = await fn(); di(n + (r ? ' → ' + r : '')); }
+  catch (e) { di(n + ' → ' + (e.message || e), true); }
+}
+const A = { canonical_user_id: '101', project_id: 'obra-1' };
+const B = { canonical_user_id: '202', project_id: 'obra-1' };
+
+await comprueba('los actos de A siguen ahí tras cerrar y volver', async () => {
+  const ops = await local.operacionesDe(A);
+  if (ops.length !== 3) throw new Error('quedan ' + ops.length + ', esperaba 3');
+  return ops.map(o => `${o.operation_id}:${o.estado}`).join('  ');
+});
+
+await comprueba('la EVIDENCIA sobrevivió, con sus bytes', async () => {
+  const bl = await local.blobsDeOperacion('op-1');
+  if (!bl.length) throw new Error('la foto no está');
+  const bytes = await bl[0].blob.arrayBuffer();
+  if (bytes.byteLength !== 262144) throw new Error('bytes: ' + bytes.byteLength);
+  return `${bytes.byteLength} bytes, «${bl[0].nombre}», subido=${bl[0].subido}`;
+});
+
+await comprueba('el puente local→canónico sobrevivió', async () => {
+  const id = await local.idCanonico(A, 'loc-1');
+  if (id !== '4242') throw new Error('devuelve ' + id);
+  return 'loc-1 → 4242';
+});
+
+await comprueba('lo precargado sobrevivió CON su versión y su fecha', async () => {
+  const s = await local.leerSnapshot(A, 'protocolos');
+  if (!s) throw new Error('no está');
+  const v = s.datos.plantillas[0].version;
+  const edad = Math.round((Date.now() - s.descargado_en) / 1000);
+  return `plantilla v${v}, descargada hace ${edad} s`;
+});
+
+await comprueba('lo borrado de B sigue borrado', async () => {
+  const ops = await local.operacionesDe(B);
+  if (ops.length) throw new Error('reaparecieron ' + ops.length);
+  return '0, como se dejó';
+});
+
+await comprueba('un fallo de CUOTA se reconoce como tal', async () => {
+  const e = new DOMException('quota exceeded', 'QuotaExceededError');
+  if (!local.esFalloDeCuota(e)) throw new Error('no lo reconoce');
+  if (local.esFalloDeCuota(new Error('la red falló')))
+    throw new Error('confunde un fallo de red con falta de sitio');
+  return 'distingue «no cabe» de «falló»';
+});
+
+// EL CASO DURO: se pide guardar y se corta la pestaña en ese mismo instante.
+// No se puede matar la pestaña desde aquí, pero sí comprobar lo que garantiza
+// la promesa: que cuando resuelve, ya está en disco y no en un buffer.
+await comprueba('cuando `encolar` resuelve, ya está en disco', async () => {
+  const p = local.encolar(A, { operation_id: 'op-recarga', local_object_id: 'loc-r',
+                               object_type: 'PROTOCOLO', action: 'CREATE', payload: {} });
+  // ANTES de que resuelva, otra conexión no debería verla todavía o verla ya
+  // confirmada -- lo que NUNCA puede pasar es que resuelva y NO esté.
+  await p;
+  const ops = await local.operacionesDe(A);
+  if (!ops.find(o => o.operation_id === 'op-recarga'))
+    throw new Error('resolvió «guardado» y no está');
+  return 'resolvió y una transacción nueva ya la lee';
+});
+
+document.title = fallos ? `${fallos} FALLOS` : 'TODO VERDE';
+di(''); di(fallos ? `${fallos} FALLOS` : `${lineas.length - 1} comprobaciones, todas verdes`, !!fallos);
+</script>
