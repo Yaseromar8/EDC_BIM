@@ -13,6 +13,7 @@ from flask import Blueprint, request, jsonify, g
 from db import get_db_connection, log_activity, resolve_project_id
 import estados_ecd as ecd
 from perimetro_de_obra import guardia_de_obra
+import plantillas_de_revision as plt
 
 reviews_bp = Blueprint('reviews', __name__)
 
@@ -305,6 +306,51 @@ def create_review():
     if negativa:
         return negativa
     items, steps = d.get('items') or [], d.get('steps') or []
+
+    # ── GAP 06 · APLICAR UNA PLANTILLA ────────────────────────────────────
+    #
+    # La expansion vive AQUI, dentro del alta de siempre, y no en una ruta
+    # paralela. Lo que sale de la plantilla son unos `steps` como cualquier
+    # otros: a partir de esta linea el codigo no distingue si los escribio una
+    # persona o los produjo un molde, y por tanto pasan por las MISMAS
+    # comprobaciones -- independencia autor/revisor, permiso sobre los
+    # documentos, idoneidad, revisor miembro de la obra.
+    #
+    # Y son una COPIA. La revision guarda su flujo en `steps`; la plantilla no
+    # vuelve a mirarse nunca mas. Cambiarla despues no toca esta revision.
+    procedencia = None
+    if d.get('plantilla_id') and not steps:
+        obra_p = resolve_project_id(d.get('model_urn') or '')
+        with get_db_connection() as _c:
+            _cur = _c.cursor()
+            _cur.execute("""SELECT id, alcance, project_id, nombre, pasos, activa, version
+                             FROM doc_review_plantillas WHERE id = %s""",
+                         (int(d['plantilla_id']),))
+            _p = _cur.fetchone()
+            if not _p:
+                return jsonify({"success": False,
+                                "error": "Esa plantilla no existe."}), 404
+            plantilla = {'id': str(_p[0]), 'alcance': _p[1], 'project_id': _p[2],
+                         'nombre': _p[3], 'pasos': _p[4] or [], 'activa': bool(_p[5]),
+                         'version': _p[6]}
+            if plantilla['alcance'] == plt.OBRA and plantilla['project_id'] != obra_p:
+                return jsonify({"success": False,
+                                "error": "Esa plantilla es de otra obra.",
+                                "code": "OTRA_OBRA"}), 409
+            if not plantilla['activa']:
+                return jsonify({
+                    "success": False,
+                    "error": "Esa plantilla está deshabilitada: no se pueden abrir "
+                             "revisiones nuevas con ella. Las que ya se abrieron "
+                             "siguen su curso.",
+                    "code": "PLANTILLA_DESACTIVADA"}), 409
+            res = plt.resolver(_cur, plantilla, obra_p, d.get('elecciones'))
+            if res.error:
+                return jsonify({"success": False, "error": res.error,
+                                "code": res.code, "opciones": res.opciones}), 409
+            steps = res.pasos
+            procedencia = plt.procedencia(plantilla)
+
     if not d.get('model_urn') or not d.get('title') or not items or not steps:
         return jsonify({"success": False, "error": "Faltan model_urn/title/items/steps"}), 400
     final_status = d.get('final_status', ecd.SHARED)
@@ -341,12 +387,20 @@ def create_review():
             actor = u.get('email') or u.get('name')
             historia = [{"event": "created", "by": actor,
                          "at": datetime.now(timezone.utc).isoformat()}]
+            # La PROCEDENCIA viaja con el nombre y la version aplicados, no solo
+            # con el id: «plantilla 4» dejaria de decir nada el dia que esa
+            # plantilla se renombre o cambie. Es traza, nunca autoridad.
             cur.execute("""INSERT INTO doc_reviews (model_urn, title, items, steps, final_status,
-                                                    created_by, history, codigo_idoneidad)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                                                    created_by, history, codigo_idoneidad,
+                                                    plantilla_id, plantilla_nombre,
+                                                    plantilla_version)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                         (d['model_urn'], d['title'], json.dumps(items), json.dumps(steps),
                          final_status, actor, json.dumps(historia),
-                         (d.get('codigo_idoneidad') or '').strip().upper() or None))
+                         (d.get('codigo_idoneidad') or '').strip().upper() or None,
+                         (procedencia or {}).get('plantilla_id'),
+                         (procedencia or {}).get('plantilla_nombre'),
+                         (procedencia or {}).get('plantilla_version')))
             rid = cur.fetchone()[0]
 
             # Arranca el turno del primer revisor: fija su plazo EN EL REVIEW, lo

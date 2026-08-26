@@ -177,7 +177,16 @@ def test_las_rutas_por_id_de_recurso_llevan_guardia():
                      # (routes/dashboards.py). Aparecio al declarar 'dashboards'
                      # en RECURSOS el 17-ago: la guardia existia desde antes, lo
                      # que faltaba era que este barrido supiera reconocerla.
-                     '_check_project_access')
+                     '_check_project_access',
+                     # GAP 06. `plantillas_revision.py` LEE la obra de la propia
+                     # fila de la plantilla --`SELECT alcance, project_id ... WHERE
+                     # id=%s`-- y despues llama a `guardia_de_obra` con ella y a
+                     # `_puede_definir`, que es fail-closed en los dos alcances:
+                     # admin de obra para una plantilla de OBRA, facultad de
+                     # entidad para una de ENTIDAD. Una plantilla de entidad NO
+                     # tiene obra a proposito, asi que `guardia_de_recurso` no
+                     # sirve aqui: `obra_del_recurso` no tendria de donde sacarla.
+                     '_puede_definir')
             tiene = 'guardia_de_recurso' in cuerpo or any(o in cuerpo for o in otras)
             if toca_obra and not tiene:
                 sin_guardia.append(f'{nombre}  {url}')

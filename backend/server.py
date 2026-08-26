@@ -912,6 +912,11 @@ from routes.issues import issues_bp
 app.register_blueprint(issues_bp, url_prefix='/api/issues')
 from routes.specs import specs_bp
 app.register_blueprint(specs_bp, url_prefix='/api/specs')
+# GAP 06. Las plantillas viven DENTRO de la herramienta `reviews` --configurar
+# el flujo no es otra capacidad que se activa aparte-- pero con su propio
+# prefijo, porque el objeto es otro: el molde, no el proceso.
+from routes.plantillas_revision import plantillas_revision_bp
+app.register_blueprint(plantillas_revision_bp, url_prefix='/api/review-templates')
 app.register_blueprint(plan_bp)
 from routes.attributes import attributes_bp, ensure_attributes_tables
 app.register_blueprint(attributes_bp)
