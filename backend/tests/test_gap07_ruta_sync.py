@@ -53,7 +53,9 @@ def test_un_fallo_de_servidor_NO_se_reporta_como_rechazo():
     """«Rechazada» le diria al movil que descarte trabajo que en realidad nunca
     se proceso. Si la transaccion no confirmo, el acto no ocurrio."""
     cuerpo = _cuerpo('sincronizar')
-    assert "'status': 'REINTENTABLE'" in cuerpo
+    assert "'status': sync.REINTENTABLE" in cuerpo, (
+        'se responde con la constante, no con un literal suelto que pueda '
+        'divergir del motor')
     assert 'ERROR_DE_SERVIDOR' in cuerpo
     # Y no se anota nada en ese camino: no hubo desenlace que anotar.
     tramo = cuerpo.split('except Exception as e:')[-1]
@@ -267,12 +269,140 @@ def test_lo_que_TODAVIA_no_se_sincroniza_lo_dice_en_vez_de_fallar_raro():
     assert 'ACTO_NO_SINCRONIZABLE' in cuerpo
     import routes.sync as rs
     import sincronizacion_de_campo as s
-    # Hoy: los tres actos del issue. Los del protocolo, declarados y pendientes.
+    # DOS DOMINIOS sobre el MISMO motor, que es lo que demuestra que esto es
+    # infraestructura y no «offline para issues» disfrazado.
     assert set(rs.DESPACHO) == {(s.ISSUE, s.CREATE), (s.ISSUE, s.MARK_CORRECTED),
-                                (s.ISSUE, s.ADD_EVIDENCE)}
+                                (s.ISSUE, s.ADD_EVIDENCE),
+                                (s.PROTOCOLO, s.CREATE), (s.PROTOCOLO, s.SET_ITEMS)}
+    # Firmar se hace CON conexion, a proposito, y se dice.
+    assert (s.PROTOCOLO, s.SIGN) not in rs.DESPACHO
 
 
 def test_hay_un_techo_de_lote():
     cuerpo = _cuerpo('sincronizar')
     assert 'MAX_POR_LOTE' in cuerpo
     assert 'LOTE_DEMASIADO_GRANDE' in cuerpo
+
+
+# ══ 8 · LA FRONTERA REINTENTABLE / INDETERMINADA ═══════════════════════════
+
+def test_un_acto_que_pudo_tocar_el_EXTERIOR_no_cae_en_REINTENTABLE():
+    """El agujero seria un `except` generico devolviendo «reintentalo» sobre un
+    efecto que quiza ya ocurrio. Los actos que pueden tocar el exterior estan
+    DECLARADOS, y ese camino pasa por la semantica de efecto externo."""
+    import sincronizacion_de_campo as s
+    assert s.puede_tocar_el_exterior('ISSUE', 'ADD_EVIDENCE')
+    assert not s.puede_tocar_el_exterior('ISSUE', 'CREATE')
+    assert not s.puede_tocar_el_exterior('PROTOCOLO', 'SET_ITEMS')
+
+    cuerpo = _cuerpo('sincronizar')
+    tramo = cuerpo.split('except Exception as e:')[-1]
+    # La bifurcacion existe y va ANTES de responder REINTENTABLE.
+    assert 'puede_tocar_el_exterior' in tramo
+    assert '_registrar_indeterminada' in tramo
+    # La bifurcacion va ANTES de la respuesta REINTENTABLE, y sale con `continue`
+    # para que un acto con efecto externo posible nunca llegue a ella.
+    assert tramo.index('puede_tocar_el_exterior') < tramo.index('sync.REINTENTABLE')
+    salida = tramo.split('puede_tocar_el_exterior')[1]
+    assert salida.index('continue') < salida.index('sync.REINTENTABLE')
+
+
+def test_la_constancia_del_efecto_externo_va_en_conexion_NUEVA():
+    """La del acto acaba de fallar y su transaccion esta envenenada: escribir
+    ahi no dejaria constancia de nada."""
+    cuerpo = _cuerpo('_registrar_indeterminada')
+    assert 'with get_db_connection()' in cuerpo
+    assert 'reservar_efecto_externo' in cuerpo
+    assert 'conn.commit()' in cuerpo
+    # Y si ni eso se pudiera, se responde INDETERMINADA igualmente: lo que NO se
+    # puede es decir «reintentalo» sin saber.
+    assert 'SIN registrar' in cuerpo
+
+
+def test_REINTENTABLE_no_es_un_estado_del_REGISTRO():
+    """No deja fila: en PostgreSQL, que la transaccion no confirme significa
+    literalmente que no paso nada."""
+    import sincronizacion_de_campo as s
+    assert s.REINTENTABLE not in s.ESTADOS
+    sql = io.open(os.path.join(RAIZ, 'sql', '21_gap07_sincronizacion_de_campo.sql'),
+                  encoding='utf-8').read()
+    assert "'REINTENTABLE'" not in sql
+
+
+def test_capturado_en_NO_se_describe_como_prueba_autoritativa():
+    """Un reloj de movil se puede mover, y aqui no se verifica el dispositivo.
+    Describirlo como prueba seria sobrevender lo que el dato vale."""
+    for fichero in ('sincronizacion_de_campo.py',
+                    'sql/21_gap07_sincronizacion_de_campo.sql'):
+        fuente = io.open(os.path.join(RAIZ, fichero), encoding='utf-8').read()
+        assert 'unica prueba' not in fuente, fichero
+        assert 'DECLARADO' in fuente.upper(), fichero
+    motor = io.open(os.path.join(RAIZ, 'sincronizacion_de_campo.py'),
+                    encoding='utf-8').read()
+    assert 'AUTORITATIVO' in motor
+    assert 'NO es prueba de cuando ocurrio el acto' in motor
+
+
+# ══ 9 · LA VERTICAL DE PROTOCOLOS · MISMO MOTOR, OTRO DOMINIO ══════════════
+
+def test_el_protocolo_usa_EL_MISMO_motor_y_no_uno_paralelo():
+    """Mismo `operation_id`, mismo modelo de cola, misma revalidacion, misma
+    idempotencia. Lo unico distinto es la semantica."""
+    fuente = _ruta()
+    # UNA sola tabla de operaciones y UNA sola llave de idempotencia: los actos
+    # de protocolo no tienen un registro propio ni un camino paralelo.
+    assert 'sync_operaciones' not in fuente, (
+        'la ruta escribe en la tabla del motor por su cuenta en vez de usarlo')
+    assert fuente.count('sync.ya_procesada') == 1, 'una sola puerta de reenvio'
+    assert fuente.count('sync.ordenar') == 1, 'un solo orden'
+    # `sync.anotar` aparece una vez por camino de salida --y eso es correcto--
+    # pero SIEMPRE es el mismo registro del mismo motor.
+    assert 'import sincronizacion_de_campo as sync' in fuente
+    # Y los actos de protocolo entran por el MISMO despacho.
+    import routes.sync as rs
+    import sincronizacion_de_campo as s
+    assert rs.DESPACHO[(s.PROTOCOLO, s.CREATE)].__name__ == '_protocolo_create'
+    assert rs.DESPACHO[(s.PROTOCOLO, s.SET_ITEMS)].__name__ == '_protocolo_set_items'
+
+
+def test_el_acta_se_lee_BLOQUEANDO_igual_que_el_issue():
+    cuerpo = _cuerpo('_acta_leer_bloqueando')
+    assert 'FOR UPDATE' in cuerpo
+    marcar = _cuerpo('_protocolo_set_items')
+    assert marcar.index('_acta_leer_bloqueando') < marcar.index("d['estado'] != pro.BORRADOR")
+
+
+def test_una_acta_FIRMADA_no_se_edita_desde_campo():
+    """Es lo que la hace valer algo. Y el desenlace es CONFLICTO, no rechazo: no
+    es culpa de quien la marco que el mundo se moviera."""
+    cuerpo = _cuerpo('_protocolo_set_items')
+    assert 'ACTA_NO_EDITABLE' in cuerpo
+    assert 'en_conflicto' in cuerpo.split('ACTA_NO_EDITABLE')[0][-400:]
+    assert 'no se ha perdido' in cuerpo.lower()
+
+
+def test_la_plantilla_se_COPIA_tambien_cuando_el_acta_nace_sin_cobertura():
+    """Si la plantilla cambia manana, esta acta seguira diciendo lo que se
+    comprobo hoy. Que se levantara en campo no cambia esa regla."""
+    cuerpo = _cuerpo('_protocolo_create')
+    assert 'protocolo_nombre' in cuerpo and 'protocolo_version' in cuerpo
+    assert "'resultado': pro.PENDIENTE" in cuerpo
+    assert 'PLANTILLA_DESACTIVADA' in cuerpo
+    assert 'PLANTILLA_SIN_PUNTOS' in cuerpo
+
+
+def test_los_puntos_que_llegan_tienen_que_CUADRAR_con_los_del_acta():
+    """Si no cuadran, la plantilla cambio o el acta no es la que el movil cree.
+    Escribirlos igualmente machacaria puntos que no son los mismos."""
+    cuerpo = _cuerpo('_protocolo_set_items')
+    assert 'PUNTOS_NO_CUADRAN' in cuerpo
+    assert 'RESULTADO_DESCONOCIDO' in cuerpo
+
+
+def test_la_semantica_del_protocolo_NO_se_reescribe_en_sync():
+    """Vive donde siempre: `flujo_de_protocolo`."""
+    fuente = _ruta()
+    assert 'import flujo_de_protocolo as pro' in fuente
+    assert 'pro.RESULTADOS' in fuente
+    assert 'pro.veredicto_que_corresponde' in fuente
+    assert 'pro.BORRADOR' in fuente

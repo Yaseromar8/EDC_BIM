@@ -43,10 +43,20 @@ cobertura. En cada sincronizacion se revalida TODO contra el servidor:
     estado actual del objeto
 
 Y `actor_id` NO viene del dispositivo. Viene de la sesion autenticada al
-sincronizar. Lo que si se conserva del campo es CUANDO se hizo: `capturado_en`,
-aparte de `recibida_en`. Son dos hechos distintos, y mezclarlos borraria la
-unica prueba de que el trabajo se hizo en obra y no en la oficina tres dias
-despues.
+sincronizar.
+
+LAS DOS MARCAS DE TIEMPO, Y LO QUE CADA UNA VALE
+-------------------------------------------------
+    capturado_en   DECLARADO POR EL DISPOSITIVO. Es lo que el movil dice que
+                   marcaba su reloj. Util para ordenar el trabajo de una
+                   persona y para contarlo en un informe.
+    recibida_en    AUTORITATIVO. Lo pone el servidor y nadie mas lo toca.
+
+`capturado_en` NO es prueba de cuando ocurrio el acto: un reloj de movil se
+puede mover, y este producto no verifica el dispositivo. Se conserva porque es
+informacion util y porque perderla haria imposible reconstruir una jornada; no
+porque demuestre nada. Si algun dia hiciera falta que lo demostrara, eso es
+attestation del dispositivo -- otro problema, y no este.
 
 NO SE VACIA LA COLA A LA FUERZA
 --------------------------------
@@ -137,6 +147,43 @@ ESTADOS = (APLICADA, RECHAZADA, CONFLICTO, BLOQUEADA, INDETERMINADA)
 # Los que NO se reintentan solos. Reintentar un rechazo es insistir contra una
 # decision; reintentar un conflicto es pisar lo que otro hizo.
 DEFINITIVOS = (RECHAZADA, CONFLICTO)
+
+# ══ LA FRONTERA QUE NO SE PUEDE DEGRADAR ═══════════════════════════════════
+#
+#     REINTENTABLE    sabemos que NINGUN efecto durable ocurrio
+#     INDETERMINADA   pudo ocurrir un efecto externo y no conocemos su desenlace
+#
+# No son grados de lo mismo. Reintentar lo primero es correcto; reintentar lo
+# segundo a ciegas duplica.
+#
+# `REINTENTABLE` no es un estado del registro --no deja fila-- sino lo que se le
+# responde al movil cuando la transaccion no confirmo: en PostgreSQL eso
+# significa literalmente que no paso nada.
+#
+# EL PELIGRO ESTA EN EL `except` GENERICO. Si un acto pudo lanzar un efecto
+# fuera de la base y su fallo se atrapa con un catch que responde REINTENTABLE,
+# el movil reintentaria sobre un efecto que quiza ya ocurrio. Por eso los actos
+# que pueden tocar el exterior estan DECLARADOS, y quien los ejecuta tiene que
+# pasar por la semantica de efecto externo -- reserva durable, objeto
+# determinista, INDETERMINADA cuando toca, reconciliacion despues.
+REINTENTABLE = 'REINTENTABLE'   # respuesta al movil; NO se anota en el registro
+
+# Actos que PUEDEN iniciar un efecto fuera de PostgreSQL. Lista CERRADA: si
+# alguien anade uno nuevo que suba, descargue o llame a un tercero, tiene que
+# declararlo aqui -- y hay un tripwire que lo comprueba.
+CON_EFECTO_EXTERNO = frozenset({
+    (ISSUE, ADD_EVIDENCE),
+})
+
+
+def puede_tocar_el_exterior(object_type, action):
+    """¿Este acto puede haber dejado algo fuera de la base?
+
+    Si la respuesta es si, un fallo NO se puede resolver con «reintentalo»: hay
+    que dejar constancia y averiguar despues si el efecto ocurrio.
+    """
+    return (object_type, action) in CON_EFECTO_EXTERNO
+
 
 Desenlace = collections.namedtuple(
     'Desenlace', ('estado', 'server_object_id', 'resultado', 'motivo', 'code'))

@@ -52,6 +52,7 @@ from perimetro_de_obra import guardia_de_obra
 import acceso_a_herramientas as _ath
 import encargos as _enc
 import flujo_de_issue as iss
+import flujo_de_protocolo as pro
 import flujo_de_registro as reg
 import herramientas_de_obra as _hdo
 import sincronizacion_de_campo as sync
@@ -357,11 +358,211 @@ def _issue_add_evidence(cur, obra, op, iid):
                                'evidencias': len(evidencia)})
 
 
+
+
+# ══ LOS ACTOS · PROTOCOLO ══════════════════════════════════════════════════
+#
+# EL MISMO MOTOR, OTRO DOMINIO. Esta vertical existe para demostrar que lo
+# construido es infraestructura y no «offline para issues» disfrazado: mismo
+# `operation_id`, mismo modelo de cola, misma revalidacion, misma idempotencia,
+# mismo tratamiento de dependencias y de conflicto.
+#
+# Lo unico que cambia es la SEMANTICA, que vive donde siempre --en
+# `flujo_de_protocolo`-- y no se reescribe aqui.
+
+def _acta_leer_bloqueando(cur, aid):
+    cur.execute("""SELECT id, project_id, codigo, titulo, estado, items,
+                          autor_id, responsable_id, history, model_urn
+                     FROM doc_actas WHERE id = %s FOR UPDATE""", (aid,))
+    f = cur.fetchone()
+    if not f:
+        return None
+    return {'id': f[0], 'project_id': f[1], 'codigo': f[2], 'titulo': f[3],
+            'estado': f[4], 'items': f[5] or [], 'autor_id': f[6],
+            'responsable_id': f[7], 'history': f[8] or [], 'model_urn': f[9]}
+
+
+def _protocolo_create(cur, obra, op):
+    """Levanta un acta en campo, copiando los puntos de su plantilla.
+
+    Los puntos se COPIAN y quedan fijos, igual que en linea: si la plantilla
+    cambia manana, esta acta seguira diciendo lo que se comprobo hoy. Que se
+    levantara sin cobertura no cambia esa regla.
+    """
+    p = op.get('payload') or {}
+    plantilla_id = p.get('protocolo_id')
+    if not plantilla_id:
+        return sync.rechazada('un acta se levanta sobre un protocolo concreto',
+                              'SIN_PLANTILLA')
+    # LA MISMA CONSULTA que el alta en linea (routes/protocolos.py): si las dos
+    # leyeran columnas distintas, un acta levantada en campo y otra levantada en
+    # la oficina guardarian cosas distintas de la MISMA plantilla.
+    cur.execute("""SELECT id, nombre, version, secciones, activo, project_id
+                     FROM doc_protocolos WHERE id = %s""", (plantilla_id,))
+    pl = cur.fetchone()
+    if not pl:
+        return sync.rechazada('ese protocolo ya no existe', 'PLANTILLA_NO_EXISTE')
+    if str(pl[5]) != str(obra):
+        return sync.rechazada('ese protocolo es de otra obra', 'OTRA_OBRA')
+    if not pl[4]:
+        return sync.rechazada(
+            'ese protocolo se desactivó mientras estabas sin cobertura; las '
+            'actas ya levantadas siguen su curso, pero no se abren nuevas',
+            'PLANTILLA_DESACTIVADA')
+
+    items = []
+    for seccion in (pl[3] or []):
+        for it in (seccion.get('items') or []):
+            items.append({'texto': it.get('texto'), 'tipo': it.get('tipo'),
+                          'seccion': seccion.get('nombre'),
+                          'exige_si_no_conforme': it.get('exige_si_no_conforme') or [],
+                          'resultado': pro.PENDIENTE})
+    if not items:
+        return sync.rechazada('ese protocolo no tiene puntos que comprobar',
+                              'PLANTILLA_SIN_PUNTOS')
+
+    responsable = p.get('responsable_id')
+    if responsable:
+        cur.execute('SELECT 1 FROM project_users WHERE project_id=%s AND user_id=%s',
+                    (obra, int(responsable)))
+        if not cur.fetchone():
+            return sync.rechazada(
+                'el responsable que elegiste en campo ya no es miembro de esta obra',
+                'RESPONSABLE_NO_MIEMBRO')
+
+    for intento in range(5):
+        codigo = reg.siguiente_codigo(cur, pro.SEMANTICA, obra)
+        try:
+            cur.execute('SAVEPOINT alta_acta_sync')
+            cur.execute("""INSERT INTO doc_actas
+                (project_id, model_urn, codigo, protocolo_id, protocolo_nombre,
+                 protocolo_version, titulo, ubicacion,
+                 progresiva, items, estado, autor_id, responsable_id, created_by,
+                 history)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                (obra, p.get('model_urn'), codigo, plantilla_id, pl[1], pl[2],
+                 (p.get('titulo') or pl[1] or '').strip(),
+                 (p.get('ubicacion') or '').strip() or None,
+                 (p.get('progresiva') or '').strip() or None,
+                 json.dumps(items), pro.BORRADOR, _usuario().get('id'),
+                 responsable, _actor(),
+                 json.dumps([reg.entrada('created', _actor(), codigo=codigo,
+                                         capturado_en=op.get('capturado_en'),
+                                         origen='campo sin cobertura')])))
+            aid = cur.fetchone()[0]
+            cur.execute('RELEASE SAVEPOINT alta_acta_sync')
+            break
+        except Exception:
+            cur.execute('ROLLBACK TO SAVEPOINT alta_acta_sync')
+            if intento == 4:
+                raise
+    return sync.aplicada(aid, {'codigo': codigo, 'puntos': len(items),
+                               'estado': pro.BORRADOR})
+
+
+def _protocolo_set_items(cur, obra, op, aid):
+    """Marca los puntos comprobados. ES EL ACTO DE CAMPO por excelencia: se hace
+    caminando la obra, y es justo el que hoy se resuelve en papel."""
+    p = op.get('payload') or {}
+    d = _acta_leer_bloqueando(cur, aid)
+    if not d:
+        return sync.rechazada('esa acta ya no existe', 'NO_EXISTE')
+    if str(d['project_id']) != str(obra):
+        return sync.rechazada('esa acta es de otra obra', 'OTRA_OBRA')
+
+    conflicto = _estado_esperado_acta(op, d)
+    if conflicto:
+        return conflicto
+    # 7 · UNA ACTA FIRMADA NO SE EDITA. Es lo que la hace valer algo.
+    if d['estado'] != pro.BORRADOR:
+        return sync.en_conflicto(
+            'esta acta ya está en «%s»: lo que se comprobó quedó fijado y no se '
+            'edita. Lo que traes de campo no se ha perdido.' % d['estado'],
+            'ACTA_NO_EDITABLE',
+            estado_servidor={'estado': d['estado'], 'codigo': d['codigo']})
+
+    # 6 · quien la levanto o su responsable. Los dos estan en obra mirandola.
+    uid = _usuario().get('id')
+    if uid not in (d['autor_id'], d['responsable_id']):
+        return sync.rechazada(
+            'solo quien levantó el acta o su responsable pueden marcar sus puntos',
+            'NO_PUEDE_MARCAR')
+
+    entrantes = p.get('items') or []
+    if len(entrantes) != len(d['items']):
+        return sync.en_conflicto(
+            'el acta tiene %d puntos y traes %d: la plantilla cambió o el acta '
+            'no es la que crees' % (len(d['items']), len(entrantes)),
+            'PUNTOS_NO_CUADRAN',
+            estado_servidor={'puntos': len(d['items']), 'codigo': d['codigo']})
+    for i, it in enumerate(entrantes):
+        if (it.get('resultado') or pro.PENDIENTE) not in pro.RESULTADOS:
+            return sync.rechazada('el punto %d trae un resultado desconocido'
+                                  % (i + 1), 'RESULTADO_DESCONOCIDO')
+
+    items = []
+    for viejo, nuevo in zip(d['items'], entrantes):
+        items.append({**viejo,
+                      'resultado': nuevo.get('resultado') or pro.PENDIENTE,
+                      'observacion': nuevo.get('observacion'),
+                      'valor': nuevo.get('valor'),
+                      'fotos': nuevo.get('fotos') or viejo.get('fotos') or []})
+    cur.execute('UPDATE doc_actas SET items=%s WHERE id=%s',
+                (json.dumps(items), aid))
+    h = list(d['history']) + [reg.entrada(
+        'items_set', _actor(), capturado_en=op.get('capturado_en'),
+        no_conformes=sum(1 for x in items if x['resultado'] == pro.NO_CONFORME),
+        origen='campo sin cobertura')]
+    cur.execute('UPDATE doc_actas SET history=%s WHERE id=%s', (json.dumps(h), aid))
+    return sync.aplicada(aid, {
+        'codigo': d['codigo'],
+        'veredicto_que_corresponde': pro.veredicto_que_corresponde(items)[0],
+        'no_conformes': sum(1 for x in items if x['resultado'] == pro.NO_CONFORME)})
+
+
+def _estado_esperado_acta(op, d):
+    esperado = (op.get('base_version') or (op.get('payload') or {}).get('expected_state'))
+    if not esperado:
+        return None
+    if str(esperado) != str(d['estado']):
+        return sync.en_conflicto(
+            'cuando la marcaste en obra esta acta estaba en «%s» y ahora está en '
+            '«%s». No se ha tocado nada.' % (esperado, d['estado']),
+            'CONFLICTO_DE_ESTADO',
+            estado_servidor={'estado': d['estado'], 'codigo': d['codigo']})
+    return None
+
+
 DESPACHO = {
     (sync.ISSUE, sync.CREATE): _issue_create,
     (sync.ISSUE, sync.MARK_CORRECTED): _issue_mark_corrected,
     (sync.ISSUE, sync.ADD_EVIDENCE): _issue_add_evidence,
+    (sync.PROTOCOLO, sync.CREATE): _protocolo_create,
+    (sync.PROTOCOLO, sync.SET_ITEMS): _protocolo_set_items,
 }
+
+
+def _registrar_indeterminada(op, obra, actor_id, actor_visible, error):
+    """Deja constancia DURABLE de un acto cuyo efecto externo no se conoce.
+
+    Va en una conexion NUEVA: la del acto acaba de fallar y su transaccion esta
+    envenenada. Y si esto tambien fallara, se registra en el log y se responde
+    igualmente INDETERMINADA -- porque lo que NO se puede hacer es decirle al
+    movil «reintentalo» cuando no se sabe si algo quedo fuera.
+    """
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            objeto = sync.nombre_del_objeto_externo(obra, op['operation_id'])
+            sync.reservar_efecto_externo(cur, op, actor_id, actor_visible, objeto)
+            sync.cerrar(cur, obra, op['operation_id'],
+                        sync.indeterminada('el acto fallo despues de poder haber '
+                                           'tocado el almacen', objeto_externo=objeto),
+                        diagnostico=str(error)[:400])
+            conn.commit()
+    except Exception as e2:
+        logger.error('[sync] %s quedo INDETERMINADA SIN registrar: %s',
+                     op.get('operation_id'), e2)
 
 
 # ══ LA RUTA ════════════════════════════════════════════════════════════════
@@ -467,8 +668,10 @@ def sincronizar():
                 manejador = DESPACHO.get((op['object_type'], op['action']))
                 if not manejador:
                     d = sync.rechazada(
-                        'ese acto todavía no se sincroniza: la primera vertical '
-                        'cubre los issues; los protocolos van después',
+                        'ese acto todavía no se sincroniza sin cobertura. Hoy: '
+                        'levantar un issue, adjuntarle evidencia y darlo por '
+                        'corregido; levantar un acta y marcar sus puntos. '
+                        'Firmarla se hace con conexión, a propósito.',
                         'ACTO_NO_SINCRONIZABLE')
                     sync.anotar(cur, op, actor_id, actor_visible, d)
                     conn.commit()
@@ -497,17 +700,40 @@ def sincronizar():
         except Exception as e:
             logger.error('[sync] %s %s: %s', op.get('operation_id'),
                          op.get('action'), e)
-            # No se anota nada: si la transaccion no confirmo, el acto no
-            # ocurrio y el reintento puede volver a intentarlo con toda la
-            # razon. Mentirle al movil diciendo «rechazada» le haria descartar
-            # trabajo que en realidad nunca se proceso.
+            # ── LA FRONTERA QUE NO SE PUEDE DEGRADAR ──────────────────────
+            #
+            #   REINTENTABLE    sabemos que NINGUN efecto durable ocurrio
+            #   INDETERMINADA   pudo ocurrir un efecto externo, y no se sabe
+            #
+            # Para un acto ENTERAMENTE en PostgreSQL, que la transaccion no
+            # confirme significa literalmente que no paso nada: REINTENTABLE es
+            # la verdad, y no se anota fila porque no hay desenlace que anotar.
+            #
+            # Para un acto que PUDO tocar el exterior, responder REINTENTABLE
+            # seria invitar al movil a reintentar sobre un efecto que quiza ya
+            # ocurrio. Ahi hace falta constancia durable: se registra
+            # INDETERMINADA con su objeto determinista, y se reconcilia despues
+            # preguntandole al almacen si existe.
+            if sync.puede_tocar_el_exterior(op.get('object_type'),
+                                            op.get('action')):
+                _registrar_indeterminada(op, obra, actor_id, actor_visible, e)
+                d = sync.indeterminada(
+                    'no se pudo saber si la evidencia llegó a subirse. NO se '
+                    'reintenta sola: queda anotada y se reconcilia comprobando '
+                    'si el objeto existe.',
+                    objeto_externo=sync.nombre_del_objeto_externo(
+                        obra, op.get('operation_id')))
+                en_este_lote[op['operation_id']] = d
+                resultados.append(_respuesta(op, d))
+                continue
             resultados.append({
                 'operation_id': op.get('operation_id'),
                 'local_object_id': op.get('local_object_id'),
-                'status': 'REINTENTABLE',
+                'status': sync.REINTENTABLE,
                 'canonical_object_id': None, 'canonical_result': None,
                 'error_code': 'ERROR_DE_SERVIDOR',
-                'error': 'no se pudo procesar; vuelve a enviarlo'})
+                'error': 'no se pudo procesar y no quedó nada hecho; '
+                         'vuelve a enviarlo'})
 
     return jsonify({
         'resultados': resultados,

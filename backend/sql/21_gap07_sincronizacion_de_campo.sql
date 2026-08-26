@@ -32,10 +32,13 @@
 -- Un acto offline no congela los permisos que el usuario tenia cuando perdio
 -- cobertura: si mientras tanto lo sacaron de la obra, ese acto no entra.
 --
--- Lo que SI se conserva del campo es CUANDO se hizo: `capturado_en` es la marca
--- del dispositivo, y va aparte de `recibida_en`. Son dos hechos distintos y
--- mezclarlos borraria la unica prueba de que el trabajo se hizo en obra y no
--- en la oficina tres dias despues.
+-- LAS DOS MARCAS DE TIEMPO, Y LO QUE CADA UNA VALE
+--     capturado_en   DECLARADO por el dispositivo. Lo que el movil dice que
+--                    marcaba su reloj. NO es prueba de cuando ocurrio el acto:
+--                    un reloj de movil se puede mover, y aqui no se verifica el
+--                    dispositivo. Se guarda porque es informacion util, no
+--                    porque demuestre nada.
+--     recibida_en    AUTORITATIVO. Lo pone el servidor y nadie mas lo toca.
 -- ═══════════════════════════════════════════════════════════════════════════
 
 BEGIN;
