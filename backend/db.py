@@ -1353,6 +1353,7 @@ def _load_project_resolver():
     if _project_resolver_cache['map'] is not None and now - _project_resolver_cache['ts'] < _PROJECT_RESOLVER_TTL:
         return _project_resolver_cache['map']
     by_id, by_ref, by_urn, by_dataset, prefijables = {}, {}, {}, {}, {}
+    arbol_documental = {}
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -1368,12 +1369,36 @@ def _load_project_resolver():
                 by_ref, solo_proyectos = cargar(cur, CUENTA_DE_ESTA_INSTANCIA)
                 prefijables.update(solo_proyectos)
 
+                # EL MAPA INVERSO: obra -> alcance documental efectivo.
+                #
+                # Es la MISMA tabla y la misma columna que ya decidian esto; lo
+                # unico que faltaba era leerla en este sentido. `es_escritura`
+                # marca cual de los alias de una obra es donde se escribe: para
+                # las legacy su `LEGACY_PATH`, para las nuevas su `PROJECT`.
+                #
+                # Si una obra tuviera DOS filas de escritura --que hoy no pasa,
+                # medido-- se deja fuera y `resolve_project_document_tree` cae
+                # en el canonico. Elegir una de las dos por orden de la base
+                # seria decidir donde se escribe por como salgan las filas.
+                cur.execute("""SELECT project_id, min(alias), count(*)
+                                 FROM project_ref
+                                WHERE es_escritura AND project_id IS NOT NULL
+                                GROUP BY project_id""")
+                for pid, alias, cuantos in cur.fetchall():
+                    if cuantos == 1:
+                        arbol_documental[str(pid)] = alias
+                    else:
+                        logger.warning(
+                            '[resolver] la obra %s tiene %d alcances de escritura: '
+                            'no se elige uno, se usa el canonico', pid, cuantos)
+
             # Base determinista para traducir lo que traen los registros. Se
             # deja `by_urn` vacio a proposito: si el propio registro se
             # consultara mientras se construye, el resultado dependeria del
             # orden en que la base devolviera las filas.
             base = {'by_ref': by_ref, 'by_id': by_id, 'by_urn': {},
-                    'by_dataset': {}, 'prefijables': prefijables}
+                    'by_dataset': {}, 'prefijables': prefijables,
+                    'arbol_documental': arbol_documental}
 
             # -- Registro de modelos: URN DEL MODELO -> OBRA ---------------
             # Sin esto el resolutor no entendia el identificador con el que se
@@ -1427,9 +1452,11 @@ def _load_project_resolver():
     except Exception as e:
         print(f"[DB] resolve_project_id: no se pudo cargar projects: {e}")
         return _project_resolver_cache['map'] or {
-            'by_ref': {}, 'by_id': {}, 'by_urn': {}, 'by_dataset': {}, 'prefijables': {}}
+            'by_ref': {}, 'by_id': {}, 'by_urn': {}, 'by_dataset': {},
+            'prefijables': {}, 'arbol_documental': {}}
     resolved = {'by_ref': by_ref, 'by_id': by_id, 'by_urn': by_urn,
-                'by_dataset': by_dataset, 'prefijables': prefijables}
+                'by_dataset': by_dataset, 'prefijables': prefijables,
+                'arbol_documental': arbol_documental}
     _project_resolver_cache['map'] = resolved
     _project_resolver_cache['ts'] = now
     return resolved
@@ -1489,6 +1516,53 @@ def _traducir(m, texto):
         return prefijables[max(candidatos, key=len)]
 
     return None
+
+
+def resolve_project_document_tree(project_id):
+    """El ALCANCE DOCUMENTAL EFECTIVO de una obra: donde viven sus documentos.
+
+    Devuelve el `model_urn` bajo el que hay que crear y buscar los nodos de esa
+    obra, o None si no se puede decidir. NUNCA lanza.
+
+        CANONICAL TREE   autoridad para toda obra nueva
+        DERIVED TREE     compatibilidad legacy, y solo eso
+
+    POR QUE EXISTE, Y POR QUE NO ES UNA SEGUNDA FUENTE DE VERDAD
+    -------------------------------------------------------------
+    El expediente vivia en dos arboles y nadie sabia cual mandaba. Las obras
+    antiguas tienen sus documentos bajo `proyectos/<NOMBRE>`; las creadas
+    despues, bajo el id canonico. El explorador del portal DEDUCIA la ruta del
+    NOMBRE de la obra:
+
+        const projectPrefix = `proyectos/${project.name.replace(/ /g, '_')}`
+
+    Una ruta deducida del nombre solo acierta cuando el nombre coincide con la
+    carpeta, que es una coincidencia y no una regla. Para las obras nuevas
+    apuntaba a un arbol vacio: la pantalla ensenaba un expediente vacio que no
+    lo estaba.
+
+    LA DECISION YA ESTABA TOMADA Y ESCRITA. `project_ref.es_escritura` marca,
+    para cada obra, cual de sus alias es el alcance de ESCRITURA. Esta tabla es
+    la misma AUTORIDAD que ya usa `resolve_project_id` en sentido contrario
+    --alias -> obra--; esto es la vuelta: obra -> alias efectivo. No hay tabla
+    nueva, ni columna nueva, ni una segunda verdad que mantener al dia.
+
+    Medido el 25-ago-2026: las once obras tienen EXACTAMENTE UN alias de
+    escritura, y en las once coincide con donde vive de verdad su contenido.
+    Las legacy apuntan a su `LEGACY_PATH`; las nuevas, a su `PROJECT`.
+
+    EL RESPALDO NO ADIVINA. Si una obra no tuviera fila de escritura, se
+    devuelve su propio `project_id` --el arbol canonico, que es la autoridad
+    para todo lo nuevo-- y nunca una ruta derivada del nombre.
+    """
+    if not project_id:
+        return None
+    try:
+        m = _load_project_resolver()
+        arboles = (m or {}).get('arbol_documental') or {}
+        return arboles.get(str(project_id)) or str(project_id)
+    except Exception:
+        return str(project_id) if project_id else None
 
 
 def resolve_project_id(frente):

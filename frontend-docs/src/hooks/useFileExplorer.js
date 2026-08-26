@@ -13,9 +13,12 @@ import { useChunkedUpload } from './useChunkedUpload';
 import { useFolderCache } from './useFolderCache';
 import { useAdministracion } from './useAdministracion';
 import toast from 'react-hot-toast';
+import { arbolDocumental } from '../utils/arbolDocumental';
 
 export function useFileExplorer(project, user) {
-  const projectPrefix = `proyectos/${project.name.replace(/ /g, '_')}`;
+  // EL ALCANCE QUE MANDA EL SERVIDOR, no una ruta deducida del nombre.
+  // El nombre es editable: renombrar una obra movia el expediente entero.
+  const projectPrefix = arbolDocumental(project);
 
   // ADMINISTRACIÓN **DE ESTA OBRA**, no el rol global.
   //

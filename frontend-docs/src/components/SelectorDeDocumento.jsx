@@ -20,22 +20,14 @@
 // adjuntos de los RFI.
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../utils/apiFetch';
+import { arbolDocumental } from '../utils/arbolDocumental';
 
 export default function SelectorDeDocumento({ API, project, titulo, ayuda,
                                               onElegir, onCerrar }) {
-  // EL URN DE LA OBRA, NO UNA RUTA DEDUCIDA DE SU NOMBRE.
-  //
-  // La primera versión construía `proyectos/<NOMBRE_CON_GUIONES>`, copiado de
-  // `IssueModule`. Conduciendo la interfaz de verdad contra producción se vio
-  // que el selector salía VACÍO: los documentos de esa obra viven bajo su id
-  // canónico (`b.proj_…`) y con la ruta deducida el expediente devolvía cero
-  // carpetas y cero ficheros. La ruta deducida solo acierta cuando el nombre
-  // de la obra coincide con la carpeta, que es una coincidencia y no una regla.
-  //
-  // Se conserva la deducción como último recurso, para una obra que solo tenga
-  // el árbol antiguo.
-  const raiz = project?.model_urn || project?.urn
-            || `proyectos/${(project?.name || '').replace(/ /g, '_')}`;
+  // EL ALCANCE QUE MANDA EL SERVIDOR. La primera versión lo deducía del nombre
+  // y salía VACÍO en las obras nuevas; ahora lo resuelve `arbolDocumental`, que
+  // es la única semántica de resolución del cliente.
+  const raiz = arbolDocumental(project);
   const [ruta, setRuta] = useState([{ id: null, name: project?.name || 'Obra', path: raiz + '/' }]);
   const [nodos, setNodos] = useState([]);
   const [cargando, setCargando] = useState(true);

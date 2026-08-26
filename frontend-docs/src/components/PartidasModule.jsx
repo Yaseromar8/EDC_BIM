@@ -7,9 +7,10 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
+import { arbolDocumental } from '../utils/arbolDocumental';
 
 const PartidasModule = ({ project, API, user, isAdmin }) => {
-  const modelUrn = project.urn || `proyectos/${project.name.replace(/ /g, '_')}`;
+  const modelUrn = arbolDocumental(project);
   const [partidas, setPartidas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');

@@ -6,13 +6,14 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import PDFViewer from './PDFViewer';
 import useDocPreview from '../hooks/useDocPreview';
+import { arbolDocumental } from '../utils/arbolDocumental';
 
 const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
   // cfg define QUÉ tipo de incidencia es (endpoint, etiquetas, prefijo de
   // código). Antes esto vivía duplicado en RfiModule y RedLineModule —
   // 1.387 líneas IDÉNTICAS por cabeza, con la única diferencia de 7 strings.
-  const modelUrn = project.urn || `proyectos/${project.name.replace(/ /g, '_')}`;
-  const projectPrefix = `proyectos/${project.name.replace(/ /g, '_')}`;
+  const modelUrn = arbolDocumental(project);
+  const projectPrefix = arbolDocumental(project);
   const [rfis, setRfis] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');

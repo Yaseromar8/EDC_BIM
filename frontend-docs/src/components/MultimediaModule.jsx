@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { enqueuePhoto } from '../services/uploadQueue';
 import { uploadFile } from '../services/uploadService';
 import './MultimediaModule.css';
+import { arbolDocumental } from '../utils/arbolDocumental';
 
 const lbBtn = { width: 28, height: 28, borderRadius: '50%', background: 'transparent', border: 'none', color: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
@@ -13,7 +14,7 @@ export default function MultimediaModule({ project, user }) {
   // El API de proyectos devuelve model_urn, NO urn → modelUrn era undefined.
   // El scope de Docs es 'proyectos/{nombre}' (igual que useFileExplorer/todo el
   // resto). Usamos ESE mismo scope para que las fotos aparezcan en esta pestaña.
-  const modelUrn = `proyectos/${String(project?.name || '').replace(/ /g, '_')}`;
+  const modelUrn = arbolDocumental(project);
 
   // Un <img>/<video> no puede mandar el header Authorization → el proxy protegido
   // devolvía 401 (imagen en blanco). El middleware acepta ?session_token= como
