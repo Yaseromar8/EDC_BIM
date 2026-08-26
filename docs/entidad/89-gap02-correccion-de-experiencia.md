@@ -128,18 +128,75 @@ servidor: la defensa no puede depender de que la pantalla no ofrezca el camino.
 
 ---
 
-## 4 · LO QUE NO SE PUDO PROBAR, Y POR QUÉ
+## 4 · LA AUTORIDAD DE EMISIÓN — CORREGIDA EL MISMO DÍA
 
-**«Usuario sin autoridad» no existe como negativa hoy.** `guardia_de_recurso` es
-de **pertenencia**: cualquier miembro de la obra puede emitir una revisión. No
-hay un gate adicional por función contractual ni por administración.
+Al hacer la EXP se descubrió que **«usuario sin autoridad» no existía como
+negativa**: `guardia_de_recurso` es de pertenencia, así que cualquier miembro
+podía emitir. Se reportó sin inventar la restricción, el propietario ordenó
+cerrarlo, y se cerró.
 
-No se ha inventado la restricción para poder enseñar la negativa. Es una
-**decisión de producto pendiente**: emitir una revisión declara qué lámina vale
-en obra, y es discutible que cualquier miembro pueda hacerlo. Recomendación,
-para que el propietario decida: restringirlo a administrador de obra o a las
-funciones `ENTIDAD`/`PROYECTISTA` de `directorio_de_obra.FUNCIONES`. **No se ha
-tocado.**
+### La autoridad ya existía; faltaba usarla
+
+No se inventó ningún permiso. La escalera documental de seis niveles
+(`none → viewer → view_download → view_markup → edit → admin`),
+`check_folder_permission` que la aplica y `funcion_de` —que deriva la función
+contractual de la empresa— llevaban ahí desde antes.
+
+### Tres capas, y ninguna sobra
+
+| capa | quién la resuelve | pregunta |
+|---|---|---|
+| Aislamiento de obra | `guardia_de_recurso` | ¿es de tu obra? |
+| Permiso de recurso | `check_folder_permission` nivel `edit` | ¿puedes con **este** documento? |
+| Autorización de flujo | admin de obra **o** función emisora | ¿te toca **decidir**? |
+
+Solo con la segunda, un contratista con `edit` sobre su carpeta declararía
+vigente lo que quisiera. Solo con la tercera, un administrador publicaría a
+ciegas un documento que ni puede abrir. Por eso el permiso sobre el documento se
+comprueba **primero, también al admin**.
+
+**Quién emite:** `ENTIDAD` y `PROYECTISTA`. En obra pública la lámina la produce
+el proyectista y la emite la entidad; la supervisión revisa y el contratista
+construye contra lo emitido. Que cualquiera de esos dos decidiera qué versión
+vale invertiría la cadena contractual.
+
+Se aplicó **también a especificaciones** —el mismo acto, la misma autoridad— y a
+crear una sección **con** documento, que emite su primera revisión: dejar esa vía
+abierta habría sido la puerta de atrás del mismo acto.
+
+### La EXP mínima, contra producción
+
+El fixture sirvió tal cual, sin fabricar nada: 23 y 25 no son admin ni tienen
+función; 24 administra la obra.
+
+| caso | resultado |
+|---|---|
+| miembro ordinario (23) emite plano | **403** `SIN_AUTORIDAD_DE_EMISION` |
+| miembro ordinario (25) emite plano | **403** `SIN_AUTORIDAD_DE_EMISION` |
+| miembro ordinario emite especificación | **403** `SIN_AUTORIDAD_DE_EMISION` |
+| miembro crea sección **con** documento (la puerta de atrás) | **403** `SIN_AUTORIDAD_DE_EMISION` |
+| administrador de obra emite | **201** · rev **D** vigente, supera a la C |
+| revisión duplicada | 409 `REVISION_DUPLICADA` |
+| documento de otra obra | 409 `OTRA_OBRA` |
+| ajeno a la obra | 403 `PROJECT_FORBIDDEN` |
+
+**Y lo que el miembro ordinario sigue pudiendo hacer**, porque son actos
+distintos: ver los planos (200), ver sus revisiones (200), ver las
+especificaciones (200) y **crear la identidad de un plano** (201). Crear la
+identidad no declara qué vale.
+
+La historia del plano lo dice de un vistazo:
+
+```
+    rev A   Superada   emitida por 23     ← hoy sería DENY
+    rev B   Superada   emitida por 23     ← hoy sería DENY
+    rev C   Superada   emitida por 25     ← hoy sería DENY
+    rev D   Vigente    emitida por 24     ← administrador de obra
+```
+
+`vigentes: 1`.
+
+**GAP 02 · autorización de emisión — ✅ CORREGIDA.**
 
 ---
 
