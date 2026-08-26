@@ -313,3 +313,21 @@ def test_toda_ruta_de_escritura_de_plantillas_tiene_guardia():
     for vista in ('crear', 'modificar', 'activar'):
         cuerpo = fuente.split('def %s(' % vista)[1].split('\n@')[0]
         assert '_puede_definir' in cuerpo, vista
+
+
+def test_la_procedencia_se_DEVUELVE_y_no_solo_se_guarda():
+    """Lo encontro la EXP contra produccion: la revision guardaba de donde salio
+    su flujo y la API no lo devolvia, asi que ninguna pantalla podia ensenarlo.
+
+    Es la misma clase de capacidad muerta que «existe en el backend no cuenta
+    como implementado», solo que un nivel mas abajo: existe en la BASE y no
+    llega a salir.
+    """
+    fuente = _reviews()
+    cuerpo = fuente.split('def _row_to_dict')[1].split('\ndef ')[0]
+    for campo in ('plantilla_id', 'plantilla_nombre', 'plantilla_version'):
+        assert campo in cuerpo, campo
+    # Y las tres consultas que alimentan `_row_to_dict` tienen que traerlas.
+    assert fuente.count('plantilla_id, plantilla_nombre, plantilla_version') >= 3, (
+        'alguna consulta de revisiones no trae la procedencia: `_row_to_dict` '
+        'leeria fuera de la fila')

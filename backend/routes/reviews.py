@@ -202,6 +202,14 @@ def _row_to_dict(r):
         "codigo_idoneidad": r[11] if len(r) > 11 else None,
         "cerrada_en": r[12].isoformat() if len(r) > 12 and r[12] else None,
         "paso_vence_en": r[13].isoformat() if len(r) > 13 and r[13] else None,
+        # DE DONDE SALIO ESTE FLUJO. Se guardaba y no se devolvia, asi que la
+        # revision sabia su procedencia y ninguna pantalla podia ensenarla --
+        # que es la misma clase de capacidad muerta que «existe en el backend».
+        # Lo encontro la EXP: el snapshot era correcto y la procedencia salia
+        # vacia. Es traza, nunca autoridad: nadie la consulta para decidir.
+        "plantilla_id": str(r[14]) if len(r) > 14 and r[14] else None,
+        "plantilla_nombre": r[15] if len(r) > 15 else None,
+        "plantilla_version": r[16] if len(r) > 16 else None,
     }
 
 
@@ -239,7 +247,8 @@ def list_reviews():
             cur = conn.cursor()
             cur.execute("""SELECT id, model_urn, title, items, steps, current_step, status,
                                   final_status, history, created_by, created_at,
-                                  codigo_idoneidad, cerrada_en, paso_vence_en
+                                  codigo_idoneidad, cerrada_en, paso_vence_en,
+                                  plantilla_id, plantilla_nombre, plantilla_version
                            FROM doc_reviews WHERE model_urn = %s ORDER BY id DESC LIMIT 200""",
                         (model_urn,))
             data = [_con_estado_del_flujo(cur, _row_to_dict(r)) for r in cur.fetchall()]
@@ -433,7 +442,8 @@ def act_on_review(rid):
             cur = conn.cursor()
             cur.execute("""SELECT id, model_urn, title, items, steps, current_step, status,
                                   final_status, history, created_by, created_at,
-                                  codigo_idoneidad, cerrada_en, paso_vence_en
+                                  codigo_idoneidad, cerrada_en, paso_vence_en,
+                                  plantilla_id, plantilla_nombre, plantilla_version
                            FROM doc_reviews WHERE id = %s FOR UPDATE""", (rid,))
             row = cur.fetchone()
             if not row:
@@ -644,7 +654,8 @@ def reasignar_revisor(rid):
             cur = conn.cursor()
             cur.execute("""SELECT id, model_urn, title, items, steps, current_step, status,
                                   final_status, history, created_by, created_at,
-                                  codigo_idoneidad, cerrada_en, paso_vence_en
+                                  codigo_idoneidad, cerrada_en, paso_vence_en,
+                                  plantilla_id, plantilla_nombre, plantilla_version
                            FROM doc_reviews WHERE id = %s FOR UPDATE""", (rid,))
             row = cur.fetchone()
             if not row:
