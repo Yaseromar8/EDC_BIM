@@ -48,6 +48,15 @@ GUARDIAS = ('verify_project_access', 'check_folder_permission', '_hay_acceso', '
             # La guardia del DOCUMENTO, para los manejadores que reciben un
             # fichero (id de nodo o ruta del objeto) en vez de una obra.
             'guardia_del_documento',
+            # GAP 07 · `/api/sync` no puede tener UNA guardia de obra a nivel de
+            # ruta: un envio trae actos de VARIAS obras, cada uno con la suya
+            # dentro del cuerpo. La resuelve y la comprueba POR OPERACION --y
+            # ademas revalida herramienta y acceso de miembro-- en
+            # `_puede_operar_en_la_obra`, que llama a `guardia_de_obra` con la
+            # obra ya resuelta de cada acto. Una guardia unica al principio
+            # seria mas comoda y estaria mal: aprobaria un lote entero por la
+            # obra de su primera operacion.
+            '_puede_operar_en_la_obra',
             # La del comparador de versiones (17-ago): sus scopes viajan
             # ANIDADOS en el cuerpo, invisibles para el resolutor central, y
             # resuelve la obra del DATO -- un scope 'source' es un urn de

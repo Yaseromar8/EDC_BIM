@@ -917,6 +917,11 @@ app.register_blueprint(specs_bp, url_prefix='/api/specs')
 # prefijo, porque el objeto es otro: el molde, no el proceso.
 from routes.plantillas_revision import plantillas_revision_bp
 app.register_blueprint(plantillas_revision_bp, url_prefix='/api/review-templates')
+# GAP 07. `/api/sync` NO se gobierna por la capa 16 desde el middleware --que
+# deduce la herramienta de la RUTA, y esta trae actos de varias-- asi que la
+# comprueba por operacion. Ver el comentario en routes/sync.py.
+from routes.sync import sync_bp
+app.register_blueprint(sync_bp)
 app.register_blueprint(plan_bp)
 from routes.attributes import attributes_bp, ensure_attributes_tables
 app.register_blueprint(attributes_bp)
