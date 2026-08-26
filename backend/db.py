@@ -1388,9 +1388,13 @@ def _load_project_resolver():
                     if cuantos == 1:
                         arbol_documental[str(pid)] = alias
                     else:
-                        logger.warning(
+                        # NO se elige uno y NO se cae en el canonico: la obra se
+                        # queda SIN alcance resoluble, y quien quiera escribir en
+                        # ella recibe un no. Es ruidoso a proposito.
+                        logger.error(
                             '[resolver] la obra %s tiene %d alcances de escritura: '
-                            'no se elige uno, se usa el canonico', pid, cuantos)
+                            'queda SIN resolver hasta que se decida cual vale', pid,
+                            cuantos)
 
             # Base determinista para traducir lo que traen los registros. Se
             # deja `by_urn` vacio a proposito: si el propio registro se
@@ -1551,18 +1555,34 @@ def resolve_project_document_tree(project_id):
     escritura, y en las once coincide con donde vive de verdad su contenido.
     Las legacy apuntan a su `LEGACY_PATH`; las nuevas, a su `PROJECT`.
 
-    EL RESPALDO NO ADIVINA. Si una obra no tuviera fila de escritura, se
-    devuelve su propio `project_id` --el arbol canonico, que es la autoridad
-    para todo lo nuevo-- y nunca una ruta derivada del nombre.
+    FALLA CERRADO. No hay respaldo:
+
+        EXACTAMENTE UN alcance de escritura   ->  se devuelve
+        CERO o MAS DE UNO                     ->  None
+
+    Devolver el canonico «por si acaso» seria peor que no responder. Ante una
+    obra con dos alcances marcados, elegir uno es decidir donde vive el
+    expediente segun como salgan las filas de la base; y ante una sin ninguno,
+    escribir en el canonico mandaria documentos a un arbol que quiza no es el
+    que esa obra usa --que es exactamente lo que le pasaria a una legacy--.
+
+    Quien llame a esto para ESCRIBIR tiene que tratar el None como un no: un
+    documento guardado en el arbol equivocado no da error, da un expediente
+    partido, y eso no se nota hasta que alguien busca el documento y no esta.
+
+    La ambiguedad ademas es IMPOSIBLE desde la migracion 20, que la impide con
+    un indice unico parcial. Esta comprobacion se queda igualmente: una guardia
+    en el codigo protege de los errores de hoy; una en la base protege tambien
+    de la escritura directa. Ninguna sustituye a la otra.
     """
     if not project_id:
         return None
     try:
         m = _load_project_resolver()
         arboles = (m or {}).get('arbol_documental') or {}
-        return arboles.get(str(project_id)) or str(project_id)
+        return arboles.get(str(project_id))
     except Exception:
-        return str(project_id) if project_id else None
+        return None
 
 
 def resolve_project_id(frente):

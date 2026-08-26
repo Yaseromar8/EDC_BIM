@@ -126,11 +126,39 @@ def test_dos_alcances_de_escritura_NO_producen_uno_elegido_al_azar():
     assert 'cuantos == 1' in cuerpo
 
 
-def test_el_respaldo_es_el_CANONICO_y_nunca_una_ruta_derivada():
+def test_FALLA_CERRADO_y_no_hay_respaldo():
+    """EXACTAMENTE UNO -> resuelve. CERO o MAS DE UNO -> None.
+
+    La primera version caia en el canonico cuando no habia fila. El propietario
+    lo cerro el 25-ago-2026: devolver el canonico «por si acaso» ante una
+    escritura ambigua mandaria documentos a un arbol que quiza no es el que esa
+    obra usa -- que es justo lo que le pasaria a una legacy.
+
+    Un documento guardado en el arbol equivocado NO da error: da un expediente
+    partido, y eso no se nota hasta que alguien lo busca y no esta.
+    """
     fuente = io.open(os.path.join(BACKEND, 'db.py'), encoding='utf-8').read()
-    cuerpo = fuente.split('def resolve_project_document_tree')[1].split('\ndef ')[0]
-    assert 'or str(project_id)' in cuerpo
+    cuerpo = fuente.split('def resolve_project_document_tree')[1].split(chr(10) + 'def ')[0]
+    assert 'or str(project_id)' not in cuerpo, 'volvio el respaldo al canonico'
+    assert 'FALLA CERRADO' in cuerpo
     assert 'proyectos/' not in cuerpo.replace('`proyectos/', '')
+
+    import db
+    assert db.resolve_project_document_tree('b.proj_que_no_existe_123') is None
+
+
+def test_la_ambiguedad_es_IMPOSIBLE_desde_la_base():
+    """Una guardia en el codigo protege de los errores de hoy; una en la base
+    protege tambien de la escritura directa y del script de mantenimiento."""
+    sql = io.open(os.path.join(BACKEND, 'sql', '20_un_solo_alcance_de_escritura.sql'),
+                  encoding='utf-8').read()
+    assert 'idx_project_ref_un_solo_alcance' in sql
+    assert 'WHERE es_escritura' in sql, 'tiene que ser un indice PARCIAL'
+    # Una fila de escritura sin obra ya la impide `project_id NOT NULL`, que
+    # la tabla trae desde su creacion. No se anade un CHECK que lo repita.
+    assert 'NOT NULL' in sql
+    assert 'DELETE' not in sql.upper()
+    assert 'UPDATE ' not in sql.upper()
 
 
 def test_nunca_lanza_y_None_para_lo_vacio():
@@ -204,6 +232,5 @@ def test_el_resolvedor_es_el_punto_de_entrada_nombrado_para_lo_que_viene():
     """
     import db
     assert callable(db.resolve_project_document_tree)
-    # Contrato minimo: idempotente y estable.
-    a = db.resolve_project_document_tree('b.proj_que_no_existe_123')
-    assert a == 'b.proj_que_no_existe_123', 'lo desconocido cae en su propio id'
+    # Contrato: lo desconocido NO se inventa. Falla cerrado.
+    assert db.resolve_project_document_tree('b.proj_que_no_existe_123') is None
