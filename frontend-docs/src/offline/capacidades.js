@@ -49,12 +49,21 @@ export async function tieneSincronizacionDeCampo(API) {
   _preguntando = (async () => {
     try {
       const r = await apiFetch(`${API}/api/sync`, { method: 'GET', retries: 0 });
-      // 404 es la única respuesta que significa «esta ruta no está aquí».
-      // Cualquier otra —405, 401, 403, 500— la dice existente, y eso es lo que
-      // se está preguntando.
-      const hay = r.status !== 404;
-      _respuesta = hay;
-      return hay;
+
+      // UN 401 NO ES UNA RESPUESTA A ESTA PREGUNTA.
+      //
+      // El middleware de autenticación corre ANTES del enrutado: sin sesión
+      // válida, `/api/sync` y `/api/lo-que-sea-que-no-existe` devuelven los dos
+      // 401. Comprobado contra producción. Tomar ese 401 por «la ruta está
+      // ahí» sería deducir que existe algo que no se ha llegado a mirar -- y
+      // con esa deducción se ofrecería trabajar sin cobertura contra un
+      // servidor que no puede recibirlo.
+      //
+      // Con sesión válida --que es cuando esto corre de verdad-- la pregunta sí
+      // se contesta: 404 la ruta no está, 405 está y el método es otro.
+      if (r.status === 401) return false;   // no se sabe, y no se recuerda
+      _respuesta = r.status !== 404;
+      return _respuesta;
     } catch (e) {
       // No se pudo preguntar. NO se recuerda como «no»: se responde que no
       // ahora y se vuelve a preguntar la próxima vez.

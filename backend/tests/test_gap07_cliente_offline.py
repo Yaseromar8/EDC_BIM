@@ -613,6 +613,18 @@ def test_se_PREGUNTA_si_el_servidor_recibe_trabajo_de_campo():
     assert 'r.status !== 404' in c
 
 
+def test_un_401_NO_es_una_respuesta_a_esta_pregunta():
+    """El middleware de autenticacion corre ANTES del enrutado: sin sesion,
+    `/api/sync` y una ruta inventada devuelven los dos 401 --comprobado contra
+    produccion--. Tomar ese 401 por «la ruta esta ahi» seria deducir que existe
+    algo que no se ha llegado a mirar."""
+    c = _sin_comentarios(capacidades())
+    assert 'if (r.status === 401) return false;' in c
+    # Y no se recuerda: la sesion puede volver.
+    trozo = c.split('r.status === 401')[1].splitlines()[0]
+    assert '_respuesta' not in trozo
+
+
 def test_ante_la_duda_la_respuesta_es_NO():
     """Prometer offline sin poder cumplirlo se paga con trabajo perdido."""
     c = _sin_comentarios(capacidades())
