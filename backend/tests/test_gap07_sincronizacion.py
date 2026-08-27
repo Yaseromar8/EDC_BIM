@@ -318,7 +318,7 @@ def test_la_primera_vertical_son_DOS_dominios_y_es_una_lista_cerrada():
     assert sync.ACTOS_DE['ISSUE'] == ('CREATE', 'ADD_EVIDENCE', 'MARK_CORRECTED')
     assert sync.ACTOS_DE['PROTOCOLO'] == ('CREATE', 'SET_ITEMS', 'SIGN')
     sql = _sql()
-    assert "object_type IN ('PROTOCOLO','ISSUE')" in sql
+    assert "object_type IN ('PROTOCOLO','ISSUE','FOTO')" in sql
 
 
 # ══ 7 · LA MIGRACION ES EXPAND ═════════════════════════════════════════════
