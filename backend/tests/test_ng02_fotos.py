@@ -289,3 +289,20 @@ def test_validate_file_LANZA_y_nadie_le_pregunta_por_valid():
             continue
         assert ".get('valid')" not in s, (
             '%s pregunta por una clave que validate_file nunca devuelve' % ruta)
+
+
+def test_la_lista_cerrada_de_la_BASE_casa_con_la_del_CODIGO():
+    """La MISMA clase de defecto que F2 (doc 93), cazada por la EXP offline de
+    foto: OBJETOS crecio en el codigo y ck_sync_objeto siguio con la lista
+    vieja en la base -- el manejador aplicaba, anotar violaba el check y todo
+    caia REINTENTABLE. Esta prueba obliga a que crezcan JUNTOS."""
+    import re
+    import sincronizacion_de_campo as sync
+    for fichero in ('21_gap07_sincronizacion_de_campo.sql',
+                    '24_foto_en_la_lista_cerrada.sql'):
+        sql = io.open(os.path.join(RAIZ, 'sql', fichero), encoding='utf-8').read()
+        m = re.search(r"ck_sync_objeto\s*\n?\s*CHECK \(object_type IN \(([^)]+)\)\)", sql)
+        assert m, fichero
+        en_base = {x.strip().strip("'") for x in m.group(1).split(',')}
+        assert en_base == set(sync.OBJETOS), (
+            '%s tiene %s y el codigo %s' % (fichero, en_base, set(sync.OBJETOS)))

@@ -159,7 +159,7 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 -- una peticion y acabe creando una familia de actos que nadie reviso.
 DO $$ BEGIN
     ALTER TABLE sync_operaciones ADD CONSTRAINT ck_sync_objeto
-        CHECK (object_type IN ('PROTOCOLO','ISSUE'));
+        CHECK (object_type IN ('PROTOCOLO','ISSUE','FOTO'));
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
