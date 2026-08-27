@@ -4,6 +4,21 @@
 sin migraciones, sin despliegue. · **Filas:** E05 ✅(sube a profundidad) · E06
 · E07 · E08 · C12.
 
+> **APROBADA CON DOS CORRECCIONES + UNA REGLA CONGELADA (propietario,
+> 27-ago-2026) — este texto ya las incorpora:**
+> 1. **Project Admin NO es aprobador contractual.** Aprueba/devuelve la
+>    función `SUPERVISION`; `ENTIDAD` solo como contingencia DECLARADA como
+>    función autorizada, nunca por privilegio administrativo. Sin aprobador
+>    contractual válido → bloqueo con código explícito.
+> 2. **El destinatario de una INSTRUCCIÓN nunca es una función desnuda:** es
+>    persona concreta o empresa concreta de la obra, con snapshot de
+>    empresa + función. El BIC se resuelve contra ESE sujeto contractual, no
+>    contra cualquier miembro que hoy comparta función.
+> 3. **La fecha del parte es la fecha OPERATIVA declarada de la obra**, no
+>    derivada de `created_at` UTC (a las 7 pm de Lima, UTC ya vive en mañana).
+>
+> **ARQ DEFINITION = CLOSED.**
+
 **Lo que ya existe, medido:** `daily_reports` (8 columnas, `UNIQUE(model_urn,
 report_date)` — la identidad por obra y día ya está decidida en datos);
 funciones contractuales derivadas (`ENTIDAD, SUPERVISION, CONTRATISTA,
@@ -21,8 +36,8 @@ autoridad y ciclo distintos**:
 | | PARTE DIARIO | ASIENTO | INSTRUCCIÓN |
 |---|---|---|---|
 | qué es | la JORNADA: el marco de un día en la obra | un registro individual, tipado, dentro de un parte | un ACTO FORMAL emitido por una parte autorizada |
-| identidad | `(obra, fecha)` — única | correlativo POR OBRA, continuo entre días (la esencia del cuaderno: el asiento N.º 217 es el 217 de la obra, no «el 3.º del martes») | numeración propia `IN-###` por obra |
-| quién crea | cualquier miembro lo ABRE (el primero del día); un responsable lo CIERRA | cualquier miembro con acceso a la herramienta | SOLO función `SUPERVISION` o `ENTIDAD` (propuesta congelable, §L) |
+| identidad | `(obra, fecha_operativa)` — única; la fecha es la DECLARADA de la jornada, no la del reloj UTC del servidor | correlativo POR OBRA, continuo entre días (la esencia del cuaderno: el asiento N.º 217 es el 217 de la obra, no «el 3.º del martes») | numeración propia `IN-###` por obra |
+| quién crea | cualquier miembro lo ABRE (el primero del día); un responsable lo CIERRA | cualquier miembro con acceso a la herramienta | SOLO función `SUPERVISION` o `ENTIDAD` (APROBADO, §L) |
 | inmutabilidad | CERRADO = congelado; nada entra después | REGISTRADO = inmutable; se corrige con OTRO asiento que lo referencia (rectificación), nunca editando | EMITIDA = inmutable; la corrección es una RECTIFICACIÓN: instrucción nueva con `rectifica_a`, la vieja queda `RECTIFICADA` visible — el mismo patrón supersede≠borrar de los planos |
 | evidencia | cita fotos y objetos; no los copia | ídem | ídem + acuse de recibo grow-only (patrón transmittal) |
 
@@ -39,16 +54,18 @@ misma regla que gobierna revisiones de plano y asientos de cuaderno en papel.
 
 ## B · OBJETOS CANÓNICOS
 
-- `doc_partes` — la jornada. `(obra, fecha)` único, responsable, estado,
-  timestamps de servidor, history append-only.
+- `doc_partes` — la jornada. `(obra, fecha_operativa)` único — fecha
+  declarada, jamás derivada de UTC —, responsable, estado, timestamps de
+  servidor (auditoría, no identidad), history append-only.
 - `doc_asientos` — el registro. `numero` correlativo por obra, `tipo` del
   catálogo (§F), `parte_id`, contenido estructurado + texto según tipo,
   referencias (§G), estado, autor + SU EMPRESA + SU FUNCIÓN al momento
   (capturadas al registrar: la función se deriva hoy, pero el asiento debe
   decir cuál era ENTONCES), history.
 - `doc_instrucciones` — el acto. Emisor (persona+empresa+función), destinatario
-  (persona o función), asunto, contenido, referencias, `rectifica_a`, acuses
-  grow-only, estado, history.
+  = **persona concreta o empresa concreta de la obra** con snapshot de
+  empresa+función (nunca una función desnuda), asunto, contenido, referencias,
+  `rectifica_a`, acuses grow-only, estado, history.
 - `daily_reports` (legacy, 0 uso real conocido) — **se congela y no se
   hereda**, como `photo_evidences`. Se verificará el conteo real en la pasada
   de implementación antes de declararlo en el doc de cierre.
@@ -79,26 +96,38 @@ INSTRUCCIÓN:  EMITIDA ──acuse──▶ ACUSADA ──atiende──▶ ATEND
 - Capa 2/3: perímetro de obra + herramienta `cuaderno` (activación capa 16 +
   acceso por miembro capa 08) — herramienta NUEVA en el catálogo.
 - Registrar asiento: cualquier miembro con la herramienta.
-- **Aprobar/Devolver** asiento de CONTRATISTA/OTRO: función `SUPERVISION` o
-  admin de obra (propuesta §L). Nunca el propio autor (misma prohibición
+- **Aprobar/Devolver** asiento de CONTRATISTA/OTRO: SOLO función contractual.
+  `FUNCIONES_APROBADORAS_DE_ASIENTO = (SUPERVISION, ENTIDAD)` — `SUPERVISION`
+  es el aprobador; `ENTIDAD` es la contingencia, autorizada porque está
+  DECLARADA en esa lista, no por privilegio. **Project Admin NO aprueba**:
+  administrar la obra no es autoridad contractual (corrección del
+  propietario). Si nadie con función aprobadora existe en la obra, el acto se
+  bloquea con código explícito (`SIN_APROBADOR_CONTRACTUAL`) — no hay
+  fallback administrativo. Nunca el propio autor (misma prohibición
   autor≠aprobador de `doc_reviews`).
-- Cerrar el parte: el responsable del parte o admin de obra.
+- Cerrar el parte: el responsable del parte o admin de obra (acto
+  administrativo de jornada, no aprobación contractual — por eso aquí el
+  admin sí).
 - **Emitir instrucción**: `FUNCIONES_EMISORAS_DE_INSTRUCCION = (SUPERVISION,
   ENTIDAD)` — el espejo de `FUNCIONES_EMISORAS` de planos, declarado como
   dato, no disperso en ifs.
-- Acusar/atender instrucción: su destinatario (persona, o cualquiera de la
-  función destinataria).
+- Acusar/atender instrucción: **su sujeto contractual** — la persona
+  destinataria, o un miembro de la empresa destinataria. Jamás «cualquiera
+  con la misma función» (corrección del propietario).
 
 ## E · BIC (encargos, los mismos)
 
 | estado | la pelota la tiene |
 |---|---|
-| asiento EN_APROBACION | el aprobador (función SUPERVISION) |
+| asiento EN_APROBACION | los miembros con función aprobadora (SUPERVISION; ENTIDAD contingencia). Si no hay ninguno: la deuda aparece como `SIN_APROBADOR_CONTRACTUAL`, visible, no asignada a un admin |
 | asiento DEVUELTO | su autor (corregir y re-registrar) |
 | parte ABIERTO al final del día | el responsable del parte (cerrar) |
-| instrucción EMITIDA | el destinatario (acusar) |
-| instrucción ACUSADA | el destinatario (atender) |
+| instrucción EMITIDA | **su sujeto contractual**: la persona destinataria, o los miembros de la empresa destinataria (acusar) |
+| instrucción ACUSADA | el mismo sujeto contractual (atender) |
 | instrucción ATENDIDA | el emisor (verificar y cerrar) |
+
+El BIC de instrucción se resuelve contra el snapshot del destinatario, nunca
+contra «quien hoy tenga esa función» (corrección del propietario).
 
 `deudor_de_asiento` y `deudor_de_instruccion` en `encargos.py`, junto a los
 demás — el mismo código que reparte calcula la bandeja.
@@ -177,7 +206,8 @@ nuevos entran en `OBJETOS` **y en `ck_sync_objeto` en la misma pasada**
 
 ## I · INVARIANTES QUE VIVEN EN BASE
 
-1. `UNIQUE (obra, fecha)` del parte.
+1. `UNIQUE (obra, fecha_operativa)` del parte — columna `DATE` declarada por
+   el cliente, nunca `created_at::date`.
 2. `UNIQUE (obra, numero)` del asiento — correlativo único y creciente
    (asignación con SAVEPOINT+retry como los códigos; sin pretensión de
    «sin huecos» bajo concurrencia, que sería mentirse).
@@ -192,16 +222,17 @@ nuevos entran en `OBJETOS` **y en `ck_sync_objeto` en la misma pasada**
 ## J · ESQUEMA CONCEPTUAL (sin DDL)
 
 ```
-doc_partes         (obra+fecha ÚNICO) responsable · estado · resumen? no:
-                   el resumen se deriva de los asientos · history
+doc_partes         (obra+fecha_operativa ÚNICO, fecha DECLARADA) responsable
+                   · estado · resumen? no: se deriva de los asientos · history
 doc_asientos       numero(obra-correlativo) · parte_id · tipo · contenido
                    JSONB (estructura según tipo) · texto · referencias
                    {foto_id | instruccion_id | issue_id | acta_id |
                     asiento_id rectificado} · autor+empresa+funcion DE ENTONCES
                    · estado · history
 doc_instrucciones  IN-### · emisor{persona,empresa,funcion} · destinatario
-                   {persona o funcion} · asunto · contenido · referencias
-                   · rectifica_a · acuses[] · estado · history
+                   {tipo: persona|empresa, snapshot empresa+funcion} · asunto
+                   · contenido · referencias · rectifica_a · acuses[] · estado
+                   · history
 ```
 
 ## K · EXP FINAL PREVISTA (los 12 pasos, ejecutables por diseño)
@@ -233,19 +264,18 @@ ni documento lo insinuará, salvo que una investigación normativa específica �
 que no existe hoy — lo demuestre. La fila del baseline mide capacidad, no
 validez legal.
 
-## L · DECISIONES DE PROPIETARIO
+## L · DECISIONES DE PROPIETARIO — RESUELTAS (27-ago-2026)
 
-**Ninguna inevitable.** Tres PROPUESTAS que quedan congeladas salvo veto tuyo
-antes de la pasada 2:
-
-1. Emisores de instrucción: `SUPERVISION` y `ENTIDAD`.
-2. Aprobador del asiento de CONTRATISTA/OTRO: función `SUPERVISION` (o admin
-   de obra en su ausencia).
-3. Identidad del parte: `(obra, fecha)` único — el turno, si algún día hace
-   falta, es un atributo del asiento, no otra jornada.
+1. Emisores de instrucción: `SUPERVISION` y `ENTIDAD` — **✅ APROBADO**.
+2. Aprobador del asiento de CONTRATISTA/OTRO: `SUPERVISION` **✅** ·
+   fallback Project Admin **❌ RECHAZADO** · contingencia `ENTIDAD` explícita
+   (declarada como función autorizada) **✅ permitida**.
+3. Identidad del parte: `(obra, fecha_operativa)` único — **✅ APROBADO**;
+   el turno, si algún día hace falta, es un atributo del asiento, no otra
+   jornada.
 
 ---
 
-**ARQ DEFINITION READY** — a la espera del visto bueno (o vetos a §L) para la
-pasada 2: semántica → suite → migración → schema → backend → smoke → frontend
-→ EXP.
+**ARQ DEFINITION = CLOSED** (con las correcciones del propietario ya
+incorporadas arriba) → pasada 2: semántica → suite → migración → schema →
+backend → smoke → frontend → EXP.
