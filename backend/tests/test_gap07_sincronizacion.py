@@ -37,7 +37,7 @@ def test_el_OBJETO_y_el_ACTO_son_identidades_distintas():
     """Un issue tiene UN `local_object_id` y varios `operation_id`. Confundirlos
     haria que reintentar la foto reintentara la creacion."""
     sql = _sql()
-    assert 'local_object_id   UUID        NOT NULL' in sql
+    assert 'local_object_id   TEXT        NOT NULL' in sql
     assert 'operation_id      UUID        NOT NULL' in sql
     # La idempotencia es del ACTO, no del objeto.
     assert 'idx_sync_idempotencia' in sql
@@ -329,3 +329,27 @@ def test_la_migracion_solo_anade():
     for destructivo in ('DROP TABLE', 'DROP COLUMN', 'DELETE FROM', 'TRUNCATE'):
         assert destructivo not in sql.upper(), destructivo
     assert 'UPDATE ' not in sql.upper(), 'no toca ni una fila existente'
+
+
+def test_local_object_id_es_TEXT_porque_lo_pone_el_dispositivo():
+    """El error que esta prueba impide volvio REINTENTABLE cada acto de campo
+    en produccion: la migracion tipaba `local_object_id` como UUID y el cliente
+    manda `loc_<uuid>` -- texto con prefijo, a proposito. Las 1438 pruebas no
+    lo vieron porque nadie CASABA el tipo de la columna con lo que el cliente
+    genera. Esta lo casa."""
+    import io as _io
+    import os as _os
+    raiz = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    m21 = _io.open(_os.path.join(raiz, 'sql',
+                   '21_gap07_sincronizacion_de_campo.sql'), encoding='utf-8').read()
+    fila = [l for l in m21.splitlines() if 'local_object_id' in l and 'NOT NULL' in l]
+    assert fila and 'TEXT' in fila[0] and 'UUID' not in fila[0], (
+        'local_object_id tiene que ser TEXT: el dispositivo manda loc_<uuid>')
+    # Y el cliente de verdad manda el prefijo -- si alguien lo quita, esta
+    # prueba obliga a decidir el tipo a la vez.
+    cap = _io.open(_os.path.join(_os.path.dirname(raiz), 'frontend-docs', 'src',
+                   'offline', 'captura.js'), encoding='utf-8').read()
+    assert "'loc_' + local.uuid()" in cap
+    # La migracion 22 existe para las instalaciones donde la 21 ya corrio.
+    assert _os.path.exists(_os.path.join(raiz, 'sql',
+                           '22_local_object_id_es_del_dispositivo.sql'))

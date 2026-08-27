@@ -52,7 +52,10 @@ CREATE TABLE IF NOT EXISTS sync_operaciones (
 
     -- ── QUE OBJETO, Y CUAL ────────────────────────────────────────────────
     object_type       TEXT        NOT NULL,
-    local_object_id   UUID        NOT NULL,
+    -- TEXT, no UUID: la identidad la pone el DISPOSITIVO y lleva prefijo
+    -- (loc_<uuid>). Tiparla UUID mato todos los INSERT en produccion; ver
+    -- la migracion 22, que corrige las instalaciones que ya corrieron esta.
+    local_object_id   TEXT        NOT NULL,
     server_object_id  TEXT,                 -- lo asigna el servidor al aplicar
     action            TEXT        NOT NULL,
 

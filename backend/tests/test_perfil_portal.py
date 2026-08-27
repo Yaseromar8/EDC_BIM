@@ -76,6 +76,14 @@ def _llamadas_del_portal():
             if not f.endswith(('.jsx', '.js')):
                 continue
             src = io.open(os.path.join(raiz, f), encoding='utf-8', errors='ignore').read()
+            # SIN COMENTARIOS: una ruta mencionada en un comentario no es una
+            # llamada. Ya dio un falso positivo real (/api/lo-que-sea-que-no-
+            # existe, citado en un comentario de capacidades.js) y es la misma
+            # debilidad que hubo que corregir en test_gap07_cliente_offline.
+            src = chr(10).join(
+                (l.split('//')[0] if '//' in l and 'http' not in l else l)
+                for l in src.splitlines()
+                if not l.strip().startswith(('*', '/*')))
             # hasta la primera interpolacion o cierre: el prefijo literal
             for m in re.finditer(r'/api/[A-Za-z0-9_/-]*', src):
                 llamadas.add(m.group(0).rstrip('/'))
