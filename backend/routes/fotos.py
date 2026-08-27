@@ -94,10 +94,14 @@ def subir_foto():
     if not fichero or not fichero.filename:
         return jsonify({'error': 'No llegó ningún fichero.', 'code': 'SIN_FICHERO'}), 400
 
-    from file_validator import validate_file
-    veredicto = validate_file(fichero)
-    if not veredicto.get('valid'):
-        return jsonify({'error': veredicto.get('error', 'Fichero no admitido')}), 400
+    # validate_file LANZA si el fichero no es aceptable y devuelve los datos
+    # si lo es -- NO devuelve {'valid': ...}. El patron get('valid') rechazaba
+    # TODO fichero desde siempre (defecto heredado, ver commit).
+    from file_validator import validate_file, FileValidationError
+    try:
+        validate_file(fichero)
+    except FileValidationError as ve:
+        return jsonify({'error': str(ve), 'code': getattr(ve, 'code', 'INVALID_FILE')}), 400
 
     sensibilidad = (request.form.get('sensibilidad') or fdo.NIVEL_POR_DEFECTO).strip()
     if not fdo.nivel_valido(sensibilidad):

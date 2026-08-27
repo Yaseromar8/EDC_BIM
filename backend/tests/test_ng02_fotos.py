@@ -269,3 +269,23 @@ def test_la_pantalla_declara_la_sensibilidad_y_la_privacidad_del_GPS():
         assert nivel in m
     assert 'GPS' in m, 'la limpieza se DICE al usuario, no se hace en silencio'
     assert 'PRIVADA' in m, 'la marca dice que es privada hasta publicarse'
+
+
+def test_validate_file_LANZA_y_nadie_le_pregunta_por_valid():
+    """DEFECTO REAL cazado por el smoke de NG-02 contra produccion:
+    `validate_file` devuelve los DATOS en exito y LANZA FileValidationError en
+    fallo -- jamas devuelve {'valid': ...}. Tres rutas comprobaban
+    veredicto.get('valid'), que siempre es None: TODA subida por tracking, pins
+    y fotos respondia 400 «Fichero no admitido» desde que se escribio el
+    patron. Nadie lo vio porque esas subidas no tenian smoke contra produccion.
+    Esta prueba casa el contrato con TODOS sus consumidores."""
+    import inspect
+    import file_validator
+    fuente_v = inspect.getsource(file_validator.validate_file)
+    assert "'valid'" not in fuente_v, 'si el contrato cambia, cambiar consumidores'
+    for ruta in ('fotos.py', 'tracking.py', 'pins.py', 'documents.py'):
+        s = io.open(os.path.join(RAIZ, 'routes', ruta), encoding='utf-8').read()
+        if 'validate_file' not in s:
+            continue
+        assert ".get('valid')" not in s, (
+            '%s pregunta por una clave que validate_file nunca devuelve' % ruta)

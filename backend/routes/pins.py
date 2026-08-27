@@ -273,10 +273,11 @@ def upload_pin_attachment():
 
     # Nada de esto se comprobaba: entraba cualquier fichero, de cualquier tamano
     # y de cualquier tipo, a un endpoint con sesion pero sin mas control.
-    from file_validator import validate_file
-    veredicto = validate_file(file)
-    if not veredicto.get('valid'):
-        return jsonify({'error': veredicto.get('error', 'Fichero no admitido')}), 400
+    from file_validator import validate_file, FileValidationError
+    try:
+        validate_file(file)
+    except FileValidationError as ve:
+        return jsonify({'error': str(ve), 'code': getattr(ve, 'code', 'INVALID_FILE')}), 400
 
     # Y el projectId entraba SIN SANEAR en el nombre del objeto. Llega del
     # formulario, asi que un valor como '../otra-obra' escribia fuera del prefijo

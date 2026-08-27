@@ -515,10 +515,14 @@ def add_photo_to_pin():
 
         # Ni tipo, ni tamano, ni extension se miraban. Y las fotos de obra llevan
         # GPS en el EXIF, asi que esto es ademas una entrada de datos personales.
-        from file_validator import validate_file
-        veredicto = validate_file(file)
-        if not veredicto.get('valid'):
-            return jsonify({"error": veredicto.get('error', 'Fichero no admitido')}), 400
+        # validate_file LANZA en fallo y devuelve datos en exito -- no hay
+        # clave 'valid'. El patron viejo rechazaba TODO fichero (defecto real,
+        # cazado por el smoke de NG-02).
+        from file_validator import validate_file, FileValidationError
+        try:
+            validate_file(file)
+        except FileValidationError as ve:
+            return jsonify({"error": str(ve), "code": getattr(ve, 'code', 'INVALID_FILE')}), 400
 
         # 1. Quitarle el GPS ANTES de subirla, y guardarlo aparte.
         #
