@@ -192,10 +192,13 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   // que el backend, y enseñar «Trabajo de campo» contra un servidor que aún no
   // la tiene sería prometer que se puede capturar sin cobertura cuando lo único
   // que pasaría es que no se guarda nada.
-  const [hayCampo, setHayCampo] = React.useState(false);
+  // true = la sirve · false = NO la sirve (404 medido) · null = no se sabe.
+  // Sin red la pestaña SE ENSEÑA aunque no se sepa: la cola es local y
+  // esconderla dejaría el trabajo capturado sin pantalla desde donde verlo.
+  const [hayCampo, setHayCampo] = React.useState(null);
   React.useEffect(() => {
     let vivo = true;
-    tieneSincronizacionDeCampo(API).then(r => { if (vivo) setHayCampo(!!r); });
+    tieneSincronizacionDeCampo(API).then(r => { if (vivo) setHayCampo(r); });
     return () => { vivo = false; };
   }, []);
   
@@ -429,7 +432,10 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   // Y la cola de campo, ademas, solo si el servidor la
                   // recibe. Una pestaña que promete offline contra un backend
                   // que no lo tiene es peor que no tenerla.
-                  if (it.mode === 'campo' && !hayCampo) return false;
+                  if (it.mode === 'campo') {
+                    if (hayCampo === false) return false;
+                    if (hayCampo === null && navigator.onLine) return false;
+                  }
                   const cod = HERRAMIENTA_DE_MODO[it.mode];
                   if (!cod) return true;
                   // Una entrada puede depender de VARIAS herramientas: basta con

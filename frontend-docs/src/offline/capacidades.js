@@ -61,13 +61,21 @@ export async function tieneSincronizacionDeCampo(API) {
       //
       // Con sesión válida --que es cuando esto corre de verdad-- la pregunta sí
       // se contesta: 404 la ruta no está, 405 está y el método es otro.
-      if (r.status === 401) return false;   // no se sabe, y no se recuerda
+      if (r.status === 401) return null;    // NO SE SABE — y no se recuerda
       _respuesta = r.status !== 404;
       return _respuesta;
     } catch (e) {
-      // No se pudo preguntar. NO se recuerda como «no»: se responde que no
-      // ahora y se vuelve a preguntar la próxima vez.
-      return false;
+      // NO SE PUDO PREGUNTAR — que es exactamente lo que pasa SIN RED.
+      //
+      // Devolver false aquí fue un defecto que la EXP destapó antes del corte:
+      // false significa «el servidor NO tiene la ruta», y con false `capturar`
+      // desvía a la ruta antigua… que sin red también falla. La captura se
+      // perdía en el único momento en el que la cola existe para salvarla.
+      //
+      // «No sé» y «no» no son lo mismo. Es la misma lección del 401, una capa
+      // más arriba: null = no determinado, y ante lo no determinado la captura
+      // ENCOLA — encolar nunca pierde nada; desviar, sí.
+      return null;
     } finally {
       _preguntando = null;
     }

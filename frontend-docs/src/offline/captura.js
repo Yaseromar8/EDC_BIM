@@ -77,7 +77,22 @@ export async function capturar(API, ctx, {
   // Y si no lo recibe, NO se encola. Una cola que no puede vaciarse es peor que
   // no tener cola: el inspector cree que su jornada está esperando, y no espera
   // nada.
-  if (!(await tieneSincronizacionDeCampo(API))) {
+  // SIN RED NO SE PREGUNTA NADA: se encola. La sonda existe para la ventana de
+  // despliegue, y esa ventana solo se puede observar CON red.
+  if (!navigator.onLine) {
+    const operation_id = local.uuid();
+    const fila = await local.encolar(ctx, {
+      operation_id, object_type, action, local_object_id, server_object_id,
+      payload: payload || {}, base_version, depende_de,
+      capturado_en: new Date().toISOString(),
+    });
+    return { modo: 'local', datos: fila };
+  }
+
+  // Solo un «NO» rotundo (404: la ruta no existe) desvía a la ruta antigua.
+  // `null` —no se pudo preguntar— sigue por la cola: encolar nunca pierde
+  // nada; desviar a una ruta que tampoco responde, sí.
+  if ((await tieneSincronizacionDeCampo(API)) === false) {
     if (!enLinea) {
       throw new Error('este servidor todavía no recibe trabajo de campo');
     }
@@ -93,11 +108,6 @@ export async function capturar(API, ctx, {
     operation_id, object_type, action, local_object_id, server_object_id,
     payload: payload || {}, base_version, depende_de, capturado_en,
   };
-
-  if (!navigator.onLine) {
-    const fila = await local.encolar(ctx, acto);
-    return { modo: 'local', datos: fila };
-  }
 
   // HAY RED (o eso dice el navegador, que a veces miente). Se intenta ahora.
   try {

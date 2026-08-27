@@ -619,33 +619,40 @@ def test_un_401_NO_es_una_respuesta_a_esta_pregunta():
     produccion--. Tomar ese 401 por «la ruta esta ahi» seria deducir que existe
     algo que no se ha llegado a mirar."""
     c = _sin_comentarios(capacidades())
-    assert 'if (r.status === 401) return false;' in c
+    assert 'if (r.status === 401) return null;' in c
     # Y no se recuerda: la sesion puede volver.
     trozo = c.split('r.status === 401')[1].splitlines()[0]
     assert '_respuesta' not in trozo
 
 
-def test_ante_la_duda_la_respuesta_es_NO():
-    """Prometer offline sin poder cumplirlo se paga con trabajo perdido."""
+def test_no_poder_preguntar_NO_es_un_no():
+    """El defecto que la EXP destapo antes del corte: el catch devolvia false,
+    `capturar` leia false como «el servidor no tiene la ruta» y desviaba a la
+    ruta antigua -- que sin red tambien falla. La captura se perdia en el unico
+    momento en el que la cola existe para salvarla. «No se» es null, y ante
+    null se ENCOLA: encolar nunca pierde nada."""
     c = _sin_comentarios(capacidades())
     catch = c.split('} catch (e) {')[1].split('} finally')[0]
-    assert 'return false' in catch
-    assert '_respuesta = true' not in catch
-    # Y el «no se sabe» NO se cachea: puede que desplieguen entretanto.
-    assert '_respuesta = false' not in catch
+    assert 'return null' in catch
+    assert 'return false' not in catch
+    assert '_respuesta' not in catch
 
 
-def test_si_el_servidor_no_lo_recibe_NO_SE_ENCOLA():
-    """Una cola que no puede vaciarse es peor que no tener cola: el inspector
-    cree que su jornada esta esperando, y no espera nada."""
+def test_solo_un_NO_rotundo_desvia_y_sin_red_se_encola_sin_preguntar():
+    """Tres respuestas, tres conductas: false (404 medido) desvia a la ruta
+    antigua; null (no se pudo preguntar) sigue por la cola; y SIN RED no se
+    pregunta nada -- se encola directo: la sonda existe para la ventana de
+    despliegue, y esa solo se observa con red."""
     c = _sin_comentarios(captura())
-    cuerpo = c.split('export async function capturar(')[1].split('\nexport ')[0]
-    guardia = cuerpo.split('tieneSincronizacionDeCampo(API)')[1].split('const operation_id')[0]
+    cuerpo = c.split('export async function capturar(')[1].split(chr(10) + 'export ')[0]
+    i_offline = cuerpo.index('!navigator.onLine')
+    i_sonda = cuerpo.index('tieneSincronizacionDeCampo')
+    assert i_offline < i_sonda, 'sin red no hay nada que preguntar'
+    assert 'local.encolar' in cuerpo[i_offline:i_sonda]
+    assert '(await tieneSincronizacionDeCampo(API)) === false' in cuerpo
+    guardia = cuerpo.split('=== false')[1].split('const operation_id')[0]
     assert 'local.encolar' not in guardia
     assert 'enLinea()' in guardia
-    # Y se comprueba ANTES de generar el operation_id: no se empieza un acto de
-    # cola que no va a poder existir.
-    assert cuerpo.index('tieneSincronizacionDeCampo') < cuerpo.index('const operation_id')
 
 
 def test_levantar_un_punch_y_un_acta_SIGUEN_FUNCIONANDO_sin_la_ruta_nueva():
@@ -670,11 +677,12 @@ def test_el_respaldo_se_DISTINGUE_de_una_sincronizacion():
         assert 'sinCampo' in m
 
 
-def test_la_pestana_de_campo_NO_se_ofrece_si_el_servidor_no_la_sirve():
-    """Enseñarla contra un backend que aun no la tiene seria prometer que se
-    puede capturar sin cobertura cuando no se guardaria nada."""
+def test_la_pestana_de_campo_solo_se_esconde_con_un_NO_medido():
+    """false (404 medido) la esconde; null + EN LINEA tambien (aun no se
+    sabe); null + SIN RED la ENSEÑA: la cola es local y esconderla dejaria
+    capturas sin pantalla desde donde verlas."""
     f = _sin_comentarios(_leer('src', 'pages', 'FilesPage.jsx'))
     assert 'tieneSincronizacionDeCampo(API)' in f
-    assert "if (it.mode === 'campo' && !hayCampo) return false;" in f
-    # Y nace en FALSE: mientras no se sepa, no se promete.
-    assert 'React.useState(false)' in f.split('const [hayCampo,')[1][:60]
+    assert 'hayCampo === false' in f
+    assert 'hayCampo === null && navigator.onLine' in f
+    assert 'React.useState(null)' in f.split('const [hayCampo,')[1][:60]
