@@ -153,7 +153,17 @@ export default function PunchModule({ project, API, user, isAdmin }) {
     apiFetch(`${API}/api/issues/catalogo`)
       .then(r => (r.ok ? r.json() : null))
       .then(d => { if (d) setCatalogo(d); })
-      .catch(() => {});
+      // SIN RED, EL CATALOGO SALE DE LA PRECARGA. Pedirlo solo a la red dejaba
+      // el modal de levantar sin tipos justo cuando mas falta hace -- lo
+      // destapo la EXP de campo. La precarga es una foto y se enseña como tal.
+      .catch(() => {
+        const ctx = campo.contextoDe(user, project);
+        if (!ctx) return;
+        import('../offline/precarga')
+          .then(pre => pre.leer(ctx, pre.CATALOGOS))
+          .then(({ datos }) => { if (datos) setCatalogo(datos); })
+          .catch(() => {});
+      });
   }, [API]);
 
   useEffect(() => {

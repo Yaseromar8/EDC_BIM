@@ -686,3 +686,27 @@ def test_la_pestana_de_campo_solo_se_esconde_con_un_NO_medido():
     assert 'hayCampo === false' in f
     assert 'hayCampo === null && navigator.onLine' in f
     assert 'React.useState(null)' in f.split('const [hayCampo,')[1][:60]
+
+
+# ══ 12 · LO QUE LA EXP DE CAMPO REAL DESTAPO (27-ago, wifi apagado) ════════
+
+def test_la_precarga_calienta_TAMBIEN_los_modulos():
+    """«Failed to fetch dynamically imported module: ProtocolosModule…»: un
+    modulo nunca visitado antes de perder la red no podia abrirse, porque el
+    service worker solo cachea lo que alguien pidio. La precarga los importa
+    para que el SW los guarde al pasar."""
+    s = precarga()
+    for m in ('ProtocolosModule', 'PunchModule', 'SincronizacionModule'):
+        assert "import('../components/%s')" % m in s, m
+
+
+def test_sin_red_el_catalogo_y_las_plantillas_salen_de_la_PRECARGA():
+    """El selector de «Levantar acta» quedaba vacio sin red: los modulos solo
+    sabian pedir a la red. Capturar offline exige que lo precargado alimente
+    las pantallas de captura."""
+    pu = punch()
+    assert "pre.leer(ctx, pre.CATALOGOS)" in pu
+    pr = protocolos()
+    assert "pre.leer(ctx, pre.PROTOCOLOS)" in pr
+    # Y lo degradado SE DICE: la pantalla avisa de que es la foto precargada.
+    assert 'Sin conexión' in pr

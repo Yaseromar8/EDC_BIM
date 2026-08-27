@@ -70,6 +70,22 @@ export async function precargar(API, ctx, { onProgreso } = {}) {
       ruta: `/api/issues/catalogo` },
   ];
 
+  // LOS MODULOS TAMBIEN SE LLEVAN. Los chunks se cargan bajo demanda, y el
+  // service worker solo cachea lo que alguien pidio: un modulo NUNCA visitado
+  // antes de perder la red no puede abrirse sin ella -- paso en la EXP real
+  // («Failed to fetch dynamically imported module: ProtocolosModule…»).
+  // Importarlos aqui los trae, y el SW los guarda al pasar.
+  try {
+    await Promise.all([
+      import('../components/ProtocolosModule'),
+      import('../components/PunchModule'),
+      import('../components/SincronizacionModule'),
+    ]);
+    if (onProgreso) onProgreso({ etiqueta: 'pantallas de campo', estado: 'listo' });
+  } catch (e) {
+    if (onProgreso) onProgreso({ etiqueta: 'pantallas de campo', estado: 'falló' });
+  }
+
   const resultado = { traidas: [], fallidas: [], descargado_en: Date.now() };
   for (const pieza of piezas) {
     if (onProgreso) onProgreso({ etiqueta: pieza.etiqueta, estado: 'trayendo' });

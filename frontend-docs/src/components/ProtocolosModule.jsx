@@ -61,10 +61,31 @@ export default function ProtocolosModule({ project, API, user, isAdmin }) {
       if (rp.ok) setPlantillas((await rp.json()).plantillas || []);
       if (rd.ok) setDeuda(await rd.json());
     } catch (e) {
+      // SIN RED, LAS PLANTILLAS SALEN DE LA PRECARGA. La EXP de campo destapo
+      // que este modulo solo sabia pedir a la red: el selector de «Levantar
+      // acta» quedaba vacio exactamente donde el protocolo hace falta. Las
+      // actas del servidor no se pueden enseñar sin red (y no se inventan),
+      // pero LEVANTAR una nueva contra la plantilla precargada, si.
+      try {
+        const ctx = campo.contextoDe(user, project);
+        if (ctx) {
+          const pre = await import('../offline/precarga');
+          const { datos } = await pre.leer(ctx, pre.PROTOCOLOS);
+          const lista = (datos && (datos.plantillas || datos)) || [];
+          if (lista.length) {
+            setPlantillas(lista);
+            setActas([]);
+            setError('Sin conexión: ves las plantillas que te llevaste. Las actas '
+                     + 'del servidor aparecerán al reconectar; las que levantes '
+                     + 'ahora quedan en Trabajo de campo.');
+            return;
+          }
+        }
+      } catch (e2) { /* la precarga no estaba: cae al error de siempre */ }
       setActas([]);
       setError(e.message || 'No se pudieron cargar las actas.');
     }
-  }, [API, urn]);
+  }, [API, urn, user, project]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
