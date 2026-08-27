@@ -199,8 +199,15 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
   const [hayCampo, setHayCampo] = React.useState(null);
   React.useEffect(() => {
     let vivo = true;
-    tieneSincronizacionDeCampo(API).then(r => { if (vivo) setHayCampo(r); });
-    return () => { vivo = false; };
+    const preguntar = () => tieneSincronizacionDeCampo(API)
+      .then(r => { if (vivo) setHayCampo(r); });
+    preguntar();
+    // Y SE VUELVE A PREGUNTAR AL VOLVER LA RED. Sin esto, una sonda que corrio
+    // sin cobertura (null) dejaba la pestaña escondida PARA SIEMPRE al
+    // reconectar -- paso en la EXP de NG-02: la cola sincronizaba pero su
+    // pantalla habia desaparecido del menu.
+    window.addEventListener('online', preguntar);
+    return () => { vivo = false; window.removeEventListener('online', preguntar); };
   }, []);
   
   const vh = useVersionHistory(fe.projectPrefix, user, {

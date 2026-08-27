@@ -710,3 +710,14 @@ def test_sin_red_el_catalogo_y_las_plantillas_salen_de_la_PRECARGA():
     assert "pre.leer(ctx, pre.PROTOCOLOS)" in pr
     # Y lo degradado SE DICE: la pantalla avisa de que es la foto precargada.
     assert 'Sin conexión' in pr
+
+
+def test_la_pestana_de_campo_VUELVE_cuando_vuelve_la_red():
+    """Cazado en la EXP de NG-02: la sonda corrio sin cobertura (null), la red
+    volvio, y la pestaña quedo escondida para siempre -- la cola sincronizaba
+    pero su pantalla habia desaparecido del menu. Al volver la red se vuelve a
+    preguntar."""
+    f = _sin_comentarios(_leer('src', 'pages', 'FilesPage.jsx'))
+    trozo = f.split('const [hayCampo,')[1].split('}, []);')[0]
+    assert "addEventListener('online', preguntar)" in trozo
+    assert "removeEventListener('online', preguntar)" in trozo
