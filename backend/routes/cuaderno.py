@@ -897,7 +897,12 @@ def clima():
                         'code': 'SIN_UBICACION_DE_OBRA'}), 409
     lat, lon = f
     import requests
+    detalle = ''
     try:
+        # User-Agent IDENTIFICADO, como pide la etiqueta de Open-Meteo: el UA
+        # por defecto de requests desde una IP de datacenter se lleva el
+        # desafio del CDN y el 502 parece «el proveedor no responde» -- medido
+        # en el smoke del 27-ago-2026 (local pasaba, Render no).
         r = requests.get(
             'https://api.open-meteo.com/v1/forecast',
             params={'latitude': lat, 'longitude': lon,
@@ -905,14 +910,20 @@ def clima():
                              'precipitation_sum,wind_speed_10m_max,weather_code',
                     'timezone': 'auto',
                     'start_date': fecha.isoformat(), 'end_date': fecha.isoformat()},
+            headers={'User-Agent': 'ALEPHIA-CDE/1.0 (cuaderno de obra; clima E08)'},
             timeout=8)
+        detalle = 'HTTP %s' % r.status_code
         r.raise_for_status()
         crudo = r.json()
     except Exception as e:
-        logger.warning('[clima] open-meteo: %s', str(e)[:200])
+        # El DETALLE viaja en la respuesta (truncado): un 502 mudo obliga a
+        # pedirle logs al dueno para saber si fue DNS, TLS, un 429 o un 403.
+        detalle = ('%s · %s' % (detalle, str(e)))[:180]
+        logger.warning('[clima] open-meteo: %s', detalle)
         return jsonify({'error': 'El proveedor de clima no respondió; el '
                                  'asiento manual sigue disponible.',
-                        'code': 'PROVEEDOR_NO_RESPONDE'}), 502
+                        'code': 'PROVEEDOR_NO_RESPONDE',
+                        'detalle': detalle}), 502
     diario = crudo.get('daily') or {}
 
     def _v(clave):
