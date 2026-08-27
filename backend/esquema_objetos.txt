@@ -1085,9 +1085,9 @@ restriccion	element_docs not null external_id
 restriccion	element_docs not null id
 restriccion	element_docs not null url
 restriccion	element_docs primary key (id)
-restriccion	encargos check (((destino_usuario is not null) or (destino_funcion is not null)))
+restriccion	encargos check (((destino_usuario is not null) or (destino_funcion is not null) or (destino_empresa is not null)))
 restriccion	encargos check ((estado = any (array['abierto'::text, 'cerrado'::text])))
-restriccion	encargos check ((objeto_tipo = any (array['review'::text, 'rfi'::text, 'redline'::text, 'transmittal'::text, 'submittal'::text, 'protocolo'::text, 'issue'::text])))
+restriccion	encargos check ((objeto_tipo = any (array['review'::text, 'rfi'::text, 'redline'::text, 'transmittal'::text, 'submittal'::text, 'protocolo'::text, 'issue'::text, 'parte'::text, 'asiento'::text, 'instruccion'::text])))
 restriccion	encargos foreign key (destino_usuario) references users(id) on delete cascade
 restriccion	encargos foreign key (project_id) references projects(id) on delete cascade
 restriccion	encargos not null asunto
@@ -1572,7 +1572,7 @@ indice	create unique index on public.doc_sets using btree (model_urn, name)
 indice	create unique index on public.document_shares using btree (id)
 indice	create unique index on public.element_docs using btree (id)
 indice	create unique index on public.encargos using btree (id)
-indice	create unique index on public.encargos using btree (project_id, objeto_tipo, objeto_id, coalesce(destino_usuario, '-1'::integer), coalesce(destino_funcion, ''::text)) where (estado = 'abierto'::text)
+indice	create unique index on public.encargos using btree (project_id, objeto_tipo, objeto_id, coalesce(destino_usuario, '-1'::integer), coalesce(destino_funcion, ''::text), coalesce(destino_empresa, '-1'::integer)) where (estado = 'abierto'::text)
 indice	create unique index on public.extraction_jobs using btree (job_id)
 indice	create unique index on public.file_emisiones using btree (id)
 indice	create unique index on public.file_nodes using btree (id)

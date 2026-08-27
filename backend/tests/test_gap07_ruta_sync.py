@@ -96,7 +96,8 @@ def test_capa16_no_se_salta_por_sincronizar():
     assert 'HERRAMIENTA_DE' in fuente
     import routes.sync as rs
     assert rs.HERRAMIENTA_DE == {'PROTOCOLO': 'protocolos', 'ISSUE': 'issues',
-                                 'FOTO': 'fotos'}  # NG-02: mismo motor, capa 16 tambien
+                                 'FOTO': 'fotos',                    # NG-02
+                                 'PARTE': 'cuaderno', 'ASIENTO': 'cuaderno'}  # NG-03
     import herramientas_de_obra as hdo
     for codigo in rs.HERRAMIENTA_DE.values():
         assert codigo in hdo.CODIGOS, codigo
@@ -275,8 +276,11 @@ def test_lo_que_TODAVIA_no_se_sincroniza_lo_dice_en_vez_de_fallar_raro():
     assert set(rs.DESPACHO) == {(s.ISSUE, s.CREATE), (s.ISSUE, s.MARK_CORRECTED),
                                 (s.ISSUE, s.ADD_EVIDENCE),
                                 (s.PROTOCOLO, s.CREATE), (s.PROTOCOLO, s.SET_ITEMS),
-                                (s.FOTO, s.CREATE)}  # NG-02
-    # Firmar se hace CON conexion, a proposito, y se dice.
+                                (s.FOTO, s.CREATE),                    # NG-02
+                                (s.PARTE, s.CREATE), (s.ASIENTO, s.CREATE)}  # NG-03
+    # Firmar se hace CON conexion, a proposito, y se dice. Y aprobar, cerrar la
+    # jornada y emitir instrucciones igual (doc 96 §H): CREATE es lo unico que
+    # el cuaderno sincroniza.
     assert (s.PROTOCOLO, s.SIGN) not in rs.DESPACHO
 
 

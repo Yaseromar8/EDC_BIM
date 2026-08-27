@@ -90,7 +90,13 @@ ISSUE = 'ISSUE'
 # /api/sync/evidencia (idempotente por objeto determinista); este acto solo
 # REGISTRA la foto -- es enteramente PostgreSQL, caso A.
 FOTO = 'FOTO'
-OBJETOS = (PROTOCOLO, ISSUE, FOTO)
+# NG-03: el cuaderno de obra. Abrir el parte y registrar asientos SON actos de
+# campo (caso A, enteramente PostgreSQL). Aprobar, cerrar la jornada y emitir
+# instrucciones NO entran aqui: son SOLO EN LINEA por decision semantica
+# (doc 96 §H), la misma que dejo la firma de actas fuera.
+PARTE = 'PARTE'
+ASIENTO = 'ASIENTO'
+OBJETOS = (PROTOCOLO, ISSUE, FOTO, PARTE, ASIENTO)
 
 # ── LOS ACTOS. Lista CERRADA ───────────────────────────────────────────────
 CREATE = 'CREATE'
@@ -103,6 +109,8 @@ ACTOS_DE = {
     PROTOCOLO: (CREATE, SET_ITEMS, SIGN),
     ISSUE: (CREATE, ADD_EVIDENCE, MARK_CORRECTED),
     FOTO: (CREATE,),
+    PARTE: (CREATE,),
+    ASIENTO: (CREATE,),
 }
 ACCIONES = tuple(sorted({a for v in ACTOS_DE.values() for a in v}))
 

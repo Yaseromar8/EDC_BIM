@@ -97,6 +97,10 @@ CATALOGO = (
     {'codigo': 'fotos', 'etiqueta': 'Fotos de campo',
      'prefijos': ('/api/pins', '/api/project-pins'), 'por_defecto': True,
      'descripcion': 'Evidencia fotográfica georreferenciada de la obra.'},
+    {'codigo': 'cuaderno', 'etiqueta': 'Cuaderno de obra',
+     'prefijos': ('/api/cuaderno',), 'por_defecto': True,
+     'descripcion': 'Parte diario con asientos tipados, aprobación e '
+                    'instrucciones de obra con acuse.'},
     {'codigo': 'visor', 'etiqueta': 'Visor 3D',
      'prefijos': ('/api/modelos', '/api/lob', '/api/civil'), 'por_defecto': True,
      'descripcion': 'Modelos publicados al visor y sus vistas 4D/civil.'},

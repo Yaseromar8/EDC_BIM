@@ -295,14 +295,25 @@ def test_la_lista_cerrada_de_la_BASE_casa_con_la_del_CODIGO():
     """La MISMA clase de defecto que F2 (doc 93), cazada por la EXP offline de
     foto: OBJETOS crecio en el codigo y ck_sync_objeto siguio con la lista
     vieja en la base -- el manejador aplicaba, anotar violaba el check y todo
-    caia REINTENTABLE. Esta prueba obliga a que crezcan JUNTOS."""
+    caia REINTENTABLE. Esta prueba obliga a que crezcan JUNTOS.
+
+    QUE SE CASA CON QUE: la 21 (el DDL canonico de instalacion nueva) y la
+    migracion MAS NUEVA que redefina el check. Las intermedias (la 24) son
+    historia de lo que se ejecuto en produccion y no se reescriben."""
     import re
     import sincronizacion_de_campo as sync
-    for fichero in ('21_gap07_sincronizacion_de_campo.sql',
-                    '24_foto_en_la_lista_cerrada.sql'):
+    patron = re.compile(r"ck_sync_objeto\s*\n?\s*CHECK \(object_type IN \(([^)]+)\)\)")
+    con_check = {}
+    for fichero in sorted(os.listdir(os.path.join(RAIZ, 'sql'))):
+        if not fichero.endswith('.sql') or not fichero[:2].isdigit():
+            continue
         sql = io.open(os.path.join(RAIZ, 'sql', fichero), encoding='utf-8').read()
-        m = re.search(r"ck_sync_objeto\s*\n?\s*CHECK \(object_type IN \(([^)]+)\)\)", sql)
-        assert m, fichero
-        en_base = {x.strip().strip("'") for x in m.group(1).split(',')}
-        assert en_base == set(sync.OBJETOS), (
-            '%s tiene %s y el codigo %s' % (fichero, en_base, set(sync.OBJETOS)))
+        m = patron.search(sql)
+        if m:
+            con_check[fichero] = {x.strip().strip("'") for x in m.group(1).split(',')}
+    assert '21_gap07_sincronizacion_de_campo.sql' in con_check
+    mas_nueva = max(con_check, key=lambda f: int(f[:2]))
+    for fichero in ('21_gap07_sincronizacion_de_campo.sql', mas_nueva):
+        assert con_check[fichero] == set(sync.OBJETOS), (
+            '%s tiene %s y el codigo %s' % (fichero, con_check[fichero],
+                                            set(sync.OBJETOS)))

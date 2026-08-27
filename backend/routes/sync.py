@@ -65,7 +65,8 @@ sync_bp = Blueprint('sync_bp', __name__)
 # Que herramienta gobierna cada dominio. Es la MISMA que gobierna sus rutas en
 # linea: sincronizar no puede ser una puerta que se salte la capa 16.
 HERRAMIENTA_DE = {sync.PROTOCOLO: 'protocolos', sync.ISSUE: 'issues',
-                  sync.FOTO: 'fotos'}
+                  sync.FOTO: 'fotos', sync.PARTE: 'cuaderno',
+                  sync.ASIENTO: 'cuaderno'}
 
 MAX_POR_LOTE = 200
 
@@ -651,6 +652,158 @@ def _foto_create(cur, obra, op):
     return sync.aplicada(fid, {'objeto': objeto})
 
 
+# ══ LOS ACTOS · CUADERNO (NG-03) ═══════════════════════════════════════════
+#
+# Abrir el parte y registrar asientos SON actos de campo. Aprobar, devolver,
+# cerrar la jornada y emitir instrucciones NO estan aqui a proposito: son SOLO
+# EN LINEA (doc 96 §H) -- autoridad revalidada al momento, la misma decision
+# semantica que dejo la firma de actas fuera del motor.
+
+def _parte_create(cur, obra, op):
+    """Abre la jornada desde campo. La fecha es la OPERATIVA DECLARADA -- regla
+    congelada por el propietario: jamas se deriva del reloj UTC del servidor.
+
+    IDEMPOTENTE POR IDENTIDAD ademas de por acto: si el parte de esa fecha ya
+    existe (otro companero lo abrio, o un reenvio raro), se devuelve el que
+    hay -- dos moviles sin cobertura el mismo dia no paren dos jornadas.
+    """
+    import cuaderno_de_obra as cdo
+    p = op.get('payload') or {}
+    fecha, mal = cdo.fecha_operativa_valida(p.get('fecha_operativa'))
+    if not fecha:
+        return sync.rechazada(
+            'un parte es de una jornada concreta: fecha_operativa AAAA-MM-DD, '
+            'declarada, no derivada del reloj del servidor', mal)
+
+    cur.execute("""SELECT id, estado FROM doc_partes
+                    WHERE project_id = %s AND fecha_operativa = %s""",
+                (obra, fecha))
+    ya = cur.fetchone()
+    if ya:
+        return sync.aplicada(ya[0], {'fecha_operativa': fecha.isoformat(),
+                                     'estado': ya[1], 'ya_existia': True})
+
+    import directorio_de_obra as dirobra
+    uid = _usuario().get('id')
+    funcion = dirobra.funcion_de(cur, obra, uid)
+    cur.execute("""INSERT INTO doc_partes
+                     (project_id, model_urn, fecha_operativa, responsable_id,
+                      created_by, estado, history)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                (obra, p.get('model_urn') or obra, fecha, uid, _actor(),
+                 cdo.ABIERTO,
+                 json.dumps([reg.entrada('abierto', _actor(),
+                                         fecha_operativa=fecha.isoformat(),
+                                         funcion=funcion,
+                                         capturado_en=op.get('capturado_en'),
+                                         origen='campo sin cobertura')])))
+    pid = cur.fetchone()[0]
+    return sync.aplicada(pid, {'fecha_operativa': fecha.isoformat(),
+                               'estado': cdo.ABIERTO})
+
+
+def _asiento_create(cur, obra, op):
+    """Registra un asiento capturado en campo. LA MISMA SEMANTICA que la ruta
+    en linea (`cuaderno_de_obra`): tipo del catalogo cerrado, referencia
+    obligatoria segun tipo, snapshot de empresa+funcion DE AHORA (el actor se
+    revalida al sincronizar, no se congela el de la captura), y aprobacion si
+    el autor es colaborador -- el autor NO gana autoridad por crear.
+    """
+    import cuaderno_de_obra as cdo
+    import directorio_de_obra as dirobra
+    p = op.get('payload') or {}
+
+    # A que parte pertenece: id canonico, o el local de un PARTE/CREATE previo.
+    parte_id = p.get('parte_id')
+    if not parte_id and p.get('parte_local'):
+        parte_id = sync.resolver_objeto(cur, obra, p['parte_local'])
+    if not parte_id and p.get('fecha_operativa'):
+        fecha, _mal = cdo.fecha_operativa_valida(p.get('fecha_operativa'))
+        if fecha:
+            cur.execute("""SELECT id FROM doc_partes
+                            WHERE project_id = %s AND fecha_operativa = %s""",
+                        (obra, fecha))
+            f = cur.fetchone()
+            parte_id = f[0] if f else None
+    if not parte_id:
+        return sync.bloqueada(
+            'este asiento es de un parte que todavía no existe en el servidor',
+            'OBJETO_LOCAL_SIN_RESOLVER')
+
+    # El candado del parte: FOR UPDATE, como las actas firmadas. Un parte
+    # CERRADO no admite asientos ni desde campo.
+    cur.execute("""SELECT id, project_id, estado, fecha_operativa
+                     FROM doc_partes WHERE id = %s FOR UPDATE""", (int(parte_id),))
+    parte = cur.fetchone()
+    if not parte:
+        return sync.rechazada('ese parte ya no existe', 'NO_EXISTE')
+    if str(parte[1]) != str(obra):
+        return sync.rechazada('ese parte es de otra obra', 'OTRA_OBRA')
+    if parte[2] != cdo.ABIERTO:
+        return sync.en_conflicto(
+            'la jornada del %s ya se cerró: lo que traes no se ha perdido, '
+            'pero entra citando en el parte del día en curso, no en uno '
+            'congelado' % parte[3].isoformat(),
+            'PARTE_CERRADO',
+            estado_servidor={'estado': parte[2],
+                             'fecha_operativa': parte[3].isoformat()})
+
+    tipo = (p.get('tipo') or '').strip()
+    ok, mal = cdo.validar_asiento(tipo, p.get('texto'), p.get('contenido'),
+                                  p.get('referencias'))
+    if not ok:
+        return sync.rechazada('asiento no registrable', mal)
+
+    uid = _usuario().get('id')
+    funcion = dirobra.funcion_de(cur, obra, uid)
+    cur.execute("""SELECT c.name FROM users u LEFT JOIN companies c
+                     ON c.id = u.company_id WHERE u.id = %s""", (uid,))
+    f = cur.fetchone()
+    empresa = f[0] if f else None
+    estado = cdo.estado_inicial_de_asiento(funcion)
+
+    for intento in range(5):
+        numero = cdo.siguiente_numero_de_asiento(cur, obra)
+        try:
+            cur.execute('SAVEPOINT alta_asiento_sync')
+            cur.execute("""INSERT INTO doc_asientos
+                (project_id, parte_id, numero, tipo, texto, contenido,
+                 referencias, autor_id, autor_empresa, autor_funcion,
+                 created_by, estado, capturado_en, history)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                RETURNING id""",
+                (obra, int(parte_id), numero, tipo,
+                 (p.get('texto') or '').strip() or None,
+                 json.dumps(p.get('contenido') or {}),
+                 json.dumps(p.get('referencias') or {}),
+                 uid, empresa, funcion, _actor(), estado,
+                 op.get('capturado_en'),
+                 json.dumps([reg.entrada('registrado', _actor(), numero=numero,
+                                         tipo=tipo, funcion=funcion,
+                                         estado=estado,
+                                         capturado_en=op.get('capturado_en'),
+                                         origen='campo sin cobertura')])))
+            aid = cur.fetchone()[0]
+            cur.execute('RELEASE SAVEPOINT alta_asiento_sync')
+            break
+        except Exception:
+            cur.execute('ROLLBACK TO SAVEPOINT alta_asiento_sync')
+            if intento == 4:
+                raise
+
+    if estado == cdo.EN_APROBACION:
+        try:
+            eid = _enc.abrir(cur, 'ASIENTO', aid,
+                             'Aprobar o devolver el asiento N.º %s (%s)'
+                             % (numero, tipo),
+                             destino_funcion='SUPERVISION', creado_por=_actor())
+            if eid:
+                _enc.avisar(cur, eid)
+        except Exception as e:
+            logger.warning('[sync asiento %s] sin encargo: %s', aid, str(e)[:120])
+    return sync.aplicada(aid, {'numero': numero, 'tipo': tipo, 'estado': estado})
+
+
 DESPACHO = {
     (sync.ISSUE, sync.CREATE): _issue_create,
     (sync.ISSUE, sync.MARK_CORRECTED): _issue_mark_corrected,
@@ -658,6 +811,8 @@ DESPACHO = {
     (sync.PROTOCOLO, sync.CREATE): _protocolo_create,
     (sync.PROTOCOLO, sync.SET_ITEMS): _protocolo_set_items,
     (sync.FOTO, sync.CREATE): _foto_create,
+    (sync.PARTE, sync.CREATE): _parte_create,
+    (sync.ASIENTO, sync.CREATE): _asiento_create,
 }
 
 
@@ -904,8 +1059,10 @@ def sincronizar():
                     d = sync.rechazada(
                         'ese acto todavía no se sincroniza sin cobertura. Hoy: '
                         'levantar un issue, adjuntarle evidencia y darlo por '
-                        'corregido; levantar un acta y marcar sus puntos. '
-                        'Firmarla se hace con conexión, a propósito.',
+                        'corregido; levantar un acta y marcar sus puntos; '
+                        'registrar una foto; abrir el parte diario y registrar '
+                        'asientos. Firmar, aprobar, cerrar la jornada y emitir '
+                        'instrucciones se hacen con conexión, a propósito.',
                         'ACTO_NO_SINCRONIZABLE')
                     sync.anotar(cur, op, actor_id, actor_visible, d)
                     conn.commit()

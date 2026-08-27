@@ -47,6 +47,7 @@ const HERRAMIENTA_DE_MODO = {
   flujos: 'reviews',
   plan: 'plan_entregas', sets: 'conjuntos',
   multimedia: 'fotos',
+  cuaderno: 'cuaderno',
 };
 import NewFolderModal from '../components/modals/NewFolderModal';
 import ShareModal from '../components/modals/ShareModal';
@@ -81,6 +82,7 @@ const EspecificacionesModule = lazy(() => import('../components/Especificaciones
 const FlujosDeRevisionModule = lazy(() => import('../components/FlujosDeRevisionModule'));
 const MultimediaModule = lazy(() => import('../components/MultimediaModule'));
 const FotosModule = lazy(() => import('../components/FotosModule'));
+const CuadernoModule = lazy(() => import('../components/CuadernoModule'));
 const GatewayPanel = lazy(() => import('../components/panels/GatewayPanel'));
 const QuarantineTable = lazy(() => import('../components/panels/QuarantineTable'));
 const SharesManager = lazy(() => import('../components/SharesManager'));
@@ -398,6 +400,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   { label: 'Especificaciones', mode: 'specs', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h7"/></svg>, onClick: () => fe.setSidebarView('specs') },
                   { label: 'Protocolos', mode: 'protocolos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3 5-5"/><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4"/></svg>, onClick: () => fe.setSidebarView('protocolos') },
                   { label: 'Issues y punch', mode: 'punch', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>, onClick: () => fe.setSidebarView('punch') },
+                  { label: 'Cuaderno de obra', mode: 'cuaderno', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="9" y1="7" x2="16" y2="7"/><line x1="9" y1="11" x2="16" y2="11"/></svg>, onClick: () => fe.setSidebarView('cuaderno') },
                   { label: 'Trabajo de campo', mode: 'campo', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16"/><path d="M12 4v10"/><path d="M8 8l4-4 4 4"/><circle cx="12" cy="18" r="1"/></svg>, onClick: () => fe.setSidebarView('campo') },
                   { label: 'Plan de entrega', mode: 'plan', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11H3v10h6V11z"/><path d="M15 3H9v18h6V3z"/><path d="M21 7h-6v14h6V7z"/></svg>, onClick: () => fe.setSidebarView('plan') },
                   { label: 'Conjuntos', mode: 'sets', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>, onClick: () => fe.setSidebarView('sets') },
@@ -576,6 +579,11 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         {fe.sidebarView === 'multimedia' && (
           <FotosModule project={project} API={API} user={user}
                        MultimediaLegacy={MultimediaModule} />
+        )}
+
+        {/* NG-03 · CUADERNO DE OBRA */}
+        {fe.sidebarView === 'cuaderno' && (
+          <CuadernoModule project={project} API={API} user={user} />
         )}
 
         {/* REPORTS VIEW */}

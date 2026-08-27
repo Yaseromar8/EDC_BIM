@@ -47,7 +47,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-TIPOS = ('REVIEW', 'RFI', 'REDLINE', 'TRANSMITTAL', 'SUBMITTAL', 'PROTOCOLO', 'ISSUE')
+TIPOS = ('REVIEW', 'RFI', 'REDLINE', 'TRANSMITTAL', 'SUBMITTAL', 'PROTOCOLO',
+         'ISSUE', 'PARTE', 'ASIENTO', 'INSTRUCCION')
 
 # De donde sale cada objeto: (tabla, columna de alcance). El id se compara
 # siempre en texto, porque unos son SERIAL y otros UUID.
@@ -59,6 +60,9 @@ _ORIGEN = {
     'SUBMITTAL':   ('doc_submittals', 'model_urn'),
     'PROTOCOLO':   ('doc_actas', 'model_urn'),
     'ISSUE':       ('doc_issues', 'model_urn'),
+    'PARTE':       ('doc_partes', 'project_id'),
+    'ASIENTO':     ('doc_asientos', 'project_id'),
+    'INSTRUCCION': ('doc_instrucciones', 'project_id'),
 }
 
 _TABLA = """
@@ -69,6 +73,7 @@ CREATE TABLE IF NOT EXISTS encargos (
     objeto_id       TEXT    NOT NULL,
     destino_usuario INTEGER,
     destino_funcion TEXT,
+    destino_empresa INTEGER,
     asunto          TEXT    NOT NULL,
     estado          TEXT    NOT NULL DEFAULT 'abierto',
     vence_en        TIMESTAMP,
@@ -84,16 +89,21 @@ CREATE TABLE IF NOT EXISTS encargos (
 _CLAVES = (
     ('fk_encargos_project', 'project_id', 'projects', 'id', 'CASCADE'),
     ('fk_encargos_usuario', 'destino_usuario', 'users', 'id', 'CASCADE'),
+    ('fk_encargos_empresa', 'destino_empresa', 'companies', 'id', 'CASCADE'),
 )
 
 _CHECKS = (
     ('ck_encargos_tipo',
-     "CHECK (objeto_tipo IN ('REVIEW','RFI','REDLINE','TRANSMITTAL','SUBMITTAL','PROTOCOLO','ISSUE'))"),
+     "CHECK (objeto_tipo IN ('REVIEW','RFI','REDLINE','TRANSMITTAL','SUBMITTAL',"
+     "'PROTOCOLO','ISSUE','PARTE','ASIENTO','INSTRUCCION'))"),
     ('ck_encargos_estado',
      "CHECK (estado IN ('abierto','cerrado'))"),
-    # Un encargo sin destinatario no es un encargo.
+    # Un encargo sin destinatario no es un encargo. La tercera forma de destino
+    # -- la EMPRESA concreta -- existe porque el BIC de una instruccion se
+    # resuelve contra el sujeto contractual, no contra una funcion (doc 96).
     ('ck_encargos_destino',
-     'CHECK (destino_usuario IS NOT NULL OR destino_funcion IS NOT NULL)'),
+     'CHECK (destino_usuario IS NOT NULL OR destino_funcion IS NOT NULL '
+     'OR destino_empresa IS NOT NULL)'),
 )
 
 # Un mismo objeto no puede tener DOS encargos abiertos para el mismo destino.
@@ -101,7 +111,8 @@ _CHECKS = (
 _UNICO = """
 CREATE UNIQUE INDEX IF NOT EXISTS idx_encargos_abierto_unico
     ON encargos(project_id, objeto_tipo, objeto_id,
-                COALESCE(destino_usuario, -1), COALESCE(destino_funcion, ''))
+                COALESCE(destino_usuario, -1), COALESCE(destino_funcion, ''),
+                COALESCE(destino_empresa, -1))
  WHERE estado = 'abierto'
 """
 
@@ -122,6 +133,11 @@ def ensure_encargos():
             # Para tablas creadas antes de que existiera la memoria de recordatorios.
             cur.execute('ALTER TABLE encargos ADD COLUMN IF NOT EXISTS '
                         'recordado_en TIMESTAMP')
+            # Y antes de que existiera el destino-empresa (NG-03). En
+            # produccion lo pone la migracion 25; esto cubre bases de
+            # desarrollo creadas con la _TABLA anterior.
+            cur.execute('ALTER TABLE encargos ADD COLUMN IF NOT EXISTS '
+                        'destino_empresa INTEGER')
             for sql in _INDICES:
                 cur.execute(sql)
             cur.execute(_UNICO)
@@ -179,23 +195,27 @@ def _obra_del_objeto(cur, objeto_tipo, objeto_id):
 
 
 def abrir(cur, objeto_tipo, objeto_id, asunto, destino_usuario=None,
-          destino_funcion=None, vence_en=None, creado_por=None):
+          destino_funcion=None, vence_en=None, creado_por=None,
+          destino_empresa=None):
     """Abre un encargo. Devuelve su id, o None si no procede.
 
     Valida ANTES de escribir:
       - el tipo es conocido;
       - hay un destinatario;
       - el objeto EXISTE y su obra se puede determinar;
-      - si el destino es una persona, esa persona ES MIEMBRO de esa obra.
+      - si el destino es una persona, esa persona ES MIEMBRO de esa obra;
+      - si el destino es una empresa, esa empresa PARTICIPA en esa obra.
 
     Esa ultima comprobacion es la invariante 1 en el momento de crear: no se
     puede abrir un encargo a alguien que no esta en la obra, ni siquiera por
-    error de quien llama.
+    error de quien llama. El destino-empresa (NG-03) apunta al SUJETO
+    CONTRACTUAL de una instruccion: sus miembros en la obra, no cualquiera
+    que comparta funcion.
     """
     if objeto_tipo not in TIPOS:
         logger.warning('[encargos] tipo desconocido: %s', objeto_tipo)
         return None
-    if not destino_usuario and not destino_funcion:
+    if not destino_usuario and not destino_funcion and not destino_empresa:
         return None
     if destino_funcion:
         from directorio_de_obra import FUNCIONES
@@ -218,14 +238,23 @@ def abrir(cur, objeto_tipo, objeto_id, asunto, destino_usuario=None,
                            destino_usuario, obra)
             return None
 
+    if destino_empresa:
+        cur.execute('SELECT 1 FROM project_companies WHERE project_id = %s '
+                    '   AND company_id = %s', (obra, int(destino_empresa)))
+        if not cur.fetchone():
+            logger.warning('[encargos] la empresa %s no participa en la obra %s: '
+                           'NO se abre el encargo', destino_empresa, obra)
+            return None
+
     cur.execute("""
         INSERT INTO encargos (project_id, objeto_tipo, objeto_id, destino_usuario,
-                              destino_funcion, asunto, vence_en, creado_por)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                              destino_funcion, destino_empresa, asunto, vence_en,
+                              creado_por)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
         ON CONFLICT DO NOTHING
         RETURNING id
     """, (obra, objeto_tipo, str(objeto_id), destino_usuario, destino_funcion,
-          (asunto or '')[:400], vence_en, creado_por))
+          destino_empresa, (asunto or '')[:400], vence_en, creado_por))
     fila = cur.fetchone()
     return fila[0] if fila else None
 
@@ -266,13 +295,13 @@ def avisar(cur, encargo_id, enlace=None, es_recordatorio=False):
     """
     try:
         cur.execute("""SELECT project_id, asunto, destino_usuario, destino_funcion,
-                              objeto_tipo, vence_en
+                              objeto_tipo, vence_en, destino_empresa
                          FROM encargos WHERE id = %s AND estado = 'abierto'""",
                     (encargo_id,))
         fila = cur.fetchone()
         if not fila:
             return 0
-        obra, asunto, uid, funcion, tipo, vence = fila
+        obra, asunto, uid, funcion, tipo, vence, empresa = fila
 
         correos = []
         if uid:
@@ -283,6 +312,15 @@ def avisar(cur, encargo_id, enlace=None, es_recordatorio=False):
         elif funcion:
             from directorio_de_obra import usuarios_de_la_funcion
             correos = [e for _i, e, _n in usuarios_de_la_funcion(cur, obra, funcion) if e]
+        elif empresa:
+            # El sujeto contractual: los miembros de ESA empresa que ademas son
+            # miembros de la obra -- el mismo JOIN de membresia que la bandeja.
+            cur.execute("""SELECT u.email FROM users u
+                             JOIN project_users pu
+                               ON pu.project_id = %s AND pu.user_id = u.id
+                            WHERE u.company_id = %s AND u.is_active""",
+                        (obra, int(empresa)))
+            correos = [f[0] for f in cur.fetchall() if f[0]]
         if not correos:
             return 0
 
@@ -347,6 +385,16 @@ SELECT e.id, e.project_id, p.name, e.objeto_tipo, e.objeto_id, e.asunto,
                  WHERE pc.project_id = e.project_id
                    AND pc.funcion   = e.destino_funcion
                    AND u.id = %(uid)s
+            )
+       )
+        OR (
+            -- El SUJETO CONTRACTUAL (NG-03): pertenecer HOY a la empresa
+            -- destinataria. El JOIN de membresia de arriba sigue mandando:
+            -- un encargo a una empresa no mete a nadie en la obra.
+            e.destino_empresa IS NOT NULL
+            AND EXISTS (
+                SELECT 1 FROM users u
+                 WHERE u.id = %(uid)s AND u.company_id = e.destino_empresa
             )
        )
    )
@@ -563,6 +611,96 @@ _SQL_ACTAS_VIVAS = """
 """
 
 
+def deudor_de_parte(cur, fila, hoy=None):
+    """A QUIEN le toca un parte AHORA. (uid, asunto, vence).
+
+    Un parte ABIERTO de una jornada YA PASADA es una deuda de su responsable:
+    cerrarlo. El del dia en curso no debe nada -- la jornada sigue.
+    """
+    import datetime as _dt
+    pid, fecha, estado, responsable_id = fila
+    if (estado or '') != 'ABIERTO' or not responsable_id:
+        return None, '', None
+    hoy = hoy or _dt.datetime.now(_dt.timezone.utc).date()
+    if fecha and fecha >= hoy:
+        return None, '', None
+    return (responsable_id,
+            'Cerrar el parte diario del %s' % (fecha.isoformat() if fecha else '?'),
+            None)
+
+
+_SQL_PARTES_VIVOS = """
+    SELECT id, fecha_operativa, estado, responsable_id, project_id
+      FROM doc_partes WHERE estado = 'ABIERTO'
+"""
+
+
+def deudor_de_asiento(cur, fila):
+    """A QUIEN le toca un asiento AHORA. (uid, funcion, asunto).
+
+    EL UNICO DEUDOR CON DOS FORMAS DE DESTINO:
+        EN_APROBACION   la FUNCION aprobadora (SUPERVISION). El Project Admin
+                        NO: aprobar es autoridad contractual y la
+                        administracion no la confiere (correccion del
+                        propietario, doc 96). Si la obra no tiene a nadie con
+                        esa funcion, la deuda queda BLOQUEADA y visible como
+                        SIN_APROBADOR_CONTRACTUAL -- no asignada a un admin.
+        DEVUELTO        su autor: corregir y re-registrar.
+    """
+    aid, numero, tipo, estado, autor_id = fila
+    if (estado or '') == 'EN_APROBACION':
+        return (None, 'SUPERVISION',
+                'Aprobar o devolver el asiento N.º %s (%s)' % (numero, tipo))
+    if (estado or '') == 'DEVUELTO' and autor_id:
+        return (autor_id, None,
+                'Corregir y re-registrar el asiento N.º %s (%s)' % (numero, tipo))
+    return None, None, ''
+
+
+_SQL_ASIENTOS_VIVOS = """
+    SELECT id, numero, tipo, estado, autor_id, project_id
+      FROM doc_asientos WHERE estado IN ('EN_APROBACION','DEVUELTO')
+"""
+
+
+def deudor_de_instruccion(cur, fila):
+    """A QUIEN le toca una instruccion AHORA. (uid, empresa_id, asunto).
+
+    EL BIC SE RESUELVE CONTRA EL SUJETO CONTRACTUAL DEL SNAPSHOT -- la persona
+    o la empresa destinataria congeladas al emitir -- y nunca contra «quien hoy
+    tenga la misma funcion» (correccion del propietario, doc 96).
+
+        EMITIDA    el destinatario: acusar recibo
+        ACUSADA    el destinatario: atenderla
+        ATENDIDA   el emisor: verificar y cerrar
+        CERRADA / RECTIFICADA   nadie
+    """
+    iid, codigo, asunto_txt, estado, emisor_id, destinatario = fila
+    d = destinatario or {}
+    uid = eid = None
+    if d.get('tipo') == 'persona':
+        uid = d.get('usuario_id')
+    elif d.get('tipo') == 'empresa':
+        eid = d.get('empresa_id')
+    estado = (estado or '').strip()
+    if estado == 'EMITIDA':
+        return uid, eid, 'Acusar recibo de %s: %s' % (codigo or 'IN', asunto_txt or '')
+    if estado == 'ACUSADA':
+        return uid, eid, 'Atender %s: %s' % (codigo or 'IN', asunto_txt or '')
+    if estado == 'ATENDIDA':
+        if not emisor_id:
+            return None, None, ''
+        return emisor_id, None, 'Verificar y cerrar %s: %s' % (codigo or 'IN',
+                                                               asunto_txt or '')
+    return None, None, ''
+
+
+_SQL_INSTRUCCIONES_VIVAS = """
+    SELECT id, codigo, asunto, estado, emisor_id, destinatario, project_id
+      FROM doc_instrucciones WHERE estado IN ('EMITIDA','ACUSADA','ATENDIDA')
+"""
+
+
 def deudor_de_submittal(cur, fila):
     """A QUIEN le toca un submittal AHORA, y por que. (uid, asunto, vence).
 
@@ -709,6 +847,51 @@ def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
         if uid is None:
             return False
         return True if destino_usuario is None else uid == destino_usuario
+
+    if tipo == 'PARTE':
+        cur.execute("""SELECT id, fecha_operativa, estado, responsable_id
+                         FROM doc_partes WHERE id::text = %s""", (str(objeto_id),))
+        fila = cur.fetchone()
+        if not fila:
+            return None
+        uid, _a, _v = deudor_de_parte(cur, fila)
+        if uid is None:
+            return False
+        return True if destino_usuario is None else uid == destino_usuario
+
+    if tipo == 'ASIENTO':
+        cur.execute("""SELECT id, numero, tipo, estado, autor_id
+                         FROM doc_asientos WHERE id::text = %s""", (str(objeto_id),))
+        fila = cur.fetchone()
+        if not fila:
+            return None
+        uid, funcion, _a = deudor_de_asiento(cur, fila)
+        if uid is None and funcion is None:
+            return False
+        if destino_usuario is None:
+            # Encargo a la funcion aprobadora: se debe mientras el asiento siga
+            # EN_APROBACION. La granularidad es del estado, como en las demas
+            # deudas por funcion.
+            return True
+        return uid == destino_usuario
+
+    if tipo == 'INSTRUCCION':
+        cur.execute("""SELECT id, codigo, asunto, estado, emisor_id, destinatario
+                         FROM doc_instrucciones WHERE id::text = %s""",
+                    (str(objeto_id),))
+        fila = cur.fetchone()
+        if not fila:
+            return None
+        uid, eid, _a = deudor_de_instruccion(cur, fila)
+        if uid is None and eid is None:
+            return False
+        if destino_usuario is None:
+            # Encargo a la empresa destinataria: se debe mientras el ciclo siga
+            # vivo en manos del sujeto contractual. Las transiciones cierran y
+            # reabren explicitamente (acusar -> atender), asi que la
+            # conciliacion solo respalda.
+            return True
+        return uid == destino_usuario
 
     if tipo == 'TRANSMITTAL':
         cur.execute('SELECT acuses FROM transmittals WHERE id::text = %s', (str(objeto_id),))
@@ -919,6 +1102,100 @@ def _faltantes(cur):
                         "   AND destino_usuario=%s AND estado='abierto'", (str(fila[0]), uid))
             if not cur.fetchone():
                 faltan.append(('PROTOCOLO', str(fila[0]), uid, asunto, vence))
+    except Exception:
+        cur.connection.rollback()
+
+    # Partes de jornadas pasadas sin cerrar: su responsable los debe.
+    try:
+        cur.execute(_SQL_PARTES_VIVOS)
+        for fila in cur.fetchall():
+            obra = fila[4]
+            uid, asunto, vence = deudor_de_parte(cur, fila[:4])
+            if not uid:
+                continue
+            cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
+                        (str(obra), uid))
+            if not cur.fetchone():
+                bloqueadas.append(('PARTE', str(fila[0]), str(fila[1] or ''),
+                                   'su responsable ya no pertenece a la obra'))
+                continue
+            cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='PARTE' AND objeto_id=%s "
+                        "   AND destino_usuario=%s AND estado='abierto'", (str(fila[0]), uid))
+            if not cur.fetchone():
+                faltan.append(('PARTE', str(fila[0]), uid, asunto, vence))
+    except Exception:
+        cur.connection.rollback()
+
+    # Asientos vivos. El DEVUELTO se reconstruye (deuda con identidad); el
+    # EN_APROBACION es deuda de la FUNCION aprobadora y aqui solo se VIGILA su
+    # bloqueo: si la obra no tiene a nadie con funcion aprobadora, eso es
+    # SIN_APROBADOR_CONTRACTUAL -- visible, y JAMAS asignado a un admin
+    # (correccion del propietario). El encargo por funcion lo abre la ruta al
+    # registrar; la conciliacion no lo reconstruye, como tampoco reconstruia
+    # los RFI de responsable-texto: limitacion declarada, no silencio.
+    try:
+        import cuaderno_de_obra as _cdo
+        cur.execute(_SQL_ASIENTOS_VIVOS)
+        for fila in cur.fetchall():
+            obra = fila[5]
+            uid, funcion, asunto = deudor_de_asiento(cur, fila[:5])
+            if funcion:
+                cur.execute("""SELECT 1 FROM project_companies pc
+                                 JOIN users u ON u.company_id = pc.company_id
+                                 JOIN project_users pu
+                                   ON pu.project_id = pc.project_id AND pu.user_id = u.id
+                                WHERE pc.project_id = %s AND pc.funcion = ANY(%s)
+                                  AND u.is_active LIMIT 1""",
+                            (str(obra), list(_cdo.FUNCIONES_APROBADORAS_DE_ASIENTO)))
+                if not cur.fetchone():
+                    bloqueadas.append(('ASIENTO', str(fila[0]), 'N.º %s' % fila[1],
+                                       'SIN_APROBADOR_CONTRACTUAL: nadie ejerce '
+                                       'una funcion aprobadora en esta obra'))
+                continue
+            if not uid:
+                continue
+            cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
+                        (str(obra), uid))
+            if not cur.fetchone():
+                bloqueadas.append(('ASIENTO', str(fila[0]), 'N.º %s' % fila[1],
+                                   'su autor ya no pertenece a la obra'))
+                continue
+            cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='ASIENTO' AND objeto_id=%s "
+                        "   AND destino_usuario=%s AND estado='abierto'", (str(fila[0]), uid))
+            if not cur.fetchone():
+                faltan.append(('ASIENTO', str(fila[0]), uid, asunto, None))
+    except Exception:
+        cur.connection.rollback()
+
+    # Instrucciones vivas: la deuda con identidad de persona se reconstruye;
+    # la de EMPRESA se vigila (la abre la ruta al emitir; si la empresa dejo
+    # el directorio, se dice).
+    try:
+        cur.execute(_SQL_INSTRUCCIONES_VIVAS)
+        for fila in cur.fetchall():
+            obra = fila[6]
+            uid, eid, asunto = deudor_de_instruccion(cur, fila[:6])
+            if eid:
+                cur.execute('SELECT 1 FROM project_companies WHERE project_id = %s '
+                            '   AND company_id = %s', (str(obra), int(eid)))
+                if not cur.fetchone():
+                    bloqueadas.append(('INSTRUCCION', str(fila[0]), fila[1] or '',
+                                       'la empresa destinataria ya no participa '
+                                       'en la obra'))
+                continue
+            if not uid:
+                continue
+            cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
+                        (str(obra), uid))
+            if not cur.fetchone():
+                bloqueadas.append(('INSTRUCCION', str(fila[0]), fila[1] or '',
+                                   'su sujeto contractual ya no pertenece a la obra'))
+                continue
+            cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='INSTRUCCION' "
+                        "   AND objeto_id=%s AND destino_usuario=%s AND estado='abierto'",
+                        (str(fila[0]), uid))
+            if not cur.fetchone():
+                faltan.append(('INSTRUCCION', str(fila[0]), uid, asunto, None))
     except Exception:
         cur.connection.rollback()
 

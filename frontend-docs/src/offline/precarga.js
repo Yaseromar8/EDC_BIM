@@ -35,6 +35,7 @@ export const PROTOCOLOS = 'protocolos';
 export const ISSUES = 'issues';
 export const MIEMBROS = 'miembros';
 export const CATALOGOS = 'catalogos';
+export const PARTES = 'partes';
 
 async function traer(API, ruta) {
   const r = await apiFetch(`${API}${ruta}`);
@@ -68,6 +69,12 @@ export async function precargar(API, ctx, { onProgreso } = {}) {
       ruta: `/api/projects/${alcance}/users` },
     { tipo: CATALOGOS, etiqueta: 'catálogos',
       ruta: `/api/issues/catalogo` },
+    // NG-03: saber qué jornadas ya existen evita abrir un parte duplicado en
+    // campo (el servidor lo resolvería igual — ya_existia — pero la pantalla
+    // puede decirlo antes). El catálogo de tipos de asiento NO se precarga:
+    // vive en el código del módulo, no en la red (lección F4).
+    { tipo: PARTES, etiqueta: 'partes diarios',
+      ruta: `/api/cuaderno/partes?model_urn=${alcance}` },
   ];
 
   // LOS MODULOS TAMBIEN SE LLEVAN. Los chunks se cargan bajo demanda, y el
@@ -81,6 +88,7 @@ export async function precargar(API, ctx, { onProgreso } = {}) {
       import('../components/PunchModule'),
       import('../components/SincronizacionModule'),
       import('../components/FotosModule'),
+      import('../components/CuadernoModule'),
     ]);
     if (onProgreso) onProgreso({ etiqueta: 'pantallas de campo', estado: 'listo' });
   } catch (e) {
