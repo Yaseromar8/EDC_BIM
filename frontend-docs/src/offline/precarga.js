@@ -36,6 +36,7 @@ export const ISSUES = 'issues';
 export const MIEMBROS = 'miembros';
 export const CATALOGOS = 'catalogos';
 export const PARTES = 'partes';
+export const FOTOS = 'fotos';
 
 async function traer(API, ruta) {
   const r = await apiFetch(`${API}${ruta}`);
@@ -75,6 +76,12 @@ export async function precargar(API, ctx, { onProgreso } = {}) {
     // vive en el código del módulo, no en la red (lección F4).
     { tipo: PARTES, etiqueta: 'partes diarios',
       ruta: `/api/cuaderno/partes?model_urn=${alcance}` },
+    // La galeria tambien viaja: sin ella, el selector de citas del cuaderno
+    // quedaba VACIO sin red y la pantalla dejaba encolar un asiento `foto`
+    // sin referencia (rechazo SIN_REFERENCIA medido en la EXP del 27-ago).
+    // Solo metadatos: los binarios no se precargan.
+    { tipo: FOTOS, etiqueta: 'galería de campo',
+      ruta: `/api/fotos?model_urn=${alcance}` },
   ];
 
   // LOS MODULOS TAMBIEN SE LLEVAN. Los chunks se cargan bajo demanda, y el

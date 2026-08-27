@@ -504,3 +504,17 @@ def test_la_precarga_calienta_el_cuaderno():
     s = _portal('src', 'offline', 'precarga.js')
     assert "import('../components/CuadernoModule')" in s
     assert '/api/cuaderno/partes' in s
+
+
+def test_C1_la_cita_no_nace_vacia_y_la_galeria_viaja_en_la_precarga():
+    """DEFECTO REAL cazado por la ronda wifi de la EXP (27-ago): sin red el
+    selector de citas quedaba vacio y la pantalla encolaba un asiento `foto`
+    SIN referencia -- el servidor lo rechazaba con SIN_REFERENCIA, pero un
+    acto que va a nacer invalido no debe salir del dispositivo. Dos mitades:
+    el guardia del borde y la galeria en la precarga (leccion F4)."""
+    m = _portal('src', 'components', 'CuadernoModule.jsx')
+    assert 'REF_OBLIGATORIA' in m, 'el espejo del guardia del servidor'
+    assert 'precarga.FOTOS' in m or 'precarga.leer' in m
+    s = _portal('src', 'offline', 'precarga.js')
+    assert "FOTOS = 'fotos'" in s
+    assert '/api/fotos?model_urn=' in s

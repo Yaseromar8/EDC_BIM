@@ -16,6 +16,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../utils/apiFetch';
 import * as campo from '../offline/captura';
+import * as precarga from '../offline/precarga';
 
 /* El MISMO catálogo cerrado que cuaderno_de_obra.TIPOS_DE_ASIENTO y el CHECK
  * de la base — hay un tripwire en el backend que los casa: si esta lista
@@ -135,6 +136,23 @@ function FormAsiento({ API, urn, parte, fotos, instrucciones, user, project,
       }
     }
     const referencias = { ...refs };
+    // EL MISMO GUARDIA QUE EL SERVIDOR, EN EL BORDE (lección de la EXP del
+    // 27-ago): sin red el selector podía quedar vacío y la pantalla encolaba
+    // un asiento `foto` SIN referencia que el servidor rechazaba con razón.
+    // Un acto que va a nacer inválido no sale del dispositivo.
+    const REF_OBLIGATORIA = { foto: 'foto_id', instruccion: 'instruccion_id',
+                              rectificacion: 'asiento_id' };
+    if (REF_OBLIGATORIA[tipo] && !referencias[REF_OBLIGATORIA[tipo]]) {
+      toast.error('Este asiento CITA: elige la referencia antes de registrar. ' +
+                  (tipo === 'foto' && !(fotos || []).length
+                    ? 'Sin red, la galería viene de la precarga — precarga la obra antes de salir.'
+                    : ''), { duration: 6000 });
+      return;
+    }
+    if (tipo === 'clima' && !clima && !Object.values(est).some(v => v)) {
+      toast.error('El clima exige procedencia: tráelo del proveedor o registra el dato manual.');
+      return;
+    }
     setOcupado(true);
     try {
       const ctx = campo.contextoDe(user, project);
@@ -495,16 +513,28 @@ export default function CuadernoModule({ project, API, user }) {
       setPartes(rp.ok ? (await rp.json()).partes || [] : []);
       setInstrucciones(ri.ok ? (await ri.json()).instrucciones || [] : []);
     } catch (e) { setPartes([]); setInstrucciones([]); }
-  }, [API, urn]);
+    // El selector de citas: red primero, PRECARGA después. Sin esto, sin red
+    // la galería quedaba vacía y el asiento `foto` nacía sin referencia
+    // (lección F4, repetida aquí y cazada por la EXP).
+    try {
+      const rf = await apiFetch(`${API}/api/fotos?model_urn=${encodeURIComponent(urn)}`);
+      if (!rf.ok) throw new Error('sin galería en línea');
+      setFotos((await rf.json()).fotos || []);
+    } catch (e) {
+      try {
+        const ctx = campo.contextoDe(user, project);
+        if (ctx) {
+          const s = await precarga.leer(ctx, precarga.FOTOS);
+          setFotos((s.datos && s.datos.fotos) || []);
+        }
+      } catch (e2) { /* sin red y sin precarga: el guardia del registro avisa */ }
+    }
+  }, [API, urn, user, project]);
   useEffect(() => { cargar(); }, [cargar]);
 
   const abrirDetalle = async (p) => {
     const r = await apiFetch(`${API}/api/cuaderno/partes/${p.id}`);
     if (r.ok) setParte(await r.json());
-    // Para el selector de citas: la galería de NG-02 (solo lo visible).
-    apiFetch(`${API}/api/fotos?model_urn=${encodeURIComponent(urn)}`)
-      .then(r2 => (r2.ok ? r2.json() : { fotos: [] }))
-      .then(d => setFotos(d.fotos || [])).catch(() => {});
   };
 
   const abrirParte = async (fecha) => {
