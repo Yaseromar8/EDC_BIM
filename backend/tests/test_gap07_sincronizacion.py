@@ -314,7 +314,7 @@ def test_la_primera_vertical_son_DOS_dominios_y_es_una_lista_cerrada():
     """No se construye sincronizacion universal del CDE: se demuestra la
     arquitectura sobre protocolos e issues y despues se extiende."""
     import sincronizacion_de_campo as sync
-    assert sync.OBJETOS == ('PROTOCOLO', 'ISSUE')
+    assert sync.OBJETOS == ('PROTOCOLO', 'ISSUE', 'FOTO')  # NG-02: tercera vertical, mismo motor
     assert sync.ACTOS_DE['ISSUE'] == ('CREATE', 'ADD_EVIDENCE', 'MARK_CORRECTED')
     assert sync.ACTOS_DE['PROTOCOLO'] == ('CREATE', 'SET_ITEMS', 'SIGN')
     sql = _sql()

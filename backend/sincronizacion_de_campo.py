@@ -86,7 +86,11 @@ logger = logging.getLogger('sync')
 # auditoria. Un objeto sin ellas sincronizaria datos, no ACTOS.
 PROTOCOLO = 'PROTOCOLO'
 ISSUE = 'ISSUE'
-OBJETOS = (PROTOCOLO, ISSUE)
+# NG-02: la foto de campo entra por EL MISMO motor. El binario sube antes por
+# /api/sync/evidencia (idempotente por objeto determinista); este acto solo
+# REGISTRA la foto -- es enteramente PostgreSQL, caso A.
+FOTO = 'FOTO'
+OBJETOS = (PROTOCOLO, ISSUE, FOTO)
 
 # ── LOS ACTOS. Lista CERRADA ───────────────────────────────────────────────
 CREATE = 'CREATE'
@@ -98,6 +102,7 @@ MARK_CORRECTED = 'MARK_CORRECTED'
 ACTOS_DE = {
     PROTOCOLO: (CREATE, SET_ITEMS, SIGN),
     ISSUE: (CREATE, ADD_EVIDENCE, MARK_CORRECTED),
+    FOTO: (CREATE,),
 }
 ACCIONES = tuple(sorted({a for v in ACTOS_DE.values() for a in v}))
 

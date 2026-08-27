@@ -432,7 +432,7 @@ def listar_anclajes(rid):
                                      for f in cur.fetchall()]})
 
 
-_TIPOS_ANCLABLES = ('RFI', 'REDLINE', 'SUBMITTAL', 'REVIEW')
+_TIPOS_ANCLABLES = ('RFI', 'REDLINE', 'SUBMITTAL', 'REVIEW', 'FOTO')
 
 
 @planos_bp.route('/revisiones/<int:rid>/anclajes', methods=['POST'])

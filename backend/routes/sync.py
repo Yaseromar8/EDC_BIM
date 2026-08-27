@@ -64,7 +64,8 @@ sync_bp = Blueprint('sync_bp', __name__)
 
 # Que herramienta gobierna cada dominio. Es la MISMA que gobierna sus rutas en
 # linea: sincronizar no puede ser una puerta que se salte la capa 16.
-HERRAMIENTA_DE = {sync.PROTOCOLO: 'protocolos', sync.ISSUE: 'issues'}
+HERRAMIENTA_DE = {sync.PROTOCOLO: 'protocolos', sync.ISSUE: 'issues',
+                  sync.FOTO: 'fotos'}
 
 MAX_POR_LOTE = 200
 
@@ -597,12 +598,66 @@ def _estado_esperado_acta(op, d):
     return None
 
 
+# ══ LOS ACTOS · FOTO ═══════════════════════════════════════════════════════
+
+def _foto_create(cur, obra, op):
+    """Registra una foto capturada en campo. CASO A: el binario YA subió por
+    /api/sync/evidencia (con su idempotencia externa); este acto solo escribe
+    la fila -- enteramente PostgreSQL.
+
+    La semantica vive en `fotos_de_obra`: mismo objeto para galeria y para
+    evidencia de actos, sensibilidad en vez de «privado», y el objeto tiene
+    que ser DEL PREFIJO DE ESTA OBRA -- sin eso, conocer el nombre de un blob
+    ajeno bastaria para colgarlo en la galeria propia.
+    """
+    import fotos_de_obra as fdo
+    p = op.get('payload') or {}
+    objeto = p.get('objeto_externo') or sync.nombre_del_objeto_externo(
+        obra, op['operation_id'])
+    if not fdo.objeto_es_de_la_obra(objeto, obra):
+        return sync.rechazada('esa evidencia pertenece a otra obra', 'OTRA_OBRA')
+    sensibilidad = (p.get('sensibilidad') or fdo.NIVEL_POR_DEFECTO).strip()
+    if not fdo.nivel_valido(sensibilidad):
+        return sync.rechazada('sensibilidad desconocida: %s' % sensibilidad,
+                              'SENSIBILIDAD_DESCONOCIDA')
+
+    # IDEMPOTENCIA POR OBJETO ademas de por acto: si un reenvio raro llegara
+    # con OTRO operation_id pero el mismo blob, no nacen dos fotos del mismo
+    # testigo -- se devuelve la que ya existe.
+    cur.execute('SELECT id FROM doc_fotos WHERE objeto = %s', (objeto,))
+    ya = cur.fetchone()
+    if ya:
+        return sync.aplicada(ya[0], {'objeto': objeto, 'ya_existia': True})
+
+    cur.execute("""INSERT INTO doc_fotos
+                     (project_id, model_urn, objeto, nombre, tipo_mime, tamano,
+                      sha256, capturado_en, autor_id, created_by, descripcion,
+                      progresiva, external_id, ubicacion, sensibilidad, history)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   RETURNING id""",
+                (obra, p.get('model_urn') or obra, objeto,
+                 p.get('nombre') or 'foto de campo',
+                 p.get('tipo_mime'), p.get('tamano'), p.get('sha256'),
+                 op.get('capturado_en'), _usuario().get('id'), _actor(),
+                 (p.get('descripcion') or '').strip() or None,
+                 (p.get('progresiva') or '').strip() or None,
+                 (p.get('external_id') or '').strip() or None,
+                 (p.get('ubicacion') or '').strip() or None,
+                 sensibilidad,
+                 json.dumps([reg.entrada('created', _actor(),
+                                         capturado_en=op.get('capturado_en'),
+                                         origen='campo sin cobertura')])))
+    fid = cur.fetchone()[0]
+    return sync.aplicada(fid, {'objeto': objeto})
+
+
 DESPACHO = {
     (sync.ISSUE, sync.CREATE): _issue_create,
     (sync.ISSUE, sync.MARK_CORRECTED): _issue_mark_corrected,
     (sync.ISSUE, sync.ADD_EVIDENCE): _issue_add_evidence,
     (sync.PROTOCOLO, sync.CREATE): _protocolo_create,
     (sync.PROTOCOLO, sync.SET_ITEMS): _protocolo_set_items,
+    (sync.FOTO, sync.CREATE): _foto_create,
 }
 
 
@@ -627,6 +682,8 @@ def _registrar_indeterminada(op, obra, actor_id, actor_visible, error):
     except Exception as e2:
         logger.error('[sync] %s quedo INDETERMINADA SIN registrar: %s',
                      op.get('operation_id'), e2)
+
+
 
 
 # ══ LA RUTA DE LA EVIDENCIA ════════════════════════════════════════════════
@@ -719,8 +776,16 @@ def subir_evidencia():
     if not tamaño:
         return jsonify({'error': 'esa evidencia llegó vacía', 'code': 'FICHERO_VACIO'}), 400
 
-    # 2 · SUBIR. El nombre no lo elige el movil.
-    url = gcs.upload_file_to_gcs(fichero, objeto)
+    # 2 · LIMPIAR Y SUBIR. El nombre no lo elige el movil, y el GPS del EXIF
+    # se quita ANTES de subir -- la misma regla que la subida en linea: si el
+    # fichero con coordenadas llegara al almacen, limpiarlo despues no lo quita
+    # de donde ya fue. Lo limpiado SE DEVUELVE: el cliente lo mete en el
+    # payload del acto FOTO/CREATE y acaba en doc_fotos.exif, no perdido.
+    import io as _io
+    import privacidad_imagen
+    datos = fichero.read()
+    limpios, metadatos = privacidad_imagen.limpiar(datos, fichero.filename)
+    url = gcs.upload_file_to_gcs(_io.BytesIO(limpios), objeto)
     if not url:
         # Fallo AL SUBIR. Puede que el objeto quedara a medias o no quedara
         # nada; el reintento volvera a preguntar, y esa consulta es la que lo
@@ -730,7 +795,8 @@ def subir_evidencia():
                         'code': 'SUBIDA_FALLIDA'}), 502
 
     return jsonify({'objeto_externo': objeto, 'ya_existia': False,
-                    'tamaño': tamaño, 'sha256': request.form.get('sha256')}), 201
+                    'tamaño': len(limpios), 'sha256': request.form.get('sha256'),
+                    'exif': metadatos or {}}), 201
 
 
 # ══ LA RUTA ════════════════════════════════════════════════════════════════

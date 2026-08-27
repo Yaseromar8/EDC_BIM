@@ -922,6 +922,10 @@ app.register_blueprint(plantillas_revision_bp, url_prefix='/api/review-templates
 # comprueba por operacion. Ver el comentario en routes/sync.py.
 from routes.sync import sync_bp
 app.register_blueprint(sync_bp)
+
+# NG-02 · fotos de campo: la foto como evidencia citable (doc 94)
+from routes.fotos import fotos_bp
+app.register_blueprint(fotos_bp)
 app.register_blueprint(plan_bp)
 from routes.attributes import attributes_bp, ensure_attributes_tables
 app.register_blueprint(attributes_bp)

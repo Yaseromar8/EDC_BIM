@@ -95,7 +95,8 @@ def test_capa16_no_se_salta_por_sincronizar():
     fuente = _ruta()
     assert 'HERRAMIENTA_DE' in fuente
     import routes.sync as rs
-    assert rs.HERRAMIENTA_DE == {'PROTOCOLO': 'protocolos', 'ISSUE': 'issues'}
+    assert rs.HERRAMIENTA_DE == {'PROTOCOLO': 'protocolos', 'ISSUE': 'issues',
+                                 'FOTO': 'fotos'}  # NG-02: mismo motor, capa 16 tambien
     import herramientas_de_obra as hdo
     for codigo in rs.HERRAMIENTA_DE.values():
         assert codigo in hdo.CODIGOS, codigo
@@ -273,7 +274,8 @@ def test_lo_que_TODAVIA_no_se_sincroniza_lo_dice_en_vez_de_fallar_raro():
     # infraestructura y no «offline para issues» disfrazado.
     assert set(rs.DESPACHO) == {(s.ISSUE, s.CREATE), (s.ISSUE, s.MARK_CORRECTED),
                                 (s.ISSUE, s.ADD_EVIDENCE),
-                                (s.PROTOCOLO, s.CREATE), (s.PROTOCOLO, s.SET_ITEMS)}
+                                (s.PROTOCOLO, s.CREATE), (s.PROTOCOLO, s.SET_ITEMS),
+                                (s.FOTO, s.CREATE)}  # NG-02
     # Firmar se hace CON conexion, a proposito, y se dice.
     assert (s.PROTOCOLO, s.SIGN) not in rs.DESPACHO
 

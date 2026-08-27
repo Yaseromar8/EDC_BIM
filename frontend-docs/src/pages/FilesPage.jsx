@@ -80,6 +80,7 @@ const SincronizacionModule = lazy(() => import('../components/SincronizacionModu
 const EspecificacionesModule = lazy(() => import('../components/EspecificacionesModule'));
 const FlujosDeRevisionModule = lazy(() => import('../components/FlujosDeRevisionModule'));
 const MultimediaModule = lazy(() => import('../components/MultimediaModule'));
+const FotosModule = lazy(() => import('../components/FotosModule'));
 const GatewayPanel = lazy(() => import('../components/panels/GatewayPanel'));
 const QuarantineTable = lazy(() => import('../components/panels/QuarantineTable'));
 const SharesManager = lazy(() => import('../components/SharesManager'));
@@ -566,7 +567,8 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
         {/* MULTIMEDIA VIEW */}
         {fe.sidebarView === 'multimedia' && (
-          <MultimediaModule project={project} user={user} />
+          <FotosModule project={project} API={API} user={user}
+                       MultimediaLegacy={MultimediaModule} />
         )}
 
         {/* REPORTS VIEW */}

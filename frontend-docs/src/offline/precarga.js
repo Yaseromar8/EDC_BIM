@@ -80,6 +80,7 @@ export async function precargar(API, ctx, { onProgreso } = {}) {
       import('../components/ProtocolosModule'),
       import('../components/PunchModule'),
       import('../components/SincronizacionModule'),
+      import('../components/FotosModule'),
     ]);
     if (onProgreso) onProgreso({ etiqueta: 'pantallas de campo', estado: 'listo' });
   } catch (e) {

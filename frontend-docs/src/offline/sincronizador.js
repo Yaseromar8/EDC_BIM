@@ -68,6 +68,18 @@ async function subirEvidencias(API, ctx, operacion) {
       if (!r.ok) return `no se pudo subir «${b.nombre}»`;
       const d = await r.json();
       await local.marcarBlobSubido(b.blob_id, { objeto_externo: d.objeto_externo });
+      // El servidor LIMPIA el GPS del fichero y devuelve lo limpiado: eso
+      // pertenece al acto (doc_fotos.exif), no a la nada. Se funde en el
+      // payload ANTES de mandar el acto.
+      if (d.objeto_externo || d.exif) {
+        await local.marcar(operacion.operation_id, {
+          payload: { ...(operacion.payload || {}),
+                     objeto_externo: d.objeto_externo,
+                     ...(d.exif && Object.keys(d.exif).length ? { exif: d.exif } : {}) },
+        });
+        operacion.payload = { ...(operacion.payload || {}),
+                              objeto_externo: d.objeto_externo };
+      }
     } catch (e) {
       // Que la subida falle NO marca el blob como subido. Que el acto principal
       // sincronice tampoco: son dos efectos distintos.
