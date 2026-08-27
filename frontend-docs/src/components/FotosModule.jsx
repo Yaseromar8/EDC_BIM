@@ -342,6 +342,7 @@ export default function FotosModule({ project, API, user, MultimediaLegacy }) {
         apiFetch(`${API}/api/fotos/albumes?model_urn=${encodeURIComponent(urn)}`),
       ]);
       if (rf.ok) setFotos((await rf.json()).fotos || []);
+      else setFotos([]);   // un servidor que aun no sirve la galeria no es un cargando eterno
       if (ra.ok) setAlbumes((await ra.json()).albumes || []);
     } catch (e) { setFotos([]); }
   }, [API, urn, album]);
