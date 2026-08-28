@@ -2543,6 +2543,19 @@ th {
   padding: 12px;
   border-bottom: 1px solid #f5f5f5;
   transition: background 0.2s;
+  /* El nombre de un plano es largo (RL_0046_JUNTAS_APORTANTE_02_...) y sacaba
+     una barra de desplazamiento HORIZONTAL dentro del desplegable: había que
+     arrastrar para leer quién lo cargó. Ahora se recorta con puntos y el
+     nombre completo queda en el title. */
+  min-width: 0;
+}
+
+.version-popover-item > div { min-width: 0; }
+
+.version-popover-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .version-popover-item:hover {

@@ -182,7 +182,7 @@ export default function DocumentViewer({
                         >
                            <div className="version-link-acc" style={{ minWidth: 32 }}>V{v.version_number || 1}</div>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                             <span style={{ fontSize: 13, fontWeight: 500, color: '#333' }}>{file.name}</span>
+                             <span title={file.name} style={{ fontSize: 13, fontWeight: 500, color: '#333' }}>{file.name}</span>
                              <span style={{ fontSize: 11, color: '#999' }}>
                                Cargado por <span style={{ textTransform: 'uppercase' }}>{v.updated_by || 'ADMIN'}</span> el {formatDate(v.updated)}
                              </span>
