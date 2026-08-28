@@ -35,7 +35,22 @@ try {
   New-Item -Force -ItemType Directory $carpeta | Out-Null
   $fichero = Join-Path $carpeta $nombre
 
+  # En Windows 11 la Terminal ignora -WindowStyle Hidden y la ventana aparece
+  # igual: que al menos diga que es y que hace, en vez de un PowerShell mudo.
+  try {
+    $Host.UI.RawUI.WindowTitle = 'Conector ALEPHIA'
+    Write-Host ''
+    Write-Host '  CONECTOR ALEPHIA' -ForegroundColor Cyan
+    Write-Host "  Descargando $nombre..."
+  } catch {}
+
+  # La barra de progreso de PowerShell 5 ralentiza Invoke-WebRequest 5-10x
+  # (repinta consola por cada trozo). Con modelos RVT de cientos de MB eso
+  # es la diferencia entre segundos y minutos.
+  $ProgressPreference = 'SilentlyContinue'
   Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $fichero
+
+  try { Write-Host '  Abriendo en la aplicacion asociada...' } catch {}
   Invoke-Item $fichero
 } catch {
   # Silencio deliberado: si algo falla, el portal ya ofrece la descarga normal.
