@@ -8,6 +8,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import PdfToolsOverlay, { COLORS } from './PdfToolsOverlay';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
+import { tiraEstaAbierta, recordarTira } from '../utils/tiraDocumentos';
 import './PDFViewer.css';
 
 // Configurar el worker de PDF.js
@@ -215,21 +216,6 @@ function servirCola() {
   }
 }
 
-// LA TIRA NO SE CIERRA AL CAMBIAR DE PLANO.
-//
-// Saltar a otro documento REMONTA el lector entero, asi que un estado normal
-// se perdia y la tira desaparecia en cada salto: habia que reabrirla para
-// cada plano. En ACC se queda abierta hasta que la cierras tu, y eso es lo
-// que hace fluido revisar una carpeta. Se guarda FUERA del componente (y en
-// el navegador) para que sobreviva al remontaje.
-let _tiraAbiertaMemoria = (() => {
-  try { return localStorage.getItem('alephia_tira_docs') === 'si'; } catch { return false; }
-})();
-function recordarTira(abierta) {
-  _tiraAbiertaMemoria = abierta;
-  try { localStorage.setItem('alephia_tira_docs', abierta ? 'si' : 'no'); } catch { /* noop */ }
-}
-
 function MiniaturaHermano({ doc, activo, onAbrir }) {
   const ref = React.useRef(null);
   const [src, setSrc] = React.useState(null);
@@ -320,7 +306,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   // alto util y no todo el mundo la quiere abierta.
   const [preparando, setPreparando] = useState(false);
   const [avisoTira, setAvisoTira] = useState('');
-  const [tiraAbierta, _setTiraAbierta] = useState(_tiraAbiertaMemoria);
+  const [tiraAbierta, _setTiraAbierta] = useState(tiraEstaAbierta);
   const setTiraAbierta = (v) => {
     const valor = typeof v === 'function' ? v(tiraAbierta) : v;
     recordarTira(valor);

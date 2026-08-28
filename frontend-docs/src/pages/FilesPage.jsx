@@ -17,6 +17,7 @@ import { useColumnResize, useSidebarResize, useVersionPanelResize } from '../hoo
 import { API, getInitials, getAuthHeaders, formatSize, formatDate, DOCS_VISOR_SHORTCUT } from '../utils/helpers';
 import { renderFileIconSop } from '../utils/fileIcons';
 import { apiFetch } from '../utils/apiFetch';
+import { reiniciarTira } from '../utils/tiraDocumentos';
 import * as campo from '../offline/captura';
 import { engancharDisparadores } from '../offline/sincronizador';
 import { tieneSincronizacionDeCampo } from '../offline/capacidades';
@@ -1011,13 +1012,13 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                     <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#888', fontSize: 13 }}>Cargando…</div>}>
                       <MatrixGrid folders={fe.filteredFolders} files={fe.filteredFiles}
                         selected={fe.selected} toggle={fe.toggle} navigate={fe.navigate}
-                        setActiveFile={fe.setActiveFile} isAdmin={isAdmin}
+                        setActiveFile={(f) => { reiniciarTira(); fe.setActiveFile(f); }} isAdmin={isAdmin}
                         onRowMenu={(item, e) => { fe.setRightClickedId(item.id); fe.setActiveRowMenu({ item, x: e.clientX, y: e.clientY, source: 'table' }); }} />
                     </Suspense>
                 ) : (
                     <MatrixTable folders={fe.filteredFolders} files={fe.filteredFiles} selected={fe.selected}
                       columnWidths={columnWidths} totalTableWidth={totalTableWidth} toggle={fe.toggle} navigate={fe.navigate}
-                      setActiveFile={fe.setActiveFile}
+                      setActiveFile={(f) => { reiniciarTira(); fe.setActiveFile(f); }}
                       onUpdateDescription={async (item, newDesc) => { if (item.type === 'folder') fe.setFolders(prev => prev.map(f => f.id === item.id ? { ...f, description: newDesc } : f)); else fe.setFiles(prev => prev.map(f => f.id === item.id ? { ...f, description: newDesc } : f)); try { const res = await apiFetch(`${API}/api/docs/description`, { method: 'POST', body: JSON.stringify({ node_id: item.id, description: newDesc, model_urn: projectPrefix }) }); if (res.ok) fe.triggerRefresh(fe.currentPath); else { toast.error('No se pudo guardar la descripción.'); fe.triggerRefresh(fe.currentPath); } } catch (e) { toast.error('Error de conexión al guardar la descripción.'); fe.triggerRefresh(fe.currentPath); } }}
                       onRename={async (item, newName) => {
                         // COHERENCIA TABLA ↔ ÁRBOL: al renombrar una carpeta desde la
