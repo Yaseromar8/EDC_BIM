@@ -179,6 +179,99 @@ const GRUPOS_DE_HERRAMIENTAS = [
 const HINTS = Object.fromEntries(
   GRUPOS_DE_HERRAMIENTAS.flatMap(g => g.items.map(t => [t.id, t.hint])));
 
+// ── LAS REGLAS DE LA MESA ───────────────────────────────────────────────
+// Un plano no se mira: se MIDE. Las reglas dicen, en milímetros de PAPEL, a
+// qué tamaño estás viendo el documento — y siguen el zoom, el encuadre y el
+// cursor. Es la seña de la casa: ni ACC ni Procore las traen.
+//
+// El PDF mide en puntos (1/72 pulgada). 1 mm de papel = 72/25,4 puntos.
+const PUNTOS_POR_MM = 72 / 25.4;
+const PASOS_MM = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000];
+
+/** El paso de regla más fino que NO amontone marcas (mínimo 7 px entre ellas). */
+function pasoDeRegla(pxPorMm) {
+  for (const paso of PASOS_MM) {
+    if (paso * pxPorMm >= 7) return paso;
+  }
+  return PASOS_MM[PASOS_MM.length - 1];
+}
+
+function etiquetaDeRegla(mm) {
+  if (Math.abs(mm) >= 1000) return `${(mm / 1000).toFixed(mm % 1000 ? 1 : 0)} m`;
+  return `${Math.round(mm)}`;
+}
+
+/**
+ * Dibuja una regla. `origenPx` es dónde cae el 0 del papel dentro de la regla,
+ * y `largoPx` cuánto mide la regla en pantalla.
+ */
+function dibujarRegla(canvas, { horizontal, origenPx, largoPx, escala, cursorPx }) {
+  if (!canvas) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const ancho = horizontal ? largoPx : 20;
+  const alto = horizontal ? 20 : largoPx;
+  if (canvas.width !== Math.round(ancho * dpr) || canvas.height !== Math.round(alto * dpr)) {
+    canvas.width = Math.round(ancho * dpr);
+    canvas.height = Math.round(alto * dpr);
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, ancho, alto);
+
+  const pxPorMm = escala * PUNTOS_POR_MM;
+  if (!(pxPorMm > 0)) return;
+  const paso = pasoDeRegla(pxPorMm);
+  const pasoPx = paso * pxPorMm;
+
+  ctx.font = '9px ui-sans-serif, system-ui, sans-serif';
+  ctx.fillStyle = '#8fa0b0';
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+  ctx.lineWidth = 1;
+  ctx.textBaseline = horizontal ? 'top' : 'bottom';
+
+  // Primera marca visible, alineada al paso.
+  const primera = Math.floor(-origenPx / pasoPx) * pasoPx + origenPx;
+  ctx.beginPath();
+  let n = Math.round((primera - origenPx) / pasoPx);
+  for (let p = primera; p <= largoPx; p += pasoPx, n += 1) {
+    const mayor = n % 10 === 0;
+    const media = n % 5 === 0;
+    const largoMarca = mayor ? 20 : media ? 9 : 5;   // marca larga cada 10 pasos
+    const v = Math.round(p) + 0.5;
+    if (horizontal) {
+      ctx.moveTo(v, 20 - largoMarca);
+      ctx.lineTo(v, 20);
+    } else {
+      ctx.moveTo(20 - largoMarca, v);
+      ctx.lineTo(20, v);
+    }
+    if (mayor && pasoPx > 3) {
+      const texto = etiquetaDeRegla(n * paso);
+      if (horizontal) {
+        ctx.fillText(texto, v + 3, 2);
+      } else {
+        ctx.save();
+        ctx.translate(3, v - 3);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText(texto, 0, 0);
+        ctx.restore();
+      }
+    }
+  }
+  ctx.stroke();
+
+  // El cursor, marcado en las dos reglas: dónde estás sobre el papel.
+  if (cursorPx != null && cursorPx >= 0 && cursorPx <= largoPx) {
+    ctx.strokeStyle = '#7fb3d5';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const v = Math.round(cursorPx) + 0.5;
+    if (horizontal) { ctx.moveTo(v, 0); ctx.lineTo(v, 20); }
+    else { ctx.moveTo(0, v); ctx.lineTo(20, v); }
+    ctx.stroke();
+  }
+}
+
 // ----------------------------------------------------------------------
 // Visor Principal
 // ----------------------------------------------------------------------
@@ -201,6 +294,10 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   const busquedaVivaRef = useRef(null);   // debounce de la busqueda en vivo
   const bufferCanvasRef = useRef(null);   // doble bufer del render (uno, reutilizado)
   const anclaRef = useRef(null);          // punto que el zoom debe conservar bajo el cursor
+  const reglaHRef = useRef(null);         // regla de arriba
+  const reglaVRef = useRef(null);         // regla de la izquierda
+  const cursorRef = useRef({ x: null, y: null });
+  const [medida, setMedida] = useState(null);   // tamaño del papel, en mm
   // CUANDO LA HOJA CABE ENTERA NO HAY SCROLL QUE MOVER, y el zoom crecia
   // desde el centro: el detalle que mirabas se escapaba. Este desplazamiento
   // propio la mueve cuando el scroll no puede, para que el punto bajo el
@@ -469,6 +566,60 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     }
     return () => clearTimeout(renderDebounceRef.current);
   }, [loading, currentPage, rotation, applyPreviewSize, renderPage]);
+
+  // ── LAS REGLAS SE REDIBUJAN CON TODO LO QUE LAS MUEVE ─────────────────
+  // zoom, scroll, giro, cambio de página, tamaño de la ventana y el propio
+  // cursor. Se pinta dentro de un requestAnimationFrame para no dibujar dos
+  // veces en el mismo fotograma mientras se arrastra.
+  const pintarReglas = useCallback(() => {
+    const cont = containerRef.current, hoja = wrapRef.current;
+    const rh = reglaHRef.current, rv = reglaVRef.current;
+    if (!cont || !hoja || !rh || !rv) return;
+    const rc = cont.getBoundingClientRect();
+    const rp = hoja.getBoundingClientRect();
+    const cur = cursorRef.current;
+    dibujarRegla(rh, {
+      horizontal: true, origenPx: rp.left - rc.left, largoPx: rc.width,
+      escala: scale || 1, cursorPx: cur.x != null ? cur.x - rc.left : null,
+    });
+    dibujarRegla(rv, {
+      horizontal: false, origenPx: rp.top - rc.top, largoPx: rc.height,
+      escala: scale || 1, cursorPx: cur.y != null ? cur.y - rc.top : null,
+    });
+    if (rp.width && (scale || 1)) {
+      setMedida({
+        ancho: Math.round(rp.width / ((scale || 1) * PUNTOS_POR_MM)),
+        alto: Math.round(rp.height / ((scale || 1) * PUNTOS_POR_MM)),
+      });
+    }
+  }, [scale]);
+
+  useEffect(() => {
+    if (loading) return undefined;
+    let pendiente = null;
+    const pedir = () => {
+      if (pendiente) return;
+      pendiente = requestAnimationFrame(() => { pendiente = null; pintarReglas(); });
+    };
+    pedir();
+    const cont = containerRef.current;
+    const alMover = (e) => { cursorRef.current = { x: e.clientX, y: e.clientY }; pedir(); };
+    const alSalir = () => { cursorRef.current = { x: null, y: null }; pedir(); };
+    cont?.addEventListener('scroll', pedir, { passive: true });
+    cont?.addEventListener('mousemove', alMover, { passive: true });
+    cont?.addEventListener('mouseleave', alSalir);
+    window.addEventListener('resize', pedir);
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(pedir) : null;
+    if (ro && cont) ro.observe(cont);
+    return () => {
+      if (pendiente) cancelAnimationFrame(pendiente);
+      cont?.removeEventListener('scroll', pedir);
+      cont?.removeEventListener('mousemove', alMover);
+      cont?.removeEventListener('mouseleave', alSalir);
+      window.removeEventListener('resize', pedir);
+      ro?.disconnect();
+    };
+  }, [loading, pintarReglas, currentPage, rotation, desplazamiento, showSidebar]);
 
   // Auto-scroll sidebar thumbnail into view when page changes
   useEffect(() => {
@@ -921,6 +1072,11 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
         )}
 
         <div className="pdf-stage">
+          {/* La mesa de dibujo: dos reglas vivas en los bordes. */}
+          <div className="pdf-corner" title="Las reglas miden el PAPEL, en milímetros">mm</div>
+          <div className="pdf-ruler-h"><canvas ref={reglaHRef} /></div>
+          <div className="pdf-ruler-v"><canvas ref={reglaVRef} /></div>
+
           <div ref={containerRef} className="pdf-canvas-container"
             style={{ cursor: tool === 'pan' ? (isDragging ? 'grabbing' : 'grab') : 'crosshair' }}
             onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
@@ -989,6 +1145,12 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
                 aria-pressed={fitMode === 'page'} title="Ajustar página (Ctrl+0)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 9l-2 2 2 2M15 9l2 2-2 2"/></svg></button>
               <button className="pdf-ico" onClick={() => fitTo('width')}
                 aria-pressed={fitMode === 'width'} title="Ajustar ancho"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg></button>
+            <span className="pdf-sep" />
+            {medida && (
+              <span className="pdf-medida" title="Tamaño de la hoja en papel">
+                <b>{medida.ancho}</b>×<b>{medida.alto}</b> mm
+              </span>
+            )}
             <span className="pdf-sep" />
             <button className="pdf-ico" onClick={rotateRight} title="Girar 90°">
               <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
