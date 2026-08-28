@@ -102,67 +102,64 @@ export function renderFileIconSop(filename, size = 24) {
     );
   }
 
-  // CAD / BIM v4 — el arquetipo del icono DWG clasico que el dueno enseno
-  // ampliado y volvio a pedir («el icono que quedamos no es ese»): HOJA
-  // CLARA con la esquina doblada, el glifo grande en azul de dibujo, y una
-  // CINTA de color abajo a la izquierda con la extension — amarilla en DWG,
-  // azul en Revit, y asi por familia. v3 pintaba el cuerpo entero del color
-  // y parecia un fichero amarillo, no el DWG de toda la vida.
+  // CAD / BIM v5 — ALTO CONTRASTE. La v4 (hoja palida, cinta pequena) se
+  // desvanecia a 22 px: «sigue sin distinguirse» — dueno. A tamano de tabla
+  // lo que se lee es la SATURACION: pagina entera del color de la familia,
+  // glifo BLANCO grueso y banda inferior contrastada con la extension. El
+  // DWG queda como el clasico: pagina azul, cruceta blanca, banda amarilla.
   const ext = lowerName.split('.').pop();
   const CAD_FAMILIAS = {
-    dwg:  { glifo: 'cruceta', tinta: '#1A6FBF', cinta: '#F7B60D', tintaCinta: '#253444' },
-    dxf:  { glifo: 'cruceta', tinta: '#1A6FBF', cinta: '#F7B60D', tintaCinta: '#253444' },
-    dwf:  { glifo: 'cruceta', tinta: '#1A6FBF', cinta: '#F7B60D', tintaCinta: '#253444' },
-    dwfx: { glifo: 'cruceta', tinta: '#1A6FBF', cinta: '#F7B60D', tintaCinta: '#253444' },
-    dgn:  { glifo: 'cruceta', tinta: '#2E7D74', cinta: '#2E7D74' },
-    rvt:  { glifo: 'letra', letra: 'R', tinta: '#1961A9', cinta: '#1961A9' },
-    rfa:  { glifo: 'letra', letra: 'R', tinta: '#1961A9', cinta: '#1961A9' },
-    rte:  { glifo: 'letra', letra: 'R', tinta: '#1961A9', cinta: '#1961A9' },
-    nwd:  { glifo: 'letra', letra: 'N', tinta: '#175A93', cinta: '#175A93' },
-    nwc:  { glifo: 'letra', letra: 'N', tinta: '#175A93', cinta: '#175A93' },
-    ifc:  { glifo: 'cubo', tinta: '#2F7D4F', cinta: '#2F7D4F' },
-    '3dm': { glifo: 'cubo', tinta: '#5B6875', cinta: '#5B6875' },
-    stl:   { glifo: 'cubo', tinta: '#5B6875', cinta: '#5B6875' },
-    obj:   { glifo: 'cubo', tinta: '#5B6875', cinta: '#5B6875' },
-    fbx:   { glifo: 'cubo', tinta: '#5B6875', cinta: '#5B6875' },
-    step:  { glifo: 'cubo', tinta: '#5B6875', cinta: '#5B6875' },
-    stp:   { glifo: 'cubo', tinta: '#5B6875', cinta: '#5B6875' },
-    iges:  { glifo: 'cubo', tinta: '#5B6875', cinta: '#5B6875' },
-    igs:   { glifo: 'cubo', tinta: '#5B6875', cinta: '#5B6875' },
-    sat:   { glifo: 'cubo', tinta: '#5B6875', cinta: '#5B6875' },
+    dwg:  { pagina: '#1F72C4', pliegue: '#5A9AD8', glifo: 'cruceta', banda: '#F7B60D', tintaBanda: '#1F2937' },
+    dxf:  { pagina: '#1F72C4', pliegue: '#5A9AD8', glifo: 'cruceta', banda: '#F7B60D', tintaBanda: '#1F2937' },
+    dwf:  { pagina: '#1F72C4', pliegue: '#5A9AD8', glifo: 'cruceta', banda: '#F7B60D', tintaBanda: '#1F2937' },
+    dwfx: { pagina: '#1F72C4', pliegue: '#5A9AD8', glifo: 'cruceta', banda: '#F7B60D', tintaBanda: '#1F2937' },
+    dgn:  { pagina: '#2E7D74', pliegue: '#5FA39B', glifo: 'cruceta', banda: '#153F3A' },
+    rvt:  { pagina: '#1961A9', pliegue: '#4E8AC8', glifo: 'letra', letra: 'R', banda: '#0F3F73' },
+    rfa:  { pagina: '#1961A9', pliegue: '#4E8AC8', glifo: 'letra', letra: 'R', banda: '#0F3F73' },
+    rte:  { pagina: '#1961A9', pliegue: '#4E8AC8', glifo: 'letra', letra: 'R', banda: '#0F3F73' },
+    nwd:  { pagina: '#F4F8FB', pliegue: '#D4E2EE', borde: '#AFC6DA', glifo: 'letra', letra: 'N', tintaGlifo: '#175A93', banda: '#175A93' },
+    nwc:  { pagina: '#F4F8FB', pliegue: '#D4E2EE', borde: '#AFC6DA', glifo: 'letra', letra: 'N', tintaGlifo: '#175A93', banda: '#175A93' },
+    ifc:  { pagina: '#2F7D4F', pliegue: '#5EA37C', glifo: 'cubo', banda: '#1E5537' },
+    '3dm': { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    stl:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    obj:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    fbx:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    step:  { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    stp:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    iges:  { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    igs:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    sat:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
   };
   if (CAD_FAMILIAS[ext]) {
     const f = CAD_FAMILIAS[ext];
+    const tinta = f.tintaGlifo || '#FFFFFF';
     return (
       <div style={{ width: size, height: size, flexShrink: 0 }}>
         <svg viewBox="0 0 32 32" width="100%" height="100%">
-          {/* la misma hoja azulada de PDF/imagen/TXT: pertenece a la tabla */}
-          <path fill="#8FB0CB" d="M3 1v30h26V8h-7V1z" />
-          <path fill="#FFF" d="M4 2v22h24V8h-6V2z" />
-          <path fill="#1B3F63" d="m29 15-7-7h7z" opacity="0.3" />
-          <path fill="#B3CCE0" d="m22 1 7 7h-7z" />
+          <path fill={f.pagina} stroke={f.borde || 'none'} strokeWidth={f.borde ? 1 : 0}
+            d="M3 1v30h26V8h-7V1z" />
+          <path fill="#0D2438" d="m29 15-7-7h7z" opacity="0.25" />
+          <path fill={f.pliegue} d="m22 1 7 7h-7z" />
           {f.glifo === 'cruceta' && (
-            <g stroke={f.tinta} strokeWidth="2" fill="none" strokeLinecap="round">
-              <circle cx="15" cy="12" r="5.4" />
-              <path d="M15 4.2v4.2M15 15.6v4.2M7.2 12h4.2M18.6 12h4.2" />
-              <circle cx="15" cy="12" r="1.1" fill={f.tinta} stroke="none" />
+            <g stroke={tinta} strokeWidth="2.2" fill="none" strokeLinecap="round">
+              <circle cx="15" cy="11.5" r="5.2" />
+              <path d="M15 4v3.6M15 15.4v3.6M7.6 11.5h3.6M18.8 11.5h3.6" />
+              <circle cx="15" cy="11.5" r="1.1" fill={tinta} stroke="none" />
             </g>
           )}
           {f.glifo === 'letra' && (
-            <text x="15" y="17.5" textAnchor="middle" fontSize="16" fontWeight="800"
-              fontFamily="'Segoe UI', system-ui, sans-serif" fill={f.tinta}>{f.letra}</text>
+            <text x="15" y="16.5" textAnchor="middle" fontSize="15.5" fontWeight="800"
+              fontFamily="'Segoe UI', system-ui, sans-serif" fill={tinta}>{f.letra}</text>
           )}
           {f.glifo === 'cubo' && (
-            <g stroke={f.tinta} strokeWidth="1.9" fill="none" strokeLinejoin="round">
-              <path d="M15 4.4l6.6 3.8v6.8L15 18.8l-6.6-3.8V8.2z" />
-              <path d="M8.4 8.2l6.6 3.8 6.6-3.8M15 12v6.8" opacity="0.6" />
+            <g stroke={tinta} strokeWidth="2" fill="none" strokeLinejoin="round">
+              <path d="M15 4.5l6.3 3.6v6.6L15 18.3l-6.3-3.6V8.1z" />
+              <path d="M8.7 8.1l6.3 3.6 6.3-3.6M15 11.7v6.6" opacity="0.65" />
             </g>
           )}
-          {/* LA CINTA: abajo a la izquierda, sobresaliendo de la hoja, como
-              la banda amarilla del icono DWG de toda la vida */}
-          <rect x="1" y="20.5" width="20" height="8.6" rx="1.6" fill={f.cinta} />
-          <text x="11" y="26.9" textAnchor="middle" fontSize="6.4" fontWeight="800"
-            fontFamily="sans-serif" fill={f.tintaCinta || '#FFFFFF'} letterSpacing="0.5">
+          <rect x="3" y="21.5" width="26" height="9.5" fill={f.banda} />
+          <text x="16" y="28.6" textAnchor="middle" fontSize="7" fontWeight="800"
+            fontFamily="sans-serif" fill={f.tintaBanda || '#FFFFFF'} letterSpacing="0.6">
             {ext.slice(0, 4).toUpperCase()}
           </text>
         </svg>

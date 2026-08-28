@@ -75,7 +75,21 @@ function formatoReloj(segundos) {
 function ajustarSentidoDelZoom(viewer, node) {
   try {
     const es2D = node?.data?.role !== '3d';
-    viewer.getNavigation?.()?.setReverseZoomDirection(es2D);
+    const aplicar = () => {
+      try {
+        // LAS DOS VIAS, y REPETIDO. Solo la navegacion no bastaba: el visor
+        // aplica sus preferencias guardadas un instante DESPUES de cargar la
+        // vista y pisaba el ajuste -- por eso el dueno seguia viendo el zoom
+        // invertido tras el primer arreglo. La preferencia es la autoridad
+        // que la navegacion escucha, y las reafirmaciones tardias ganan la
+        // carrera a cualquier aplicacion tardia del perfil.
+        viewer.prefs?.set('reverseMouseZoomDir', es2D);
+        viewer.getNavigation?.()?.setReverseZoomDirection(es2D);
+      } catch { /* noop */ }
+    };
+    aplicar();
+    setTimeout(aplicar, 1200);
+    setTimeout(aplicar, 3500);
   } catch { /* noop */ }
 }
 
