@@ -260,10 +260,10 @@ export default function DocumentViewer({
       )}
 
       {/* Para un PDF, el desplegable de versiones flota sobre el documento:
-          la barra es la del lector y no hay dónde colgarlo. */}
+          la barra es la del lector y no hay dónde colgarlo. Cuelga DEL CHIP,
+          como en ACC: la barra lleva menú (32) + búsqueda (32) + el hueco, así
+          que el chip empieza sobre los 76 px. */}
       {esPdf && !isShared && showVersions && (
-        {/* Colgando DEL CHIP, como en ACC: la barra lleva menú (32) +
-            búsqueda (32) + el hueco, así que el chip empieza sobre los 76 px. */}
         <div style={{ position: 'absolute', top: 44, left: 76, zIndex: 40 }}>
           {popoverVersiones}
         </div>
