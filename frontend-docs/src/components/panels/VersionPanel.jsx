@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { renderFileIconSop } from '../../utils/fileIcons';
 import { API, formatSizeDetailed as formatSize, formatDate, getInitialsDetailed as getInitials } from '../../utils/helpers';
 import PdfCompareView from '../PdfCompareView';
+import DocQuickView from '../DocQuickView';
 
 export default function VersionPanel({
   isOpen,
@@ -23,7 +24,24 @@ export default function VersionPanel({
   onPromote,
 }) {
   const [compareOpen, setCompareOpen] = useState(false);
+  // Ver UNA versión concreta en el lector propio (no descarga, no otra pestaña)
+  const [quickView, setQuickView] = useState(null);
   if (!isOpen || !versionTarget) return null;
+
+  const abrirVersion = (v) => {
+    const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
+    const tokenQuery = token ? `&session_token=${token}` : '';
+    if (!v.gcs_urn) return;
+    setQuickView({
+      file: {
+        url: `${API}/api/docs/view?urn=${encodeURIComponent(v.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}${tokenQuery}`,
+        name: versionTarget.name,
+        nodeId: null, // versión histórica: solo lectura, sin herramientas de anotación
+      },
+      versionLabel: `V${v.version_number || 1}`,
+      versionInfo: `Cargado por ${v.updated_by || '—'}${v.updated ? ` · ${formatDate(v.updated)}` : ''}`,
+    });
+  };
 
   // Comparar 2 versiones de un PDF (overlay rojo/azul)
   const isPdf = (versionTarget.name || '').toLowerCase().endsWith('.pdf');
@@ -147,6 +165,16 @@ export default function VersionPanel({
         </div>
       </div>
 
+      {quickView && (
+        <DocQuickView
+          file={quickView.file}
+          projectPrefix={projectPrefix}
+          versionLabel={quickView.versionLabel}
+          versionInfo={quickView.versionInfo}
+          onClose={() => setQuickView(null)}
+        />
+      )}
+
       {compareOpen && canCompare && (
         <PdfCompareView
           fileName={versionTarget.name}
@@ -169,6 +197,10 @@ export default function VersionPanel({
             style={{ position: 'fixed', left: versionRowMenu.x, top: versionRowMenu.y, width: 220 }}
             onClick={e => e.stopPropagation()}
           >
+            <button onClick={() => { abrirVersion(versionRowMenu.v); setVersionRowMenu(null); }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              Ver esta versión
+            </button>
             <button onClick={() => {
               const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
               const tokenQuery = token ? `&session_token=${token}` : '';

@@ -143,8 +143,15 @@ body {
   color: var(--text-primary);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   font-size: 14px;
+  letter-spacing: 0.002em;
 }
+
+/* Cifras de ancho fijo en TODA tabla: tamaños, fechas y versiones dejan de
+   bailar de fila en fila. Las celdas que quieran otra cosa lo declaran. */
+table { font-variant-numeric: tabular-nums; }
 
 #root {
   min-height: 100vh;
@@ -2173,7 +2180,7 @@ th {
 }
 
 .adsk-logo {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font);
   font-weight: 800;
   font-size: 18px;
   letter-spacing: 0.5px;

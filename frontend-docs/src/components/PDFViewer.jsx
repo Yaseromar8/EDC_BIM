@@ -109,8 +109,8 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         padding: '12px 0', cursor: 'pointer',
-        background: isActive ? '#e8e8e8' : 'transparent',
-        borderBottom: '1px solid #ddd',
+        background: isActive ? '#e3eaf0' : 'transparent',
+        borderBottom: '1px solid #e3e6ea',
         transition: 'background 0.2s'
       }}
     >
@@ -124,7 +124,7 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
       }}>
         <canvas ref={canvasRef} />
       </div>
-      <span style={{ fontSize: 11, color: '#555', marginTop: 8, fontWeight: isActive ? 600 : 400 }}>
+      <span style={{ fontSize: 11, color: '#4a5561', marginTop: 8, fontVariantNumeric: 'tabular-nums', fontWeight: isActive ? 600 : 400 }}>
         {pageNum}
       </span>
     </div>
@@ -135,7 +135,8 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
 // ----------------------------------------------------------------------
 // Visor Principal
 // ----------------------------------------------------------------------
-export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = null, projectPrefix = '' }) {
+export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
+                                    versionLabel = null, versionInfo = null }) {
   const viewerRef = useRef(null); // Para Fullscreen
   const canvasRef = useRef(null);
   const wrapRef = useRef(null); // Envuelve canvas + overlay de herramientas
@@ -698,7 +699,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       className="pdf-viewer"
       tabIndex={-1}
       aria-busy={pageRendering}
-      style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#888', overflow: 'hidden' }}
+      style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#78838f', overflow: 'hidden' }}
     >
       
       {/* ▀▀▀ ACC Dark Toolbar ▀▀▀ */}
@@ -706,13 +707,13 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
         
         {/* Izquierda: Menú + Búsqueda */}
         <div className="pdf-toolbar__group pdf-toolbar__left" style={styles.toolbarGroupLeft}>
-          <button aria-label="Alternar panel de miniaturas" aria-pressed={showSidebar} onClick={() => setShowSidebar(!showSidebar)} style={{...styles.toolBtnDark, background: showSidebar ? '#444' : 'transparent'}} title="Alternar panel de miniaturas">
+          <button aria-label="Alternar panel de miniaturas" aria-pressed={showSidebar} onClick={() => setShowSidebar(!showSidebar)} style={{...styles.toolBtnDark, background: showSidebar ? '#243140' : 'transparent'}} title="Alternar panel de miniaturas">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
           </button>
 
           <button onClick={() => { setSearchOpen(o => !o); setTimeout(() => document.getElementById('pdf-search-input')?.focus(), 0); }}
             aria-label="Buscar en el documento" aria-pressed={searchOpen}
-            style={{ ...styles.toolBtnDark, background: searchOpen ? '#444' : 'transparent' }} title="Buscar en el documento (Ctrl+F)">
+            style={{ ...styles.toolBtnDark, background: searchOpen ? '#243140' : 'transparent' }} title="Buscar en el documento (Ctrl+F)">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           </button>
 
@@ -753,7 +754,19 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
               <button onClick={() => gotoMatch(1)} disabled={!matches.length} style={styles.searchBtn} title="Siguiente (Enter)">›</button>
             </div>
           )}
-          {!searchOpen && <span className="pdf-file-title" title={fileName}>{fileName}</span>}
+          {!searchOpen && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              {versionLabel && (
+                <span style={styles.versionChip} title={versionInfo || versionLabel}>{versionLabel}</span>
+              )}
+              <span className="pdf-file-title" title={fileName}>{fileName}</span>
+              {versionInfo && (
+                <span className="pdf-version-info" style={styles.versionInfo} title={versionInfo}>
+                  {versionInfo}
+                </span>
+              )}
+            </span>
+          )}
         </div>
 
         {/* Centro: Herramientas Principales */}
@@ -777,7 +790,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
             {zoomMenuOpen && (
               <div role="menu" style={{
                 position: 'absolute', top: '110%', left: '50%', transform: 'translateX(-50%)',
-                background: '#2b2b2b', border: '1px solid #444', borderRadius: 6,
+                background: '#131b24', border: '1px solid #2a3541', borderRadius: 6,
                 boxShadow: '0 4px 14px rgba(0,0,0,.45)', padding: 4, zIndex: 40,
                 display: 'flex', flexDirection: 'column', minWidth: 150,
               }}>
@@ -796,7 +809,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
                       cursor: 'pointer', borderRadius: 4, display: 'flex',
                       justifyContent: 'space-between', gap: 16,
                     }}
-                    onMouseOver={e => e.currentTarget.style.background = '#3a3a3a'}
+                    onMouseOver={e => e.currentTarget.style.background = '#22303e'}
                     onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
                     <span>{texto}</span>
                     {atajo && <span style={{ color: '#888', fontSize: 11 }}>{atajo}</span>}
@@ -901,7 +914,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{t.icon}</svg>
             </button>
           ))}
-          <div style={{ width: 1, height: 20, background: '#444', margin: '0 6px' }} />
+          <div style={{ width: 1, height: 20, background: '#2a3541', margin: '0 6px' }} />
           {COLORS.map(c => (
             <button key={c} onClick={() => setMarkupColor(c)} title="Color"
               style={{ width: 18, height: 18, borderRadius: '50%', background: c, cursor: 'pointer', border: markupColor === c ? '2px solid #fff' : '2px solid transparent', padding: 0 }} />
@@ -988,31 +1001,36 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
 }
 
 // --- Inline Styles ---
+// PALETA: la misma pizarra ALEPHIA del top-header (Ink #0B0E12) y sus grises
+// azulados. El lector deja de ser un gris genérico y pasa a ser de la casa.
 const styles = {
-  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', width: '100%', gap: 4, background: '#f5f5f5' },
+  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', width: '100%', gap: 4, background: 'var(--alephia-mist, #F3F6F8)' },
   spinner: { width: 36, height: 36, border: '3px solid #e0e0e0', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' },
-  
-  toolbar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', height: 48, background: '#222222', color: '#fff', flexShrink: 0, zIndex: 10 },
-  toolbarGroupLeft: { display: 'flex', alignItems: 'center', flex: 1 },
+
+  toolbar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', height: 48, background: 'var(--alephia-ink, #0B0E12)', color: '#fff', flexShrink: 0, zIndex: 10 },
+  toolbarGroupLeft: { display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 },
   toolbarGroupCenter: { display: 'flex', alignItems: 'center', gap: 4, flex: 2, justifyContent: 'center' },
   toolbarGroupRight: { display: 'flex', alignItems: 'center', gap: 4, flex: 1, justifyContent: 'flex-end' },
-  
-  toolBtnDark: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, border: 'none', background: 'transparent', borderRadius: 4, cursor: 'pointer', color: '#ddd', transition: 'background 0.2s, color 0.2s' },
-  separatorDark: { width: 1, height: 24, background: '#444', margin: '0 8px' },
 
-  searchBox: { display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6, background: '#111', border: '1px solid #444', borderRadius: 4, padding: '2px 4px' },
-  searchInput: { width: 190, background: 'transparent', border: 'none', outline: 'none', color: '#fff', fontSize: 12, padding: '5px 6px', fontFamily: 'inherit' },
-  searchBtn: { background: 'transparent', border: 'none', color: '#ddd', cursor: 'pointer', fontSize: 14, padding: '2px 7px', borderRadius: 3 },
-  
-  pageInfoDark: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#bbb' },
-  pageInputDark: { width: 40, textAlign: 'center', border: '1px solid #444', borderRadius: 4, padding: '4px 4px', fontSize: 13, outline: 'none', background: '#111', color: '#fff', fontFamily: 'inherit' },
-  pageNavBtnDark: { background: 'transparent', border: 'none', color: '#ddd', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 2 },
-  
-  toolsBar: { display: 'flex', alignItems: 'center', gap: 2, padding: '0 12px', height: 38, background: '#2b2b2b', borderTop: '1px solid #3a3a3a', flexShrink: 0, zIndex: 9 },
+  toolBtnDark: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, border: 'none', background: 'transparent', borderRadius: 4, cursor: 'pointer', color: '#d6dde4', transition: 'background 0.2s, color 0.2s' },
+  separatorDark: { width: 1, height: 24, background: '#2a3541', margin: '0 8px' },
+
+  versionChip: { flexShrink: 0, padding: '2px 8px', borderRadius: 4, background: '#1d2a37', border: '1px solid #33475b', color: '#cfe0ee', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.04em' },
+  versionInfo: { flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11.5, color: '#8b98a6', letterSpacing: '0.01em' },
+
+  searchBox: { display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6, background: '#0a1017', border: '1px solid #2a3541', borderRadius: 4, padding: '2px 4px' },
+  searchInput: { width: 190, background: 'transparent', border: 'none', outline: 'none', color: '#fff', fontSize: 12.5, padding: '5px 6px', fontFamily: 'inherit' },
+  searchBtn: { background: 'transparent', border: 'none', color: '#d6dde4', cursor: 'pointer', fontSize: 14, padding: '2px 7px', borderRadius: 3 },
+
+  pageInfoDark: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#a7b2bd', letterSpacing: '0.01em' },
+  pageInputDark: { width: 40, textAlign: 'center', border: '1px solid #2a3541', borderRadius: 4, padding: '4px 4px', fontSize: 13, outline: 'none', background: '#0a1017', color: '#fff', fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums' },
+  pageNavBtnDark: { background: 'transparent', border: 'none', color: '#d6dde4', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 2 },
+
+  toolsBar: { display: 'flex', alignItems: 'center', gap: 2, padding: '0 12px', height: 38, background: '#121922', borderTop: '1px solid #26313d', flexShrink: 0, zIndex: 9 },
   toolsBtn: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 28, border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14, transition: 'background 0.15s' },
 
-  sidebar: { width: 220, background: '#f9f9f9', borderRight: '1px solid #ccc', overflowY: 'auto', display: 'flex', flexDirection: 'column', flexShrink: 0 },
+  sidebar: { width: 220, background: 'var(--alephia-mist, #F3F6F8)', borderRight: '1px solid var(--neutral-200, #e3e6ea)', overflowY: 'auto', display: 'flex', flexDirection: 'column', flexShrink: 0 },
   canvasContainer: { flex: 1, overflow: 'auto' },
-  canvas: { boxShadow: '0 4px 16px rgba(0,0,0,0.3)', background: '#fff' },
+  canvas: { boxShadow: '0 4px 16px rgba(11,14,18,0.35)', background: '#fff' },
   downloadBtn: { marginTop: 16, padding: '8px 20px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, textDecoration: 'none', fontSize: 13, fontWeight: 500 },
 };

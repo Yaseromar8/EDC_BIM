@@ -335,8 +335,16 @@ export default function DocumentViewer({
 
           // 5. PDF (Mozilla PDF.js — Motor intercambiable)
           if (lowerName.endsWith('.pdf') || lowerName.endsWith('.pdfx')) {
+            // El chip de versión viaja DENTRO del lector: en pantalla completa
+            // la cabecera del documento desaparece y la versión debe seguir
+            // a la vista (la trazabilidad no se va con el fullscreen).
+            const vv = viewedVersionInfo || versionHistory[0] || null;
             return <PDFViewer url={fileUrl} fileName={file.name}
-              nodeId={isShared ? null : file.id} projectPrefix={projectPrefix} />;
+              nodeId={isShared ? null : file.id} projectPrefix={projectPrefix}
+              versionLabel={vv ? `V${vv.version_number || 1}` : null}
+              versionInfo={vv && (vv.updated_by || vv.updated)
+                ? `Cargado por ${vv.updated_by || '—'}${vv.updated ? ` · ${formatDate(vv.updated)}` : ''}`
+                : null} />;
           }
 
           // 6. CAD / BIM: DWG de Civil 3D, RVT, IFC... El navegador no sabe

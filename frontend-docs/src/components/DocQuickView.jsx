@@ -3,7 +3,8 @@
 import React from 'react';
 import PDFViewer from './PDFViewer';
 
-export default function DocQuickView({ file, projectPrefix, onClose }) {
+export default function DocQuickView({ file, projectPrefix, onClose,
+                                       versionLabel = null, versionInfo = null }) {
   if (!file) return null;
   const lower = file.name.toLowerCase();
   const isPdf = lower.endsWith('.pdf');
@@ -24,7 +25,9 @@ export default function DocQuickView({ file, projectPrefix, onClose }) {
           </div>
         </div>
         <div style={{ flex: 1, position: 'relative', background: '#f5f5f5', minHeight: 0 }}>
-          {isPdf && <PDFViewer url={file.url} fileName={file.name} nodeId={file.nodeId || null} projectPrefix={projectPrefix} />}
+          {isPdf && <PDFViewer url={file.url} fileName={file.name} nodeId={file.nodeId || null}
+                               projectPrefix={projectPrefix}
+                               versionLabel={versionLabel} versionInfo={versionInfo} />}
           {isImage && (
             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <img src={file.url} alt={file.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
