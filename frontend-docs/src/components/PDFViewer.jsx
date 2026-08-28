@@ -183,7 +183,8 @@ const HINTS = Object.fromEntries(
 // Visor Principal
 // ----------------------------------------------------------------------
 export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
-                                    versionLabel = null, versionInfo = null, hideTitle = false }) {
+                                    versionLabel = null, versionInfo = null, hideTitle = false,
+                                    onClose = null, onVersionClick = null }) {
   const viewerRef = useRef(null); // Para Fullscreen
   const canvasRef = useRef(null);
   const wrapRef = useRef(null); // Envuelve canvas + overlay de herramientas
@@ -849,7 +850,15 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
             </div>
           ) : mostrarIdentidad && (
             <div className="pdf-ident">
-              {versionLabel && <span className="pdf-chip-ver" title={versionInfo || versionLabel}>{versionLabel}</span>}
+              {versionLabel && (onVersionClick ? (
+                <button className="pdf-chip-ver pdf-chip-ver--menu" onClick={onVersionClick}
+                  title="Ver el historial de versiones">
+                  {versionLabel}
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+                </button>
+              ) : (
+                <span className="pdf-chip-ver" title={versionInfo || versionLabel}>{versionLabel}</span>
+              ))}
               <span className="pdf-file-title" title={fileName}>{fileName}</span>
               {versionInfo && <span className="pdf-meta">{versionInfo}</span>}
             </div>
@@ -882,6 +891,16 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
             title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
             {isFullscreen ? <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg> : <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>}
           </button>
+
+          {onClose && (
+            <>
+              <span className="pdf-sep" />
+              <button className="pdf-ico" onClick={onClose} title="Cerrar documento" aria-label="Cerrar documento">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="1.7" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+              </button>
+            </>
+          )}
         </div>
       </div>
 

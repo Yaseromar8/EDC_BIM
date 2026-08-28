@@ -73,6 +73,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+.pdf-chip-ver--menu {
+  display: inline-flex; align-items: center; gap: 4px;
+  cursor: pointer; font-family: inherit;
+}
+
+.pdf-chip-ver--menu:hover { background: #e3ecf4; }
+
 .pdf-file-title {
   overflow: hidden; color: var(--pdf-ink);
   font-size: 13px; font-weight: 600;
@@ -254,61 +261,67 @@
 
 /* ── MANDO INFERIOR · pastilla flotante ──────────────────────────────── */
 
+/* EL MANDO ES OSCURO, como el de ACC: flota sobre el plano y por contraste
+   se encuentra sin buscarlo. Es la unica pieza oscura del lector. */
 .pdf-dock {
   position: absolute;
-  left: 50%; bottom: 16px;
+  left: 50%; bottom: 18px;
   z-index: 8;
   display: flex; align-items: center; gap: 1px;
-  padding: 4px;
-  border: 1px solid var(--pdf-line);
-  border-radius: 10px;
-  background: var(--pdf-chrome);
-  box-shadow: var(--pdf-shadow);
+  padding: 5px;
+  border-radius: 12px;
+  background: #26313c;
+  box-shadow: 0 8px 26px rgba(15, 22, 30, 0.34);
   transform: translateX(-50%);
 }
 
+.pdf-dock .pdf-ico { color: #d3dbe3; }
+.pdf-dock .pdf-ico:hover { background: rgba(255, 255, 255, 0.13); color: #fff; }
+.pdf-dock .pdf-ico[aria-pressed="true"] { background: rgba(255, 255, 255, 0.20); color: #fff; }
+.pdf-dock .pdf-sep { background: rgba(255, 255, 255, 0.16); }
+
 .pdf-zoom-label {
   min-width: 52px; height: 30px; padding: 0 6px;
-  border: none; border-radius: 6px;
-  background: transparent; color: var(--pdf-ink);
+  border: none; border-radius: 7px;
+  background: transparent; color: #eaf0f5;
   cursor: pointer; font: inherit;
   font-size: 12.5px; font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-.pdf-zoom-label:hover { background: var(--pdf-hover); }
+.pdf-zoom-label:hover { background: rgba(255, 255, 255, 0.13); }
 
 .pdf-medida {
   display: flex; align-items: baseline; gap: 4px;
   padding: 0 8px;
-  color: var(--pdf-muted);
+  color: #9fadba;
   font-size: 11.5px; font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.pdf-medida b { color: var(--pdf-ink); font-weight: 600; }
+.pdf-medida b { color: #eaf0f5; font-weight: 600; }
 
 .pdf-zoom-menu {
   position: absolute;
   bottom: calc(100% + 8px); left: 50%;
   z-index: 20;
   display: flex; flex-direction: column;
-  min-width: 184px; padding: 4px;
-  border: 1px solid var(--pdf-line); border-radius: 10px;
-  background: var(--pdf-chrome);
-  box-shadow: var(--pdf-shadow);
+  min-width: 190px; padding: 5px;
+  border-radius: 11px;
+  background: #26313c;
+  box-shadow: 0 8px 26px rgba(15, 22, 30, 0.34);
   transform: translateX(-50%);
 }
 
 .pdf-zoom-menu button {
   display: flex; justify-content: space-between; gap: 18px;
-  padding: 8px 10px; border: none; border-radius: 6px;
-  background: transparent; color: var(--pdf-ink);
+  padding: 8px 10px; border: none; border-radius: 7px;
+  background: transparent; color: #eaf0f5;
   cursor: pointer; font: inherit; font-size: 12.5px; text-align: left;
 }
 
-.pdf-zoom-menu button:hover { background: var(--pdf-hover); }
-.pdf-zoom-menu span:last-child { color: var(--pdf-muted); font-size: 11.5px; }
+.pdf-zoom-menu button:hover { background: rgba(255, 255, 255, 0.13); }
+.pdf-zoom-menu span:last-child { color: #9fadba; font-size: 11.5px; }
 
 .pdf-tool-hint {
   position: absolute;

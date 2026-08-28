@@ -142,29 +142,14 @@ export default function DocumentViewer({
 
   if (!file) return null;
 
-  return (
-    <div className="file-viewer-overlay" style={isShared ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#fff' } : undefined}>
-      <div className="file-viewer-header" style={isShared ? { padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e0e0e0', flexShrink: 0 } : undefined}>
-        <div className="file-viewer-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--accent)', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {file.name}
-          </span>
-          
-          <div style={{ position: 'relative' }}>
-            <div 
-              className="version-link-acc" 
-              onClick={() => { if (!isShared && setShowVersions) setShowVersions(!showVersions); }}
-              style={{ fontSize: 13, padding: '2px 12px', cursor: isShared ? 'default' : 'pointer' }}
-            >
-              {viewedVersionInfo ? `V${viewedVersionInfo.version_number}` : (file.version ? `V${file.version}` : 'V1')}
-              {!isShared && (
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 6, transform: showVersions ? 'rotate(180deg)' : 'none' }}>
-                  <path d="M7 10l5 5 5-5H7z"/>
-                </svg>
-              )}
-            </div>
-
-            {!isShared && showVersions && (
+  // UNA SOLA BARRA PARA LOS PLANOS (como ACC).
+  //
+  // El lector ya lleva nombre, versión y cierre: repetir aquí la cabecera del
+  // expediente daba DOS barras apiladas y 100 px de cromo por delante del
+  // plano. Para los PDF la cabecera se calla y el lector manda; el desplegable
+  // de versiones sigue siendo el mismo, solo que flota sobre el documento.
+  const esPdf = /\.pdfx?$/i.test(file.name || '');
+  const popoverVersiones = (
               <div className="version-popover" style={{ top: 32, left: 0, width: 350 }}>
                 <div style={{ padding: '8px 12px', borderBottom: '1px solid #eee', fontSize: 12, fontWeight: 600, color: '#666' }}>
                   Versiones
@@ -228,7 +213,32 @@ export default function DocumentViewer({
                   )}
                 </div>
               </div>
-            )}
+  );
+
+  return (
+    <div className="file-viewer-overlay" style={isShared ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#fff' } : undefined}>
+      {!esPdf && (
+      <div className="file-viewer-header" style={isShared ? { padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e0e0e0', flexShrink: 0 } : undefined}>
+        <div className="file-viewer-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--accent)', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {file.name}
+          </span>
+          
+          <div style={{ position: 'relative' }}>
+            <div 
+              className="version-link-acc" 
+              onClick={() => { if (!isShared && setShowVersions) setShowVersions(!showVersions); }}
+              style={{ fontSize: 13, padding: '2px 12px', cursor: isShared ? 'default' : 'pointer' }}
+            >
+              {viewedVersionInfo ? `V${viewedVersionInfo.version_number}` : (file.version ? `V${file.version}` : 'V1')}
+              {!isShared && (
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 6, transform: showVersions ? 'rotate(180deg)' : 'none' }}>
+                  <path d="M7 10l5 5 5-5H7z"/>
+                </svg>
+              )}
+            </div>
+
+            {!isShared && showVersions && !esPdf && popoverVersiones}
           </div>
 
           {!isShared && viewedVersionInfo && viewedVersionInfo.version_number !== (versionHistory[0]?.version_number || file.version) && (
@@ -247,6 +257,15 @@ export default function DocumentViewer({
            <button className="file-viewer-close" onClick={onClose || (() => window.close())}>✕</button>
         </div>
       </div>
+      )}
+
+      {/* Para un PDF, el desplegable de versiones flota sobre el documento:
+          la barra es la del lector y no hay dónde colgarlo. */}
+      {esPdf && !isShared && showVersions && (
+        <div style={{ position: 'absolute', top: 46, left: 12, zIndex: 40 }}>
+          {popoverVersiones}
+        </div>
+      )}
       
       <div className="file-viewer-content" style={{ flex: 1, position: 'relative', background: '#f5f5f5', display: 'flex', justifyContent: 'center' }}>
         {(() => {
@@ -341,10 +360,9 @@ export default function DocumentViewer({
             const vv = viewedVersionInfo || versionHistory[0] || null;
             return <PDFViewer url={fileUrl} fileName={file.name}
               nodeId={isShared ? null : file.id} projectPrefix={projectPrefix}
-              // Esta pantalla YA tiene cabecera con nombre y versión: el lector
-              // no la repite… salvo en pantalla completa, donde esa cabecera
-              // desaparece y la trazabilidad tiene que seguir a la vista.
-              hideTitle
+              onClose={onClose || (() => window.close())}
+              onVersionClick={!isShared && setShowVersions
+                ? () => setShowVersions(!showVersions) : null}
               versionLabel={vv ? `V${vv.version_number || 1}` : null}
               versionInfo={vv && (vv.updated_by || vv.updated)
                 ? `Cargado por ${vv.updated_by || '—'}${vv.updated ? ` · ${formatDate(vv.updated)}` : ''}`
