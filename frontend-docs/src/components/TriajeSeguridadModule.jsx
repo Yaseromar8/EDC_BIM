@@ -84,8 +84,33 @@ export function TriajeSeguridadView({ projectPrefix, isAdmin }) {
   const t = datos?.triaje;
   const caducado = t?.caducado;
 
+  // EL MOTIVO VIENE REDACTADO, no en blanco.
+  //
+  // La decisión queda escrita porque un permiso sin motivo no se audita — eso
+  // no se toca. Lo que sobraba era el PEAJE: para compartir un plano en solo
+  // lectura había que redactar un párrafo desde cero. Ahora elegir la
+  // respuesta rellena un motivo por defecto, editable: quien esté de acuerdo
+  // confirma en dos clics, y quien quiera matizarlo escribe encima.
+  const MOTIVO_POR_DEFECTO = {
+    false: 'Obra pública ordinaria: los planos y modelos del expediente no '
+         + 'contienen información cuya divulgación exija restricciones más allá '
+         + 'de los permisos de carpeta del equipo.',
+    true: 'El plan de ejecución BIM (o la entidad contratante) identifica '
+        + 'información restringida en este expediente, de modo que su salida '
+        + 'del ECD se clasifica documento a documento.',
+  };
+
+  const elegir = (valor) => {
+    if (!isAdmin) return;
+    setRequiere(valor);
+    // No se pisa lo que la persona ya escribió, ni el motivo de un triaje previo.
+    const sinTocar = !justificacion.trim()
+      || justificacion.trim() === MOTIVO_POR_DEFECTO[String(!valor)];
+    if (sinTocar) setJustificacion(MOTIVO_POR_DEFECTO[String(valor)]);
+  };
+
   const Opcion = ({ valor, titulo, texto }) => (
-    <button onClick={() => isAdmin && setRequiere(valor)} disabled={!isAdmin}
+    <button onClick={() => elegir(valor)} disabled={!isAdmin}
             style={{
               flex: '1 1 280px', textAlign: 'left', cursor: isAdmin ? 'pointer' : 'default',
               background: requiere === valor ? 'var(--bg-accent)' : 'var(--bg-primary)',
