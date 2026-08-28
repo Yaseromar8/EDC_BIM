@@ -64,27 +64,22 @@ function formatoReloj(segundos) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-// El sentido del zoom con rueda NO es el mismo en 2D que en 3D dentro del
-// visor de Autodesk: la herramienta de laminas suma la rueda con el signo
-// contrario al dolly 3D (verificado en el bundle 7.126: ambos consultan
-// getReverseZoomDirection, pero el delta base va cambiado). Con la bandera
-// en false para todo, el 3D acercaba con rueda arriba y una lamina DWG se
-// ALEJABA -- el "scroll invertido" que reporto el dueno. La bandera se
-// decide POR VISTA: false en 3D (paridad con el visor principal), true en
-// 2D para que acercar sea acercar.
-function ajustarSentidoDelZoom(viewer, node) {
+// EL ZOOM INVERTIDO, resuelto leyendo el codigo del visor de Autodesk
+// (bundle 7.126): su perfil "AEC" -- el que activa para modelos de
+// construccion, o sea NUESTROS DWG y RVT -- trae DE FABRICA
+// reverseMouseZoomDir = true (OB.settings[REVERSE_MOUSE_ZOOM_DIR]=!0) y lo
+// aplica DESPUES de cargar la vista, pisando cualquier ajuste temprano.
+// Historia de esta funcion: la v1 ponia false una vez (el perfil la pisaba),
+// la v2 puso true en 2D (reforzo la inversion). La verdad: FALSE SIEMPRE
+// -- rueda adentro acerca, como el visor 3D principal y como ACC -- fijado
+// por la via autoritativa (la preferencia, que la navegacion escucha) y
+// reafirmado tarde para ganarle la carrera al perfil.
+function ajustarSentidoDelZoom(viewer, _node) {
   try {
-    const es2D = node?.data?.role !== '3d';
     const aplicar = () => {
       try {
-        // LAS DOS VIAS, y REPETIDO. Solo la navegacion no bastaba: el visor
-        // aplica sus preferencias guardadas un instante DESPUES de cargar la
-        // vista y pisaba el ajuste -- por eso el dueno seguia viendo el zoom
-        // invertido tras el primer arreglo. La preferencia es la autoridad
-        // que la navegacion escucha, y las reafirmaciones tardias ganan la
-        // carrera a cualquier aplicacion tardia del perfil.
-        viewer.prefs?.set('reverseMouseZoomDir', es2D);
-        viewer.getNavigation?.()?.setReverseZoomDirection(es2D);
+        viewer.prefs?.set('reverseMouseZoomDir', false);
+        viewer.getNavigation?.()?.setReverseZoomDirection(false);
       } catch { /* noop */ }
     };
     aplicar();
