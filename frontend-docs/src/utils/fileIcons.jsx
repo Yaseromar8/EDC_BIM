@@ -102,39 +102,44 @@ export function renderFileIconSop(filename, size = 24) {
     );
   }
 
-  // CAD / BIM v6 — la ANATOMIA del icono DWG clasico, que el dueno puso
-  // ampliado como referencia definitiva: pagina azul PROFUNDA, glifo CIAN
-  // (no blanco) y la cinta amarilla EN DIAGONAL cruzando la esquina inferior
-  // izquierda — no una banda horizontal, que era lo que v5 seguia haciendo.
-  // OJO: el icono real lleva (TM) — es marca de Autodesk y no se clona pixel
-  // a pixel; se toma su anatomia, dibujada propia, y el mismo lenguaje de
-  // cinta diagonal viste a toda la familia CAD con su color.
+  // CAD / BIM v7 — dos lenguajes A PROPOSITO, por orden del dueno:
+  //   · La familia DWG lleva la anatomia del icono clasico que el puso de
+  //     referencia: pagina azul profunda, cruceta CIAN y cinta amarilla EN
+  //     DIAGONAL cruzando la esquina («ese icono, asi deberia ser»).
+  //   · El resto (Revit, Navisworks, IFC, intercambio) vuelve a la v5 que
+  //     ya le gustaba — pagina saturada, glifo blanco, banda horizontal —
+  //     porque extender la cinta diagonal a todos fue iniciativa mia y la
+  //     rechazo: «no te pedi que cambien el icono de Revit».
   const ext = lowerName.split('.').pop();
   const CAD_FAMILIAS = {
-    dwg:  { pagina: '#14539F', pliegue: '#4D85C6', glifo: 'cruceta', tintaGlifo: '#7CCBF0', cinta: '#F7B60D', tintaCinta: '#1F2937' },
-    dxf:  { pagina: '#14539F', pliegue: '#4D85C6', glifo: 'cruceta', tintaGlifo: '#7CCBF0', cinta: '#F7B60D', tintaCinta: '#1F2937' },
-    dwf:  { pagina: '#14539F', pliegue: '#4D85C6', glifo: 'cruceta', tintaGlifo: '#7CCBF0', cinta: '#F7B60D', tintaCinta: '#1F2937' },
-    dwfx: { pagina: '#14539F', pliegue: '#4D85C6', glifo: 'cruceta', tintaGlifo: '#7CCBF0', cinta: '#F7B60D', tintaCinta: '#1F2937' },
-    dgn:  { pagina: '#1F6E66', pliegue: '#57A099', glifo: 'cruceta', tintaGlifo: '#9BE3DA', cinta: '#123F3A' },
-    rvt:  { pagina: '#1961A9', pliegue: '#4E8AC8', glifo: 'letra', letra: 'R', cinta: '#0C355F' },
-    rfa:  { pagina: '#1961A9', pliegue: '#4E8AC8', glifo: 'letra', letra: 'R', cinta: '#0C355F' },
-    rte:  { pagina: '#1961A9', pliegue: '#4E8AC8', glifo: 'letra', letra: 'R', cinta: '#0C355F' },
-    nwd:  { pagina: '#F4F8FB', pliegue: '#D4E2EE', borde: '#AFC6DA', glifo: 'letra', letra: 'N', tintaGlifo: '#175A93', cinta: '#175A93' },
-    nwc:  { pagina: '#F4F8FB', pliegue: '#D4E2EE', borde: '#AFC6DA', glifo: 'letra', letra: 'N', tintaGlifo: '#175A93', cinta: '#175A93' },
-    ifc:  { pagina: '#2F7D4F', pliegue: '#5EA37C', glifo: 'cubo', cinta: '#1B4D31' },
-    '3dm': { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', cinta: '#39434D' },
-    stl:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', cinta: '#39434D' },
-    obj:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', cinta: '#39434D' },
-    fbx:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', cinta: '#39434D' },
-    step:  { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', cinta: '#39434D' },
-    stp:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', cinta: '#39434D' },
-    iges:  { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', cinta: '#39434D' },
-    igs:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', cinta: '#39434D' },
-    sat:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', cinta: '#39434D' },
+    dwg:  { pagina: '#14539F', pliegue: '#4D85C6', glifo: 'cruceta', tintaGlifo: '#7CCBF0', cinta: '#F7B60D', tintaCinta: '#1F2937', diagonal: true },
+    dxf:  { pagina: '#14539F', pliegue: '#4D85C6', glifo: 'cruceta', tintaGlifo: '#7CCBF0', cinta: '#F7B60D', tintaCinta: '#1F2937', diagonal: true },
+    dwf:  { pagina: '#14539F', pliegue: '#4D85C6', glifo: 'cruceta', tintaGlifo: '#7CCBF0', cinta: '#F7B60D', tintaCinta: '#1F2937', diagonal: true },
+    dwfx: { pagina: '#14539F', pliegue: '#4D85C6', glifo: 'cruceta', tintaGlifo: '#7CCBF0', cinta: '#F7B60D', tintaCinta: '#1F2937', diagonal: true },
+    dgn:  { pagina: '#2E7D74', pliegue: '#5FA39B', glifo: 'cruceta', banda: '#153F3A' },
+    rvt:  { pagina: '#1961A9', pliegue: '#4E8AC8', glifo: 'letra', letra: 'R', banda: '#0F3F73' },
+    rfa:  { pagina: '#1961A9', pliegue: '#4E8AC8', glifo: 'letra', letra: 'R', banda: '#0F3F73' },
+    rte:  { pagina: '#1961A9', pliegue: '#4E8AC8', glifo: 'letra', letra: 'R', banda: '#0F3F73' },
+    nwd:  { pagina: '#F4F8FB', pliegue: '#D4E2EE', borde: '#AFC6DA', glifo: 'letra', letra: 'N', tintaGlifo: '#175A93', banda: '#175A93' },
+    nwc:  { pagina: '#F4F8FB', pliegue: '#D4E2EE', borde: '#AFC6DA', glifo: 'letra', letra: 'N', tintaGlifo: '#175A93', banda: '#175A93' },
+    ifc:  { pagina: '#2F7D4F', pliegue: '#5EA37C', glifo: 'cubo', banda: '#1E5537' },
+    '3dm': { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    stl:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    obj:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    fbx:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    step:  { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    stp:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    iges:  { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    igs:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
+    sat:   { pagina: '#5B6875', pliegue: '#88939E', glifo: 'cubo', banda: '#3F4A55' },
   };
   if (CAD_FAMILIAS[ext]) {
     const f = CAD_FAMILIAS[ext];
     const tinta = f.tintaGlifo || '#FFFFFF';
+    // La familia con cinta diagonal sube el glifo a la derecha para dejarle
+    // sitio; la de banda horizontal lo lleva centrado, como en v5.
+    const cx = f.diagonal ? 17.5 : 15;
+    const cy = f.diagonal ? 11 : 11.5;
     return (
       <div style={{ width: size, height: size, flexShrink: 0 }}>
         <svg viewBox="0 0 32 32" width="100%" height="100%">
@@ -142,33 +147,40 @@ export function renderFileIconSop(filename, size = 24) {
             d="M3 1v30h26V8h-7V1z" />
           <path fill="#0D2438" d="m29 15-7-7h7z" opacity="0.25" />
           <path fill={f.pliegue} d="m22 1 7 7h-7z" />
-          {/* glifo arriba-derecha, dejando sitio a la cinta */}
           {f.glifo === 'cruceta' && (
-            <g stroke={tinta} strokeWidth="2" fill="none" strokeLinecap="round">
-              <circle cx="17.5" cy="11" r="4.8" />
-              <path d="M17.5 4.2v3.4M17.5 14.4v3.4M10.7 11h3.4M21.3 11h3.4" />
-              <circle cx="17.5" cy="11" r="1" fill={tinta} stroke="none" />
+            <g stroke={tinta} strokeWidth={f.diagonal ? 2 : 2.2} fill="none" strokeLinecap="round">
+              <circle cx={cx} cy={cy} r={f.diagonal ? 4.8 : 5.2} />
+              <path d={`M${cx} ${cy - 6.8}v3.4M${cx} ${cy + 3.4}v3.4M${cx - 6.8} ${cy}h3.4M${cx + 3.4} ${cy}h3.4`} />
+              <circle cx={cx} cy={cy} r="1" fill={tinta} stroke="none" />
             </g>
           )}
           {f.glifo === 'letra' && (
-            <text x="17" y="15.5" textAnchor="middle" fontSize="14.5" fontWeight="800"
+            <text x="15" y="16.5" textAnchor="middle" fontSize="15.5" fontWeight="800"
               fontFamily="'Segoe UI', system-ui, sans-serif" fill={tinta}>{f.letra}</text>
           )}
           {f.glifo === 'cubo' && (
-            <g stroke={tinta} strokeWidth="1.9" fill="none" strokeLinejoin="round">
-              <path d="M17.5 3.8l5.9 3.4v6.2l-5.9 3.4-5.9-3.4V7.2z" />
-              <path d="M11.6 7.2l5.9 3.4 5.9-3.4M17.5 10.6v6.2" opacity="0.65" />
+            <g stroke={tinta} strokeWidth="2" fill="none" strokeLinejoin="round">
+              <path d="M15 4.5l6.3 3.6v6.6L15 18.3l-6.3-3.6V8.1z" />
+              <path d="M8.7 8.1l6.3 3.6 6.3-3.6M15 11.7v6.6" opacity="0.65" />
             </g>
           )}
-          {/* LA CINTA DIAGONAL: cruza la esquina inferior izquierda como en el
-              icono de toda la vida, con la extension corriendo por ella */}
-          <g transform="rotate(-33 9 24.5)">
-            <rect x="-7" y="20.7" width="33" height="7.6" fill={f.cinta} />
-            <text x="9" y="26.3" textAnchor="middle" fontSize="6.6" fontWeight="800"
-              fontFamily="sans-serif" fill={f.tintaCinta || '#FFFFFF'} letterSpacing="0.5">
-              {ext.slice(0, 4).toUpperCase()}
-            </text>
-          </g>
+          {f.diagonal ? (
+            <g transform="rotate(-33 9 24.5)">
+              <rect x="-7" y="20.7" width="33" height="7.6" fill={f.cinta} />
+              <text x="9" y="26.3" textAnchor="middle" fontSize="6.6" fontWeight="800"
+                fontFamily="sans-serif" fill={f.tintaCinta || '#FFFFFF'} letterSpacing="0.5">
+                {ext.slice(0, 4).toUpperCase()}
+              </text>
+            </g>
+          ) : (
+            <>
+              <rect x="3" y="21.5" width="26" height="9.5" fill={f.banda} />
+              <text x="16" y="28.6" textAnchor="middle" fontSize="7" fontWeight="800"
+                fontFamily="sans-serif" fill="#FFFFFF" letterSpacing="0.6">
+                {ext.slice(0, 4).toUpperCase()}
+              </text>
+            </>
+          )}
         </svg>
       </div>
     );
