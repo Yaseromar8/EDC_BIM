@@ -11,6 +11,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
+import toast from 'react-hot-toast';
 
 const VIEWER_JS = 'https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js';
 const VIEWER_CSS = 'https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css';
@@ -63,7 +64,7 @@ function formatoReloj(segundos) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-export default function CadViewer({ file }) {
+export default function CadViewer({ file, projectPrefix = '' }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
   const [phase, setPhase] = useState('preparando');   // preparando | traduciendo | listo | error
@@ -313,14 +314,28 @@ export default function CadViewer({ file }) {
               )}
               {/* Este enlace apuntaba a una ruta de descarga que NUNCA existio
                   en el backend: llevaba roto desde que se escribio, y nadie lo
-                  noto porque solo aparece cuando la traduccion CAD falla. Se
-                  usa el proxy real, con el mismo patron de sesion-por-query que
-                  las imagenes (una etiqueta <a> no puede mandar cabeceras). */}
-              <a href={`${API}/api/docs/proxy?id=${file.id}&session_token=${encodeURIComponent(localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token') || '')}`}
-                 download={file.name}
-                 style={{ fontSize: 13, color: '#7fb3d5', marginTop: 4 }}>
+                  noto porque solo aparece cuando la traduccion CAD falla.
+                  Y despues llevaba el TOKEN DE SESION en la direccion, que es
+                  la llave escrita en el historial del navegador. Ahora se pide
+                  una URL FIRMADA -- misma via que el lector y el menu del clic
+                  derecho -- que caduca sola y no lleva identidad dentro. */}
+              <button type="button"
+                onClick={async () => {
+                  const ventana = window.open('', '_blank', 'noopener');
+                  try {
+                    const r = await apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(file.gcs_urn || '')}&model_urn=${encodeURIComponent(projectPrefix || '')}`);
+                    const d = await r.json().catch(() => ({}));
+                    if (!r.ok || !d.success || !d.url) throw new Error(d.error || 'No se pudo preparar la descarga.');
+                    if (ventana) ventana.location = d.url; else window.open(d.url, '_blank', 'noopener');
+                  } catch (e) {
+                    if (ventana) ventana.close();
+                    toast.error(e.message || 'No se pudo descargar el archivo original.');
+                  }
+                }}
+                style={{ fontSize: 13, color: '#7fb3d5', marginTop: 4, background: 'none',
+                         border: 'none', textDecoration: 'underline', cursor: 'pointer' }}>
                 Descargar el archivo original
-              </a>
+              </button>
             </>
           ) : (
             <>

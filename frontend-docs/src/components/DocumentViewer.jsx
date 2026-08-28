@@ -378,7 +378,7 @@ export default function DocumentViewer({
           if (!isShared && CAD_EXTENSIONS.some(ext => lowerName.endsWith(ext))) {
             return (
               <Suspense fallback={<div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>}>
-                <CadViewer file={file} />
+                <CadViewer file={file} projectPrefix={projectPrefix} />
               </Suspense>
             );
           }

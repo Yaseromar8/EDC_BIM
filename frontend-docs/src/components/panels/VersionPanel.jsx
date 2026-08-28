@@ -4,8 +4,10 @@
  * Extraído de App.jsx líneas 2300-2466
  */
 import React, { useState } from 'react';
+import toast from 'react-hot-toast';
 import { renderFileIconSop } from '../../utils/fileIcons';
 import { API, formatSizeDetailed as formatSize, formatDate, getInitialsDetailed as getInitials } from '../../utils/helpers';
+import { apiFetch } from '../../utils/apiFetch';
 import PdfCompareView from '../PdfCompareView';
 import DocQuickView from '../DocQuickView';
 
@@ -28,13 +30,22 @@ export default function VersionPanel({
   const [quickView, setQuickView] = useState(null);
   if (!isOpen || !versionTarget) return null;
 
-  const abrirVersion = (v) => {
-    const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
-    const tokenQuery = token ? `&session_token=${token}` : '';
+  const abrirVersion = async (v) => {
     if (!v.gcs_urn) return;
+    // URL firmada, no token en la dirección (mismo criterio que la descarga).
+    let url = '';
+    try {
+      const r = await apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(v.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.success || !d.url) throw new Error(d.error || 'No se pudo abrir esta versión.');
+      url = d.url;
+    } catch (e) {
+      toast.error(e.message || 'No se pudo abrir esta versión.');
+      return;
+    }
     setQuickView({
       file: {
-        url: `${API}/api/docs/view?urn=${encodeURIComponent(v.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}${tokenQuery}`,
+        url,
         name: versionTarget.name,
         nodeId: null, // versión histórica: solo lectura, sin herramientas de anotación
       },
@@ -201,11 +212,22 @@ export default function VersionPanel({
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               Ver esta versión
             </button>
-            <button onClick={() => {
-              const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
-              const tokenQuery = token ? `&session_token=${token}` : '';
-              if (versionRowMenu.v.gcs_urn) window.open(`${API}/api/docs/view?urn=${encodeURIComponent(versionRowMenu.v.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}${tokenQuery}`, '_blank');
+            <button onClick={async () => {
+              // Mismo criterio que el menú de la tabla: la llave de la sesión
+              // no viaja en una URL. Se pide una URL firmada y se abre esa.
+              const v = versionRowMenu.v;
               setVersionRowMenu(null);
+              if (!v.gcs_urn) return;
+              const ventana = window.open('', '_blank', 'noopener');
+              try {
+                const r = await apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(v.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}`);
+                const d = await r.json().catch(() => ({}));
+                if (!r.ok || !d.success || !d.url) throw new Error(d.error || 'No se pudo preparar la descarga.');
+                if (ventana) ventana.location = d.url; else window.open(d.url, '_blank', 'noopener');
+              } catch (e) {
+                if (ventana) ventana.close();
+                toast.error(e.message || 'No se pudo descargar esta versión.');
+              }
             }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
               Descargar archivo de origen

@@ -29,8 +29,23 @@ export default function ContextMenu({
   if (!activeRowMenu) return null;
 
   const item = activeRowMenu.item;
+  // La lista YA dice qué puede hacer cada quien con cada fila
+  // (`permission_level`, escalera de folder_permissions). Se usa para no
+  // ofrecer acciones que el servidor rechazaría.
+  const NIVELES = { none: -1, viewer: 0, view_download: 1, view_markup: 2, edit: 3, admin: 4 };
+  const nivel = NIVELES[item.permission_level] ?? (isAdmin ? 4 : 0);
+  const puedeEditar = isAdmin || nivel >= NIVELES.edit;
   // Altura estimada del menú según acciones visibles (para no salirse por abajo)
-  const estHeight = isAdmin ? 320 : 90;
+  // Alto estimado: se CUENTAN las acciones visibles en vez de suponerlas. Con
+  // el número fijo, un menú corto se pegaba al borde inferior sin necesidad.
+  const acciones =
+    (item.type === 'folder' && isAdmin ? 2 : 0) +
+    (item.type !== 'folder' && puedeEditar ? 1 : 0) +
+    (isAdmin ? 2 : 0) +
+    (item.type !== 'folder' && onAttributes ? 1 : 0) +
+    1 +
+    (isAdmin ? 2 : 0);
+  const estHeight = 16 + acciones * 40;
 
   return (
     <div className="row-context-menu"
@@ -55,7 +70,16 @@ export default function ContextMenu({
           Configuración de permisos
         </button>
       )}
-      {item.node_type !== 'FOLDER' && (
+      {/* RESERVAR: solo DOCUMENTOS y solo a quien puede editarlos.
+          Dos defectos que tenía esta condición:
+            · miraba `node_type`, que la lista NUNCA devuelve (`list_contents`
+              solo manda `type`): undefined !== 'FOLDER' era SIEMPRE cierto, así
+              que el botón salía también sobre carpetas — y el servidor las
+              rechaza siempre («las carpetas no se reservan»);
+            · no miraba el permiso, y reservar exige `edit`: a un lector le
+              ofrecía un botón que terminaba en 403.
+          La regla del producto es no ofrecer lo que el servidor va a negar. */}
+      {item.type !== 'folder' && puedeEditar && (
         <button onClick={async () => {
           onClose();
           const tengoYo = item.bloqueado_por && item.bloqueado_por === (user?.email || user?.name);
@@ -108,12 +132,26 @@ export default function ContextMenu({
            Descargar Carpeta
         </button>
       ) : (
-        <button onClick={() => { 
+        <button onClick={async () => {
             onClose();
-            const token = localStorage.getItem('visor_session_token') || sessionStorage.getItem('visor_session_token');
-            const tokenQuery = token ? `&session_token=${token}` : '';
-            if (item.gcs_urn) {
-                window.open(`${API}/api/docs/view?urn=${encodeURIComponent(item.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}${tokenQuery}`, '_blank');
+            // EL TOKEN DE SESIÓN YA NO VIAJA EN LA URL.
+            //
+            // Antes se abría `/api/docs/view?...&session_token=<token>`: esa
+            // dirección queda en el historial del navegador, en los registros
+            // del servidor y en la cabecera Referer de lo que se abra después.
+            // Es la llave de la sesión escrita en sitios que nadie vigila.
+            // Ahora se pide una URL FIRMADA —el mismo camino que usa el
+            // lector— y se abre esa: caduca sola y no lleva identidad dentro.
+            if (!item.gcs_urn) { toast.error('Este documento no tiene fichero asociado.'); return; }
+            const ventana = window.open('', '_blank', 'noopener');  // antes del await: si no, lo bloquea el navegador
+            try {
+              const r = await apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(item.gcs_urn)}&model_urn=${encodeURIComponent(projectPrefix)}`);
+              const d = await r.json().catch(() => ({}));
+              if (!r.ok || !d.success || !d.url) throw new Error(d.error || 'No se pudo preparar la descarga.');
+              if (ventana) ventana.location = d.url; else window.open(d.url, '_blank', 'noopener');
+            } catch (e) {
+              if (ventana) ventana.close();
+              toast.error(e.message || 'No se pudo descargar.');
             }
         }}>
           <div className="menu-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></div>
