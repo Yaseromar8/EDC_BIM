@@ -2388,6 +2388,24 @@ _MINIATURAS_ENCOLADAS = set()
 _CANDADO_MINIATURAS = _threading.Lock()
 
 
+def _sellar_cache(blob):
+    """Le pone a una miniatura ya existente la instruccion de conservacion."""
+    try:
+        from gcs_manager import CACHE_MINIATURA
+        blob.cache_control = CACHE_MINIATURA
+        blob.patch()
+    except Exception as e:
+        print('[miniaturas] no se pudo sellar %s: %s' % (blob.name, str(e)[:100]))
+
+
+def _encolar_cache_miniaturas(blobs):
+    for b in blobs:
+        try:
+            _COLA_MINIATURAS.submit(_sellar_cache, b)
+        except Exception:
+            break
+
+
 def _encolar_miniaturas(urns):
     """Encola sin repetir. Devuelve cuantas entraron de verdad."""
     from gcs_manager import get_or_create_thumbnail
@@ -2441,14 +2459,31 @@ def urls_de_miniaturas():
     # QUE HAY HECHO, en UNA llamada. Preguntar objeto por objeto seria una
     # peticion de red por plano: justo lo que hace lenta la pantalla.
     hechas = set()
+    sin_cache = []
     try:
         bucket = get_storage_client().bucket(_os.environ.get('GCS_BUCKET_NAME'))
         prefijo = 'multi-tenant/%s/' % model_urn
         for blob in bucket.list_blobs(prefix=prefijo):
             if blob.name.endswith('__thumb420.jpg'):
                 hechas.add(blob.name)
+                # Las generadas ANTES de que existiera CACHE_MINIATURA no
+                # llevan la instruccion, y sin ella el navegador no las
+                # conserva: viajarian enteras en cada visita a la carpeta,
+                # para siempre. El listado ya nos dice cuales son, asi que se
+                # corrigen solas, una vez, sin migracion ni script aparte.
+                if not blob.cache_control:
+                    sin_cache.append(blob)
     except Exception as e:
         print('[miniaturas] no se pudo listar el almacen: %s' % str(e)[:120])
+
+    # Con TOPE: es una escritura por objeto y no vale la pena arriesgar el
+    # tiempo de respuesta de la pantalla por ponerse al dia de golpe. Lo que
+    # no entre hoy se corrige en la siguiente visita.
+    if sin_cache:
+        try:
+            _encolar_cache_miniaturas(sin_cache[:60])
+        except Exception as e:
+            print('[miniaturas] no se pudo sellar la cache: %s' % str(e)[:120])
 
     urls, pendientes = {}, []
     for urn in urns:

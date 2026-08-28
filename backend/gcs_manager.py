@@ -1,4 +1,5 @@
 import os
+import time as _time
 import threading
 from google.cloud import storage
 import datetime
@@ -160,8 +161,57 @@ _CONTENT_TYPE_MAP = {
     '.heif': 'image/heif',
 }
 
+CACHE_MINIATURA = 'private, max-age=86400, immutable'
+
+# LA URL FIRMADA, REUTILIZADA MIENTRAS SIGA VIVA.
+#
+# El firmado v4 mete la HORA dentro de la firma, asi que llamar dos veces a
+# `generate_signed_url` para el MISMO objeto devolvia dos direcciones
+# distintas. Para el navegador una direccion distinta es un fichero distinto:
+# se lo volvia a descargar aunque tuviera los bytes identicos en disco. Ese
+# era el motivo real de que abrir la misma carpeta nunca fuera mas rapido la
+# segunda vez.
+#
+# Guardando la URL y devolviendo LA MISMA mientras le quede vida, la clave de
+# cache del navegador se mantiene y la imagen sale de su disco sin pedir nada.
+# No cambia la seguridad: la caducidad sigue siendo la de siempre y la
+# autorizacion se comprueba ANTES de entregar la URL, no dentro de ella.
+_URLS_FIRMADAS = {}
+_CANDADO_URLS = threading.Lock()
+_TOPE_URLS = 4000            # ~2 MB; con tope para no repetir el susto de RAM
+_MARGEN_URL = 2 * 3600       # se renueva cuando le quedan menos de 2 h
+
+
+def _url_guardada(clave):
+    ahora = _time.time()
+    with _CANDADO_URLS:
+        guardada = _URLS_FIRMADAS.get(clave)
+        if guardada and guardada[1] - ahora > _MARGEN_URL:
+            return guardada[0]
+    return None
+
+
+def _guardar_url(clave, url, segundos):
+    with _CANDADO_URLS:
+        if len(_URLS_FIRMADAS) >= _TOPE_URLS:
+            # Poda simple: fuera la mitad mas antigua. No hace falta un LRU
+            # fino para esto, y uno mal hecho es mas riesgo que beneficio.
+            for k in sorted(_URLS_FIRMADAS, key=lambda k: _URLS_FIRMADAS[k][1])[:_TOPE_URLS // 2]:
+                _URLS_FIRMADAS.pop(k, None)
+        _URLS_FIRMADAS[clave] = (url, _time.time() + segundos)
+
+
 def generate_signed_url(blob_name, expiration_minutes=60*24):
-    """Genera una URL temporal segura para ver la imagen/documento inline."""
+    """Genera una URL temporal segura para ver la imagen/documento inline.
+
+    La misma URL se reutiliza mientras le quede vida (ver _URLS_FIRMADAS): es
+    lo que permite que el navegador conserve la imagen y que la segunda vez
+    sea instantanea.
+    """
+    clave = (blob_name, expiration_minutes)
+    repetida = _url_guardada(clave)
+    if repetida:
+        return repetida
     try:
         bucket_name = os.environ.get("GCS_BUCKET_NAME")
         client = get_storage_client()
@@ -179,6 +229,7 @@ def generate_signed_url(blob_name, expiration_minutes=60*24):
             response_disposition="inline",
             response_type=content_type
         )
+        _guardar_url(clave, url, expiration_minutes * 60)
         return url
     except Exception as e:
         print(f"Error generando signed url: {str(e)}")
@@ -344,8 +395,23 @@ def get_or_create_thumbnail(blob_name, max_px=420):
             pass
 
         try:
-            bucket.blob(thumb_name).upload_from_string(datos,
-                                                       content_type='image/jpeg')
+            destino = bucket.blob(thumb_name)
+            # QUE EL NAVEGADOR SE LA QUEDE. Sin esta linea la miniatura viaja
+            # entera en CADA carga de la carpeta: lo caro (rasterizar) ya no se
+            # repetia, pero el transporte si. Con 45 planos por carpeta eso son
+            # 45 descargas cada vez que el usuario entra.
+            #
+            # `immutable` es literalmente cierto aqui y no una licencia: cada
+            # subida crea un objeto con nombre unico
+            # (`.../{tiempo}_{uuid}_{fichero}`), asi que una version nueva es un
+            # nombre NUEVO -- el contenido de un nombre dado no puede cambiar
+            # jamas. Por eso se puede conservar sin riesgo de mostrar algo viejo.
+            #
+            # `private` y no `public` A PROPOSITO: la URL firmada ES la
+            # credencial, y estos son planos de obra. Solo el navegador del
+            # usuario la guarda; ningun intermediario compartido.
+            destino.cache_control = CACHE_MINIATURA
+            destino.upload_from_string(datos, content_type='image/jpeg')
         except Exception as ce:
             print(f"[thumb] no se pudo cachear {thumb_name}: {ce}")
         return datos, 'image/jpeg'
