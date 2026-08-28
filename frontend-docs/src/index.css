@@ -4084,7 +4084,13 @@ th {
 .rejilla-tarjeta.es-carpeta { cursor: default; }
 
 .rejilla-lienzo {
-  height: 150px;
+  /* FLEX-SHRINK 0, y no es cosmetica: la tarjeta es un flex en columna, y en
+     flexbox una pieza con altura fija SE ENCOGE si el contenedor aprieta
+     (flex-shrink vale 1 por defecto). Al darle altura propia a la rejilla,
+     el lienzo cedia hasta CERO y las tarjetas quedaban con la casilla y el
+     nombre -- sin miniatura, que fue justo lo que reporto el dueno.
+     Reproducido en una probeta con el CSS de produccion antes de tocar. */
+  height: 150px; flex: 0 0 150px; min-height: 150px;
   display: flex; align-items: center; justify-content: center;
   overflow: hidden; background: #f6f8fa;
   border-bottom: 1px solid var(--border-soft, #eef1f4);
@@ -4099,7 +4105,7 @@ th {
   animation: spin 0.9s linear infinite;
 }
 
-.rejilla-pie { padding: 9px 11px 11px; }
+.rejilla-pie { flex: 0 0 auto; padding: 9px 11px 11px; }
 
 .rejilla-nombre {
   font-size: 12.5px; font-weight: 600; color: var(--text-primary, #22303c);
