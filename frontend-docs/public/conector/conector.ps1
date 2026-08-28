@@ -52,9 +52,22 @@ try {
   if ($permitidos -notcontains $anfitrion) { exit }
 
   $nombre  = ($nombre -replace '[\\/:*?"<>|]', '_')
-  $carpeta = Join-Path $env:USERPROFILE 'Downloads\ALEPHIA'
+  # La cache vive en datos de aplicacion, NO en Descargas. El dueno vio la
+  # carpeta ALEPHIA en sus Descargas y pregunto si era normal: no debia serlo.
+  # Una copia visible invita a editarla creyendo que sincroniza -- y no
+  # sincroniza: el camino de vuelta al expediente es resubir por el portal.
+  # Quien quiera el fichero EN SUS MANOS tiene "Solo descargar el archivo".
+  # (ACC hace lo mismo: la cache del Desktop Connector vive escondida.)
+  $carpeta = Join-Path $env:LOCALAPPDATA 'ALEPHIA\cache'
   New-Item -Force -ItemType Directory $carpeta | Out-Null
   $fichero = Join-Path $carpeta $nombre
+
+  # La cache no crece sin fin: lo que lleve 45 dias sin abrirse, fuera.
+  try {
+    Get-ChildItem $carpeta -File | Where-Object {
+      $_.LastWriteTime -lt (Get-Date).AddDays(-45)
+    } | Remove-Item -Force -ErrorAction SilentlyContinue
+  } catch {}
 
   # CACHE POR VERSION, como el Desktop Connector de ACC: mismo plano cien
   # veces = UNA descarga; solo una version nueva en el ECD vuelve a bajar.
@@ -66,6 +79,9 @@ try {
   }
 
   if ($alDia) {
+    # Abrir desde cache cuenta como uso: que la limpieza de 45 dias no se
+    # lleve justo los planos que alguien abre a diario.
+    try { (Get-Item $fichero).LastWriteTime = Get-Date } catch {}
     Aviso "Abriendo $nombre (copia local al dia)"
   } else {
     Aviso "Descargando $nombre..."
