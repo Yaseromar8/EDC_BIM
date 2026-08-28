@@ -358,8 +358,13 @@ export default function DocumentViewer({
                 Cerrar
               </button>
             </div>
-            <div style={{ fontSize: 11.5, color: '#8a95a1', marginTop: 12, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 11.5, color: '#8a95a1', marginTop: 12, lineHeight: 1.6 }}>
               Tras instalarlo (doble clic al .bat), vuelve y pulsa «Abrir en el escritorio» otra vez.
+              Si el navegador bloquea el .bat, abre PowerShell y pega esta línea — hace lo mismo:
+              <code style={{ display: 'block', marginTop: 5, padding: '6px 8px', background: '#f2f4f6',
+                             borderRadius: 4, fontSize: 11, color: '#33404c', userSelect: 'all' }}>
+                irm https://visor-ecd-portal.onrender.com/conector/instalar.ps1 | iex
+              </code>
             </div>
           </div>
         </div>
