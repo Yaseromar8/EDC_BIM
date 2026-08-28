@@ -64,27 +64,43 @@ function formatoReloj(segundos) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-// EL ZOOM INVERTIDO, resuelto leyendo el codigo del visor de Autodesk
-// (bundle 7.126): su perfil "AEC" -- el que activa para modelos de
-// construccion, o sea NUESTROS DWG y RVT -- trae DE FABRICA
-// reverseMouseZoomDir = true (OB.settings[REVERSE_MOUSE_ZOOM_DIR]=!0) y lo
-// aplica DESPUES de cargar la vista, pisando cualquier ajuste temprano.
-// Historia de esta funcion: la v1 ponia false una vez (el perfil la pisaba),
-// la v2 puso true en 2D (reforzo la inversion). La verdad: FALSE SIEMPRE
-// -- rueda adentro acerca, como el visor 3D principal y como ACC -- fijado
-// por la via autoritativa (la preferencia, que la navegacion escucha) y
-// reafirmado tarde para ganarle la carrera al perfil.
-function ajustarSentidoDelZoom(viewer, _node) {
+// EL ZOOM INVERTIDO, resuelto DE RAIZ al tercer intento.
+//
+// Historia, porque importa: el perfil "AEC" del visor de Autodesk -- el que
+// activa para modelos de construccion, o sea NUESTROS DWG y RVT -- trae de
+// fabrica reverseMouseZoomDir = true. La v1 lo ponia en false UNA vez y el
+// perfil lo pisaba. La v2 puso true en 2D y reforzo la inversion. La v3
+// reafirmaba a 1,2 s y 3,5 s... y seguia invertido, porque el perfil se
+// aplica CUANDO ARRANCA LA CARGA DEL MODELO (setProfile en el bundle) y un
+// plano grande tarda mucho mas que esos segundos: las reafirmaciones
+// llegaban ANTES que el perfil, no despues.
+//
+// La cura no es adivinar el momento: es no depender de el. `prefs`
+// admite oyentes, asi que se pone un GUARDIAN -- si alguien (el perfil, un
+// cambio de vista, lo que sea) pone la bandera en true, se devuelve a false
+// en el acto. Sin bucle: devolverla dispara el oyente con false, que no
+// hace nada.
+//
+// Regla, para todo el visor CAD de la web: rueda adentro ACERCA.
+function ajustarSentidoDelZoom(viewer) {
   try {
-    const aplicar = () => {
+    const poner = () => {
       try {
         viewer.prefs?.set('reverseMouseZoomDir', false);
         viewer.getNavigation?.()?.setReverseZoomDirection(false);
       } catch { /* noop */ }
     };
-    aplicar();
-    setTimeout(aplicar, 1200);
-    setTimeout(aplicar, 3500);
+    poner();
+    // EL GUARDIAN: sobrevive al perfil, a los cambios de vista y a los
+    // modelos que tardan un minuto en cargar.
+    try {
+      viewer.prefs?.addListeners('reverseMouseZoomDir', (valor) => {
+        if (valor) poner();
+      });
+    } catch { /* si esta version no admite oyentes, quedan los reintentos */ }
+    setTimeout(poner, 1200);
+    setTimeout(poner, 4000);
+    setTimeout(poner, 12000);
   } catch { /* noop */ }
 }
 
@@ -170,15 +186,20 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
               tipo: v.data.role === '3d' ? '3D' : 'Lámina',
             })));
 
-            // Se prefiere una vista 3D si la hay: es lo que se espera al abrir un
-            // modelo. Si el Revit no publica ninguna —pasa mas de lo que parece,
-            // depende de que vistas marque el modelador— se cae a la de siempre.
-            const node = todas.find(v => v.data.role === '3d') || raiz.getDefaultGeometry();
+            // MODEL PRIMERO (peticion del dueno). En un DWG de Civil, "Model"
+            // es el espacio donde esta el dibujo de verdad; las demas vistas
+            // son presentaciones. Autodesk suele marcar por defecto una
+            // lamina —a menudo la caratula—, y se abria el membrete.
+            // Orden: Model > cualquier 3D > lo que marque Autodesk.
+            const esModel = (v) => /^\s*model\s*$/i.test(v.data.name || '');
+            const node = todas.find(esModel)
+                      || todas.find(v => v.data.role === '3d')
+                      || raiz.getDefaultGeometry();
             if (!node) return fail('La traducción no produjo ninguna vista visible.');
             setVistaActiva(node.data.guid);
             viewer.loadDocumentNode(doc, node).then(() => {
               if (cancelled) return;
-              ajustarSentidoDelZoom(viewer, node);
+              ajustarSentidoDelZoom(viewer);
               setPhase('listo');
             });
           },
@@ -311,7 +332,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
               .find(n => n.data.guid === v.guid);
             if (!node) return;
             setVistaActiva(v.guid);
-            viewer.loadDocumentNode(doc, node).then(() => ajustarSentidoDelZoom(viewer, node));
+            viewer.loadDocumentNode(doc, node).then(() => ajustarSentidoDelZoom(viewer));
           }}
           style={{
             position: 'absolute', top: 12, left: 12, zIndex: 20, maxWidth: 380,

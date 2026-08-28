@@ -215,6 +215,21 @@ function servirCola() {
   }
 }
 
+// LA TIRA NO SE CIERRA AL CAMBIAR DE PLANO.
+//
+// Saltar a otro documento REMONTA el lector entero, asi que un estado normal
+// se perdia y la tira desaparecia en cada salto: habia que reabrirla para
+// cada plano. En ACC se queda abierta hasta que la cierras tu, y eso es lo
+// que hace fluido revisar una carpeta. Se guarda FUERA del componente (y en
+// el navegador) para que sobreviva al remontaje.
+let _tiraAbiertaMemoria = (() => {
+  try { return localStorage.getItem('alephia_tira_docs') === 'si'; } catch { return false; }
+})();
+function recordarTira(abierta) {
+  _tiraAbiertaMemoria = abierta;
+  try { localStorage.setItem('alephia_tira_docs', abierta ? 'si' : 'no'); } catch { /* noop */ }
+}
+
 function MiniaturaHermano({ doc, activo, onAbrir }) {
   const ref = React.useRef(null);
   const [src, setSrc] = React.useState(null);
@@ -302,7 +317,12 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   // LA TIRA DE LA CARPETA (el boton de cuadricula, como ACC): saltar al
   // plano siguiente sin volver al explorador. Cerrada por defecto -- ocupa
   // alto util y no todo el mundo la quiere abierta.
-  const [tiraAbierta, setTiraAbierta] = useState(false);
+  const [tiraAbierta, _setTiraAbierta] = useState(_tiraAbiertaMemoria);
+  const setTiraAbierta = (v) => {
+    const valor = typeof v === 'function' ? v(tiraAbierta) : v;
+    recordarTira(valor);
+    _setTiraAbierta(valor);
+  };
   const indiceActual = hermanos.findIndex(h => h.name === fileName);
   const irAHermano = (paso) => {
     if (!onAbrirHermano || indiceActual < 0) return;
@@ -1213,7 +1233,15 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
                 <span>{hermanos.length} documentos en esta carpeta</span>
                 <button onClick={() => setTiraAbierta(false)} title="Cerrar la tira">✕</button>
               </div>
-              <div className="pdf-tira-carril">
+              <div className="pdf-tira-carril" ref={(el) => {
+                // El plano actual se trae a la vista solo: en una carpeta de
+                // 45, saltar al siguiente lo dejaba fuera de pantalla.
+                if (!el) return;
+                const actual = el.querySelector('.pdf-tira-item.es-actual');
+                if (actual && actual.scrollIntoView) {
+                  actual.scrollIntoView({ block: 'nearest', inline: 'center' });
+                }
+              }}>
                 {hermanos.map(h => (
                   <MiniaturaHermano key={h.id || h.name} doc={h}
                     activo={h.name === fileName} onAbrir={onAbrirHermano} />
