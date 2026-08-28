@@ -1,32 +1,34 @@
 /* ═══════════════════════════════════════════════════════════════════════
    LECTOR DE DOCUMENTOS · ALEPHIA
-   Rediseño 27-ago-2026 tras la comparación lado a lado con ACC.
+   Rediseño 27-ago-2026 · segunda pasada
 
-   QUÉ ESTABA MAL, Y ES LO QUE ESTO CORRIGE:
-     · TRES barras apiladas (cabecera del documento + barra oscura + barra de
-       herramientas) comían 130 px de alto y repetían el nombre del fichero
-       dos veces. Ahora hay UNA barra de 52 px y la identidad aparece una vez.
-     · Once herramientas en una fila plana, todas del mismo peso visual, sin
-       agrupar: imposible de leer de un vistazo. Ahora van en un carril
-       FLOTANTE a la derecha, agrupadas por lo que hacen (navegar · medir ·
-       anotar) con separadores.
-     · El campo gris oscuro empequeñecía el plano. Ahora el fondo es claro y
-       frío, la hoja lleva sombra suave, y el documento es lo que manda.
+   POR QUÉ NO SE PARECE A ACC, Y ES DELIBERADO
+   -------------------------------------------
+   La primera versión copiaba su gramática: cromo blanco, carril de iconos
+   mudos a la DERECHA, pastillas flotando. Parecía un clon. Aquí el lector es
+   una CONSOLA DE INSTRUMENTOS con la pizarra de ALEPHIA (la misma Ink de la
+   cabecera del portal), y su seña propia:
 
-   La regla de identidad: el cromo es claro y calla; el color solo aparece en
-   la herramienta ACTIVA (Navy de marca) y en el foco de teclado.
+     · el carril va a la IZQUIERDA, pegado al borde, y cada herramienta lleva
+       su NOMBRE debajo — ACC y Procore son solo iconos: quien entra por
+       primera vez a un CDE no tiene que adivinar qué hace cada pictograma;
+     · el cromo es oscuro y la hoja es lo único claro de la pantalla, como en
+       una mesa de luz: el plano no compite con la interfaz;
+     · abajo, un solo mando con lo que se toca a cada rato — zoom, encuadre y
+       giro — en vez de repartirlo por tres bordes.
    ═══════════════════════════════════════════════════════════════════════ */
 
 .pdf-viewer {
-  --pdf-chrome: #ffffff;
-  --pdf-field: #e7ecf1;
-  --pdf-line: #dde3e9;
-  --pdf-ink: var(--alephia-ink, #0b0e12);
-  --pdf-muted: #667180;
-  --pdf-icon: #4a5561;
-  --pdf-active: var(--alephia-navy, #153754);
-  --pdf-focus: var(--accent, #3e6f91);
-  --pdf-shadow: 0 6px 22px rgba(11, 14, 18, 0.14), 0 1px 3px rgba(11, 14, 18, 0.08);
+  --pdf-chrome: #10161d;
+  --pdf-chrome-2: #18212b;
+  --pdf-line: #26313d;
+  --pdf-text: #e3eaf1;
+  --pdf-icon: #a9b6c2;
+  --pdf-muted: #7a8896;
+  --pdf-field: #eceff3;
+  --pdf-active: var(--alephia-signal, #3e6f91);
+  --pdf-focus: #7fb3d5;
+  --pdf-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
 
   position: absolute;
   inset: 0;
@@ -34,65 +36,42 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--pdf-field);
-  color: var(--pdf-ink);
+  color: var(--pdf-text);
 }
 
-/* ── BARRA ÚNICA ──────────────────────────────────────────────────────── */
+/* ── BARRA ÚNICA (pizarra ALEPHIA, la misma del portal) ───────────────── */
 
 .pdf-topbar {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  height: 52px;
+  height: 48px;
   padding: 0 10px;
   background: var(--pdf-chrome);
-  border-bottom: 1px solid var(--pdf-line);
   z-index: 10;
 }
 
-.pdf-topbar__left {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1 1 auto;
-  min-width: 0;
-}
+.pdf-topbar__left { display: flex; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; }
+.pdf-topbar__center { display: flex; align-items: center; flex: 0 0 auto; }
+.pdf-topbar__right { display: flex; align-items: center; gap: 2px; flex: 1 1 auto; justify-content: flex-end; }
 
-.pdf-topbar__center {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: 0 0 auto;
-}
-
-.pdf-topbar__right {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: 1 1 auto;
-  justify-content: flex-end;
-}
-
-/* Identidad del documento: chip de versión + nombre + procedencia.
-   Aparece UNA vez. Dentro del lector porque en pantalla completa la
-   cabecera del expediente desaparece y la trazabilidad no debe irse con ella. */
 .pdf-ident {
   display: flex;
   align-items: baseline;
   gap: 8px;
   min-width: 0;
-  margin-left: 6px;
+  margin-left: 8px;
 }
 
 .pdf-chip-ver {
   flex-shrink: 0;
   align-self: center;
   padding: 2px 8px;
-  border: 1px solid #c9d6e2;
+  border: 1px solid #2f4b62;
   border-radius: 4px;
-  background: #eef4f9;
-  color: #2b4d68;
+  background: #16293a;
+  color: #9ec7e4;
   font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -101,7 +80,7 @@
 
 .pdf-file-title {
   overflow: hidden;
-  color: var(--pdf-ink);
+  color: var(--pdf-text);
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.005em;
@@ -119,7 +98,7 @@
   white-space: nowrap;
 }
 
-/* ── BOTONES DE ICONO ─────────────────────────────────────────────────── */
+/* ── BOTONES ──────────────────────────────────────────────────────────── */
 
 .pdf-ico {
   display: inline-flex;
@@ -138,17 +117,11 @@
   transition: background 0.14s, color 0.14s;
 }
 
-.pdf-ico:hover { background: #eef1f5; color: var(--pdf-ink); }
-.pdf-ico[aria-pressed="true"] { background: #e6edf4; color: var(--pdf-active); }
-.pdf-ico:disabled { cursor: not-allowed; opacity: 0.35; }
+.pdf-ico:hover { background: var(--pdf-chrome-2); color: #fff; }
+.pdf-ico[aria-pressed="true"] { background: var(--pdf-active); color: #fff; }
+.pdf-ico:disabled { cursor: not-allowed; opacity: 0.3; }
 
-.pdf-sep {
-  flex-shrink: 0;
-  width: 1px;
-  height: 22px;
-  margin: 0 6px;
-  background: var(--pdf-line);
-}
+.pdf-sep { flex-shrink: 0; width: 1px; height: 20px; margin: 0 6px; background: var(--pdf-line); }
 
 /* ── PAGINACIÓN ───────────────────────────────────────────────────────── */
 
@@ -167,15 +140,15 @@
   padding: 0 4px;
   border: 1px solid var(--pdf-line);
   border-radius: 5px;
-  background: #fff;
-  color: var(--pdf-ink);
+  background: #0a1017;
+  color: var(--pdf-text);
   font: inherit;
   font-weight: 600;
   text-align: center;
   outline: none;
 }
 
-.pdf-pagenav input:focus { border-color: var(--pdf-focus); }
+.pdf-pagenav input:focus { border-color: var(--pdf-active); }
 .pdf-pagenav input::-webkit-outer-spin-button,
 .pdf-pagenav input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .pdf-pagenav input { -moz-appearance: textfield; }
@@ -191,7 +164,7 @@
   padding: 2px 4px 2px 8px;
   border: 1px solid var(--pdf-line);
   border-radius: 7px;
-  background: #f7f9fb;
+  background: #0a1017;
 }
 
 .pdf-search input {
@@ -199,7 +172,7 @@
   min-width: 90px;
   border: none;
   background: transparent;
-  color: var(--pdf-ink);
+  color: var(--pdf-text);
   font: inherit;
   font-size: 12.5px;
   outline: none;
@@ -215,47 +188,136 @@
 }
 
 .pdf-search button {
-  width: 26px;
-  height: 26px;
+  width: 26px; height: 26px;
+  border: none; border-radius: 5px;
+  background: transparent;
+  color: var(--pdf-icon);
+  cursor: pointer; font: inherit; font-size: 15px; line-height: 1;
+}
+
+.pdf-search button:hover:not(:disabled) { background: var(--pdf-chrome-2); }
+.pdf-search button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ── CUERPO ───────────────────────────────────────────────────────────── */
+
+.pdf-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+/* EL CARRIL DE LA IZQUIERDA, CON NOMBRES. Es la seña de la casa: en un CDE
+   de obra pública entra gente que no vive en el software, y un pictograma
+   sin nombre es una adivinanza. */
+.pdf-rail {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 64px;
+  padding: 6px 0 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--pdf-chrome);
+  border-right: 1px solid var(--pdf-line);
+  scrollbar-width: thin;
+  scrollbar-color: #2f3b48 transparent;
+}
+
+.pdf-rail__group { display: flex; flex-direction: column; }
+
+.pdf-rail__group + .pdf-rail__group {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--pdf-line);
+}
+
+.pdf-rail-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  padding: 7px 2px 6px;
   border: none;
-  border-radius: 5px;
   background: transparent;
   color: var(--pdf-icon);
   cursor: pointer;
-  font: inherit;
-  font-size: 15px;
+  transition: background 0.14s, color 0.14s;
+}
+
+.pdf-rail-btn span {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
   line-height: 1;
+  text-transform: uppercase;
 }
 
-.pdf-search button:hover:not(:disabled) { background: #e6ebf0; }
-.pdf-search button:disabled { opacity: 0.3; cursor: not-allowed; }
+.pdf-rail-btn:hover { background: var(--pdf-chrome-2); color: #fff; }
 
-/* ── CUERPO: MINIATURAS + ESCENARIO ───────────────────────────────────── */
+.pdf-rail-btn[aria-pressed="true"] {
+  background: var(--pdf-active);
+  color: #fff;
+}
 
-.pdf-body {
+.pdf-swatch {
   display: flex;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  padding: 7px 2px 6px;
+  border: none;
+  background: transparent;
+  color: var(--pdf-icon);
+  cursor: pointer;
 }
+
+.pdf-swatch i {
+  display: block;
+  width: 18px; height: 18px;
+  border: 2px solid #0f1620;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #3a4855;
+}
+
+.pdf-swatch span {
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.03em;
+  line-height: 1; text-transform: uppercase;
+}
+
+.pdf-swatch:hover { background: var(--pdf-chrome-2); color: #fff; }
+
+.pdf-colors {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 0;
+  z-index: 30;
+  display: flex;
+  gap: 5px;
+  padding: 6px;
+  border: 1px solid var(--pdf-line);
+  border-radius: 9px;
+  background: var(--pdf-chrome-2);
+  box-shadow: var(--pdf-shadow);
+}
+
+.pdf-colors button {
+  width: 22px; height: 22px;
+  border: 2px solid transparent; border-radius: 50%;
+  cursor: pointer; padding: 0;
+}
+
+.pdf-colors button[aria-pressed="true"] { border-color: #fff; }
+
+/* ── ESCENARIO ────────────────────────────────────────────────────────── */
+
+.pdf-stage { position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; }
 
 .pdf-sidebar {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  width: 200px;
+  width: 196px;
   overflow-y: auto;
-  background: #f4f7f9;
-  border-right: 1px solid var(--pdf-line);
-}
-
-/* El escenario ancla los muelles flotantes; el scroll vive dentro. */
-.pdf-stage {
-  position: relative;
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
+  background: #f4f6f8;
+  border-right: 1px solid #dde3e9;
 }
 
 .pdf-canvas-container {
@@ -273,7 +335,7 @@
   width: fit-content;
   min-width: 100%;
   margin: 0 auto;
-  padding: 40px 40px 96px; /* aire abajo para que el muelle no tape la hoja */
+  padding: 34px 34px 92px;
 }
 
 .pdf-page { position: relative; }
@@ -281,43 +343,34 @@
 .pdf-page canvas {
   display: block;
   background: #fff;
-  box-shadow: 0 2px 6px rgba(11, 14, 18, 0.10), 0 12px 34px rgba(11, 14, 18, 0.14);
+  box-shadow: 0 1px 3px rgba(11, 14, 18, 0.16), 0 14px 40px rgba(11, 14, 18, 0.18);
 }
 
-/* ── MUELLE INFERIOR: ZOOM ────────────────────────────────────────────── */
+/* ── MANDO INFERIOR: zoom · encuadre · GIRO (aquí, no arriba) ─────────── */
 
 .pdf-dock {
   position: absolute;
   left: 50%;
-  bottom: 18px;
+  bottom: 20px;
   z-index: 6;
-  display: flex;
-  gap: 8px;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-
-.pdf-dock__group,
-.pdf-rail__group {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 4px;
-  border: 1px solid var(--pdf-line);
-  border-radius: 10px;
-  background: var(--pdf-chrome);
+  padding: 5px;
+  border-radius: 11px;
+  background: rgba(16, 22, 29, 0.96);
   box-shadow: var(--pdf-shadow);
-  pointer-events: auto;
+  transform: translateX(-50%);
 }
 
 .pdf-zoom-label {
-  min-width: 52px;
+  min-width: 54px;
   height: 30px;
   padding: 0 6px;
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--pdf-ink);
+  color: var(--pdf-text);
   cursor: pointer;
   font: inherit;
   font-size: 12.5px;
@@ -325,7 +378,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.pdf-zoom-label:hover { background: #eef1f5; }
+.pdf-zoom-label:hover { background: var(--pdf-chrome-2); }
 
 .pdf-zoom-menu {
   position: absolute;
@@ -334,11 +387,11 @@
   z-index: 20;
   display: flex;
   flex-direction: column;
-  min-width: 178px;
+  min-width: 186px;
   padding: 5px;
   border: 1px solid var(--pdf-line);
   border-radius: 10px;
-  background: var(--pdf-chrome);
+  background: var(--pdf-chrome-2);
   box-shadow: var(--pdf-shadow);
   transform: translateX(-50%);
 }
@@ -351,116 +404,28 @@
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--pdf-ink);
+  color: var(--pdf-text);
   cursor: pointer;
   font: inherit;
   font-size: 12.5px;
   text-align: left;
 }
 
-.pdf-zoom-menu button:hover { background: #eef1f5; }
+.pdf-zoom-menu button:hover { background: #22303e; }
 .pdf-zoom-menu span:last-child { color: var(--pdf-muted); font-size: 11.5px; }
 
-/* ── CARRIL DERECHO: HERRAMIENTAS DE INGENIERÍA ───────────────────────── */
-
-.pdf-rail {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 6;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: calc(100% - 32px);
-  overflow-y: auto;
-  pointer-events: none;
-}
-
-.pdf-rail__group {
-  flex-direction: column;
-}
-
-.pdf-rail-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--pdf-icon);
-  cursor: pointer;
-  transition: background 0.14s, color 0.14s;
-}
-
-.pdf-rail-btn:hover { background: #eef1f5; color: var(--pdf-ink); }
-
-.pdf-rail-btn[aria-pressed="true"] {
-  background: var(--pdf-active);
-  color: #fff;
-}
-
-/* El color es un botón con muestra, no seis puntos ocupando sitio. */
-.pdf-swatch {
-  position: relative;
-  width: 34px;
-  height: 34px;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.pdf-swatch i {
-  display: block;
-  width: 17px;
-  height: 17px;
-  margin: 0 auto;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1px var(--pdf-line);
-}
-
-.pdf-swatch:hover { background: #eef1f5; }
-
-.pdf-colors {
-  position: absolute;
-  top: 0;
-  right: calc(100% + 8px);
-  display: flex;
-  gap: 4px;
-  padding: 5px;
-  border: 1px solid var(--pdf-line);
-  border-radius: 9px;
-  background: var(--pdf-chrome);
-  box-shadow: var(--pdf-shadow);
-}
-
-.pdf-colors button {
-  width: 22px;
-  height: 22px;
-  border: 2px solid transparent;
-  border-radius: 50%;
-  cursor: pointer;
-  padding: 0;
-}
-
-.pdf-colors button[aria-pressed="true"] { border-color: var(--pdf-ink); }
-
-/* Pista de la herramienta activa: aparece bajo el carril, no en una barra. */
+/* Pista de la herramienta activa: sale junto al carril, a media altura. */
 .pdf-tool-hint {
   position: absolute;
-  right: 66px;
-  top: 22px;
+  left: 16px;
+  bottom: 22px;
   z-index: 5;
-  max-width: 240px;
-  padding: 6px 11px;
-  border: 1px solid var(--pdf-line);
+  max-width: 250px;
+  padding: 7px 12px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(16, 22, 29, 0.94);
   box-shadow: var(--pdf-shadow);
-  color: var(--pdf-muted);
+  color: #c3ced9;
   font-size: 11.5px;
   line-height: 1.35;
   pointer-events: none;
@@ -473,7 +438,7 @@
 .pdf-viewer input:focus-visible,
 .pdf-viewer [role="button"]:focus-visible {
   outline: 2px solid var(--pdf-focus);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 
 .pdf-render-status,
@@ -487,38 +452,32 @@
   margin: 12px auto -46px;
   align-items: center;
   gap: 10px;
-  border: 1px solid var(--pdf-line);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(16, 22, 29, 0.92);
   box-shadow: var(--pdf-shadow);
-  color: var(--pdf-muted);
+  color: #c3ced9;
   font-size: 12px;
   padding: 8px 14px;
   pointer-events: none;
 }
 
 .pdf-render-error {
-  border-color: var(--border-danger, #eec6c3);
   border-radius: 8px;
-  background: var(--bg-danger, #fdf0ef);
-  color: var(--danger, #a8241b);
+  background: #4a1d1d;
+  color: #ffd7d4;
   pointer-events: auto;
 }
 
 .pdf-render-error button {
-  border: 1px solid currentColor;
-  border-radius: 5px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  padding: 3px 9px;
+  border: 1px solid currentColor; border-radius: 5px;
+  background: transparent; color: inherit; cursor: pointer;
+  font: inherit; padding: 3px 9px;
 }
 
 .pdf-error-details {
   max-width: min(520px, calc(100% - 32px));
   margin-top: 10px;
-  color: var(--pdf-muted);
+  color: #667180;
   font-size: 12px;
   text-align: center;
 }
@@ -526,13 +485,7 @@
 .pdf-error-details summary { cursor: pointer; }
 .pdf-error-details div { margin-top: 6px; overflow-wrap: anywhere; }
 
-.pdf-error-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-}
-
+.pdf-error-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .pdf-error-actions button { cursor: pointer; font-family: inherit; }
 
 /* ── ADAPTACIÓN ───────────────────────────────────────────────────────── */
@@ -543,35 +496,30 @@
 }
 
 @media (max-width: 860px) {
-  .pdf-file-title { max-width: 180px; }
-  .pdf-rail { top: 10px; right: 10px; }
+  .pdf-rail { width: 52px; }
+  .pdf-rail-btn span, .pdf-swatch span { display: none; }
   .pdf-tool-hint { display: none; }
 }
 
 @media (max-width: 700px) {
-  .pdf-topbar { height: 56px; gap: 2px; }
+  .pdf-topbar { height: 54px; gap: 2px; }
   .pdf-ico { width: 40px; height: 40px; }
-  .pdf-ident { margin-left: 2px; }
-  .pdf-file-title { max-width: 120px; font-size: 12.5px; }
+  .pdf-file-title { max-width: 130px; font-size: 12.5px; }
   .pdf-sidebar { width: 168px; }
-  .pdf-page-pad { padding: 20px 16px 92px; }
+  .pdf-page-pad { padding: 18px 14px 88px; }
 }
 
 @media (max-width: 480px) {
   .pdf-sidebar {
-    position: absolute;
-    inset: 0 auto 0 0;
-    z-index: 12;
+    position: absolute; inset: 0 auto 0 0; z-index: 12;
     width: min(78vw, 250px);
-    box-shadow: 8px 0 24px rgba(11, 14, 18, 0.22);
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.35);
   }
   .pdf-topbar__right .pdf-ico:not(:last-child) { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pdf-viewer *,
-  .pdf-viewer *::before,
-  .pdf-viewer *::after {
+  .pdf-viewer *, .pdf-viewer *::before, .pdf-viewer *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;

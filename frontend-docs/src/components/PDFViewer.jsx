@@ -138,40 +138,40 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
 // PISTA, que se enseña cuando está activo en vez de un letrero permanente.
 const GRUPOS_DE_HERRAMIENTAS = [
   { nombre: 'navegar', items: [
-    { id: 'pan', title: 'Navegar: arrastra para mover, rueda para acercar',
+    { id: 'pan', etiqueta: 'Mover', title: 'Navegar: arrastra para mover, rueda para acercar',
       icon: <><path d="M9 11V6a1.6 1.6 0 0 1 3.2 0v5"/><path d="M12.2 11V4.8a1.6 1.6 0 0 1 3.2 0V11"/><path d="M15.4 11.4V7.6a1.6 1.6 0 0 1 3.2 0V15a6 6 0 0 1-6 6h-1.3a5 5 0 0 1-3.7-1.7L5 15.6a1.6 1.6 0 0 1 2.4-2.1L9 15"/></>,
       hint: 'Arrastra para mover el plano · rueda para acercar' } ] },
   { nombre: 'medir', items: [
-    { id: 'calibrate', title: 'Calibrar escala con una distancia conocida',
+    { id: 'calibrate', etiqueta: 'Escala', title: 'Calibrar escala con una distancia conocida',
       icon: <><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/><path d="M6.8 17.2 17.2 6.8"/><path d="m10 14 1 1M13 11l1 1"/></>,
       hint: 'Marca dos puntos de una distancia conocida y escríbela' },
-    { id: 'measure', title: 'Medir distancia',
+    { id: 'measure', etiqueta: 'Medir', title: 'Medir distancia',
       icon: <><rect x="2" y="9" width="20" height="6" rx="1" transform="rotate(-45 12 12)"/><path d="m8 12 1.4 1.4M11 9l1.4 1.4M14 6l1.4 1.4"/></>,
       hint: 'Clic por puntos · doble clic termina la medición' },
-    { id: 'area', title: 'Medir área',
+    { id: 'area', etiqueta: 'Área', title: 'Medir área',
       icon: <path d="m12 3 8.5 6.5-3.2 10.4H6.7L3.5 9.5z"/>,
       hint: 'Clic en cada vértice · doble clic cierra el área' },
-    { id: 'count', title: 'Conteo de elementos',
+    { id: 'count', etiqueta: 'Contar', title: 'Conteo de elementos',
       icon: <><circle cx="12" cy="12" r="8.5"/><path d="M12 8.5v7M8.5 12h7"/></>,
       hint: 'Cada clic suma una unidad al conteo' } ] },
   { nombre: 'anotar', items: [
-    { id: 'cloud', title: 'Nube de revisión',
+    { id: 'cloud', etiqueta: 'Nube', title: 'Nube de revisión',
       icon: <path d="M17.5 19a4.5 4.5 0 0 0 .4-9 7 7 0 0 0-13.5 1.9A4 4 0 0 0 6 19z"/>,
       hint: 'Arrastra para encerrar lo que hay que revisar' },
-    { id: 'arrow', title: 'Flecha',
+    { id: 'arrow', etiqueta: 'Flecha', title: 'Flecha',
       icon: <path d="M5 19 19 5m0 0h-7m7 0v7"/>,
       hint: 'Arrastra desde el origen hasta la punta' },
-    { id: 'rect', title: 'Rectángulo',
+    { id: 'rect', etiqueta: 'Marco', title: 'Rectángulo',
       icon: <rect x="4" y="6" width="16" height="12" rx="1.5"/>,
       hint: 'Arrastra para dibujar el rectángulo' },
-    { id: 'pen', title: 'Lápiz libre',
+    { id: 'pen', etiqueta: 'Lápiz', title: 'Lápiz libre',
       icon: <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>,
       hint: 'Dibuja a mano alzada' },
-    { id: 'text', title: 'Texto',
+    { id: 'text', etiqueta: 'Texto', title: 'Texto',
       icon: <path d="M5 6V4h14v2M12 4v16M9 20h6"/>,
       hint: 'Clic donde quieras escribir' } ] },
   { nombre: 'borrar', items: [
-    { id: 'erase', title: 'Borrar anotación',
+    { id: 'erase', etiqueta: 'Borrar', title: 'Borrar anotación',
       icon: <><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></>,
       hint: 'Clic sobre una anotación para borrarla' } ] },
 ];
@@ -200,6 +200,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   const textCacheRef = useRef(new Map());
   const busquedaVivaRef = useRef(null);   // debounce de la busqueda en vivo
   const bufferCanvasRef = useRef(null);   // doble bufer del render (uno, reutilizado)
+  const anclaRef = useRef(null);          // punto que el zoom debe conservar bajo el cursor
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false);   // menu de presets de zoom
   const [colorOpen, setColorOpen] = useState(false);         // paleta del carril de anotacion
 
@@ -313,6 +314,27 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     if (!canvasRef.current) return;
     canvasRef.current.style.width = `${base.width * (scale || 1)}px`;
     canvasRef.current.style.height = `${base.height * (scale || 1)}px`;
+
+    // ── EL PUNTO BAJO EL CURSOR SE QUEDA BAJO EL CURSOR ──────────────────
+    //
+    // EL DEFECTO QUE ESTO CORRIGE (reportado mirando un plano de verdad): al
+    // acercarse a un detalle, el detalle se escapaba. La versión anterior
+    // calculaba el scroll dentro de un `requestAnimationFrame` disparado
+    // JUNTO al cambio de escala — es decir, ANTES de que la hoja creciera. El
+    // navegador recortaba ese scroll al máximo del tamaño VIEJO y el ancla se
+    // perdía; cuanto más se acercaba, más se iba.
+    //
+    // Ahora la corrección se aplica AQUÍ, en el instante exacto en que la
+    // hoja ya tiene su tamaño nuevo, y se mide contra el rectángulo REAL de
+    // la página: así funciona igual esté centrada, con relleno o desbordando
+    // — que era el otro motivo por el que fallaba.
+    const ancla = anclaRef.current;
+    if (ancla && wrapRef.current && containerRef.current) {
+      const r = wrapRef.current.getBoundingClientRect();
+      containerRef.current.scrollLeft += (r.left + ancla.ux * (scale || 1)) - ancla.clientX;
+      containerRef.current.scrollTop += (r.top + ancla.uy * (scale || 1)) - ancla.clientY;
+      anclaRef.current = null;
+    }
   }, [currentPage, rotation, scale]);
 
   // Render nítido de la página actual
@@ -507,21 +529,23 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   const zoomIn = useCallback(() => { setFitMode('custom'); setScale(prev => Math.min((prev || 1.0) * 1.2, 8.0)); }, []);
   const zoomOut = useCallback(() => { setFitMode('custom'); setScale(prev => Math.max((prev || 1.0) / 1.2, 0.2)); }, []);
 
-  // Zoom anclado al cursor: el punto bajo el mouse se mantiene en su sitio
+  // Zoom anclado al cursor. Aquí solo se ANOTA el punto en unidades de la
+  // hoja (sin escala); la corrección del scroll la aplica `applyPreviewSize`
+  // cuando la hoja ya creció — ver el comentario largo de allí.
   const zoomAt = useCallback((dir, clientX, clientY) => {
-    const cont = containerRef.current;
-    if (!cont) { dir > 0 ? zoomIn() : zoomOut(); return; }
-    const rect = cont.getBoundingClientRect();
-    const mx = clientX - rect.left + cont.scrollLeft;
-    const my = clientY - rect.top + cont.scrollTop;
+    const cont = containerRef.current, hoja = wrapRef.current;
+    if (!cont || !hoja) { dir > 0 ? zoomIn() : zoomOut(); return; }
+    const r = hoja.getBoundingClientRect();
     setFitMode('custom');
     setScale(prev => {
       const next = dir > 0 ? Math.min(prev * 1.2, 8.0) : Math.max(prev / 1.2, 0.2);
-      const ratio = next / prev;
-      requestAnimationFrame(() => {
-        cont.scrollLeft = mx * ratio - (clientX - rect.left);
-        cont.scrollTop = my * ratio - (clientY - rect.top);
-      });
+      if (next !== prev) {
+        anclaRef.current = {
+          ux: (clientX - r.left) / prev,   // punto en unidades de PDF
+          uy: (clientY - r.top) / prev,
+          clientX, clientY,
+        };
+      }
       return next;
     });
   }, [zoomIn, zoomOut]);
@@ -812,8 +836,6 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
         </div>
 
         <div className="pdf-topbar__right">
-          <button className="pdf-ico" onClick={rotateRight} title="Rotar 90°"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg></button>
-          <span className="pdf-sep" />
           <button className="pdf-ico" onClick={printDocument} title="Imprimir"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="7" rx="1.5"/><path d="M7 16h10v5H7z"/></svg></button>
           <a className="pdf-ico" href={url} target="_blank" rel="noopener noreferrer" title="Descargar"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11M8 12l4 4 4-4"/><path d="M4 19h16"/></svg></a>
           <span className="pdf-sep" />
@@ -825,6 +847,43 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       </div>
 
       <div className="pdf-body">
+        {nodeId && (
+            <div className="pdf-rail" role="toolbar" aria-label="Herramientas de medición y anotación">
+              {GRUPOS_DE_HERRAMIENTAS.map(grupo => (
+                <div key={grupo.nombre} className="pdf-rail__group">
+                  {grupo.items.map(t => (
+                    <button key={t.id} className="pdf-rail-btn" title={t.title}
+                      aria-label={t.title} aria-pressed={tool === t.id}
+                      onClick={() => setTool(prev => prev === t.id ? 'pan' : t.id)}>
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{t.icon}</svg>
+                      <span>{t.etiqueta}</span>
+                    </button>
+                  ))}
+                  {grupo.nombre === 'anotar' && (
+                    <span style={{ position: 'relative' }}>
+                      <button className="pdf-swatch" title="Color de anotación"
+                        aria-haspopup="true" aria-expanded={colorOpen}
+                        onClick={() => setColorOpen(o => !o)}>
+                        <i style={{ background: markupColor }} />
+                        <span>Color</span>
+                      </button>
+                      {colorOpen && (
+                        <div className="pdf-colors" role="menu">
+                          {COLORS.map(c => (
+                            <button key={c} style={{ background: c }} aria-pressed={markupColor === c}
+                              aria-label={'Color ' + c} title={c}
+                              onClick={() => { setMarkupColor(c); setColorOpen(false); }} />
+                          ))}
+                        </div>
+                      )}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+        )}
+
         {showSidebar && (
           <div ref={sidebarRef} className="pdf-sidebar" aria-label="Miniaturas de páginas">
             {Array.from({ length: numPages }, (_, i) => i + 1).map(pageNum => (
@@ -902,47 +961,18 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
                 aria-pressed={fitMode === 'page'} title="Ajustar página (Ctrl+0)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 9l-2 2 2 2M15 9l2 2-2 2"/></svg></button>
               <button className="pdf-ico" onClick={() => fitTo('width')}
                 aria-pressed={fitMode === 'width'} title="Ajustar ancho"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg></button>
+            <span className="pdf-sep" />
+            <button className="pdf-ico" onClick={rotateRight} title="Girar 90°">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/>
+              </svg>
+            </button>
             </div>
           </div>
 
-          {nodeId && (
-            <>
-              <div className="pdf-rail" role="toolbar" aria-label="Herramientas de medición y anotación">
-                {GRUPOS_DE_HERRAMIENTAS.map(grupo => (
-                  <div key={grupo.nombre} className="pdf-rail__group">
-                    {grupo.items.map(t => (
-                      <button key={t.id} className="pdf-rail-btn" title={t.title}
-                        aria-label={t.title} aria-pressed={tool === t.id}
-                        onClick={() => setTool(prev => prev === t.id ? 'pan' : t.id)}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                          strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{t.icon}</svg>
-                      </button>
-                    ))}
-                    {grupo.nombre === 'anotar' && (
-                      <span style={{ position: 'relative' }}>
-                        <button className="pdf-swatch" title="Color de anotación"
-                          aria-haspopup="true" aria-expanded={colorOpen}
-                          onClick={() => setColorOpen(o => !o)}>
-                          <i style={{ background: markupColor }} />
-                        </button>
-                        {colorOpen && (
-                          <div className="pdf-colors" role="menu">
-                            {COLORS.map(c => (
-                              <button key={c} style={{ background: c }} aria-pressed={markupColor === c}
-                                aria-label={'Color ' + c} title={c}
-                                onClick={() => { setMarkupColor(c); setColorOpen(false); }} />
-                            ))}
-                          </div>
-                        )}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {tool !== 'pan' && (
-                <div className="pdf-tool-hint">{HINTS[tool]} · Esc cancela</div>
-              )}
-            </>
+          {nodeId && tool !== 'pan' && (
+            <div className="pdf-tool-hint">{HINTS[tool]} · Esc cancela</div>
           )}
         </div>
       </div>
