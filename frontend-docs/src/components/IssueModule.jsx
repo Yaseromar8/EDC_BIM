@@ -416,7 +416,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(100, 100, 100);
-    doc.text(`Total RL: ${total}`, barX + barW + 4, barY + 4);
+    doc.text(`Total ${cfg.singular}: ${total}`, barX + barW + 4, barY + 4);
 
     // Donut Chart (right side)
     const donutCx = 200, donutCy = dashY + 16, donutR = 14, donutInner = 8;
@@ -768,7 +768,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
           </div>
           {isAdmin && (
             <button onClick={createRfi} style={{ background: '#d32f2f', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontWeight: 500, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>+</span> Nuevo RL
+              <span>+</span> {`Nuevo ${cfg.singular}`}
             </button>
           )}
           <button onClick={fetchRfis} title="Actualizar" style={{ width: 36, height: 36, background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1370,7 +1370,7 @@ const IssueModule = ({ project, API, user, isAdmin, cfg }) => {
 
               <div style={{ marginTop: 4, background: '#fff', borderRadius: 6, padding: '4px 10px', border: '1px solid #e0e0e0' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                  <span style={{ fontSize: 9, color: '#80868b', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total RL</span>
+                  <span style={{ fontSize: 9, color: '#80868b', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{`Total ${cfg.singular}`}</span>
                   <span style={{ fontSize: 14, fontWeight: 800, color: '#202124' }}>{total}</span>
                 </div>
                 <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', height: 6, background: '#f1f3f4' }}>
