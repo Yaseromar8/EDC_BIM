@@ -158,6 +158,17 @@ export default function DocumentViewer({
   // Windows lo lleva a la aplicacion asociada.
   const esCad = CAD_EXTENSIONS.some(e => (file.name || '').toLowerCase().endsWith(e));
 
+  // El boton dice A DONDE va, no un generico: Revit para RVT, Civil 3D para
+  // DWG, Navisworks para NWD — con su sello de letra. (Peticion del dueno:
+  // «para abrir Civil o Revit debe aparecer el icono segun corresponda».)
+  const appEscritorio = (() => {
+    const n = (file.name || '').toLowerCase();
+    if (/\.(rvt|rfa|rte)$/.test(n)) return { nombre: 'Revit', letra: 'R', color: '#1961A9' };
+    if (/\.(dwg|dxf|dwf|dwfx)$/.test(n)) return { nombre: 'Civil 3D', letra: 'C', color: '#0E8577' };
+    if (/\.(nwd|nwc)$/.test(n)) return { nombre: 'Navisworks', letra: 'N', color: '#175A93' };
+    return { nombre: 'el escritorio', letra: null, color: '#5B6875' };
+  })();
+
   // El botón invoca el protocolo alephia:// del CONECTOR ALEPHIA (ver
   // public/conector/), que descarga el original con URL firmada y lo abre en
   // la aplicación asociada — Revit, Civil 3D, Navisworks.
@@ -317,8 +328,16 @@ export default function DocumentViewer({
                         padding: '5px 12px', fontSize: 12.5, fontWeight: 600,
                         background: '#fff', border: '1px solid var(--accent)', color: 'var(--accent)',
                         borderRadius: 4, cursor: 'pointer' }}>
-               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-               {conectorListo ? 'Abrir en Revit / Civil 3D' : 'Abrir en el escritorio'}
+               {appEscritorio.letra ? (
+                 <span style={{ width: 16, height: 16, borderRadius: 3, background: appEscritorio.color,
+                                color: '#fff', fontSize: 10.5, fontWeight: 800, display: 'inline-flex',
+                                alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                   {appEscritorio.letra}
+                 </span>
+               ) : (
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+               )}
+               Abrir en {appEscritorio.nombre}
              </button>
            )}
            {isShared && sharedRole && (
