@@ -64,44 +64,48 @@ function formatoReloj(segundos) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-// EL ZOOM INVERTIDO, resuelto DE RAIZ al tercer intento.
+// EL ZOOM DEL CAD, al QUINTO intento: se intercepta la rueda.
 //
-// Historia, porque importa: el perfil "AEC" del visor de Autodesk -- el que
-// activa para modelos de construccion, o sea NUESTROS DWG y RVT -- trae de
-// fabrica reverseMouseZoomDir = true. La v1 lo ponia en false UNA vez y el
-// perfil lo pisaba. La v2 puso true en 2D y reforzo la inversion. La v3
-// reafirmaba a 1,2 s y 3,5 s... y seguia invertido, porque el perfil se
-// aplica CUANDO ARRANCA LA CARGA DEL MODELO (setProfile en el bundle) y un
-// plano grande tarda mucho mas que esos segundos: las reafirmaciones
-// llegaban ANTES que el perfil, no despues.
+// HISTORIA, porque explica por que este es el enfoque correcto y no otro
+// parche mas: el perfil "AEC" del visor trae reverseMouseZoomDir = true, asi
+// que se probo poner esa bandera en `false` (intentos 1, 3 y 4, este ultimo
+// con un oyente que la devolvia cada vez que el perfil la cambiaba) y en
+// `true` (intento 2). EL RESULTADO FUE EL MISMO LAS CINCO VECES. Si cambiar
+// una bandera en AMBOS sentidos no altera el comportamiento, esa bandera NO
+// gobierna la rueda en esta vista. Seguir tocandola era adivinar.
 //
-// La cura no es adivinar el momento: es no depender de el. `prefs`
-// admite oyentes, asi que se pone un GUARDIAN -- si alguien (el perfil, un
-// cambio de vista, lo que sea) pone la bandera en true, se devuelve a false
-// en el acto. Sin bucle: devolverla dispara el oyente con false, que no
-// hace nada.
+// Se deja de negociar con su configuracion: la rueda se captura ANTES de que
+// el visor la vea, se invierte y se le entrega ya corregida. No depende de
+// su version, ni de su perfil, ni de que herramienta este activa.
 //
-// Regla, para todo el visor CAD de la web: rueda adentro ACERCA.
-function ajustarSentidoDelZoom(viewer) {
-  try {
-    const poner = () => {
-      try {
-        viewer.prefs?.set('reverseMouseZoomDir', false);
-        viewer.getNavigation?.()?.setReverseZoomDirection(false);
-      } catch { /* noop */ }
-    };
-    poner();
-    // EL GUARDIAN: sobrevive al perfil, a los cambios de vista y a los
-    // modelos que tardan un minuto en cargar.
-    try {
-      viewer.prefs?.addListeners('reverseMouseZoomDir', (valor) => {
-        if (valor) poner();
-      });
-    } catch { /* si esta version no admite oyentes, quedan los reintentos */ }
-    setTimeout(poner, 1200);
-    setTimeout(poner, 4000);
-    setTimeout(poner, 12000);
-  } catch { /* noop */ }
+// SOLO en el visor CAD de la web -- el visor 3D principal no se toca, que
+// alli la rueda ya se comporta como debe.
+const RUEDA_INVERTIDA = true;   // si algun dia sobra, se pone en false
+
+function interceptarRueda(contenedor) {
+  if (!contenedor || !RUEDA_INVERTIDA) return () => {};
+  const alRodar = (e) => {
+    // El evento que fabricamos nosotros pasa de largo: sin esta marca, se
+    // interceptaria a si mismo y nunca llegaria al visor.
+    if (e.__alephiaRueda) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const copia = new WheelEvent('wheel', {
+      deltaX: -e.deltaX, deltaY: -e.deltaY, deltaZ: -e.deltaZ,
+      deltaMode: e.deltaMode,
+      clientX: e.clientX, clientY: e.clientY,
+      screenX: e.screenX, screenY: e.screenY,
+      ctrlKey: e.ctrlKey, shiftKey: e.shiftKey,
+      altKey: e.altKey, metaKey: e.metaKey,
+      bubbles: true, cancelable: true, view: window,
+    });
+    copia.__alephiaRueda = true;
+    e.target.dispatchEvent(copia);
+  };
+  // Fase de CAPTURA: hay que llegar antes que el visor, que escucha en el
+  // lienzo. `passive: false` porque se llama a preventDefault.
+  contenedor.addEventListener('wheel', alRodar, { capture: true, passive: false });
+  return () => contenedor.removeEventListener('wheel', alRodar, { capture: true });
 }
 
 export default function CadViewer({ file, projectPrefix = '', urnDirecto = null }) {
@@ -118,6 +122,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
   const [vistas, setVistas] = useState([]);
   const [vistaActiva, setVistaActiva] = useState(null);
   const documentoRef = useRef(null);
+  const soltarRueda = useRef(null);
 
   // Un reloj que corre. Aunque Autodesk no de porcentaje durante el envio, ver
   // el tiempo avanzar es la diferencia entre "esta trabajando" y "se colgo".
@@ -167,6 +172,9 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
         const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current);
         viewer.start();
         viewerRef.current = viewer;
+        // La rueda, corregida en el borde (ver interceptarRueda).
+        if (soltarRueda.current) soltarRueda.current();
+        soltarRueda.current = interceptarRueda(containerRef.current);
         Autodesk.Viewing.Document.load(
           `urn:${urn}`,
           (doc) => {
@@ -199,7 +207,6 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
             setVistaActiva(node.data.guid);
             viewer.loadDocumentNode(doc, node).then(() => {
               if (cancelled) return;
-              ajustarSentidoDelZoom(viewer);
               setPhase('listo');
             });
           },
@@ -291,6 +298,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
 
     return () => {
       cancelled = true;
+      if (soltarRueda.current) { soltarRueda.current(); soltarRueda.current = null; }
       if (timer) clearTimeout(timer);
       try { viewerRef.current?.finish(); } catch { /* el visor ya podría estar destruido */ }
       viewerRef.current = null;
@@ -332,7 +340,7 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
               .find(n => n.data.guid === v.guid);
             if (!node) return;
             setVistaActiva(v.guid);
-            viewer.loadDocumentNode(doc, node).then(() => ajustarSentidoDelZoom(viewer));
+            viewer.loadDocumentNode(doc, node);
           }}
           style={{
             position: 'absolute', top: 12, left: 12, zIndex: 20, maxWidth: 380,
