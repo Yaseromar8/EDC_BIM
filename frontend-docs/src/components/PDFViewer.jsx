@@ -944,7 +944,6 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
                       onClick={() => setTool(prev => prev === t.id ? 'pan' : t.id)}>
                       <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{t.icon}</svg>
-                      <span>{t.etiqueta}</span>
                     </button>
                   ))}
                   {grupo.nombre === 'anotar' && (
@@ -953,7 +952,6 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
                         aria-haspopup="true" aria-expanded={colorOpen}
                         onClick={() => setColorOpen(o => !o)}>
                         <i style={{ background: markupColor }} />
-                        <span>Color</span>
                       </button>
                       {colorOpen && (
                         <div className="pdf-colors" role="menu">

@@ -1109,6 +1109,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
         shareGeneralAccess={fe.shareGeneralAccess} setShareGeneralAccess={fe.setShareGeneralAccess}
         shareGeneralRole={fe.shareGeneralRole} setShareGeneralRole={fe.setShareGeneralRole}
         shareLinkCopied={fe.shareLinkCopied} setShareLinkCopied={fe.setShareLinkCopied}
+        onIrAlTriaje={() => fe.setSidebarView('triaje')}
         onClose={() => fe.setShowShareModal(false)} />
 
       {/* Render CONDICIONAL: así el chunk del modal se descarga recién al abrirlo. */}

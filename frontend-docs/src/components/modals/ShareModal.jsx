@@ -6,10 +6,43 @@ import { API, getInitials } from '../../utils/helpers';
 // El backend todavía no persiste ACL por invitado. En vez de aparentar que un
 // correo fue invitado, este modal expone únicamente el flujo que sí es seguro:
 // enlace público explícito, solo lectura, revocable y con vencimiento.
-export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, shareLinkCopied, setShareLinkCopied, onClose }) {
+export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, shareLinkCopied, setShareLinkCopied, onClose, onIrAlTriaje }) {
   const [expiresDays, setExpiresDays] = React.useState(7);
   const [creating, setCreating] = React.useState(false);
+  // LA PUERTA SE PREGUNTA ANTES, NO DESPUÉS.
+  //
+  // Un enlace público es distribución incontrolada: la parte 5 de la ISO 19650
+  // exige que la obra haya hecho su triaje de seguridad antes de emitir uno. El
+  // backend lo impide -- correctamente-- pero el modal dejaba pulsar «Copiar
+  // enlace» y respondía con un aviso rojo que no decía qué hacer: parecía que
+  // compartir estuviera roto. Ahora se consulta al abrir, se explica, y se
+  // ofrece el camino a quien puede recorrerlo.
+  const [puerta, setPuerta] = React.useState({ estado: 'consultando' });
+
+  React.useEffect(() => {
+    if (!isOpen) return undefined;
+    let vivo = true;
+    setPuerta({ estado: 'consultando' });
+    apiFetch(`${API}/api/docs/sensibilidad?model_urn=${encodeURIComponent(projectPrefix)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!vivo) return;
+        if (d && d.success && d.sin_evaluar) {
+          setPuerta({ estado: 'sin_triaje' });
+        } else if (d && d.success && d.triaje && d.triaje.caducado) {
+          setPuerta({ estado: 'caducado' });
+        } else {
+          setPuerta({ estado: 'abierta' });
+        }
+      })
+      .catch(() => { if (vivo) setPuerta({ estado: 'abierta' }); });
+    return () => { vivo = false; };
+  }, [isOpen, projectPrefix]);
+
   if (!isOpen || !shareTarget) return null;
+
+  const esAdmin = user?.role === 'admin';
+  const bloqueada = puerta.estado === 'sin_triaje' || puerta.estado === 'caducado';
 
   const handleCopyLink = async () => {
     setCreating(true);
@@ -44,6 +77,46 @@ export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, s
         <div style={{ padding: '8px 0', fontSize: 13, color: '#555', lineHeight: 1.55 }}>
           Este piloto crea enlaces públicos de solo lectura. Las invitaciones individuales y los enlaces restringidos se habilitarán cuando exista una lista de acceso persistente. Para usuarios registrados, usa permisos de carpeta.
         </div>
+
+        {bloqueada && (
+          <div role="alert" style={{ margin: '4px 0 12px', padding: '12px 14px',
+                                     border: '1px solid var(--border-warning, #e6d3a8)',
+                                     background: 'var(--bg-warning, #fbf4e6)',
+                                     borderRadius: 6, fontSize: 12.5, lineHeight: 1.5,
+                                     color: 'var(--text-primary, #16202b)' }}>
+            <b>
+              {puerta.estado === 'caducado'
+                ? 'El triaje de seguridad de esta obra está caducado.'
+                : 'Esta obra todavía no tiene hecho el triaje de seguridad.'}
+            </b>
+            <div style={{ marginTop: 4, color: 'var(--text-secondary, #4a5561)' }}>
+              Un enlace público es distribución incontrolada: quien lo tenga, abre.
+              La ISO 19650-5 pide decidir antes si la obra maneja información
+              delicada. {esAdmin
+                ? 'Hazlo una vez y este documento se podrá compartir.'
+                : 'Pídeselo a un administrador de la obra.'}
+            </div>
+            {esAdmin && onIrAlTriaje && (
+              <button type="button"
+                onClick={() => { onClose(); onIrAlTriaje(); }}
+                style={{ marginTop: 10, padding: '7px 14px', border: 'none', borderRadius: 6,
+                         background: 'var(--accent)', color: '#fff', fontSize: 12.5,
+                         fontWeight: 600, cursor: 'pointer' }}>
+                Hacer el triaje de seguridad
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Los transmittals SIGUEN funcionando sin triaje: son canal formal con
+            destinatarios, número y acuse. Se dice, para que nadie crea que el
+            documento está atrapado. */}
+        {bloqueada && (
+          <div style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-secondary, #667180)' }}>
+            Mientras tanto puedes emitirlo por <b>Transmittal</b>, que es canal formal
+            con acuse y no depende del triaje.
+          </div>
+        )}
         <div className="share-access-list">
           <div className="share-user-item">
             <div className="user-avatar-acc" style={{ width: 32, height: 32, fontSize: 13 }}>{getInitials(user?.email || 'US')}</div>
@@ -62,7 +135,12 @@ export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, s
           </select>
         </div>
         <div className="share-footer" style={{ position: 'relative' }}>
-          <button className="btn-copy-link" disabled={creating} onClick={handleCopyLink}>{creating ? 'Creando…' : 'Copiar enlace'}</button>
+          <button className="btn-copy-link"
+            disabled={creating || bloqueada || puerta.estado === 'consultando'}
+            title={bloqueada ? 'Falta el triaje de seguridad de la obra' : undefined}
+            onClick={handleCopyLink}>
+            {creating ? 'Creando…' : puerta.estado === 'consultando' ? 'Comprobando…' : 'Copiar enlace'}
+          </button>
           {shareLinkCopied && <div style={{ position: 'absolute', top: 50, left: 24, background: '#323232', color: '#fff', padding: '12px 16px', borderRadius: 4 }}>Enlace copiado</div>}
           <button className="btn-share-done" onClick={onClose}>Hecho</button>
         </div>
