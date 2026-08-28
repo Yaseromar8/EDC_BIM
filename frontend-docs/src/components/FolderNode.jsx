@@ -8,6 +8,10 @@ import { apiFetch } from '../utils/apiFetch';
 import { API, getAuthHeaders } from '../utils/helpers';
 import toast from 'react-hot-toast';
 
+// El conjunto de carpetas abiertas, compartido por todo el arbol y ajeno al
+// ciclo de vida de los componentes.
+const abiertas = new Set();
+
 export default function FolderNode({ 
   user, folder, currentPath, onNavigate, projectPrefix, level = 1, 
   defaultExpanded = false, isAdmin, onTreeRefresh, onGlobalRefresh, 
@@ -21,7 +25,19 @@ export default function FolderNode({
   const isActive = currentPath === folderFullName;
   const isChildrenActive = folderFullName && currentPath.startsWith(folderFullName) && !isActive;
 
-  const [expanded, setExpanded] = useState(defaultExpanded || isChildrenActive);
+  // QUE CARPETAS ESTAN ABIERTAS, FUERA DEL COMPONENTE.
+  //
+  // Vivia como estado local, asi que cualquier desmontaje del nodo -- un
+  // refresco de la cache, por ejemplo -- lo borraba y el arbol se encogia
+  // entero. Guardado aparte, el arbol se queda como lo dejo la persona,
+  // que es lo que hace ACC.
+  const [expanded, _setExpanded] = useState(
+    () => abiertas.has(nodeId) || defaultExpanded || isChildrenActive);
+  const setExpanded = (v) => {
+    const valor = typeof v === 'function' ? v(expanded) : v;
+    if (valor) abiertas.add(nodeId); else abiertas.delete(nodeId);
+    _setExpanded(valor);
+  };
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef(null);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -101,7 +117,12 @@ export default function FolderNode({
   useEffect(() => { if (expanded && refreshSignal > 0 && cacheMethods) { cacheMethods.expandNode(nodeId, folderFullName); } }, [refreshSignal, expanded, cacheMethods, nodeId, folderFullName]);
   useEffect(() => { function handleClickOutside(event) { if (menuRef.current && !menuRef.current.contains(event.target)) setShowMenu(false); } document.addEventListener('mousedown', handleClickOutside); return () => document.removeEventListener('mousedown', handleClickOutside); }, []);
   useEffect(() => { if (defaultExpanded && !children && cacheMethods) { cacheMethods.expandNode(nodeId, folderFullName); } }, [defaultExpanded, children, cacheMethods, nodeId, folderFullName]);
-  useEffect(() => { if (collapseSignal > 0 && level > 0) { setExpanded(false); } }, [collapseSignal, level]);
+  useEffect(() => {
+    if (collapseSignal > 0 && level > 0) {
+      abiertas.delete(nodeId);
+      _setExpanded(false);
+    }
+  }, [collapseSignal, level, nodeId]);
   // Revelar el camino hasta la carpeta actual SOLO al navegar.
   // Antes este efecto tenía `expanded` en sus dependencias: al colapsar a mano
   // se re-ejecutaba y volvía a abrir la carpeta, así que era IMPOSIBLE cerrar un

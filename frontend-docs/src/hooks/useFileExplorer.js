@@ -133,7 +133,13 @@ export function useFileExplorer(project, user) {
   }, [projectPrefix]);
   const chunkedUpload = useChunkedUpload(API, projectPrefix, user, {
     onUploadComplete: () => {
-      cacheMethods.invalidateAll();
+      // SOLO LA CARPETA DONDE SE SUBIO, y su padre por el contador de hijos.
+      // Antes esto era `invalidateAll()`: borraba la cache del arbol ENTERO,
+      // asi que todos los nodos perdian sus hijos, se desmontaban y renacian
+      // CERRADOS. Subir un fichero a una carpeta cerraba las otras cuarenta
+      // -- lo reporto el dueno, y ACC no hace eso. Una subida a una carpeta
+      // no tiene por que invalidar las demas.
+      cacheMethods.invalidateNode(currentNodeIdRef.current || '__root__');
     }
   });
 
