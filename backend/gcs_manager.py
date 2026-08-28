@@ -1,4 +1,5 @@
 import os
+import re as _re
 import time as _time
 import threading
 from google.cloud import storage
@@ -84,6 +85,13 @@ def upload_file_to_gcs(file_object, destination_blob_name):
         content_type = getattr(file_object, 'content_type', 'application/octet-stream')
         file_object.seek(0)
         
+        # EL DOCUMENTO TAMBIEN SE CONSERVA, si su nombre lo permite. Es lo
+        # que hace que abrir el mismo plano dos veces no lo baje dos veces.
+        # `nombre_inmutable` es quien decide: las rutas que se sobrescriben
+        # (adjuntos de pin, fotos de avance, server.py) NO pasan el filtro.
+        if nombre_inmutable(destination_blob_name):
+            blob.cache_control = CACHE_INMUTABLE
+
         print(f"[GCS] Starting streaming transfer... (version {new_version})")
         # Compat SDK: las versiones nuevas de google-cloud-storage QUITARON el
         # kwarg 'num_retries' (rompía TODOS los uploads con TypeError). Ahora los
@@ -161,7 +169,35 @@ _CONTENT_TYPE_MAP = {
     '.heif': 'image/heif',
 }
 
-CACHE_MINIATURA = 'private, max-age=86400, immutable'
+CACHE_INMUTABLE = 'private, max-age=86400, immutable'
+CACHE_MINIATURA = CACHE_INMUTABLE          # nombre viejo, mismo valor
+
+# QUE NOMBRES SE PUEDEN CONSERVAR, Y POR QUE SOLO ESOS.
+#
+# Conservar un objeto en el navegador es seguro UNICAMENTE si su contenido no
+# puede cambiar. Aqui eso no se supone: se comprueba contra como se construyo
+# el nombre. La auditoria de todas las rutas de subida (28-ago-2026) dio esto:
+#
+#   multi-tenant/{obra}/{tiempo}_{uuid8}_{fichero}   documents.py:1164  UNICO
+#   multi-tenant/{obra}/pin_attachments/{fichero}    pins.py:288        se repite
+#   multi-tenant/{obra}/tracking_photos/{fichero}    tracking.py:543    se repite
+#   documents/{fichero}                              server.py:791      se repite
+#
+# Es decir: DOS de las rutas que se sobrescriben viven DENTRO del prefijo de la
+# obra. Sellar "todo lo de la obra" habria marcado como inmutable algo que si
+# cambia, y el usuario habria visto un plano viejo hasta un dia entero. En obra
+# eso es inaceptable, asi que el criterio es el patron, no la carpeta.
+_PATRON_UNICO = _re.compile(r'^multi-tenant/[^/]+/\d+_[0-9a-f]{8}_[^/]*$')
+
+
+def nombre_inmutable(nombre):
+    """True solo si el NOMBRE garantiza que su contenido no puede cambiar."""
+    if not nombre:
+        return False
+    # La miniatura hereda la garantia de su original: si el original es unico,
+    # su miniatura tambien lo es.
+    origen = _re.sub(r'__thumb\d+\.jpg$', '', nombre)
+    return bool(_PATRON_UNICO.match(origen))
 
 # LA URL FIRMADA, REUTILIZADA MIENTRAS SIGA VIVA.
 #
@@ -410,7 +446,8 @@ def get_or_create_thumbnail(blob_name, max_px=420):
             # `private` y no `public` A PROPOSITO: la URL firmada ES la
             # credencial, y estos son planos de obra. Solo el navegador del
             # usuario la guarda; ningun intermediario compartido.
-            destino.cache_control = CACHE_MINIATURA
+            if nombre_inmutable(thumb_name):
+                destino.cache_control = CACHE_INMUTABLE
             destino.upload_from_string(datos, content_type='image/jpeg')
         except Exception as ce:
             print(f"[thumb] no se pudo cachear {thumb_name}: {ce}")

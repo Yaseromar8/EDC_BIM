@@ -2391,8 +2391,8 @@ _CANDADO_MINIATURAS = _threading.Lock()
 def _sellar_cache(blob):
     """Le pone a una miniatura ya existente la instruccion de conservacion."""
     try:
-        from gcs_manager import CACHE_MINIATURA
-        blob.cache_control = CACHE_MINIATURA
+        from gcs_manager import CACHE_INMUTABLE
+        blob.cache_control = CACHE_INMUTABLE
         blob.patch()
     except Exception as e:
         print('[miniaturas] no se pudo sellar %s: %s' % (blob.name, str(e)[:100]))
@@ -2463,16 +2463,23 @@ def urls_de_miniaturas():
     try:
         bucket = get_storage_client().bucket(_os.environ.get('GCS_BUCKET_NAME'))
         prefijo = 'multi-tenant/%s/' % model_urn
+        from gcs_manager import nombre_inmutable
         for blob in bucket.list_blobs(prefix=prefijo):
             if blob.name.endswith('__thumb420.jpg'):
                 hechas.add(blob.name)
-                # Las generadas ANTES de que existiera CACHE_MINIATURA no
-                # llevan la instruccion, y sin ella el navegador no las
-                # conserva: viajarian enteras en cada visita a la carpeta,
-                # para siempre. El listado ya nos dice cuales son, asi que se
-                # corrigen solas, una vez, sin migracion ni script aparte.
-                if not blob.cache_control:
-                    sin_cache.append(blob)
+            # Lo subido ANTES de que existiera el sello no lleva instruccion
+            # de conservacion, y sin ella el navegador no guarda nada: la
+            # miniatura -- y el PDF entero -- viajarian otra vez en cada
+            # visita, para siempre. El listado ya nos dice cuales faltan, asi
+            # que se corrigen solas, una vez, sin migracion ni script aparte.
+            #
+            # Alcanza TAMBIEN al documento completo, no solo a la miniatura:
+            # es lo que hace que abrir el mismo plano por segunda vez no lo
+            # vuelva a descargar. `nombre_inmutable` decide -- los adjuntos de
+            # pin y las fotos de avance viven bajo este mismo prefijo pero se
+            # sobrescriben, y sellarlos mostraria algo viejo.
+            if not blob.cache_control and nombre_inmutable(blob.name):
+                sin_cache.append(blob)
     except Exception as e:
         print('[miniaturas] no se pudo listar el almacen: %s' % str(e)[:120])
 
@@ -2481,7 +2488,7 @@ def urls_de_miniaturas():
     # no entre hoy se corrige en la siguiente visita.
     if sin_cache:
         try:
-            _encolar_cache_miniaturas(sin_cache[:60])
+            _encolar_cache_miniaturas(sin_cache[:80])
         except Exception as e:
             print('[miniaturas] no se pudo sellar la cache: %s' % str(e)[:120])
 
