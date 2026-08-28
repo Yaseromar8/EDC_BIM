@@ -39,7 +39,12 @@ export default function DocumentViewer({
   onPromote = null,
   
   API,
-  onClose
+  onClose,
+  // La tira de la carpeta (boton de cuadricula del lector, como ACC):
+  // el explorador YA tiene la lista de la carpeta abierta, asi que se
+  // pasa tal cual -- ni una peticion nueva por abrir un plano.
+  hermanos = [],
+  onAbrirHermano = null,
 }) {
 
   const [officeUrl, setOfficeUrl] = useState('');
@@ -548,6 +553,8 @@ export default function DocumentViewer({
               onClose={onClose || (() => window.close())}
               onVersionClick={!isShared && setShowVersions
                 ? () => setShowVersions(!showVersions) : null}
+              hermanos={isShared ? [] : hermanos}
+              onAbrirHermano={isShared ? null : onAbrirHermano}
               versionLabel={vv ? `V${vv.version_number || 1}` : null}
               versionInfo={vv && (vv.updated_by || vv.updated)
                 ? `Cargado por ${vv.updated_by || '—'}${vv.updated ? ` · ${formatDate(vv.updated)}` : ''}`

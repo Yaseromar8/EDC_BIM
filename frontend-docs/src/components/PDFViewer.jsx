@@ -6,6 +6,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import PdfToolsOverlay, { COLORS } from './PdfToolsOverlay';
+import { API } from '../utils/helpers';
+import { apiFetch } from '../utils/apiFetch';
 import './PDFViewer.css';
 
 // Configurar el worker de PDF.js
@@ -182,9 +184,62 @@ const HINTS = Object.fromEntries(
 // ----------------------------------------------------------------------
 // Visor Principal
 // ----------------------------------------------------------------------
+// UNA MINIATURA DE OTRO DOCUMENTO DE LA CARPETA.
+//
+// El servidor rasteriza y CACHEA la primera pagina (?thumb=1), asi que esto
+// es una imagen pequena. Se pide con apiFetch y se vuelve un blob local: una
+// etiqueta <img> no puede mandar la cabecera de sesion, y meter el token en
+// la direccion es justo el defecto que se corrigio en el menu del clic
+// derecho. Y se pide SOLO cuando entra en pantalla (IntersectionObserver):
+// una carpeta con 100 planos no baja 100 miniaturas de golpe.
+function MiniaturaHermano({ doc, activo, onAbrir }) {
+  const ref = React.useRef(null);
+  const [src, setSrc] = React.useState(null);
+  const [falla, setFalla] = React.useState(false);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el || src || falla || !doc.gcs_urn) return undefined;
+    if (typeof IntersectionObserver === 'undefined') return undefined;
+    let vivo = true;
+    let objectUrl = null;
+    const io = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting) return;
+      io.disconnect();
+      apiFetch(`${API}/api/docs/view?urn=${encodeURIComponent(doc.gcs_urn)}` +
+               `&model_urn=${encodeURIComponent(doc.model_urn || '')}&thumb=1&gen=1`)
+        .then(r => (r.ok ? r.blob() : Promise.reject(new Error('sin miniatura'))))
+        .then(b => {
+          if (!vivo) return;
+          objectUrl = URL.createObjectURL(b);
+          setSrc(objectUrl);
+        })
+        .catch(() => vivo && setFalla(true));
+    }, { rootMargin: '200px' });
+    io.observe(el);
+    return () => {
+      vivo = false;
+      io.disconnect();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [doc, src, falla, API]);
+
+  return (
+    <button ref={ref} className={`pdf-tira-item${activo ? ' es-actual' : ''}`}
+      onClick={() => !activo && onAbrir(doc)} title={doc.name}>
+      <div className="pdf-tira-lienzo">
+        {src ? <img src={src} alt="" />
+             : <div className="pdf-tira-vacio">{falla ? 'sin vista' : ''}</div>}
+      </div>
+      <div className="pdf-tira-nombre">{doc.name}</div>
+    </button>
+  );
+}
+
 export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
                                     versionLabel = null, versionInfo = null, hideTitle = false,
-                                    onClose = null, onVersionClick = null }) {
+                                    onClose = null, onVersionClick = null,
+                                    hermanos = [], onAbrirHermano = null }) {
   const viewerRef = useRef(null); // Para Fullscreen
   const canvasRef = useRef(null);
   const wrapRef = useRef(null); // Envuelve canvas + overlay de herramientas
@@ -208,7 +263,17 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   // propio la mueve cuando el scroll no puede, para que el punto bajo el
   // cursor siga bajo el cursor a CUALQUIER zoom.
   const [desplazamiento, setDesplazamiento] = useState({ x: 0, y: 0 });
-  const [zoomMenuOpen, setZoomMenuOpen] = useState(false);   // menu de presets de zoom
+  const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
+  // LA TIRA DE LA CARPETA (el boton de cuadricula, como ACC): saltar al
+  // plano siguiente sin volver al explorador. Cerrada por defecto -- ocupa
+  // alto util y no todo el mundo la quiere abierta.
+  const [tiraAbierta, setTiraAbierta] = useState(false);
+  const indiceActual = hermanos.findIndex(h => h.name === fileName);
+  const irAHermano = (paso) => {
+    if (!onAbrirHermano || indiceActual < 0) return;
+    const destino = hermanos[indiceActual + paso];
+    if (destino) onAbrirHermano(destino);
+  };   // menu de presets de zoom
   const [colorOpen, setColorOpen] = useState(false);         // paleta del carril de anotacion
 
   // ── Búsqueda dentro del documento ──
@@ -1025,6 +1090,33 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
               </span>
             )}
             <span className="pdf-sep" />
+            {hermanos.length > 1 && onAbrirHermano && (
+              <>
+                <span className="pdf-sep" />
+                <button className="pdf-ico" onClick={() => irAHermano(-1)}
+                  disabled={indiceActual <= 0} title="Documento anterior de la carpeta">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <button className="pdf-ico" onClick={() => setTiraAbierta(v => !v)}
+                  aria-pressed={tiraAbierta}
+                  title={`Documentos de la carpeta (${hermanos.length})`}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="3" y="3" width="8" height="8" rx="1.5"/>
+                    <rect x="13" y="3" width="8" height="8" rx="1.5"/>
+                    <rect x="3" y="13" width="8" height="8" rx="1.5"/>
+                    <rect x="13" y="13" width="8" height="8" rx="1.5"/>
+                  </svg>
+                </button>
+                <button className="pdf-ico" onClick={() => irAHermano(1)}
+                  disabled={indiceActual < 0 || indiceActual >= hermanos.length - 1}
+                  title="Documento siguiente de la carpeta">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
+              </>
+            )}
+            <span className="pdf-sep" />
             <button className="pdf-ico" onClick={rotateRight} title="Girar 90°">
               <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -1033,6 +1125,21 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
             </button>
             </div>
           </div>
+
+          {tiraAbierta && hermanos.length > 1 && onAbrirHermano && (
+            <div className="pdf-tira">
+              <div className="pdf-tira-cabecera">
+                <span>{hermanos.length} documentos en esta carpeta</span>
+                <button onClick={() => setTiraAbierta(false)} title="Cerrar la tira">✕</button>
+              </div>
+              <div className="pdf-tira-carril">
+                {hermanos.map(h => (
+                  <MiniaturaHermano key={h.id || h.name} doc={h}
+                    activo={h.name === fileName} onAbrir={onAbrirHermano} />
+                ))}
+              </div>
+            </div>
+          )}
 
           {nodeId && tool !== 'pan' && (
             <div className="pdf-tool-hint">{HINTS[tool]} · Esc cancela</div>

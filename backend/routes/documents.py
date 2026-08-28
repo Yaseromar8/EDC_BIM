@@ -765,6 +765,12 @@ def proxy_document():
 
     # Si es imagen, lo evitamos exponer a redirect/signing issues (soluciona error de imagen negra)
     is_image = any(gcs_urn.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif'])
+    # Un PDF tambien tiene miniatura: su PRIMERA PAGINA. La pide la tira de
+    # documentos de la carpeta en el lector. Solo con ?thumb=1 -- sin el
+    # parametro, un PDF se sigue sirviendo entero como siempre.
+    if not is_image and request.args.get('thumb') and \
+            gcs_urn.lower().endswith(('.pdf', '.pdfx')):
+        is_image = True
     if is_image:
         # ?thumb=1 → miniatura de galería (~25 KB); ?size=display → mediana 1600px
         # (~150 KB) para el lightbox: abre rápido y se ve nítida en pantalla. La

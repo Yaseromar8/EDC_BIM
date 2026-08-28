@@ -1082,6 +1082,8 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
           viewedVersionInfo={fe.viewedVersionInfo} setViewedVersionInfo={fe.setViewedVersionInfo}
           showVersions={fe.showVersions} setShowVersions={fe.setShowVersions} isAdmin={isAdmin}
           onPromote={vh.handlePromote} API={API}
+          hermanos={(fe.files || []).filter(f => /\.pdfx?$/i.test(f.name || ''))}
+          onAbrirHermano={(doc) => { fe.setViewedVersionInfo(null); fe.setShowVersions(false); fe.setActiveFile(doc); }}
           onClose={() => { fe.setActiveFile(null); fe.setShowVersions(false); fe.setViewedVersionInfo(null); }} />
       )}
 

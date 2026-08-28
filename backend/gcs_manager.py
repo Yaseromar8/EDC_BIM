@@ -232,6 +232,34 @@ def get_or_create_thumbnail(blob_name, max_px=420):
             return None, None
         thumb_blob = bucket.blob(thumb_name)
 
+        # PDF: se rasteriza la PRIMERA PAGINA. Hace falta para la tira de
+        # documentos de la carpeta (el boton de cuadricula del lector, como
+        # ACC): sin esto la tira tendria iconos iguales y no se reconoceria
+        # un plano de otro -- que es justo para lo que sirve.
+        # PyMuPDF ya estaba en requirements; nada nuevo que instalar.
+        if blob_name.lower().endswith(('.pdf', '.pdfx')):
+            import fitz
+            doc = fitz.open(stream=raw, filetype='pdf')
+            try:
+                if doc.page_count < 1:
+                    return None, None
+                pagina = doc.load_page(0)
+                caja = pagina.rect
+                escala = max_px / max(caja.width, caja.height, 1)
+                pix = pagina.get_pixmap(matrix=fitz.Matrix(escala, escala),
+                                        alpha=False)
+                img = Image.open(BytesIO(pix.tobytes('png'))).convert('RGB')
+            finally:
+                doc.close()
+            out = BytesIO()
+            img.save(out, format='JPEG', quality=72, optimize=True)
+            data = out.getvalue()
+            try:
+                thumb_blob.upload_from_string(data, content_type='image/jpeg')
+            except Exception as ce:
+                print(f"[thumb] no se pudo cachear {thumb_name}: {ce}")
+            return data, 'image/jpeg'
+
         img = Image.open(BytesIO(raw))
         img = ImageOps.exif_transpose(img)      # respeta orientación EXIF del celular
         img = img.convert('RGB')
