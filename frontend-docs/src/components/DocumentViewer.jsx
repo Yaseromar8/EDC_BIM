@@ -48,6 +48,7 @@ export default function DocumentViewer({
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [previewRetry, setPreviewRetry] = useState(0);
+  const [conectorAviso, setConectorAviso] = useState(null);
 
   useEffect(() => {
     if (!file) return;
@@ -157,20 +158,48 @@ export default function DocumentViewer({
   // Windows lo lleva a la aplicacion asociada.
   const esCad = CAD_EXTENSIONS.some(e => (file.name || '').toLowerCase().endsWith(e));
 
+  // El botón invoca el protocolo alephia:// que instala el CONECTOR ALEPHIA
+  // (un .bat de un clic, sin administrador; ver public/conector/): el
+  // conector descarga el original con URL firmada y lo abre en la aplicación
+  // asociada — Revit, Civil 3D, Navisworks. Un navegador NO puede saber si
+  // Revit está instalado; lo que SÍ puede detectar es si el protocolo
+  // respondió: al saltar el conector la página pierde el foco. Si en ~2 s
+  // nadie respondió, se ofrece instalar el conector o descargar sin más.
+  const conectorListo = (() => {
+    try { return localStorage.getItem('alephia_conector') === 'si'; } catch { return false; }
+  })();
+
   const abrirEnEscritorio = async () => {
     const urn = viewedVersionInfo?.gcs_urn || file.gcs_urn;
     if (!urn) { toast.error('Este documento no tiene fichero asociado.'); return; }
-    const ventana = window.open('', '_blank', 'noopener');
+    let firmada = '';
     try {
       const r = await apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`);
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.success || !d.url) throw new Error(d.error || 'No se pudo preparar el archivo.');
-      if (ventana) ventana.location = d.url; else window.open(d.url, '_blank', 'noopener');
-      toast.success('Descargando el original. Al abrirlo, Windows lo llevara a Revit / Civil 3D.', { duration: 6000 });
+      firmada = d.url;
     } catch (e) {
-      if (ventana) ventana.close();
       toast.error(e.message || 'No se pudo preparar el archivo.');
+      return;
     }
+
+    const uri = `alephia://abrir?u=${encodeURIComponent(firmada)}&n=${encodeURIComponent(file.name)}`;
+    let respondio = false;
+    const marcar = () => {
+      respondio = true;
+      try { localStorage.setItem('alephia_conector', 'si'); } catch { /* noop */ }
+    };
+    window.addEventListener('blur', marcar);
+    const marco = document.createElement('iframe');
+    marco.style.display = 'none';
+    marco.src = uri;
+    document.body.appendChild(marco);
+    setTimeout(() => {
+      window.removeEventListener('blur', marcar);
+      marco.remove();
+      if (respondio) toast.success(`Abriendo ${file.name} en tu escritorio…`, { duration: 5000 });
+      else setConectorAviso({ firmada });
+    }, 2200);
   };
   const popoverVersiones = (
               <div className="version-popover" style={{ top: 32, left: 0, width: 350 }}>
@@ -280,7 +309,7 @@ export default function DocumentViewer({
                         background: '#fff', border: '1px solid var(--accent)', color: 'var(--accent)',
                         borderRadius: 4, cursor: 'pointer' }}>
                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-               Abrir en el escritorio
+               {conectorListo ? 'Abrir en Revit / Civil 3D' : 'Abrir en el escritorio'}
              </button>
            )}
            {isShared && sharedRole && (
@@ -291,6 +320,46 @@ export default function DocumentViewer({
            <button className="file-viewer-close" onClick={onClose || (() => window.close())}>✕</button>
         </div>
       </div>
+      )}
+
+      {conectorAviso && (
+        <div onClick={() => setConectorAviso(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 10050, background: 'rgba(15,22,30,0.45)',
+                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width: 470, maxWidth: '92vw', background: '#fff', borderRadius: 10,
+                     padding: '22px 24px', boxShadow: '0 18px 50px rgba(15,22,30,0.35)' }}>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: '#1a2430', marginBottom: 8 }}>
+              Falta el Conector ALEPHIA
+            </div>
+            <div style={{ fontSize: 13, color: '#4a5560', lineHeight: 1.6, marginBottom: 14 }}>
+              El navegador no puede lanzar Revit ni Civil 3D por sí solo — ningún navegador puede.
+              El Conector es un instalador de <b>un clic, sin administrador</b>: registra el enlace
+              {' '}<code style={{ background: '#f2f4f6', padding: '1px 5px', borderRadius: 3 }}>alephia://</code>{' '}
+              y desde entonces este botón abre los modelos directamente en tu software.
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <a href="/conector/instalar-conector-alephia.bat" download
+                 style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent)',
+                          color: '#fff', borderRadius: 5, textDecoration: 'none' }}>
+                Descargar el Conector
+              </a>
+              <button onClick={() => { window.open(conectorAviso.firmada, '_blank', 'noopener'); setConectorAviso(null); }}
+                 style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, background: '#fff',
+                          border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 5, cursor: 'pointer' }}>
+                Solo descargar el archivo
+              </button>
+              <button onClick={() => setConectorAviso(null)}
+                 style={{ padding: '8px 12px', fontSize: 13, background: 'transparent', border: 'none',
+                          color: '#7b8794', cursor: 'pointer' }}>
+                Cerrar
+              </button>
+            </div>
+            <div style={{ fontSize: 11.5, color: '#8a95a1', marginTop: 12, lineHeight: 1.5 }}>
+              Tras instalarlo (doble clic al .bat), vuelve y pulsa «Abrir en el escritorio» otra vez.
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Para un PDF, el desplegable de versiones flota sobre el documento:

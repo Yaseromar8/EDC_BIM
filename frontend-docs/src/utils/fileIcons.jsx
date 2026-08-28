@@ -102,76 +102,64 @@ export function renderFileIconSop(filename, size = 24) {
     );
   }
 
-  // CAD / BIM — el lenguaje de ACC: TEJA de producto con su letra grande y
-  // una franja inferior con la extensión. La primera versión usaba la
-  // silueta de documento con un glifo pequeño y el dueño la comparó lado a
-  // lado con ACC: no se reconocía. La señal es la LETRA (R = Revit,
-  // N = Navisworks) o, para DWG, la hoja de dibujo con la franja ámbar del
-  // clásico icono de AutoCAD.
+  // CAD / BIM v3 — silueta de DOCUMENTO, la misma del resto de la tabla
+  // (PDF, imagen, TXT), con el cuerpo en el color de la familia, el glifo
+  // GRANDE en la hoja y la extensión en la banda inferior. v1 (glifo
+  // pequeño) no se reconocía; v2 (teja cuadrada) rompía con el resto de la
+  // tabla y el dueño la rechazó: «no se parece». Su referencia — el icono
+  // DWG clásico — es exactamente esto: hoja con esquina doblada, cruceta de
+  // dibujo azul y su banda amarilla.
   const ext = lowerName.split('.').pop();
-  const TEJAS_CAD = {
-    // AutoCAD / Civil 3D
-    dwg:  { fondo: '#EAF2FA', dibujo: 'cruceta', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
-    dxf:  { fondo: '#EAF2FA', dibujo: 'cruceta', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
-    dwf:  { fondo: '#EAF2FA', dibujo: 'cruceta', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
-    dwfx: { fondo: '#EAF2FA', dibujo: 'cruceta', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
-    dgn:  { fondo: '#EAF6F4', dibujo: 'lineas', tinta: '#2E7D74', franja: '#2E7D74' },
-    // Revit — teja azul con la R
-    rvt:  { fondo: '#1961A9', letra: 'R', tinta: '#FFFFFF', franja: '#114B85' },
-    rfa:  { fondo: '#1961A9', letra: 'R', tinta: '#FFFFFF', franja: '#114B85' },
-    rte:  { fondo: '#1961A9', letra: 'R', tinta: '#FFFFFF', franja: '#114B85' },
-    // Navisworks — teja clara con la N
-    nwd:  { fondo: '#FFFFFF', borde: '#B9CCDD', letra: 'N', tinta: '#175A93', franja: '#175A93' },
-    nwc:  { fondo: '#FFFFFF', borde: '#B9CCDD', letra: 'N', tinta: '#175A93', franja: '#175A93' },
-    // openBIM e intercambio — cubo
-    ifc:   { fondo: '#EDF6EF', dibujo: 'cubo', tinta: '#2F7D4F', franja: '#2F7D4F' },
-    '3dm': { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
-    stl:   { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
-    obj:   { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
-    fbx:   { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
-    step:  { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
-    stp:   { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
-    iges:  { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
-    igs:   { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
-    sat:   { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
+  const CAD_FAMILIAS = {
+    dwg:  { cuerpo: '#D99000', glifo: 'cruceta', tinta: '#1A6FBF' },
+    dxf:  { cuerpo: '#D99000', glifo: 'cruceta', tinta: '#1A6FBF' },
+    dwf:  { cuerpo: '#D99000', glifo: 'cruceta', tinta: '#1A6FBF' },
+    dwfx: { cuerpo: '#D99000', glifo: 'cruceta', tinta: '#1A6FBF' },
+    dgn:  { cuerpo: '#2E7D74', glifo: 'cruceta', tinta: '#2E7D74' },
+    rvt:  { cuerpo: '#1961A9', glifo: 'letra', letra: 'R', tinta: '#1961A9' },
+    rfa:  { cuerpo: '#1961A9', glifo: 'letra', letra: 'R', tinta: '#1961A9' },
+    rte:  { cuerpo: '#1961A9', glifo: 'letra', letra: 'R', tinta: '#1961A9' },
+    nwd:  { cuerpo: '#134B79', glifo: 'letra', letra: 'N', tinta: '#175A93' },
+    nwc:  { cuerpo: '#134B79', glifo: 'letra', letra: 'N', tinta: '#175A93' },
+    ifc:  { cuerpo: '#2F7D4F', glifo: 'cubo', tinta: '#2F7D4F' },
+    '3dm': { cuerpo: '#5B6875', glifo: 'cubo', tinta: '#5B6875' },
+    stl:   { cuerpo: '#5B6875', glifo: 'cubo', tinta: '#5B6875' },
+    obj:   { cuerpo: '#5B6875', glifo: 'cubo', tinta: '#5B6875' },
+    fbx:   { cuerpo: '#5B6875', glifo: 'cubo', tinta: '#5B6875' },
+    step:  { cuerpo: '#5B6875', glifo: 'cubo', tinta: '#5B6875' },
+    stp:   { cuerpo: '#5B6875', glifo: 'cubo', tinta: '#5B6875' },
+    iges:  { cuerpo: '#5B6875', glifo: 'cubo', tinta: '#5B6875' },
+    igs:   { cuerpo: '#5B6875', glifo: 'cubo', tinta: '#5B6875' },
+    sat:   { cuerpo: '#5B6875', glifo: 'cubo', tinta: '#5B6875' },
   };
-  if (TEJAS_CAD[ext]) {
-    const f = TEJAS_CAD[ext];
+  if (CAD_FAMILIAS[ext]) {
+    const f = CAD_FAMILIAS[ext];
     return (
       <div style={{ width: size, height: size, flexShrink: 0 }}>
         <svg viewBox="0 0 32 32" width="100%" height="100%">
-          <rect x="2" y="2" width="28" height="28" rx="5" fill={f.fondo}
-            stroke={f.borde || 'none'} strokeWidth={f.borde ? 1.2 : 0} />
-          {f.letra && (
-            <text x="16" y="19.5" textAnchor="middle" fontSize="16.5" fontWeight="800"
+          <path fill={f.cuerpo} d="M3 1v30h26V8h-7V1z" />
+          <path fill="#FFF" d="M4 2v20h24V8h-6V2z" />
+          <path fill="#1B3F63" d="m29 15-7-7h7z" opacity="0.3" />
+          <path fill={f.cuerpo} opacity="0.55" d="m22 1 7 7h-7z" />
+          {f.glifo === 'cruceta' && (
+            <g stroke={f.tinta} strokeWidth="2" fill="none" strokeLinecap="round">
+              <circle cx="14" cy="12.5" r="5.6" />
+              <path d="M14 4.5v4.4M14 16.1v4.4M5.9 12.5h4.4M17.7 12.5h4.4" />
+              <circle cx="14" cy="12.5" r="1.1" fill={f.tinta} stroke="none" />
+            </g>
+          )}
+          {f.glifo === 'letra' && (
+            <text x="14" y="18.5" textAnchor="middle" fontSize="17" fontWeight="800"
               fontFamily="'Segoe UI', system-ui, sans-serif" fill={f.tinta}>{f.letra}</text>
           )}
-          {/* La cruceta de dibujo del icono DWG clasico: el dueno la
-              enseno ampliada y es lo que su equipo reconoce como AutoCAD. */}
-          {f.dibujo === 'cruceta' && (
-            <g stroke={f.tinta} strokeWidth="1.9" fill="none" strokeLinecap="round">
-              <circle cx="16" cy="12.5" r="5" />
-              <path d="M16 5v4M16 16v4M8.5 12.5h4M19.5 12.5h4" />
-              <circle cx="16" cy="12.5" r="1" fill={f.tinta} stroke="none" />
+          {f.glifo === 'cubo' && (
+            <g stroke={f.tinta} strokeWidth="1.9" fill="none" strokeLinejoin="round">
+              <path d="M14 4.8l6.8 3.9v7L14 19.6l-6.8-3.9v-7z" />
+              <path d="M7.2 8.7l6.8 3.9 6.8-3.9M14 12.6v7" opacity="0.6" />
             </g>
           )}
-          {f.dibujo === 'lineas' && (
-            <g stroke={f.tinta} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M7 17.5 12 8l4.5 6 6.5-8" />
-              <circle cx="12" cy="8" r="1.7" fill={f.tinta} stroke="none" />
-              <circle cx="16.5" cy="14" r="1.7" fill={f.tinta} stroke="none" />
-            </g>
-          )}
-          {f.dibujo === 'cubo' && (
-            <g stroke={f.tinta} strokeWidth="1.8" fill="none" strokeLinejoin="round">
-              <path d="M16 4.5l6.5 3.7v6.8L16 18.7l-6.5-3.7V8.2z" />
-              <path d="M9.5 8.2l6.5 3.7 6.5-3.7M16 11.9v6.8" opacity="0.6" />
-            </g>
-          )}
-          {/* franja inferior con la extensión, esquinas de abajo redondeadas */}
-          <path d="M2 22.5H30V25a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5Z" fill={f.franja} />
-          <text x="16" y="28.3" textAnchor="middle" fontSize="6.3" fontWeight="800"
-            fontFamily="sans-serif" fill={f.tintaExt || '#FFFFFF'} letterSpacing="0.5">
+          <text x="16" y="28.6" textAnchor="middle" fontSize="6.8" fontWeight="800"
+            fontFamily="sans-serif" fill="#FFF" letterSpacing="0.5">
             {ext.slice(0, 4).toUpperCase()}
           </text>
         </svg>
