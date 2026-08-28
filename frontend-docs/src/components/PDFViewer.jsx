@@ -695,19 +695,64 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       document.exitFullscreen();
     }
   };
-  // Imprimir vía iframe oculto: `window.open(url).print()` disparaba print()
-  // ANTES de que el PDF terminara de cargar (hoja en blanco o nada). Si el
-  // origen bloquea el acceso al iframe (URL firmada de GCS), abre pestaña.
-  const printDocument = () => {
+  // LOS BYTES QUE YA TENEMOS.
+  //
+  // El lector cargo el PDF entero para dibujarlo: `getData()` los devuelve
+  // sin tocar la red. Con ellos se hace un blob de NUESTRO origen, y eso
+  // desbloquea las dos cosas que antes obligaban a salir a una pestana de
+  // Google: imprimir (un iframe de otro origen no deja llamar a print) y
+  // descargar con el nombre real (una URL firmada descarga con el nombre
+  // del objeto del almacen, o peor, la abre en el visor del navegador).
+  const bytesDelDocumento = async () => {
+    const pdf = pdfDocRef.current;
+    if (!pdf) return null;
+    try {
+      const datos = await pdf.getData();
+      return new Blob([datos], { type: 'application/pdf' });
+    } catch {
+      return null;
+    }
+  };
+
+  // Imprimir: iframe oculto con el blob PROPIO. Se llama a print() en el
+  // onload -- hacerlo antes imprimia una hoja en blanco.
+  const printDocument = async () => {
+    const blob = await bytesDelDocumento();
+    if (!blob) { window.open(url, '_blank', 'noopener'); return; }
+    const objectUrl = URL.createObjectURL(blob);
     const iframe = document.createElement('iframe');
     Object.assign(iframe.style, { position: 'fixed', right: 0, bottom: 0, width: 0, height: 0, border: 0 });
-    iframe.src = url;
+    iframe.src = objectUrl;
     iframe.onload = () => {
       try { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
-      catch { window.open(url, '_blank', 'noopener'); }
+      catch { window.open(objectUrl, '_blank', 'noopener'); }
     };
     document.body.appendChild(iframe);
-    setTimeout(() => { try { document.body.removeChild(iframe); } catch { /* ya removido */ } }, 60000);
+    // El blob y el iframe viven mientras dure el dialogo de impresion.
+    setTimeout(() => {
+      try { document.body.removeChild(iframe); } catch { /* ya removido */ }
+      URL.revokeObjectURL(objectUrl);
+    }, 120000);
+  };
+
+  // Descargar: el fichero cae con SU nombre, sin pestana intermedia.
+  const [descargando, setDescargando] = useState(false);
+  const downloadDocument = async () => {
+    setDescargando(true);
+    try {
+      const blob = await bytesDelDocumento();
+      if (!blob) { window.open(url, '_blank', 'noopener'); return; }
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = fileName || 'documento.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+    } finally {
+      setDescargando(false);
+    }
   };
 
   // Fullscreen Listener
@@ -950,7 +995,8 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
 
         <div className="pdf-topbar__right">
           <button className="pdf-ico" onClick={printDocument} title="Imprimir"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="7" rx="1.5"/><path d="M7 16h10v5H7z"/></svg></button>
-          <a className="pdf-ico" href={url} target="_blank" rel="noopener noreferrer" title="Descargar"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11M8 12l4 4 4-4"/><path d="M4 19h16"/></svg></a>
+          <button className="pdf-ico" onClick={downloadDocument} disabled={descargando}
+            title={`Descargar ${fileName}`}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11M8 12l4 4 4-4"/><path d="M4 19h16"/></svg></button>
           <span className="pdf-sep" />
           <button className="pdf-ico" onClick={toggleFullscreen}
             title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
