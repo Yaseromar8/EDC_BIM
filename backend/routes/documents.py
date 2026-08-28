@@ -15,6 +15,9 @@ from pathlib import Path
 from flask import Blueprint, request, jsonify, redirect, Response, g
 from perimetro_de_obra import guardia_de_obra
 from enlaces_firmados import emitir, leer, PROPOSITO_RECURSO
+import threading as _threading
+from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
+
 from politica import publico_en_lectura, requiere_rol
 from werkzeug.utils import secure_filename
 from gcs_manager import generate_signed_url, upload_file_to_gcs, delete_gcs_blob
@@ -2375,6 +2378,38 @@ def share_document():
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
+# ── LA COLA DE MINIATURAS ─────────────────────────────────────────────────
+# Pequena a proposito: cada trabajo baja un PDF a disco y lo rasteriza. Dos
+# a la vez es suficiente para que una carpeta se prepare en segundos sin
+# acercarse al limite de memoria, y no compite con el sellado de integridad.
+_COLA_MINIATURAS = _ThreadPoolExecutor(max_workers=2,
+                                       thread_name_prefix='miniaturas')
+_MINIATURAS_ENCOLADAS = set()
+_CANDADO_MINIATURAS = _threading.Lock()
+
+
+def _encolar_miniaturas(urns):
+    """Encola sin repetir. Devuelve cuantas entraron de verdad."""
+    from gcs_manager import get_or_create_thumbnail
+    nuevas = 0
+    for urn in urns:
+        with _CANDADO_MINIATURAS:
+            if urn in _MINIATURAS_ENCOLADAS:
+                continue
+            _MINIATURAS_ENCOLADAS.add(urn)
+        nuevas += 1
+
+        def trabajo(u=urn):
+            try:
+                get_or_create_thumbnail(u, 420)
+            finally:
+                with _CANDADO_MINIATURAS:
+                    _MINIATURAS_ENCOLADAS.discard(u)
+
+        _COLA_MINIATURAS.submit(trabajo)
+    return nuevas
+
+
 @documents_bp.route('/api/docs/miniaturas/urls', methods=['POST'])
 def urls_de_miniaturas():
     """Las URLs FIRMADAS de las miniaturas de una carpeta, de una vez.
@@ -2426,13 +2461,18 @@ def urls_de_miniaturas():
         else:
             pendientes.append(urn)
 
-    # Lo que falta se genera en el ejecutor acotado: la pantalla no espera.
+    # Lo que falta se genera en una cola PROPIA y SIN REPETIR.
+    #
+    # Antes se encolaba TODO lo pendiente en CADA llamada, y la cuadricula
+    # llama al abrirse y otra vez a los 12 s: abrir la carpeta tres veces
+    # metia 135 trabajos, casi todos repetidos. Sumado a que cada uno
+    # cargaba el PDF entero en memoria, fue una de las causas del aviso de
+    # memoria de Render (28-ago-2026). Ahora hay memoria de lo ya encolado y
+    # una cola pequena, separada del sellado de integridad para que un lote
+    # de miniaturas no le quite sitio.
     if pendientes:
         try:
-            from file_system_db import gcs_executor
-            from gcs_manager import get_or_create_thumbnail
-            for urn in pendientes:
-                gcs_executor.submit(get_or_create_thumbnail, urn, 420)
+            _encolar_miniaturas(pendientes)
         except Exception as e:
             print('[miniaturas] no se pudo encolar: %s' % str(e)[:120])
 
@@ -2488,8 +2528,7 @@ def preparar_miniaturas():
                                      'desconocido (¿el PDF supera 120 MB?)'),
         }), 500
 
-    for urn in urns[1:]:
-        gcs_executor.submit(_gcs.get_or_create_thumbnail, urn, 420)
+    _encolar_miniaturas(urns[1:])
     return jsonify({'success': True, 'encolados': len(urns)})
 
 

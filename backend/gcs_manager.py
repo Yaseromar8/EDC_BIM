@@ -206,30 +206,33 @@ def get_blob_data(blob_name):
         return None, None
 
 
-def _rasterizar_pdf(raw, max_px):
-    """La primera pagina de un PDF como imagen. DOS MOTORES a proposito.
+# El motivo del ultimo fallo de rasterizado, para poder ENSENARLO.
+ULTIMO_ERROR_RASTER = None
 
-    Los dos estan en requirements desde antes de este frente. Se intenta
-    PyMuPDF y, si no importa o revienta -- el nombre del modulo cambio entre
-    versiones (`fitz` paso a ser `pymupdf`), y en produccion no siempre corre
-    la version que uno cree --, entra pypdfium2. Que una miniatura dependa de
-    UN import concreto es lo que dejo la cuadricula entera en «sin vista
-    previa» sin decir por que.
 
-    Devuelve una imagen PIL o None. `ULTIMO_ERROR_RASTER` guarda el motivo
-    para que la ruta de preparacion pueda ENSENARLO en vez de tragarselo.
+def _rasterizar_pdf_de_fichero(ruta, max_px):
+    """La primera pagina de un PDF EN DISCO, como imagen PIL.
+
+    Se le pasa una RUTA y no los bytes A PROPOSITO: asi el fichero no vive
+    en memoria dos veces (una en nuestra variable y otra dentro del motor).
+    Con varias miniaturas a la vez esa diferencia es la que separa un
+    servicio en pie de uno que Render reinicia por exceso de memoria -- paso
+    el 28-ago-2026 y esta es la correccion.
+
+    DOS MOTORES a proposito, los dos ya en requirements: PyMuPDF cambio de
+    nombre entre versiones (`fitz` -> `pymupdf`) y en produccion no siempre
+    corre la que uno cree; si ninguno de los dos nombres importa, entra
+    pypdfium2. `ULTIMO_ERROR_RASTER` guarda el motivo para poder ENSENARLO.
     """
     global ULTIMO_ERROR_RASTER
     from io import BytesIO
     from PIL import Image
     fallos = []
 
-    # Motor 1: PyMuPDF (se llama `pymupdf` en las versiones nuevas y `fitz`
-    # en las viejas; se prueban los dos nombres).
     for nombre in ('pymupdf', 'fitz'):
         try:
             motor = __import__(nombre)
-            doc = motor.open(stream=raw, filetype='pdf')
+            doc = motor.open(ruta)
             try:
                 if doc.page_count < 1:
                     fallos.append('%s: el PDF no tiene paginas' % nombre)
@@ -239,17 +242,18 @@ def _rasterizar_pdf(raw, max_px):
                 escala = max_px / max(caja.width, caja.height, 1)
                 pix = pagina.get_pixmap(matrix=motor.Matrix(escala, escala),
                                         alpha=False)
+                imagen = Image.open(BytesIO(pix.tobytes('png'))).convert('RGB')
+                pix = None          # el mapa de pixeles, fuera cuanto antes
                 ULTIMO_ERROR_RASTER = None
-                return Image.open(BytesIO(pix.tobytes('png'))).convert('RGB')
+                return imagen
             finally:
                 doc.close()
         except Exception as e:
             fallos.append('%s: %s' % (nombre, str(e)[:120]))
 
-    # Motor 2: pypdfium2.
     try:
         import pypdfium2 as pdfium
-        doc = pdfium.PdfDocument(raw)
+        doc = pdfium.PdfDocument(ruta)
         try:
             if len(doc) < 1:
                 fallos.append('pypdfium2: el PDF no tiene paginas')
@@ -269,35 +273,37 @@ def _rasterizar_pdf(raw, max_px):
     return None
 
 
-# El motivo del ultimo fallo de rasterizado, para poder ENSENARLO.
-ULTIMO_ERROR_RASTER = None
-
-
 def get_or_create_thumbnail(blob_name, max_px=420):
-    """Versión reducida JPEG cacheada en GCS ('<blob>__thumb<max_px>.jpg').
-    max_px=420 → miniatura de galería (~25 KB); max_px=1600 → 'display' para el
-    lightbox (~150 KB, abre rápido). La 1ª vez se genera, luego es instantánea.
-    Devuelve (bytes, 'image/jpeg') o (None, None)."""
-    try:
-        from io import BytesIO
-        from PIL import Image, ImageOps
-        from google.cloud.exceptions import NotFound
-        bucket_name = os.environ.get("GCS_BUCKET_NAME")
-        client = get_storage_client()
-        bucket = client.bucket(bucket_name)
+    """Version reducida JPEG cacheada en el almacen ('<blob>__thumb<px>.jpg').
 
+    Sirve para imagenes Y para PDF (su primera pagina), que es lo que
+    alimenta la cuadricula del explorador y la tira del lector.
+
+    EL ORIGINAL SE BAJA A DISCO, NUNCA A MEMORIA. La version anterior hacia
+    `download_as_bytes()` -- el fichero entero en RAM -- y el rasterizador
+    hacia ademas su propia copia: dos veces el plano por miniatura. Con
+    varias a la vez, eso fue una de las causas del aviso de exceso de
+    memoria de Render. Ahora el temporal se borra siempre, pase lo que pase.
+    """
+    from io import BytesIO
+    from PIL import Image, ImageOps
+    from google.cloud.exceptions import NotFound
+    import tempfile
+
+    ruta_temporal = None
+    try:
+        bucket_name = os.environ.get("GCS_BUCKET_NAME")
+        bucket = get_storage_client().bucket(bucket_name)
         thumb_name = f"{blob_name}__thumb{max_px}.jpg"
-        # Intento directo de descarga (1 llamada): si existe, listo; si no, generamos.
+
+        # Si ya esta hecha, se sirve y no se toca nada mas.
         try:
             return bucket.blob(thumb_name).download_as_bytes(), 'image/jpeg'
         except NotFound:
             pass
 
-        # GUARDIA DE TAMANO. Generar una miniatura carga el fichero ENTERO en
-        # memoria; con un PDF de 300 MB eso tumba la instancia (512 MB), que
-        # es como murio el hilo del DWG de 260 MB. Por encima del tope se
-        # devuelve nada y la pantalla ensena su recuadro sin imagen: mejor
-        # una miniatura ausente que el servicio caido.
+        # GUARDIA DE TAMANO: por encima del tope no se rasteriza al vuelo.
+        # Mejor una miniatura ausente que el servicio caido.
         MAX_ORIGEN = 120 * 1024 * 1024
         try:
             origen = bucket.blob(blob_name)
@@ -308,49 +314,51 @@ def get_or_create_thumbnail(blob_name, max_px=420):
         except NotFound:
             return None, None
         except Exception:
-            pass   # si no se puede consultar el tamano, se intenta igual
+            pass                     # sin tamano conocido, se intenta igual
 
+        temporal = tempfile.NamedTemporaryFile(delete=False)
+        ruta_temporal = temporal.name
         try:
-            raw = bucket.blob(blob_name).download_as_bytes()
+            bucket.blob(blob_name).download_to_file(temporal)
         except NotFound:
             return None, None
-        thumb_blob = bucket.blob(thumb_name)
+        finally:
+            temporal.close()
 
-        # PDF: se rasteriza la PRIMERA PAGINA. Hace falta para la tira de
-        # documentos de la carpeta (el boton de cuadricula del lector, como
-        # ACC): sin esto la tira tendria iconos iguales y no se reconoceria
-        # un plano de otro -- que es justo para lo que sirve.
-        # PyMuPDF ya estaba en requirements; nada nuevo que instalar.
         if blob_name.lower().endswith(('.pdf', '.pdfx')):
-            img = _rasterizar_pdf(raw, max_px)
-            if img is None:
+            imagen = _rasterizar_pdf_de_fichero(ruta_temporal, max_px)
+            if imagen is None:
                 return None, None
-            out = BytesIO()
-            img.save(out, format='JPEG', quality=72, optimize=True)
-            data = out.getvalue()
-            try:
-                thumb_blob.upload_from_string(data, content_type='image/jpeg')
-            except Exception as ce:
-                print(f"[thumb] no se pudo cachear {thumb_name}: {ce}")
-            return data, 'image/jpeg'
+        else:
+            imagen = Image.open(ruta_temporal)
+            imagen = ImageOps.exif_transpose(imagen)   # orientacion del movil
+            imagen = imagen.convert('RGB')
+            imagen.thumbnail((max_px, max_px), Image.LANCZOS)
 
-        img = Image.open(BytesIO(raw))
-        img = ImageOps.exif_transpose(img)      # respeta orientación EXIF del celular
-        img = img.convert('RGB')
-        img.thumbnail((max_px, max_px), Image.LANCZOS)
         out = BytesIO()
-        img.save(out, format='JPEG', quality=72, optimize=True)
-        data = out.getvalue()
-
-        # Cachear para próximas veces (best-effort; si falla, igual servimos)
+        imagen.save(out, format='JPEG', quality=72, optimize=True)
+        datos = out.getvalue()
         try:
-            thumb_blob.upload_from_string(data, content_type='image/jpeg')
+            imagen.close()
+        except Exception:
+            pass
+
+        try:
+            bucket.blob(thumb_name).upload_from_string(datos,
+                                                       content_type='image/jpeg')
         except Exception as ce:
             print(f"[thumb] no se pudo cachear {thumb_name}: {ce}")
-        return data, 'image/jpeg'
+        return datos, 'image/jpeg'
     except Exception as e:
         print(f"[thumb] error generando miniatura de {blob_name}: {e}")
         return None, None
+    finally:
+        if ruta_temporal:
+            try:
+                os.unlink(ruta_temporal)
+            except Exception:
+                pass
+
 
 def list_gcs_contents(prefix=""):
     """

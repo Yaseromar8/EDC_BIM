@@ -11,7 +11,11 @@ ISO_19650_REGEX = r"^[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+
 # SEIS desde el 28-ago-2026 (instancia de 1 CPU / 2 GB). Aqui viven el
 # sellado de integridad y la generacion de miniaturas: son tareas cortas y
 # muchas, y el cuatro venia de cuando habia 512 MB.
-gcs_executor = ThreadPoolExecutor(max_workers=6)
+# CUATRO. Subio a seis al pasar a 2 GB y Render aviso de exceso de memoria
+# ese mismo dia: el trabajo que corre aqui carga ficheros, y mas obreros es
+# mas RAM simultanea, no solo mas velocidad. Las miniaturas se fueron a su
+# propia cola de dos (routes/documents.py); aqui queda el sellado.
+gcs_executor = ThreadPoolExecutor(max_workers=4)
 
 def resolve_path_to_node_id(path, model_urn, created_by=None, auto_create=True):
     """
