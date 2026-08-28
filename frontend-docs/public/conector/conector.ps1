@@ -23,7 +23,7 @@ try {
     $kv = $par -split '=', 2
     if ($kv.Count -eq 2) { $q[$kv[0]] = [uri]::UnescapeDataString($kv[1]) }
   }
-  $url = $q['u']; $nombre = $q['n']
+  $url = $q['u']; $nombre = $q['n']; $version = $q['v']
   if (-not $url -or -not $nombre) { exit }
 
   $anfitrion = ([uri]$url).Host
@@ -34,6 +34,27 @@ try {
   $carpeta = Join-Path $env:USERPROFILE 'Downloads\ALEPHIA'
   New-Item -Force -ItemType Directory $carpeta | Out-Null
   $fichero = Join-Path $carpeta $nombre
+
+  # CACHE POR VERSION, como el Desktop Connector de ACC. El portal manda en
+  # `v` la identidad de la version (cada version tiene su objeto unico en el
+  # almacen): si la copia local ya es ESA version, se abre al instante sin
+  # bajar nada. Abrir el mismo plano cien veces = UNA descarga. Solo una
+  # version nueva en el ECD vuelve a descargar (una vez). El sello vive al
+  # lado del fichero; si alguien lo borra, simplemente se re-descarga.
+  $sello = "$fichero.version.txt"
+  if ($version -and (Test-Path $fichero) -and (Test-Path $sello)) {
+    $selloActual = (Get-Content $sello -Raw -ErrorAction SilentlyContinue)
+    if ($selloActual -and $selloActual.Trim() -eq $version) {
+      try {
+        $Host.UI.RawUI.WindowTitle = 'Conector ALEPHIA'
+        Write-Host ''
+        Write-Host '  CONECTOR ALEPHIA' -ForegroundColor Cyan
+        Write-Host "  $nombre ya esta al dia: abriendo la copia local..."
+      } catch {}
+      Invoke-Item $fichero
+      exit
+    }
+  }
 
   # En Windows 11 la Terminal ignora -WindowStyle Hidden y la ventana aparece
   # igual: que al menos diga que es y que hace, en vez de un PowerShell mudo.
@@ -49,6 +70,8 @@ try {
   # es la diferencia entre segundos y minutos.
   $ProgressPreference = 'SilentlyContinue'
   Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $fichero
+
+  if ($version) { Set-Content -Path $sello -Value $version -Encoding utf8 }
 
   try { Write-Host '  Abriendo en la aplicacion asociada...' } catch {}
   Invoke-Item $fichero

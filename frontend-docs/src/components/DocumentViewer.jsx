@@ -183,7 +183,10 @@ export default function DocumentViewer({
       return;
     }
 
-    const uri = `alephia://abrir?u=${encodeURIComponent(firmada)}&n=${encodeURIComponent(file.name)}`;
+    // `v` = identidad de la version (el objeto del almacen es unico por
+    // version): el conector la usa como CACHE — abrir el mismo plano cien
+    // veces descarga UNA; solo una version nueva vuelve a bajar.
+    const uri = `alephia://abrir?u=${encodeURIComponent(firmada)}&n=${encodeURIComponent(file.name)}&v=${encodeURIComponent(urn)}`;
     let respondio = false;
     const marcar = () => {
       respondio = true;
