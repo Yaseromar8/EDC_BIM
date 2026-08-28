@@ -8,7 +8,10 @@ from psycopg2.extras import Json as _Json
 # --- ISO 19650 Naming Standard Constants ---
 # [PROJECT]-[ORIGINATOR]-[VOLUME]-[LEVEL]-[TYPE]-[ROLE]-[NUMBER]
 ISO_19650_REGEX = r"^[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+-[0-9]{4,6}$"
-gcs_executor = ThreadPoolExecutor(max_workers=4)
+# SEIS desde el 28-ago-2026 (instancia de 1 CPU / 2 GB). Aqui viven el
+# sellado de integridad y la generacion de miniaturas: son tareas cortas y
+# muchas, y el cuatro venia de cuando habia 512 MB.
+gcs_executor = ThreadPoolExecutor(max_workers=6)
 
 def resolve_path_to_node_id(path, model_urn, created_by=None, auto_create=True):
     """

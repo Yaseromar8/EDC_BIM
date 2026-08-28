@@ -480,7 +480,12 @@ _CANDADO_PRETRADUCCION = __import__('threading').Lock()
 # DWG de 260 MB antes de trocear la subida. Con dos obreros, los 100 entran
 # igual: hacen COLA y van saliendo. Nadie espera delante de la pantalla,
 # porque esto es de fondo por definicion.
-_COLA_TRADUCCION = _ThreadPoolExecutor(max_workers=2,
+# CUATRO desde el 28-ago-2026: la instancia paso de 0,1 CPU / 512 MB al plan
+# de 1 CPU / 2 GB. El dos era el techo para caber en 512 MB con ficheros de
+# cientos de MB, no una virtud -- y con cuatro, un lote de planos se prepara
+# en la mitad de tiempo. Si algun dia se vuelve a estrechar la instancia,
+# ESTE es el numero que hay que bajar.
+_COLA_TRADUCCION = _ThreadPoolExecutor(max_workers=4,
                                        thread_name_prefix='cad-pretrad')
 
 
@@ -726,6 +731,16 @@ def cad_de_enlace_publico(share_id):
     Si no esta traducido, el invitado recibe `listo: false` y la pantalla le
     ofrece descargar el original -- no un error.
     """
+    # UN ID MAL FORMADO NO ES UN ERROR DEL SERVIDOR. La columna es UUID: al
+    # comparar contra basura, Postgres lanza y la ruta devolvia 500 -- feo, y
+    # ademas cuenta al de fuera que algo se rompio. Un enlace que no existe se
+    # dice como lo que es.
+    import uuid as _uuid
+    try:
+        _uuid.UUID(str(share_id))
+    except (ValueError, AttributeError, TypeError):
+        return jsonify({'success': False, 'error': 'Enlace invalido'}), 404
+
     with get_db_connection() as conn:
         cur = conn.cursor()
         cur.execute("""SELECT s.expires_at, s.revoked, f.id, f.name

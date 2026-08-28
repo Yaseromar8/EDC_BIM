@@ -17,15 +17,23 @@ import routes.docs_cad as cad
 AQUI = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def test_la_cola_esta_acotada_a_dos_obreros():
-    assert cad._COLA_TRADUCCION._max_workers == 2, (
-        'Cada pre-traducción baja el fichero entero a disco y lo reenvía a '
-        'Autodesk. Subir el techo sin medir la instancia es repetir la caída '
-        'del DWG de 260 MB, multiplicada.')
+def test_la_cola_TIENE_TECHO_y_es_razonable():
+    """Lo que se vigila es que HAYA techo, y que nadie lo dispare.
+
+    El numero concreto sigue a la instancia: fue 2 con 512 MB y paso a 4 al
+    subir a 1 CPU / 2 GB (28-ago-2026). Lo que no puede cambiar es que exista
+    un limite: cada pre-traduccion baja el fichero entero a disco y lo
+    reenvia a Autodesk, y sin techo 100 planos matan la instancia -- la
+    caida del DWG de 260 MB, multiplicada.
+    """
+    techo = cad._COLA_TRADUCCION._max_workers
+    assert 1 <= techo <= 8, (
+        'techo de %s: por debajo de 1 no hay cola y por encima de 8 no cabe '
+        'en ninguna instancia que este proyecto vaya a pagar' % techo)
 
 
-def test_CIEN_ficheros_a_la_vez_nunca_pasan_de_DOS_en_paralelo(monkeypatch):
-    """El escenario del dueño, medido."""
+def test_CIEN_ficheros_a_la_vez_nunca_pasan_del_TECHO(monkeypatch):
+    """El escenario del dueño, medido contra el techo que haya configurado."""
     a_la_vez = 0
     pico = 0
     atendidos = []
@@ -50,8 +58,10 @@ def test_CIEN_ficheros_a_la_vez_nunca_pasan_de_DOS_en_paralelo(monkeypatch):
     while len(atendidos) < 100 and time.time() - esperando < 30:
         time.sleep(0.05)
 
+    techo = cad._COLA_TRADUCCION._max_workers
     assert len(atendidos) == 100, 'se perdieron %d' % (100 - len(atendidos))
-    assert pico <= 2, 'hubo %d traducciones a la vez: la cola no acota' % pico
+    assert pico <= techo, ('hubo %d traducciones a la vez con techo %d: la '
+                           'cola no acota' % (pico, techo))
 
 
 def test_ningun_camino_lanza_HILOS_SUELTOS_de_traduccion():
