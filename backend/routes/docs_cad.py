@@ -431,18 +431,32 @@ def _build_package(node):
         return None, 0, None, 'No se pudo armar el paquete: %s' % e
 
 
-def pretraducir_en_fondo(node_id):
-    """Traduce un CAD recien subido sin que nadie espere: el camino de ACC.
+# Un mismo fichero no viaja dos veces A LA VEZ hacia Autodesk: la subida lo
+# pre-traduce en un hilo y, si alguien lo abre en ese instante, /translate
+# lanzaria OTRO hilo con los mismos 260 MB. El candado hace que el segundo
+# se vaya sin hacer nada; el sondeo de /status les sirve a los dos.
+_PRETRADUCCIONES_EN_CURSO = set()
+_CANDADO_PRETRADUCCION = __import__('threading').Lock()
+
+
+def pretraducir_en_fondo(node_id, forzar=False, master=False):
+    """Traduce un CAD sin que nadie espere: el camino de ACC.
 
     Mismo flujo idempotente que el endpoint /translate pero fuera de una
-    peticion HTTP: upload-confirm lo lanza en un hilo, y cuando alguien pulse
-    "Ver" el modelo ya esta listo (o en curso, con su porcentaje).
+    peticion HTTP. Lo lanzan en un hilo las confirmaciones de subida y el
+    propio /translate cuando toca trabajo pesado (mover el fichero de GCS a
+    Autodesk tarda minutos con planos grandes; hacerlo dentro de la peticion
+    era el fallo documentado del navegador que se cansa antes).
 
     Es best-effort a conciencia: cualquier tropiezo se imprime y se abandona,
-    porque la apertura manual conserva su camino de siempre. Y refleja rama a
-    rama el endpoint — incluido que el fichero suelto recien subido va SIN
-    root_filename (pasarlo hizo que Autodesk tratara un RVT como un ZIP).
+    porque /status cuenta la verdad y reintentar siempre es posible. Refleja
+    rama a rama el endpoint — incluido que el fichero suelto recien subido va
+    SIN root_filename (pasarlo hizo que Autodesk tratara un RVT como un ZIP).
     """
+    with _CANDADO_PRETRADUCCION:
+        if node_id in _PRETRADUCCIONES_EN_CURSO:
+            return
+        _PRETRADUCCIONES_EN_CURSO.add(node_id)
     try:
         node = _load_node(node_id)
         if not node or not is_cad_file(node['name']) or not node['gcs_urn']:
@@ -458,7 +472,7 @@ def pretraducir_en_fondo(node_id):
         urn = _urn_for(node, bucket)
 
         manifest, _err = _manifest(token, urn)
-        if manifest and manifest.get('status') in ('success', 'inprogress', 'pending'):
+        if not forzar and manifest and manifest.get('status') in ('success', 'inprogress', 'pending'):
             _save_cad_meta(node, {'urn': urn, 'status': 'success' if manifest.get('status') == 'success' else 'inprogress'})
             return
 
@@ -473,9 +487,9 @@ def pretraducir_en_fondo(node_id):
             ya_subido = False
 
         if ya_subido and not node.get('refs'):
-            ok, error = _start_translation(token, urn, force=False,
+            ok, error = _start_translation(token, urn, force=forzar or master,
                                            root_filename=node.get('name'),
-                                           master_views=False)
+                                           master_views=master)
             if error:
                 print('[CAD pre] traduccion: %s' % error)
                 return
@@ -524,8 +538,8 @@ def pretraducir_en_fondo(node_id):
         _save_cad_meta(node, {'urn': urn, 'status': 'inprogress',
                               'started_at': time.time(), 'object_key': object_key,
                               'refs': [r['name'] for r in node.get('refs') or []], 'error': None})
-        _job, error = _start_translation(token, urn, force=False, root_filename=raiz,
-                                         master_views=False)
+        _job, error = _start_translation(token, urn, force=forzar, root_filename=raiz,
+                                         master_views=master)
         if error:
             _save_cad_meta(node, {'status': 'failed', 'error': error})
             print('[CAD pre] traduccion: %s' % error)
@@ -533,6 +547,9 @@ def pretraducir_en_fondo(node_id):
         print('[CAD pre] %s: subido y traduciendose' % node['name'])
     except Exception as e:
         print('[CAD pre] %s' % e)
+    finally:
+        with _CANDADO_PRETRADUCCION:
+            _PRETRADUCCIONES_EN_CURSO.discard(node_id)
 
 
 @docs_cad_bp.route('/api/docs/cad/translate', methods=['POST'])
@@ -624,61 +641,21 @@ def translate_cad():
         _save_cad_meta(node, {'urn': urn, 'status': 'inprogress'})
         return jsonify({'success': True, 'status': 'inprogress', 'urn': urn})
 
-    raiz = None
-    paquete = None
-
-    if node.get('refs'):
-        # Dibujo CON referencias (ortofotos, xrefs): viaja en un ZIP junto a
-        # ellas. Model Derivative lo abre, resuelve lo que hay dentro y traduce.
-        paquete, tam, raiz, error = _build_package(node)
-        if error:
-            return jsonify({'success': False, 'error': error}), 400
-        object_id, error = _upload_to_oss(token, bucket, object_key, paquete, size=tam)
-        try:
-            paquete.close()
-        except Exception:
-            pass
-        if error:
-            return jsonify({'success': False, 'error': error}), 502
-    else:
-        # A DISCO, no a memoria. Cargar un Revit de 300 MB entero en RAM, con
-        # varias peticiones a la vez y una instancia modesta, es como se queda
-        # sin memoria el backend. Los bytes solo se van a reenviar: no hace falta
-        # tenerlos todos a la vez.
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.cad')
-        try:
-            from gcs_manager import descargar_a_fichero
-            tam = descargar_a_fichero(node['gcs_urn'], tmp)
-            if not tam:
-                return jsonify({'success': False, 'error': 'El archivo esta vacio en GCS'}), 400
-            tmp.seek(0)
-            object_id, error = _upload_to_oss(token, bucket, object_key, tmp, size=tam)
-        except Exception as e:
-            return jsonify({'success': False, 'error': 'No se pudo leer de GCS: %s' % e}), 502
-        finally:
-            try:
-                tmp.close()
-                os.unlink(tmp.name)
-            except Exception:
-                pass
-        if error:
-            return jsonify({'success': False, 'error': error}), 502
-
-    # El URN se guarda ANTES de lanzar el trabajo. Si el trabajo fallara, el
-    # URN sigue ahi y el estado se puede consultar: un fallo no deja el archivo
-    # inalcanzable, que es lo que pasaba cuando el error borraba el URN.
-    urn = _urn_of(object_id)
-    _save_cad_meta(node, {'urn': urn, 'status': 'inprogress',
-                          'started_at': time.time(), 'object_key': object_key,
-                          'refs': [r['name'] for r in node.get('refs') or []], 'error': None})
-
-    _job, error = _start_translation(token, urn, force=forzar, root_filename=raiz,
-                                     master_views=master)
-    if error:
-        _save_cad_meta(node, {'status': 'failed', 'error': error})
-        return jsonify({'success': False, 'error': error}), 502
-
-    return jsonify({'success': True, 'status': 'inprogress', 'urn': urn})
+    # LO PESADO, FUERA DE LA PETICION. Mover el fichero de GCS a Autodesk
+    # tarda minutos con un plano grande, y hacerlo aqui dentro era el fallo
+    # documentado arriba: "el navegador se cansa antes y el usuario ve 'no se
+    # pudo contactar con el servidor'". El aviso de arriba mitigaba el
+    # REINTENTO (no re-subir lo ya subido) pero el primer viaje seguia siendo
+    # en linea, y con un DWG de 260 MB volvio a pasar. El mismo flujo corre
+    # ahora en un hilo (pretraducir_en_fondo, con su candado anti-duplicados)
+    # y esta respuesta vuelve al instante: el frontend ya sondea /status, que
+    # trata la fase sin manifiesto como 'inprogress 0%'.
+    import threading as _th
+    _th.Thread(target=pretraducir_en_fondo,
+               args=(str(node['id']), forzar, master), daemon=True).start()
+    _save_cad_meta(node, {'urn': urn, 'status': 'inprogress'})
+    return jsonify({'success': True, 'status': 'inprogress', 'urn': urn,
+                    'progress': 'Subiendo el archivo a Autodesk…'})
 
 
 @docs_cad_bp.route('/api/docs/cad/status', methods=['GET'])
