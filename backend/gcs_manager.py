@@ -226,6 +226,23 @@ def get_or_create_thumbnail(blob_name, max_px=420):
         except NotFound:
             pass
 
+        # GUARDIA DE TAMANO. Generar una miniatura carga el fichero ENTERO en
+        # memoria; con un PDF de 300 MB eso tumba la instancia (512 MB), que
+        # es como murio el hilo del DWG de 260 MB. Por encima del tope se
+        # devuelve nada y la pantalla ensena su recuadro sin imagen: mejor
+        # una miniatura ausente que el servicio caido.
+        MAX_ORIGEN = 120 * 1024 * 1024
+        try:
+            origen = bucket.blob(blob_name)
+            origen.reload()
+            if (origen.size or 0) > MAX_ORIGEN:
+                print(f"[thumb] {blob_name} pesa {origen.size}: sin miniatura")
+                return None, None
+        except NotFound:
+            return None, None
+        except Exception:
+            pass   # si no se puede consultar el tamano, se intenta igual
+
         try:
             raw = bucket.blob(blob_name).download_as_bytes()
         except NotFound:

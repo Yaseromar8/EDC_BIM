@@ -192,10 +192,34 @@ const HINTS = Object.fromEntries(
 // la direccion es justo el defecto que se corrigio en el menu del clic
 // derecho. Y se pide SOLO cuando entra en pantalla (IntersectionObserver):
 // una carpeta con 100 planos no baja 100 miniaturas de golpe.
+// UNA COLA DE DOS para las miniaturas de la tira.
+//
+// La primera vez, cada miniatura obliga al servidor a bajar el PDF entero y
+// rasterizarlo. Con la tira abierta hay ~15 recuadros en pantalla y salian
+// las 15 peticiones A LA VEZ: la instancia se atascaba y los recuadros se
+// quedaban EN BLANCO -- lo que reporto el dueno con 45 planos. De dos en
+// dos entran igual, y se van pintando segun llegan.
+const _colaMiniaturas = [];
+let _enCurso = 0;
+function pedirMiniatura(tarea) {
+  return new Promise((resolve, reject) => {
+    _colaMiniaturas.push({ tarea, resolve, reject });
+    servirCola();
+  });
+}
+function servirCola() {
+  while (_enCurso < 2 && _colaMiniaturas.length) {
+    const { tarea, resolve, reject } = _colaMiniaturas.shift();
+    _enCurso += 1;
+    tarea().then(resolve, reject).finally(() => { _enCurso -= 1; servirCola(); });
+  }
+}
+
 function MiniaturaHermano({ doc, activo, onAbrir }) {
   const ref = React.useRef(null);
   const [src, setSrc] = React.useState(null);
   const [falla, setFalla] = React.useState(false);
+  const [pidiendo, setPidiendo] = React.useState(false);
 
   React.useEffect(() => {
     const el = ref.current;
@@ -206,15 +230,24 @@ function MiniaturaHermano({ doc, activo, onAbrir }) {
     const io = new IntersectionObserver(([e]) => {
       if (!e.isIntersecting) return;
       io.disconnect();
-      apiFetch(`${API}/api/docs/view?urn=${encodeURIComponent(doc.gcs_urn)}` +
-               `&model_urn=${encodeURIComponent(doc.model_urn || '')}&thumb=1&gen=1`)
+      setPidiendo(true);
+      pedirMiniatura(() => apiFetch(
+        `${API}/api/docs/view?urn=${encodeURIComponent(doc.gcs_urn)}&thumb=1&gen=1`,
+        { timeoutMs: 60000 })
         .then(r => (r.ok ? r.blob() : Promise.reject(new Error('sin miniatura'))))
+        .then(b => {
+          // Si el servidor no supo hacer la miniatura devuelve el PDF entero:
+          // eso no es una imagen y hay que decirlo, no pintar un hueco.
+          if (!b.type.startsWith('image/')) throw new Error('no es imagen');
+          return b;
+        }))
         .then(b => {
           if (!vivo) return;
           objectUrl = URL.createObjectURL(b);
           setSrc(objectUrl);
         })
-        .catch(() => vivo && setFalla(true));
+        .catch(() => vivo && setFalla(true))
+        .finally(() => vivo && setPidiendo(false));
     }, { rootMargin: '200px' });
     io.observe(el);
     return () => {
@@ -229,7 +262,9 @@ function MiniaturaHermano({ doc, activo, onAbrir }) {
       onClick={() => !activo && onAbrir(doc)} title={doc.name}>
       <div className="pdf-tira-lienzo">
         {src ? <img src={src} alt="" />
-             : <div className="pdf-tira-vacio">{falla ? 'sin vista' : ''}</div>}
+             : <div className="pdf-tira-vacio">
+                 {falla ? 'sin vista previa' : (pidiendo ? 'generando…' : '')}
+               </div>}
       </div>
       <div className="pdf-tira-nombre">{doc.name}</div>
     </button>

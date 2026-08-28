@@ -338,6 +338,14 @@ def complete_upload():
             from routes.docs_cad import is_cad_file, encolar_pretraduccion
             if is_cad_file(filename):
                 encolar_pretraduccion(node_id)
+            # El PDF deja lista su miniatura (primera pagina) para la tira de
+            # documentos del lector: generarla al abrirla, 45 a la vez, era
+            # justo lo que las dejaba en blanco. Va por el mismo ejecutor
+            # acotado que el sellado, no por un hilo suelto.
+            if str(filename or '').lower().endswith(('.pdf', '.pdfx')):
+                from file_system_db import gcs_executor
+                from gcs_manager import get_or_create_thumbnail
+                gcs_executor.submit(get_or_create_thumbnail, gcs_urn, 420)
         except Exception as _e:
             print(f"[uploads] no se pudo lanzar la pre-traduccion CAD: {_e}")
 

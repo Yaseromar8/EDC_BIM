@@ -1589,7 +1589,12 @@ def confirm_upload():
         # aparezca instantánea en la galería (sin el retardo de generarla al
         # primer clic). Best-effort: si falla, el fallback ?gen=1 la genera.
         try:
-            if str(mime_type or '').startswith('image/'):
+            # Imagenes Y PDF: la miniatura se pre-genera al subir. Sin esto,
+            # la tira de documentos de la carpeta las pedia todas de golpe la
+            # primera vez y se quedaban en blanco (lo vio el dueno con 45
+            # planos). Generada aqui, cuando alguien abre la tira ya existen.
+            if str(mime_type or '').startswith('image/') or \
+                    str(filename or '').lower().endswith(('.pdf', '.pdfx')):
                 from gcs_manager import get_or_create_thumbnail
                 threading.Thread(target=get_or_create_thumbnail, args=(gcs_urn, 420), daemon=True).start()
         except Exception as te:
