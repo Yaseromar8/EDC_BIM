@@ -499,21 +499,41 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
   const [joinCode, setJoinCode] = useState('');
   const [joinError, setJoinError] = useState('');
   const [joining, setJoining] = useState(false);
+  // Por que la carga puede fallar, y que hacer al respecto. Sin esto, un
+  // servidor que no contesta se veia igual que una cuenta sin proyectos.
+  const [falloDeCarga, setFalloDeCarga] = useState(null);
   
   const isAdmin = user.role === 'admin';
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setFalloDeCarga(null);
     try {
       // `/api/portal/hubs`, no `/api/hubs`: ese camino esta declarado dos
       // veces en el producto (municipalidades aqui, cuentas de Autodesk en el
       // visor) y con DEPLOY_PROFILE=completo ganaba la de APS -- el
       // desplegable de «Crear proyecto» salia vacio. Ver routes/projects.py.
-      const hRes = await apiFetch(`${API}/api/portal/hubs`);
+      const hRes = await apiFetch(`${API}/api/portal/hubs`, { timeoutMs: 25000 });
       if (hRes.ok) { const hData = await hRes.json(); setHubs(hData.hubs || []); }
-      const res = await apiFetch(`${API}/api/projects?user_id=${user.id}&role=${user.role}`);
-      if (res.ok) { const data = await res.json(); setProjects(Array.isArray(data) ? data : (data.projects || [])); }
-    } catch (e) { console.error(e); }
+      // TIEMPO CORTO Y VERDAD RAPIDA: el defecto de apiFetch son 120 s por
+      // intento y dos reintentos -- hasta seis minutos de «Cargando…» mudo
+      // mientras el servidor se redespliega. Aqui se pregunta con 25 s: si no
+      // contesta, se DICE y se ofrece reintentar.
+      const res = await apiFetch(`${API}/api/projects?user_id=${user.id}&role=${user.role}`,
+                                 { timeoutMs: 25000 });
+      if (res.ok) {
+        const data = await res.json();
+        setProjects(Array.isArray(data) ? data : (data.projects || []));
+      } else if (res.status === 401) {
+        // La sesion caduco: no hay nada que reintentar, hay que volver a entrar.
+        setFalloDeCarga({ sesion: true, mensaje: 'Tu sesión caducó.' });
+      } else {
+        setFalloDeCarga({ mensaje: `El servidor respondió ${res.status}.` });
+      }
+    } catch (e) {
+      console.error(e);
+      setFalloDeCarga({ mensaje: e?.message || 'No se pudo contactar con el servidor.' });
+    }
     finally { setLoading(false); }
   }, [user]);
 
@@ -612,6 +632,29 @@ export default function SecureProjectsPage({ user, onSelectProject, onLogout, on
               <input type="text" placeholder="Buscar proyectos..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: 280, padding: '7px 12px', background: '#fff', border: '1px solid #ddd', borderRadius: 4, fontSize: 13, outline: 'none' }} />
             </div>
             {loading ? <div className="loading"><div className="spinner" /><span>Cargando proyectos...</span></div> :
+              falloDeCarga ? (
+                <div style={{ maxWidth: 460, margin: '48px auto', background: '#fff', padding: 28,
+                              borderRadius: 8, border: '1px solid var(--border-danger, #eec6c3)',
+                              textAlign: 'center' }} role="alert">
+                  <h3 style={{ margin: '0 0 6px', fontSize: 16 }}>
+                    {falloDeCarga.sesion ? 'Tu sesión caducó' : 'No se pudieron cargar los proyectos'}
+                  </h3>
+                  <p style={{ color: 'var(--text-secondary, #667180)', fontSize: 13, margin: '0 0 18px', lineHeight: 1.5 }}>
+                    {falloDeCarga.sesion
+                      ? 'Vuelve a entrar con tu correo y contraseña; no se ha perdido nada.'
+                      : `${falloDeCarga.mensaje} Puede que el servidor se esté reiniciando: espera unos segundos y reintenta.`}
+                  </p>
+                  {falloDeCarga.sesion ? (
+                    <button className="btn btn-create" onClick={() => {
+                      localStorage.removeItem('visor_session_token');
+                      sessionStorage.removeItem('visor_session_token');
+                      window.location.reload();
+                    }}>Volver a entrar</button>
+                  ) : (
+                    <button className="btn btn-create" onClick={fetchData}>Reintentar</button>
+                  )}
+                </div>
+              ) :
               filtered.length === 0 ? (
                 isAdmin ? (
                   <div className="empty-state"><span className="empty-icon">🏗️</span><p>No hay proyectos. Haz clic en "+ Crear proyecto".</p></div>
