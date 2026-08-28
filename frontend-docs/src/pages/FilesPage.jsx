@@ -84,6 +84,7 @@ const MultimediaModule = lazy(() => import('../components/MultimediaModule'));
 const FotosModule = lazy(() => import('../components/FotosModule'));
 const CuadernoModule = lazy(() => import('../components/CuadernoModule'));
 const AvanceModule = lazy(() => import('../components/AvanceModule'));
+const MatrixGrid = lazy(() => import('../components/MatrixGrid'));
 const GatewayPanel = lazy(() => import('../components/panels/GatewayPanel'));
 const QuarantineTable = lazy(() => import('../components/panels/QuarantineTable'));
 const SharesManager = lazy(() => import('../components/SharesManager'));
@@ -265,6 +266,20 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
 
   // ── Atributos personalizados ──
   const [attributesItem, setAttributesItem] = React.useState(null); // archivo en edición
+  // VISTA DE LA CARPETA: lista (por defecto) o cuadricula, como ACC. La
+  // eleccion se RECUERDA: quien revisa planos vive en cuadricula y quien
+  // revisa metadatos vive en lista; preguntarselo en cada carpeta seria
+  // hacerle repetir una decision que ya tomo.
+  const [vistaCarpeta, setVistaCarpeta] = React.useState(() => {
+    try {
+      return localStorage.getItem('alephia_vista_carpeta') === 'cuadricula'
+        ? 'cuadricula' : 'lista';
+    } catch { return 'lista'; }
+  });
+  const cambiarVista = (v) => {
+    setVistaCarpeta(v);
+    try { localStorage.setItem('alephia_vista_carpeta', v); } catch { /* noop */ }
+  };
   // ── Conjuntos (Sets) ──
   const [setModalItems, setSetModalItems] = React.useState(null); // null = cerrado
 
@@ -883,6 +898,32 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                     <option value="PUBLISHED">Publicado</option>
                     <option value="ARCHIVED">Archivado</option>
                   </select>
+
+                )}
+
+                {/* LISTA o CUADRICULA (peticion del dueno, con ACC al lado).
+                    En una carpeta de 45 planos con nombres que difieren en un
+                    digito, la lista obliga a leer codigos; la cuadricula deja
+                    que el ojo reconozca el dibujo. */}
+                {!fe.isTrashMode && (
+                  <div className="acc-vista-switch" style={{ marginLeft: 'auto' }}>
+                    <button className={vistaCarpeta === 'cuadricula' ? 'activo' : ''}
+                      onClick={() => cambiarVista('cuadricula')} title="Ver en cuadrícula">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="3" y="3" width="8" height="8" rx="1.5"/>
+                        <rect x="13" y="3" width="8" height="8" rx="1.5"/>
+                        <rect x="3" y="13" width="8" height="8" rx="1.5"/>
+                        <rect x="13" y="13" width="8" height="8" rx="1.5"/>
+                      </svg>
+                    </button>
+                    <button className={vistaCarpeta === 'lista' ? 'activo' : ''}
+                      onClick={() => cambiarVista('lista')} title="Ver en lista">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        strokeWidth="2" strokeLinecap="round">
+                        <path d="M4 6h16M4 12h16M4 18h16"/>
+                      </svg>
+                    </button>
+                  </div>
                 )}
 
               </div>
@@ -966,6 +1007,13 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                     <DeletedTable items={fe.deletedItems} selectedIds={fe.selectedDeletedIds} onToggle={fe.setSelectedDeletedIds}
                       onRestore={(id) => { fe.setRestoringIds(prev => ({ ...prev, [id]: true })); setTimeout(async () => { try { const res = await apiFetch(`${API}/api/docs/restore`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ id, model_urn: projectPrefix, user: user.name }) }); if (!res.ok) { const errData = await res.json().catch(() => ({})); toast.error(errData.error || "No se pudo restaurar."); } } catch(e) { toast.error("Error de conexión al restaurar"); } fe.setDeletedItems(prev => prev.filter(it => it.id !== id)); fe.setSelectedDeletedIds(prev => prev.filter(x => x !== id)); fe.setRestoringIds(prev => { const c = {...prev}; delete c[id]; return c; }); fe.triggerRefresh(fe.currentPath); }, 1000); }}
                       getInitials={getInitials} restoringIds={fe.restoringIds} />
+                ) : vistaCarpeta === 'cuadricula' ? (
+                    <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#888', fontSize: 13 }}>Cargando…</div>}>
+                      <MatrixGrid folders={fe.filteredFolders} files={fe.filteredFiles}
+                        selected={fe.selected} toggle={fe.toggle} navigate={fe.navigate}
+                        setActiveFile={fe.setActiveFile} isAdmin={isAdmin}
+                        onRowMenu={(item, e) => { fe.setRightClickedId(item.id); fe.setActiveRowMenu({ item, x: e.clientX, y: e.clientY, source: 'table' }); }} />
+                    </Suspense>
                 ) : (
                     <MatrixTable folders={fe.filteredFolders} files={fe.filteredFiles} selected={fe.selected}
                       columnWidths={columnWidths} totalTableWidth={totalTableWidth} toggle={fe.toggle} navigate={fe.navigate}

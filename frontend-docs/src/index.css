@@ -4029,3 +4029,107 @@ th {
 @keyframes spin-acc {
   to { transform: rotate(360deg); }
 }
+/* ── VISTA DE CARPETA: interruptor y cuadrícula ─────────────────────────
+   Pedido del propietario con ACC al lado: una carpeta de planos se
+   reconoce por el dibujo, no por un código que difiere en un dígito. */
+
+.acc-vista-switch { display: flex; gap: 2px; }
+
+.acc-vista-switch button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 30px;
+  border: 1px solid var(--border, #dcdcdc); background: #fff;
+  color: var(--text-secondary, #6b7480);
+  cursor: pointer;
+}
+
+.acc-vista-switch button:first-child { border-radius: 5px 0 0 5px; }
+.acc-vista-switch button:last-child { border-radius: 0 5px 5px 0; border-left: none; }
+.acc-vista-switch button:hover { background: #f4f6f8; }
+.acc-vista-switch button.activo {
+  background: var(--bg-accent, #eaf1f7);
+  border-color: var(--accent, #3e6f91);
+  color: var(--accent, #3e6f91);
+}
+
+.rejilla {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  padding: 18px;
+  background: #fff;
+  align-content: start;
+}
+
+.rejilla-tarjeta {
+  position: relative;
+  display: flex; flex-direction: column;
+  border: 1px solid var(--border, #e3e6ea); border-radius: 8px;
+  overflow: hidden; background: #fff; cursor: pointer;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.rejilla-tarjeta:hover {
+  border-color: var(--accent, #3e6f91);
+  box-shadow: 0 3px 12px rgba(20, 30, 42, 0.10);
+}
+
+.rejilla-tarjeta.esta-marcada { border-color: var(--accent, #3e6f91); }
+.rejilla-tarjeta.es-carpeta { cursor: default; }
+
+.rejilla-lienzo {
+  height: 150px;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; background: #f6f8fa;
+  border-bottom: 1px solid var(--border-soft, #eef1f4);
+}
+
+.rejilla-lienzo img { max-width: 100%; max-height: 100%; display: block; }
+.rejilla-sin-vista { display: flex; align-items: center; justify-content: center; }
+
+.rejilla-punto {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid #c8d2dc; border-top-color: var(--accent, #3e6f91);
+  animation: spin 0.9s linear infinite;
+}
+
+.rejilla-pie { padding: 9px 11px 11px; }
+
+.rejilla-nombre {
+  font-size: 12.5px; font-weight: 600; color: var(--text-primary, #22303c);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.rejilla-meta { display: flex; align-items: center; gap: 8px; margin-top: 5px; min-width: 0; }
+
+.rejilla-version {
+  flex-shrink: 0; padding: 1px 7px;
+  border: 1px solid #cfdae4; border-radius: 10px;
+  background: #eef3f8; color: #2c4d67;
+  font-size: 10.5px; font-weight: 700;
+}
+
+.rejilla-desc {
+  font-size: 11px; color: var(--text-secondary, #7b8794);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.rejilla-marca { position: absolute; top: 8px; left: 8px; z-index: 2; }
+
+.rejilla-menu {
+  position: absolute; top: 6px; right: 6px; z-index: 2;
+  width: 24px; height: 24px;
+  border: none; border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9); color: #5b6875;
+  cursor: pointer; font-size: 15px; line-height: 1;
+  opacity: 0; transition: opacity 0.14s ease;
+}
+
+.rejilla-tarjeta:hover .rejilla-menu { opacity: 1; }
+.rejilla-menu:hover { background: #eef1f4; }
+
+.rejilla-vacia {
+  grid-column: 1 / -1;
+  padding: 50px; text-align: center;
+  color: var(--text-secondary, #8a95a1); font-size: 13px;
+}

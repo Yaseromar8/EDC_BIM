@@ -661,6 +661,13 @@ const MatrixTable = ({
                 itemCount={allItems.length}
                 itemSize={48}
                 width={totalTableWidth}
+                // DOS BARRAS HORIZONTALES ABAJO (lo enseno el dueno en
+                // captura). react-window pone overflow:auto en su scroller y
+                // le da el ancho EXACTO de la tabla; en cuanto aparece la
+                // barra vertical, esta roba ~15 px y el contenido "sobra"
+                // por el lado -- naciendo una segunda barra horizontal
+                // encima de la que ya tiene .table-wrap, que es la buena.
+                style={{ overflowX: 'hidden' }}
                 itemData={{
                   items: allItems,
                   selected,
