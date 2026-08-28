@@ -326,6 +326,22 @@ def complete_upload():
         except Exception as _e:
             print(f"[uploads] no se pudo lanzar el sellado de integridad: {_e}")
 
+        # ── Pre-TRADUCIR los CAD, en segundo plano ────────────────────────────
+        # Como hace ACC: la traduccion a formato de visor arranca AL SUBIR, no
+        # al primer clic, y al abrir el modelo ya esta listo (o en curso con su
+        # porcentaje). Esta es LA ruta de los planos grandes (el modal de Docs
+        # sube por aqui, trozo a trozo directo a GCS); upload-confirm cubre la
+        # hermana de Multimedia. Decision de coste del dueno (28-ago-2026):
+        # todo CAD subido consume creditos de Model Derivative aunque nadie lo
+        # abra jamas.
+        try:
+            import threading as _th
+            from routes.docs_cad import is_cad_file, pretraducir_en_fondo
+            if is_cad_file(filename):
+                _th.Thread(target=pretraducir_en_fondo, args=(str(node_id),), daemon=True).start()
+        except Exception as _e:
+            print(f"[uploads] no se pudo lanzar la pre-traduccion CAD: {_e}")
+
         # Mark session as completed
         with get_db_connection() as conn:
             cursor = conn.cursor()

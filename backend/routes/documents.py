@@ -1589,6 +1589,18 @@ def confirm_upload():
         except Exception as te:
             print(f"[upload-confirm] thumb bg: {te}")
 
+        # Pre-TRADUCIR los CAD en segundo plano, como hace ACC: la traduccion
+        # a formato de visor arranca AL SUBIR, no al primer clic, y al abrir
+        # el modelo ya esta listo (o en curso con su porcentaje). Decision de
+        # coste del dueno (28-ago-2026): todo CAD subido consume creditos de
+        # Model Derivative aunque nadie lo abra jamas.
+        try:
+            from routes.docs_cad import is_cad_file, pretraducir_en_fondo
+            if is_cad_file(filename):
+                threading.Thread(target=pretraducir_en_fondo, args=(str(file_id),), daemon=True).start()
+        except Exception as te:
+            print(f"[upload-confirm] cad bg: {te}")
+
         return jsonify({
             "success": True,
             "message": "File record created",

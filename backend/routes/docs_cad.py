@@ -7,10 +7,15 @@ segundo plano y luego lo muestra con este mismo visor.
 
 Asi que el camino es: GCS -> bucket OSS de APS -> traduccion -> URN -> visor.
 
-La traduccion se lanza BAJO DEMANDA, al pulsar "Ver", no al subir: solo se
-gastan creditos en los archivos que alguien abre de verdad. El resultado queda
-guardado en file_versions.metadata (columna JSONB que ya existia), de modo que
-la segunda apertura es inmediata y no hizo falta ninguna migracion de esquema.
+La traduccion arranca AL SUBIR (pretraducir_en_fondo, hilo desde
+upload-confirm), como hace ACC: cuando alguien pulsa "Ver", el modelo ya esta
+listo o en curso. Fue al reves hasta el 28-ago-2026 ("bajo demanda, solo se
+gastan creditos en lo que alguien abre"): el dueno decidio pagar la traduccion
+de todo CAD subido a cambio de aperturas sin espera. El endpoint /translate
+sigue existiendo como red de seguridad para lo subido antes o si el hilo
+muere. El resultado queda guardado en file_versions.metadata (columna JSONB
+que ya existia), de modo que las aperturas siguientes son inmediatas y no
+hizo falta ninguna migracion de esquema.
 
 Se guarda POR VERSION a proposito: una version nueva del DWG es otro archivo y
 hay que volver a traducirla.
@@ -424,6 +429,110 @@ def _build_package(node):
         except Exception:
             pass
         return None, 0, None, 'No se pudo armar el paquete: %s' % e
+
+
+def pretraducir_en_fondo(node_id):
+    """Traduce un CAD recien subido sin que nadie espere: el camino de ACC.
+
+    Mismo flujo idempotente que el endpoint /translate pero fuera de una
+    peticion HTTP: upload-confirm lo lanza en un hilo, y cuando alguien pulse
+    "Ver" el modelo ya esta listo (o en curso, con su porcentaje).
+
+    Es best-effort a conciencia: cualquier tropiezo se imprime y se abandona,
+    porque la apertura manual conserva su camino de siempre. Y refleja rama a
+    rama el endpoint — incluido que el fichero suelto recien subido va SIN
+    root_filename (pasarlo hizo que Autodesk tratara un RVT como un ZIP).
+    """
+    try:
+        node = _load_node(node_id)
+        if not node or not is_cad_file(node['name']) or not node['gcs_urn']:
+            return
+        token, error = get_internal_token()
+        if error or not token:
+            print('[CAD pre] sin credenciales APS: %s' % error)
+            return
+        bucket, error = _ensure_bucket(token)
+        if error:
+            print('[CAD pre] bucket: %s' % error)
+            return
+        urn = _urn_for(node, bucket)
+
+        manifest, _err = _manifest(token, urn)
+        if manifest and manifest.get('status') in ('success', 'inprogress', 'pending'):
+            _save_cad_meta(node, {'urn': urn, 'status': 'success' if manifest.get('status') == 'success' else 'inprogress'})
+            return
+
+        object_key = _object_key_for(node)
+        ya_subido = False
+        try:
+            det = requests.get(
+                '%s/oss/v2/buckets/%s/objects/%s/details' % (APS_BASE, bucket, object_key),
+                headers=_headers(token), timeout=30)
+            ya_subido = det.ok and (det.json().get('size') or 0) > 0
+        except Exception:
+            ya_subido = False
+
+        if ya_subido and not node.get('refs'):
+            ok, error = _start_translation(token, urn, force=False,
+                                           root_filename=node.get('name'),
+                                           master_views=False)
+            if error:
+                print('[CAD pre] traduccion: %s' % error)
+                return
+            _save_cad_meta(node, {'urn': urn, 'status': 'inprogress'})
+            print('[CAD pre] %s: ya estaba en Autodesk, traduccion lanzada' % node['name'])
+            return
+
+        raiz = None
+        if node.get('refs'):
+            paquete, tam, raiz, error = _build_package(node)
+            if error:
+                print('[CAD pre] paquete: %s' % error)
+                return
+            object_id, error = _upload_to_oss(token, bucket, object_key, paquete, size=tam)
+            try:
+                paquete.close()
+            except Exception:
+                pass
+            if error:
+                print('[CAD pre] subida: %s' % error)
+                return
+        else:
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.cad')
+            try:
+                from gcs_manager import descargar_a_fichero
+                tam = descargar_a_fichero(node['gcs_urn'], tmp)
+                if not tam:
+                    print('[CAD pre] %s vacio en GCS' % node['name'])
+                    return
+                tmp.seek(0)
+                object_id, error = _upload_to_oss(token, bucket, object_key, tmp, size=tam)
+            except Exception as e:
+                print('[CAD pre] GCS: %s' % e)
+                return
+            finally:
+                try:
+                    tmp.close()
+                    os.unlink(tmp.name)
+                except Exception:
+                    pass
+            if error:
+                print('[CAD pre] subida: %s' % error)
+                return
+
+        urn = _urn_of(object_id)
+        _save_cad_meta(node, {'urn': urn, 'status': 'inprogress',
+                              'started_at': time.time(), 'object_key': object_key,
+                              'refs': [r['name'] for r in node.get('refs') or []], 'error': None})
+        _job, error = _start_translation(token, urn, force=False, root_filename=raiz,
+                                         master_views=False)
+        if error:
+            _save_cad_meta(node, {'status': 'failed', 'error': error})
+            print('[CAD pre] traduccion: %s' % error)
+            return
+        print('[CAD pre] %s: subido y traduciendose' % node['name'])
+    except Exception as e:
+        print('[CAD pre] %s' % e)
 
 
 @docs_cad_bp.route('/api/docs/cad/translate', methods=['POST'])
