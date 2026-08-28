@@ -288,6 +288,15 @@ def _referencias_validas(cur, obra, tipo, referencias):
                     (int(r['asiento_id']), obra))
         if not cur.fetchone():
             return 'ese asiento no existe en esta obra', 'ASIENTO_NO_EXISTE'
+    if r.get('avance_id'):
+        # NG-04 (propuesta 4 aprobada): el asiento CITA al avance; la
+        # CANTIDAD vive unicamente en avance_campo. La cita es opcional en
+        # los asientos de tipo avance (la narrativa sola es legitima), pero
+        # si viene, apunta a un avance DE ESTA obra.
+        cur.execute('SELECT 1 FROM avance_campo WHERE id::text = %s '
+                    '   AND model_urn = %s', (str(r['avance_id']), obra))
+        if not cur.fetchone():
+            return 'ese avance no existe en esta obra', 'AVANCE_NO_EXISTE'
     if r.get('issue_id'):
         cur.execute('SELECT 1 FROM doc_issues WHERE id = %s AND project_id = %s',
                     (int(r['issue_id']), obra))

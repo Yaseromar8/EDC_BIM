@@ -371,7 +371,12 @@ def test_la_lista_cerrada_del_motor_crecio_JUNTO_a_la_base():
     sql = _sql25()
     m = re.search(r"ck_sync_objeto\s*\n?\s*CHECK \(object_type IN \(([^)]+)\)\)", sql)
     assert m
-    assert {x.strip().strip("'") for x in m.group(1).split(',')} == set(sync.OBJETOS)
+    # La 25 congeló los CINCO de su época (verdad histórica: no se reescribe);
+    # el casamiento con el motor ACTUAL lo vigila test_ng02 sobre la migración
+    # más nueva con ck_sync_objeto (la 26 añadió AVANCE).
+    de_entonces = {x.strip().strip("'") for x in m.group(1).split(',')}
+    assert de_entonces == {'PROTOCOLO', 'ISSUE', 'FOTO', 'PARTE', 'ASIENTO'}
+    assert de_entonces <= set(sync.OBJETOS)
 
 
 # ══ 7 · BIC ════════════════════════════════════════════════════════════════

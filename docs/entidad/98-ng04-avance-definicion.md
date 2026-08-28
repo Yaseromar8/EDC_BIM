@@ -4,6 +4,42 @@
 sin DDL, sin migración, sin despliegue. · **Bucle a cerrar:** PLAN/4D →
 ejecución → evidencia → validación → estado reconocido → 4D actualizado.
 
+---
+
+## ✅ ARQ DEFINITION = CLOSED (28-ago-2026) — aprobada con 3 correcciones
+
+Las cuatro propuestas de §N quedaron **aprobadas** (validar=aprobar · canal
+manual LOB=escenario · `actual_finish` solo explícito · asiento NG-03 cita
+avance). El dueño ordenó incorporar, antes de implementar:
+
+> **1 · Snapshot de autoridad del objetivo.** Todo avance aprobado conserva
+> la base contra la que fue reconocido: `fuente_objetivo · id_objetivo ·
+> unidad · cantidad_objetivo_al_aprobar · versión/revisión/huella de la
+> fuente`. El histórico no puede cambiar semánticamente porque después
+> cambie el metrado. Se distingue **porcentaje histórico al aprobar** vs
+> **porcentaje actual contra el plan vigente**, sin duplicar
+> innecesariamente datos derivados.
+>
+> **2 · BIC contractual concreto.** No usar `SUPERVISION` como destinatario
+> desnudo: resolver a **empresa concreta en la obra o persona concreta
+> designada**, y snapshotear su función. `0 candidatos →
+> SIN_APROBADOR_CONTRACTUAL · 1 candidato → asignar · >1 candidatos →
+> APROBADOR_CONTRACTUAL_AMBIGUO`. ENTIDAD de contingencia sigue la misma
+> regla.
+>
+> **3 · Ajustes.** No mezclar `cantidad > 0` con un delta a veces positivo y
+> a veces negativo. Tipos congelados: `AVANCE · AJUSTE_POSITIVO ·
+> AJUSTE_NEGATIVO`, con **magnitud siempre positiva**. Para solape/exceso:
+> detectar ≠ prohibir, detectar ≠ aceptar silenciosamente — si se aprueba
+> existiendo conflicto, quedan trazables **aprobación explícita + motivo +
+> actor + timestamp**. Y explícito: `actual_start` = primera ejecución
+> aprobada aplicable; `actual_finish` = únicamente declaración explícita de
+> terminación.
+
+Con ellas: **ARQ DEFINITION = CLOSED**. Pasada 2 autónoma; el **PRIVILEGE
+SWEEP** se ejecuta como gate y viaja EN la migración 26 (no se pospone más
+allá de la siguiente migración a producción — orden del dueño).
+
 **Lo que ya existe, medido (y se reutiliza, no se duplica):**
 
 | pieza | qué aporta |

@@ -804,6 +804,144 @@ def _asiento_create(cur, obra, op):
     return sync.aplicada(aid, {'numero': numero, 'tipo': tipo, 'estado': estado})
 
 
+def _avance_create(cur, obra, op):
+    """Reporta un avance capturado en campo. LA MISMA SEMANTICA que la ruta
+    en linea (`avance_fisico`): magnitud positiva con el signo en el TIPO,
+    destino fisico obligatorio, unidad casada con la partida, fotos citadas
+    de ESTA obra (canonicas o locales resueltas), y BIC contractual CONCRETO
+    (correccion 2). Aprobar y devolver: SOLO EN LINEA.
+    """
+    import avance_fisico as af
+    import directorio_de_obra as dirobra
+    from datetime import date as _date
+    p = op.get('payload') or {}
+
+    tipo = (p.get('tipo') or 'AVANCE').strip()
+    if tipo not in af.TIPOS_DE_AVANCE:
+        return sync.rechazada('tipo de avance desconocido', 'TIPO_DESCONOCIDO')
+    try:
+        cantidad = float(p.get('cantidad') or 0)
+    except (TypeError, ValueError):
+        cantidad = 0
+    if cantidad <= 0:
+        return sync.rechazada('la cantidad es una magnitud positiva; la '
+                              'direccion la pone el tipo de ajuste',
+                              'CANTIDAD_NO_POSITIVA')
+    if not (p.get('activity_id') or p.get('cost_item_codigo')
+            or p.get('elemento_link_id')):
+        return sync.rechazada('un avance sin destino fisico no es un avance',
+                              'SIN_DESTINO_FISICO')
+    fecha_op, codigo_fecha = af.fecha_operativa_valida(
+        p.get('fecha_operativa'), _date.today())
+    if codigo_fecha:
+        return sync.rechazada('la fecha operativa declarada no es valida',
+                              codigo_fecha)
+
+    from routes.avance import (_dataset_activo, _objetivo_de, _aprobados_de,
+                               _candidatos_aprobadores)
+    dataset_id, _h = _dataset_activo(cur, obra)
+    dataset_id = p.get('dataset_id') or dataset_id
+    # revalidacion contra el dataset VIGENTE: el reporte no se reinterpreta
+    objetivo, unidad_plan, _oid = _objetivo_de(
+        cur, dataset_id, p.get('activity_id'), p.get('cost_item_codigo'))
+    unidad = (p.get('unidad') or '').strip()
+    if unidad_plan and unidad and unidad.lower() != str(unidad_plan).lower():
+        return sync.rechazada('la partida mide en %s y el reporte viene en %s'
+                              % (unidad_plan, unidad), 'UNIDAD_NO_CASA')
+    unidad = unidad or unidad_plan
+    if not unidad:
+        return sync.rechazada('falta la unidad de la cantidad', 'SIN_UNIDAD')
+
+    if tipo != 'AVANCE':
+        return sync.rechazada('los ajustes se registran en linea, con el '
+                              'aprobado a la vista', 'AJUSTE_SOLO_EN_LINEA')
+
+    # fotos: canonicas + locales del propio lote (depende_de ya garantizo orden)
+    fotos = [int(x) for x in (p.get('fotos') or []) if str(x).isdigit()]
+    for local in (p.get('fotos_locales') or []):
+        canonico = sync.resolver_objeto(cur, obra, local)
+        if not canonico:
+            return sync.bloqueada('una foto de este avance todavia no existe '
+                                  'en el servidor', 'OBJETO_LOCAL_SIN_RESOLVER')
+        fotos.append(int(canonico))
+    if fotos:
+        cur.execute("""SELECT id FROM doc_fotos
+                        WHERE project_id = %s AND id = ANY(%s)""",
+                    (obra, fotos))
+        elegibles = {r[0] for r in cur.fetchall()}
+        if set(fotos) - elegibles:
+            return sync.rechazada('hay fotos que no pertenecen a esta obra',
+                                  'FOTO_AJENA')
+
+    uid = _usuario().get('id')
+    funcion = dirobra.funcion_de(cur, obra, uid)
+    cur.execute('SELECT company_id FROM users WHERE id = %s', (uid,))
+    f = cur.fetchone()
+    empresa_id = f[0] if f else None
+
+    aprobados = _aprobados_de(cur, obra, p.get('activity_id'),
+                              p.get('cost_item_codigo'))
+    nuevo = {'tipo': tipo, 'cantidad': cantidad,
+             'progresiva_inicio': p.get('progresiva_inicio'),
+             'progresiva_fin': p.get('progresiva_fin'),
+             'fecha_operativa': p.get('fecha_operativa')}
+    conflictos = af.detectar_conflictos(nuevo, aprobados, objetivo)
+
+    for intento in range(5):
+        cur.execute('SAVEPOINT alta_avance_sync')
+        try:
+            cur.execute("""SELECT COALESCE(MAX(numero), 0) + 1
+                             FROM avance_campo WHERE model_urn = %s""", (obra,))
+            numero = cur.fetchone()[0]
+            cur.execute("""INSERT INTO avance_campo
+                    (model_urn, numero, dataset_id, activity_id,
+                     cost_item_codigo, elemento_link_id, frente_label,
+                     progresiva_inicio, progresiva_fin, tipo, cantidad,
+                     unidad, termina_actividad, descripcion, estado,
+                     fecha_operativa, capturado_en, origen, autor_id,
+                     autor_empresa_id, autor_funcion, conflictos_detectados,
+                     created_by)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                        'REPORTADO',%s,%s,'offline',%s,%s,%s,%s,%s)
+                RETURNING id""",
+                (obra, numero, dataset_id, p.get('activity_id'),
+                 p.get('cost_item_codigo'), p.get('elemento_link_id'),
+                 p.get('frente_label'), p.get('progresiva_inicio'),
+                 p.get('progresiva_fin'), tipo, cantidad, unidad,
+                 bool(p.get('termina_actividad')), p.get('descripcion'),
+                 fecha_op, op.get('capturado_en'), uid, empresa_id, funcion,
+                 json.dumps(conflictos), _actor()))
+            aid = cur.fetchone()[0]
+            cur.execute('RELEASE SAVEPOINT alta_avance_sync')
+            break
+        except Exception:
+            cur.execute('ROLLBACK TO SAVEPOINT alta_avance_sync')
+            if intento == 4:
+                raise
+    for foto in fotos:
+        cur.execute("""INSERT INTO avance_fotos (avance_id, foto_id)
+                        VALUES (%s, %s) ON CONFLICT DO NOTHING""", (aid, foto))
+
+    destino, codigo = _candidatos_aprobadores(cur, obra)
+    if destino:
+        try:
+            eid = _enc.abrir(cur, 'AVANCE', str(aid),
+                             'Aprobar o devolver el avance N.º %s (%s %s)'
+                             % (numero, cantidad, unidad),
+                             destino_usuario=destino.get('user_id'),
+                             destino_empresa=(destino.get('company_id')
+                                              if destino['tipo'] == 'empresa'
+                                              else None),
+                             creado_por=_actor())
+            if eid:
+                _enc.avisar(cur, eid)
+        except Exception as e:
+            logger.warning('[sync avance %s] sin encargo: %s', aid, str(e)[:120])
+    return sync.aplicada(str(aid), {'numero': numero,
+                                    'conflictos_detectados': conflictos,
+                                    'bloqueo_de_aprobacion': codigo})
+
+
 DESPACHO = {
     (sync.ISSUE, sync.CREATE): _issue_create,
     (sync.ISSUE, sync.MARK_CORRECTED): _issue_mark_corrected,
@@ -813,6 +951,7 @@ DESPACHO = {
     (sync.FOTO, sync.CREATE): _foto_create,
     (sync.PARTE, sync.CREATE): _parte_create,
     (sync.ASIENTO, sync.CREATE): _asiento_create,
+    (sync.AVANCE, sync.CREATE): _avance_create,
 }
 
 

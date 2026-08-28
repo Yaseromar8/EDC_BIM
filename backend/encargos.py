@@ -48,7 +48,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 TIPOS = ('REVIEW', 'RFI', 'REDLINE', 'TRANSMITTAL', 'SUBMITTAL', 'PROTOCOLO',
-         'ISSUE', 'PARTE', 'ASIENTO', 'INSTRUCCION')
+         'ISSUE', 'PARTE', 'ASIENTO', 'INSTRUCCION', 'AVANCE')
 
 # De donde sale cada objeto: (tabla, columna de alcance). El id se compara
 # siempre en texto, porque unos son SERIAL y otros UUID.
@@ -63,6 +63,7 @@ _ORIGEN = {
     'PARTE':       ('doc_partes', 'project_id'),
     'ASIENTO':     ('doc_asientos', 'project_id'),
     'INSTRUCCION': ('doc_instrucciones', 'project_id'),
+    'AVANCE':      ('avance_campo', 'model_urn'),
 }
 
 _TABLA = """
@@ -95,7 +96,7 @@ _CLAVES = (
 _CHECKS = (
     ('ck_encargos_tipo',
      "CHECK (objeto_tipo IN ('REVIEW','RFI','REDLINE','TRANSMITTAL','SUBMITTAL',"
-     "'PROTOCOLO','ISSUE','PARTE','ASIENTO','INSTRUCCION'))"),
+     "'PROTOCOLO','ISSUE','PARTE','ASIENTO','INSTRUCCION','AVANCE'))"),
     ('ck_encargos_estado',
      "CHECK (estado IN ('abierto','cerrado'))"),
     # Un encargo sin destinatario no es un encargo. La tercera forma de destino
@@ -663,6 +664,30 @@ _SQL_ASIENTOS_VIVOS = """
 """
 
 
+def deudor_de_avance(cur, fila):
+    """A QUIEN le toca un avance AHORA. (uid, empresa_id, asunto).
+
+    EL PRIMER DEUDOR SIN FORMA DE FUNCION (correccion 2 del propietario,
+    doc 98): el destino de un REPORTADO se resuelve a PERSONA o EMPRESA
+    concreta al abrirlo la ruta (resolver_aprobador_contractual); aqui solo
+    se reconstruye la deuda con identidad del DEVUELTO -- corregirlo es de
+    su autor. La deuda del REPORTADO se VIGILA: si la obra se quedo sin
+    aprobador o con varios ambiguos, eso es un bloqueo visible con codigo,
+    jamas una asignacion inventada.
+    """
+    aid, numero, estado, autor_id = fila
+    if (estado or '') == 'DEVUELTO' and autor_id:
+        return (autor_id, None,
+                'Corregir y re-reportar el avance N.º %s' % numero)
+    return None, None, ''
+
+
+_SQL_AVANCES_VIVOS = """
+    SELECT id, numero, estado, autor_id, model_urn
+      FROM avance_campo WHERE estado IN ('REPORTADO','DEVUELTO')
+"""
+
+
 def deudor_de_instruccion(cur, fila):
     """A QUIEN le toca una instruccion AHORA. (uid, empresa_id, asunto).
 
@@ -874,6 +899,21 @@ def _sigue_debiendose(cur, tipo, objeto_id, destino_usuario):
             # deudas por funcion.
             return True
         return uid == destino_usuario
+
+    if tipo == 'AVANCE':
+        cur.execute("""SELECT id, numero, estado, autor_id
+                         FROM avance_campo WHERE id::text = %s""", (str(objeto_id),))
+        fila = cur.fetchone()
+        if not fila:
+            return None
+        if (fila[2] or '') == 'REPORTADO':
+            # La deuda del REPORTADO vive mientras nadie apruebe o devuelva,
+            # sea el destino persona o empresa: granularidad del estado.
+            return True
+        uid, _emp, _a = deudor_de_avance(cur, fila)
+        if uid is None:
+            return False
+        return destino_usuario is None or uid == destino_usuario
 
     if tipo == 'INSTRUCCION':
         cur.execute("""SELECT id, codigo, asunto, estado, emisor_id, destinatario
@@ -1164,6 +1204,51 @@ def _faltantes(cur):
                         "   AND destino_usuario=%s AND estado='abierto'", (str(fila[0]), uid))
             if not cur.fetchone():
                 faltan.append(('ASIENTO', str(fila[0]), uid, asunto, None))
+    except Exception:
+        cur.connection.rollback()
+
+    # Avances vivos (NG-04). El DEVUELTO se reconstruye (deuda con identidad
+    # del autor); el REPORTADO se VIGILA con la regla de la correccion 2:
+    # cero candidatos -> SIN_APROBADOR_CONTRACTUAL; varias empresas ->
+    # APROBADOR_CONTRACTUAL_AMBIGUO. Ninguno de los dos se asigna a nadie.
+    try:
+        import avance_fisico as _af
+        cur.execute(_SQL_AVANCES_VIVOS)
+        for fila in cur.fetchall():
+            obra = fila[4]
+            if (fila[2] or '') == 'REPORTADO':
+                cur.execute("""SELECT u.id, pc.company_id, pc.funcion
+                                 FROM project_companies pc
+                                 JOIN users u ON u.company_id = pc.company_id
+                                 JOIN project_users pu
+                                   ON pu.project_id = pc.project_id AND pu.user_id = u.id
+                                WHERE pc.project_id = %s AND pc.funcion = ANY(%s)
+                                  AND u.is_active""",
+                            (str(obra), list(_af.FUNCIONES_VALIDADORAS_DE_AVANCE)))
+                candidatos = cur.fetchall()
+                sup = [{'user_id': c[0], 'company_id': c[1], 'funcion': c[2]}
+                       for c in candidatos if c[2] == 'SUPERVISION']
+                ent = [{'user_id': c[0], 'company_id': c[1], 'funcion': c[2]}
+                       for c in candidatos if c[2] == 'ENTIDAD']
+                _destino, codigo = _af.resolver_aprobador_contractual(sup, ent)
+                if codigo:
+                    bloqueadas.append(('AVANCE', str(fila[0]), 'N.º %s' % fila[1],
+                                       '%s: la aprobacion del avance no tiene '
+                                       'sujeto contractual resoluble' % codigo))
+                continue
+            uid, _emp, asunto = deudor_de_avance(cur, fila[:4])
+            if not uid:
+                continue
+            cur.execute('SELECT 1 FROM project_users WHERE project_id = %s AND user_id = %s',
+                        (str(obra), uid))
+            if not cur.fetchone():
+                bloqueadas.append(('AVANCE', str(fila[0]), 'N.º %s' % fila[1],
+                                   'su autor ya no pertenece a la obra'))
+                continue
+            cur.execute("SELECT 1 FROM encargos WHERE objeto_tipo='AVANCE' AND objeto_id=%s "
+                        "   AND destino_usuario=%s AND estado='abierto'", (str(fila[0]), uid))
+            if not cur.fetchone():
+                faltan.append(('AVANCE', str(fila[0]), uid, asunto, None))
     except Exception:
         cur.connection.rollback()
 

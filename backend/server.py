@@ -930,6 +930,8 @@ app.register_blueprint(fotos_bp)
 # NG-03 · cuaderno de obra: parte diario, asientos e instrucciones (doc 96)
 from routes.cuaderno import cuaderno_bp
 app.register_blueprint(cuaderno_bp)
+from routes.avance import avance_bp
+app.register_blueprint(avance_bp)
 app.register_blueprint(plan_bp)
 from routes.attributes import attributes_bp, ensure_attributes_tables
 app.register_blueprint(attributes_bp)

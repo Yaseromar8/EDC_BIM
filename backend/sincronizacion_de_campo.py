@@ -96,7 +96,12 @@ FOTO = 'FOTO'
 # (doc 96 §H), la misma que dejo la firma de actas fuera.
 PARTE = 'PARTE'
 ASIENTO = 'ASIENTO'
-OBJETOS = (PROTOCOLO, ISSUE, FOTO, PARTE, ASIENTO)
+# NG-04: el reporte de avance fisico es un acto de campo (caso A, PostgreSQL).
+# Aprobar y devolver NO entran: SOLO EN LINEA por decision semantica (doc 98
+# SS J) -- la misma que dejo fuera la firma de actas y la aprobacion de
+# asientos.
+AVANCE = 'AVANCE'
+OBJETOS = (PROTOCOLO, ISSUE, FOTO, PARTE, ASIENTO, AVANCE)
 
 # ── LOS ACTOS. Lista CERRADA ───────────────────────────────────────────────
 CREATE = 'CREATE'
@@ -111,6 +116,7 @@ ACTOS_DE = {
     FOTO: (CREATE,),
     PARTE: (CREATE,),
     ASIENTO: (CREATE,),
+    AVANCE: (CREATE,),
 }
 ACCIONES = tuple(sorted({a for v in ACTOS_DE.values() for a in v}))
 

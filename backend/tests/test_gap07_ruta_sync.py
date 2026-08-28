@@ -277,7 +277,8 @@ def test_lo_que_TODAVIA_no_se_sincroniza_lo_dice_en_vez_de_fallar_raro():
                                 (s.ISSUE, s.ADD_EVIDENCE),
                                 (s.PROTOCOLO, s.CREATE), (s.PROTOCOLO, s.SET_ITEMS),
                                 (s.FOTO, s.CREATE),                    # NG-02
-                                (s.PARTE, s.CREATE), (s.ASIENTO, s.CREATE)}  # NG-03
+                                (s.PARTE, s.CREATE), (s.ASIENTO, s.CREATE),  # NG-03
+                                    (s.AVANCE, s.CREATE)}                  # NG-04
     # Firmar se hace CON conexion, a proposito, y se dice. Y aprobar, cerrar la
     # jornada y emitir instrucciones igual (doc 96 §H): CREATE es lo unico que
     # el cuaderno sincroniza.

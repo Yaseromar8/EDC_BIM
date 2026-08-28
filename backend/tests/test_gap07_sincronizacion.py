@@ -316,13 +316,14 @@ def test_la_primera_vertical_son_DOS_dominios_y_es_una_lista_cerrada():
     import sincronizacion_de_campo as sync
     # NG-02: tercera vertical (FOTO). NG-03: cuarta y quinta (PARTE, ASIENTO) --
     # solo CREATE: aprobar, cerrar y emitir exigen conexion (doc 96 §H).
-    assert sync.OBJETOS == ('PROTOCOLO', 'ISSUE', 'FOTO', 'PARTE', 'ASIENTO')
+    assert sync.OBJETOS == ('PROTOCOLO', 'ISSUE', 'FOTO', 'PARTE', 'ASIENTO', 'AVANCE')
     assert sync.ACTOS_DE['ISSUE'] == ('CREATE', 'ADD_EVIDENCE', 'MARK_CORRECTED')
     assert sync.ACTOS_DE['PROTOCOLO'] == ('CREATE', 'SET_ITEMS', 'SIGN')
     assert sync.ACTOS_DE['PARTE'] == ('CREATE',)
     assert sync.ACTOS_DE['ASIENTO'] == ('CREATE',)
     sql = _sql()
-    assert "object_type IN ('PROTOCOLO','ISSUE','FOTO','PARTE','ASIENTO')" in sql
+    assert ("object_type IN ('PROTOCOLO','ISSUE','FOTO','PARTE','ASIENTO',"
+            "'AVANCE')") in sql
 
 
 # ══ 7 · LA MIGRACION ES EXPAND ═════════════════════════════════════════════
