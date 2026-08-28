@@ -12,9 +12,28 @@ Es seguro repetirlo: lo que ya tiene miniatura se salta en una consulta.
 """
 import io
 import os
+import pathlib
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# EL .env DE LA RAÍZ, como hace server.py. Sin esto el script arrancaba y
+# moría en la primera miniatura con «default credentials were not found»:
+# las claves de Google Cloud (y el nombre del bucket) viven ahí, no en el
+# fichero de la base. Es exactamente lo que le pasó al dueño al ejecutarlo.
+try:
+    from dotenv import load_dotenv
+    _raiz = pathlib.Path(__file__).resolve().parent.parent.parent
+    if not load_dotenv():
+        load_dotenv(_raiz / '.env')
+        load_dotenv(_raiz / 'backend' / '.env')
+except Exception as _e:
+    print('aviso: no se pudo cargar el .env (%s)' % str(_e)[:80])
+
+if not os.environ.get('GCS_BUCKET_NAME'):
+    print('FALTA GCS_BUCKET_NAME: sin eso no se puede leer ni escribir en el '
+          'almacén. Revisa el .env de la raíz del proyecto.')
+    sys.exit(1)
 
 pwd = io.open('D:/copias-ecd/clave-migrator.txt', encoding='utf-8').read().strip()
 os.environ.setdefault('DB_HOST', '34.86.206.187')
