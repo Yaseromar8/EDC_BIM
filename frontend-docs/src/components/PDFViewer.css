@@ -503,3 +503,20 @@
 
 /* Con la tira abierta, el mando sube para no quedar tapado. */
 .pdf-stage:has(.pdf-tira) .pdf-dock { bottom: 142px; }
+
+
+.pdf-tira-preparar {
+  padding: 3px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 5px;
+  background: transparent; color: #c6d0d9;
+  font: inherit; font-size: 11px; cursor: pointer;
+}
+
+.pdf-tira-preparar:hover:not(:disabled) { background: rgba(255,255,255,0.12); color: #fff; }
+.pdf-tira-preparar:disabled { opacity: 0.5; cursor: default; }
+
+.pdf-tira-aviso {
+  padding: 5px 14px;
+  color: #7CCBF0; font-size: 11.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}

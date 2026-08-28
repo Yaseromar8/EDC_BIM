@@ -2375,6 +2375,43 @@ def share_document():
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
+@documents_bp.route('/api/docs/miniaturas/preparar', methods=['POST'])
+@requiere_rol('admin')
+def preparar_miniaturas():
+    """Genera las miniaturas de los PDF de una obra que aun no las tienen.
+
+    POR QUE UNA RUTA Y NO UN SCRIPT: generar una miniatura exige leer y
+    escribir en el almacen, y esas credenciales viven SOLO en el servidor
+    (el .env local apunta a un fichero que no esta en la maquina del
+    dueno). Quien tiene las llaves hace el trabajo.
+
+    Va por el ejecutor acotado -- el mismo del sellado de integridad -- para
+    no repetir la estampida que dejo la tira en blanco: cuatro a la vez, el
+    resto en cola, y la peticion vuelve al instante diciendo cuantos.
+    """
+    data = request.get_json(silent=True) or {}
+    model_urn = data.get('model_urn') or 'global'
+    from flask import g as _g
+    if not verify_project_access(getattr(_g, 'current_user', None), model_urn):
+        return jsonify({'success': False, 'error': 'Sin acceso a esta obra.'}), 403
+
+    from db import get_db_connection
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("""SELECT DISTINCT gcs_urn FROM file_nodes
+                        WHERE model_urn = %s AND is_deleted = FALSE
+                          AND node_type = 'FILE' AND gcs_urn IS NOT NULL
+                          AND (lower(name) LIKE %s OR lower(name) LIKE %s)""",
+                    (model_urn, '%.pdf', '%.pdfx'))
+        urns = [r[0] for r in cur.fetchall()]
+
+    from file_system_db import gcs_executor
+    from gcs_manager import get_or_create_thumbnail
+    for urn in urns:
+        gcs_executor.submit(get_or_create_thumbnail, urn, 420)
+    return jsonify({'success': True, 'encolados': len(urns)})
+
+
 @documents_bp.route('/api/docs/shared/<share_id>', methods=['GET'])
 @publico_en_lectura(motivo='enlace publico a un documento por UUID; la propia vista comprueba revocacion y vencimiento y solo entrega una URL firmada de lectura')
 def get_shared_document(share_id):

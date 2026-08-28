@@ -289,7 +289,8 @@ function MiniaturaHermano({ doc, activo, onAbrir }) {
 export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
                                     versionLabel = null, versionInfo = null, hideTitle = false,
                                     onClose = null, onVersionClick = null,
-                                    hermanos = [], onAbrirHermano = null }) {
+                                    hermanos = [], onAbrirHermano = null,
+                                    esAdmin = false, obraDelDocumento = '' }) {
   const viewerRef = useRef(null); // Para Fullscreen
   const canvasRef = useRef(null);
   const wrapRef = useRef(null); // Envuelve canvas + overlay de herramientas
@@ -317,6 +318,8 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   // LA TIRA DE LA CARPETA (el boton de cuadricula, como ACC): saltar al
   // plano siguiente sin volver al explorador. Cerrada por defecto -- ocupa
   // alto util y no todo el mundo la quiere abierta.
+  const [preparando, setPreparando] = useState(false);
+  const [avisoTira, setAvisoTira] = useState('');
   const [tiraAbierta, _setTiraAbierta] = useState(_tiraAbiertaMemoria);
   const setTiraAbierta = (v) => {
     const valor = typeof v === 'function' ? v(tiraAbierta) : v;
@@ -1231,8 +1234,35 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
             <div className="pdf-tira">
               <div className="pdf-tira-cabecera">
                 <span>{hermanos.length} documentos en esta carpeta</span>
-                <button onClick={() => setTiraAbierta(false)} title="Cerrar la tira">✕</button>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {esAdmin && (
+                    <button className="pdf-tira-preparar" disabled={preparando}
+                      title="Genera en el servidor las miniaturas que falten de esta obra"
+                      onClick={async () => {
+                        setPreparando(true);
+                        try {
+                          const r = await apiFetch(`${API}/api/docs/miniaturas/preparar`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ model_urn: obraDelDocumento }),
+                            timeoutMs: 60000,
+                          });
+                          const d = await r.json();
+                          if (!r.ok || !d.success) throw new Error(d.error || 'no se pudo');
+                          setAvisoTira(`Preparando ${d.encolados} miniaturas en el `
+                                     + 'servidor. Vuelve a abrir la tira en un minuto.');
+                        } catch {
+                          setAvisoTira('No se pudo pedir la preparación.');
+                        } finally {
+                          setPreparando(false);
+                        }
+                      }}>
+                      {preparando ? 'pidiendo…' : 'Preparar las que falten'}
+                    </button>
+                  )}
+                  <button onClick={() => setTiraAbierta(false)} title="Cerrar la tira">✕</button>
+                </span>
               </div>
+              {avisoTira && <div className="pdf-tira-aviso">{avisoTira}</div>}
               <div className="pdf-tira-carril" ref={(el) => {
                 // El plano actual se trae a la vista solo: en una carpeta de
                 // 45, saltar al siguiente lo dejaba fuera de pantalla.

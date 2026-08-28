@@ -555,6 +555,8 @@ export default function DocumentViewer({
                 ? () => setShowVersions(!showVersions) : null}
               hermanos={isShared ? [] : hermanos}
               onAbrirHermano={isShared ? null : onAbrirHermano}
+              esAdmin={!isShared && isAdmin}
+              obraDelDocumento={projectPrefix}
               versionLabel={vv ? `V${vv.version_number || 1}` : null}
               versionInfo={vv && (vv.updated_by || vv.updated)
                 ? `Cargado por ${vv.updated_by || '—'}${vv.updated ? ` · ${formatDate(vv.updated)}` : ''}`

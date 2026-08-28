@@ -35,6 +35,26 @@ if not os.environ.get('GCS_BUCKET_NAME'):
           'almacén. Revisa el .env de la raíz del proyecto.')
     sys.exit(1)
 
+# LAS LLAVES DEL ALMACÉN VIVEN EN EL SERVIDOR, NO AQUÍ.
+#
+# El .env apunta a un fichero de credenciales de Google que en la máquina del
+# dueño NO existe (está solo en Render). Este script se quedaba fallando en
+# cada plano con «default credentials were not found» sin decir por qué.
+# Si no están, se dice y se manda al camino que SÍ funciona: el botón
+# «Preparar las que falten» de la tira, que hace el trabajo en el servidor.
+_creds = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', '')
+_ruta_creds = _creds if os.path.isabs(_creds) else str(
+    pathlib.Path(__file__).resolve().parent.parent.parent / _creds)
+if not _creds or not os.path.exists(_ruta_creds):
+    print('Las credenciales del almacén no están en esta máquina '
+          '(GOOGLE_APPLICATION_CREDENTIALS apunta a un fichero que no existe).')
+    print('')
+    print('Esto NO se puede hacer desde aquí: las llaves viven en el servidor.')
+    print('Abre un plano en el portal, despliega la tira de documentos y pulsa')
+    print('«Preparar las que falten» — hace exactamente esto, allí donde sí')
+    print('hay credenciales.')
+    sys.exit(1)
+
 pwd = io.open('D:/copias-ecd/clave-migrator.txt', encoding='utf-8').read().strip()
 os.environ.setdefault('DB_HOST', '34.86.206.187')
 os.environ.setdefault('DB_PORT', '5432')
