@@ -154,7 +154,7 @@ export default function DocumentViewer({
                 <div style={{ padding: '8px 12px', borderBottom: '1px solid #eee', fontSize: 12, fontWeight: 600, color: '#666' }}>
                   Versiones
                 </div>
-                <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                <div style={{ maxHeight: 300, overflowY: 'auto', overflowX: 'hidden' }}>  {/* overflowX explícito: fijar solo overflowY hace que el navegador calcule overflowX=auto, y ahí nacía la barra horizontal */}
                   {(!versionHistory || versionHistory.length === 0) ? (
                     <div style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: 13 }}>
                        <div className="adsk-spinner" style={{ width: 20, height: 20, margin: '0 auto 8px', borderWidth: 2 }} />
@@ -262,7 +262,9 @@ export default function DocumentViewer({
       {/* Para un PDF, el desplegable de versiones flota sobre el documento:
           la barra es la del lector y no hay dónde colgarlo. */}
       {esPdf && !isShared && showVersions && (
-        <div style={{ position: 'absolute', top: 46, left: 12, zIndex: 40 }}>
+        {/* Colgando DEL CHIP, como en ACC: la barra lleva menú (32) +
+            búsqueda (32) + el hueco, así que el chip empieza sobre los 76 px. */}
+        <div style={{ position: 'absolute', top: 44, left: 76, zIndex: 40 }}>
           {popoverVersiones}
         </div>
       )}

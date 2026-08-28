@@ -2550,7 +2550,10 @@ th {
   min-width: 0;
 }
 
-.version-popover-item > div { min-width: 0; }
+/* TODOS los descendientes, no solo los hijos: el bloque con el nombre y el
+   «Cargado por» es NIETO, y con min-width auto se negaba a encoger — de ahí
+   la barra horizontal dentro del desplegable. */
+.version-popover-item div { min-width: 0; }
 
 .version-popover-item span {
   overflow: hidden;
