@@ -102,62 +102,67 @@ export function renderFileIconSop(filename, size = 24) {
     );
   }
 
-  // CAD / BIM — cara propia para los formatos de obra. Antes caian al
-  // generico «FILE», y en un expediente de obra son media tabla: un RVT y un
-  // DWG se distinguen por color y glifo igual que un Excel de un Word.
+  // CAD / BIM — el lenguaje de ACC: TEJA de producto con su letra grande y
+  // una franja inferior con la extensión. La primera versión usaba la
+  // silueta de documento con un glifo pequeño y el dueño la comparó lado a
+  // lado con ACC: no se reconocía. La señal es la LETRA (R = Revit,
+  // N = Navisworks) o, para DWG, la hoja de dibujo con la franja ámbar del
+  // clásico icono de AutoCAD.
   const ext = lowerName.split('.').pop();
-  const CAD_FAMILIAS = {
-    dwg:  { color: '#A8431E', glifo: 'lineas' },   // AutoCAD / Civil 3D
-    dxf:  { color: '#A8431E', glifo: 'lineas' },
-    dwf:  { color: '#A8431E', glifo: 'lineas' },
-    dwfx: { color: '#A8431E', glifo: 'lineas' },
-    dgn:  { color: '#4A6B8A', glifo: 'lineas' },
-    rvt:  { color: '#2D6EA8', glifo: 'edificio' }, // Revit
-    rfa:  { color: '#2D6EA8', glifo: 'edificio' },
-    ifc:  { color: '#2E7D5B', glifo: 'cubo' },     // openBIM
-    nwd:  { color: '#5E8F32', glifo: 'cubo' },     // Navisworks
-    nwc:  { color: '#5E8F32', glifo: 'cubo' },
-    '3dm': { color: '#555F6B', glifo: 'cubo' },
-    stl:  { color: '#555F6B', glifo: 'cubo' },
-    obj:  { color: '#555F6B', glifo: 'cubo' },
-    fbx:  { color: '#555F6B', glifo: 'cubo' },
-    step: { color: '#555F6B', glifo: 'cubo' },
-    stp:  { color: '#555F6B', glifo: 'cubo' },
-    iges: { color: '#555F6B', glifo: 'cubo' },
-    igs:  { color: '#555F6B', glifo: 'cubo' },
-    sat:  { color: '#555F6B', glifo: 'cubo' },
+  const TEJAS_CAD = {
+    // AutoCAD / Civil 3D
+    dwg:  { fondo: '#EAF2FA', dibujo: 'lineas', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
+    dxf:  { fondo: '#EAF2FA', dibujo: 'lineas', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
+    dwf:  { fondo: '#EAF2FA', dibujo: 'lineas', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
+    dwfx: { fondo: '#EAF2FA', dibujo: 'lineas', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
+    dgn:  { fondo: '#EAF6F4', dibujo: 'lineas', tinta: '#2E7D74', franja: '#2E7D74' },
+    // Revit — teja azul con la R
+    rvt:  { fondo: '#1961A9', letra: 'R', tinta: '#FFFFFF', franja: '#114B85' },
+    rfa:  { fondo: '#1961A9', letra: 'R', tinta: '#FFFFFF', franja: '#114B85' },
+    rte:  { fondo: '#1961A9', letra: 'R', tinta: '#FFFFFF', franja: '#114B85' },
+    // Navisworks — teja clara con la N
+    nwd:  { fondo: '#FFFFFF', borde: '#B9CCDD', letra: 'N', tinta: '#175A93', franja: '#175A93' },
+    nwc:  { fondo: '#FFFFFF', borde: '#B9CCDD', letra: 'N', tinta: '#175A93', franja: '#175A93' },
+    // openBIM e intercambio — cubo
+    ifc:   { fondo: '#EDF6EF', dibujo: 'cubo', tinta: '#2F7D4F', franja: '#2F7D4F' },
+    '3dm': { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
+    stl:   { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
+    obj:   { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
+    fbx:   { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
+    step:  { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
+    stp:   { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
+    iges:  { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
+    igs:   { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
+    sat:   { fondo: '#F0F2F4', dibujo: 'cubo', tinta: '#5B6875', franja: '#5B6875' },
   };
-  if (CAD_FAMILIAS[ext]) {
-    const { color, glifo } = CAD_FAMILIAS[ext];
+  if (TEJAS_CAD[ext]) {
+    const f = TEJAS_CAD[ext];
     return (
       <div style={{ width: size, height: size, flexShrink: 0 }}>
         <svg viewBox="0 0 32 32" width="100%" height="100%">
-          <path fill={color} d="M3 1v30h26V8h-7V1z" />
-          <path fill="#FFF" d="M4 2v20h24V8h-6V2z" />
-          <path fill="#1B3F63" d="m29 15-7-7h7z" opacity="0.3" />
-          <path fill={color} opacity="0.55" d="m22 1 7 7h-7z" />
-          {glifo === 'lineas' && (
-            <g stroke={color} strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M7 18 12 8l5 7 7-9" />
-              <circle cx="12" cy="8" r="1.6" fill={color} stroke="none" />
-              <circle cx="17" cy="15" r="1.6" fill={color} stroke="none" />
+          <rect x="2" y="2" width="28" height="28" rx="5" fill={f.fondo}
+            stroke={f.borde || 'none'} strokeWidth={f.borde ? 1.2 : 0} />
+          {f.letra && (
+            <text x="16" y="19.5" textAnchor="middle" fontSize="16.5" fontWeight="800"
+              fontFamily="'Segoe UI', system-ui, sans-serif" fill={f.tinta}>{f.letra}</text>
+          )}
+          {f.dibujo === 'lineas' && (
+            <g stroke={f.tinta} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 17.5 12 8l4.5 6 6.5-8" />
+              <circle cx="12" cy="8" r="1.7" fill={f.tinta} stroke="none" />
+              <circle cx="16.5" cy="14" r="1.7" fill={f.tinta} stroke="none" />
             </g>
           )}
-          {glifo === 'edificio' && (
-            <g fill={color}>
-              <path d="M8 7h7v13H8z" />
-              <path d="M17 11h7v9h-7z" opacity="0.55" />
-              <path fill="#FFF" d="M10 9h1.6v1.6H10zM12.6 9h1.6v1.6h-1.6zM10 12h1.6v1.6H10zM12.6 12h1.6v1.6h-1.6zM10 15h1.6v1.6H10zM12.6 15h1.6v1.6h-1.6zM19 13h1.5v1.5H19zM21.4 13h1.5v1.5h-1.5zM19 16h1.5v1.5H19zM21.4 16h1.5v1.5h-1.5z" />
+          {f.dibujo === 'cubo' && (
+            <g stroke={f.tinta} strokeWidth="1.8" fill="none" strokeLinejoin="round">
+              <path d="M16 4.5l6.5 3.7v6.8L16 18.7l-6.5-3.7V8.2z" />
+              <path d="M9.5 8.2l6.5 3.7 6.5-3.7M16 11.9v6.8" opacity="0.6" />
             </g>
           )}
-          {glifo === 'cubo' && (
-            <g stroke={color} strokeWidth="1.7" fill="none" strokeLinejoin="round">
-              <path d="M16 5l7 4v7l-7 4-7-4V9z" />
-              <path d="M9 9l7 4 7-4M16 13v7" opacity="0.6" />
-            </g>
-          )}
-          <text x="16" y="29" textAnchor="middle" fontSize="6.5" fontWeight="800"
-            fontFamily="sans-serif" fill="#FFF" letterSpacing="0.4">
+          {/* franja inferior con la extensión, esquinas de abajo redondeadas */}
+          <path d="M2 22.5H30V25a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5Z" fill={f.franja} />
+          <text x="16" y="28.3" textAnchor="middle" fontSize="6.3" fontWeight="800"
+            fontFamily="sans-serif" fill={f.tintaExt || '#FFFFFF'} letterSpacing="0.5">
             {ext.slice(0, 4).toUpperCase()}
           </text>
         </svg>
