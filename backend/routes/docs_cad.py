@@ -30,6 +30,8 @@ import zipfile
 import requests
 from flask import Blueprint, request, jsonify, g
 
+from politica import publico_en_lectura
+
 from aps import get_internal_token
 from db import get_db_connection
 from gcs_manager import get_blob_data
@@ -688,6 +690,56 @@ def translate_cad():
     _save_cad_meta(node, {'urn': urn, 'status': 'inprogress'})
     return jsonify({'success': True, 'status': 'inprogress', 'urn': urn,
                     'progress': 'Subiendo el archivo a Autodesk…'})
+
+
+@docs_cad_bp.route('/api/docs/cad/compartido/<share_id>', methods=['GET'])
+@publico_en_lectura(motivo='vista por enlace publico de un CAD YA traducido; '
+                           'valida el enlace (revocado/vencido) y solo LEE el '
+                           'manifiesto -- jamas lanza una traduccion, que es '
+                           'lo que cuesta creditos')
+def cad_de_enlace_publico(share_id):
+    """(traducido?, urn) para un invitado. Nunca gasta creditos.
+
+    LA REGLA DE COSTE NO CAMBIA: un enlace publico puede reenviarse a
+    cualquiera, y dejar que un desconocido dispare traducciones seria una
+    puerta abierta a vaciar la cuota de Autodesk. Lo que SI se puede es
+    mostrar lo que alguien de la obra ya tradujo: eso no cuesta nada.
+    Si no esta traducido, el invitado recibe `listo: false` y la pantalla le
+    ofrece descargar el original -- no un error.
+    """
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("""SELECT s.expires_at, s.revoked, f.id, f.name
+                         FROM document_shares s
+                         JOIN file_nodes f ON s.file_node_id = f.id
+                        WHERE s.id = %s""", (share_id,))
+        fila = cur.fetchone()
+    if not fila:
+        return jsonify({'success': False, 'error': 'Enlace invalido'}), 404
+    expires_at, revoked, node_id, nombre = fila
+    if revoked:
+        return jsonify({'success': False, 'error': 'Este enlace fue revocado.'}), 410
+    if expires_at:
+        from datetime import datetime, timezone
+        if datetime.now(timezone.utc) > expires_at:
+            return jsonify({'success': False, 'error': 'Este enlace expiro.'}), 410
+    if not is_cad_file(nombre):
+        return jsonify({'success': True, 'es_cad': False, 'listo': False})
+
+    node = _load_node(node_id)
+    if not node:
+        return jsonify({'success': False, 'error': 'Archivo no encontrado'}), 404
+
+    token, error = get_internal_token()
+    if error or not token:
+        return jsonify({'success': True, 'es_cad': True, 'listo': False})
+    cad = node['meta'].get('cad') or {}
+    urn = cad.get('urn') or _urn_for(node, _bucket_key())
+    manifest, error = _manifest(token, urn)
+    listo = bool(manifest and manifest.get('status') == 'success')
+    return jsonify({'success': True, 'es_cad': True, 'listo': listo,
+                    'urn': urn if listo else None,
+                    'nombre': nombre})
 
 
 @docs_cad_bp.route('/api/docs/cad/status', methods=['GET'])

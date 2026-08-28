@@ -47,7 +47,7 @@ export default function SharedViewer({ shareId }) {
 
   return (
     <DocumentViewer 
-      file={data} 
+      file={{ ...data, shareId }}
       isShared={true} 
       sharedRole={data.role}
       API={API} 

@@ -88,7 +88,7 @@ function ajustarSentidoDelZoom(viewer, _node) {
   } catch { /* noop */ }
 }
 
-export default function CadViewer({ file, projectPrefix = '' }) {
+export default function CadViewer({ file, projectPrefix = '', urnDirecto = null }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
   const [phase, setPhase] = useState('preparando');   // preparando | traduciendo | listo | error
@@ -262,7 +262,11 @@ export default function CadViewer({ file, projectPrefix = '' }) {
       }
     };
 
-    arrancar();
+    // VISTA POR ENLACE: el URN llega ya traducido y se monta DIRECTO. No se
+    // pide traduccion porque un invitado no puede gastar creditos -- eso lo
+    // decidio el backend antes de darnos este URN.
+    if (urnDirecto) mount(urnDirecto);
+    else arrancar();
 
     return () => {
       cancelled = true;
@@ -270,7 +274,7 @@ export default function CadViewer({ file, projectPrefix = '' }) {
       try { viewerRef.current?.finish(); } catch { /* el visor ya podría estar destruido */ }
       viewerRef.current = null;
     };
-  }, [file.id, intento]);
+  }, [file.id, intento, urnDirecto]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', background: '#2b2f36' }}>

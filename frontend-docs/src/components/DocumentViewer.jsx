@@ -49,6 +49,19 @@ export default function DocumentViewer({
   const [previewError, setPreviewError] = useState('');
   const [previewRetry, setPreviewRetry] = useState(0);
   const [conectorAviso, setConectorAviso] = useState(null);
+  // CAD POR ENLACE PUBLICO (decision del dueno, 28-ago): si alguien de la
+  // obra ya lo tradujo, el invitado lo VE; si no, se le ofrece descargarlo.
+  // Un invitado nunca dispara una traduccion -- el coste manda.
+  const [cadCompartido, setCadCompartido] = useState(null);
+  useEffect(() => {
+    if (!isShared || !file?.shareId) return;
+    const esCadAhora = CAD_EXTENSIONS.some(e => (file.name || '').toLowerCase().endsWith(e));
+    if (!esCadAhora) return;
+    fetch(`${API}/api/docs/cad/compartido/${file.shareId}`)
+      .then(r => r.json())
+      .then(d => setCadCompartido(d && d.success ? d : { listo: false }))
+      .catch(() => setCadCompartido({ listo: false }));
+  }, [isShared, file, API]);
 
   // El original FIRMADO se pide al ABRIR un CAD, no al pulsar el boton. En el
   // plan gratuito de Render el backend se duerme a los 15 min y despierta en
@@ -547,6 +560,44 @@ export default function DocumentViewer({
           //    visor de Autodesk, el mismo que usa ACC por dentro.
           //    En vistas compartidas no: un invitado no debe poder gastar
           //    créditos de traducción.
+          // 6.a CAD POR ENLACE: lo YA traducido se ve; lo demas se descarga.
+          if (isShared && CAD_EXTENSIONS.some(ext => lowerName.endsWith(ext))) {
+            if (!cadCompartido) {
+              return <div style={{ padding: 40, textAlign: 'center' }}>
+                <div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>;
+            }
+            if (cadCompartido.listo && cadCompartido.urn) {
+              return (
+                <Suspense fallback={<div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>}>
+                  <CadViewer file={file} urnDirecto={cadCompartido.urn} />
+                </Suspense>
+              );
+            }
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
+                            justifyContent: 'center', height: '100%', gap: 14, padding: 30,
+                            textAlign: 'center', background: '#f5f6f7' }}>
+                <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#5b6875"
+                  strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <div style={{ fontSize: 15, fontWeight: 600, color: '#1a2430' }}>{file.name}</div>
+                <div style={{ fontSize: 13, color: '#5b6875', maxWidth: 420, lineHeight: 1.6 }}>
+                  Este plano CAD todavía no tiene vista previa preparada. Puedes
+                  descargar el archivo original y abrirlo en tu AutoCAD, Civil 3D
+                  o Revit.
+                </div>
+                <a href={fileUrl} download={file.name}
+                  style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600,
+                           background: 'var(--accent, #3e6f91)', color: '#fff',
+                           borderRadius: 6, textDecoration: 'none' }}>
+                  Descargar el archivo original
+                </a>
+              </div>
+            );
+          }
+
           if (!isShared && CAD_EXTENSIONS.some(ext => lowerName.endsWith(ext))) {
             return (
               <Suspense fallback={<div style={{ padding: 40, textAlign: 'center' }}><div className="adsk-spinner" style={{ margin: '0 auto' }} /></div>}>
