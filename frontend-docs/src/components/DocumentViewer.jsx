@@ -1,5 +1,5 @@
 // frontend-docs/src/components/DocumentViewer.jsx
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import PDFViewer from './PDFViewer';
 import { apiFetch } from '../utils/apiFetch';
 import { getRecentPdfUrl } from '../utils/recentPdfCache';
@@ -49,6 +49,27 @@ export default function DocumentViewer({
   const [previewError, setPreviewError] = useState('');
   const [previewRetry, setPreviewRetry] = useState(0);
   const [conectorAviso, setConectorAviso] = useState(null);
+
+  // El original FIRMADO se pide al ABRIR un CAD, no al pulsar el boton. En el
+  // plan gratuito de Render el backend se duerme a los 15 min y despierta en
+  // ~30-50 s: pedir la URL en el clic convertia «Abrir en Revit» en medio
+  // minuto MUDO (lo reporto el dueno: «¿estara cargando o que?»). Pedida
+  // aqui, el clic la tiene lista; si caduca de vieja, el clic la renueva
+  // avisando en pantalla.
+  const firmadaRef = useRef({ urn: null, url: '', ts: 0 });
+  useEffect(() => {
+    if (!file || isShared) return;
+    const esCadAhora = CAD_EXTENSIONS.some(e => (file.name || '').toLowerCase().endsWith(e));
+    if (!esCadAhora) return;
+    const urn = viewedVersionInfo?.gcs_urn || file.gcs_urn;
+    if (!urn || firmadaRef.current.urn === urn) return;
+    apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d?.success && d.url) firmadaRef.current = { urn, url: d.url, ts: Date.now() };
+      })
+      .catch(() => { /* el clic tiene su propio camino con aviso */ });
+  }, [file, viewedVersionInfo, projectPrefix, isShared, API]);
 
   useEffect(() => {
     if (!file) return;
@@ -193,14 +214,26 @@ export default function DocumentViewer({
     const urn = viewedVersionInfo?.gcs_urn || file.gcs_urn;
     if (!urn) { toast.error('Este documento no tiene fichero asociado.'); return; }
     let firmada = '';
-    try {
-      const r = await apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`);
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok || !d.success || !d.url) throw new Error(d.error || 'No se pudo preparar el archivo.');
-      firmada = d.url;
-    } catch (e) {
-      toast.error(e.message || 'No se pudo preparar el archivo.');
-      return;
+    const enCache = firmadaRef.current;
+    if (enCache.urn === urn && enCache.url && (Date.now() - enCache.ts) < 10 * 60 * 1000) {
+      // Pre-firmada al abrir el documento: el clic es INSTANTANEO.
+      firmada = enCache.url;
+    } else {
+      // Toca pedirla ahora — puede tardar ~30 s si el backend estaba dormido
+      // (plan gratuito de Render): que la espera se VEA, no un boton mudo.
+      const espera = toast.loading(`Preparando ${file.name}… (si el servidor estaba dormido, tarda ~30 s)`);
+      try {
+        const r = await apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`);
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d.success || !d.url) throw new Error(d.error || 'No se pudo preparar el archivo.');
+        firmada = d.url;
+        firmadaRef.current = { urn, url: firmada, ts: Date.now() };
+        toast.dismiss(espera);
+      } catch (e) {
+        toast.dismiss(espera);
+        toast.error(e.message || 'No se pudo preparar el archivo.');
+        return;
+      }
     }
 
     // `v` = identidad de la version (el objeto del almacen es unico por
