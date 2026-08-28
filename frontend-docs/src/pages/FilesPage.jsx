@@ -1013,6 +1013,7 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                       <MatrixGrid folders={fe.filteredFolders} files={fe.filteredFiles}
                         selected={fe.selected} toggle={fe.toggle} navigate={fe.navigate}
                         setActiveFile={(f) => { reiniciarTira(); fe.setActiveFile(f); }} isAdmin={isAdmin}
+                        projectPrefix={projectPrefix}
                         onRowMenu={(item, e) => { fe.setRightClickedId(item.id); fe.setActiveRowMenu({ item, x: e.clientX, y: e.clientY, source: 'table' }); }} />
                     </Suspense>
                 ) : (

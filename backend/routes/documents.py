@@ -2375,6 +2375,70 @@ def share_document():
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
+@documents_bp.route('/api/docs/miniaturas/urls', methods=['POST'])
+def urls_de_miniaturas():
+    """Las URLs FIRMADAS de las miniaturas de una carpeta, de una vez.
+
+    ASI CARGA ACC Y POR ESO ES INSTANTANEO: la miniatura es un objeto
+    estatico que el navegador pide DIRECTO al almacen con una etiqueta
+    <img>, muchas a la vez y cacheadas. Nuestro camino anterior -- un fetch
+    autenticado por imagen que hacia al backend bajar el objeto y
+    reenviarlo, de dos en dos -- tenia dos saltos por miniatura y no podia
+    competir.
+
+    Aqui se firma sin tocar la red (la firma es local) y se comprueba
+    cuales EXISTEN con UNA sola llamada de listado sobre el prefijo de la
+    obra. Las que falten se encolan para generarse; la pantalla las pedira
+    otra vez mas tarde.
+    """
+    data = request.get_json(silent=True) or {}
+    model_urn = data.get('model_urn') or 'global'
+    urns = [u for u in (data.get('urns') or []) if u][:300]
+    from flask import g as _g
+    if not verify_project_access(getattr(_g, 'current_user', None), model_urn):
+        return jsonify({'success': False, 'error': 'Sin acceso a esta obra.'}), 403
+    if not urns:
+        return jsonify({'success': True, 'urls': {}, 'pendientes': []})
+
+    from gcs_manager import generate_signed_url, get_storage_client
+    import os as _os
+
+    # QUE HAY HECHO, en UNA llamada. Preguntar objeto por objeto seria una
+    # peticion de red por plano: justo lo que hace lenta la pantalla.
+    hechas = set()
+    try:
+        bucket = get_storage_client().bucket(_os.environ.get('GCS_BUCKET_NAME'))
+        prefijo = 'multi-tenant/%s/' % model_urn
+        for blob in bucket.list_blobs(prefix=prefijo):
+            if blob.name.endswith('__thumb420.jpg'):
+                hechas.add(blob.name)
+    except Exception as e:
+        print('[miniaturas] no se pudo listar el almacen: %s' % str(e)[:120])
+
+    urls, pendientes = {}, []
+    for urn in urns:
+        nombre = '%s__thumb420.jpg' % urn
+        if nombre in hechas:
+            try:
+                urls[urn] = generate_signed_url(nombre)
+            except Exception:
+                pendientes.append(urn)
+        else:
+            pendientes.append(urn)
+
+    # Lo que falta se genera en el ejecutor acotado: la pantalla no espera.
+    if pendientes:
+        try:
+            from file_system_db import gcs_executor
+            from gcs_manager import get_or_create_thumbnail
+            for urn in pendientes:
+                gcs_executor.submit(get_or_create_thumbnail, urn, 420)
+        except Exception as e:
+            print('[miniaturas] no se pudo encolar: %s' % str(e)[:120])
+
+    return jsonify({'success': True, 'urls': urls, 'pendientes': pendientes})
+
+
 @documents_bp.route('/api/docs/miniaturas/preparar', methods=['POST'])
 @requiere_rol('admin')
 def preparar_miniaturas():

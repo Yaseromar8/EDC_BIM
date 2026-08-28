@@ -1,38 +1,32 @@
-// Cola compartida para pedir miniaturas de documentos.
+// Las miniaturas de una carpeta, en UNA petición.
 //
-// Generar la miniatura de un PDF obliga al servidor a bajar el fichero entero
-// y rasterizar su primera página. Pedirlas todas de golpe fue justo lo que
-// dejó la tira del lector EN BLANCO con 45 planos. De dos en dos entran
-// igual y se van pintando según llegan.
+// Antes esto era una cola que pedía las imágenes de dos en dos al backend,
+// autenticadas, y cada una obligaba al servidor a bajar el objeto de Google
+// y reenviarlo. Dos saltos por imagen: lentísimo comparado con ACC, que las
+// sirve como objetos estáticos que el navegador baja en paralelo.
 //
-// Vive aquí, y no dentro de una pantalla, porque ahora hay DOS sitios que
-// las piden: la tira del lector y la vista de cuadrícula del explorador.
-// Compartir la cola es lo que impide que abrir las dos a la vez duplique la
-// avalancha que ya costó un incidente.
+// Ahora se piden de golpe las URLs FIRMADAS de la carpeta y la pantalla las
+// pone en <img src>: el navegador las baja directo del almacén, a la vez, y
+// las cachea. Lo que todavía no está hecho vuelve como «pendiente» y el
+// servidor lo genera mientras tanto.
 
-const cola = [];
-let enCurso = 0;
-const LIMITE = 2;
+import { apiFetch } from './apiFetch';
+import { API } from './helpers';
 
-function servir() {
-  while (enCurso < LIMITE && cola.length) {
-    const { tarea, resolve, reject } = cola.shift();
-    enCurso += 1;
-    tarea().then(resolve, reject).finally(() => { enCurso -= 1; servir(); });
+export async function urlsDeMiniaturas(modelUrn, urns) {
+  const limpias = (urns || []).filter(Boolean);
+  if (!limpias.length) return { urls: {}, pendientes: [] };
+  try {
+    const r = await apiFetch(`${API}/api/docs/miniaturas/urls`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model_urn: modelUrn, urns: limpias }),
+      timeoutMs: 45000,
+    });
+    const d = await r.json();
+    if (!r.ok || !d.success) return { urls: {}, pendientes: limpias };
+    return { urls: d.urls || {}, pendientes: d.pendientes || [] };
+  } catch {
+    return { urls: {}, pendientes: limpias };
   }
-}
-
-export function pedirMiniatura(tarea) {
-  return new Promise((resolve, reject) => {
-    cola.push({ tarea, resolve, reject });
-    servir();
-  });
-}
-
-// La dirección de la miniatura de un documento. Se pide con apiFetch (que
-// manda la cabecera de sesión) y se vuelve un blob local: una etiqueta <img>
-// no puede mandar cabeceras, y meter el token en la URL es el defecto que ya
-// se corrigió en el menú del clic derecho.
-export function urlDeMiniatura(API, gcsUrn) {
-  return `${API}/api/docs/view?urn=${encodeURIComponent(gcsUrn)}&thumb=1&gen=1`;
 }

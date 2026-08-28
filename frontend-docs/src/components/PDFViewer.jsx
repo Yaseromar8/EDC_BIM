@@ -9,6 +9,7 @@ import PdfToolsOverlay, { COLORS } from './PdfToolsOverlay';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import { tiraEstaAbierta, recordarTira } from '../utils/tiraDocumentos';
+import { urlsDeMiniaturas } from '../utils/colaMiniaturas';
 import './PDFViewer.css';
 
 // Configurar el worker de PDF.js
@@ -193,85 +194,6 @@ const HINTS = Object.fromEntries(
 // la direccion es justo el defecto que se corrigio en el menu del clic
 // derecho. Y se pide SOLO cuando entra en pantalla (IntersectionObserver):
 // una carpeta con 100 planos no baja 100 miniaturas de golpe.
-// UNA COLA DE DOS para las miniaturas de la tira.
-//
-// La primera vez, cada miniatura obliga al servidor a bajar el PDF entero y
-// rasterizarlo. Con la tira abierta hay ~15 recuadros en pantalla y salian
-// las 15 peticiones A LA VEZ: la instancia se atascaba y los recuadros se
-// quedaban EN BLANCO -- lo que reporto el dueno con 45 planos. De dos en
-// dos entran igual, y se van pintando segun llegan.
-const _colaMiniaturas = [];
-let _enCurso = 0;
-function pedirMiniatura(tarea) {
-  return new Promise((resolve, reject) => {
-    _colaMiniaturas.push({ tarea, resolve, reject });
-    servirCola();
-  });
-}
-function servirCola() {
-  while (_enCurso < 2 && _colaMiniaturas.length) {
-    const { tarea, resolve, reject } = _colaMiniaturas.shift();
-    _enCurso += 1;
-    tarea().then(resolve, reject).finally(() => { _enCurso -= 1; servirCola(); });
-  }
-}
-
-function MiniaturaHermano({ doc, activo, onAbrir }) {
-  const ref = React.useRef(null);
-  const [src, setSrc] = React.useState(null);
-  const [falla, setFalla] = React.useState(false);
-  const [pidiendo, setPidiendo] = React.useState(false);
-
-  React.useEffect(() => {
-    const el = ref.current;
-    if (!el || src || falla || !doc.gcs_urn) return undefined;
-    if (typeof IntersectionObserver === 'undefined') return undefined;
-    let vivo = true;
-    let objectUrl = null;
-    const io = new IntersectionObserver(([e]) => {
-      if (!e.isIntersecting) return;
-      io.disconnect();
-      setPidiendo(true);
-      pedirMiniatura(() => apiFetch(
-        `${API}/api/docs/view?urn=${encodeURIComponent(doc.gcs_urn)}&thumb=1&gen=1`,
-        { timeoutMs: 60000 })
-        .then(r => (r.ok ? r.blob() : Promise.reject(new Error('sin miniatura'))))
-        .then(b => {
-          // Si el servidor no supo hacer la miniatura devuelve el PDF entero:
-          // eso no es una imagen y hay que decirlo, no pintar un hueco.
-          if (!b.type.startsWith('image/')) throw new Error('no es imagen');
-          return b;
-        }))
-        .then(b => {
-          if (!vivo) return;
-          objectUrl = URL.createObjectURL(b);
-          setSrc(objectUrl);
-        })
-        .catch(() => vivo && setFalla(true))
-        .finally(() => vivo && setPidiendo(false));
-    }, { rootMargin: '200px' });
-    io.observe(el);
-    return () => {
-      vivo = false;
-      io.disconnect();
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [doc, src, falla, API]);
-
-  return (
-    <button ref={ref} className={`pdf-tira-item${activo ? ' es-actual' : ''}`}
-      onClick={() => !activo && onAbrir(doc)} title={doc.name}>
-      <div className="pdf-tira-lienzo">
-        {src ? <img src={src} alt="" />
-             : <div className="pdf-tira-vacio">
-                 {falla ? 'sin vista previa' : (pidiendo ? 'generando…' : '')}
-               </div>}
-      </div>
-      <div className="pdf-tira-nombre">{doc.name}</div>
-    </button>
-  );
-}
-
 export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
                                     versionLabel = null, versionInfo = null, hideTitle = false,
                                     onClose = null, onVersionClick = null,
@@ -304,6 +226,12 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   // LA TIRA DE LA CARPETA (el boton de cuadricula, como ACC): saltar al
   // plano siguiente sin volver al explorador. Cerrada por defecto -- ocupa
   // alto util y no todo el mundo la quiere abierta.
+  // LAS MINIATURAS DE LA TIRA, en UNA peticion y en paralelo -- el mismo
+  // camino que la cuadricula. Antes cada una era un fetch autenticado que
+  // obligaba al backend a bajar el objeto y reenviarlo, de dos en dos: por
+  // eso salian «sin vista previa» o en blanco. Solo se piden cuando la tira
+  // se ABRE: quien no la usa no paga nada.
+  const [minisTira, setMinisTira] = useState({});
   const [preparando, setPreparando] = useState(false);
   const [avisoTira, setAvisoTira] = useState('');
   const [tiraAbierta, _setTiraAbierta] = useState(tiraEstaAbierta);
@@ -313,6 +241,16 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     _setTiraAbierta(valor);
   };
   const indiceActual = hermanos.findIndex(h => h.name === fileName);
+  useEffect(() => {
+    if (!tiraAbierta || !hermanos.length) return undefined;
+    let vivo = true;
+    const conUrn = hermanos.filter(h => h.gcs_urn).map(h => h.gcs_urn);
+    urlsDeMiniaturas(obraDelDocumento, conUrn).then(({ urls }) => {
+      if (vivo) setMinisTira(prev => ({ ...prev, ...urls }));
+    });
+    return () => { vivo = false; };
+  }, [tiraAbierta, hermanos, obraDelDocumento]);
+
   const irAHermano = (paso) => {
     if (!onAbrirHermano || indiceActual < 0) return;
     const destino = hermanos[indiceActual + paso];
@@ -1261,8 +1199,16 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
                 }
               }}>
                 {hermanos.map(h => (
-                  <MiniaturaHermano key={h.id || h.name} doc={h}
-                    activo={h.name === fileName} onAbrir={onAbrirHermano} />
+                  <button key={h.id || h.name} title={h.name}
+                    className={`pdf-tira-item${h.name === fileName ? ' es-actual' : ''}`}
+                    onClick={() => h.name !== fileName && onAbrirHermano(h)}>
+                    <div className="pdf-tira-lienzo">
+                      {minisTira[h.gcs_urn]
+                        ? <img src={minisTira[h.gcs_urn]} alt="" loading="lazy" />
+                        : <div className="pdf-tira-vacio" />}
+                    </div>
+                    <div className="pdf-tira-nombre">{h.name}</div>
+                  </button>
                 ))}
               </div>
             </div>

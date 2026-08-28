@@ -4133,3 +4133,10 @@ th {
   padding: 50px; text-align: center;
   color: var(--text-secondary, #8a95a1); font-size: 13px;
 }
+
+.rejilla-aviso {
+  grid-column: 1 / -1;
+  padding: 8px 12px; margin-bottom: 2px;
+  border: 1px solid #d9e6f2; border-radius: 6px;
+  background: #f2f8fd; color: #2c4d67; font-size: 12px;
+}
