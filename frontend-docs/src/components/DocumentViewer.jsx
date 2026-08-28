@@ -3,6 +3,7 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import PDFViewer from './PDFViewer';
 import { apiFetch } from '../utils/apiFetch';
 import { getRecentPdfUrl } from '../utils/recentPdfCache';
+import toast from 'react-hot-toast';
 
 // El visor CAD arrastra el visor de Autodesk: diferido para que no pese en el
 // arranque de quien nunca abre un DWG.
@@ -149,6 +150,28 @@ export default function DocumentViewer({
   // plano. Para los PDF la cabecera se calla y el lector manda; el desplegable
   // de versiones sigue siendo el mismo, solo que flota sobre el documento.
   const esPdf = /\.pdfx?$/i.test(file.name || '');
+  // CAD/BIM tienen aplicacion de escritorio (Revit, Civil 3D, Navisworks).
+  // Un navegador NO puede lanzarlas -- eso exige un agente instalado, que es
+  // exactamente lo que hace el Desktop Connector de ACC --, pero SI puede
+  // entregar el ORIGINAL con su nombre real por URL firmada: al abrirlo,
+  // Windows lo lleva a la aplicacion asociada.
+  const esCad = CAD_EXTENSIONS.some(e => (file.name || '').toLowerCase().endsWith(e));
+
+  const abrirEnEscritorio = async () => {
+    const urn = viewedVersionInfo?.gcs_urn || file.gcs_urn;
+    if (!urn) { toast.error('Este documento no tiene fichero asociado.'); return; }
+    const ventana = window.open('', '_blank', 'noopener');
+    try {
+      const r = await apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.success || !d.url) throw new Error(d.error || 'No se pudo preparar el archivo.');
+      if (ventana) ventana.location = d.url; else window.open(d.url, '_blank', 'noopener');
+      toast.success('Descargando el original. Al abrirlo, Windows lo llevara a Revit / Civil 3D.', { duration: 6000 });
+    } catch (e) {
+      if (ventana) ventana.close();
+      toast.error(e.message || 'No se pudo preparar el archivo.');
+    }
+  };
   const popoverVersiones = (
               <div className="version-popover" style={{ top: 32, left: 0, width: 350 }}>
                 <div style={{ padding: '8px 12px', borderBottom: '1px solid #eee', fontSize: 12, fontWeight: 600, color: '#666' }}>
@@ -249,6 +272,17 @@ export default function DocumentViewer({
         </div>
 
         <div className="file-viewer-actions">
+           {esCad && !isShared && (
+             <button onClick={abrirEnEscritorio}
+               title="Descarga el original con su nombre real; al abrirlo, Windows usa la aplicacion asociada (Revit, Civil 3D, Navisworks)"
+               style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginRight: 14,
+                        padding: '5px 12px', fontSize: 12.5, fontWeight: 600,
+                        background: '#fff', border: '1px solid var(--accent)', color: 'var(--accent)',
+                        borderRadius: 4, cursor: 'pointer' }}>
+               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+               Abrir en el escritorio
+             </button>
+           )}
            {isShared && sharedRole && (
              <span style={{ fontFamily: 'Inter', fontSize: 13, fontWeight: 500, color: '#666', marginRight: 16 }}>
                Acceso compartido: {sharedRole === 'viewer' ? 'Lector' : 'Comentador'}

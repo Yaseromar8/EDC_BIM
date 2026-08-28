@@ -267,12 +267,28 @@
   position: absolute;
   left: 50%; bottom: 18px;
   z-index: 8;
-  display: flex; align-items: center; gap: 1px;
-  padding: 5px;
+  display: flex; align-items: center; gap: 2px;
+  /* UNA SOLA FILA, SIEMPRE. Un elemento absoluto anclado con left:50% solo
+     dispone del hueco hasta el borde derecho de su contenedor: cuando el
+     contenido no cabia en esa mitad, envolvia en filas -- la pastilla
+     "cuadrada" de las capturas. width:max-content le devuelve su ancho
+     verdadero, y ademas los grupos internos no tenian display:flex. */
+  width: max-content;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  padding: 5px 10px;
   border-radius: 12px;
   background: #26313c;
   box-shadow: 0 8px 26px rgba(15, 22, 30, 0.34);
   transform: translateX(-50%);
+}
+
+.pdf-dock__group { display: flex; align-items: center; gap: 1px; }
+
+/* La pastilla se ALARGA con una costura entre grupos, como el mando de ACC. */
+.pdf-dock__group + .pdf-dock__group {
+  margin-left: 7px; padding-left: 9px;
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
 }
 
 .pdf-dock .pdf-ico { color: #d3dbe3; }
