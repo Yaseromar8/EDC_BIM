@@ -201,6 +201,11 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   const busquedaVivaRef = useRef(null);   // debounce de la busqueda en vivo
   const bufferCanvasRef = useRef(null);   // doble bufer del render (uno, reutilizado)
   const anclaRef = useRef(null);          // punto que el zoom debe conservar bajo el cursor
+  // CUANDO LA HOJA CABE ENTERA NO HAY SCROLL QUE MOVER, y el zoom crecia
+  // desde el centro: el detalle que mirabas se escapaba. Este desplazamiento
+  // propio la mueve cuando el scroll no puede, para que el punto bajo el
+  // cursor siga bajo el cursor a CUALQUIER zoom.
+  const [desplazamiento, setDesplazamiento] = useState({ x: 0, y: 0 });
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false);   // menu de presets de zoom
   const [colorOpen, setColorOpen] = useState(false);         // paleta del carril de anotacion
 
@@ -330,9 +335,29 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     // — que era el otro motivo por el que fallaba.
     const ancla = anclaRef.current;
     if (ancla && wrapRef.current && containerRef.current) {
+      const cont = containerRef.current;
       const r = wrapRef.current.getBoundingClientRect();
-      containerRef.current.scrollLeft += (r.left + ancla.ux * (scale || 1)) - ancla.clientX;
-      containerRef.current.scrollTop += (r.top + ancla.uy * (scale || 1)) - ancla.clientY;
+      const s = scale || 1;
+      const faltaX = (r.left + ancla.ux * s) - ancla.clientX;
+      const faltaY = (r.top + ancla.uy * s) - ancla.clientY;
+
+      // Primero el scroll, que es lo natural cuando la hoja desborda...
+      const antesX = cont.scrollLeft, antesY = cont.scrollTop;
+      cont.scrollLeft = Math.max(0, Math.min(cont.scrollWidth - cont.clientWidth, antesX + faltaX));
+      cont.scrollTop = Math.max(0, Math.min(cont.scrollHeight - cont.clientHeight, antesY + faltaY));
+
+      // ...y lo que el scroll no pudo cubrir --porque la hoja cabe entera-- se
+      // cubre moviendo la hoja. Con tope: nunca se va más allá de media
+      // ventana, para que no se pueda perder de vista.
+      const restoX = faltaX - (cont.scrollLeft - antesX);
+      const restoY = faltaY - (cont.scrollTop - antesY);
+      if (Math.abs(restoX) > 0.5 || Math.abs(restoY) > 0.5) {
+        const topeX = cont.clientWidth * 0.5, topeY = cont.clientHeight * 0.5;
+        setDesplazamiento(d => ({
+          x: Math.max(-topeX, Math.min(topeX, d.x - restoX)),
+          y: Math.max(-topeY, Math.min(topeY, d.y - restoY)),
+        }));
+      }
       anclaRef.current = null;
     }
   }, [currentPage, rotation, scale]);
@@ -457,6 +482,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   // --- Controles de Navegación ---
   const goToPage = useCallback((p) => {
     const clamped = Math.max(1, Math.min(p, numPages));
+    setDesplazamiento({ x: 0, y: 0 });   // cada página entra centrada
     setCurrentPage(clamped);
     setPageDraft(String(clamped));
   }, [numPages]);
@@ -560,6 +586,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       const sW = (cont.clientWidth - 64) / vp1.width;
       const sH = (cont.clientHeight - 64) / vp1.height;
       setFitMode(mode);
+      setDesplazamiento({ x: 0, y: 0 });   // encuadrar re-centra la hoja
       setScale(Math.max(0.2, mode === 'width' ? sW : Math.min(sW, sH)));
     } catch { /* el documento puede estar cerrándose */ }
   }, [currentPage, rotation]);
@@ -912,7 +939,8 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
             )}
 
             <div className="pdf-page-pad">
-              <div ref={wrapRef} className="pdf-page">
+              <div ref={wrapRef} className="pdf-page"
+                style={{ transform: `translate(${desplazamiento.x}px, ${desplazamiento.y}px)` }}>
                 <canvas ref={canvasRef} />
                 {highlights.map(h => (
                   <div key={h.key} style={{
