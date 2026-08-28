@@ -4053,34 +4053,41 @@ th {
 }
 
 .rejilla {
-  /* ALTURA PROPIA, no heredada de un flex que no existe.
-     El contenedor que envuelve las dos vistas es un bloque con
-     overflow:hidden, NO un flex: `flex: 1` aqui no valia nada, la rejilla
-     crecia a su alto natural y el padre la RECORTABA -- con 45 planos, las
-     ultimas filas eran inalcanzables (lo reporto el dueno). La tabla no
-     sufria porque lleva su propio desplazamiento dentro. */
-  height: 100%; box-sizing: border-box; overflow-y: auto;
-  display: grid; gap: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  /* BALDOSAS QUE SE REACOMODAN, no una rejilla de filas.
+     Cuatro intentos con CSS Grid y el defecto siempre volvia por otro lado:
+     las filas no respetaban la altura de la tarjeta -- primero la miniatura
+     se encogia, luego se aplastaba, y al final se salia y pisaba a la
+     vecina. La causa comun es que en una rejilla el ALTO DE LA FILA lo
+     negocian el contenedor y los elementos, y esa negociacion es la que no
+     conseguia domar.
+     Con envoltura simple no hay filas que negociar: cada baldosa mide lo que
+     mide y se van acomodando; al cambiar el tamaño de la pagina o el zoom
+     entran mas o menos por linea. Es como se comporta ACC, y es la razon de
+     que su galeria nunca se deforme. */
+  height: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 16px;
   padding: 18px;
   background: #fff;
-  align-content: start;
-  /* Y las tarjetas con SU alto, no el de la fila: estirarlas era una de las
-     fuerzas que deformaban la miniatura. */
-  align-items: start;
 }
 
 .rejilla-tarjeta {
-  /* MAQUETACION NORMAL, no flexbox. Con la tarjeta en flex-columna hubo dos
-     defectos encadenados: primero el lienzo se encogia a cero (miniaturas
-     invisibles) y, al blindarlo, el pie quedaba recortado por el
-     overflow:hidden (sin nombre ni version). En un bloque corriente la
-     altura la marca el CONTENIDO -- lienzo + pie -- y no hay nada que
-     comprimir ni recortar. Menos mecanismo, menos formas de fallar. */
+  /* ANCHO FIJO: es lo que convierte la baldosa en algo predecible. Y con el
+     ancho fijo, el alto de la miniatura es aritmetica -- 210 x 0,709 = 149,
+     la proporcion del papel serie A. */
   position: relative;
   display: block;
-  border: 1px solid var(--border, #e3e6ea); border-radius: 8px;
-  overflow: hidden; background: #fff; cursor: pointer;
+  width: 210px;
+  flex: 0 0 210px;
+  border: 1px solid var(--border, #e3e6ea);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  cursor: pointer;
   transition: border-color 0.14s ease, box-shadow 0.14s ease;
 }
 
@@ -4093,38 +4100,20 @@ th {
 .rejilla-tarjeta.es-carpeta { cursor: default; }
 
 .rejilla-lienzo {
-  /* LA PROPORCION, POR RELLENO -- y no por `aspect-ratio`.
-     Tras varios intentos con altura fija y con aspect-ratio, el CSS servido
-     era el correcto y aun asi la caja no obedecia: a mas ancho, MENOS alto,
-     que es lo contrario de lo que ambas reglas prometen. Sintoma de estar
-     peleando con como la rejilla y el flexbox negocian el tamaño.
-     `padding-top` en porcentaje se resuelve SIEMPRE contra el ANCHO del
-     contenedor: la altura queda atada al ancho por aritmetica, sin depender
-     de esa negociacion. 70,9 % = 1 / 1,41, la proporcion del papel serie A.
-     El contenido va posicionado encima, ocupando la caja entera. */
-  position: relative;
-  width: 100%;
-  height: 0;
-  padding-top: 70.9%;
+  width: 210px;
+  height: 149px;              /* 210 x 0,709 -- proporcion del papel serie A */
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
   background: #f6f8fa;
   border-bottom: 1px solid var(--border-soft, #eef1f4);
 }
 
-.rejilla-lienzo > * {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .rejilla-lienzo img {
-  /* `contain`: el plano se ajusta a la caja SIN deformarse, jamas. */
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  /* `contain`: el plano se ajusta a la baldosa SIN deformarse, jamas. */
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   display: block;
 }
