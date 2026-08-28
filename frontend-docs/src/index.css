@@ -4065,6 +4065,9 @@ th {
   padding: 18px;
   background: #fff;
   align-content: start;
+  /* Y las tarjetas con SU alto, no el de la fila: estirarlas era una de las
+     fuerzas que deformaban la miniatura. */
+  align-items: start;
 }
 
 .rejilla-tarjeta {
@@ -4090,26 +4093,38 @@ th {
 .rejilla-tarjeta.es-carpeta { cursor: default; }
 
 .rejilla-lienzo {
-  /* PROPORCION, NO ALTURA FIJA. Este es el arreglo de fondo, y explica los
-     dos parches anteriores: con `height: 150px` la miniatura no se adapta al
-     tamaño de la página -- a menos zoom entran mas columnas, las tarjetas se
-     estrechan y la imagen quedaba aplastada dentro de una caja que no
-     encogia con ella. Con `aspect-ratio` la ALTURA SALE DEL ANCHO: la tarjeta
-     manda, la caja la sigue, y a 100, 95, 80 o 75 % todo conserva su forma.
-     1,41:1 es la proporcion de los papeles de la serie A -- un A3 apaisado
-     llena la caja casi exacta, sin franjas. */
+  /* LA PROPORCION, POR RELLENO -- y no por `aspect-ratio`.
+     Tras varios intentos con altura fija y con aspect-ratio, el CSS servido
+     era el correcto y aun asi la caja no obedecia: a mas ancho, MENOS alto,
+     que es lo contrario de lo que ambas reglas prometen. Sintoma de estar
+     peleando con como la rejilla y el flexbox negocian el tamaño.
+     `padding-top` en porcentaje se resuelve SIEMPRE contra el ANCHO del
+     contenedor: la altura queda atada al ancho por aritmetica, sin depender
+     de esa negociacion. 70,9 % = 1 / 1,41, la proporcion del papel serie A.
+     El contenido va posicionado encima, ocupando la caja entera. */
+  position: relative;
   width: 100%;
-  aspect-ratio: 1.41 / 1;
-  display: flex; align-items: center; justify-content: center;
+  height: 0;
+  padding-top: 70.9%;
   overflow: hidden;
   background: #f6f8fa;
   border-bottom: 1px solid var(--border-soft, #eef1f4);
 }
 
+.rejilla-lienzo > * {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .rejilla-lienzo img {
-  /* `contain` es la promesa de que el plano NUNCA se deforma: se ajusta al
-     hueco conservando su forma, y lo que sobra queda en el fondo. */
-  width: 100%; height: 100%;
+  /* `contain`: el plano se ajusta a la caja SIN deformarse, jamas. */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   display: block;
 }
