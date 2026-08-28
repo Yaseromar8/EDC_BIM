@@ -4053,7 +4053,13 @@ th {
 }
 
 .rejilla {
-  flex: 1; min-height: 0; overflow-y: auto;
+  /* ALTURA PROPIA, no heredada de un flex que no existe.
+     El contenedor que envuelve las dos vistas es un bloque con
+     overflow:hidden, NO un flex: `flex: 1` aqui no valia nada, la rejilla
+     crecia a su alto natural y el padre la RECORTABA -- con 45 planos, las
+     ultimas filas eran inalcanzables (lo reporto el dueno). La tabla no
+     sufria porque lleva su propio desplazamiento dentro. */
+  height: 100%; box-sizing: border-box; overflow-y: auto;
   display: grid; gap: 16px;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   padding: 18px;
