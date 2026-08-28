@@ -2405,10 +2405,27 @@ def preparar_miniaturas():
                     (model_urn, '%.pdf', '%.pdfx'))
         urns = [r[0] for r in cur.fetchall()]
 
+    if not urns:
+        return jsonify({'success': True, 'encolados': 0,
+                        'aviso': 'Esta obra no tiene PDF.'})
+
+    # LA PRIMERA SE HACE EN DIRECTO, y su resultado se cuenta. Encolar 45
+    # fracasos silenciosos fue exactamente lo que dejo la cuadricula en
+    # «sin vista previa» sin que nadie supiera por que.
     from file_system_db import gcs_executor
-    from gcs_manager import get_or_create_thumbnail
-    for urn in urns:
-        gcs_executor.submit(get_or_create_thumbnail, urn, 420)
+    import gcs_manager as _gcs
+    prueba = _gcs.get_or_create_thumbnail(urns[0], 420)[0]
+    if not prueba:
+        return jsonify({
+            'success': False,
+            'code': 'RASTER_FALLA',
+            'error': 'El servidor no pudo generar la miniatura de prueba. '
+                     'Motivo: %s' % (_gcs.ULTIMO_ERROR_RASTER or
+                                     'desconocido (¿el PDF supera 120 MB?)'),
+        }), 500
+
+    for urn in urns[1:]:
+        gcs_executor.submit(_gcs.get_or_create_thumbnail, urn, 420)
     return jsonify({'success': True, 'encolados': len(urns)})
 
 

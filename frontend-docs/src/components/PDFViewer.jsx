@@ -1250,8 +1250,10 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
                           if (!r.ok || !d.success) throw new Error(d.error || 'no se pudo');
                           setAvisoTira(`Preparando ${d.encolados} miniaturas en el `
                                      + 'servidor. Vuelve a abrir la tira en un minuto.');
-                        } catch {
-                          setAvisoTira('No se pudo pedir la preparación.');
+                        } catch (e) {
+                          // El motivo EXACTO del servidor. Un «no se pudo»
+                          // generico deja al dueno sin nada que contarme.
+                          setAvisoTira(e.message || 'No se pudo pedir la preparación.');
                         } finally {
                           setPreparando(false);
                         }

@@ -206,6 +206,73 @@ def get_blob_data(blob_name):
         return None, None
 
 
+def _rasterizar_pdf(raw, max_px):
+    """La primera pagina de un PDF como imagen. DOS MOTORES a proposito.
+
+    Los dos estan en requirements desde antes de este frente. Se intenta
+    PyMuPDF y, si no importa o revienta -- el nombre del modulo cambio entre
+    versiones (`fitz` paso a ser `pymupdf`), y en produccion no siempre corre
+    la version que uno cree --, entra pypdfium2. Que una miniatura dependa de
+    UN import concreto es lo que dejo la cuadricula entera en «sin vista
+    previa» sin decir por que.
+
+    Devuelve una imagen PIL o None. `ULTIMO_ERROR_RASTER` guarda el motivo
+    para que la ruta de preparacion pueda ENSENARLO en vez de tragarselo.
+    """
+    global ULTIMO_ERROR_RASTER
+    from io import BytesIO
+    from PIL import Image
+    fallos = []
+
+    # Motor 1: PyMuPDF (se llama `pymupdf` en las versiones nuevas y `fitz`
+    # en las viejas; se prueban los dos nombres).
+    for nombre in ('pymupdf', 'fitz'):
+        try:
+            motor = __import__(nombre)
+            doc = motor.open(stream=raw, filetype='pdf')
+            try:
+                if doc.page_count < 1:
+                    fallos.append('%s: el PDF no tiene paginas' % nombre)
+                    break
+                pagina = doc.load_page(0)
+                caja = pagina.rect
+                escala = max_px / max(caja.width, caja.height, 1)
+                pix = pagina.get_pixmap(matrix=motor.Matrix(escala, escala),
+                                        alpha=False)
+                ULTIMO_ERROR_RASTER = None
+                return Image.open(BytesIO(pix.tobytes('png'))).convert('RGB')
+            finally:
+                doc.close()
+        except Exception as e:
+            fallos.append('%s: %s' % (nombre, str(e)[:120]))
+
+    # Motor 2: pypdfium2.
+    try:
+        import pypdfium2 as pdfium
+        doc = pdfium.PdfDocument(raw)
+        try:
+            if len(doc) < 1:
+                fallos.append('pypdfium2: el PDF no tiene paginas')
+            else:
+                pagina = doc[0]
+                escala = max_px / max(pagina.get_width(), pagina.get_height(), 1)
+                imagen = pagina.render(scale=escala).to_pil().convert('RGB')
+                ULTIMO_ERROR_RASTER = None
+                return imagen
+        finally:
+            doc.close()
+    except Exception as e:
+        fallos.append('pypdfium2: %s' % str(e)[:120])
+
+    ULTIMO_ERROR_RASTER = ' | '.join(fallos) or 'sin motor de PDF disponible'
+    print('[thumb] no se pudo rasterizar: %s' % ULTIMO_ERROR_RASTER)
+    return None
+
+
+# El motivo del ultimo fallo de rasterizado, para poder ENSENARLO.
+ULTIMO_ERROR_RASTER = None
+
+
 def get_or_create_thumbnail(blob_name, max_px=420):
     """Versión reducida JPEG cacheada en GCS ('<blob>__thumb<max_px>.jpg').
     max_px=420 → miniatura de galería (~25 KB); max_px=1600 → 'display' para el
@@ -255,19 +322,9 @@ def get_or_create_thumbnail(blob_name, max_px=420):
         # un plano de otro -- que es justo para lo que sirve.
         # PyMuPDF ya estaba en requirements; nada nuevo que instalar.
         if blob_name.lower().endswith(('.pdf', '.pdfx')):
-            import fitz
-            doc = fitz.open(stream=raw, filetype='pdf')
-            try:
-                if doc.page_count < 1:
-                    return None, None
-                pagina = doc.load_page(0)
-                caja = pagina.rect
-                escala = max_px / max(caja.width, caja.height, 1)
-                pix = pagina.get_pixmap(matrix=fitz.Matrix(escala, escala),
-                                        alpha=False)
-                img = Image.open(BytesIO(pix.tobytes('png'))).convert('RGB')
-            finally:
-                doc.close()
+            img = _rasterizar_pdf(raw, max_px)
+            if img is None:
+                return None, None
             out = BytesIO()
             img.save(out, format='JPEG', quality=72, optimize=True)
             data = out.getvalue()
