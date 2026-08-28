@@ -179,13 +179,28 @@ export default function CadViewer({ file, projectPrefix = '' }) {
     };
 
     // Consulta el estado hasta que la traducción termine.
+    //
+    // EL PRIMER 502 NO ES EL FINAL. La instancia gratuita de Render se
+    // reinicia y se despierta a su ritmo, y justo durante una traducción
+    // larga es cuando más se nota (el dueño lo vio: dos 502, un 503 y la
+    // pantalla rendida — mientras el trabajo seguía vivo en Autodesk). El
+    // sondeo aguanta ~2 minutos de fallos seguidos antes de rendirse.
+    let fallosSeguidos = 0;
+    const reintentarPoll = (motivo) => {
+      if (cancelled) return;
+      fallosSeguidos += 1;
+      if (fallosSeguidos > 20) return fail(motivo);
+      if (fallosSeguidos > 2) setProgress('reconectando con el servidor…');
+      timer = setTimeout(poll, 6000);
+    };
     const poll = async () => {
       if (cancelled) return;
       try {
         const r = await apiFetch(`${API}/api/docs/cad/status?node_id=${encodeURIComponent(file.id)}`);
         const d = await r.json();
         if (cancelled) return;
-        if (!d.success) return fail(d.error || 'No se pudo consultar el estado.');
+        if (!d.success) return reintentarPoll(d.error || 'No se pudo consultar el estado.');
+        fallosSeguidos = 0;
         if (d.status === 'success') return mount(d.urn);
         if (d.status === 'retry_plain') {
           // El paquete con la imagen adjunta fracasó; el backend ya se rindió
@@ -215,7 +230,7 @@ export default function CadViewer({ file, projectPrefix = '' }) {
         setProgress(d.progress || '');
         timer = setTimeout(poll, 4000);
       } catch {
-        fail('Se perdió la conexión mientras se preparaba el archivo.');
+        reintentarPoll('Se perdió la conexión mientras se preparaba el archivo.');
       }
     };
 

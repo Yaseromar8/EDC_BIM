@@ -140,6 +140,34 @@ def _upload_to_oss(token, bucket, object_key, source, size=None):
     if not urls:
         return None, 'APS no devolvio URL de subida'
 
+    class _Ventana:
+        """Un tramo del fichero como objeto legible: requests lo envia a
+        trocitos (8 KB) directamente desde disco, con Content-Length del
+        tramo. Leer cada parte entera con read(PART_SIZE) ponia 90 MB en RAM
+        por trozo — asi tumbo el hilo de un DWG de 260 MB a la instancia de
+        512 MB (los dos 502 y el 503 que vio el dueno). Y el tamano de parte
+        no puede bajar: 90 MB x 25 partes es lo que permite el tope de subida
+        de 2 GB con una sola tanda de URLs firmadas."""
+        def __init__(self, fichero, inicio, tam):
+            self._f, self._ini, self._tam, self._pos = fichero, inicio, tam, 0
+
+        def __len__(self):
+            return self._tam
+
+        def rebobinar(self):
+            self._pos = 0
+
+        def read(self, n=-1):
+            if self._pos >= self._tam:
+                return b''
+            if n is None or n < 0:
+                n = self._tam - self._pos
+            n = min(n, self._tam - self._pos)
+            self._f.seek(self._ini + self._pos)
+            datos = self._f.read(n)
+            self._pos += len(datos)
+            return datos
+
     def _subir_trozo(url, datos, numero):
         """Con reintentos. Un modelo de 300 MB cruzando la red de una obra se
         corta: perder la subida entera por un corte de un trozo es tirar diez
@@ -147,6 +175,8 @@ def _upload_to_oss(token, bucket, object_key, source, size=None):
         ultimo = None
         for intento in range(3):
             try:
+                if hasattr(datos, 'rebobinar'):
+                    datos.rebobinar()
                 put = requests.put(url, data=datos, timeout=1800)
                 if put.ok:
                     return None
@@ -163,12 +193,14 @@ def _upload_to_oss(token, bucket, object_key, source, size=None):
             if fallo:
                 return None, fallo
     else:
-        source.seek(0)
+        source.seek(0, os.SEEK_END)
+        total = source.tell()
         for i, url in enumerate(urls, start=1):
-            trozo = source.read(PART_SIZE)
-            if not trozo:
+            ini = (i - 1) * PART_SIZE
+            tam = min(PART_SIZE, total - ini)
+            if tam <= 0:
                 break
-            fallo = _subir_trozo(url, trozo, i)
+            fallo = _subir_trozo(url, _Ventana(source, ini, tam), i)
             if fallo:
                 return None, fallo
 
