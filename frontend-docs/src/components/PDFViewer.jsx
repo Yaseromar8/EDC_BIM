@@ -132,11 +132,58 @@ function Thumbnail({ pdf, pageNum, isActive, onClick }) {
 }
 
 
+// ── EL CATÁLOGO DE HERRAMIENTAS, AGRUPADO POR LO QUE HACE ───────────────
+// Once iconos en fila plana no se leen: hay que buscarlos uno a uno. En
+// grupos —navegar, medir, anotar, borrar— la mano va sola. Cada uno lleva su
+// PISTA, que se enseña cuando está activo en vez de un letrero permanente.
+const GRUPOS_DE_HERRAMIENTAS = [
+  { nombre: 'navegar', items: [
+    { id: 'pan', title: 'Navegar: arrastra para mover, rueda para acercar',
+      icon: <><path d="M9 11V6a1.6 1.6 0 0 1 3.2 0v5"/><path d="M12.2 11V4.8a1.6 1.6 0 0 1 3.2 0V11"/><path d="M15.4 11.4V7.6a1.6 1.6 0 0 1 3.2 0V15a6 6 0 0 1-6 6h-1.3a5 5 0 0 1-3.7-1.7L5 15.6a1.6 1.6 0 0 1 2.4-2.1L9 15"/></>,
+      hint: 'Arrastra para mover el plano · rueda para acercar' } ] },
+  { nombre: 'medir', items: [
+    { id: 'calibrate', title: 'Calibrar escala con una distancia conocida',
+      icon: <><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/><path d="M6.8 17.2 17.2 6.8"/><path d="m10 14 1 1M13 11l1 1"/></>,
+      hint: 'Marca dos puntos de una distancia conocida y escríbela' },
+    { id: 'measure', title: 'Medir distancia',
+      icon: <><rect x="2" y="9" width="20" height="6" rx="1" transform="rotate(-45 12 12)"/><path d="m8 12 1.4 1.4M11 9l1.4 1.4M14 6l1.4 1.4"/></>,
+      hint: 'Clic por puntos · doble clic termina la medición' },
+    { id: 'area', title: 'Medir área',
+      icon: <path d="m12 3 8.5 6.5-3.2 10.4H6.7L3.5 9.5z"/>,
+      hint: 'Clic en cada vértice · doble clic cierra el área' },
+    { id: 'count', title: 'Conteo de elementos',
+      icon: <><circle cx="12" cy="12" r="8.5"/><path d="M12 8.5v7M8.5 12h7"/></>,
+      hint: 'Cada clic suma una unidad al conteo' } ] },
+  { nombre: 'anotar', items: [
+    { id: 'cloud', title: 'Nube de revisión',
+      icon: <path d="M17.5 19a4.5 4.5 0 0 0 .4-9 7 7 0 0 0-13.5 1.9A4 4 0 0 0 6 19z"/>,
+      hint: 'Arrastra para encerrar lo que hay que revisar' },
+    { id: 'arrow', title: 'Flecha',
+      icon: <path d="M5 19 19 5m0 0h-7m7 0v7"/>,
+      hint: 'Arrastra desde el origen hasta la punta' },
+    { id: 'rect', title: 'Rectángulo',
+      icon: <rect x="4" y="6" width="16" height="12" rx="1.5"/>,
+      hint: 'Arrastra para dibujar el rectángulo' },
+    { id: 'pen', title: 'Lápiz libre',
+      icon: <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>,
+      hint: 'Dibuja a mano alzada' },
+    { id: 'text', title: 'Texto',
+      icon: <path d="M5 6V4h14v2M12 4v16M9 20h6"/>,
+      hint: 'Clic donde quieras escribir' } ] },
+  { nombre: 'borrar', items: [
+    { id: 'erase', title: 'Borrar anotación',
+      icon: <><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></>,
+      hint: 'Clic sobre una anotación para borrarla' } ] },
+];
+
+const HINTS = Object.fromEntries(
+  GRUPOS_DE_HERRAMIENTAS.flatMap(g => g.items.map(t => [t.id, t.hint])));
+
 // ----------------------------------------------------------------------
 // Visor Principal
 // ----------------------------------------------------------------------
 export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
-                                    versionLabel = null, versionInfo = null }) {
+                                    versionLabel = null, versionInfo = null, hideTitle = false }) {
   const viewerRef = useRef(null); // Para Fullscreen
   const canvasRef = useRef(null);
   const wrapRef = useRef(null); // Envuelve canvas + overlay de herramientas
@@ -154,6 +201,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   const busquedaVivaRef = useRef(null);   // debounce de la busqueda en vivo
   const bufferCanvasRef = useRef(null);   // doble bufer del render (uno, reutilizado)
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false);   // menu de presets de zoom
+  const [colorOpen, setColorOpen] = useState(false);         // paleta del carril de anotacion
 
   // ── Búsqueda dentro del documento ──
   const [searchOpen, setSearchOpen] = useState(false);
@@ -693,44 +741,31 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     );
   }
 
+  // La identidad se enseña aquí SOLO si nadie la enseña fuera (o si estamos en
+  // pantalla completa, donde la cabecera del expediente ya no está).
+  const mostrarIdentidad = !hideTitle || isFullscreen;
+
   return (
-    <div
-      ref={viewerRef}
-      className="pdf-viewer"
-      tabIndex={-1}
-      aria-busy={pageRendering}
-      style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#78838f', overflow: 'hidden' }}
-    >
-      
-      {/* ▀▀▀ ACC Dark Toolbar ▀▀▀ */}
-      <div className="pdf-toolbar" style={styles.toolbar} role="toolbar" aria-label="Controles del documento PDF">
-        
-        {/* Izquierda: Menú + Búsqueda */}
-        <div className="pdf-toolbar__group pdf-toolbar__left" style={styles.toolbarGroupLeft}>
-          <button aria-label="Alternar panel de miniaturas" aria-pressed={showSidebar} onClick={() => setShowSidebar(!showSidebar)} style={{...styles.toolBtnDark, background: showSidebar ? '#243140' : 'transparent'}} title="Alternar panel de miniaturas">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+    <div ref={viewerRef} className="pdf-viewer" tabIndex={-1} aria-busy={pageRendering}>
+
+      <div className="pdf-topbar" role="toolbar" aria-label="Controles del documento">
+        <div className="pdf-topbar__left">
+          <button className="pdf-ico" onClick={() => setShowSidebar(!showSidebar)}
+            aria-label="Panel de miniaturas" aria-pressed={showSidebar} title="Miniaturas de páginas">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+          </button>
+          <button className="pdf-ico" aria-label="Buscar en el documento" aria-pressed={searchOpen}
+            title="Buscar en el documento (Ctrl+F)"
+            onClick={() => { setSearchOpen(o => !o); setTimeout(() => document.getElementById('pdf-search-input')?.focus(), 0); }}>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
           </button>
 
-          <button onClick={() => { setSearchOpen(o => !o); setTimeout(() => document.getElementById('pdf-search-input')?.focus(), 0); }}
-            aria-label="Buscar en el documento" aria-pressed={searchOpen}
-            style={{ ...styles.toolBtnDark, background: searchOpen ? '#243140' : 'transparent' }} title="Buscar en el documento (Ctrl+F)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          </button>
-
-          {searchOpen && (
-            <div style={styles.searchBox}>
-              <input
-                id="pdf-search-input"
-                value={searchQuery}
+          {searchOpen ? (
+            <div className="pdf-search">
+              <input id="pdf-search-input" value={searchQuery} placeholder="Buscar en el documento…"
                 onChange={e => {
                   const v = e.target.value;
                   setSearchQuery(v);
-                  // BUSQUEDA EN VIVO. Antes habia que pulsar Enter o el boton
-                  // «Ir»; quien viene de Autodesk (o de cualquier navegador)
-                  // espera que el resaltado aparezca mientras escribe. 300 ms
-                  // de espera para no barrer el documento en cada tecla; el
-                  // motor ya cachea el texto por pagina, asi que repetir la
-                  // busqueda es barato.
                   if (busquedaVivaRef.current) clearTimeout(busquedaVivaRef.current);
                   busquedaVivaRef.current = setTimeout(() => {
                     if (v.trim().length >= 2) runSearch(v);
@@ -740,297 +775,185 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
                 onKeyDown={e => {
                   if (e.key === 'Enter') { e.preventDefault(); matches.length ? gotoMatch(e.shiftKey ? -1 : 1) : runSearch(searchQuery); }
                   if (e.key === 'Escape') setSearchOpen(false);
-                }}
-                placeholder="Buscar en el documento…"
-                style={styles.searchInput}
-              />
-              <span style={{ fontSize: 11, color: '#999', minWidth: 68, textAlign: 'center' }}>
+                }} />
+              <span className="pdf-search__count">
                 {searching ? 'Buscando…'
                   : matches.length ? `${matchIdx + 1} de ${matches.length}`
                   : searchQuery.trim().length >= 2 ? 'Sin resultados' : ''}
               </span>
-              <button onClick={() => runSearch(searchQuery)} style={styles.searchBtn} title="Buscar">Ir</button>
-              <button onClick={() => gotoMatch(-1)} disabled={!matches.length} style={styles.searchBtn} title="Anterior (Shift+Enter)">‹</button>
-              <button onClick={() => gotoMatch(1)} disabled={!matches.length} style={styles.searchBtn} title="Siguiente (Enter)">›</button>
+              <button onClick={() => gotoMatch(-1)} disabled={!matches.length} title="Anterior (Shift+Enter)">‹</button>
+              <button onClick={() => gotoMatch(1)} disabled={!matches.length} title="Siguiente (Enter)">›</button>
             </div>
-          )}
-          {!searchOpen && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              {versionLabel && (
-                <span style={styles.versionChip} title={versionInfo || versionLabel}>{versionLabel}</span>
-              )}
+          ) : mostrarIdentidad && (
+            <div className="pdf-ident">
+              {versionLabel && <span className="pdf-chip-ver" title={versionInfo || versionLabel}>{versionLabel}</span>}
               <span className="pdf-file-title" title={fileName}>{fileName}</span>
-              {versionInfo && (
-                <span className="pdf-version-info" style={styles.versionInfo} title={versionInfo}>
-                  {versionInfo}
-                </span>
-              )}
-            </span>
+              {versionInfo && <span className="pdf-meta">{versionInfo}</span>}
+            </div>
           )}
         </div>
 
-        {/* Centro: Herramientas Principales */}
-        <div className="pdf-toolbar__group pdf-toolbar__center" style={styles.toolbarGroupCenter}>
-
-          <button onClick={zoomOut} style={styles.toolBtnDark} title="Reducir zoom (−)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13H5v-2h14v2z"/></svg>
-          </button>
-
-          {/* El porcentaje era un letrero pasivo. En el visor de Autodesk es un
-              MENU: pulsas y eliges 100%, 200%, ajustar a ancho... Es la forma
-              rapida de volver a un zoom conocido despues de perderse en un
-              plano A0. Se cierra con Escape, con clic fuera, o al elegir. */}
-          <span style={{ position: 'relative', display: 'inline-flex' }}>
-            <button onClick={() => setZoomMenuOpen(o => !o)}
-              aria-haspopup="menu" aria-expanded={zoomMenuOpen}
-              style={{ ...styles.toolBtnDark, fontSize: 12, color: '#ccc', minWidth: 48, fontWeight: 500 }}
-              title="Elegir nivel de zoom">
-              {Math.round(scale * 100)}%
-            </button>
-            {zoomMenuOpen && (
-              <div role="menu" style={{
-                position: 'absolute', top: '110%', left: '50%', transform: 'translateX(-50%)',
-                background: '#131b24', border: '1px solid #2a3541', borderRadius: 6,
-                boxShadow: '0 4px 14px rgba(0,0,0,.45)', padding: 4, zIndex: 40,
-                display: 'flex', flexDirection: 'column', minWidth: 150,
-              }}>
-                {[['Ajustar página', () => fitTo('page'), 'Ctrl+0'],
-                  ['Ajustar ancho', () => fitTo('width'), ''],
-                  ['50 %', () => { setFitMode('custom'); setScale(0.5); }, ''],
-                  ['100 %', () => { setFitMode('custom'); setScale(1); }, 'Ctrl+1'],
-                  ['200 %', () => { setFitMode('custom'); setScale(2); }, ''],
-                  ['400 %', () => { setFitMode('custom'); setScale(4); }, ''],
-                ].map(([texto, accion, atajo]) => (
-                  <button key={texto} role="menuitem"
-                    onClick={() => { accion(); setZoomMenuOpen(false); }}
-                    style={{
-                      background: 'transparent', border: 'none', color: '#ddd',
-                      padding: '7px 12px', fontSize: 12.5, textAlign: 'left',
-                      cursor: 'pointer', borderRadius: 4, display: 'flex',
-                      justifyContent: 'space-between', gap: 16,
-                    }}
-                    onMouseOver={e => e.currentTarget.style.background = '#22303e'}
-                    onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
-                    <span>{texto}</span>
-                    {atajo && <span style={{ color: '#888', fontSize: 11 }}>{atajo}</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-          </span>
-
-          <button onClick={zoomIn} style={styles.toolBtnDark} title="Aumentar zoom (+)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-          </button>
-
-          <button onClick={() => fitTo('page')} style={styles.toolBtnDark} title="Ajustar página completa (Ctrl+0)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 8l-2 2 2 2M15 8l2 2-2 2"/></svg>
-          </button>
-          <button onClick={() => fitTo('width')} style={styles.toolBtnDark} title="Ajustar al ancho">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg>
-          </button>
-
-          <div style={styles.separatorDark} />
-
-          <div style={styles.pageInfoDark}>
-            <span>Página</span>
-            <button aria-label="Página anterior" onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1} style={styles.pageNavBtnDark}>
-               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-            </button>
-            <input 
-              aria-label="Número de página"
-              inputMode="numeric"
-              type="number" value={pageDraft}
+        <div className="pdf-topbar__center">
+          <div className="pdf-pagenav">
+            <button className="pdf-ico" aria-label="Página anterior" title="Página anterior"
+              onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+            <input aria-label="Número de página" inputMode="numeric" type="number"
+              value={pageDraft} min={1} max={numPages}
               onChange={(e) => setPageDraft(e.target.value)}
               onBlur={() => goToPage(Number(pageDraft) || currentPage)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  goToPage(Number(pageDraft) || currentPage);
-                  e.currentTarget.blur();
-                }
-                if (e.key === 'Escape') {
-                  setPageDraft(String(currentPage));
-                  e.currentTarget.blur();
-                }
-              }}
-              style={styles.pageInputDark} min={1} max={numPages} 
-            />
-            <button aria-label="Página siguiente" onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= numPages} style={styles.pageNavBtnDark}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-            </button>
+                if (e.key === 'Enter') { e.preventDefault(); goToPage(Number(pageDraft) || currentPage); e.currentTarget.blur(); }
+                if (e.key === 'Escape') { setPageDraft(String(currentPage)); e.currentTarget.blur(); }
+              }} />
             <span>de {numPages}</span>
+            <button className="pdf-ico" aria-label="Página siguiente" title="Página siguiente"
+              onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= numPages}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
           </div>
-
         </div>
 
-        {/* Derecha: Opciones Extra */}
-        <div className="pdf-toolbar__group pdf-toolbar__right" style={styles.toolbarGroupRight}>
-          <button onClick={rotateRight} style={styles.toolBtnDark} title="Rotar 90 grados">
-             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15.55 5.55L11 1v3C7.06 4 4 7.06 4 11s3.06 7 7 7c1.53 0 2.95-.49 4.1-1.32l-1.5-1.5C12.82 15.69 11.95 16 11 16c-2.76 0-5-2.24-5-5s2.24-5 5-5v3l4.55-4.55zM13 11c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2z"/></svg>
-          </button>
-
-          <div style={styles.separatorDark} />
-
-          <button onClick={printDocument} style={styles.toolBtnDark} title="Imprimir">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-          </button>
-          
-          <a href={url} target="_blank" rel="noopener noreferrer" style={{ ...styles.toolBtnDark, textDecoration: 'none' }} title="Descargar PDF">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-          </a>
-
-          <div style={styles.separatorDark} />
-
-          <button onClick={toggleFullscreen} style={styles.toolBtnDark} title="Pantalla completa">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-              {isFullscreen ? 
-                <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/> :
-                <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-              }
-            </svg>
+        <div className="pdf-topbar__right">
+          <button className="pdf-ico" onClick={rotateRight} title="Rotar 90°"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg></button>
+          <span className="pdf-sep" />
+          <button className="pdf-ico" onClick={printDocument} title="Imprimir"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="7" rx="1.5"/><path d="M7 16h10v5H7z"/></svg></button>
+          <a className="pdf-ico" href={url} target="_blank" rel="noopener noreferrer" title="Descargar"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11M8 12l4 4 4-4"/><path d="M4 19h16"/></svg></a>
+          <span className="pdf-sep" />
+          <button className="pdf-ico" onClick={toggleFullscreen}
+            title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
+            {isFullscreen ? <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg> : <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>}
           </button>
         </div>
       </div>
 
-      {/* ▀▀▀ Barra de herramientas de ingeniería ▀▀▀ */}
-      {nodeId && (
-        <div className="pdf-tools-bar" style={styles.toolsBar} role="toolbar" aria-label="Herramientas de ingeniería">
-          {[
-            { id: 'pan', title: 'Navegar (pan y zoom)', icon: <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/> },
-            { id: 'calibrate', title: 'Calibrar escala: clic en 2 puntos de una distancia conocida', icon: <><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/><path d="M7 17L17 7M10 14l1 1M13 11l1 1"/></> },
-            { id: 'measure', title: 'Medir distancia: clic por puntos, doble clic termina', icon: <><rect x="1" y="9" width="22" height="6" rx="1" transform="rotate(-45 12 12)"/><path d="M8 12l1.5 1.5M11 9l1.5 1.5M14 6l1.5 1.5"/></> },
-            { id: 'area', title: 'Medir área: clic por vértices, doble clic cierra', icon: <path d="M12 2l9 7-3.5 11h-11L3 9z"/> },
-            { id: 'count', title: 'Conteo: cada clic suma 1', icon: <><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></> },
-            { id: 'cloud', title: 'Nube de revisión: arrastrar', icon: <path d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 7 7 0 0 0-13.6 1.9A4 4 0 0 0 6 19z"/> },
-            { id: 'arrow', title: 'Flecha: arrastrar', icon: <path d="M5 19L19 5M19 5h-8M19 5v8"/> },
-            { id: 'rect', title: 'Rectángulo: arrastrar', icon: <rect x="4" y="6" width="16" height="12" rx="1"/> },
-            { id: 'pen', title: 'Lápiz libre: arrastrar', icon: <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/> },
-            { id: 'text', title: 'Texto: clic donde quieras escribir', icon: <path d="M5 6V4h14v2M12 4v16M9 20h6"/> },
-            { id: 'erase', title: 'Borrar: clic sobre una anotación', icon: <><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></> },
-          ].map(t => (
-            <button key={t.id} onClick={() => setTool(prev => prev === t.id ? 'pan' : t.id)} title={t.title}
-              style={{ ...styles.toolsBtn, background: tool === t.id ? 'var(--accent)' : 'transparent', color: tool === t.id ? '#fff' : '#ccc' }}>
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{t.icon}</svg>
-            </button>
-          ))}
-          <div style={{ width: 1, height: 20, background: '#2a3541', margin: '0 6px' }} />
-          {COLORS.map(c => (
-            <button key={c} onClick={() => setMarkupColor(c)} title="Color"
-              style={{ width: 18, height: 18, borderRadius: '50%', background: c, cursor: 'pointer', border: markupColor === c ? '2px solid #fff' : '2px solid transparent', padding: 0 }} />
-          ))}
-          <span className="pdf-tools-hint" style={{ marginLeft: 'auto', fontSize: 11, color: '#888', paddingRight: 8 }}>
-            {tool === 'pan' ? 'Elige una herramienta para medir o anotar' : 'Esc cancela · doble clic termina líneas/áreas'}
-          </span>
-        </div>
-      )}
-
-      {/* ▀▀▀ MAIN AREA (1 Página) ▀▀▀ */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
-        
-        {/* Sidebar Miniaturas */}
+      <div className="pdf-body">
         {showSidebar && (
-          <div ref={sidebarRef} className="pdf-sidebar" style={styles.sidebar} aria-label="Miniaturas de páginas">
+          <div ref={sidebarRef} className="pdf-sidebar" aria-label="Miniaturas de páginas">
             {Array.from({ length: numPages }, (_, i) => i + 1).map(pageNum => (
-              <Thumbnail 
-                key={pageNum}
-                pdf={pdfDocRef.current}
-                pageNum={pageNum}
-                isActive={currentPage === pageNum}
-                onClick={() => goToPage(pageNum)}
-              />
+              <Thumbnail key={pageNum} pdf={pdfDocRef.current} pageNum={pageNum}
+                isActive={currentPage === pageNum} onClick={() => goToPage(pageNum)} />
             ))}
           </div>
         )}
 
-        {/* Canvas de Documento */}
-        <div 
-          ref={containerRef} 
-          className="pdf-canvas-container"
-          style={{
-            ...styles.canvasContainer,
-            cursor: isDragging ? 'grabbing' : 'grab' // Aplica a toda el área
-          }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        >
-          {pageRendering && (
-            <div className="pdf-render-status" role="status" aria-live="polite">
-              Actualizando página {currentPage}…
-            </div>
-          )}
-          {renderError && (
-            <div className="pdf-render-error" role="alert">
-              <span>{renderError}</span>
-              <button type="button" onClick={renderPage}>Reintentar</button>
-            </div>
-          )}
-          {/* minWidth 100% + width fit-content: centra cuando el plano es mas
-              chico que la pantalla, pero crece y deja hacer scroll a TODOS los
-              lados cuando el zoom lo hace mas grande (sin recortar los bordes). */}
-          <div style={{ padding: 48, boxSizing: 'border-box', minWidth: '100%', width: 'fit-content', margin: '0 auto', display: 'flex', justifyContent: 'center' }}>
-            <div ref={wrapRef} style={{ position: 'relative' }}>
-              <canvas ref={canvasRef} style={styles.canvas} />
+        <div className="pdf-stage">
+          <div ref={containerRef} className="pdf-canvas-container"
+            style={{ cursor: tool === 'pan' ? (isDragging ? 'grabbing' : 'grab') : 'crosshair' }}
+            onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
 
-              {/* Resaltado de coincidencias — no intercepta clics (las herramientas siguen funcionando) */}
-              {highlights.map(h => (
-                <div key={h.key} style={{
-                  position: 'absolute', pointerEvents: 'none',
-                  left: h.left, top: h.top, width: h.width, height: h.height,
-                  background: h.active ? 'rgba(255,145,0,0.55)' : 'rgba(255,235,59,0.38)',
-                  outline: h.active ? '1px solid #ff6d00' : 'none',
-                  borderRadius: 2,
-                }} />
-              ))}
-              {nodeId && vpInfo && (
-                <PdfToolsOverlay
-                  vpInfo={vpInfo} page={currentPage} nodeId={nodeId}
-                  projectPrefix={projectPrefix} tool={tool} setTool={setTool}
-                  color={markupColor} userName={userName}
-                />
-              )}
+            {pageRendering && (
+              <div className="pdf-render-status" role="status" aria-live="polite">
+                Actualizando página {currentPage}…
+              </div>
+            )}
+            {renderError && (
+              <div className="pdf-render-error" role="alert">
+                <span>{renderError}</span>
+                <button type="button" onClick={renderPage}>Reintentar</button>
+              </div>
+            )}
+
+            <div className="pdf-page-pad">
+              <div ref={wrapRef} className="pdf-page">
+                <canvas ref={canvasRef} />
+                {highlights.map(h => (
+                  <div key={h.key} style={{
+                    position: 'absolute', pointerEvents: 'none',
+                    left: h.left, top: h.top, width: h.width, height: h.height,
+                    background: h.active ? 'rgba(255,145,0,0.55)' : 'rgba(255,235,59,0.38)',
+                    outline: h.active ? '1px solid #ff6d00' : 'none', borderRadius: 2,
+                  }} />
+                ))}
+                {nodeId && vpInfo && (
+                  <PdfToolsOverlay vpInfo={vpInfo} page={currentPage} nodeId={nodeId}
+                    projectPrefix={projectPrefix} tool={tool} setTool={setTool}
+                    color={markupColor} userName={userName} />
+                )}
+              </div>
             </div>
           </div>
+
+          {/* El zoom FLOTA sobre la hoja: no le roba una barra al alto útil. */}
+          <div className="pdf-dock">
+            <div className="pdf-dock__group" style={{ position: 'relative' }}>
+              <button className="pdf-ico" onClick={zoomOut} title="Reducir (−)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-3.6-3.6"/></svg></button>
+              <button className="pdf-zoom-label" onClick={() => setZoomMenuOpen(o => !o)}
+                aria-haspopup="menu" aria-expanded={zoomMenuOpen} title="Nivel de zoom">
+                {Math.round(scale * 100)}%
+              </button>
+              <button className="pdf-ico" onClick={zoomIn} title="Aumentar (+)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M20 20l-3.6-3.6"/></svg></button>
+              {zoomMenuOpen && (
+                <div role="menu" className="pdf-zoom-menu">
+                  {[['Ajustar página', () => fitTo('page'), 'Ctrl+0'],
+                    ['Ajustar ancho', () => fitTo('width'), ''],
+                    ['50 %', () => { setFitMode('custom'); setScale(0.5); }, ''],
+                    ['100 %', () => { setFitMode('custom'); setScale(1); }, 'Ctrl+1'],
+                    ['200 %', () => { setFitMode('custom'); setScale(2); }, ''],
+                    ['400 %', () => { setFitMode('custom'); setScale(4); }, ''],
+                  ].map(([texto, accion, atajo]) => (
+                    <button key={texto} role="menuitem" onClick={() => { accion(); setZoomMenuOpen(false); }}>
+                      <span>{texto}</span>{atajo && <span>{atajo}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="pdf-dock__group">
+              <button className="pdf-ico" onClick={() => fitTo('page')}
+                aria-pressed={fitMode === 'page'} title="Ajustar página (Ctrl+0)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 9l-2 2 2 2M15 9l2 2-2 2"/></svg></button>
+              <button className="pdf-ico" onClick={() => fitTo('width')}
+                aria-pressed={fitMode === 'width'} title="Ajustar ancho"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg></button>
+            </div>
+          </div>
+
+          {nodeId && (
+            <>
+              <div className="pdf-rail" role="toolbar" aria-label="Herramientas de medición y anotación">
+                {GRUPOS_DE_HERRAMIENTAS.map(grupo => (
+                  <div key={grupo.nombre} className="pdf-rail__group">
+                    {grupo.items.map(t => (
+                      <button key={t.id} className="pdf-rail-btn" title={t.title}
+                        aria-label={t.title} aria-pressed={tool === t.id}
+                        onClick={() => setTool(prev => prev === t.id ? 'pan' : t.id)}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{t.icon}</svg>
+                      </button>
+                    ))}
+                    {grupo.nombre === 'anotar' && (
+                      <span style={{ position: 'relative' }}>
+                        <button className="pdf-swatch" title="Color de anotación"
+                          aria-haspopup="true" aria-expanded={colorOpen}
+                          onClick={() => setColorOpen(o => !o)}>
+                          <i style={{ background: markupColor }} />
+                        </button>
+                        {colorOpen && (
+                          <div className="pdf-colors" role="menu">
+                            {COLORS.map(c => (
+                              <button key={c} style={{ background: c }} aria-pressed={markupColor === c}
+                                aria-label={'Color ' + c} title={c}
+                                onClick={() => { setMarkupColor(c); setColorOpen(false); }} />
+                            ))}
+                          </div>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {tool !== 'pan' && (
+                <div className="pdf-tool-hint">{HINTS[tool]} · Esc cancela</div>
+              )}
+            </>
+          )}
         </div>
-        
       </div>
     </div>
   );
 }
 
-// --- Inline Styles ---
-// PALETA: la misma pizarra ALEPHIA del top-header (Ink #0B0E12) y sus grises
-// azulados. El lector deja de ser un gris genérico y pasa a ser de la casa.
+// Estilos en línea: solo los estados SIN chrome (carga y error). Todo lo
+// demás vive en PDFViewer.css, con clases.
 const styles = {
   center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', width: '100%', gap: 4, background: 'var(--alephia-mist, #F3F6F8)' },
   spinner: { width: 36, height: 36, border: '3px solid #e0e0e0', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' },
-
-  toolbar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', height: 48, background: 'var(--alephia-ink, #0B0E12)', color: '#fff', flexShrink: 0, zIndex: 10 },
-  toolbarGroupLeft: { display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 },
-  toolbarGroupCenter: { display: 'flex', alignItems: 'center', gap: 4, flex: 2, justifyContent: 'center' },
-  toolbarGroupRight: { display: 'flex', alignItems: 'center', gap: 4, flex: 1, justifyContent: 'flex-end' },
-
-  toolBtnDark: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, border: 'none', background: 'transparent', borderRadius: 4, cursor: 'pointer', color: '#d6dde4', transition: 'background 0.2s, color 0.2s' },
-  separatorDark: { width: 1, height: 24, background: '#2a3541', margin: '0 8px' },
-
-  versionChip: { flexShrink: 0, padding: '2px 8px', borderRadius: 4, background: '#1d2a37', border: '1px solid #33475b', color: '#cfe0ee', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.04em' },
-  versionInfo: { flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11.5, color: '#8b98a6', letterSpacing: '0.01em' },
-
-  searchBox: { display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6, background: '#0a1017', border: '1px solid #2a3541', borderRadius: 4, padding: '2px 4px' },
-  searchInput: { width: 190, background: 'transparent', border: 'none', outline: 'none', color: '#fff', fontSize: 12.5, padding: '5px 6px', fontFamily: 'inherit' },
-  searchBtn: { background: 'transparent', border: 'none', color: '#d6dde4', cursor: 'pointer', fontSize: 14, padding: '2px 7px', borderRadius: 3 },
-
-  pageInfoDark: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#a7b2bd', letterSpacing: '0.01em' },
-  pageInputDark: { width: 40, textAlign: 'center', border: '1px solid #2a3541', borderRadius: 4, padding: '4px 4px', fontSize: 13, outline: 'none', background: '#0a1017', color: '#fff', fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums' },
-  pageNavBtnDark: { background: 'transparent', border: 'none', color: '#d6dde4', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 2 },
-
-  toolsBar: { display: 'flex', alignItems: 'center', gap: 2, padding: '0 12px', height: 38, background: '#121922', borderTop: '1px solid #26313d', flexShrink: 0, zIndex: 9 },
-  toolsBtn: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 28, border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14, transition: 'background 0.15s' },
-
-  sidebar: { width: 220, background: 'var(--alephia-mist, #F3F6F8)', borderRight: '1px solid var(--neutral-200, #e3e6ea)', overflowY: 'auto', display: 'flex', flexDirection: 'column', flexShrink: 0 },
-  canvasContainer: { flex: 1, overflow: 'auto' },
-  canvas: { boxShadow: '0 4px 16px rgba(11,14,18,0.35)', background: '#fff' },
   downloadBtn: { marginTop: 16, padding: '8px 20px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, textDecoration: 'none', fontSize: 13, fontWeight: 500 },
 };

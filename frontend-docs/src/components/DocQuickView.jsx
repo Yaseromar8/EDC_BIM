@@ -14,8 +14,19 @@ export default function DocQuickView({ file, projectPrefix, onClose,
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 12000, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ width: '92vw', height: '90vh', background: '#fff', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 50px rgba(0,0,0,0.4)' }}>
-        <div style={{ height: 46, padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e5e5e5', flexShrink: 0 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--accent)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+        <div style={{ height: 46, padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border, #e3e6ea)', flexShrink: 0, gap: 12 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+            {versionLabel && (
+              <span style={{ flexShrink: 0, padding: '2px 8px', border: '1px solid #c9d6e2', borderRadius: 4,
+                             background: '#eef4f9', color: '#2b4d68', fontSize: 11.5, fontWeight: 700,
+                             letterSpacing: '0.04em' }} title={versionInfo || versionLabel}>{versionLabel}</span>
+            )}
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary, #0B0E12)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+            {versionInfo && (
+              <span style={{ flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
+                             whiteSpace: 'nowrap', fontSize: 11.5, color: 'var(--text-secondary, #667180)' }}>{versionInfo}</span>
+            )}
+          </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <a href={file.url} target="_blank" rel="noopener noreferrer" title="Descargar"
               style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 6, color: '#666', textDecoration: 'none' }}>
@@ -26,7 +37,7 @@ export default function DocQuickView({ file, projectPrefix, onClose,
         </div>
         <div style={{ flex: 1, position: 'relative', background: '#f5f5f5', minHeight: 0 }}>
           {isPdf && <PDFViewer url={file.url} fileName={file.name} nodeId={file.nodeId || null}
-                               projectPrefix={projectPrefix}
+                               projectPrefix={projectPrefix} hideTitle
                                versionLabel={versionLabel} versionInfo={versionInfo} />}
           {isImage && (
             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>

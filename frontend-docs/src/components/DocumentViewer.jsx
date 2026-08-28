@@ -341,6 +341,10 @@ export default function DocumentViewer({
             const vv = viewedVersionInfo || versionHistory[0] || null;
             return <PDFViewer url={fileUrl} fileName={file.name}
               nodeId={isShared ? null : file.id} projectPrefix={projectPrefix}
+              // Esta pantalla YA tiene cabecera con nombre y versión: el lector
+              // no la repite… salvo en pantalla completa, donde esa cabecera
+              // desaparece y la trazabilidad tiene que seguir a la vista.
+              hideTitle
               versionLabel={vv ? `V${vv.version_number || 1}` : null}
               versionInfo={vv && (vv.updated_by || vv.updated)
                 ? `Cargado por ${vv.updated_by || '—'}${vv.updated ? ` · ${formatDate(vv.updated)}` : ''}`
