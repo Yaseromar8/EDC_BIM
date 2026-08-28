@@ -28,6 +28,7 @@ import time
 import zipfile
 
 import requests
+from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 from flask import Blueprint, request, jsonify, g
 
 from politica import publico_en_lectura
@@ -472,6 +473,26 @@ def _build_package(node):
 _PRETRADUCCIONES_EN_CURSO = set()
 _CANDADO_PRETRADUCCION = __import__('threading').Lock()
 
+# LA COLA, ACOTADA A DOS. Cada pre-traduccion baja el fichero entero de GCS a
+# un temporal y lo reenvia a Autodesk: es pesada en disco y en red. Con un
+# hilo suelto por fichero, cargar 100 planos lanzaba 100 a la vez y mataba la
+# instancia (512 MB, disco efimero) -- la misma muerte que provoco un solo
+# DWG de 260 MB antes de trocear la subida. Con dos obreros, los 100 entran
+# igual: hacen COLA y van saliendo. Nadie espera delante de la pantalla,
+# porque esto es de fondo por definicion.
+_COLA_TRADUCCION = _ThreadPoolExecutor(max_workers=2,
+                                       thread_name_prefix='cad-pretrad')
+
+
+def encolar_pretraduccion(node_id, forzar=False, master=False):
+    """Mete una pre-traduccion en la cola. Nunca lanza hilos sueltos."""
+    try:
+        _COLA_TRADUCCION.submit(pretraducir_en_fondo, str(node_id), forzar, master)
+        return True
+    except Exception as e:
+        print('[CAD pre] no se pudo encolar %s: %s' % (node_id, str(e)[:120]))
+        return False
+
 
 def pretraducir_en_fondo(node_id, forzar=False, master=False):
     """Traduce un CAD sin que nadie espere: el camino de ACC.
@@ -684,9 +705,7 @@ def translate_cad():
     # ahora en un hilo (pretraducir_en_fondo, con su candado anti-duplicados)
     # y esta respuesta vuelve al instante: el frontend ya sondea /status, que
     # trata la fase sin manifiesto como 'inprogress 0%'.
-    import threading as _th
-    _th.Thread(target=pretraducir_en_fondo,
-               args=(str(node['id']), forzar, master), daemon=True).start()
+    encolar_pretraduccion(node['id'], forzar, master)
     _save_cad_meta(node, {'urn': urn, 'status': 'inprogress'})
     return jsonify({'success': True, 'status': 'inprogress', 'urn': urn,
                     'progress': 'Subiendo el archivo a Autodesk…'})

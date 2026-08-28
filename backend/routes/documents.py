@@ -1595,9 +1595,9 @@ def confirm_upload():
         # coste del dueno (28-ago-2026): todo CAD subido consume creditos de
         # Model Derivative aunque nadie lo abra jamas.
         try:
-            from routes.docs_cad import is_cad_file, pretraducir_en_fondo
+            from routes.docs_cad import is_cad_file, encolar_pretraduccion
             if is_cad_file(filename):
-                threading.Thread(target=pretraducir_en_fondo, args=(str(file_id),), daemon=True).start()
+                encolar_pretraduccion(file_id)
         except Exception as te:
             print(f"[upload-confirm] cad bg: {te}")
 

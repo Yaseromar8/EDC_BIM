@@ -335,10 +335,9 @@ def complete_upload():
         # todo CAD subido consume creditos de Model Derivative aunque nadie lo
         # abra jamas.
         try:
-            import threading as _th
-            from routes.docs_cad import is_cad_file, pretraducir_en_fondo
+            from routes.docs_cad import is_cad_file, encolar_pretraduccion
             if is_cad_file(filename):
-                _th.Thread(target=pretraducir_en_fondo, args=(str(node_id),), daemon=True).start()
+                encolar_pretraduccion(node_id)
         except Exception as _e:
             print(f"[uploads] no se pudo lanzar la pre-traduccion CAD: {_e}")
 
