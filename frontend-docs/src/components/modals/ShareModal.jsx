@@ -132,6 +132,12 @@ export default function ShareModal({ isOpen, shareTarget, user, projectPrefix, s
           <span>El enlace caduca en:</span>
           <select value={expiresDays} onChange={e => setExpiresDays(Number(e.target.value))} disabled={creating}>
             <option value={1}>1 día</option><option value={7}>7 días</option><option value={30}>30 días</option><option value={90}>90 días</option>
+            {/* SIN CADUCIDAD: el backend ya lo aceptaba (expires_days 0) y la
+                pantalla no lo ofrecía. Hace falta para el uso real que pidió
+                el dueño: pegar los enlaces como REFERENCIA en un Excel que
+                vive meses — un enlace de 90 días deja el Excel roto en el
+                peor momento. Sigue siendo revocable cuando se quiera. */}
+            <option value={0}>Sin caducidad</option>
           </select>
         </div>
         <div className="share-footer" style={{ position: 'relative' }}>
