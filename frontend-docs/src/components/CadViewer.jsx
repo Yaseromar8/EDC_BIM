@@ -64,6 +64,21 @@ function formatoReloj(segundos) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// El sentido del zoom con rueda NO es el mismo en 2D que en 3D dentro del
+// visor de Autodesk: la herramienta de laminas suma la rueda con el signo
+// contrario al dolly 3D (verificado en el bundle 7.126: ambos consultan
+// getReverseZoomDirection, pero el delta base va cambiado). Con la bandera
+// en false para todo, el 3D acercaba con rueda arriba y una lamina DWG se
+// ALEJABA -- el "scroll invertido" que reporto el dueno. La bandera se
+// decide POR VISTA: false en 3D (paridad con el visor principal), true en
+// 2D para que acercar sea acercar.
+function ajustarSentidoDelZoom(viewer, node) {
+  try {
+    const es2D = node?.data?.role !== '3d';
+    viewer.getNavigation?.()?.setReverseZoomDirection(es2D);
+  } catch { /* noop */ }
+}
+
 export default function CadViewer({ file, projectPrefix = '' }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
@@ -154,11 +169,7 @@ export default function CadViewer({ file, projectPrefix = '' }) {
             setVistaActiva(node.data.guid);
             viewer.loadDocumentNode(doc, node).then(() => {
               if (cancelled) return;
-              // Mismo sentido de scroll que el Visor 3D. El visor de Autodesk
-              // trae invertido el zoom con rueda por defecto, y tener dos
-              // comportamientos distintos entre productos desconcierta más que
-              // cualquiera de los dos. Ver Viewer.jsx:2520 — allí es lo mismo.
-              try { viewer.getNavigation?.()?.setReverseZoomDirection(false); } catch { /* noop */ }
+              ajustarSentidoDelZoom(viewer, node);
               setPhase('listo');
             });
           },
@@ -272,7 +283,7 @@ export default function CadViewer({ file, projectPrefix = '' }) {
               .find(n => n.data.guid === v.guid);
             if (!node) return;
             setVistaActiva(v.guid);
-            viewer.loadDocumentNode(doc, node);
+            viewer.loadDocumentNode(doc, node).then(() => ajustarSentidoDelZoom(viewer, node));
           }}
           style={{
             position: 'absolute', top: 12, left: 12, zIndex: 20, maxWidth: 380,

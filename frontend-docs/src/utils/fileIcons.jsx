@@ -111,10 +111,10 @@ export function renderFileIconSop(filename, size = 24) {
   const ext = lowerName.split('.').pop();
   const TEJAS_CAD = {
     // AutoCAD / Civil 3D
-    dwg:  { fondo: '#EAF2FA', dibujo: 'lineas', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
-    dxf:  { fondo: '#EAF2FA', dibujo: 'lineas', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
-    dwf:  { fondo: '#EAF2FA', dibujo: 'lineas', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
-    dwfx: { fondo: '#EAF2FA', dibujo: 'lineas', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
+    dwg:  { fondo: '#EAF2FA', dibujo: 'cruceta', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
+    dxf:  { fondo: '#EAF2FA', dibujo: 'cruceta', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
+    dwf:  { fondo: '#EAF2FA', dibujo: 'cruceta', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
+    dwfx: { fondo: '#EAF2FA', dibujo: 'cruceta', tinta: '#1A6FBF', franja: '#F0B41C', tintaExt: '#243447' },
     dgn:  { fondo: '#EAF6F4', dibujo: 'lineas', tinta: '#2E7D74', franja: '#2E7D74' },
     // Revit — teja azul con la R
     rvt:  { fondo: '#1961A9', letra: 'R', tinta: '#FFFFFF', franja: '#114B85' },
@@ -145,6 +145,15 @@ export function renderFileIconSop(filename, size = 24) {
           {f.letra && (
             <text x="16" y="19.5" textAnchor="middle" fontSize="16.5" fontWeight="800"
               fontFamily="'Segoe UI', system-ui, sans-serif" fill={f.tinta}>{f.letra}</text>
+          )}
+          {/* La cruceta de dibujo del icono DWG clasico: el dueno la
+              enseno ampliada y es lo que su equipo reconoce como AutoCAD. */}
+          {f.dibujo === 'cruceta' && (
+            <g stroke={f.tinta} strokeWidth="1.9" fill="none" strokeLinecap="round">
+              <circle cx="16" cy="12.5" r="5" />
+              <path d="M16 5v4M16 16v4M8.5 12.5h4M19.5 12.5h4" />
+              <circle cx="16" cy="12.5" r="1" fill={f.tinta} stroke="none" />
+            </g>
           )}
           {f.dibujo === 'lineas' && (
             <g stroke={f.tinta} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
