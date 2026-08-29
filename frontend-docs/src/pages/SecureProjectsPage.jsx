@@ -4,6 +4,7 @@
  * Extraído de App.jsx líneas 106-552 (UsersTab + TagsTab + SecureProjectsPage)
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import toast from 'react-hot-toast';   // se usaba SIN importar: reventaba al fallar una operacion
 import { apiFetch } from '../utils/apiFetch';
 import { confirmAction } from '../utils/confirm';
 import { API, formatDate, getInitials } from '../utils/helpers';

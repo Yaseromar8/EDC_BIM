@@ -300,6 +300,35 @@ function MarcaEsperando({ porcentaje = null }) {
   );
 }
 
+// LA SIGUIENTE LAMINA, PREPARADA DE ANTEMANO.
+//
+// Mientras el usuario mira una lamina la maquina esta parada: ahi se prepara
+// la siguiente, y al pulsarla ya esta interpretada.
+//
+// SE PERDIO UNA VEZ: un reemplazo posterior --el de la marca de espera-- se
+// llevo por delante esta funcion sin que el build dijera nada, porque el uso
+// esta dentro de un `setTimeout` y eso no se comprueba al compilar. En
+// produccion reventaba con «prepararSiguiente is not defined» EN CADA CAMBIO
+// DE LAMINA, y un error sin capturar ahi rompe el ciclo de actualizacion. Lo
+// vio el dueño en la consola, no una prueba.
+async function prepararSiguiente(hermano, obra, yaPedidos) {
+  if (!hermano || !hermano.gcs_urn || yaPedidos.has(hermano.gcs_urn)) return;
+  yaPedidos.add(hermano.gcs_urn);
+  try {
+    const r = await apiFetch(
+      `${API}/api/docs/signed-url?urn=${encodeURIComponent(hermano.gcs_urn)}`
+      + `&model_urn=${encodeURIComponent(obra || '')}`);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.success || !d.url) return;
+    if (documentoEnCache(d.url)) return;
+    const pdf = await pdfjsLib.getDocument({ url: d.url, withCredentials: false }).promise;
+    try { await pdf.getPage(1); } catch { /* con tenerlo abierto ya se gana */ }
+    guardarDocumento(d.url, pdf);
+  } catch {
+    // Preparar de antemano es un lujo: si falla, no se dice nada.
+  }
+}
+
 export default function PDFViewer({ url, preparando = false,
   alEscritorio = null, appEscritorio = null, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
                                     versionLabel = null, versionInfo = null, hideTitle = false,
