@@ -20,6 +20,7 @@ if not _env_found:
     load_dotenv(_parent_env)
 
 from flask import Flask, g, jsonify, request, send_from_directory, redirect
+from politica import publico_en_lectura
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import base64
@@ -1232,11 +1233,13 @@ def get_inventory_schema():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/inventory', methods=['GET'])
-# NOTA: la vista compartida por enlace pide esta ruta sin sesion y hoy recibe
-# 401, asi que en modo compartido no se aplican colores ni filtros. Abrirla
-# entera seria entregar el inventario de la obra a cualquiera: la solucion
-# correcta es acotarla al proyecto del enlace, no dejarla publica.
-def get_inventory():
+# Esta ruta SIGUE EXIGIENDO SESION, y debe seguir exigiendola: hay dos pruebas
+# que lo fijan (test_auth.test_inventory_exige_sesion y la lista de
+# test_politica). La vista compartida NO entra por aqui -- entra por
+# /api/vista-compartida/<id>/inventario, que resuelve la obra desde el enlace.
+# `_obra_forzada` es como esa via reutiliza esta consulta sin duplicarla: solo
+# se pasa desde dentro del proceso, nunca desde la peticion.
+def get_inventory(_obra_forzada=None):
     """
     Fase 3: API Endpoint para entregar el inventario inmutable y masivo al Frontend.
     
@@ -1249,8 +1252,14 @@ def get_inventory():
         import json as _json
         
         include_props = request.args.get('include_props', 'true').lower() == 'true'
-        model_urn = request.args.get('model_urn')
-        project_id = request.args.get('project_id')  # Pilar Identidad: filtrar por obra completa (dual-read)
+        if _obra_forzada:
+            # LA OBRA LA PONE EL ENLACE, NO EL CLIENTE. Es la garantia de que
+            # un enlace de una obra no puede leer el inventario de otra
+            # cambiando un parametro de la URL.
+            model_urn, project_id = None, _obra_forzada
+        else:
+            model_urn = request.args.get('model_urn')
+            project_id = request.args.get('project_id')  # Pilar Identidad: filtrar por obra completa (dual-read)
         
         if True:  # (bloque preservado; la conexión se abre EAGER más abajo)
             # Construir la query base y los parámetros
@@ -1470,8 +1479,58 @@ def civil_base_axis():
         return jsonify({'error': str(e)}), 500
 
 
+def _obra_de_la_vista(view_id):
+    """La obra a la que pertenece una vista guardada, o None si no existe.
+
+    El identificador de la vista ES la credencial (`secrets.token_urlsafe(24)`,
+    ver routes/views.py). Quien lo tiene, abre esa vista -- que es lo que
+    "compartir por enlace" significa. Lo que este resolutor garantiza es el
+    ALCANCE: el enlace solo puede leer el inventario de SU obra, y esa obra
+    sale de la base de datos, no de un parametro de la peticion.
+    """
+    try:
+        from routes.views import get_view_by_id
+        vista = get_view_by_id(view_id)
+        return ((vista or {}).get('projectId')) or None
+    except Exception as e:
+        print('[vista-compartida] no se pudo resolver la obra: %s' % str(e)[:120])
+        return None
+
+
+@app.route('/api/vista-compartida/<view_id>/inventario', methods=['GET'])
+@publico_en_lectura(motivo='es el enlace de vista compartida: quien lo abre es un tercero sin sesion, y la obra se resuelve desde el enlace')
+def inventario_de_vista_compartida(view_id):
+    """El inventario de la obra de una vista compartida, en lectura.
+
+    POR QUE UNA RUTA PROPIA Y NO UNA EXENCION EN /api/inventory: esa ruta
+    tiene dos pruebas que fijan que un anonimo recibe 401, y ya cazaron un
+    intento anterior de abrirla. Con una via aparte, aquella sigue cerrada
+    palabra por palabra y esta expone UNA cosa concreta y auditable: el
+    inventario de la obra que el enlace ya deja ver.
+
+    Sin `model_urn` en la peticion: la obra la pone el enlace.
+    """
+    obra = _obra_de_la_vista(view_id)
+    if not obra:
+        return jsonify({'error': 'Enlace de vista no valido o vencido.'}), 404
+    return get_inventory(_obra_forzada=obra)
+
+
+@app.route('/api/vista-compartida/<view_id>/inventario/version', methods=['GET'])
+@publico_en_lectura(motivo='huella de version del inventario del enlace compartido; misma obra que la vista')
+def version_de_inventario_compartido(view_id):
+    """La huella de version, para que el invitado tambien use su cache local.
+
+    Sin esto el supervisor se bajaria los megas del inventario en cada visita.
+    """
+    obra = _obra_de_la_vista(view_id)
+    if not obra:
+        return jsonify({'error': 'Enlace de vista no valido o vencido.'}), 404
+    return get_inventory_version(_obra_forzada=obra)
+
+
 @app.route('/api/inventory/version', methods=['GET'])
-def get_inventory_version():
+def get_inventory_version(_obra_forzada=None):
     """
     Huella de versión del inventario (respuesta de ~100 bytes). El frontend la
     compara con su caché local (IndexedDB): si coincide, NO descarga los ~7MB.
@@ -1480,8 +1539,11 @@ def get_inventory_version():
     """
     try:
         from db import get_db_connection
-        model_urn = request.args.get('model_urn')
-        project_id = request.args.get('project_id')
+        if _obra_forzada:
+            model_urn, project_id = None, _obra_forzada
+        else:
+            model_urn = request.args.get('model_urn')
+            project_id = request.args.get('project_id')
 
         where = ''
         params = []

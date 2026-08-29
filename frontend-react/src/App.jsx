@@ -554,6 +554,28 @@ function FilterConfigurator({
 
 const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location.hostname.match(/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/) ? `http://${window.location.hostname}:3000` : 'https://visor-ecd-backend.onrender.com')));
 
+// DE DONDE SALE EL INVENTARIO, segun se entre con sesion o por enlace.
+//
+// Con sesion: /api/inventory?model_urn=... como siempre.
+// Por enlace: /api/vista-compartida/<id>/inventario, que NO lleva obra en la
+// peticion -- la resuelve el backend a partir del identificador del enlace.
+// Esa es justamente la garantia: un invitado no puede leer el inventario de
+// otra obra porque no hay parametro que cambiar. `/api/inventory` sigue
+// devolviendo 401 a quien no tiene sesion, y hay dos pruebas que lo fijan.
+const enlaceCompartido = () => {
+  try {
+    return new URLSearchParams(window.location.search).get('shareView') || null;
+  } catch { return null; }
+};
+
+const urlInventario = (obraId, { version = false } = {}) => {
+  const enlace = enlaceCompartido();
+  if (enlace) {
+    return `${BACKEND_URL}/api/vista-compartida/${encodeURIComponent(enlace)}/inventario${version ? '/version' : ''}`;
+  }
+  return `${BACKEND_URL}/api/inventory${version ? '/version' : ''}?model_urn=${encodeURIComponent(obraId)}`;
+};
+
 console.log('[App] Initializing. Platform:', Capacitor.getPlatform(), 'Backend:', BACKEND_URL);
 console.log('[App] Version: 1.0.3 - Mobile Connection & UI Cleanup applied.');
 
@@ -2027,7 +2049,7 @@ function App() {
     // lo que rompía JSON.parse ("Unexpected end of JSON input"). Leemos texto, validamos, y
     // reintentamos con backoff antes de rendirnos.
     const fetchInventoryResilient = async (attempt = 0) => {
-      const res = await apiFetch(`${BACKEND_URL}/api/inventory?model_urn=${encodeURIComponent(selectedProject.id)}`);
+      const res = await apiFetch(urlInventario(selectedProject.id));
       if (!res.ok) {
         // Leer el cuerpo del error ({'error': ...} del backend) para saber la
         // CAUSA real, y reintentar: los 500 vienen intermitentes (conexión del
@@ -2076,7 +2098,7 @@ function App() {
       // completa (gzip) y se guarda para la próxima.
       let verKey = null;
       try {
-        const vres = await apiFetch(`${BACKEND_URL}/api/inventory/version?model_urn=${encodeURIComponent(selectedProject.id)}`);
+        const vres = await apiFetch(urlInventario(selectedProject.id, { version: true }));
         if (vres.ok) {
           const v = await vres.json();
           verKey = `${v.count}|${v.last_updated}|${v.user_updated}`;
@@ -2204,7 +2226,7 @@ function App() {
     if (!selectedProject) return;
     const handleRefresh = () => {
       console.log('[Piedra Rosetta] Recarga reactiva disparada — descargando inventario fresco...');
-      apiFetch(`${BACKEND_URL}/api/inventory?model_urn=${encodeURIComponent(selectedProject.id)}`)
+      apiFetch(urlInventario(selectedProject.id))
         .then(res => {
           if (!res.ok) throw new Error('Falló el fetch a /api/inventory');
           return res.json();
@@ -2661,7 +2683,7 @@ function App() {
       // Si se cargó un gemelo, forzamos recarga de la metadata (inventario Postgres)
       if (isGemelo) {
         try {
-          const res = await apiFetch(`${BACKEND_URL}/api/inventory?model_urn=${encodeURIComponent(selectedProject.id)}`);
+          const res = await apiFetch(urlInventario(selectedProject.id));
           if (res.ok) {
             const dbData = await res.json();
             const schemaMap = {};
@@ -4100,7 +4122,38 @@ function App() {
         )}
 
 
-        {!isSharedMode && (
+        {/* RAIL DEL ENLACE COMPARTIDO. Exactamente dos herramientas, y por
+            eso es un rail PROPIO y no el de siempre con cosas escondidas: lo
+            que no esta aqui no se puede alcanzar, en vez de estar oculto pero
+            presente. El invitado filtra y consulta el inventario; nada mas. */}
+        {isSharedMode && (
+          <nav className="app-left-rail" aria-label="Vista compartida">
+            <button
+              type="button"
+              className={`rail-button ${activePanel === 'filters' && panelVisible ? 'active' : ''}`}
+              onClick={() => togglePanel('filters')}
+              title="Filters"
+            >
+              <FilterIcon />
+              <span className="rail-label" style={{ fontWeight: 700 }}>Filters</span>
+            </button>
+
+            <button
+              type="button"
+              className={`rail-button ${inventoryTabOpen ? 'active' : ''}`}
+              onClick={() => setInventoryTabOpen(prev => !prev)}
+              title="Inventory"
+            >
+              <InventoryIcon />
+              <span className="rail-label" style={{ fontWeight: 700 }}>Inventory</span>
+            </button>
+          </nav>
+        )}
+
+        {/* En modo compartido esta barra SOLO puede traer el panel de filtros:
+            es la mitad de lo que el enlace concede. Cualquier otro panel queda
+            fuera aunque algo intente activarlo. */}
+        {(!isSharedMode || activePanel === 'filters') && (
           <TandemSidebar
             activePanel={activePanel}
             panelVisible={panelVisible}

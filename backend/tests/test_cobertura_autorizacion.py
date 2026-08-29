@@ -121,6 +121,20 @@ SIN_CUBRIR = {
     ('routes/civil_solids.py', '/api/civil/extract-surfaces'): 'PENDIENTE: deducir la obra del modelo',
     ('routes/compare.py', '/api/compare/cleanup'): 'borra solo el ambito temporal fijo __cmp__, que no es de ninguna obra. Residual: es compartido, y un usuario puede tirar la comparacion en curso de otro',
     ('routes/digital_twin.py', '/api/modelos/firmar-subida'): 'exige rol admin dentro de la vista; traducir cuesta creditos de Autodesk',
+    # Las dos vias del enlace de vista compartida. El middleware NO puede
+    # resolver la obra aqui, y es a proposito: la peticion no la nombra. La
+    # obra se resuelve DENTRO, contra la base de datos, a partir del
+    # identificador del enlace -- que es un `secrets.token_urlsafe(24)` y hace
+    # de credencial. Es MAS estrecho que el control central: el invitado no
+    # puede pedir otra obra porque no hay parametro que cambiar.
+    #
+    # Se hicieron rutas PROPIAS en vez de exentar /api/inventory precisamente
+    # para que aquella siga devolviendo 401 a un anonimo, que es lo que fijan
+    # test_auth.test_inventory_exige_sesion y la lista de test_politica.
+    ('server.py', '/api/vista-compartida/<view_id>/inventario'):
+        'la obra se resuelve dentro, desde el identificador del enlace; no hay parametro de obra que manipular',
+    ('server.py', '/api/vista-compartida/<view_id>/inventario/version'):
+        'misma via y misma obra que la anterior: solo devuelve la huella de version',
     ('server.py', '/api/inventory'): 'va por external_id, no por obra: el limite esta en el propio SQL contra project_users',
     ('server.py', '/api/inventory/bulk'): 'va por external_id, no por obra: el limite esta en el propio SQL contra project_users',
     # Anadida el 17-ago. NO es deuda por descuido: no hay de donde sacar la
