@@ -329,6 +329,34 @@ async function prepararSiguiente(hermano, obra, yaPedidos) {
   }
 }
 
+// CRONOMETRO POR FASES.
+//
+// «Sigue demorando en cambiar el plano.» Mis mediciones en el banco no
+// reproducen la maquina, la ventana ni la red del dueño, asi que dejan de
+// servir para decidir. Esto mide EN SU NAVEGADOR y por fases, que es lo unico
+// que distingue «tarda porque el vector es pesado» (inevitable aqui) de
+// «tarda por algo que podemos arreglar».
+//
+// Usa `console.info` a proposito: la construccion de produccion elimina
+// `console.log` y `console.debug`, pero conserva este. Una linea por cambio
+// de lamina, no un chorro.
+const _crono = { t0: 0, marcas: [] };
+function cronoIniciar(nombre) {
+  _crono.t0 = performance.now();
+  _crono.marcas = [];
+  _crono.doc = nombre;
+}
+function cronoMarca(fase) {
+  if (!_crono.t0) return;
+  _crono.marcas.push(`${fase} ${Math.round(performance.now() - _crono.t0)}ms`);
+}
+function cronoFin(extra) {
+  if (!_crono.t0) return;
+  cronoMarca('total');
+  console.info('[lector]', _crono.doc || '', _crono.marcas.join('  ·  '), extra || '');
+  _crono.t0 = 0;
+}
+
 export default function PDFViewer({ url, preparando = false,
   alEscritorio = null, appEscritorio = null, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
                                     versionLabel = null, versionInfo = null, hideTitle = false,
@@ -377,7 +405,10 @@ export default function PDFViewer({ url, preparando = false,
     recordarTira(valor);
     _setTiraAbierta(valor);
   };
-  useEffect(() => { setSaltandoA(null); }, [fileName]);
+  useEffect(() => {
+    setSaltandoA(null);
+    cronoIniciar(fileName);   // el usuario acaba de pedir esta lamina
+  }, [fileName]);
   const indiceActual = hermanos.findIndex(h => h.name === fileName);
   // LA FIRMA DE LA CARPETA, no el array. `hermanos` llega como un array nuevo
   // en cada renderizado del padre, asi que el efecto se disparaba a cada
@@ -668,6 +699,8 @@ export default function PDFViewer({ url, preparando = false,
     textCacheRef.current = new Map(); // el texto leído se descarta al cambiar de PDF
     setMatches([]); setMatchIdx(0); setSearchQuery(''); setSearchOpen(false);
 
+    cronoMarca('url-firmada');
+
     // ¿YA LO TENEMOS INTERPRETADO? Entonces no hay nada que esperar.
     const yaAbierto = documentoEnCache(url);
     if (yaAbierto) {
@@ -678,6 +711,7 @@ export default function PDFViewer({ url, preparando = false,
       setLoading(false);
       setShowSidebar(yaAbierto.numPages > 1);
       setDocNonce(n => n + 1);              // <- sin esto, no se redibuja
+      cronoMarca('PREPARADO-DE-ANTEMANO');
       return undefined;                     // sin descarga y sin re-interpretar
     }
 
@@ -696,6 +730,7 @@ export default function PDFViewer({ url, preparando = false,
         pdfDocRef.current = pdf;
         huboDocumentoRef.current = true;   // ver el `if (loading)` de abajo
         guardarDocumento(url, pdf);
+        cronoMarca('descargado+interpretado');
         setNumPages(pdf.numPages);
         setLoading(false);
         setDocNonce(n => n + 1);
@@ -815,11 +850,11 @@ export default function PDFViewer({ url, preparando = false,
           for (const fy of [0.2, 0.5, 0.8]) {
             const d = g.getImageData(Math.floor(c.width * fx), Math.floor(c.height * fy), 16, 16).data;
             for (let i = 0; i < d.length; i += 4) {
-              if (d[i] < 242 || d[i + 1] < 242 || d[i + 2] < 242) { setHayTinta(true); setPlanoListo(true); return; }
+              if (d[i] < 242 || d[i + 1] < 242 || d[i + 2] < 242) { cronoMarca('PRIMERA-TINTA'); setHayTinta(true); setPlanoListo(true); return; }
             }
           }
         }
-      } catch { setHayTinta(true); setPlanoListo(true); return; }   // sin poder mirar, no se estorba
+      } catch { cronoMarca('PRIMERA-TINTA'); setHayTinta(true); setPlanoListo(true); return; }   // sin poder mirar, no se estorba
       vigilaTintaRef.current = requestAnimationFrame(mirar);
     };
     // TOPE DE CORTESIA: si en segundo y medio no se detecta trazo --una
@@ -956,6 +991,7 @@ export default function PDFViewer({ url, preparando = false,
       // hoja se quedaria oculta para siempre. Al terminar el dibujado se
       // enseña SI O SI. En el peor caso se comporta como antes; en el bueno,
       // aparece mucho antes.
+      cronoFin('(dibujo completo)');
       setPlanoListo(true);
     } catch (err) {
       if (renderSequence === renderSequenceRef.current && err?.name !== 'RenderingCancelledException' && err?.name !== 'RenderingCancelled') {
@@ -1181,6 +1217,7 @@ export default function PDFViewer({ url, preparando = false,
       // Si el encuadre falla, NO se puede quedar el plano sin dibujar: se
       // marca igual y se pinta a la escala que haya.
       try { await fitTo('page'); } catch { /* se dibuja igual */ }
+      cronoMarca('encuadrado');
       if (vivo) setEncuadrado(docNonce);
     })();
     return () => { vivo = false; };
