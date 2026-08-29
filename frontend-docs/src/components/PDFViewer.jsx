@@ -289,21 +289,6 @@ export default function PDFViewer({ url, preparando = false,
   const [avisoDeRender, setAvisoDeRender] = useState(true);
   const [saltandoA, setSaltandoA] = useState(null);
 
-  // LA ESPERA NO APARECE DE GOLPE: espera un cuarto de segundo.
-  //
-  // Con el almacen de documentos, reabrir un plano ya visto es instantaneo --
-  // y ahi la barra y el atenuado salian y desaparecian en un fotograma: un
-  // fogonazo. Peor que no avisar, porque el ojo lo lee como un fallo.
-  //
-  // Con este retardo, lo rapido no parpadea NADA y lo lento avisa igual. Es
-  // la misma idea que usa el navegador con su propia barra de carga.
-  const [mostrarEspera, setMostrarEspera] = useState(false);
-  const ocupado = preparando || loading || (pageRendering && avisoDeRender);
-  useEffect(() => {
-    if (!ocupado) { setMostrarEspera(false); return undefined; }
-    const t = setTimeout(() => setMostrarEspera(true), 250);
-    return () => clearTimeout(t);
-  }, [ocupado]);
   // CUANDO LA HOJA CABE ENTERA NO HAY SCROLL QUE MOVER, y el zoom crecia
   // desde el centro: el detalle que mirabas se escapaba. Este desplazamiento
   // propio la mueve cuando el scroll no puede, para que el punto bajo el
@@ -405,6 +390,28 @@ export default function PDFViewer({ url, preparando = false,
   const [showSidebar, setShowSidebar] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pageRendering, setPageRendering] = useState(false);
+
+  // OJO CON EL ORDEN: este bloque usa `loading` y `pageRendering`, asi que
+  // TIENE que ir despues de ellos. Estaba doscientas lineas mas arriba y
+  // reventaba la vista entera con «Cannot access before initialization» --
+  // zona muerta. Es la SEGUNDA vez que este fichero cae en lo mismo (ver el
+  // comentario del `const pdf` en renderPage), y las dos veces lo vio el
+  // dueno en produccion, no una prueba.
+  // LA ESPERA NO APARECE DE GOLPE: espera un cuarto de segundo.
+  //
+  // Con el almacen de documentos, reabrir un plano ya visto es instantaneo --
+  // y ahi la barra y el atenuado salian y desaparecian en un fotograma: un
+  // fogonazo. Peor que no avisar, porque el ojo lo lee como un fallo.
+  //
+  // Con este retardo, lo rapido no parpadea NADA y lo lento avisa igual. Es
+  // la misma idea que usa el navegador con su propia barra de carga.
+  const [mostrarEspera, setMostrarEspera] = useState(false);
+  const ocupado = preparando || loading || (pageRendering && avisoDeRender);
+  useEffect(() => {
+    if (!ocupado) { setMostrarEspera(false); return undefined; }
+    const t = setTimeout(() => setMostrarEspera(true), 250);
+    return () => clearTimeout(t);
+  }, [ocupado]);
   const [renderError, setRenderError] = useState('');
   const [retryNonce, setRetryNonce] = useState(0);
   
