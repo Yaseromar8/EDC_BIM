@@ -168,7 +168,23 @@
   background: #fafbfc; border-right: 1px solid var(--pdf-line);
 }
 
-.pdf-stage { position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; }
+/* EL ESCENARIO ES UNA COLUMNA: arriba el lienzo, abajo la cinta. Con esto la
+   cinta deja de ser una capa que tapa y pasa a ocupar su sitio; el lienzo se
+   encoge solo. Es lo que evita tener que apartar unas piezas de otras a mano
+   cada vez que se añade algo. */
+.pdf-stage {
+  position: relative;
+  display: flex; flex-direction: column;
+  flex: 1; min-width: 0; min-height: 0;
+}
+
+/* La zona del lienzo: se queda con todo el alto que la cinta no use. */
+.pdf-lienzo-zona {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0; min-width: 0;
+}
 
 .pdf-canvas-container {
   position: relative;
@@ -459,8 +475,9 @@
    se lea como parte del mismo aparato y no como otra barra del navegador. */
 
 .pdf-tira {
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
+  /* EN EL FLUJO, no flotando: ver `.pdf-stage`. */
+  position: relative;
+  flex-shrink: 0;
   z-index: 9;
   background: rgba(28, 35, 43, 0.97);
   box-shadow: 0 -8px 26px rgba(15, 22, 30, 0.28);
@@ -523,8 +540,8 @@
 
 .pdf-tira-item.es-actual .pdf-tira-nombre { color: #fff; font-weight: 600; }
 
-/* Con la tira abierta, el mando sube para no quedar tapado. */
-.pdf-stage:has(.pdf-tira) .pdf-dock { bottom: 186px; }   /* la cinta crecio */
+/* (La regla que subia el mando con la tira abierta se retiro: ahora la
+   cinta no lo tapa, porque no flota sobre el.) */   /* la cinta crecio */
 
 
 .pdf-tira-preparar {

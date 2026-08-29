@@ -1335,15 +1335,20 @@ export default function PDFViewer({ url, preparando = false,
         )}
 
         <div className="pdf-stage">
+          {/* ZONA DEL LIENZO: el lienzo, su mando y la marca de espera.
+              Antes la cinta y el mando FLOTABAN sobre el contenedor del
+              lienzo, y cada vez que crecia uno habia que apartar al otro a
+              mano (hubo hasta una regla con `:has()` empujando el mando hacia
+              arriba). Eso no escala: cada pieza nueva obliga a recolocar las
+              anteriores. Ahora la zona y la cinta son HERMANAS en una columna,
+              asi que el lienzo se encoge solo cuando la cinta se abre y nada
+              tapa a nada. */}
+          <div className="pdf-lienzo-zona">
           <div ref={containerRef} className="pdf-canvas-container"
             style={{ cursor: tool === 'pan' ? (isDragging ? 'grabbing' : 'grab') : 'crosshair' }}
             onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
 
-            <div className={`pdf-espera-encima${mostrarEspera ? ' se-ve' : ''}`}>
-              <MarcaEsperando
-                porcentaje={loading && progress > 0 && progress < 100 ? progress : null} />
-            </div>
 
             {renderError && (
               <div className="pdf-render-error" role="alert">
@@ -1425,6 +1430,15 @@ export default function PDFViewer({ url, preparando = false,
             </div>
         )}
 
+          {/* LA MARCA SE ANCLA A LA ZONA, NO AL CONTENEDOR QUE SE DESPLAZA.
+              Estaba dentro del contenedor con scroll, asi que su «centro» era
+              el centro del CONTENIDO: al alejar la lamina y cambiar de plano
+              aparecia lejos, fuera de la vista. Aqui el centro es el de lo que
+              se ve, siempre. */}
+          <div className={`pdf-espera-encima${mostrarEspera ? ' se-ve' : ''}`}>
+            <MarcaEsperando
+                porcentaje={loading && progress > 0 && progress < 100 ? progress : null} />
+          </div>
           {/* El zoom FLOTA sobre la hoja: no le roba una barra al alto útil. */}
           <div className="pdf-dock">
             {/* SIN CONTROLES DE ZOOM. El dueno los retiro enteros -- lupas,
@@ -1475,6 +1489,8 @@ export default function PDFViewer({ url, preparando = false,
             </button>
             </div>
           </div>
+
+          </div>{/* fin de la zona del lienzo */}
 
           {tiraAbierta && hermanos.length > 1 && onAbrirHermano && (
             <div className="pdf-tira">
