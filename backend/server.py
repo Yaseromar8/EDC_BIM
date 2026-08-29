@@ -1256,7 +1256,14 @@ def get_inventory(_obra_forzada=None):
             # LA OBRA LA PONE EL ENLACE, NO EL CLIENTE. Es la garantia de que
             # un enlace de una obra no puede leer el inventario de otra
             # cambiando un parametro de la URL.
-            model_urn, project_id = None, _obra_forzada
+            #
+            # VA POR `model_urn` Y NO POR `project_id`. Lo que guarda una vista
+            # en `projectId` es el identificador del FRENTE (p.ej. '1_CANAL'),
+            # que es exactamente lo que un usuario con sesion manda como
+            # ?model_urn=. Metido por `project_id` la consulta filtraba por una
+            # columna distinta y devolvia CERO filas: el invitado veia el
+            # modelo y una tabla vacia. Lo cazo el enlace real del dueno.
+            model_urn, project_id = _obra_forzada, None
         else:
             model_urn = request.args.get('model_urn')
             project_id = request.args.get('project_id')  # Pilar Identidad: filtrar por obra completa (dual-read)
@@ -1540,7 +1547,7 @@ def get_inventory_version(_obra_forzada=None):
     try:
         from db import get_db_connection
         if _obra_forzada:
-            model_urn, project_id = None, _obra_forzada
+            model_urn, project_id = _obra_forzada, None   # el frente, igual que con sesion
         else:
             model_urn = request.args.get('model_urn')
             project_id = request.args.get('project_id')
