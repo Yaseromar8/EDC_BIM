@@ -479,7 +479,14 @@ export default function DocumentViewer({
           // El spinner SOLO cuando no hay nada que ensenar todavia (primera
           // apertura). Con un documento ya abierto se conserva el lector: ver
           // el comentario de setSecurePreviewUrl mas arriba.
-          if (!isShared && !['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext)) && loadingPreview && !fileUrl) {
+          // LOS PDF NO PASAN POR AQUI. Tenian DOS pantallas de carga
+          // seguidas: esta («Preparando vista segura...») y despues la del
+          // propio lector. Se veia como si cargara dos veces, y sumaban sus
+          // esperas. El lector se monta ya y ensena UNA sola, la suya, desde
+          // el primer instante -- sabe que esta preparando porque se le dice
+          // con `preparando`.
+          const esPdfAqui = /\.pdfx?$/i.test(lowerName);
+          if (!isShared && !esPdfAqui && !['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext)) && loadingPreview && !fileUrl) {
             return (
               <div role="status" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
                 <div className="spinner-acc" style={{ width: 40, height: 40, border: '3px solid #e5e7eb', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' }} />

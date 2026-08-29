@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Banco de pruebas · lector de planos</title>
+  <style>
+    html, body, #raiz { height: 100%; margin: 0; }
+    #mando { position: fixed; top: 8px; left: 8px; z-index: 99999;
+             font: 12px Inter, Arial; background: #10151b; color: #d7dee5;
+             padding: 8px 10px; border-radius: 8px; display: flex; gap: 6px; align-items: center; }
+    #mando button { font: 11px Inter, Arial; padding: 4px 8px; border-radius: 5px;
+                    border: 1px solid #3a4550; background: #1b2husb; color: #d7dee5; cursor: pointer; }
+    #reloj { color: #7CCBF0; min-width: 130px; }
+  </style>
+</head>
+<body>
+  <div id="mando">
+    <span>saltar a:</span>
+    <button onclick="irA(0)">A</button>
+    <button onclick="irA(1)">B</button>
+    <button onclick="irA(2)">C</button>
+    <span id="reloj">—</span>
+  </div>
+  <div id="raiz"></div>
+  <script type="module" src="/src/probar-lector.jsx"></script>
+</body>
+</html>

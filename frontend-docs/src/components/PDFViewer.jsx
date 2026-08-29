@@ -263,6 +263,31 @@ function guardarDocumento(url, pdf) {
 // Lo que mide el banco de pruebas. No se usa en la aplicacion.
 if (typeof window !== 'undefined') window.__alephiaDocsEnCache = () => _docsAbiertos.size;
 
+// LA MARCA QUE ESPERA. Una sola definicion para los dos momentos en que se
+// ve --la primera apertura y el salto de lamina-- porque son la MISMA espera
+// y verlas distintas es lo que hacia pensar que cargaba dos veces.
+//
+// Sin tarjeta ni texto: el dueno pidio «solo el logo». El aro dice el estado
+// y solo se llena cuando hay algo real que medir (la descarga); en las otras
+// fases gira, que es decir «trabajando» sin fingir un porcentaje.
+function MarcaEsperando({ porcentaje = null }) {
+  const medido = porcentaje !== null && porcentaje > 0 && porcentaje < 100;
+  const VUELTA = 2 * Math.PI * 40;          // radio 40
+  return (
+    <div className="pdf-marca-espera" role="status" aria-live="polite">
+      <svg className="pdf-marca-aro" viewBox="0 0 96 96" aria-hidden="true">
+        <circle className="pdf-marca-pista" cx="48" cy="48" r="40" />
+        <circle className={`pdf-marca-trazo${medido ? ' es-medido' : ''}`}
+          cx="48" cy="48" r="40"
+          style={medido
+            ? { strokeDasharray: VUELTA, strokeDashoffset: VUELTA * (1 - porcentaje / 100) }
+            : undefined} />
+      </svg>
+      <img className="pdf-marca-simbolo" src="/brand/ALEPHIA_Symbol_Navy.svg" alt="" />
+    </div>
+  );
+}
+
 export default function PDFViewer({ url, preparando = false,
   alEscritorio = null, appEscritorio = null, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
                                     versionLabel = null, versionInfo = null, hideTitle = false,
@@ -409,8 +434,21 @@ export default function PDFViewer({ url, preparando = false,
   const [mostrarEspera, setMostrarEspera] = useState(false);
   const ocupado = preparando || loading || pageRendering;
   useEffect(() => {
-    if (!ocupado) { setMostrarEspera(false); return undefined; }
-    const t = setTimeout(() => setMostrarEspera(true), 250);
+    // APARECE con retardo: lo instantaneo no debe parpadear.
+    if (ocupado) {
+      const t = setTimeout(() => setMostrarEspera(true), 250);
+      return () => clearTimeout(t);
+    }
+    // Y DESAPARECE TAMBIEN CON RETARDO, que es lo que faltaba.
+    //
+    // MEDIDO EN EL BANCO DE PRUEBAS: al saltar de lamina la marca aparecia a
+    // los 259 ms, SE IBA a los 513 y volvia a los 939. No es que cargara dos
+    // veces --se dibuja una sola, tambien medido-- es que entre dos fases hay
+    // un hueco de milisegundos: llega la URL nueva, se apaga `preparando`, y
+    // `loading` todavia no se ha encendido. En ese respiro la señal se
+    // apagaba. Esperando un poco antes de ocultarla, las fases se encadenan
+    // y se ve UNA sola espera de principio a fin.
+    const t = setTimeout(() => setMostrarEspera(false), 180);
     return () => clearTimeout(t);
   }, [ocupado]);
   const [renderError, setRenderError] = useState('');
@@ -1073,16 +1111,8 @@ export default function PDFViewer({ url, preparando = false,
   // hasta que el nuevo esta listo -- que es como se comporta ACC.
   if (loading && !huboDocumentoRef.current) {
     return (
-      <div style={styles.center} role="status" aria-live="polite">
-        <div style={styles.spinner} />
-        <div style={{ fontSize: 14, color: '#666', marginTop: 16 }}>
-          {progress > 0 && progress < 100 ? `Cargando documento… ${progress}%` : 'Cargando documento PDF…'}
-        </div>
-        {progress > 0 && progress < 100 && (
-          <div style={{ width: 200, height: 4, background: '#e0e0e0', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
-            <div style={{ width: `${progress}%`, height: '100%', background: 'var(--accent)', transition: 'width .2s' }} />
-          </div>
-        )}
+      <div style={styles.center}>
+        <MarcaEsperando porcentaje={progress > 0 && progress < 100 ? progress : null} />
       </div>
     );
   }
@@ -1228,34 +1258,10 @@ export default function PDFViewer({ url, preparando = false,
             onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
 
-            {/* LA MARCA, MIENTRAS CARGA.
-                Una sola senal al centro en vez de dos animandose a la vez
-                (antes habia barra arriba Y pastilla): el ojo va al centro,
-                que es donde va a aparecer el plano.
-                El aro exterior gira siempre --dice «sigo trabajando»-- y solo
-                se llena cuando hay algo REAL que medir, la descarga. Las otras
-                dos fases no se pueden medir y no se finge que si. */}
             {mostrarEspera && (
-              <div className="pdf-cargando" role="status" aria-live="polite">
-                <div className="pdf-cargando-marca">
-                  <svg className="pdf-cargando-aro" viewBox="0 0 52 52" aria-hidden="true">
-                    <circle className="pdf-aro-pista" cx="26" cy="26" r="23" />
-                    <circle className={`pdf-aro-trazo${
-                      loading && progress > 0 && progress < 100 ? ' es-medido' : ''}`}
-                      cx="26" cy="26" r="23"
-                      style={loading && progress > 0 && progress < 100
-                        ? { strokeDasharray: 144.5, strokeDashoffset: 144.5 * (1 - progress / 100) }
-                        : undefined} />
-                  </svg>
-                  <img className="pdf-cargando-simbolo"
-                    src="/brand/ALEPHIA_Symbol_Navy.svg" alt="" />
-                </div>
-                <div className="pdf-cargando-texto">
-                  {preparando ? 'Preparando el documento'
-                    : loading ? (progress > 0 && progress < 100
-                        ? `Descargando ${progress}%` : 'Descargando')
-                    : 'Dibujando el plano'}
-                </div>
+              <div className="pdf-espera-encima">
+                <MarcaEsperando
+                  porcentaje={loading && progress > 0 && progress < 100 ? progress : null} />
               </div>
             )}
 
