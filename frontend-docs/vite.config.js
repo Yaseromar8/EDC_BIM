@@ -1,6 +1,25 @@
 /* global process */   // este fichero corre en Node: `process` existe aqui
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import fs from 'node:fs'
+import path from 'node:path'
+
+// LOS RECURSOS DE pdf.js, AL SITIO DONDE SE SIRVEN.
+//
+// La biblioteca trae descompresores en WebAssembly, tablas de codificacion y
+// las tipografias estandar del formato, pero NO los publica sola. Sin ellos
+// cae a sus caminos de reserva --el descompresor en JavaScript, mucho mas
+// lento-- y eso ocurre dentro del dibujado del plano.
+//
+// Se copian aqui, al arrancar, y NO se versionan (ver .gitignore): vienen del
+// paquete instalado, asi que al subir de version se copian los nuevos solos.
+// No pesan en el arranque: el navegador solo pide el que un documento
+// necesita.
+for (const carpeta of ['wasm', 'cmaps', 'standard_fonts']) {
+  const origen = path.resolve('node_modules/pdfjs-dist', carpeta)
+  const destino = path.resolve('public/pdfjs', carpeta)
+  if (fs.existsSync(origen)) fs.cpSync(origen, destino, { recursive: true })
+}
 
 export default defineConfig(({ command }) => ({
   plugins: [react()],

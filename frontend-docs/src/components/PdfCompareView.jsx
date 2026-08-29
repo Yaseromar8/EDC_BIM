@@ -1,11 +1,10 @@
 // PdfCompareView.jsx — Comparación de dos versiones de un PDF (estilo Bluebeam/ACC).
 // Modo Overlay: tinta A en rojo, B en azul; lo común queda negro. Modo Lado a lado.
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import * as pdfjsLib from 'pdfjs-dist';
+import { abrirPdf } from '../utils/pdfjs';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString();
 
 async function signedUrl(gcsUrn, projectPrefix) {
   const r = await apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(gcsUrn)}&model_urn=${encodeURIComponent(projectPrefix)}`);
@@ -54,8 +53,8 @@ export default function PdfCompareView({ fileName, versionA, versionB, projectPr
           signedUrl(versionB.gcs_urn, projectPrefix),
         ]);
         const [a, b] = await Promise.all([
-          pdfjsLib.getDocument({ url: urlA }).promise,
-          pdfjsLib.getDocument({ url: urlB }).promise,
+          abrirPdf({ url: urlA }).promise,
+          abrirPdf({ url: urlB }).promise,
         ]);
         if (cancel) return;
         setPdfA(a); setPdfB(b); setLoading(false);

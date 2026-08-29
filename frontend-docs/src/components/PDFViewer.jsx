@@ -4,7 +4,7 @@
 // Modo: Single-Page (100% Zoom, Scroll-Zoom, Click-Pan)
 // ═══════════════════════════════════════════════════════════════
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import * as pdfjsLib from 'pdfjs-dist';
+import { pdfjsLib, abrirPdf } from '../utils/pdfjs';
 import PdfToolsOverlay, { COLORS } from './PdfToolsOverlay';
 import SelloEscritorio from './SelloEscritorio';
 import { API } from '../utils/helpers';
@@ -13,11 +13,7 @@ import { tiraEstaAbierta, recordarTira } from '../utils/tiraDocumentos';
 import { urlsDeMiniaturas } from '../utils/colaMiniaturas';
 import './PDFViewer.css';
 
-// Configurar el worker de PDF.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.mjs',
-  import.meta.url
-).toString();
+// El worker y los recursos de pdf.js se configuran en un solo sitio.
 
 // ----------------------------------------------------------------------
 // Sub-componente para renderizar Miniaturas en el Sidebar
@@ -321,7 +317,7 @@ async function prepararSiguiente(hermano, obra, yaPedidos) {
     const d = await r.json().catch(() => ({}));
     if (!r.ok || !d.success || !d.url) return;
     if (documentoEnCache(d.url)) return;
-    const pdf = await pdfjsLib.getDocument({ url: d.url, withCredentials: false }).promise;
+    const pdf = await abrirPdf({ url: d.url, withCredentials: false }).promise;
     try { await pdf.getPage(1); } catch { /* con tenerlo abierto ya se gana */ }
     guardarDocumento(d.url, pdf);
   } catch {
@@ -720,7 +716,7 @@ export default function PDFViewer({ url, preparando = false,
         // Descarga en streaming continuo (comportamiento por defecto de PDF.js).
         // NO activar `disableAutoFetch`: para PDFs normales dispara decenas de
         // peticiones por rangos y sale MÁS LENTO que bajar el archivo de corrido.
-        const loadingTask = pdfjsLib.getDocument({ url, withCredentials: false });
+        const loadingTask = abrirPdf({ url, withCredentials: false });
         loadingTaskRef.current = loadingTask;
         loadingTask.onProgress = ({ loaded, total }) => {
           if (!cancelled && total) setProgress(Math.min(99, Math.round((loaded / total) * 100)));

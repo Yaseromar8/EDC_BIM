@@ -101,3 +101,7 @@ copias/
 # son documentos de obra, no van al repositorio. Se copian a mano:
 #   cp PDF/<plano>.pdf frontend-docs/public/_probar/plano-A.pdf   (y B, C)
 frontend-docs/public/_probar/
+
+# Recursos de pdf.js copiados del paquete instalado al empaquetar
+# (ver vite.config.js). Vienen de node_modules: no se versionan.
+frontend-docs/public/pdfjs/
