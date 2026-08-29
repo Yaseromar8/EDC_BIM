@@ -441,6 +441,19 @@ export default function PDFViewer({ url, preparando = false,
   // almacen o de la red-- asi que el dibujado no puede saltarselo.
   const [docNonce, setDocNonce] = useState(0);
 
+  // QUE DOCUMENTO ESTA YA ENCUADRADO.
+  //
+  // EL DEFECTO: al abrir un plano se dibujaba a la escala del ANTERIOR y, un
+  // instante despues, el encuadre automatico cambiaba la escala y lo dibujaba
+  // OTRA VEZ. De ahi la sensacion de «hace dos veces la carga»: es que la
+  // hacia dos veces de verdad, y la primera no servia para nada -- el plano
+  // aparecia con el tamano equivocado y saltaba.
+  //
+  // Con esto el dibujado ESPERA a que la escala este decidida. Se pinta una
+  // sola vez, y ya a su tamano.
+  const encuadradoRef = useRef(0);
+  const [encuadrado, setEncuadrado] = useState(0);
+
   // Load PDF document
   useEffect(() => {
     if (!url) return;
@@ -674,6 +687,9 @@ export default function PDFViewer({ url, preparando = false,
   const lastSigRef = useRef('');
   useEffect(() => {
     if (loading || !pdfDocRef.current) return undefined;
+    // Sin encuadrar todavia: dibujar ahora seria hacerlo a la escala del
+    // plano anterior y repetirlo entero medio segundo despues.
+    if (encuadrado !== docNonce) return undefined;
     // El numero del documento entra en la firma: dos planos distintos son
     // ambos «pagina 1», y sin esto el segundo se tomaba por «solo cambio el
     // zoom» y se dibujaba con retardo -- o no se dibujaba.
@@ -695,7 +711,7 @@ export default function PDFViewer({ url, preparando = false,
       renderPage(); // primera carga / cambio de página → sin esperar
     }
     return () => clearTimeout(renderDebounceRef.current);
-  }, [loading, docNonce, currentPage, rotation, applyPreviewSize, renderPage]);
+  }, [loading, docNonce, encuadrado, currentPage, rotation, applyPreviewSize, renderPage]);
 
   // Auto-scroll sidebar thumbnail into view when page changes
   useEffect(() => {
@@ -818,11 +834,26 @@ export default function PDFViewer({ url, preparando = false,
     } catch { /* el documento puede estar cerrándose */ }
   }, [currentPage, rotation]);
 
-  // Al abrir un documento, ajustarlo a la vista (no 100% arbitrario)
+  // Al abrir un documento, ajustarlo a la vista (no 100% arbitrario).
+  //
+  // VA POR `docNonce` Y NO POR `loading`: al reutilizar un documento del
+  // almacen, `loading` no llega a cambiar (se pone y se quita en el mismo
+  // lote), asi que el plano se quedaba con el zoom del anterior. Segundo
+  // defecto de lo mismo, y por eso se corrigen juntos.
   useEffect(() => {
-    if (!loading && pdfDocRef.current) fitTo('page');
+    if (loading || !pdfDocRef.current) return undefined;
+    if (encuadradoRef.current === docNonce) return undefined;
+    encuadradoRef.current = docNonce;
+    let vivo = true;
+    (async () => {
+      // Si el encuadre falla, NO se puede quedar el plano sin dibujar: se
+      // marca igual y se pinta a la escala que haya.
+      try { await fitTo('page'); } catch { /* se dibuja igual */ }
+      if (vivo) setEncuadrado(docNonce);
+    })();
+    return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
+  }, [loading, docNonce]);
 
   // Mantiene "ajustar a página/ancho" al redimensionar la ventana o el panel.
   useEffect(() => {
