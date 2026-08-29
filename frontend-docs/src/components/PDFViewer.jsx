@@ -656,23 +656,12 @@ export default function PDFViewer({ url, preparando = false,
       const faltaX = (r.left + ancla.ux * s) - ancla.clientX;
       const faltaY = (r.top + ancla.uy * s) - ancla.clientY;
 
-      // Primero el scroll, que es lo natural cuando la hoja desborda...
-      const antesX = cont.scrollLeft, antesY = cont.scrollTop;
-      cont.scrollLeft = Math.max(0, Math.min(cont.scrollWidth - cont.clientWidth, antesX + faltaX));
-      cont.scrollTop = Math.max(0, Math.min(cont.scrollHeight - cont.clientHeight, antesY + faltaY));
-
-      // ...y lo que el scroll no pudo cubrir --porque la hoja cabe entera-- se
-      // cubre moviendo la hoja. Con tope: nunca se va más allá de media
-      // ventana, para que no se pueda perder de vista.
-      const restoX = faltaX - (cont.scrollLeft - antesX);
-      const restoY = faltaY - (cont.scrollTop - antesY);
-      if (Math.abs(restoX) > 0.5 || Math.abs(restoY) > 0.5) {
-        const topeX = cont.clientWidth * 0.5, topeY = cont.clientHeight * 0.5;
-        setDesplazamiento(d => ({
-          x: Math.max(-topeX, Math.min(topeX, d.x - restoX)),
-          y: Math.max(-topeY, Math.min(topeY, d.y - restoY)),
-        }));
-      }
+      // TODO con scroll, y sin tope: con la holgura del relleno (ver
+      // `.pdf-page-pad` en el CSS) siempre hay margen adonde moverse, tambien
+      // con la hoja pequeña. Ya no hace falta empujar la hoja aparte, que era
+      // de donde salia la deriva.
+      cont.scrollLeft += faltaX;
+      cont.scrollTop += faltaY;
       anclaRef.current = null;
     }
   }, [currentPage, rotation, scale]);
@@ -944,7 +933,15 @@ export default function PDFViewer({ url, preparando = false,
       const sW = (cont.clientWidth - 64) / vp1.width;
       const sH = (cont.clientHeight - 64) / vp1.height;
       setFitMode(mode);
-      setDesplazamiento({ x: 0, y: 0 });   // encuadrar re-centra la hoja
+      setDesplazamiento({ x: 0, y: 0 });
+      // Con holgura alrededor, encuadrar tiene que dejar la hoja EN EL CENTRO
+      // de esa holgura; si no, apareceria pegada a una esquina.
+      requestAnimationFrame(() => {
+        const c = containerRef.current;
+        if (!c) return;
+        c.scrollLeft = (c.scrollWidth - c.clientWidth) / 2;
+        c.scrollTop = (c.scrollHeight - c.clientHeight) / 2;
+      });
       setScale(Math.max(0.2, mode === 'width' ? sW : Math.min(sW, sH)));
     } catch { /* el documento puede estar cerrándose */ }
   }, [currentPage, rotation]);
@@ -1150,9 +1147,14 @@ export default function PDFViewer({ url, preparando = false,
 
   // --- Click & Drag Panning Logic ---
   const handleMouseDown = (e) => {
-    // Con una herramienta activa, el clic sobre la hoja es para dibujar, no para panear
-    if (tool !== 'pan' && wrapRef.current && wrapRef.current.contains(e.target)) return;
-    // 0 = Click Izquierdo, 1 = Click Rueda (Middle Click)
+    // LA RUEDA PULSADA ARRASTRA SIEMPRE, tenga o no una herramienta activa.
+    // Es el gesto de ACC y el de cualquier CAD: no obliga a soltar la
+    // herramienta para recolocar la lamina. Antes quedaba bloqueada por el
+    // guardia de abajo en cuanto se elegia una marca.
+    const conLaRueda = e.button === 1;
+    // Con una herramienta activa, el clic IZQUIERDO sobre la hoja es para
+    // dibujar, no para panear.
+    if (!conLaRueda && tool !== 'pan' && wrapRef.current && wrapRef.current.contains(e.target)) return;
     if (e.button !== 0 && e.button !== 1) return;
     e.preventDefault(); // Evitar scroll automático al usar click central
     setIsDragging(true);

@@ -179,12 +179,31 @@
 }
 
 .pdf-page-pad {
-  display: flex; justify-content: center;
+  /* HOLGURA A LOS CUATRO LADOS.
+     Antes el relleno era justo, asi que con la hoja entera a la vista NO
+     HABIA NADA QUE DESPLAZAR: arrastrar no hacia nada, y el zoom al cursor
+     --que se corrige moviendo el scroll-- tampoco tenia margen. Se resolvia
+     empujando la hoja con un tope de media ventana, y lo que ese tope
+     recortaba era justo lo que se escapaba del punto, acumulandose a cada
+     acercamiento: «mientras mas acerco, mas se pierde el foco».
+     Con holgura siempre hay sitio adonde moverse, asi que el arrastre y el
+     zoom usan LO MISMO --el scroll-- y el punto bajo el cursor se queda
+     donde esta, sin topes ni casos especiales. */
+  display: flex; justify-content: center; align-items: center;
   box-sizing: border-box;
   width: fit-content; min-width: 100%;
+  min-height: 100%;
   margin: 0 auto;
   padding: 26px 74px 84px 26px;   /* aire a la derecha para el carril */
 }
+
+/* LA HOLGURA VIVE EN LA HOJA, NO EN EL RELLENO DEL CONTENEDOR.
+   Primero se puso como `padding` del `.pdf-page-pad` y no funcionaba: hay
+   consultas de medios mas abajo que ajustan ese relleno para pantallas
+   estrechas y lo pisaban (computado: 14 px en vez de 45vh). Aqui nadie la
+   toca, y el efecto es el mismo: margen a los cuatro lados para que SIEMPRE
+   haya sitio adonde arrastrar y adonde corregir el zoom. */
+.pdf-page { margin: 45vh 45vw; }
 
 .pdf-page { position: relative; }
 
