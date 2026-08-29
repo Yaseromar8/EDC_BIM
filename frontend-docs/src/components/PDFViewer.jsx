@@ -450,6 +450,13 @@ export default function PDFViewer({ url, preparando = false,
   const [scale, setScale] = useState(1.0); // 100% por defecto
   const [rotation, setRotation] = useState(0);
   const [fitMode, setFitMode] = useState('page'); // page | width | custom
+  // ESPEJO INMEDIATO DEL MODO. `fitMode` es estado, y el estado llega tarde:
+  // al primer giro de rueda se pide 'custom' pero durante unos milisegundos
+  // el observador de tamaño todavia lee 'page' y se cree con derecho a
+  // reencuadrar -- justo encima del zoom que el usuario esta haciendo. Ese
+  // hueco es una de las formas en que «se pierde el punto». El espejo se pone
+  // en el mismo instante del giro, sin esperar a React.
+  const fitModeRef = useRef('page');
   
   // UI States
   const [loading, setLoading] = useState(true);
@@ -505,6 +512,8 @@ export default function PDFViewer({ url, preparando = false,
   // marca se aparta para no taparlo. El zoom sigue fuera (`avisoDeRender`),
   // que ahi no se espera nada.
   const ocupado = preparando || loading || (pageRendering && avisoDeRender && !hayTinta);
+  const ocupadoRef = useRef(false);
+  useEffect(() => { ocupadoRef.current = ocupado; }, [ocupado]);
 
   // VA DESPUES DE `ocupado` A PROPOSITO: su lista de dependencias lo nombra,
   // y esa lista se evalua al renderizar. Puesto antes, reventaba con «Cannot
@@ -1035,6 +1044,7 @@ export default function PDFViewer({ url, preparando = false,
     const ux = (clientX - r.left) / sAhora;
     const uy = (clientY - r.top) / sAhora;
 
+    fitModeRef.current = 'custom';
     setFitMode('custom');
     lienzo.style.width = `${base.width * siguiente}px`;
     lienzo.style.height = `${base.height * siguiente}px`;
@@ -1064,6 +1074,7 @@ export default function PDFViewer({ url, preparando = false,
       const vp1 = page.getViewport({ scale: 1, rotation: giroDeLaHoja(page, rotation) });
       const sW = (cont.clientWidth - 64) / vp1.width;
       const sH = (cont.clientHeight - 64) / vp1.height;
+      fitModeRef.current = mode;
       setFitMode(mode);
       setDesplazamiento({ x: 0, y: 0 });
       // Con holgura alrededor, encuadrar tiene que dejar la hoja EN EL CENTRO
@@ -1100,13 +1111,37 @@ export default function PDFViewer({ url, preparando = false,
   }, [loading, docNonce]);
 
   // Mantiene "ajustar a página/ancho" al redimensionar la ventana o el panel.
+  const ultimaMedidaRef = useRef({ w: 0, h: 0 });
   useEffect(() => {
     const el = containerRef.current;
     if (!el || fitMode === 'custom' || typeof ResizeObserver === 'undefined') return undefined;
     let timer;
-    const ro = new ResizeObserver(() => {
+    const ro = new ResizeObserver(([entrada]) => {
+      // DOS FRENOS, y los dos hacen falta.
+      //
+      // EL DEFECTO: este observador reencuadraba ante CUALQUIER aviso de
+      // tamaño -- y un ResizeObserver avisa tambien nada mas engancharse,
+      // aunque nada haya cambiado. Al pulsar otra lamina basta con que la
+      // maquetacion se mueva un pixel (el nombre del fichero es mas largo, la
+      // cabecera cambia de alto) para que se dispare y RECENTRE EL PLANO QUE
+      // ESTAS MIRANDO. Es lo que el dueño describio: «el plano actual se
+      // centra y despues de segundos recien aparece el otro».
+      //
+      //   1. Solo si el tamaño cambio DE VERDAD (mas de 2 px). Un aviso sin
+      //      cambio real no es un cambio.
+      //   2. Nunca mientras se esta trayendo otro documento: reencuadrar lo
+      //      que esta a punto de desaparecer no sirve para nada y ademas se ve.
+      const r = entrada.contentRect;
+      const ant = ultimaMedidaRef.current;
+      if (Math.abs(r.width - ant.w) < 2 && Math.abs(r.height - ant.h) < 2) return;
+      ultimaMedidaRef.current = { w: r.width, h: r.height };
       clearTimeout(timer);
-      timer = setTimeout(() => fitTo(fitMode), 120);
+      timer = setTimeout(() => {
+        // Se vuelve a mirar AL DISPARAR, no al programar: en esos 120 ms el
+        // usuario puede haber empezado a hacer zoom.
+        if (ocupadoRef.current || fitModeRef.current === 'custom') return;
+        fitTo(fitModeRef.current);
+      }, 120);
     });
     ro.observe(el);
     return () => { clearTimeout(timer); ro.disconnect(); };
