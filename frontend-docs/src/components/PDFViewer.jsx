@@ -271,58 +271,33 @@ if (typeof window !== 'undefined') window.__alephiaDocsEnCache = () => _docsAbie
 // y solo se llena cuando hay algo real que medir (la descarga); en las otras
 // fases gira, que es decir «trabajando» sin fingir un porcentaje.
 function MarcaEsperando({ porcentaje = null }) {
-  const medido = porcentaje !== null && porcentaje > 0 && porcentaje < 100;
-  const VUELTA = 2 * Math.PI * 40;          // radio 40
+  // NADA DE GIRAR POR GIRAR.
+  //
+  // El aro daba vueltas mientras no habia nada que medir, y al cambiar de fase
+  // se reiniciaba: un movimiento que no significaba nada y encima incoherente.
+  // El dueno lo dijo claro -- «que vaya ese efecto, o simplemente el
+  // porcentaje». Asi que el aro ES el porcentaje: la unica fase medible es la
+  // descarga, y es justo la que se enseña.
+  //
+  // Mientras aun no hay cifra (los primeros milisegundos, pidiendo el permiso
+  // de lectura) el aro se queda vacio y solo la marca respira. Quieto no
+  // miente; girando, si.
+  const hay = porcentaje !== null && porcentaje >= 0;
+  const VUELTA = 2 * Math.PI * 40;
   return (
     <div className="pdf-marca-espera" role="status" aria-live="polite">
       <svg className="pdf-marca-aro" viewBox="0 0 96 96" aria-hidden="true">
         <circle className="pdf-marca-pista" cx="48" cy="48" r="40" />
-        <circle className={`pdf-marca-trazo${medido ? ' es-medido' : ''}`}
-          cx="48" cy="48" r="40"
-          style={medido
-            ? { strokeDasharray: VUELTA, strokeDashoffset: VUELTA * (1 - porcentaje / 100) }
-            : undefined} />
+        {hay && (
+          <circle className="pdf-marca-trazo" cx="48" cy="48" r="40"
+            style={{ strokeDasharray: VUELTA,
+                     strokeDashoffset: VUELTA * (1 - Math.min(100, porcentaje) / 100) }} />
+        )}
       </svg>
       <img className="pdf-marca-simbolo" src="/brand/ALEPHIA_Symbol_Navy.svg" alt="" />
+      {hay && <div className="pdf-marca-cifra">{Math.round(porcentaje)}%</div>}
     </div>
   );
-}
-
-// LA SIGUIENTE LAMINA, PREPARADA DE ANTEMANO.
-//
-// Interpretar un plano de obra cuesta segundos y eso no se puede acelerar en
-// el navegador -- pero SI se puede hacer antes de que haga falta. Mientras el
-// usuario mira una lamina, la maquina esta parada: ahi se prepara la
-// siguiente, y al pulsarla ya esta lista.
-//
-// SOLO LA SIGUIENTE, no las dos vecinas: el almacen guarda dos documentos
-// (medido: ~13 MB cada uno) y esos dos son la actual y la que viene. Meter
-// tambien la anterior echaria a la actual, que es justo la que no se puede
-// perder. Avanzar por la carpeta es el gesto habitual; retroceder, la
-// excepcion.
-//
-// Y SIEMPRE DESPUES, NUNCA DURANTE: se espera a que la lamina actual este
-// dibujada. Adelantar trabajo robandole CPU a lo que el usuario tiene
-// delante seria cambiar una espera por otra peor.
-async function prepararSiguiente(hermano, obra, yaPedidos) {
-  if (!hermano || !hermano.gcs_urn || yaPedidos.has(hermano.gcs_urn)) return;
-  yaPedidos.add(hermano.gcs_urn);
-  try {
-    const r = await apiFetch(
-      `${API}/api/docs/signed-url?urn=${encodeURIComponent(hermano.gcs_urn)}`
-      + `&model_urn=${encodeURIComponent(obra || '')}`);
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok || !d.success || !d.url) return;
-    if (documentoEnCache(d.url)) return;            // ya lo teniamos
-    const pdf = await pdfjsLib.getDocument({ url: d.url, withCredentials: false }).promise;
-    // Se toca su primera pagina: es donde pdf.js hace el trabajo caro de
-    // interpretar el contenido, y es justo lo que se quiere adelantar.
-    try { await pdf.getPage(1); } catch { /* con tenerlo abierto ya se gana */ }
-    guardarDocumento(d.url, pdf);
-  } catch {
-    // Preparar de antemano es un lujo: si falla, no se dice nada y el plano
-    // se abrira como siempre cuando el usuario lo pida.
-  }
 }
 
 export default function PDFViewer({ url, preparando = false,
@@ -478,7 +453,14 @@ export default function PDFViewer({ url, preparando = false,
   // El usuario no esta esperando nada cuando hace zoom: la hoja ya se escalo
   // al instante y solo se esta afinando. Ensenarle el logo ahi convierte una
   // interaccion fluida en una que parece lenta.
-  const ocupado = preparando || loading || (pageRendering && avisoDeRender);
+  // LA MARCA ACOMPAÑA HASTA QUE EL PLANO ASOMA, NI UN INSTANTE MAS.
+  //
+  // Ya no incluye el dibujado: desde que se pinta DIRECTO al lienzo (ver
+  // `conBufer` en renderPage) el plano va apareciendo por partes, y taparlo
+  // con un logo justo cuando el usuario empieza a ver su lamina es lo peor de
+  // los dos mundos. La marca cubre lo que de verdad no se ve -- pedir el
+  // permiso y descargar-- y se retira cuando empieza el dibujo.
+  const ocupado = preparando || loading;
 
   // VA DESPUES DE `ocupado` A PROPOSITO: su lista de dependencias lo nombra,
   // y esa lista se evalua al renderizar. Puesto antes, reventaba con «Cannot
@@ -1375,7 +1357,9 @@ export default function PDFViewer({ url, preparando = false,
                 // dueno describio: el plano viejo se AVIVABA y un instante
                 // despues saltaba al nuevo -- dos movimientos donde deberia
                 // haber uno. Ahora se aclara justo cuando aparece el nuevo.
-                className={`pdf-page${mostrarEspera && ocupado ? ' esta-vieja' : ''}`}
+                // El atenuado SI dura hasta que el plano nuevo esta pintado:
+                // aqui no se tapa nada, solo se dice «esto ya no es lo vigente».
+                className={`pdf-page${mostrarEspera || (pageRendering && avisoDeRender) ? ' esta-vieja' : ''}`}
                 style={{ transform: `translate(${desplazamiento.x}px, ${desplazamiento.y}px)` }}>
                 <canvas ref={canvasRef} />
                 {highlights.map(h => (
