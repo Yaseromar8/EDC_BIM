@@ -430,6 +430,17 @@ export default function PDFViewer({ url, preparando = false,
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pageRendering, setPageRendering] = useState(false);
 
+  // ¿HAY YA ALGO DIBUJADO DEL PLANO NUEVO?
+  //
+  // EL HUECO QUE ESTO CIERRA: la marca se retiraba al terminar la DESCARGA,
+  // pero despues viene el DIBUJADO, que en un plano denso son varios
+  // segundos. En ese tramo no habia señal ninguna y el plano nuevo todavia no
+  // estaba: «el logo termina de cargar y recien despues de 5 segundos cambia
+  // de plano». Ahora la marca dura hasta que el lienzo tiene TINTA, que es lo
+  // que el dueño pidio -- «hasta que se muestra la silueta del PDF».
+  const [hayTinta, setHayTinta] = useState(false);
+  const vigilaTintaRef = useRef(0);
+
   // OJO CON EL ORDEN: este bloque usa `loading` y `pageRendering`, asi que
   // TIENE que ir despues de ellos. Estaba doscientas lineas mas arriba y
   // reventaba la vista entera con «Cannot access before initialization» --
@@ -460,7 +471,11 @@ export default function PDFViewer({ url, preparando = false,
   // con un logo justo cuando el usuario empieza a ver su lamina es lo peor de
   // los dos mundos. La marca cubre lo que de verdad no se ve -- pedir el
   // permiso y descargar-- y se retira cuando empieza el dibujo.
-  const ocupado = preparando || loading;
+  // La espera cubre TODO el camino: pedir el permiso, descargar y dibujar --
+  // hasta que hay tinta. Ni un instante mas: en cuanto el plano asoma, la
+  // marca se aparta para no taparlo. El zoom sigue fuera (`avisoDeRender`),
+  // que ahi no se espera nada.
+  const ocupado = preparando || loading || (pageRendering && avisoDeRender && !hayTinta);
 
   // VA DESPUES DE `ocupado` A PROPOSITO: su lista de dependencias lo nombra,
   // y esa lista se evalua al renderizar. Puesto antes, reventaba con «Cannot
@@ -666,6 +681,45 @@ export default function PDFViewer({ url, preparando = false,
     }
   }, [currentPage, rotation, scale]);
 
+  // Mira el lienzo hasta encontrar el primer trazo. Muestrea un cuadrito
+  // pequeño --no la hoja entera-- porque esto corre mientras pdf.js rasteriza
+  // y robarle tiempo aqui seria contraproducente.
+  const vigilarLaTinta = useCallback(() => {
+    cancelAnimationFrame(vigilaTintaRef.current);
+    const mirar = () => {
+      const c = canvasRef.current;
+      if (!c || c.width < 40) { vigilaTintaRef.current = requestAnimationFrame(mirar); return; }
+      try {
+        // NUEVE PUNTOS REPARTIDOS, no uno.
+        //
+        // Con una sola muestra la marca se quedaba puesta aunque medio plano
+        // estuviera ya dibujado: pdf.js pinta en el orden del documento, y si
+        // ese punto concreto cae en una zona vacia --el centro de una lamina
+        // suele serlo-- la señal no llegaba nunca. Basta con que CUALQUIERA de
+        // los nueve tenga trazo para saber que el plano ya se esta viendo.
+        const g = c.getContext('2d', { willReadFrequently: true });
+        for (const fx of [0.2, 0.5, 0.8]) {
+          for (const fy of [0.2, 0.5, 0.8]) {
+            const d = g.getImageData(Math.floor(c.width * fx), Math.floor(c.height * fy), 16, 16).data;
+            for (let i = 0; i < d.length; i += 4) {
+              if (d[i] < 242 || d[i + 1] < 242 || d[i + 2] < 242) { setHayTinta(true); return; }
+            }
+          }
+        }
+      } catch { setHayTinta(true); return; }   // sin poder mirar, no se estorba
+      vigilaTintaRef.current = requestAnimationFrame(mirar);
+    };
+    // TOPE DE CORTESIA: si en segundo y medio no se detecta trazo --una
+    // lamina casi vacia, un plano que empieza por una esquina que no
+    // muestreamos-- la marca se aparta igual. Mas vale quitarse de en medio
+    // sin certeza que quedarse encima de un plano que ya se ve.
+    const tope = setTimeout(() => setHayTinta(true), 1500);
+    vigilaTintaRef.current = requestAnimationFrame(mirar);
+    return () => clearTimeout(tope);
+  }, []);
+
+  useEffect(() => () => cancelAnimationFrame(vigilaTintaRef.current), []);
+
   // Render nítido de la página actual
   const renderPage = useCallback(async () => {
     const pdf = pdfDocRef.current;
@@ -679,6 +733,7 @@ export default function PDFViewer({ url, preparando = false,
     const renderSequence = ++renderSequenceRef.current;
     setVpInfo(null);
     setPageRendering(true);
+    if (avisoDeRender) { setHayTinta(false); vigilarLaTinta(); }
     setRenderError('');
     try {
       const page = await pdf.getPage(currentPage);
@@ -783,7 +838,7 @@ export default function PDFViewer({ url, preparando = false,
     } finally {
       if (renderSequence === renderSequenceRef.current) setPageRendering(false);
     }
-  }, [currentPage, scale, rotation, avisoDeRender]);
+  }, [currentPage, scale, rotation, avisoDeRender, vigilarLaTinta]);
 
   // Render principal. El debounce se aplica SOLO al zoom (para no rasterizar 15
   // veces en un gesto de rueda). Abrir el documento o cambiar de página rinde
