@@ -262,7 +262,8 @@ function guardarDocumento(url, pdf) {
 // Lo que mide el banco de pruebas. No se usa en la aplicacion.
 if (typeof window !== 'undefined') window.__alephiaDocsEnCache = () => _docsAbiertos.size;
 
-export default function PDFViewer({ url, preparando = false, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
+export default function PDFViewer({ url, preparando = false,
+  alEscritorio = null, appEscritorio = null, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
                                     versionLabel = null, versionInfo = null, hideTitle = false,
                                     onClose = null, onVersionClick = null,
                                     hermanos = [], onAbrirHermano = null,
@@ -287,6 +288,22 @@ export default function PDFViewer({ url, preparando = false, fileName = 'documen
   const anclaRef = useRef(null);          // punto que el zoom debe conservar bajo el cursor
   const [avisoDeRender, setAvisoDeRender] = useState(true);
   const [saltandoA, setSaltandoA] = useState(null);
+
+  // LA ESPERA NO APARECE DE GOLPE: espera un cuarto de segundo.
+  //
+  // Con el almacen de documentos, reabrir un plano ya visto es instantaneo --
+  // y ahi la barra y el atenuado salian y desaparecian en un fotograma: un
+  // fogonazo. Peor que no avisar, porque el ojo lo lee como un fallo.
+  //
+  // Con este retardo, lo rapido no parpadea NADA y lo lento avisa igual. Es
+  // la misma idea que usa el navegador con su propia barra de carga.
+  const [mostrarEspera, setMostrarEspera] = useState(false);
+  const ocupado = preparando || loading || (pageRendering && avisoDeRender);
+  useEffect(() => {
+    if (!ocupado) { setMostrarEspera(false); return undefined; }
+    const t = setTimeout(() => setMostrarEspera(true), 250);
+    return () => clearTimeout(t);
+  }, [ocupado]);
   // CUANDO LA HOJA CABE ENTERA NO HAY SCROLL QUE MOVER, y el zoom crecia
   // desde el centro: el detalle que mirabas se escapaba. Este desplazamiento
   // propio la mueve cuando el scroll no puede, para que el punto bajo el
@@ -1111,6 +1128,15 @@ export default function PDFViewer({ url, preparando = false, fileName = 'documen
         </div>
 
         <div className="pdf-topbar__right">
+          {alEscritorio && (
+            <button className="pdf-ico pdf-escritorio" onClick={alEscritorio}
+              title={`Abrir en ${appEscritorio?.nombre || 'el escritorio'}`}>
+              <span className="pdf-escritorio-sello"
+                style={{ background: appEscritorio?.color || '#5B6875' }}>
+                {appEscritorio?.letra || 'P'}
+              </span>
+            </button>
+          )}
           <button className="pdf-ico" onClick={printDocument} title="Imprimir"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="7" rx="1.5"/><path d="M7 16h10v5H7z"/></svg></button>
           <button className="pdf-ico" onClick={downloadDocument} disabled={descargando}
             title={`Descargar ${fileName}`}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11M8 12l4 4 4-4"/><path d="M4 19h16"/></svg></button>
@@ -1155,7 +1181,7 @@ export default function PDFViewer({ url, preparando = false, fileName = 'documen
                 avanza) y dibujarlo (el mas largo en un A1, y tampoco medible).
                 Ensenar las tres por separado es lo que quita la sensacion de
                 que la aplicacion se colgo: se ve que algo pasa Y en que va. */}
-            {(preparando || loading || (pageRendering && avisoDeRender)) && (
+            {mostrarEspera && (
               <div className="pdf-progreso" role="status" aria-live="polite">
                 <div className={`pdf-progreso-barra${
                   loading && progress > 0 && progress < 100 ? '' : ' es-indefinida'}`}
@@ -1164,7 +1190,7 @@ export default function PDFViewer({ url, preparando = false, fileName = 'documen
               </div>
             )}
 
-            {(preparando || loading || (pageRendering && avisoDeRender)) && (
+            {mostrarEspera && (
               <div className="pdf-render-status" role="status" aria-live="polite">
                 <span className="pdf-girador" aria-hidden="true" />
                 {preparando ? 'Preparando el documento…'
@@ -1182,7 +1208,7 @@ export default function PDFViewer({ url, preparando = false, fileName = 'documen
 
             <div className="pdf-page-pad">
               <div ref={wrapRef}
-                className={`pdf-page${preparando || loading ? ' esta-vieja' : ''}`}
+                className={`pdf-page${mostrarEspera && (preparando || loading) ? ' esta-vieja' : ''}`}
                 style={{ transform: `translate(${desplazamiento.x}px, ${desplazamiento.y}px)` }}>
                 <canvas ref={canvasRef} />
                 {highlights.map(h => (

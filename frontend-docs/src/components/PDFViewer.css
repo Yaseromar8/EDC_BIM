@@ -605,7 +605,30 @@
 
 /* El plano anterior se atenua mientras llega el nuevo: sigue ahi para no
    dejar la pantalla en blanco, pero se ve que ya no es el vigente. */
-.pdf-page.esta-vieja {
-  opacity: 0.42;
-  transition: opacity 0.2s ease;
+.pdf-page.esta-vieja { opacity: 0.55; }
+
+/* La transicion va SIEMPRE en .pdf-page, no solo en el estado atenuado: si
+   vive en la clase que se quita, al volver no hay nada que animar y el plano
+   REAPARECE DE GOLPE. Ese salto seco era lo que se veia. */
+.pdf-page { transition: opacity 0.35s ease; }
+
+
+/* Lo que aparece durante la espera, entra desvanecido en vez de saltar. */
+.pdf-progreso, .pdf-render-status { animation: pdf-aparece 0.22s ease both; }
+
+@keyframes pdf-aparece { from { opacity: 0; } to { opacity: 1; } }
+
+/* Sello de la aplicacion de escritorio (P de PDF, R de Revit, C de Civil),
+   igual que el de la cabecera del expediente: mismo lenguaje en los dos
+   sitios, que es lo que hace que se reconozca sin leer. */
+.pdf-escritorio-sello {
+  width: 17px; height: 17px;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0;
 }

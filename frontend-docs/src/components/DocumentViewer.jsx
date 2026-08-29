@@ -579,6 +579,12 @@ export default function DocumentViewer({
               // espera era mudo -- justo el que mas ansiedad da, porque es el
               // que sigue al clic.
               preparando={loadingPreview}
+              // EL BOTON DE ESCRITORIO, TAMBIEN EN LA BARRA DEL LECTOR. Estaba
+              // solo en la cabecera del expediente, que es justo la que
+              // desaparece al abrir el plano: el dueno lo busco ahi y no
+              // estaba. Se le pasa la ACCION, no se duplica la logica.
+              alEscritorio={esPdfDeEscritorio && !isShared ? abrirEnEscritorio : null}
+              appEscritorio={appEscritorio}
               nodeId={isShared ? null : file.id} projectPrefix={projectPrefix}
               onClose={onClose || (() => window.close())}
               onVersionClick={!isShared && setShowVersions
