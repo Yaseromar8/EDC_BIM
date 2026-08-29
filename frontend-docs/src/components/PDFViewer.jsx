@@ -457,6 +457,20 @@ export default function PDFViewer({ url, preparando = false,
   // hueco es una de las formas en que «se pierde el punto». El espejo se pone
   // en el mismo instante del giro, sin esperar a React.
   const fitModeRef = useRef('page');
+
+  // LA ESCALA QUE EL USUARIO ESTA VIENDO, sin pasar por el estado.
+  //
+  // EL SALTO BRUSCO AL ACERCAR: el dibujado nitido se lanza con retardo y, AL
+  // TERMINAR, volvia a fijar el tamaño del lienzo a la escala que tenia
+  // CUANDO EMPEZO. Si mientras tanto seguiste girando la rueda, eso devuelve
+  // la hoja a un tamaño anterior de golpe -- y con ella se va el punto que
+  // mirabas. No es deriva que se acumula: es un tiron hacia atras, que es
+  // exactamente como el dueño lo describio.
+  //
+  // Con este espejo el tamaño en pantalla lo decide SIEMPRE el ultimo giro.
+  // Los pixeles nitidos pueden llegar un instante despues --y verse suaves
+  // ese instante-- pero la hoja NO retrocede nunca.
+  const escalaVisualRef = useRef(1.0);
   
   // UI States
   const [loading, setLoading] = useState(true);
@@ -512,6 +526,17 @@ export default function PDFViewer({ url, preparando = false,
   // marca se aparta para no taparlo. El zoom sigue fuera (`avisoDeRender`),
   // que ahi no se espera nada.
   const ocupado = preparando || loading || (pageRendering && avisoDeRender && !hayTinta);
+  // LA HOJA SE ESCONDE SOLO MIENTRAS NO HAY NADA QUE ENSEÑAR.
+  //
+  // La escondia durante TODA la espera, dibujado incluido -- y el dibujado es
+  // progresivo: el plano se va formando desde el primer medio segundo. Al
+  // taparlo, el usuario veia el logo y luego el plano APARECER DE GOLPE al
+  // terminar. «Carga el logo y despues demora 5 segundos en cambiar»: esos
+  // cinco segundos eran de dibujado, y se los estaba ocultando.
+  //
+  // Ahora se esconde mientras se pide el permiso y se descarga --ahi de
+  // verdad no hay nada que ver-- y en cuanto empieza a dibujarse se enseña.
+  const esperandoDocumento = preparando || loading;
   const ocupadoRef = useRef(false);
   useEffect(() => { ocupadoRef.current = ocupado; }, [ocupado]);
 
@@ -685,8 +710,8 @@ export default function PDFViewer({ url, preparando = false,
       } catch { return; }
     }
     if (!canvasRef.current) return;
-    canvasRef.current.style.width = `${base.width * (scale || 1)}px`;
-    canvasRef.current.style.height = `${base.height * (scale || 1)}px`;
+    canvasRef.current.style.width = `${base.width * escalaVisualRef.current}px`;
+    canvasRef.current.style.height = `${base.height * escalaVisualRef.current}px`;
 
     // ── EL PUNTO BAJO EL CURSOR SE QUEDA BAJO EL CURSOR ──────────────────
     //
@@ -790,6 +815,11 @@ export default function PDFViewer({ url, preparando = false,
     try {
       const page = await pdf.getPage(currentPage);
 
+      const baseR = baseVpRef.current[`${currentPage}:${rotation}`];
+      const anchoVisual = (w) => (baseR && baseR.width
+        ? { w: baseR.width * escalaVisualRef.current, h: baseR.height * escalaVisualRef.current }
+        : { w, h: null });
+
       const effectiveScale = scale || 1.0;
       const viewport = page.getViewport({ scale: effectiveScale, rotation: giroDeLaHoja(page, rotation) });
 
@@ -838,8 +868,10 @@ export default function PDFViewer({ url, preparando = false,
         destino = bufferCanvasRef.current;
       } else {
         destino = canvas;
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
+        // El tamaño en pantalla lo manda el ultimo giro (ver escalaVisualRef).
+        const v = anchoVisual(viewport.width);
+        canvas.style.width = `${v.w}px`;
+        canvas.style.height = `${v.h != null ? v.h : viewport.height}px`;
       }
       destino.width = Math.round(viewport.width * dpr);
       destino.height = Math.round(viewport.height * dpr);
@@ -861,8 +893,9 @@ export default function PDFViewer({ url, preparando = false,
       if (conBufer) {
         canvas.width = buffer.width;
         canvas.height = buffer.height;
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
+        const v = anchoVisual(viewport.width);
+        canvas.style.width = `${v.w}px`;
+        canvas.style.height = `${v.h != null ? v.h : viewport.height}px`;
         const ctx = canvas.getContext('2d');
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.drawImage(buffer, 0, 0);
@@ -1045,6 +1078,7 @@ export default function PDFViewer({ url, preparando = false,
     const uy = (clientY - r.top) / sAhora;
 
     fitModeRef.current = 'custom';
+    escalaVisualRef.current = siguiente;
     setFitMode('custom');
     lienzo.style.width = `${base.width * siguiente}px`;
     lienzo.style.height = `${base.height * siguiente}px`;
@@ -1075,6 +1109,7 @@ export default function PDFViewer({ url, preparando = false,
       const sW = (cont.clientWidth - 64) / vp1.width;
       const sH = (cont.clientHeight - 64) / vp1.height;
       fitModeRef.current = mode;
+      escalaVisualRef.current = Math.max(0.2, mode === 'width' ? sW : Math.min(sW, sH));
       setFitMode(mode);
       setDesplazamiento({ x: 0, y: 0 });
       // Con holgura alrededor, encuadrar tiene que dejar la hoja EN EL CENTRO
@@ -1532,7 +1567,7 @@ export default function PDFViewer({ url, preparando = false,
                 250 ms que gobiernan la marca), la hoja vieja se retira y queda
                 la marca sola. Si el cambio es instantaneo --lamina ya
                 preparada-- no se aparta nada: no hay parpadeo. */}
-            <div className={`pdf-page-pad${numPages ? '' : ' sin-documento'}${mostrarEspera ? ' esperando' : ''}`}>
+            <div className={`pdf-page-pad${numPages ? '' : ' sin-documento'}${esperandoDocumento ? ' esperando' : ''}`}>
               <div ref={wrapRef}
                 // ATENUADO HASTA QUE EL PLANO NUEVO ESTA PINTADO, no hasta
                 // que termina la descarga. Soltarlo antes hacia lo que el
