@@ -489,6 +489,7 @@ export default function PDFViewer({ url, preparando = false,
   // de plano». Ahora la marca dura hasta que el lienzo tiene TINTA, que es lo
   // que el dueño pidio -- «hasta que se muestra la silueta del PDF».
   const [hayTinta, setHayTinta] = useState(false);
+  const [planoListo, setPlanoListo] = useState(false);
   const vigilaTintaRef = useRef(0);
 
   // OJO CON EL ORDEN: este bloque usa `loading` y `pageRendering`, asi que
@@ -525,7 +526,10 @@ export default function PDFViewer({ url, preparando = false,
   // hasta que hay tinta. Ni un instante mas: en cuanto el plano asoma, la
   // marca se aparta para no taparlo. El zoom sigue fuera (`avisoDeRender`),
   // que ahi no se espera nada.
-  const ocupado = preparando || loading || (pageRendering && avisoDeRender && !hayTinta);
+  // La marca acompaña EXACTAMENTE mientras la hoja no se ve: mismo criterio,
+  // asi que no puede haber un instante con la hoja oculta y sin señal, ni al
+  // reves. El zoom queda fuera (ahi no se espera nada).
+  const ocupado = !planoListo;
   // LA HOJA SE ESCONDE SOLO MIENTRAS NO HAY NADA QUE ENSEÑAR.
   //
   // La escondia durante TODA la espera, dibujado incluido -- y el dibujado es
@@ -536,7 +540,19 @@ export default function PDFViewer({ url, preparando = false,
   //
   // Ahora se esconde mientras se pide el permiso y se descarga --ahi de
   // verdad no hay nada que ver-- y en cuanto empieza a dibujarse se enseña.
-  const esperandoDocumento = preparando || loading;
+  // ¿SE VE YA EL PLANO NUEVO? Un solo estado, un solo significado.
+  //
+  // Antes esto se decidia con tres condiciones distintas segun el sitio, y
+  // entre ellas quedaba un hueco: desde que termina la descarga hasta que
+  // empieza a dibujarse, el lienzo TODAVIA MUESTRA EL PLANO VIEJO -- y en ese
+  // instante se calcula el encuadre del nuevo y SE LE APLICA. El usuario ve su
+  // plano anterior reescalarse a otro tamaño («como que quiere restablecer a
+  // su zoom original») y solo despues aparece el que pidio.
+  //
+  // Ahora la hoja se enseña cuando hay algo NUEVO que enseñar, y no antes:
+  // se apaga al pedir otro documento y se enciende con la primera tinta.
+  // Cubre el hueco entero sin casos especiales.
+  const esperandoDocumento = !planoListo;
   const ocupadoRef = useRef(false);
   useEffect(() => { ocupadoRef.current = ocupado; }, [ocupado]);
 
@@ -622,6 +638,7 @@ export default function PDFViewer({ url, preparando = false,
     let cancelled = false;
 
     setLoading(true);
+    setPlanoListo(false);   // hasta que el NUEVO se vea, no se enseña nada
     setError(null);
     setProgress(0);
     setCurrentPage(1);
@@ -779,18 +796,18 @@ export default function PDFViewer({ url, preparando = false,
           for (const fy of [0.2, 0.5, 0.8]) {
             const d = g.getImageData(Math.floor(c.width * fx), Math.floor(c.height * fy), 16, 16).data;
             for (let i = 0; i < d.length; i += 4) {
-              if (d[i] < 242 || d[i + 1] < 242 || d[i + 2] < 242) { setHayTinta(true); return; }
+              if (d[i] < 242 || d[i + 1] < 242 || d[i + 2] < 242) { setHayTinta(true); setPlanoListo(true); return; }
             }
           }
         }
-      } catch { setHayTinta(true); return; }   // sin poder mirar, no se estorba
+      } catch { setHayTinta(true); setPlanoListo(true); return; }   // sin poder mirar, no se estorba
       vigilaTintaRef.current = requestAnimationFrame(mirar);
     };
     // TOPE DE CORTESIA: si en segundo y medio no se detecta trazo --una
     // lamina casi vacia, un plano que empieza por una esquina que no
     // muestreamos-- la marca se aparta igual. Mas vale quitarse de en medio
     // sin certeza que quedarse encima de un plano que ya se ve.
-    const tope = setTimeout(() => setHayTinta(true), 1500);
+    const tope = setTimeout(() => { setHayTinta(true); setPlanoListo(true); }, 1500);
     vigilaTintaRef.current = requestAnimationFrame(mirar);
     return () => clearTimeout(tope);
   }, []);
@@ -915,6 +932,12 @@ export default function PDFViewer({ url, preparando = false,
       }
       // El overlay necesita el viewport vigente para transformar coordenadas PDF<->pantalla
       setVpInfo({ vp: viewport, w: viewport.width, h: viewport.height });
+      // RED DE SEGURIDAD: si el vigilante de tinta no llegara a dispararse
+      // --una lamina practicamente vacia, o un fallo al leer el lienzo-- la
+      // hoja se quedaria oculta para siempre. Al terminar el dibujado se
+      // enseña SI O SI. En el peor caso se comporta como antes; en el bueno,
+      // aparece mucho antes.
+      setPlanoListo(true);
     } catch (err) {
       if (renderSequence === renderSequenceRef.current && err?.name !== 'RenderingCancelledException' && err?.name !== 'RenderingCancelled') {
         console.error('[PDFViewer] Render error:', err);
