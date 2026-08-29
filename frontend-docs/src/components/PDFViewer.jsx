@@ -912,7 +912,22 @@ export default function PDFViewer({ url, preparando = false,
     setFitMode('custom');
     setScale(prev => {
       const next = dir > 0 ? Math.min(prev * 1.2, 8.0) : Math.max(prev / 1.2, 0.2);
-      if (next !== prev) {
+      // EL ANCLA SE ANOTA UNA SOLA VEZ POR RAFAGA.
+      //
+      // EL DEFECTO: girando la rueda rapido llegan varios eventos ANTES de que
+      // la hoja se redibuje. El segundo ya lee la escala NUEVA (`prev` viene
+      // encadenado) pero el rectangulo VIEJO --la hoja aun no ha crecido-- y
+      // con esa mezcla calcula un punto que no existe. Cada giro añadia su
+      // error, y por eso «cuanto mas me acerco, mas se va para otro lado».
+      // Espaciando los giros no se notaba: por eso mi prueba anterior no lo
+      // cazo, y esta vez se mide con la rafaga pegada.
+      //
+      // LO QUE EL ANCLA DICE es «este punto del plano tiene que quedarse bajo
+      // el cursor», y eso NO CAMBIA durante la rafaga: el punto es el mismo y
+      // el cursor no se ha movido. Asi que se anota con el primer giro --el
+      // unico que tiene rectangulo y escala coherentes-- y los demas la
+      // respetan.
+      if (next !== prev && !anclaRef.current) {
         anclaRef.current = {
           ux: (clientX - r.left) / prev,   // punto en unidades de PDF
           uy: (clientY - r.top) / prev,
