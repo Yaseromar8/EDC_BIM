@@ -288,6 +288,43 @@ function MarcaEsperando({ porcentaje = null }) {
   );
 }
 
+// LA SIGUIENTE LAMINA, PREPARADA DE ANTEMANO.
+//
+// Interpretar un plano de obra cuesta segundos y eso no se puede acelerar en
+// el navegador -- pero SI se puede hacer antes de que haga falta. Mientras el
+// usuario mira una lamina, la maquina esta parada: ahi se prepara la
+// siguiente, y al pulsarla ya esta lista.
+//
+// SOLO LA SIGUIENTE, no las dos vecinas: el almacen guarda dos documentos
+// (medido: ~13 MB cada uno) y esos dos son la actual y la que viene. Meter
+// tambien la anterior echaria a la actual, que es justo la que no se puede
+// perder. Avanzar por la carpeta es el gesto habitual; retroceder, la
+// excepcion.
+//
+// Y SIEMPRE DESPUES, NUNCA DURANTE: se espera a que la lamina actual este
+// dibujada. Adelantar trabajo robandole CPU a lo que el usuario tiene
+// delante seria cambiar una espera por otra peor.
+async function prepararSiguiente(hermano, obra, yaPedidos) {
+  if (!hermano || !hermano.gcs_urn || yaPedidos.has(hermano.gcs_urn)) return;
+  yaPedidos.add(hermano.gcs_urn);
+  try {
+    const r = await apiFetch(
+      `${API}/api/docs/signed-url?urn=${encodeURIComponent(hermano.gcs_urn)}`
+      + `&model_urn=${encodeURIComponent(obra || '')}`);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.success || !d.url) return;
+    if (documentoEnCache(d.url)) return;            // ya lo teniamos
+    const pdf = await pdfjsLib.getDocument({ url: d.url, withCredentials: false }).promise;
+    // Se toca su primera pagina: es donde pdf.js hace el trabajo caro de
+    // interpretar el contenido, y es justo lo que se quiere adelantar.
+    try { await pdf.getPage(1); } catch { /* con tenerlo abierto ya se gana */ }
+    guardarDocumento(d.url, pdf);
+  } catch {
+    // Preparar de antemano es un lujo: si falla, no se dice nada y el plano
+    // se abrira como siempre cuando el usuario lo pida.
+  }
+}
+
 export default function PDFViewer({ url, preparando = false,
   alEscritorio = null, appEscritorio = null, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
                                     versionLabel = null, versionInfo = null, hideTitle = false,
@@ -353,6 +390,7 @@ export default function PDFViewer({ url, preparando = false,
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiraAbierta, firmaHermanos, obraDelDocumento]);
+
 
   // LA CINTA SE CENTRA UNA SOLA VEZ: AL ABRIRLA.
   //
@@ -441,6 +479,23 @@ export default function PDFViewer({ url, preparando = false,
   // al instante y solo se esta afinando. Ensenarle el logo ahi convierte una
   // interaccion fluida en una que parece lenta.
   const ocupado = preparando || loading || (pageRendering && avisoDeRender);
+
+  // VA DESPUES DE `ocupado` A PROPOSITO: su lista de dependencias lo nombra,
+  // y esa lista se evalua al renderizar. Puesto antes, reventaba con «Cannot
+  // access before initialization» -- el mismo fallo que tumbo el explorador
+  // esta misma sesion. Segunda vez en el dia; por eso queda escrito aqui.
+  // Se prepara la siguiente lamina en cuanto la actual esta quieta.
+  const yaPedidosRef = useRef(new Set());
+  useEffect(() => {
+    if (ocupado || !hermanos.length || !onAbrirHermano) return undefined;
+    const i = hermanos.findIndex(h => h.name === fileName);
+    const siguiente = i >= 0 ? hermanos[i + 1] : null;
+    if (!siguiente) return undefined;
+    // Un respiro antes de empezar: si el usuario esta saltando de lamina en
+    // lamina, no tiene sentido preparar la que ya va a dejar atras.
+    const t = setTimeout(() => prepararSiguiente(siguiente, obraDelDocumento, yaPedidosRef.current), 900);
+    return () => clearTimeout(t);
+  }, [ocupado, hermanos, fileName, obraDelDocumento, onAbrirHermano]);
   useEffect(() => {
     // APARECE con retardo: lo instantaneo no debe parpadear.
     if (ocupado) {
