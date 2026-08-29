@@ -84,27 +84,50 @@ const RUEDA_INVERTIDA = true;   // si algun dia sobra, se pone en false
 
 function interceptarRueda(contenedor) {
   if (!contenedor || !RUEDA_INVERTIDA) return () => {};
+
+  // SE LE CAMBIA EL SIGNO AL EVENTO, NO SE FABRICA OTRO.
+  //
+  // El intento anterior cancelaba la rueda del usuario (preventDefault +
+  // stopPropagation) y despachaba una COPIA invertida. Eso tiene un fallo
+  // grave: si el visor no atiende la copia -- por como registre sus oyentes,
+  // por el elemento donde la reciba, o por cualquier detalle de su version --
+  // el usuario se queda SIN RUEDA. Y quedarse sin zoom es peor que tenerlo al
+  // reves. Fue lo que paso.
+  //
+  // Aqui no se cancela nada: se deja pasar el MISMO evento del usuario y solo
+  // se le sombrean sus lecturas de desplazamiento con el valor opuesto. El
+  // visor lo recibe por su camino de siempre y lee el signo cambiado.
+  //
+  // La propiedad de esto que importa: EL PEOR CASO ES QUE VUELVA A ESTAR
+  // INVERTIDO, nunca que deje de funcionar. Si el navegador no dejara
+  // redefinir, el evento sigue intacto y la rueda se comporta como siempre.
+  //
+  // Se sombrean tambien las lecturas antiguas (wheelDelta*) porque no todo el
+  // codigo del visor lee `deltaY`.
   const alRodar = (e) => {
-    // El evento que fabricamos nosotros pasa de largo: sin esta marca, se
-    // interceptaria a si mismo y nunca llegaria al visor.
-    if (e.__alephiaRueda) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const copia = new WheelEvent('wheel', {
-      deltaX: -e.deltaX, deltaY: -e.deltaY, deltaZ: -e.deltaZ,
-      deltaMode: e.deltaMode,
-      clientX: e.clientX, clientY: e.clientY,
-      screenX: e.screenX, screenY: e.screenY,
-      ctrlKey: e.ctrlKey, shiftKey: e.shiftKey,
-      altKey: e.altKey, metaKey: e.metaKey,
-      bubbles: true, cancelable: true, view: window,
-    });
-    copia.__alephiaRueda = true;
-    e.target.dispatchEvent(copia);
+    if (e.__alephiaGirada) return;
+    try {
+      Object.defineProperty(e, '__alephiaGirada', { value: true });
+      const opuestos = {
+        deltaY: -e.deltaY, deltaX: -e.deltaX, deltaZ: -e.deltaZ,
+        wheelDelta: -(e.wheelDelta || 0),
+        wheelDeltaY: -(e.wheelDeltaY || 0),
+        wheelDeltaX: -(e.wheelDeltaX || 0),
+      };
+      for (const nombre of Object.keys(opuestos)) {
+        Object.defineProperty(e, nombre, {
+          value: opuestos[nombre], configurable: true,
+        });
+      }
+    } catch (_) {
+      // Sin poder redefinir, mejor la rueda normal que ninguna rueda.
+    }
   };
-  // Fase de CAPTURA: hay que llegar antes que el visor, que escucha en el
-  // lienzo. `passive: false` porque se llama a preventDefault.
-  contenedor.addEventListener('wheel', alRodar, { capture: true, passive: false });
+
+  // CAPTURA: hay que llegar antes que el visor, que escucha en su lienzo.
+  // `passive: true` porque ya no se llama a preventDefault -- y asi el
+  // navegador nunca tiene que esperarnos para desplazar.
+  contenedor.addEventListener('wheel', alRodar, { capture: true, passive: true });
   return () => contenedor.removeEventListener('wheel', alRodar, { capture: true });
 }
 
