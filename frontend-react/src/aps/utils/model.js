@@ -446,7 +446,21 @@ function _buildFacetIndex(allData, rosettaToExtIdReversed) {
         }
 
         // Resolver dbId del viewer (rosetta directa o fallback global)
-        const urnDict = rosettaToExtIdReversed[rawUrn] || rosettaToExtIdReversed[safeUrn];
+        //
+        // LA COMPROBACION DE null NO ES DEFENSIVA POR SI ACASO: treinta lineas
+        // mas arriba, al construir `globalExtIdLookup`, ESTA MISMA variable se
+        // comprueba con `if (rosettaToExtIdReversed)`. O sea que ya se sabia
+        // que podia venir vacia; aqui se olvido. Cuando pasaba, reventaba con
+        // "Cannot read properties of null (reading '<urn>')" y la promesa se
+        // quedaba sin capturar. Visto en la consola del enlace compartido, pero
+        // no es exclusivo de el: le pasa a cualquiera que llegue aqui antes de
+        // que la rosetta este lista.
+        //
+        // Sin rosetta no hay nada que mapear, asi que cada fila cae al fallback
+        // global -- vacio en ese caso -- y se descarta con el `continue` de
+        // abajo. Ninguna fila inventada.
+        const urnDict = rosettaToExtIdReversed
+            && (rosettaToExtIdReversed[rawUrn] || rosettaToExtIdReversed[safeUrn]);
         let viewerDbId;
         let effectiveModelUrn = safeUrn;
         if (urnDict && urnDict[extId] !== undefined) {

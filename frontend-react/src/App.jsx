@@ -1529,6 +1529,8 @@ function App() {
   // Load views on mount
   useEffect(() => {
     if (!selectedProject) return;
+    // El invitado no tiene el panel de vistas: pedir la lista solo daba 401.
+    if (isSharedMode) return;
 
     const projectId = selectedProject?.id || selectedProject?.name || 'global';
     apiFetch(`${BACKEND_URL}/api/views?project=${encodeURIComponent(projectId)}`)
@@ -1793,6 +1795,10 @@ function App() {
   // JSON de alineamientos del backend (la extracción vive en Postgres).
   useEffect(() => {
     if (!selectedProject || !models.length) return undefined;
+    // Herramienta DEL EQUIPO: desde un enlace compartido no se pide.
+    // No es cosmetica -- cada una devolvia 401 y llenaba de rojo la
+    // consola del supervisor, que es a quien le ensenas la plataforma.
+    if (isSharedMode) return undefined;
     const scope = selectedProject.id || 'global';
     let cancelled = false;
     let pin = null;
@@ -1864,6 +1870,10 @@ function App() {
   // de Civil 3D (loft sobre el eje real) y la dibuja translúcida sobre el
   // modelo. La matemática vive en el backend; aquí solo se dibuja.
   useEffect(() => {
+    // Herramienta DEL EQUIPO: desde un enlace compartido no se pide.
+    // No es cosmetica -- cada una devolvia 401 y llenaba de rojo la
+    // consola del supervisor, que es a quien le ensenas la plataforma.
+    if (isSharedMode) return undefined;
     const scope = selectedProject?.id || 'global';
     let cancelled = false;
     // Payload cacheado por frente (el efecto se recrea al cambiar de frente):
@@ -2286,6 +2296,8 @@ function App() {
   // === VERSION CHECK POLLING (Tandem-style) ===
   useEffect(() => {
     if (!selectedProject) return;
+    // Avisar de versiones nuevas es para quien edita, no para quien mira.
+    if (isSharedMode) return;
 
     const checkForUpdates = async () => {
       try {
@@ -3114,7 +3126,11 @@ function App() {
 
   // Load Tracking Data on Mount or Project Change
   useEffect(() => {
-    if (!user && !isSharedMode) return; // sin sesión no se pide nada, salvo vista compartida
+    // NI CON SESION NI POR ENLACE: el seguimiento de obra (pines, fotos de
+    // avance) es del equipo. Antes se dejaba pasar el modo compartido
+    // pensando que le servia, pero sin sesion la ruta responde 401: el
+    // invitado solo recibia errores.
+    if (!user) return;
 
     const fetchTracking = async () => {
       try {
