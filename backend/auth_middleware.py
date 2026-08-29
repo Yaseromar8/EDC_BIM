@@ -110,6 +110,16 @@ PUBLIC_GET_PREFIXES = (
     # ── Secure Share Engine: SOLO enlaces publicos por UUID ──────────────
     '/api/docs/shared/',      # Enlaces publicos a documentos por UUID
     '/api/views/',            # Vistas compartidas por UUID
+    # El inventario de una vista compartida. TIENE QUE ESTAR AQUI, no basta el
+    # decorador: AUTH_POLICY_MODE viene en 'sombra', y en sombra la politica
+    # declarada solo se ANOTA en el log -- quien decide es esta lista. Sin esta
+    # linea el invitado abria el modelo y recibia 401 justo en el inventario,
+    # que es la mitad de lo que el enlace concede.
+    #
+    # Solo LECTURA (esta tupla es de GET/HEAD) y solo este prefijo: la obra la
+    # resuelve el backend desde el identificador del enlace, asi que no hay
+    # parametro de obra que un invitado pueda cambiar.
+    '/api/vista-compartida/',
 )
 
 _METODOS_LECTURA = ('GET', 'HEAD')

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
+import { urlInventario, enlaceCompartido } from '../utils/enlaceCompartido';
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../utils/apiFetch';
 import ColumnConfiguratorModal from './ColumnConfiguratorModal';
@@ -147,6 +148,10 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
                         style={{ width: col.width, flexShrink: 0, padding: isEditing?'0':'0 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', borderRight: '1px solid #32363e', height: '100%', display: 'flex', alignItems: 'center' }} 
                         onDoubleClick={(e) => {
                             // TANDEM PARITY: Solo permitimos editar propiedades extendidas de Facility (Data gemelo), los datos Nativos de Revit son READ-ONLY (Volumen, Area, etc).
+                            // Por enlace compartido se MIRA, no se edita. Sin esto la
+                            // celda entraba en edicion y el guardado moria con 401:
+                            // el invitado creeria que la plataforma falla.
+                            if (enlaceCompartido()) return;
                             const EDITABLE_COLUMNS = ['Material', 'Status', 'Costo', 'Notas', 'Proveedor', 'Fase'];
                             if (!EDITABLE_COLUMNS.includes(col.key)) return;
                             
@@ -468,8 +473,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
 
                     result = { mappedData, cols, orderedCols };
                 } else {
-                    const urnParam = activeModelUrn && activeModelUrn !== 'global' ? `?model_urn=${encodeURIComponent(activeModelUrn)}` : '';
-                    const res = await apiFetch(`${BACKEND_URL}/api/inventory${urnParam}`);
+                    const res = await apiFetch(urlInventario(BACKEND_URL, activeModelUrn));
                     if (!res.ok) throw new Error('Falló el fetch a /api/inventory');
                     
                     const dbData = await res.json();
