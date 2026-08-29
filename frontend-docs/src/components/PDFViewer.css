@@ -533,3 +533,14 @@
 }
 
 .pdf-tira-cerrar:hover { color: #fff; background: rgba(255, 255, 255, 0.09); }
+
+
+/* El boton del menu de zoom ya no muestra un numero, solo una flecha:
+   necesita menos ancho y centrar su icono. */
+.pdf-zoom-menu-btn {
+  min-width: 26px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

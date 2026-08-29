@@ -163,7 +163,16 @@ export default function DocumentViewer({
       if (cancelled) return;
       setLoadingPreview(true);
       setPreviewError('');
-      setSecurePreviewUrl('');
+      // LA URL ANTERIOR NO SE BORRA. Borrarla dejaba a la vista sin nada que
+      // pintar, y la rama de «Preparando vista segura...» de mas abajo
+      // devolvia el spinner EN LUGAR DEL LECTOR: React lo desmontaba entero
+      // -- con su cinta, su documento en memoria y todo su estado -- y lo
+      // volvia a construir de cero al llegar la URL nueva.
+      //
+      // Ese era el motivo de que al pulsar otra lamina «desapareciera todo,
+      // incluida la cinta». Manteniendo la anterior, el lector sigue montado
+      // mostrando el plano previo hasta que llega el nuevo, que es como se
+      // comporta ACC.
     });
     apiFetch(url)
       .then(async response => {
@@ -462,7 +471,10 @@ export default function DocumentViewer({
           const fileUrl = isShared && file.url ? file.url : securePreviewUrl;
           const lowerName = file.name.toLowerCase();
 
-          if (!isShared && !['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext)) && loadingPreview) {
+          // El spinner SOLO cuando no hay nada que ensenar todavia (primera
+          // apertura). Con un documento ya abierto se conserva el lector: ver
+          // el comentario de setSecurePreviewUrl mas arriba.
+          if (!isShared && !['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'].some(ext => lowerName.endsWith(ext)) && loadingPreview && !fileUrl) {
             return (
               <div role="status" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
                 <div className="spinner-acc" style={{ width: 40, height: 40, border: '3px solid #e5e7eb', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin-acc 1s linear infinite' }} />

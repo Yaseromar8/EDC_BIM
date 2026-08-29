@@ -285,7 +285,6 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   const busquedaVivaRef = useRef(null);   // debounce de la busqueda en vivo
   const bufferCanvasRef = useRef(null);   // doble bufer del render (uno, reutilizado)
   const anclaRef = useRef(null);          // punto que el zoom debe conservar bajo el cursor
-  const [medida, setMedida] = useState(null);   // tamaño del papel, en mm
   const [avisoDeRender, setAvisoDeRender] = useState(true);
   // CUANDO LA HOJA CABE ENTERA NO HAY SCROLL QUE MOVER, y el zoom crecia
   // desde el centro: el detalle que mirabas se escapaba. Este desplazamiento
@@ -634,17 +633,6 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     }
     return () => clearTimeout(renderDebounceRef.current);
   }, [loading, currentPage, rotation, applyPreviewSize, renderPage]);
-
-  // El tamaño del papel, en milímetros: se lee del propio PDF (1 punto =
-  // 1/72 pulgada) y sirve para reconocer un A0 o un A3 de un vistazo.
-  useEffect(() => {
-    if (loading || !wrapRef.current) return;
-    const r = wrapRef.current.getBoundingClientRect();
-    const s = scale || 1;
-    if (!r.width || !s) return;
-    const mm = (px) => Math.round(px / (s * (72 / 25.4)));
-    setMedida({ ancho: mm(r.width), alto: mm(r.height) });
-  }, [loading, scale, currentPage, rotation]);
 
   // Auto-scroll sidebar thumbnail into view when page changes
   useEffect(() => {
@@ -1219,9 +1207,14 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
           <div className="pdf-dock">
             <div className="pdf-dock__group" style={{ position: 'relative' }}>
               <button className="pdf-ico" onClick={zoomOut} title="Reducir (−)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-3.6-3.6"/></svg></button>
-              <button className="pdf-zoom-label" onClick={() => setZoomMenuOpen(o => !o)}
-                aria-haspopup="menu" aria-expanded={zoomMenuOpen} title="Nivel de zoom">
-                {Math.round(scale * 100)}%
+              {/* SIN EL PORCENTAJE. El dueno lo pidio: el zoom ya se maneja con
+                  la rueda y el numero solo ocupaba sitio. El boton se queda
+                  porque es el que abre los saltos fijos (Ajustar pagina, 100 %,
+                  200 %...), que si se usan. */}
+              <button className="pdf-zoom-label pdf-zoom-menu-btn" onClick={() => setZoomMenuOpen(o => !o)}
+                aria-haspopup="menu" aria-expanded={zoomMenuOpen} title="Niveles de zoom">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
               </button>
               <button className="pdf-ico" onClick={zoomIn} title="Aumentar (+)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M20 20l-3.6-3.6"/></svg></button>
               {zoomMenuOpen && (
@@ -1245,12 +1238,9 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
                 aria-pressed={fitMode === 'page'} title="Ajustar página (Ctrl+0)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 9l-2 2 2 2M15 9l2 2-2 2"/></svg></button>
               <button className="pdf-ico" onClick={() => fitTo('width')}
                 aria-pressed={fitMode === 'width'} title="Ajustar ancho"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg></button>
-            <span className="pdf-sep" />
-            {medida && (
-              <span className="pdf-medida" title="Tamaño de la hoja en papel">
-                <b>{medida.ancho}</b>×<b>{medida.alto}</b> mm
-              </span>
-            )}
+            {/* Las medidas del papel (841 x 594 mm) tambien se retiraron a
+                peticion del dueno: en una carpeta de planos del mismo formato
+                repetian el mismo dato en cada uno. */}
             <span className="pdf-sep" />
             {hermanos.length > 1 && onAbrirHermano && (
               <>
