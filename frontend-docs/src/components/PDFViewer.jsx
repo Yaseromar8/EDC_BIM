@@ -432,7 +432,15 @@ export default function PDFViewer({ url, preparando = false,
   // Con este retardo, lo rapido no parpadea NADA y lo lento avisa igual. Es
   // la misma idea que usa el navegador con su propia barra de carga.
   const [mostrarEspera, setMostrarEspera] = useState(false);
-  const ocupado = preparando || loading || pageRendering;
+  // EL ZOOM NO ES UNA ESPERA.
+  //
+  // `avisoDeRender` vale false cuando lo unico que cambio fue la escala. Al
+  // hacer que el atenuado durase hasta tener el plano nuevo pintado, quite
+  // esa condicion de aqui -- y la marca empezo a salir EN CADA PASO DE RUEDA.
+  // El usuario no esta esperando nada cuando hace zoom: la hoja ya se escalo
+  // al instante y solo se esta afinando. Ensenarle el logo ahi convierte una
+  // interaccion fluida en una que parece lenta.
+  const ocupado = preparando || loading || (pageRendering && avisoDeRender);
   useEffect(() => {
     // APARECE con retardo: lo instantaneo no debe parpadear.
     if (ocupado) {
