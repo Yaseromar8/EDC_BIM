@@ -1663,7 +1663,22 @@ export default function PDFViewer({ url, preparando = false,
                     outline: h.active ? '1px solid #ff6d00' : 'none', borderRadius: 2,
                   }} />
                 ))}
-                {nodeId && vpInfo && (
+                {/* EL OVERLAY DE MARCAS NO SE DESMONTA EN CADA REDIBUJADO.
+                    Estaba condicionado a `vpInfo`, que se pone a NULO al
+                    empezar cada dibujado -- asi que en cada zoom, cada cambio
+                    de pagina y cada pasada de render el componente se
+                    destruia y se volvia a crear. Dos daños medidos en la
+                    consola del dueño:
+                      · ONCE peticiones identicas a /api/pdf/markups por plano
+                        (una por montaje), golpeando un backend de una sola
+                        CPU mientras pdf.js rasteriza. La fase «url-firmada»
+                        llego a 8 segundos.
+                      · y las marcas ya dibujadas se perdian del estado y
+                        habia que recargarlas del servidor cada vez.
+                    El propio overlay ya sabe esperar sin viewport (`if (!vp)
+                    return null`, con todos sus hooks por encima), asi que
+                    basta con dejarlo vivo. */}
+                {nodeId && (
                   <PdfToolsOverlay vpInfo={vpInfo} page={currentPage} nodeId={nodeId}
                     projectPrefix={projectPrefix} tool={tool} setTool={setTool}
                     color={markupColor} userName={userName} />
