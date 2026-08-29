@@ -60,8 +60,9 @@ export default function DocumentViewer({
   const [cadCompartido, setCadCompartido] = useState(null);
   useEffect(() => {
     if (!isShared || !file?.shareId) return;
-    const esCadAhora = CAD_EXTENSIONS.some(e => (file.name || '').toLowerCase().endsWith(e));
-    if (!esCadAhora) return;
+    const abrible = CAD_EXTENSIONS.some(e => (file.name || '').toLowerCase().endsWith(e))
+      || /\.pdfx?$/i.test(file.name || '');
+    if (!abrible) return;
     fetch(`${API}/api/docs/cad/compartido/${file.shareId}`)
       .then(r => r.json())
       .then(d => setCadCompartido(d && d.success ? d : { listo: false }))
@@ -77,8 +78,9 @@ export default function DocumentViewer({
   const firmadaRef = useRef({ urn: null, url: '', ts: 0 });
   useEffect(() => {
     if (!file || isShared) return;
-    const esCadAhora = CAD_EXTENSIONS.some(e => (file.name || '').toLowerCase().endsWith(e));
-    if (!esCadAhora) return;
+    const abrible = CAD_EXTENSIONS.some(e => (file.name || '').toLowerCase().endsWith(e))
+      || /\.pdfx?$/i.test(file.name || '');
+    if (!abrible) return;
     const urn = viewedVersionInfo?.gcs_urn || file.gcs_urn;
     if (!urn || firmadaRef.current.urn === urn) return;
     apiFetch(`${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`)
@@ -206,6 +208,13 @@ export default function DocumentViewer({
   // Windows lo lleva a la aplicacion asociada.
   const esCad = CAD_EXTENSIONS.some(e => (file.name || '').toLowerCase().endsWith(e));
 
+  // EL PDF TAMBIEN SE PUEDE ABRIR EN EL ESCRITORIO, y no hizo falta tocar el
+  // Conector: no mira la extension. Descarga el original con su nombre real y
+  // deja que Windows lo lleve a la aplicacion asociada -- Acrobat, Bluebeam,
+  // el lector que cada uno tenga. Es el mismo camino que Revit y Civil 3D.
+  const esPdfDeEscritorio = /\.pdfx?$/i.test(file.name || '');
+  const abribleEnEscritorio = esCad || esPdfDeEscritorio;
+
   // El boton dice A DONDE va, no un generico: Revit para RVT, Civil 3D para
   // DWG, Navisworks para NWD — con su sello de letra. (Peticion del dueno:
   // «para abrir Civil o Revit debe aparecer el icono segun corresponda».)
@@ -214,6 +223,9 @@ export default function DocumentViewer({
     if (/\.(rvt|rfa|rte)$/.test(n)) return { nombre: 'Revit', letra: 'R', color: '#1961A9' };
     if (/\.(dwg|dxf|dwf|dwfx)$/.test(n)) return { nombre: 'Civil 3D', letra: 'C', color: '#0E8577' };
     if (/\.(nwd|nwc)$/.test(n)) return { nombre: 'Navisworks', letra: 'N', color: '#175A93' };
+    // Sin nombre de marca: el lector de PDF lo elige el usuario en su Windows,
+    // asi que prometer «Acrobat» seria mentir la mitad de las veces.
+    if (/\.pdfx?$/.test(n)) return { nombre: 'tu lector de PDF', letra: 'P', color: '#B23B3B' };
     return { nombre: 'el escritorio', letra: null, color: '#5B6875' };
   })();
 
@@ -381,7 +393,7 @@ export default function DocumentViewer({
         </div>
 
         <div className="file-viewer-actions">
-           {esCad && !isShared && (
+           {abribleEnEscritorio && !isShared && (
              <button onClick={abrirEnEscritorio}
                title="Descarga el original con su nombre real; al abrirlo, Windows usa la aplicacion asociada (Revit, Civil 3D, Navisworks)"
                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginRight: 14,

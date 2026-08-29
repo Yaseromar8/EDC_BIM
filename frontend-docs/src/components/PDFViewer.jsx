@@ -286,6 +286,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   const bufferCanvasRef = useRef(null);   // doble bufer del render (uno, reutilizado)
   const anclaRef = useRef(null);          // punto que el zoom debe conservar bajo el cursor
   const [avisoDeRender, setAvisoDeRender] = useState(true);
+  const [saltandoA, setSaltandoA] = useState(null);
   // CUANDO LA HOJA CABE ENTERA NO HAY SCROLL QUE MOVER, y el zoom crecia
   // desde el centro: el detalle que mirabas se escapaba. Este desplazamiento
   // propio la mueve cuando el scroll no puede, para que el punto bajo el
@@ -307,6 +308,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     recordarTira(valor);
     _setTiraAbierta(valor);
   };
+  useEffect(() => { setSaltandoA(null); }, [fileName]);
   const indiceActual = hermanos.findIndex(h => h.name === fileName);
   // LA FIRMA DE LA CARPETA, no el array. `hermanos` llega como un array nuevo
   // en cada renderizado del padre, asi que el efecto se disparaba a cada
@@ -323,6 +325,25 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiraAbierta, firmaHermanos, obraDelDocumento]);
+
+  // LA CINTA SE CENTRA UNA SOLA VEZ: AL ABRIRLA.
+  //
+  // Antes esto vivia en el `ref` del carril, que React ejecuta EN CADA
+  // RENDERIZADO. Resultado: al pulsar otra lamina la cinta se desplazaba sola
+  // -- «como si yo moviera la barra»-- y perdias el sitio donde estabas
+  // mirando. Ahora se centra al abrir y despues la cinta es tuya: no se mueve
+  // salvo que la muevas.
+  const carrilRef = useRef(null);
+  const yaCentradaRef = useRef(false);
+  useEffect(() => {
+    if (!tiraAbierta) { yaCentradaRef.current = false; return; }
+    if (yaCentradaRef.current || !carrilRef.current) return;
+    const actual = carrilRef.current.querySelector('.pdf-tira-item.es-actual');
+    if (actual && actual.scrollIntoView) {
+      actual.scrollIntoView({ block: 'nearest', inline: 'center' });
+    }
+    yaCentradaRef.current = true;
+  }, [tiraAbierta, hermanos.length]);
 
   // LA CINTA SE CIERRA AL TOCAR FUERA: en el plano, en el mando o en
   // cualquier sitio que no sea ella misma. Pedido del dueno -- tener que
@@ -1205,34 +1226,10 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
 
           {/* El zoom FLOTA sobre la hoja: no le roba una barra al alto útil. */}
           <div className="pdf-dock">
-            <div className="pdf-dock__group" style={{ position: 'relative' }}>
-              <button className="pdf-ico" onClick={zoomOut} title="Reducir (−)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-3.6-3.6"/></svg></button>
-              {/* SIN EL PORCENTAJE. El dueno lo pidio: el zoom ya se maneja con
-                  la rueda y el numero solo ocupaba sitio. El boton se queda
-                  porque es el que abre los saltos fijos (Ajustar pagina, 100 %,
-                  200 %...), que si se usan. */}
-              <button className="pdf-zoom-label pdf-zoom-menu-btn" onClick={() => setZoomMenuOpen(o => !o)}
-                aria-haspopup="menu" aria-expanded={zoomMenuOpen} title="Niveles de zoom">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-              </button>
-              <button className="pdf-ico" onClick={zoomIn} title="Aumentar (+)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M20 20l-3.6-3.6"/></svg></button>
-              {zoomMenuOpen && (
-                <div role="menu" className="pdf-zoom-menu">
-                  {[['Ajustar página', () => fitTo('page'), 'Ctrl+0'],
-                    ['Ajustar ancho', () => fitTo('width'), ''],
-                    ['50 %', () => { setFitMode('custom'); setScale(0.5); }, ''],
-                    ['100 %', () => { setFitMode('custom'); setScale(1); }, 'Ctrl+1'],
-                    ['200 %', () => { setFitMode('custom'); setScale(2); }, ''],
-                    ['400 %', () => { setFitMode('custom'); setScale(4); }, ''],
-                  ].map(([texto, accion, atajo]) => (
-                    <button key={texto} role="menuitem" onClick={() => { accion(); setZoomMenuOpen(false); }}>
-                      <span>{texto}</span>{atajo && <span>{atajo}</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* SIN CONTROLES DE ZOOM. El dueno los retiro enteros -- lupas,
+                porcentaje y menu de saltos fijos: el zoom se hace con la rueda
+                y el encuadre con los dos botones de ajuste que siguen abajo.
+                Los atajos de teclado y `fitTo` se mantienen intactos. */}
             <div className="pdf-dock__group">
               <button className="pdf-ico" onClick={() => fitTo('page')}
                 aria-pressed={fitMode === 'page'} title="Ajustar página (Ctrl+0)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 9l-2 2 2 2M15 9l2 2-2 2"/></svg></button>
@@ -1288,19 +1285,18 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
                 <button className="pdf-tira-cerrar" onClick={() => setTiraAbierta(false)}
                   title="Cerrar la tira">✕</button>
               </div>
-              <div className="pdf-tira-carril" ref={(el) => {
-                // El plano actual se trae a la vista solo: en una carpeta de
-                // 45, saltar al siguiente lo dejaba fuera de pantalla.
-                if (!el) return;
-                const actual = el.querySelector('.pdf-tira-item.es-actual');
-                if (actual && actual.scrollIntoView) {
-                  actual.scrollIntoView({ block: 'nearest', inline: 'center' });
-                }
-              }}>
+              <div className="pdf-tira-carril" ref={carrilRef}>
                 {hermanos.map(h => (
                   <button key={h.id || h.name} title={h.name}
-                    className={`pdf-tira-item${h.name === fileName ? ' es-actual' : ''}`}
-                    onClick={() => h.name !== fileName && onAbrirHermano(h)}>
+                    className={`pdf-tira-item${h.name === fileName ? ' es-actual' : ''}`
+                      + (h.name === saltandoA ? ' esta-abriendo' : '')}
+                    onClick={() => {
+                      if (h.name === fileName) return;
+                      // Interpretar un plano lleva segundos. Sin senal, el clic
+                      // parecia no hacer nada y la gente pulsaba otra vez.
+                      setSaltandoA(h.name);
+                      onAbrirHermano(h);
+                    }}>
                     <div className="pdf-tira-lienzo">
                       {minisTira[h.gcs_urn]
                         ? <img src={minisTira[h.gcs_urn]} alt="" loading="lazy" />

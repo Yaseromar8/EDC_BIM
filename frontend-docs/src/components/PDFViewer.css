@@ -544,3 +544,15 @@
   align-items: center;
   justify-content: center;
 }
+
+/* La lamina que se esta abriendo: senal inmediata al pulsar, porque
+   interpretar un plano lleva segundos y sin aviso el clic parecia perdido. */
+.pdf-tira-item.esta-abriendo .pdf-tira-lienzo {
+  border-color: #7CCBF0;
+  opacity: 0.55;
+}
+
+.pdf-tira-item.esta-abriendo .pdf-tira-nombre::after {
+  content: ' · abriendo…';
+  color: #7CCBF0;
+}
