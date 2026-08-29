@@ -262,7 +262,7 @@ function guardarDocumento(url, pdf) {
 // Lo que mide el banco de pruebas. No se usa en la aplicacion.
 if (typeof window !== 'undefined') window.__alephiaDocsEnCache = () => _docsAbiertos.size;
 
-export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
+export default function PDFViewer({ url, preparando = false, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
                                     versionLabel = null, versionInfo = null, hideTitle = false,
                                     onClose = null, onVersionClick = null,
                                     hermanos = [], onAbrirHermano = null,
@@ -1148,17 +1148,29 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
             onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
 
-            {pageRendering && avisoDeRender && (
-              <div className="pdf-render-status" role="status" aria-live="polite">
-                Actualizando página {currentPage}…
+            {/* LA ESPERA, VISIBLE Y CON SUS TRES FASES REALES.
+                Abrir un plano no es un paso, son tres, y cada uno se siente
+                distinto: pedir el permiso de lectura (corto, sin porcentaje
+                posible), bajar el fichero (medible, de ahi la barra que
+                avanza) y dibujarlo (el mas largo en un A1, y tampoco medible).
+                Ensenar las tres por separado es lo que quita la sensacion de
+                que la aplicacion se colgo: se ve que algo pasa Y en que va. */}
+            {(preparando || loading || (pageRendering && avisoDeRender)) && (
+              <div className="pdf-progreso" role="status" aria-live="polite">
+                <div className={`pdf-progreso-barra${
+                  loading && progress > 0 && progress < 100 ? '' : ' es-indefinida'}`}
+                  style={loading && progress > 0 && progress < 100
+                    ? { width: `${progress}%` } : undefined} />
               </div>
             )}
-            {/* La carga del SIGUIENTE documento ocurre aqui dentro, sin
-                desmontar la cinta ni la barra (ver el `if (loading)` de
-                arriba). El plano anterior sigue visible debajo. */}
-            {loading && (
+
+            {(preparando || loading || (pageRendering && avisoDeRender)) && (
               <div className="pdf-render-status" role="status" aria-live="polite">
-                Cargando {progress > 0 && progress < 100 ? `${progress}%` : '…'}
+                <span className="pdf-girador" aria-hidden="true" />
+                {preparando ? 'Preparando el documento…'
+                  : loading ? (progress > 0 && progress < 100
+                      ? `Descargando… ${progress}%` : 'Descargando…')
+                  : `Dibujando página ${currentPage}…`}
               </div>
             )}
             {renderError && (
@@ -1169,7 +1181,8 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
             )}
 
             <div className="pdf-page-pad">
-              <div ref={wrapRef} className="pdf-page"
+              <div ref={wrapRef}
+                className={`pdf-page${preparando || loading ? ' esta-vieja' : ''}`}
                 style={{ transform: `translate(${desplazamiento.x}px, ${desplazamiento.y}px)` }}>
                 <canvas ref={canvasRef} />
                 {highlights.map(h => (

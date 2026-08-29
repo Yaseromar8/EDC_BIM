@@ -556,3 +556,56 @@
   content: ' · abriendo…';
   color: #7CCBF0;
 }
+
+
+/* ── LA ESPERA, VISIBLE ──────────────────────────────────────────────────
+   Barra fina arriba del escenario. Cuando se puede medir (la descarga) es
+   una barra de verdad; cuando no (permiso y dibujado), se desliza para
+   decir «sigo trabajando» sin fingir un porcentaje que no existe. */
+
+.pdf-progreso {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: rgba(28, 35, 43, 0.10);
+  overflow: hidden;
+  z-index: 12;
+  pointer-events: none;
+}
+
+.pdf-progreso-barra {
+  height: 100%;
+  background: var(--accent, #2E6E9E);
+  border-radius: 0 2px 2px 0;
+  transition: width 0.18s ease-out;
+}
+
+.pdf-progreso-barra.es-indefinida {
+  width: 34%;
+  animation: pdf-progreso-va 1.15s ease-in-out infinite;
+}
+
+@keyframes pdf-progreso-va {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(320%); }
+}
+
+.pdf-girador {
+  width: 12px; height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-top-color: #fff;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+  vertical-align: -2px;
+  animation: pdf-gira 0.8s linear infinite;
+}
+
+@keyframes pdf-gira { to { transform: rotate(360deg); } }
+
+/* El plano anterior se atenua mientras llega el nuevo: sigue ahi para no
+   dejar la pantalla en blanco, pero se ve que ya no es el vigente. */
+.pdf-page.esta-vieja {
+  opacity: 0.42;
+  transition: opacity 0.2s ease;
+}

@@ -573,6 +573,12 @@ export default function DocumentViewer({
             // a la vista (la trazabilidad no se va con el fullscreen).
             const vv = viewedVersionInfo || versionHistory[0] || null;
             return <PDFViewer url={fileUrl} fileName={file.name}
+              // El lector conserva el plano anterior mientras se pide la URL
+              // firmada del nuevo (asi la cinta no se desmonta), pero entonces
+              // NO SABE que viene otro. Sin este aviso, el primer tramo de la
+              // espera era mudo -- justo el que mas ansiedad da, porque es el
+              // que sigue al clic.
+              preparando={loadingPreview}
               nodeId={isShared ? null : file.id} projectPrefix={projectPrefix}
               onClose={onClose || (() => window.close())}
               onVersionClick={!isShared && setShowVersions
