@@ -563,45 +563,9 @@
    una barra de verdad; cuando no (permiso y dibujado), se desliza para
    decir «sigo trabajando» sin fingir un porcentaje que no existe. */
 
-.pdf-progreso {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: rgba(28, 35, 43, 0.10);
-  overflow: hidden;
-  z-index: 12;
-  pointer-events: none;
+
 }
 
-.pdf-progreso-barra {
-  height: 100%;
-  background: var(--accent, #2E6E9E);
-  border-radius: 0 2px 2px 0;
-  transition: width 0.18s ease-out;
-}
-
-.pdf-progreso-barra.es-indefinida {
-  width: 34%;
-  animation: pdf-progreso-va 1.15s ease-in-out infinite;
-}
-
-@keyframes pdf-progreso-va {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(320%); }
-}
-
-.pdf-girador {
-  width: 12px; height: 12px;
-  border: 2px solid rgba(255, 255, 255, 0.28);
-  border-top-color: #fff;
-  border-radius: 50%;
-  display: inline-block;
-  margin-right: 8px;
-  vertical-align: -2px;
-  animation: pdf-gira 0.8s linear infinite;
-}
-
-@keyframes pdf-gira { to { transform: rotate(360deg); } }
 
 /* El plano anterior se atenua mientras llega el nuevo: sigue ahi para no
    dejar la pantalla en blanco, pero se ve que ya no es el vigente. */
@@ -614,7 +578,7 @@
 
 
 /* Lo que aparece durante la espera, entra desvanecido en vez de saltar. */
-.pdf-progreso, .pdf-render-status { animation: pdf-aparece 0.22s ease both; }
+.pdf-cargando { animation: pdf-aparece 0.22s ease both; }
 
 @keyframes pdf-aparece { from { opacity: 0; } to { opacity: 1; } }
 
@@ -631,4 +595,94 @@
   align-items: center;
   justify-content: center;
   letter-spacing: 0;
+}
+
+
+/* ── LA MARCA MIENTRAS CARGA ─────────────────────────────────────────────
+   Aparece sobre el plano atenuado, al centro: es donde el ojo ya esta
+   mirando porque es donde va a salir el documento. Solo se dibuja cuando la
+   espera pasa de un cuarto de segundo (ver `mostrarEspera`), asi que un
+   salto instantaneo no la muestra siquiera. */
+
+.pdf-cargando {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 13;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 26px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 8px 30px rgba(15, 22, 30, 0.16);
+  pointer-events: none;
+}
+
+.pdf-cargando-marca {
+  position: relative;
+  width: 52px; height: 52px;
+  display: grid;
+  place-items: center;
+}
+
+.pdf-cargando-simbolo {
+  width: 24px; height: 24px;
+  display: block;
+  /* Latido muy leve: acompana al aro sin competir con el. */
+  animation: pdf-marca-late 1.9s ease-in-out infinite;
+}
+
+@keyframes pdf-marca-late {
+  0%, 100% { opacity: 1;    transform: scale(1); }
+  50%      { opacity: 0.72; transform: scale(0.94); }
+}
+
+.pdf-cargando-aro {
+  position: absolute;
+  inset: 0;
+  width: 52px; height: 52px;
+  transform: rotate(-90deg);   /* el trazo empieza arriba, no a la derecha */
+}
+
+.pdf-aro-pista {
+  fill: none;
+  stroke: rgba(28, 35, 43, 0.10);
+  stroke-width: 3;
+}
+
+.pdf-aro-trazo {
+  fill: none;
+  stroke: var(--accent, #2E6E9E);
+  stroke-width: 3;
+  stroke-linecap: round;
+  /* SIN MEDIDA: un arco corto que da vueltas. Dice «trabajando» sin fingir
+     un porcentaje que no existe. */
+  stroke-dasharray: 34 110;
+  transform-origin: 26px 26px;
+  animation: pdf-aro-gira 1.1s linear infinite;
+}
+
+.pdf-aro-trazo.es-medido {
+  /* CON MEDIDA (la descarga): deja de girar y se llena de verdad. */
+  animation: none;
+  transition: stroke-dashoffset 0.2s ease-out;
+}
+
+@keyframes pdf-aro-gira { to { transform: rotate(360deg); } }
+
+.pdf-cargando-texto {
+  font-size: 12px;
+  color: #46525E;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* Quien pida menos movimiento, que no lo tenga: el aro se queda quieto y la
+   marca deja de latir. La informacion sigue estando. */
+@media (prefers-reduced-motion: reduce) {
+  .pdf-aro-trazo, .pdf-cargando-simbolo { animation: none; }
 }

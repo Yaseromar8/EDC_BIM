@@ -1230,31 +1230,37 @@ export default function PDFViewer({ url, preparando = false,
             onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
 
-            {/* LA ESPERA, VISIBLE Y CON SUS TRES FASES REALES.
-                Abrir un plano no es un paso, son tres, y cada uno se siente
-                distinto: pedir el permiso de lectura (corto, sin porcentaje
-                posible), bajar el fichero (medible, de ahi la barra que
-                avanza) y dibujarlo (el mas largo en un A1, y tampoco medible).
-                Ensenar las tres por separado es lo que quita la sensacion de
-                que la aplicacion se colgo: se ve que algo pasa Y en que va. */}
+            {/* LA MARCA, MIENTRAS CARGA.
+                Una sola senal al centro en vez de dos animandose a la vez
+                (antes habia barra arriba Y pastilla): el ojo va al centro,
+                que es donde va a aparecer el plano.
+                El aro exterior gira siempre --dice «sigo trabajando»-- y solo
+                se llena cuando hay algo REAL que medir, la descarga. Las otras
+                dos fases no se pueden medir y no se finge que si. */}
             {mostrarEspera && (
-              <div className="pdf-progreso" role="status" aria-live="polite">
-                <div className={`pdf-progreso-barra${
-                  loading && progress > 0 && progress < 100 ? '' : ' es-indefinida'}`}
-                  style={loading && progress > 0 && progress < 100
-                    ? { width: `${progress}%` } : undefined} />
+              <div className="pdf-cargando" role="status" aria-live="polite">
+                <div className="pdf-cargando-marca">
+                  <svg className="pdf-cargando-aro" viewBox="0 0 52 52" aria-hidden="true">
+                    <circle className="pdf-aro-pista" cx="26" cy="26" r="23" />
+                    <circle className={`pdf-aro-trazo${
+                      loading && progress > 0 && progress < 100 ? ' es-medido' : ''}`}
+                      cx="26" cy="26" r="23"
+                      style={loading && progress > 0 && progress < 100
+                        ? { strokeDasharray: 144.5, strokeDashoffset: 144.5 * (1 - progress / 100) }
+                        : undefined} />
+                  </svg>
+                  <img className="pdf-cargando-simbolo"
+                    src="/brand/ALEPHIA_Symbol_Navy.svg" alt="" />
+                </div>
+                <div className="pdf-cargando-texto">
+                  {preparando ? 'Preparando el documento'
+                    : loading ? (progress > 0 && progress < 100
+                        ? `Descargando ${progress}%` : 'Descargando')
+                    : 'Dibujando el plano'}
+                </div>
               </div>
             )}
 
-            {mostrarEspera && (
-              <div className="pdf-render-status" role="status" aria-live="polite">
-                <span className="pdf-girador" aria-hidden="true" />
-                {preparando ? 'Preparando el documento…'
-                  : loading ? (progress > 0 && progress < 100
-                      ? `Descargando… ${progress}%` : 'Descargando…')
-                  : 'Dibujando el plano…'}
-              </div>
-            )}
             {renderError && (
               <div className="pdf-render-error" role="alert">
                 <span>{renderError}</span>
