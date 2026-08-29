@@ -1350,16 +1350,25 @@ export default function PDFViewer({ url, preparando = false,
               </div>
             )}
 
-            <div className={`pdf-page-pad${numPages ? '' : ' sin-documento'}`}>
+            {/* EL PLANO ANTERIOR SE APARTA MIENTRAS LLEGA EL NUEVO.
+                Dejarlo puesto evitaba la pantalla en blanco, pero con planos
+                pesados --paisajismo, 5 s de espera-- lo que parecia es que el
+                clic no habia hecho nada: «sigue en el mismo plano y despues
+                recien cambia». Ahora, EN CUANTO LA ESPERA SE NOTA (los mismos
+                250 ms que gobiernan la marca), la hoja vieja se retira y queda
+                la marca sola. Si el cambio es instantaneo --lamina ya
+                preparada-- no se aparta nada: no hay parpadeo. */}
+            <div className={`pdf-page-pad${numPages ? '' : ' sin-documento'}${mostrarEspera ? ' esperando' : ''}`}>
               <div ref={wrapRef}
                 // ATENUADO HASTA QUE EL PLANO NUEVO ESTA PINTADO, no hasta
                 // que termina la descarga. Soltarlo antes hacia lo que el
                 // dueno describio: el plano viejo se AVIVABA y un instante
                 // despues saltaba al nuevo -- dos movimientos donde deberia
                 // haber uno. Ahora se aclara justo cuando aparece el nuevo.
-                // El atenuado SI dura hasta que el plano nuevo esta pintado:
-                // aqui no se tapa nada, solo se dice «esto ya no es lo vigente».
-                className={`pdf-page${mostrarEspera || (pageRendering && avisoDeRender) ? ' esta-vieja' : ''}`}
+                // Sin atenuado: durante la ESPERA la hoja ya no esta (la
+                // aparta `.esperando`), y durante el DIBUJADO se quiere ver
+                // como aparece, no verlo a media luz.
+                className="pdf-page"
                 style={{ transform: `translate(${desplazamiento.x}px, ${desplazamiento.y}px)` }}>
                 <canvas ref={canvasRef} />
                 {highlights.map(h => (

@@ -569,7 +569,11 @@
 
 /* El plano anterior se atenua mientras llega el nuevo: sigue ahi para no
    dejar la pantalla en blanco, pero se ve que ya no es el vigente. */
-.pdf-page.esta-vieja { opacity: 0.55; }
+/* La hoja se aparta mientras se espera al plano nuevo: ver el comentario del
+   `pdf-page-pad` en PDFViewer.jsx. Con transicion, para que sea un ceder el
+   sitio y no un corte. */
+.pdf-page-pad.esperando { opacity: 0; }
+.pdf-page-pad { transition: opacity 0.2s ease; }
 
 /* La transicion va SIEMPRE en .pdf-page, no solo en el estado atenuado: si
    vive en la clase que se quita, al volver no hay nada que animar y el plano
