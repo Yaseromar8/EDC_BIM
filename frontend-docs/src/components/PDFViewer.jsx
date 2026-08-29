@@ -1306,7 +1306,7 @@ export default function PDFViewer({ url, preparando = false,
                 if (e.key === 'Enter') { e.preventDefault(); goToPage(Number(pageDraft) || currentPage); e.currentTarget.blur(); }
                 if (e.key === 'Escape') { setPageDraft(String(currentPage)); e.currentTarget.blur(); }
               }} />
-            <span>de {numPages}</span>
+            <span>de {numPages || '—'}</span>
             <button className="pdf-ico" aria-label="Página siguiente" title="Página siguiente"
               onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= numPages}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
           </div>
@@ -1356,12 +1356,10 @@ export default function PDFViewer({ url, preparando = false,
             onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
 
-            {mostrarEspera && (
-              <div className="pdf-espera-encima">
-                <MarcaEsperando
-                  porcentaje={loading && progress > 0 && progress < 100 ? progress : null} />
-              </div>
-            )}
+            <div className={`pdf-espera-encima${mostrarEspera ? ' se-ve' : ''}`}>
+              <MarcaEsperando
+                porcentaje={loading && progress > 0 && progress < 100 ? progress : null} />
+            </div>
 
             {renderError && (
               <div className="pdf-render-error" role="alert">
@@ -1370,7 +1368,7 @@ export default function PDFViewer({ url, preparando = false,
               </div>
             )}
 
-            <div className="pdf-page-pad">
+            <div className={`pdf-page-pad${numPages ? '' : ' sin-documento'}`}>
               <div ref={wrapRef}
                 // ATENUADO HASTA QUE EL PLANO NUEVO ESTA PINTADO, no hasta
                 // que termina la descarga. Soltarlo antes hacia lo que el

@@ -647,14 +647,27 @@
 @keyframes pdf-marca-gira { to { transform: rotate(360deg); } }
 
 /* En el escenario va centrada sobre el plano, sin robarle el raton. */
+/* SIEMPRE EN EL ARBOL, solo se muestra o se esconde.
+   Montarla y desmontarla reiniciaba la animacion del aro en cada cambio de
+   fase -- «gira un momento y de la nada se reinicia». Una animacion CSS
+   empieza de cero cada vez que su elemento nace; dejandolo vivo, el giro es
+   continuo de principio a fin. */
 .pdf-espera-encima {
   position: absolute;
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
   z-index: 13;
   pointer-events: none;
-  animation: pdf-aparece 0.25s ease both;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease;
 }
+
+.pdf-espera-encima.se-ve { opacity: 1; visibility: visible; }
+
+/* Sin documento no hay hoja que enseñar: la caja blanca vacia daba la
+   impresion de que el lector estaba roto. */
+.pdf-page-pad.sin-documento { visibility: hidden; }
 
 @media (prefers-reduced-motion: reduce) {
   .pdf-marca-trazo, .pdf-marca-simbolo { animation: none; }
