@@ -242,3 +242,107 @@
         max-width: none;
     }
 }
+
+/* ── CONFIRMAR Y COMPARTIR, EN LA PROPIA FILA ───────────────────────────
+   Sustituyen a window.confirm y window.alert. Se dibujan pegadas a su vista
+   a proposito: la pregunta "celiminar?" solo se puede responder bien si se
+   ve DE QUE vista se habla, y el enlace solo es util si se puede leer y
+   volver a copiar sin que nada se cierre. */
+
+.view-fila { display: block; }
+
+.view-tira {
+  margin: 2px 6px 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  font-size: 12px;
+  color: #e8eaed;
+}
+
+.view-tira-borrar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* Un borde rojo tenue, no un fondo rojo: avisa sin gritar. */
+  border-color: rgba(229, 115, 115, 0.45);
+}
+
+.view-tira-borrar b { color: #fff; font-weight: 600; }
+
+.view-tira-botones { display: flex; gap: 6px; flex-shrink: 0; }
+
+.tira-btn {
+  padding: 5px 11px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: transparent;
+  color: #e8eaed;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+
+.tira-btn:hover { background: rgba(255, 255, 255, 0.1); }
+
+.tira-btn-peligro {
+  border-color: rgba(229, 115, 115, 0.6);
+  color: #ff9a9a;
+}
+
+.tira-btn-peligro:hover { background: rgba(229, 115, 115, 0.16); }
+
+.view-tira-enlace { display: flex; flex-direction: column; gap: 8px; }
+
+.view-tira-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #a9b0b8;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.tira-copiado {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #7fd18f;
+  font-weight: 600;
+}
+
+.tira-cerrar {
+  background: none;
+  border: none;
+  color: #a9b0b8;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.tira-cerrar:hover { color: #fff; }
+
+.tira-enlace-campo {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.28);
+  color: #cfd4da;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* El enlace es largo: se corta con puntos en vez de desbordar el panel. */
+  text-overflow: ellipsis;
+}
+
+.tira-enlace-campo:focus { outline: none; border-color: rgba(74, 144, 226, 0.7); }
+
+.tira-btn-copiar { align-self: flex-start; }
+
+.more-btn.esta-activo { background: rgba(74, 144, 226, 0.22); color: #fff; }
+
+.more-btn.es-peligro:hover { color: #ff9a9a; }

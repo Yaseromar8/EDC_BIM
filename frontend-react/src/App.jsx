@@ -1580,7 +1580,10 @@ function App() {
   }, [filterSelections, filterColors, filterProperties, hiddenModelUrns]);
 
   const handleDeleteView = useCallback((viewId) => {
-    if (!window.confirm("Delete this view?")) return;
+    // Sin window.confirm: la pregunta la hace el propio panel, en la fila.
+    // El aviso del navegador rompia el sitio (sale con el dominio delante, en
+    // ingles y con el estilo del sistema) y ademas tapaba QUE vista se iba a
+    // borrar, que es justo el dato que uno necesita para decidir.
     apiFetch(`${BACKEND_URL}/api/views/${viewId}`, { method: 'DELETE' })
       .then(res => res.ok ? setSavedViews(prev => prev.filter(v => v.id !== viewId)) : null)
       .catch(err => console.error("Error deleting view:", err));

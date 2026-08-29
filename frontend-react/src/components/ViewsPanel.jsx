@@ -40,7 +40,29 @@ const SaveIcon = () => (
     </svg>
 );
 
+const TrashIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+    </svg>
+);
+
+const CheckIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
+);
+
 const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose }) => {
+    // Nada de window.confirm ni window.alert. Los dos avisos del navegador se
+    // veian mal (con el dominio delante y en ingles), pero el problema de
+    // fondo era otro: el de borrar no decia QUE vista se borraba, y el de
+    // compartir obligaba a leer el enlace en un cuadro que se cierra -- si el
+    // copiado al portapapeles fallaba, el enlace se perdia. Ahora las dos
+    // cosas pasan en la propia fila, donde el usuario ya esta mirando.
+    const [borrando, setBorrando] = useState(null);   // id de la vista a confirmar
+    const [enlaceDe, setEnlaceDe] = useState(null);   // id de la vista compartida
+    const [copiado, setCopiado] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [newViewName, setNewViewName] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
@@ -52,12 +74,28 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose }) =>
         setIsCreating(false);
     };
 
+    const urlDeVista = (view) =>
+        `${window.location.origin}${window.location.pathname}?shareView=${view.id}`;
+
+    const copiarAlPortapapeles = async (texto) => {
+        try {
+            await navigator.clipboard.writeText(texto);
+            setCopiado(true);
+            setTimeout(() => setCopiado(false), 2200);
+        } catch {
+            // El portapapeles se puede denegar por permisos. No se avisa de
+            // nada: el enlace queda a la vista para copiarlo a mano, que es lo
+            // unico que hace falta.
+            setCopiado(false);
+        }
+    };
+
     const handleShare = (view, e) => {
         e.stopPropagation();
-        const shareUrl = `${window.location.origin}${window.location.pathname}?shareView=${view.id}`;
-        navigator.clipboard.writeText(shareUrl)
-            .then(() => alert(`¡Enlace copiado al portapapeles!\n${shareUrl}`))
-            .catch(err => console.error("Error al copiar", err));
+        setBorrando(null);
+        setEnlaceDe(prev => (prev === view.id ? null : view.id));
+        setCopiado(false);
+        copiarAlPortapapeles(urlDeVista(view));
     };
 
     const filteredViews = views.filter(v =>
@@ -122,25 +160,66 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose }) =>
                     <div className="views-empty">No views found.</div>
                 )}
                 {filteredViews.map(view => (
-                    <div key={view.id} className="view-list-item" onClick={() => onLoadView(view)}>
-                        <span className="view-name-text">{view.name}</span>
-                        <div className="view-item-actions">
-                            <button
-                                className="more-btn"
-                                onClick={(e) => handleShare(view, e)}
-                                title="Share View"
-                                style={{ marginRight: '6px' }}
-                            >
-                                <ShareIcon />
-                            </button>
-                            <button
-                                className="more-btn"
-                                onClick={(e) => { e.stopPropagation(); onDeleteView(view.id); }}
-                                title="Delete"
-                            >
-                                <MoreIcon />
-                            </button>
+                    <div key={view.id} className="view-fila">
+                        <div className="view-list-item" onClick={() => onLoadView(view)}>
+                            <span className="view-name-text">{view.name}</span>
+                            <div className="view-item-actions">
+                                <button
+                                    className={`more-btn${enlaceDe === view.id ? ' esta-activo' : ''}`}
+                                    onClick={(e) => handleShare(view, e)}
+                                    title="Compartir esta vista"
+                                    style={{ marginRight: '6px' }}
+                                >
+                                    <ShareIcon />
+                                </button>
+                                <button
+                                    className="more-btn es-peligro"
+                                    onClick={(e) => { e.stopPropagation(); setEnlaceDe(null); setBorrando(view.id); }}
+                                    title="Eliminar esta vista"
+                                >
+                                    <TrashIcon />
+                                </button>
+                            </div>
                         </div>
+
+                        {borrando === view.id && (
+                            <div className="view-tira view-tira-borrar">
+                                <span>¿Eliminar <b>{view.name}</b>?</span>
+                                <div className="view-tira-botones">
+                                    <button type="button" className="tira-btn"
+                                        onClick={(e) => { e.stopPropagation(); setBorrando(null); }}>
+                                        Cancelar
+                                    </button>
+                                    <button type="button" className="tira-btn tira-btn-peligro"
+                                        onClick={(e) => { e.stopPropagation(); setBorrando(null); onDeleteView(view.id); }}>
+                                        Eliminar
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {enlaceDe === view.id && (
+                            <div className="view-tira view-tira-enlace">
+                                <div className="view-tira-cabecera">
+                                    {copiado
+                                        ? <span className="tira-copiado"><CheckIcon /> Enlace copiado</span>
+                                        : <span>Enlace de solo lectura</span>}
+                                    <button type="button" className="tira-cerrar"
+                                        onClick={(e) => { e.stopPropagation(); setEnlaceDe(null); }}
+                                        title="Cerrar">×</button>
+                                </div>
+                                <input
+                                    className="tira-enlace-campo"
+                                    readOnly
+                                    value={urlDeVista(view)}
+                                    onClick={(e) => { e.stopPropagation(); e.target.select(); }}
+                                />
+                                <button type="button" className="tira-btn tira-btn-copiar"
+                                    onClick={(e) => { e.stopPropagation(); copiarAlPortapapeles(urlDeVista(view)); }}>
+                                    {copiado ? 'Copiado' : 'Copiar'}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>
