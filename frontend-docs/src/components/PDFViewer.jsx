@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { pdfjsLib, abrirPdf } from '../utils/pdfjs';
+import { pedirUrlFirmada } from '../utils/urlFirmada';
 import PdfToolsOverlay, { COLORS } from './PdfToolsOverlay';
 import SelloEscritorio from './SelloEscritorio';
 import { API } from '../utils/helpers';
@@ -220,7 +221,11 @@ const giroDeLaHoja = (page, giroPedido) =>
 // Ademas hay FRENO POR PRESION: antes de guardar se mira cuanta memoria queda
 // libre y, si el navegador va justo, se vacia el almacen en vez de crecer. Un
 // visor que se queda sin memoria es peor que uno que tarda dos segundos.
-const CACHE_MAX_DOCS = 2;
+// TRES documentos: el que miras, el anterior y el siguiente. Medido: ~13 MB
+// cada uno, asi que son unos 40 MB. Con dos, volver atras una lamina obligaba
+// a interpretarla otra vez -- y revisar una carpeta es ir y venir, no avanzar
+// en linea recta.
+const CACHE_MAX_DOCS = 3;
 const _docsAbiertos = new Map();          // url -> documento de pdf.js
 
 function _memoriaApretada() {
@@ -307,21 +312,51 @@ function MarcaEsperando({ porcentaje = null }) {
 // produccion reventaba con «prepararSiguiente is not defined» EN CADA CAMBIO
 // DE LAMINA, y un error sin capturar ahi rompe el ciclo de actualizacion. Lo
 // vio el dueño en la consola, no una prueba.
-async function prepararSiguiente(hermano, obra, yaPedidos) {
+async function prepararUna(hermano, obra, yaPedidos, interpretar) {
   if (!hermano || !hermano.gcs_urn || yaPedidos.has(hermano.gcs_urn)) return;
   yaPedidos.add(hermano.gcs_urn);
   try {
-    const r = await apiFetch(
-      `${API}/api/docs/signed-url?urn=${encodeURIComponent(hermano.gcs_urn)}`
-      + `&model_urn=${encodeURIComponent(obra || '')}`);
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok || !d.success || !d.url) return;
-    if (documentoEnCache(d.url)) return;
-    const pdf = await abrirPdf({ url: d.url, withCredentials: false }).promise;
+    // Autorizar es lo caro (hasta OCHO segundos medidos en produccion) y es lo
+    // primero que paga el clic. Se hace aqui, antes, y queda en el almacen
+    // compartido: cuando el usuario pulse, esa fase ya no existe.
+    const url = await pedirUrlFirmada(hermano.gcs_urn, obra);
+    if (!interpretar || documentoEnCache(url)) return;
+    // Interpretar el vector es lo caro EN MEMORIA (~13 MB por plano), asi que
+    // solo se hace con las inmediatas. La autorizacion, en cambio, no pesa
+    // nada y se adelanta para muchas mas.
+    const pdf = await abrirPdf({ url, withCredentials: false }).promise;
     try { await pdf.getPage(1); } catch { /* con tenerlo abierto ya se gana */ }
-    guardarDocumento(d.url, pdf);
+    guardarDocumento(url, pdf);
   } catch {
-    // Preparar de antemano es un lujo: si falla, no se dice nada.
+    // Adelantar trabajo es un lujo: si falla, no se dice nada y el plano se
+    // abrira como siempre cuando el usuario lo pida.
+    yaPedidos.delete(hermano.gcs_urn);
+  }
+}
+
+// LAS VECINAS, NO SOLO LA SIGUIENTE.
+//
+// La primera version preparaba unicamente la lamina i+1, y en produccion NO
+// SERVIA: con 45 miniaturas delante nadie avanza en linea recta. En la traza
+// del dueño --004120 -> 004129 -> 004131 -> 004121 -> 004125-- no aparecio ni
+// una vez «PREPARADO-DE-ANTEMANO»: cada clic pagaba el precio entero.
+//
+// Ahora se adelanta en abanico alrededor de donde esta, y en el orden en que
+// es probable que pulse: primero las pegadas, luego hacia fuera. De una en
+// una y con un respiro entre ellas, porque disparar cuarenta peticiones a la
+// vez es exactamente lo que dejo el backend de rodillas esta misma sesion.
+const VENTANA = 4;
+
+async function prepararVecinas(hermanos, indice, obra, yaPedidos, sigueValiendo) {
+  const orden = [];
+  for (let d = 1; d <= VENTANA; d++) {
+    if (hermanos[indice + d]) orden.push([hermanos[indice + d], d === 1]);
+    if (hermanos[indice - d]) orden.push([hermanos[indice - d], d === 1]);
+  }
+  for (const [hermano, interpretar] of orden) {
+    if (!sigueValiendo()) return;   // el usuario ya salto a otra cosa
+    await prepararUna(hermano, obra, yaPedidos, interpretar);
+    await new Promise(r => setTimeout(r, 250));
   }
 }
 
@@ -607,12 +642,14 @@ export default function PDFViewer({ url, preparando = false,
   useEffect(() => {
     if (ocupado || !hermanos.length || !onAbrirHermano) return undefined;
     const i = hermanos.findIndex(h => h.name === fileName);
-    const siguiente = i >= 0 ? hermanos[i + 1] : null;
-    if (!siguiente) return undefined;
+    if (i < 0) return undefined;
     // Un respiro antes de empezar: si el usuario esta saltando de lamina en
-    // lamina, no tiene sentido preparar la que ya va a dejar atras.
-    const t = setTimeout(() => prepararSiguiente(siguiente, obraDelDocumento, yaPedidosRef.current), 900);
-    return () => clearTimeout(t);
+    // lamina, no tiene sentido preparar las que ya va a dejar atras.
+    let vigente = true;
+    const t = setTimeout(() => {
+      prepararVecinas(hermanos, i, obraDelDocumento, yaPedidosRef.current, () => vigente);
+    }, 900);
+    return () => { vigente = false; clearTimeout(t); };
   }, [ocupado, hermanos, fileName, obraDelDocumento, onAbrirHermano]);
   useEffect(() => {
     // APARECE con retardo: lo instantaneo no debe parpadear.

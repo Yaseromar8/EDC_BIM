@@ -4,6 +4,7 @@ import PDFViewer from './PDFViewer';
 import SelloEscritorio from './SelloEscritorio';
 import { apiFetch } from '../utils/apiFetch';
 import { getRecentPdfUrl } from '../utils/recentPdfCache';
+import { urlFirmadaEnMano, pedirUrlFirmada } from '../utils/urlFirmada';
 import toast from 'react-hot-toast';
 
 // El visor CAD arrastra el visor de Autodesk: diferido para que no pese en el
@@ -158,6 +159,22 @@ export default function DocumentViewer({
 
     let cancelled = false;
     const urn = viewedVersionInfo?.gcs_urn || file.gcs_urn;
+
+    // ¿YA ESTABA AUTORIZADA? Entonces el clic no espera nada aqui.
+    // El lector va preparando las de las laminas vecinas mientras miras la
+    // actual (ver `prepararVecinas`), asi que al saltar por la cinta esta
+    // fase --que llego a costar OCHO SEGUNDOS en produccion-- desaparece.
+    const yaAutorizada = urn ? urlFirmadaEnMano(urn) : null;
+    if (yaAutorizada) {
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setSecurePreviewUrl(yaAutorizada);
+        setLoadingPreview(false);
+        setPreviewError('');
+      });
+      return () => { cancelled = true; };
+    }
+
     const url = urn
       ? `${API}/api/docs/signed-url?urn=${encodeURIComponent(urn)}&model_urn=${encodeURIComponent(projectPrefix)}`
       : `${API}/api/docs/signed-url?path=${encodeURIComponent(file.fullName)}&model_urn=${encodeURIComponent(projectPrefix)}`;
@@ -177,12 +194,16 @@ export default function DocumentViewer({
       // mostrando el plano previo hasta que llega el nuevo, que es como se
       // comporta ACC.
     });
-    apiFetch(url)
+    // Con urn se pasa por el almacen compartido (asi queda guardada para la
+    // proxima). Sin urn --ficheros antiguos sin identificador-- se pide como
+    // siempre: no hay clave con la que guardarla.
+    (urn ? pedirUrlFirmada(urn, projectPrefix) : apiFetch(url)
       .then(async response => {
         const data = await response.json();
         if (!response.ok || !data.success || !data.url) throw new Error(data.error || 'No se pudo autorizar la vista previa');
-        if (!cancelled) setSecurePreviewUrl(data.url);
-      })
+        return data.url;
+      }))
+      .then(u => { if (!cancelled) setSecurePreviewUrl(u); })
       .catch(err => {
         if (!cancelled) setPreviewError(err.message || 'No se pudo abrir el archivo');
       })
