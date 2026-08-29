@@ -1103,6 +1103,14 @@ function App() {
   useEffect(() => {
     const pid = selectedProject?.id;
     if (!pid) return undefined;
+    // EN EL ENLACE COMPARTIDO NO SE LATE. El latido existe para que el plugin
+    // de Revit descubra que frente tiene abierto EL USUARIO; un invitado sin
+    // sesion no tiene nada que enganchar, asi que el POST solo podia devolver
+    // 401 -- y lo hacia cada 5 segundos, para siempre, por cada invitado. En
+    // la consola del supervisor se veia una cascada de errores en rojo (parece
+    // roto) y al backend le llegaba una peticion inutil por invitado y por
+    // lustro. Se corta en el origen.
+    if (isSharedMode) return undefined;
     let stop = false;
     const beat = () => {
       apiFetch(`${BACKEND_URL}/api/link/web-presence`, {
@@ -1113,7 +1121,7 @@ function App() {
     beat();
     const id = setInterval(() => { if (!stop) beat(); }, 5000);
     return () => { stop = true; clearInterval(id); };
-  }, [selectedProject?.id]);
+  }, [selectedProject?.id, isSharedMode]);
 
 
 
@@ -4536,7 +4544,12 @@ function App() {
               {!compareMode && activePanel !== 'build' && (
                 <ViewerLabelsBar rightSlot={<>
                   <SectionCutTool />
-                  <LinkRevitBadge variant="inline" project={selectedProject?.id} backendUrl={BACKEND_URL} />
+                  {/* Mismo motivo que el latido: consulta /api/link/status cada
+                      3 s y para un invitado siempre es 401. El enlace de Revit
+                      es una herramienta del equipo, no del que recibe el enlace. */}
+                  {!isSharedMode && (
+                    <LinkRevitBadge variant="inline" project={selectedProject?.id} backendUrl={BACKEND_URL} />
+                  )}
                   {!isSharedMode && !nativeArActive && selectedProject && models && models.length > 0 && (
                     <button
                       onClick={() => {
