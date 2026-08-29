@@ -406,7 +406,7 @@ export default function PDFViewer({ url, preparando = false,
   // Con este retardo, lo rapido no parpadea NADA y lo lento avisa igual. Es
   // la misma idea que usa el navegador con su propia barra de carga.
   const [mostrarEspera, setMostrarEspera] = useState(false);
-  const ocupado = preparando || loading || (pageRendering && avisoDeRender);
+  const ocupado = preparando || loading || pageRendering;
   useEffect(() => {
     if (!ocupado) { setMostrarEspera(false); return undefined; }
     const t = setTimeout(() => setMostrarEspera(true), 250);
@@ -427,6 +427,19 @@ export default function PDFViewer({ url, preparando = false,
     try { return JSON.parse(localStorage.getItem('visor_user') || sessionStorage.getItem('visor_user') || '{}').name || ''; }
     catch { return ''; }
   })();
+
+  // CADA DOCUMENTO ADOPTADO LLEVA UN NUMERO NUEVO.
+  //
+  // EL FALLO QUE ESTO CORRIGE: al reutilizar un documento del almacen, el
+  // efecto hacia setLoading(true) y setLoading(false) seguidos -- React los
+  // agrupa, asi que `loading` NO CAMBIABA. Y en un plano de una sola pagina
+  // tampoco cambiaban `currentPage`, `rotation` ni `renderPage`. Con todas
+  // las dependencias del dibujado iguales, EL EFECTO NO VOLVIA A CORRER: el
+  // lienzo se quedaba con el plano anterior y no cambiaba nunca.
+  //
+  // Este contador cambia SIEMPRE que se adopta un documento -- venga del
+  // almacen o de la red-- asi que el dibujado no puede saltarselo.
+  const [docNonce, setDocNonce] = useState(0);
 
   // Load PDF document
   useEffect(() => {
@@ -453,6 +466,7 @@ export default function PDFViewer({ url, preparando = false,
       setNumPages(yaAbierto.numPages);
       setLoading(false);
       setShowSidebar(yaAbierto.numPages > 1);
+      setDocNonce(n => n + 1);              // <- sin esto, no se redibuja
       return undefined;                     // sin descarga y sin re-interpretar
     }
 
@@ -473,6 +487,7 @@ export default function PDFViewer({ url, preparando = false,
         guardarDocumento(url, pdf);
         setNumPages(pdf.numPages);
         setLoading(false);
+        setDocNonce(n => n + 1);
         setShowSidebar(pdf.numPages > 1);
       } catch (err) {
         if (cancelled) return;
@@ -659,7 +674,10 @@ export default function PDFViewer({ url, preparando = false,
   const lastSigRef = useRef('');
   useEffect(() => {
     if (loading || !pdfDocRef.current) return undefined;
-    const sig = `${currentPage}:${rotation}`;
+    // El numero del documento entra en la firma: dos planos distintos son
+    // ambos «pagina 1», y sin esto el segundo se tomaba por «solo cambio el
+    // zoom» y se dibujaba con retardo -- o no se dibujaba.
+    const sig = `${docNonce}:${currentPage}:${rotation}`;
     const soloCambioElZoom = sig === lastSigRef.current;
     lastSigRef.current = sig;
     // El cartelito «Actualizando pagina N» aparecia en CADA paso de rueda.
@@ -677,7 +695,7 @@ export default function PDFViewer({ url, preparando = false,
       renderPage(); // primera carga / cambio de página → sin esperar
     }
     return () => clearTimeout(renderDebounceRef.current);
-  }, [loading, currentPage, rotation, applyPreviewSize, renderPage]);
+  }, [loading, docNonce, currentPage, rotation, applyPreviewSize, renderPage]);
 
   // Auto-scroll sidebar thumbnail into view when page changes
   useEffect(() => {
@@ -1203,7 +1221,7 @@ export default function PDFViewer({ url, preparando = false,
                 {preparando ? 'Preparando el documento…'
                   : loading ? (progress > 0 && progress < 100
                       ? `Descargando… ${progress}%` : 'Descargando…')
-                  : `Dibujando página ${currentPage}…`}
+                  : 'Dibujando el plano…'}
               </div>
             )}
             {renderError && (
@@ -1215,7 +1233,12 @@ export default function PDFViewer({ url, preparando = false,
 
             <div className="pdf-page-pad">
               <div ref={wrapRef}
-                className={`pdf-page${mostrarEspera && (preparando || loading) ? ' esta-vieja' : ''}`}
+                // ATENUADO HASTA QUE EL PLANO NUEVO ESTA PINTADO, no hasta
+                // que termina la descarga. Soltarlo antes hacia lo que el
+                // dueno describio: el plano viejo se AVIVABA y un instante
+                // despues saltaba al nuevo -- dos movimientos donde deberia
+                // haber uno. Ahora se aclara justo cuando aparece el nuevo.
+                className={`pdf-page${mostrarEspera && ocupado ? ' esta-vieja' : ''}`}
                 style={{ transform: `translate(${desplazamiento.x}px, ${desplazamiento.y}px)` }}>
                 <canvas ref={canvasRef} />
                 {highlights.map(h => (
