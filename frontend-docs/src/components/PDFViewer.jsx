@@ -194,6 +194,20 @@ const HINTS = Object.fromEntries(
 // la direccion es justo el defecto que se corrigio en el menu del clic
 // derecho. Y se pide SOLO cuando entra en pantalla (IntersectionObserver):
 // una carpeta con 100 planos no baja 100 miniaturas de golpe.
+// EL GIRO REAL DE LA HOJA = el que trae el plano + el que pidio el usuario.
+//
+// En pdf.js, `getViewport({ rotation })` NO SUMA la rotacion: la SUSTITUYE.
+// Si no se le pasa nada usa la de la pagina (`page.rotate`), que es la
+// correcta. El lector le pasaba siempre su propio contador -- que arranca en
+// 0 -- y con eso DESCARTABA la rotacion que el plano lleva dentro.
+//
+// La mayoria de laminas de obra se autoran como hoja vertical con /Rotate 90,
+// no como hoja apaisada. Por eso un A3 apaisado se abria de pie. La prueba de
+// que la causa era esta y no otra: la miniatura de la tira SI salia bien,
+// porque su viewport se pide sin rotacion y hereda la de la pagina.
+const giroDeLaHoja = (page, giroPedido) =>
+  (((page && page.rotate) || 0) + (giroPedido || 0)) % 360;
+
 export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
                                     versionLabel = null, versionInfo = null, hideTitle = false,
                                     onClose = null, onVersionClick = null,
@@ -360,7 +374,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     if (!base) {
       try {
         const page = await pdf.getPage(currentPage);
-        const vp1 = page.getViewport({ scale: 1, rotation });
+        const vp1 = page.getViewport({ scale: 1, rotation: giroDeLaHoja(page, rotation) });
         base = { width: vp1.width, height: vp1.height };
         baseVpRef.current[key] = base;
       } catch { return; }
@@ -429,7 +443,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       const page = await pdf.getPage(currentPage);
 
       const effectiveScale = scale || 1.0;
-      const viewport = page.getViewport({ scale: effectiveScale, rotation });
+      const viewport = page.getViewport({ scale: effectiveScale, rotation: giroDeLaHoja(page, rotation) });
 
       // TOPE DE PÍXELES: sin esto, un plano grande a 8× con dpr 2 pedía un
       // canvas de cientos de megapíxeles → memoria disparada y render lentísimo.
@@ -642,7 +656,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     if (!pdf || !cont) return;
     try {
       const page = await pdf.getPage(currentPage);
-      const vp1 = page.getViewport({ scale: 1, rotation });
+      const vp1 = page.getViewport({ scale: 1, rotation: giroDeLaHoja(page, rotation) });
       const sW = (cont.clientWidth - 64) / vp1.width;
       const sH = (cont.clientHeight - 64) / vp1.height;
       setFitMode(mode);
