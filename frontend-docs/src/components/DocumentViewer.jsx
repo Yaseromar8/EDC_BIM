@@ -1,6 +1,7 @@
 // frontend-docs/src/components/DocumentViewer.jsx
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import PDFViewer from './PDFViewer';
+import SelloEscritorio from './SelloEscritorio';
 import { apiFetch } from '../utils/apiFetch';
 import { getRecentPdfUrl } from '../utils/recentPdfCache';
 import toast from 'react-hot-toast';
@@ -395,20 +396,12 @@ export default function DocumentViewer({
         <div className="file-viewer-actions">
            {abribleEnEscritorio && !isShared && (
              <button onClick={abrirEnEscritorio}
-               title="Descarga el original con su nombre real; al abrirlo, Windows usa la aplicacion asociada (Revit, Civil 3D, Navisworks)"
+               title="Descarga el original con su nombre real; al abrirlo, Windows usa la aplicacion asociada"
                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginRight: 14,
                         padding: '5px 12px', fontSize: 12.5, fontWeight: 600,
                         background: '#fff', border: '1px solid var(--accent)', color: 'var(--accent)',
                         borderRadius: 4, cursor: 'pointer' }}>
-               {appEscritorio.letra ? (
-                 <span style={{ width: 16, height: 16, borderRadius: 3, background: appEscritorio.color,
-                                color: '#fff', fontSize: 10.5, fontWeight: 800, display: 'inline-flex',
-                                alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
-                   {appEscritorio.letra}
-                 </span>
-               ) : (
-                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-               )}
+               <SelloEscritorio app={appEscritorio} tamano={16} />
                Abrir en {appEscritorio.nombre}
              </button>
            )}

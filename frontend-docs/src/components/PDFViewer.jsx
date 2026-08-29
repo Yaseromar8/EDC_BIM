@@ -6,6 +6,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import PdfToolsOverlay, { COLORS } from './PdfToolsOverlay';
+import SelloEscritorio from './SelloEscritorio';
 import { API } from '../utils/helpers';
 import { apiFetch } from '../utils/apiFetch';
 import { tiraEstaAbierta, recordarTira } from '../utils/tiraDocumentos';
@@ -1187,10 +1188,7 @@ export default function PDFViewer({ url, preparando = false,
           {alEscritorio && (
             <button className="pdf-ico pdf-escritorio" onClick={alEscritorio}
               title={`Abrir en ${appEscritorio?.nombre || 'el escritorio'}`}>
-              <span className="pdf-escritorio-sello"
-                style={{ background: appEscritorio?.color || '#5B6875' }}>
-                {appEscritorio?.letra || 'P'}
-              </span>
+              <SelloEscritorio app={appEscritorio} tamano={21} />
             </button>
           )}
           <button className="pdf-ico" onClick={printDocument} title="Imprimir"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="7" rx="1.5"/><path d="M7 16h10v5H7z"/></svg></button>
