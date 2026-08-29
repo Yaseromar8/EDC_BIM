@@ -35,6 +35,7 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+/* global __ALEPHIA_BUILD__ */   // lo inyecta vite (`define`), no existe en el fuente
 // El commit desplegado, a la vista: escribe `__ALEPHIA_BUILD` en la
 // consola del navegador. El porque, en vite.config.js.
 try { window.__ALEPHIA_BUILD = __ALEPHIA_BUILD__; } catch { /* sin define */ }

@@ -1,3 +1,4 @@
+/* global process */   // este fichero corre en Node: `process` existe aqui
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 

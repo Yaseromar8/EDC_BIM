@@ -552,7 +552,22 @@ export default function PDFViewer({ url, preparando = false,
   // Ahora la hoja se enseña cuando hay algo NUEVO que enseñar, y no antes:
   // se apaga al pedir otro documento y se enciende con la primera tinta.
   // Cubre el hueco entero sin casos especiales.
-  const esperandoDocumento = !planoListo;
+  // LA HOJA Y LA MARCA CAMBIAN A LA VEZ, mirando el MISMO valor.
+  //
+  // MEDIDO EN EL BANCO, secuencia real de un cambio de lamina:
+  //   ms 1681  hoja oculta, SIN marca   <- casi un segundo de vacio sin señal
+  //   ms 2668  hoja oculta, con marca
+  //   ms 3669  hoja VISIBLE, marca aun puesta  <- encima del plano ya visible
+  //
+  // La hoja se ocultaba al instante y la marca esperaba su retardo de
+  // cortesia; al final la hoja volvia y la marca se quedaba encima. Dos piezas
+  // para un mismo momento, con criterios distintos: de ahi el hueco muerto y
+  // la sensacion de que va en dos tiempos.
+  //
+  // Ahora las dos miran `mostrarEspera`, que ya lleva ese retardo dentro. Un
+  // cambio instantaneo no oculta nada ni enseña nada --sin parpadeo-- y uno
+  // lento oculta la hoja y avisa EN EL MISMO INSTANTE.
+  const esperandoDocumento = mostrarEspera;
   const ocupadoRef = useRef(false);
   useEffect(() => { ocupadoRef.current = ocupado; }, [ocupado]);
 
@@ -587,8 +602,12 @@ export default function PDFViewer({ url, preparando = false,
     // `loading` todavia no se ha encendido. En ese respiro la señal se
     // apagaba. Esperando un poco antes de ocultarla, las fases se encadenan
     // y se ve UNA sola espera de principio a fin.
-    const t = setTimeout(() => setMostrarEspera(false), 180);
-    return () => clearTimeout(t);
+    // SE RETIRA AL INSTANTE. Aquel retardo de 180 ms tapaba un hueco entre
+    // fases que ya no existe: `ocupado` es ahora UN SOLO valor (`!planoListo`)
+    // y no parpadea. Mantenerlo solo conseguia que la marca --y con ella la
+    // hoja oculta-- se quedaran un momento de mas sobre un plano ya listo.
+    setMostrarEspera(false);
+    return undefined;
   }, [ocupado]);
   const [renderError, setRenderError] = useState('');
   const [retryNonce, setRetryNonce] = useState(0);
