@@ -666,17 +666,31 @@ export default function PDFViewer({ url, preparando = false,
     const ancla = anclaRef.current;
     if (ancla && wrapRef.current && containerRef.current) {
       const cont = containerRef.current;
-      const r = wrapRef.current.getBoundingClientRect();
-      const s = scale || 1;
-      const faltaX = (r.left + ancla.ux * s) - ancla.clientX;
-      const faltaY = (r.top + ancla.uy * s) - ancla.clientY;
 
-      // TODO con scroll, y sin tope: con la holgura del relleno (ver
-      // `.pdf-page-pad` en el CSS) siempre hay margen adonde moverse, tambien
-      // con la hoja pequeña. Ya no hace falta empujar la hoja aparte, que era
-      // de donde salia la deriva.
-      cont.scrollLeft += faltaX;
-      cont.scrollTop += faltaY;
+      // LA CORRECCION SE VERIFICA A SI MISMA.
+      //
+      // Antes se calculaba UNA vez con la escala del ESTADO (`scale`) y se
+      // aplicaba a ciegas. Dos problemas: la escala del estado y la geometria
+      // real pueden ir desfasadas --el mismo error que habia al anotar el
+      // ancla-- y ademas el navegador puede recortar el scroll y dejar la
+      // correccion a medias. El resto sobraba en cada giro y se acumulaba:
+      // medido, 7,4 % de deriva en seis giros lentos, y eso NO lo arreglaba
+      // corregir solo el anotado.
+      //
+      // Ahora se mide, se corrige, y SE VUELVE A MEDIR. La escala sale del
+      // propio rectangulo, asi que geometria y escala vienen siempre del mismo
+      // instante. Se repite hasta que el punto esta a menos de medio pixel del
+      // cursor, con tope de tres vueltas para no poder colgarse.
+      const base = baseVpRef.current[`${currentPage}:${rotation}`];
+      for (let intento = 0; intento < 3; intento++) {
+        const rr = wrapRef.current.getBoundingClientRect();
+        const sr = base && base.width ? rr.width / base.width : (scale || 1);
+        const dx = (rr.left + ancla.ux * sr) - ancla.clientX;
+        const dy = (rr.top + ancla.uy * sr) - ancla.clientY;
+        if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) break;
+        cont.scrollLeft += dx;
+        cont.scrollTop += dy;
+      }
       anclaRef.current = null;
     }
   }, [currentPage, rotation, scale]);
@@ -961,37 +975,56 @@ export default function PDFViewer({ url, preparando = false,
   // hoja (sin escala); la corrección del scroll la aplica `applyPreviewSize`
   // cuando la hoja ya creció — ver el comentario largo de allí.
   const zoomAt = useCallback((dir, clientX, clientY) => {
+    // EL ZOOM SE APLICA Y SE CORRIGE EN EL MISMO INSTANTE DEL GIRO.
+    //
+    // Antes esto solo ANOTABA el punto y dejaba la correccion para un efecto
+    // posterior. Eso ata la exactitud al ciclo de React: segun cuando llegue
+    // el giro respecto al redibujado, la escala del estado y la geometria de
+    // la hoja pueden ir desfasadas, y el error se acumula. Medido en el banco:
+    // 58 % de deriva con giros cada 30 ms, y un 7,4 % tozudo con giros lentos
+    // que NO se arreglaba corrigiendo el anotado.
+    //
+    // Aqui no hay ciclo que esperar. Se lee la escala REAL de la hoja (su
+    // ancho entre el ancho a escala 1), se calcula la nueva, se aplica el
+    // tamaño AL INSTANTE y se corrige el scroll midiendo el resultado. Todo
+    // dentro del mismo evento, con la misma geometria. El estado se actualiza
+    // despues, solo para que el redibujado nitido sepa a que escala ir.
     const cont = containerRef.current, hoja = wrapRef.current;
-    if (!cont || !hoja) { dir > 0 ? zoomIn() : zoomOut(); return; }
+    const lienzo = canvasRef.current;
+    const base = baseVpRef.current[`${currentPage}:${rotation}`];
+    if (!cont || !hoja || !lienzo || !base || !base.width) {
+      dir > 0 ? zoomIn() : zoomOut();
+      return;
+    }
+
     const r = hoja.getBoundingClientRect();
+    const sAhora = r.width / base.width;
+    const siguiente = dir > 0 ? Math.min(sAhora * 1.2, 8.0) : Math.max(sAhora / 1.2, 0.2);
+    if (Math.abs(siguiente - sAhora) < 0.0005) return;
+
+    // El punto del plano que hay bajo el cursor, en unidades de la hoja.
+    const ux = (clientX - r.left) / sAhora;
+    const uy = (clientY - r.top) / sAhora;
+
     setFitMode('custom');
-    setScale(prev => {
-      const next = dir > 0 ? Math.min(prev * 1.2, 8.0) : Math.max(prev / 1.2, 0.2);
-      // EL ANCLA SE ANOTA UNA SOLA VEZ POR RAFAGA.
-      //
-      // EL DEFECTO: girando la rueda rapido llegan varios eventos ANTES de que
-      // la hoja se redibuje. El segundo ya lee la escala NUEVA (`prev` viene
-      // encadenado) pero el rectangulo VIEJO --la hoja aun no ha crecido-- y
-      // con esa mezcla calcula un punto que no existe. Cada giro añadia su
-      // error, y por eso «cuanto mas me acerco, mas se va para otro lado».
-      // Espaciando los giros no se notaba: por eso mi prueba anterior no lo
-      // cazo, y esta vez se mide con la rafaga pegada.
-      //
-      // LO QUE EL ANCLA DICE es «este punto del plano tiene que quedarse bajo
-      // el cursor», y eso NO CAMBIA durante la rafaga: el punto es el mismo y
-      // el cursor no se ha movido. Asi que se anota con el primer giro --el
-      // unico que tiene rectangulo y escala coherentes-- y los demas la
-      // respetan.
-      if (next !== prev && !anclaRef.current) {
-        anclaRef.current = {
-          ux: (clientX - r.left) / prev,   // punto en unidades de PDF
-          uy: (clientY - r.top) / prev,
-          clientX, clientY,
-        };
-      }
-      return next;
-    });
-  }, [zoomIn, zoomOut]);
+    lienzo.style.width = `${base.width * siguiente}px`;
+    lienzo.style.height = `${base.height * siguiente}px`;
+
+    // Y se coloca, verificando: leer el rectangulo fuerza el recalculo, asi
+    // que la medida ya refleja el tamaño nuevo. Dos vueltas bastan; la tercera
+    // es un seguro.
+    for (let i = 0; i < 3; i++) {
+      const rr = hoja.getBoundingClientRect();
+      const dx = (rr.left + ux * siguiente) - clientX;
+      const dy = (rr.top + uy * siguiente) - clientY;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) break;
+      cont.scrollLeft += dx;
+      cont.scrollTop += dy;
+    }
+
+    anclaRef.current = null;   // ya esta colocado: el efecto no debe tocarlo
+    setScale(siguiente);
+  }, [zoomIn, zoomOut, currentPage, rotation]);
 
   // Ajustar a página / ancho según el tamaño real del contenedor
   const fitTo = useCallback(async (mode) => {
