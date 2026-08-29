@@ -222,7 +222,8 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   const loadingTaskRef = useRef(null);
   const renderTaskRef = useRef(null);
   const renderSequenceRef = useRef(0);
-  const baseVpRef = useRef({});          // cache "pagina:rotacion" → viewport a escala 1
+  const baseVpRef = useRef({});
+  const huboDocumentoRef = useRef(false);          // cache "pagina:rotacion" → viewport a escala 1
   const renderDebounceRef = useRef(null); // coalesce de renders durante el zoom
   // Texto por página SOLO EN MEMORIA: se lee del PDF al vuelo y se descarta al
   // cerrar el documento. No se extrae ni se guarda nada en el servidor.
@@ -231,6 +232,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   const bufferCanvasRef = useRef(null);   // doble bufer del render (uno, reutilizado)
   const anclaRef = useRef(null);          // punto que el zoom debe conservar bajo el cursor
   const [medida, setMedida] = useState(null);   // tamaño del papel, en mm
+  const [avisoDeRender, setAvisoDeRender] = useState(true);
   // CUANDO LA HOJA CABE ENTERA NO HAY SCROLL QUE MOVER, y el zoom crecia
   // desde el centro: el detalle que mirabas se escapaba. Este desplazamiento
   // propio la mueve cuando el scroll no puede, para que el punto bajo el
@@ -246,8 +248,6 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   // eso salian «sin vista previa» o en blanco. Solo se piden cuando la tira
   // se ABRE: quien no la usa no paga nada.
   const [minisTira, setMinisTira] = useState({});
-  const [preparando, setPreparando] = useState(false);
-  const [avisoTira, setAvisoTira] = useState('');
   const [tiraAbierta, _setTiraAbierta] = useState(tiraEstaAbierta);
   const setTiraAbierta = (v) => {
     const valor = typeof v === 'function' ? v(tiraAbierta) : v;
@@ -255,6 +255,11 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     _setTiraAbierta(valor);
   };
   const indiceActual = hermanos.findIndex(h => h.name === fileName);
+  // LA FIRMA DE LA CARPETA, no el array. `hermanos` llega como un array nuevo
+  // en cada renderizado del padre, asi que el efecto se disparaba a cada
+  // salto de lamina y volvia a pedir las 45 miniaturas: de ahi que la cinta
+  // «se recargara» cada vez. La firma solo cambia si cambia la CARPETA.
+  const firmaHermanos = hermanos.map(h => h.gcs_urn || h.name).join('|');
   useEffect(() => {
     if (!tiraAbierta || !hermanos.length) return undefined;
     let vivo = true;
@@ -263,7 +268,23 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       if (vivo) setMinisTira(prev => ({ ...prev, ...urls }));
     });
     return () => { vivo = false; };
-  }, [tiraAbierta, hermanos, obraDelDocumento]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tiraAbierta, firmaHermanos, obraDelDocumento]);
+
+  // LA CINTA SE CIERRA AL TOCAR FUERA: en el plano, en el mando o en
+  // cualquier sitio que no sea ella misma. Pedido del dueno -- tener que
+  // apuntar a la ✕ para quitarla de en medio era un paso de mas.
+  useEffect(() => {
+    if (!tiraAbierta) return undefined;
+    const alPulsarFuera = (e) => {
+      const t = e.target;
+      if (t && t.closest && (t.closest('.pdf-tira') || t.closest('.pdf-tira-boton'))) return;
+      setTiraAbierta(false);
+    };
+    document.addEventListener('mousedown', alPulsarFuera, true);
+    return () => document.removeEventListener('mousedown', alPulsarFuera, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tiraAbierta]);
 
   const irAHermano = (paso) => {
     if (!onAbrirHermano || indiceActual < 0) return;
@@ -338,6 +359,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
         const pdf = await loadingTask.promise;
         if (cancelled) return;
         pdfDocRef.current = pdf;
+        huboDocumentoRef.current = true;   // ver el `if (loading)` de abajo
         setNumPages(pdf.numPages);
         setLoading(false);
         setShowSidebar(pdf.numPages > 1);
@@ -522,6 +544,12 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     const sig = `${currentPage}:${rotation}`;
     const soloCambioElZoom = sig === lastSigRef.current;
     lastSigRef.current = sig;
+    // El cartelito «Actualizando pagina N» aparecia en CADA paso de rueda.
+    // Como el lienzo ya se escala al instante y solo despues se redibuja
+    // nitido, lo unico que aportaba era un parpadeo encima del plano: eso es
+    // el «temblor» al acercar y alejar de golpe. En un cambio de pagina si
+    // avisa, porque ahi el usuario espera de verdad.
+    setAvisoDeRender(!soloCambioElZoom);
 
     applyPreviewSize();
     clearTimeout(renderDebounceRef.current);
@@ -876,7 +904,17 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
   const handleMouseUp = () => setIsDragging(false);
 
   // --- Render ---
-  if (loading) {
+  // SOLO LA PRIMERA VEZ SE VACIA LA PANTALLA.
+  //
+  // Antes esto era `if (loading)` a secas, y al saltar a otra lamina de la
+  // carpeta devolvia la pantalla de carga EN LUGAR DE TODO EL LECTOR: se iban
+  // la barra, el mando y LA CINTA, y volvian a construirse. Por eso el salto
+  // se sentia en toda la ventana en vez de solo en el plano.
+  //
+  // Con un documento ya abierto, la carga del siguiente ocurre DENTRO del
+  // escenario: la cinta no se entera, y el plano anterior se queda a la vista
+  // hasta que el nuevo esta listo -- que es como se comporta ACC.
+  if (loading && !huboDocumentoRef.current) {
     return (
       <div style={styles.center} role="status" aria-live="polite">
         <div style={styles.spinner} />
@@ -1027,9 +1065,17 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
             onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
 
-            {pageRendering && (
+            {pageRendering && avisoDeRender && (
               <div className="pdf-render-status" role="status" aria-live="polite">
                 Actualizando página {currentPage}…
+              </div>
+            )}
+            {/* La carga del SIGUIENTE documento ocurre aqui dentro, sin
+                desmontar la cinta ni la barra (ver el `if (loading)` de
+                arriba). El plano anterior sigue visible debajo. */}
+            {loading && (
+              <div className="pdf-render-status" role="status" aria-live="polite">
+                Cargando {progress > 0 && progress < 100 ? `${progress}%` : '…'}
               </div>
             )}
             {renderError && (
@@ -1140,7 +1186,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
                   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
                 </button>
-                <button className="pdf-ico" onClick={() => setTiraAbierta(v => !v)}
+                <button className="pdf-ico pdf-tira-boton" onClick={() => setTiraAbierta(v => !v)}
                   aria-pressed={tiraAbierta}
                   title={`Documentos de la carpeta (${hermanos.length})`}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -1172,37 +1218,12 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
             <div className="pdf-tira">
               <div className="pdf-tira-cabecera">
                 <span>{hermanos.length} documentos en esta carpeta</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  {esAdmin && (
-                    <button className="pdf-tira-preparar" disabled={preparando}
-                      title="Genera en el servidor las miniaturas que falten de esta obra"
-                      onClick={async () => {
-                        setPreparando(true);
-                        try {
-                          const r = await apiFetch(`${API}/api/docs/miniaturas/preparar`, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ model_urn: obraDelDocumento }),
-                            timeoutMs: 60000,
-                          });
-                          const d = await r.json();
-                          if (!r.ok || !d.success) throw new Error(d.error || 'no se pudo');
-                          setAvisoTira(`Preparando ${d.encolados} miniaturas en el `
-                                     + 'servidor. Vuelve a abrir la tira en un minuto.');
-                        } catch (e) {
-                          // El motivo EXACTO del servidor. Un «no se pudo»
-                          // generico deja al dueno sin nada que contarme.
-                          setAvisoTira(e.message || 'No se pudo pedir la preparación.');
-                        } finally {
-                          setPreparando(false);
-                        }
-                      }}>
-                      {preparando ? 'pidiendo…' : 'Preparar las que falten'}
-                    </button>
-                  )}
-                  <button onClick={() => setTiraAbierta(false)} title="Cerrar la tira">✕</button>
-                </span>
+                {/* El boton «Preparar las que falten» se retiro a peticion del
+                    dueno: las miniaturas ya se generan solas al abrir la
+                    carpeta, asi que pedirlas a mano sobraba. */}
+                <button className="pdf-tira-cerrar" onClick={() => setTiraAbierta(false)}
+                  title="Cerrar la tira">✕</button>
               </div>
-              {avisoTira && <div className="pdf-tira-aviso">{avisoTira}</div>}
               <div className="pdf-tira-carril" ref={(el) => {
                 // El plano actual se trae a la vista solo: en una carpeta de
                 // 45, saltar al siguiente lo dejaba fuera de pantalla.

@@ -468,13 +468,16 @@
 }
 
 .pdf-tira-item {
-  flex: 0 0 auto; width: 104px;
+  /* MAS GRANDE (104 -> 158): a 104 px un plano de obra no se distinguia de
+     otro, que es justo para lo que sirve la cinta. La altura sale de la
+     proporcion del papel serie A, no de un numero elegido a ojo. */
+  flex: 0 0 auto; width: 158px;
   padding: 0; border: none; background: none;
   cursor: pointer; text-align: center;
 }
 
 .pdf-tira-lienzo {
-  width: 104px; height: 74px;
+  width: 158px; height: 112px;   /* 158 x 0,709 -- papel serie A */
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;
   border: 2px solid transparent; border-radius: 5px;
@@ -494,15 +497,15 @@
 }
 
 .pdf-tira-nombre {
-  margin-top: 4px;
-  color: #c6d0d9; font-size: 10px; line-height: 1.3;
+  margin-top: 5px;
+  color: #c6d0d9; font-size: 10.5px; line-height: 1.3;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .pdf-tira-item.es-actual .pdf-tira-nombre { color: #fff; font-weight: 600; }
 
 /* Con la tira abierta, el mando sube para no quedar tapado. */
-.pdf-stage:has(.pdf-tira) .pdf-dock { bottom: 142px; }
+.pdf-stage:has(.pdf-tira) .pdf-dock { bottom: 186px; }   /* la cinta crecio */
 
 
 .pdf-tira-preparar {
@@ -520,3 +523,13 @@
   color: #7CCBF0; font-size: 11.5px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.09);
 }
+
+
+/* La ✕ de la cinta, con area de toque de verdad (antes era un glifo suelto). */
+.pdf-tira-cerrar {
+  background: none; border: none; color: #9fadba;
+  font-size: 15px; line-height: 1; cursor: pointer;
+  padding: 4px 8px; border-radius: 5px;
+}
+
+.pdf-tira-cerrar:hover { color: #fff; background: rgba(255, 255, 255, 0.09); }
