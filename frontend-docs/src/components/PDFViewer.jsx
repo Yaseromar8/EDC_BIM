@@ -733,12 +733,41 @@ export default function PDFViewer({ url, preparando = false,
       // UN único búfer reutilizado (no OffscreenCanvas, no uno por render): los
       // planos A0 ya rozan el tope de 16 MP y duplicar picos de memoria por
       // gusto es como se muere un portátil de obra.
-      if (!bufferCanvasRef.current) bufferCanvasRef.current = document.createElement('canvas');
-      const buffer = bufferCanvasRef.current;
-      buffer.width = Math.round(viewport.width * dpr);
-      buffer.height = Math.round(viewport.height * dpr);
+      // EL DOBLE BUFER, SOLO CUANDO PAGA.
+      //
+      // Cuando lo que cambia es la ESCALA, el lienzo ya tiene el plano y
+      // redimensionarlo lo blanquearia: ahi el bufer evita el fogonazo y vale
+      // la pena. Pero con un DOCUMENTO NUEVO no hay nada que proteger -- lo
+      // que hay debajo ya no sirve-- y el bufer sale caro por dos motivos,
+      // los dos medidos:
+      //
+      //   · un lienzo desconectado del documento NO lo acelera la tarjeta
+      //     grafica, asi que rasterizar un A1 denso ahi es mas lento;
+      //   · y no se ve NADA hasta que termina, mientras que pintando directo
+      //     el plano va apareciendo mientras se dibuja.
+      //
+      // Medido con el banco (mismo plano, misma maquina, produccion):
+      //   lector del 12-ago, sin bufer ......... 5 857 ms
+      //   lector de hoy, con bufer siempre ..... 8 627 ms
+      //
+      // `avisoDeRender` ya distingue los dos casos: es false cuando lo unico
+      // que cambio fue el zoom.
+      const conBufer = !avisoDeRender;
 
-      const bctx = buffer.getContext('2d');
+      let destino, bctx;
+      if (conBufer) {
+        if (!bufferCanvasRef.current) bufferCanvasRef.current = document.createElement('canvas');
+        destino = bufferCanvasRef.current;
+      } else {
+        destino = canvas;
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+      }
+      destino.width = Math.round(viewport.width * dpr);
+      destino.height = Math.round(viewport.height * dpr);
+      const buffer = destino;
+
+      bctx = destino.getContext('2d');
       bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       // El búfer no hereda fondo: se pinta blanco para que un PDF con
       // transparencia no se vuelque sobre basura del render anterior.
@@ -750,14 +779,16 @@ export default function PDFViewer({ url, preparando = false,
       await renderTaskRef.current.promise;
       if (renderSequence !== renderSequenceRef.current) return;
 
-      // Volcado atómico: recién aquí se toca el canvas visible.
-      canvas.width = buffer.width;
-      canvas.height = buffer.height;
-      canvas.style.width = `${viewport.width}px`;
-      canvas.style.height = `${viewport.height}px`;
-      const ctx = canvas.getContext('2d');
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.drawImage(buffer, 0, 0);
+      // Volcado atomico: solo si se dibujo aparte. Pintando directo ya esta.
+      if (conBufer) {
+        canvas.width = buffer.width;
+        canvas.height = buffer.height;
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+        const ctx = canvas.getContext('2d');
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(buffer, 0, 0);
+      }
 
       // Calentar las páginas vecinas: getPage dispara el parseo del contenido,
       // que es la parte lenta al avanzar hoja a hoja por un expediente.
@@ -781,7 +812,7 @@ export default function PDFViewer({ url, preparando = false,
     } finally {
       if (renderSequence === renderSequenceRef.current) setPageRendering(false);
     }
-  }, [currentPage, scale, rotation]);
+  }, [currentPage, scale, rotation, avisoDeRender]);
 
   // Render principal. El debounce se aplica SOLO al zoom (para no rasterizar 15
   // veces en un gesto de rueda). Abrir el documento o cambiar de página rinde
