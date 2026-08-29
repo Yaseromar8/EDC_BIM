@@ -208,6 +208,60 @@ const HINTS = Object.fromEntries(
 const giroDeLaHoja = (page, giroPedido) =>
   (((page && page.rotate) || 0) + (giroPedido || 0)) % 360;
 
+// ───────────────────────────────────────────────────────────────────────────
+// LOS ULTIMOS DOCUMENTOS ABIERTOS, EN MEMORIA
+//
+// Reabrir un plano ya visto volvia a tardar lo mismo que la primera vez. Los
+// BYTES ya no se bajaban (eso lo resuelve la cache del navegador), pero al
+// cerrar el documento se liberaba, asi que pdf.js tenia que INTERPRETARLO
+// entero otra vez -- y eso es lo que se sentia.
+//
+// DOS documentos como tope, no mas. Un plano A1 no es un fichero de texto y
+// este mes ya hubo un aviso de memoria por guardar cosas grandes sin pensar;
+// el tope se eligio midiendo (ver el commit), no a ojo.
+//
+// Ademas hay FRENO POR PRESION: antes de guardar se mira cuanta memoria queda
+// libre y, si el navegador va justo, se vacia el almacen en vez de crecer. Un
+// visor que se queda sin memoria es peor que uno que tarda dos segundos.
+const CACHE_MAX_DOCS = 2;
+const _docsAbiertos = new Map();          // url -> documento de pdf.js
+
+function _memoriaApretada() {
+  try {
+    const m = performance && performance.memory;
+    if (!m || !m.jsHeapSizeLimit) return false;
+    return m.usedJSHeapSize / m.jsHeapSizeLimit > 0.7;
+  } catch { return false; }   // navegador que no lo expone: se sigue normal
+}
+
+function _soltarDocumento(pdf) {
+  try { pdf && pdf.destroy(); } catch { /* ya liberado */ }
+}
+
+function documentoEnCache(url) {
+  return url ? _docsAbiertos.get(url) || null : null;
+}
+
+function guardarDocumento(url, pdf) {
+  if (!url || !pdf) return;
+  if (_memoriaApretada()) {
+    for (const [, viejo] of _docsAbiertos) _soltarDocumento(viejo);
+    _docsAbiertos.clear();
+    console.warn('[PDFViewer] memoria justa: se vacia el almacen de documentos');
+    return;                                // ni siquiera se guarda este
+  }
+  _docsAbiertos.delete(url);               // reinsertar = pasa a ser el mas reciente
+  _docsAbiertos.set(url, pdf);
+  while (_docsAbiertos.size > CACHE_MAX_DOCS) {
+    const masViejo = _docsAbiertos.keys().next().value;
+    _soltarDocumento(_docsAbiertos.get(masViejo));
+    _docsAbiertos.delete(masViejo);
+  }
+}
+
+// Lo que mide el banco de pruebas. No se usa en la aplicacion.
+if (typeof window !== 'undefined') window.__alephiaDocsEnCache = () => _docsAbiertos.size;
+
 export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = null, projectPrefix = '',
                                     versionLabel = null, versionInfo = null, hideTitle = false,
                                     onClose = null, onVersionClick = null,
@@ -346,6 +400,18 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
     textCacheRef.current = new Map(); // el texto leído se descarta al cambiar de PDF
     setMatches([]); setMatchIdx(0); setSearchQuery(''); setSearchOpen(false);
 
+    // ¿YA LO TENEMOS INTERPRETADO? Entonces no hay nada que esperar.
+    const yaAbierto = documentoEnCache(url);
+    if (yaAbierto) {
+      pdfDocRef.current = yaAbierto;
+      huboDocumentoRef.current = true;
+      guardarDocumento(url, yaAbierto);     // pasa a ser el mas reciente
+      setNumPages(yaAbierto.numPages);
+      setLoading(false);
+      setShowSidebar(yaAbierto.numPages > 1);
+      return undefined;                     // sin descarga y sin re-interpretar
+    }
+
     const loadPDF = async () => {
       try {
         // Descarga en streaming continuo (comportamiento por defecto de PDF.js).
@@ -360,6 +426,7 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
         if (cancelled) return;
         pdfDocRef.current = pdf;
         huboDocumentoRef.current = true;   // ver el `if (loading)` de abajo
+        guardarDocumento(url, pdf);
         setNumPages(pdf.numPages);
         setLoading(false);
         setShowSidebar(pdf.numPages > 1);
@@ -377,8 +444,15 @@ export default function PDFViewer({ url, fileName = 'documento.pdf', nodeId = nu
       clearTimeout(renderDebounceRef.current);
       renderSequenceRef.current += 1;
       try { renderTaskRef.current?.cancel(); } catch { /* render ya finalizado */ }
-      try { loadingTaskRef.current?.destroy(); } catch { /* tarea ya finalizada */ }
-      try { pdfDocRef.current?.destroy(); } catch { /* documento ya liberado */ }
+      // OJO: destruir la tarea de carga destruye TAMBIEN su documento. Si
+      // este esta en el almacen, liberarlo aqui haria que la proxima apertura
+      // recibiera un documento muerto -- el fallo clasico de esta clase de
+      // cache. Solo se libera lo que NO se guarda.
+      const guardado = documentoEnCache(url) === pdfDocRef.current && pdfDocRef.current;
+      if (!guardado) {
+        try { loadingTaskRef.current?.destroy(); } catch { /* tarea ya finalizada */ }
+        try { pdfDocRef.current?.destroy(); } catch { /* documento ya liberado */ }
+      }
       renderTaskRef.current = null;
       loadingTaskRef.current = null;
       pdfDocRef.current = null;
