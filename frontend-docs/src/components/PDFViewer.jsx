@@ -1109,13 +1109,17 @@ export default function PDFViewer({ url, preparando = false,
   // Con un documento ya abierto, la carga del siguiente ocurre DENTRO del
   // escenario: la cinta no se entera, y el plano anterior se queda a la vista
   // hasta que el nuevo esta listo -- que es como se comporta ACC.
-  if (loading && !huboDocumentoRef.current) {
-    return (
-      <div style={styles.center}>
-        <MarcaEsperando porcentaje={progress > 0 && progress < 100 ? progress : null} />
-      </div>
-    );
-  }
+  // NO HAY PANTALLA APARTE PARA LA PRIMERA APERTURA.
+  //
+  // La habia, y por eso se veian DOS cargas seguidas: primero el logo sobre
+  // un fondo desnudo --sin barra, sin herramientas-- y despues el lector
+  // entero con el logo otra vez encima de la hoja en blanco. Dos estados para
+  // una sola espera; el dueno lo describio como «de la imagen 01 pasa a la
+  // 02».
+  //
+  // Ahora el lector se dibuja COMPLETO desde el primer instante y la marca
+  // espera dentro, sobre la hoja. Una sola pantalla de principio a fin, y
+  // cuando termina, el plano aparece donde ya estaba mirando.
 
   if (error) {
     return (
