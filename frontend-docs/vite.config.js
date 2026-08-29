@@ -4,6 +4,23 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ command }) => ({
   plugins: [react()],
 
+  // QUE COMMIT ESTA DESPLEGADO, legible desde fuera.
+  //
+  // Durante toda una sesion de correcciones se perdio muchisimo tiempo en la
+  // misma duda: el dueño probaba, decia «sigue igual», y no habia forma barata
+  // de saber si estaba viendo el arreglo o la version anterior -- entre el
+  // push y el despliegue pasan minutos, y por delante hay una cache de borde
+  // de 5 minutos. Varias veces se diagnostico sobre codigo viejo.
+  //
+  // Render expone el commit en RENDER_GIT_COMMIT. Se hornea en el bundle y se
+  // publica en `window.__ALEPHIA_BUILD`, asi que basta con mirarlo en la
+  // consola -- o descargar el bundle y buscarlo -- para saber EXACTAMENTE que
+  // esta corriendo. Cuesta doce bytes.
+  define: {
+    __ALEPHIA_BUILD__: JSON.stringify(
+      (process.env.RENDER_GIT_COMMIT || 'local').slice(0, 7)),
+  },
+
   // Producción: fuera los console.log (warn/error se conservan para
   // diagnóstico). Cada log construye strings y toca el hilo principal.
   esbuild: command === 'build'

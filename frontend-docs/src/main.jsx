@@ -34,3 +34,7 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw-campo.js').catch(() => {});
   });
 }
+
+// El commit desplegado, a la vista: escribe `__ALEPHIA_BUILD` en la
+// consola del navegador. El porque, en vite.config.js.
+try { window.__ALEPHIA_BUILD = __ALEPHIA_BUILD__; } catch { /* sin define */ }
