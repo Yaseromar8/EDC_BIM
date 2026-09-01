@@ -55,6 +55,27 @@ except ImportError:
     pass
 
 
+def _opcion(nombre):
+    """El valor de --algo, si viene."""
+    return sys.argv[sys.argv.index(nombre) + 1] if nombre in sys.argv else None
+
+
+def _conexion_desde_argumentos():
+    """TODO EN UN SOLO COMANDO.
+
+    La primera version pedia exportar DB_HOST/DB_NAME/DB_USER en una terminal y
+    ejecutar el script en otra linea. El dueño le dio a los dos botones y «no
+    paso nada»: cada bloque abre UNA TERMINAL NUEVA, asi que las variables del
+    primero no llegan al segundo. Un procedimiento que solo funciona si sabes
+    eso es un procedimiento roto.
+    """
+    for opcion, variable in (('--host', 'DB_HOST'), ('--base', 'DB_NAME'),
+                             ('--usuario', 'DB_USER'), ('--puerto', 'DB_PORT')):
+        valor = _opcion(opcion)
+        if valor:
+            os.environ[variable] = valor
+
+
 def _clave_desde_fichero():
     """La contraseña, desde un fichero del dueño. NUNCA por pantalla ni por chat.
 
@@ -69,6 +90,7 @@ def _clave_desde_fichero():
         os.environ['DB_PASS'] = f.read().strip()
 
 
+_conexion_desde_argumentos()
 _clave_desde_fichero()
 
 
@@ -92,10 +114,12 @@ def _revisar_conexion():
     print('  A) DESDE EL PORTAL, sin credenciales: entra como admin y archiva')
     print('     las obras de prueba. Es el mismo efecto y no necesita esto.')
     print()
-    print('  B) Con las variables de Render en esta terminal:')
-    print('       $env:DB_HOST="..."; $env:DB_NAME="..."; $env:DB_USER="..."')
-    print('     y la contrasena SIN teclearla, desde tu fichero:')
-    print('       python archivar_obras_de_prueba.py --clave D:/copias-ecd/clave-app.txt')
+    print('  B) EN UNA SOLA LINEA, con los datos de Render (Environment del')
+    print('     servicio backend). La contrasena NO se teclea: se lee de tu fichero.')
+    print()
+    print('     python archivar_obras_de_prueba.py --host EL_HOST'
+          ' --base LA_BASE --usuario EL_USUARIO'
+          ' --clave D:/copias-ecd/clave-app.txt')
     print()
     print('Los valores estan en Render -> el servicio backend -> Environment.')
     sys.exit(2)
