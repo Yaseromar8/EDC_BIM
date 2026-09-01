@@ -1,0 +1,313 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   ALEPHIA · FUENTE CANÓNICA DEL SISTEMA VISUAL
+   ═══════════════════════════════════════════════════════════════════════
+
+   ESTE FICHERO ES LA ÚNICA FUENTE. Lo consumen las dos aplicaciones:
+
+       frontend-docs/src/index.css   →  @import '../../design/alephia.tokens.css';
+       frontend-react/src/index.css  →  @import '../../design/alephia.tokens.css';
+
+   No se copia. Si algún día hay dos copias, el sistema habrá dejado de
+   existir: eso es exactamente lo que UX-01 vino a corregir --los mismos
+   colores estaban declarados dos veces con nombres distintos, y uno de los
+   valores ya había divergido (#F3F6F8 en el portal, #F4F6F8 en el visor).
+
+   ───────────────────────────────────────────────────────────────────────
+   TRES NIVELES, Y LA REGLA QUE LOS SEPARA
+   ───────────────────────────────────────────────────────────────────────
+   R1 · Ningún componente consume una primitiva. Solo semánticos.
+        Una primitiva no sabe de temas; usarla directamente es cómo se
+        rompe el modo oscuro.
+   R2 · Un semántico existe solo si nombra un USO, no un valor.
+   R3 · Un token de componente nace solo si NINGÚN semántico lo expresa,
+        y se documenta el porqué. Hoy: cero.
+
+   ───────────────────────────────────────────────────────────────────────
+   ESTE FICHERO NO CAMBIA NADA POR SÍ SOLO
+   ───────────────────────────────────────────────────────────────────────
+   Fase K1 del contrato: declara el vocabulario y NADIE lo consume todavía.
+   Los 112 tokens antiguos siguen intactos y con sus valores actuales. La
+   adopción ocurre después, por lotes verificables (UX-09, UX-11...).
+
+   Contrato completo, con la evidencia de cada valor: UX-01 · PASADA 1.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+
+  /* ─── PRIMITIVAS · 39 valores ────────────────────────────────────────
+     Casi todos existen ya en el código; solo dos son nuevos y están
+     marcados. Ningún componente debe leer estas variables (R1). */
+
+  /* Marca · azul. Navy y Signal son la identidad aprobada. */
+  --a-blue-900: #0F2940;   /* era --accent-hover                        */
+  --a-blue-800: #153754;   /* NAVY                                      */
+  --a-blue-600: #3E6F91;   /* SIGNAL                                    */
+  --a-blue-500: #4E82A6;   /* era --cta-primary-alto                    */
+  --a-blue-400: #6FA3C4;   /* NUEVO · texto interactivo sobre oscuro.
+                              Signal como TEXTO da 3.01:1 y no cumple AA;
+                              este da 5.98:1 sobre panel oscuro.        */
+  --a-blue-200: #B7C8D6;   /* era --border-accent                       */
+  --a-blue-100: #EDF3F8;   /* era --bg-accent                           */
+
+  /* Marca · acero */
+  --a-steel-500: #5C7182;  /* STEEL                                     */
+
+  /* Neutros · la rampa del portal, conservada entera */
+  --a-neutral-0:   #FFFFFF;
+  --a-neutral-25:  #FBFCFD;
+  --a-neutral-50:  #F8F9FA;
+  --a-neutral-100: #F3F6F8;   /* MIST                                   */
+  --a-neutral-200: #E3E6EA;
+  --a-neutral-300: #CBD2D9;
+  --a-neutral-400: #98A2AD;
+  --a-neutral-500: #667180;
+  --a-neutral-600: #4A5561;
+  --a-neutral-700: #343D47;
+  --a-neutral-800: #262E37;
+  --a-neutral-900: #0B0E12;   /* INK                                    */
+
+  /* Superficies oscuras. ink-800 y ink-750 tienen la MISMA luminancia
+     (1.003:1 entre sí) pero consumidores distintos: ink-800 pinta campos
+     de formulario del login, ink-750 el chrome del visor. Si se unifican
+     o no lo decide UX-09; el canon registra los dos. */
+  --a-ink-900: #0B0E12;    /* = INK · fondo del tema oscuro             */
+  --a-ink-800: #111925;    /* era --cta-surface   · controles           */
+  --a-ink-750: #13191F;    /* era --alephia-surface · chrome del visor  */
+  --a-ink-700: #18212A;    /* era --alephia-surface-raised              */
+  --a-ink-600: #24384C;    /* era --cta-line                            */
+  --a-ink-500: #3A5670;    /* era --cta-line-fuerte                     */
+
+  /* Éxito */
+  --a-green-600: #1E6B45;  /* era --success                             */
+  --a-green-400: #5FBE92;  /* NUEVO · no existía éxito para oscuro.
+                              #1E6B45 sobre panel oscuro no es legible. */
+  --a-green-200: #BFDFCF;
+  --a-green-100: #EEF8F3;
+
+  /* Peligro */
+  --a-red-700: #8F1E17;
+  --a-red-600: #B3261E;
+  --a-red-400: #FF6B6B;    /* era --cta-danger                          */
+  --a-red-200: #EEC6C3;
+  --a-red-100: #FDF0EF;
+
+  /* Aviso */
+  --a-amber-700: #8A5A00;
+  --a-amber-400: #F5A524;  /* era --cta-warn                            */
+  --a-amber-200: #E6D3A8;
+  --a-amber-100: #FBF4E6;
+
+  /* ─── CANALES · 3 ────────────────────────────────────────────────────
+     Los mismos colores en canales, para poder aplicarles alfa. Un velo o
+     una sombra NO son un color: son compuestos. Sin esto habría que
+     escribir el rgba() a mano y el sistema perdería su trazabilidad
+     (regla T4a-2 del contrato). */
+  --a-ink-900-rgb:  11 14 18;
+  --a-blue-600-rgb: 62 111 145;
+  --a-blue-400-rgb: 111 163 196;
+
+  /* ─── TIPOGRAFÍA ─────────────────────────────────────────────────────
+     Ocho roles. Hoy hay 23 tamaños distintos; los dominantes son 13, 12,
+     11 y 14 px, y eso dice algo cierto: esta es una interfaz DENSA de
+     obra, no una web. La escala respeta esa densidad. */
+  --a-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --a-font-mono: 'SF Mono', 'Fira Code', Consolas, monospace;
+
+  --a-type-display-size: 24px;  --a-type-display-weight: 700;  --a-type-display-lh: 1.15;
+  --a-type-heading-size: 20px;  --a-type-heading-weight: 600;  --a-type-heading-lh: 1.2;
+  --a-type-title-size:   16px;  --a-type-title-weight:   600;  --a-type-title-lh:   1.3;
+  --a-type-body-size:    13px;  --a-type-body-weight:    400;  --a-type-body-lh:    1.55;
+  --a-type-body-lg-size: 14px;  --a-type-body-lg-weight: 400;  --a-type-body-lg-lh: 1.5;
+  --a-type-label-size:   12px;  --a-type-label-weight:   500;  --a-type-label-lh:   1.35;
+  --a-type-caption-size: 11px;  --a-type-caption-weight: 400;  --a-type-caption-lh: 1.4;
+  --a-type-numeric-size: 13px;  --a-type-numeric-weight: 500;  --a-type-numeric-lh: 1.4;
+
+  /* ─── ESPACIADO ──────────────────────────────────────────────────────
+     El nombre ES el valor, a propósito: con pasos abstractos nadie
+     recuerda si space-4 son 4 px o el cuarto paso, y se acaba midiendo a
+     ojo. Los 197 usos de 6 y 10 px que hoy quedan fuera de escala NO se
+     migran aquí: eso mueve píxeles y es UX-19. */
+  --a-space-0:  0;
+  --a-space-2:  2px;
+  --a-space-4:  4px;
+  --a-space-8:  8px;    /* unidad base · 170 usos hoy                    */
+  --a-space-12: 12px;
+  --a-space-16: 16px;
+  --a-space-24: 24px;
+  --a-space-32: 32px;
+  --a-space-48: 48px;
+
+  /* ─── RADIO Y BORDE ──────────────────────────────────────────────────  */
+  --a-radius-none: 0;
+  --a-radius-sm:   2px;
+  --a-radius-md:   4px;    /* = el --radius actual                       */
+  --a-radius-lg:   8px;
+  --a-radius-full: 9999px;
+  --a-border-width-1: 1px;
+  --a-border-width-2: 2px;
+
+  /* ─── MOTION ─────────────────────────────────────────────────────────
+     Enteramente nuevo: hoy no existe ni un token de movimiento. */
+  --a-motion-fast: 120ms;
+  --a-motion-base: 180ms;
+  --a-motion-slow: 280ms;
+  --a-ease: cubic-bezier(.2, .7, .3, 1);
+
+  /* ─── BREAKPOINTS ────────────────────────────────────────────────────
+     CUIDADO: las custom properties NO funcionan dentro de @media NI de
+     @container -- la condición se evalúa antes de sustituirlas, así que
+     `@media (min-width: var(--a-bp-md))` es CSS inválido y falla en
+     silencio. Estos tokens son para leer desde JavaScript; en las
+     condiciones se escribe el valor literalmente. Un mecanismo real ahí
+     exige @custom-media vía PostCSS: se adopta en UX-17. */
+  --a-bp-sm:  480px;
+  --a-bp-md:  768px;   /* tablet · el supervisor en obra · 7 usos hoy    */
+  --a-bp-lg: 1024px;   /* escritorio · 8 usos hoy                        */
+  --a-bp-xl: 1280px;   /* nuevo · sin uso todavía                        */
+
+  /* ─── CAPAS ──────────────────────────────────────────────────────────
+     Finitas y con nombre. Hoy hay 73 valores de z-index sueltos, con
+     techo en 1 000 000 (portal) y 99 999 (visor), donde un mismo modal
+     puja contra sí mismo. Con esta escala esa subasta no tiene dónde
+     ocurrir: `system` es el techo y no hay nada encima. */
+  --a-layer-base:     0;
+  --a-layer-raised:   10;
+  --a-layer-sticky:   100;
+  --a-layer-dropdown: 200;
+  --a-layer-popover:  300;
+  --a-layer-drawer:   400;
+  --a-layer-modal:    500;
+  --a-layer-toast:    600;
+  --a-layer-tooltip:  700;
+  --a-layer-system:   800;
+
+  /* ═══════════════════════════════════════════════════════════════════
+     SEMÁNTICOS · TEMA CLARO
+     Esto es lo que consumen los componentes (R1). Mismo vocabulario en
+     los dos temas; solo cambia a qué primitiva resuelve cada uno.
+     ═══════════════════════════════════════════════════════════════════ */
+
+  /* Superficies */
+  --a-surface-base:    var(--a-neutral-0);
+  --a-surface-raised:  var(--a-neutral-0);
+  --a-surface-chrome:  var(--a-neutral-0);
+  --a-surface-sunken:  var(--a-neutral-50);
+  --a-field-surface:   var(--a-neutral-0);
+  --a-surface-overlay: rgb(var(--a-ink-900-rgb) / .45);
+
+  /* Texto */
+  --a-text-primary:   var(--a-neutral-900);
+  --a-text-secondary: var(--a-neutral-600);
+  --a-text-muted:     var(--a-neutral-500);
+  --a-text-disabled:  var(--a-neutral-400);
+  --a-text-on-action: var(--a-neutral-0);
+
+  /* Bordes */
+  --a-border-subtle:  var(--a-neutral-100);
+  --a-border-default: var(--a-neutral-200);
+  --a-border-strong:  var(--a-neutral-300);
+
+  /* Acciones. action-primary es FONDO; action-text es para texto y
+     enlaces -- separarlos no es cosmético: Signal como texto sobre
+     oscuro da 3.01:1 y no cumple AA. */
+  --a-action-primary:       var(--a-blue-800);
+  --a-action-primary-hover: var(--a-blue-900);
+  --a-action-text:          var(--a-blue-600);
+  --a-action-secondary:     var(--a-neutral-100);
+  --a-action-danger:        var(--a-red-600);
+
+  /* Estados de interacción */
+  --a-state-hover:    var(--a-neutral-100);
+  --a-state-selected: var(--a-blue-100);
+  --a-focus-ring:     0 0 0 3px rgb(var(--a-blue-600-rgb) / .30);
+
+  /* Sombras */
+  --a-shadow-sm: 0 1px 2px rgb(var(--a-ink-900-rgb) / .06);
+  --a-shadow-md: 0 4px 12px rgb(var(--a-ink-900-rgb) / .10);
+  --a-shadow-lg: 0 8px 24px rgb(var(--a-ink-900-rgb) / .14);
+
+  /* Estado del sistema */
+  --a-status-success:         var(--a-green-600);
+  --a-status-success-surface: var(--a-green-100);
+  --a-status-success-border:  var(--a-green-200);
+  --a-status-warning:         var(--a-amber-700);
+  --a-status-warning-surface: var(--a-amber-100);
+  --a-status-warning-border:  var(--a-amber-200);
+  --a-status-danger:          var(--a-red-600);
+  --a-status-danger-surface:  var(--a-red-100);
+  --a-status-danger-border:   var(--a-red-200);
+
+  /* Estado DOCUMENTAL · ISO 19650. Semántica de dominio, no decoración:
+     se conserva tal cual estaba decidida. */
+  --a-estado-wip:       var(--a-neutral-500);
+  --a-estado-shared:    var(--a-blue-800);
+  --a-estado-published: var(--a-green-600);
+  --a-estado-archived:  var(--a-neutral-400);
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+   SEMÁNTICOS · TEMA OSCURO
+   ═════════════════════════════════════════════════════════════════════
+
+   SELECCIÓN EXPLÍCITA, no automática. No se usa `prefers-color-scheme` a
+   propósito: en este producto el tema no es una preferencia del usuario
+   sino una decisión de aplicación --el portal trabaja en claro y el visor
+   en oscuro--. Que el sistema operativo del usuario cambiara el aspecto
+   del expediente sería un efecto no pedido.
+
+   EQUIVALENTE NO ES INVERTIDO: `--a-action-primary` usa Navy en claro y
+   Signal en oscuro, porque Navy sobre #0B0E12 no tiene contraste
+   suficiente. Invertir mecánicamente es el error clásico.
+
+   Cobertura verificada: todo semántico definido arriba se redefine aquí. */
+
+[data-theme="dark"] {
+
+  --a-surface-base:    var(--a-ink-900);
+  --a-surface-raised:  var(--a-ink-700);
+  --a-surface-chrome:  var(--a-ink-750);
+  --a-surface-sunken:  var(--a-neutral-900);
+  --a-field-surface:   var(--a-ink-800);
+  --a-surface-overlay: rgb(var(--a-ink-900-rgb) / .72);
+
+  --a-text-primary:   var(--a-neutral-100);
+  --a-text-secondary: var(--a-neutral-300);
+  --a-text-muted:     var(--a-neutral-400);   /* steel daba 3.21:1 · no cumple AA */
+  --a-text-disabled:  var(--a-neutral-600);
+  --a-text-on-action: var(--a-neutral-0);
+
+  --a-border-subtle:  var(--a-ink-800);
+  --a-border-default: var(--a-ink-600);
+  --a-border-strong:  var(--a-ink-500);
+
+  --a-action-primary:       var(--a-blue-600);
+  --a-action-primary-hover: var(--a-blue-500);
+  --a-action-text:          var(--a-blue-400);
+  --a-action-secondary:     var(--a-ink-700);
+  --a-action-danger:        var(--a-red-400);
+
+  --a-state-hover:    var(--a-ink-700);
+  --a-state-selected: var(--a-ink-600);
+  --a-focus-ring:     0 0 0 3px rgb(var(--a-blue-400-rgb) / .45);
+
+  /* Sobre #0B0E12 una sombra no se ve: en oscuro el mismo token resuelve
+     a un borde luminoso, que es como se separa una superficie elevada. */
+  --a-shadow-sm: 0 0 0 1px rgb(255 255 255 / .04);
+  --a-shadow-md: 0 0 0 1px rgb(255 255 255 / .07);
+  --a-shadow-lg: 0 0 0 1px rgb(255 255 255 / .10);
+
+  --a-status-success:         var(--a-green-400);
+  --a-status-success-surface: var(--a-ink-700);
+  --a-status-success-border:  var(--a-green-600);
+  --a-status-warning:         var(--a-amber-400);
+  --a-status-warning-surface: var(--a-ink-700);
+  --a-status-warning-border:  var(--a-amber-700);
+  --a-status-danger:          var(--a-red-400);
+  --a-status-danger-surface:  var(--a-ink-700);
+  --a-status-danger-border:   var(--a-red-600);
+
+  --a-estado-wip:       var(--a-neutral-400);
+  --a-estado-shared:    var(--a-blue-600);
+  --a-estado-published: var(--a-green-400);
+  --a-estado-archived:  var(--a-neutral-600);
+}

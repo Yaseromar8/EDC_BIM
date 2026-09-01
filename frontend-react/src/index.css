@@ -1,3 +1,9 @@
+/* LA FUENTE CANÓNICA DEL SISTEMA VISUAL, PRIMERO.
+   Una sola fuente para el portal y el visor: design/alephia.tokens.css.
+   Debe ir ANTES que cualquier regla -- el CSS exige que los @import
+   encabecen la hoja. Ver UX-01 · fase K1. */
+@import '../../design/alephia.tokens.css';
+
 /* index.css - Zero Interference Reset */
 
 /* 
