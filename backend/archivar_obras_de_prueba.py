@@ -25,6 +25,7 @@ Hay en el repositorio un `delete_projects.py` que ejecuta
 confirmacion y contra el .env de produccion. Se llevaria tambien
 PQT8_INTERFERENCIAS, que es una de las dos que se conservan. No usarlo.
 """
+import io
 import os
 import sys
 
@@ -36,13 +37,72 @@ CONSERVAR = {
 
 APLICAR = '--confirmar' in sys.argv
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# LA CONSOLA DE WINDOWS ES cp1252 y este fichero es UTF-8: una flecha o una
+# «ñ» en un nombre de obra reventaba el script con UnicodeEncodeError -- ocurrio
+# de verdad, y el dueño solo vio «no muestra ningun cuadro». Los mensajes
+# propios van en ASCII; esto cubre lo que venga de la base.
+try:
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
+
+AQUI = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(AQUI)
 try:
     from dotenv import load_dotenv
-    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
+    load_dotenv(os.path.join(AQUI, '.env'))
 except ImportError:
     pass
-from db import get_db_connection
+
+
+def _clave_desde_fichero():
+    """La contraseña, desde un fichero del dueño. NUNCA por pantalla ni por chat.
+
+        python archivar_obras_de_prueba.py --clave D:/copias-ecd/clave-app.txt
+
+    Se lee, se pone en el entorno de ESTE proceso y no se imprime jamas.
+    """
+    if '--clave' not in sys.argv:
+        return
+    ruta = sys.argv[sys.argv.index('--clave') + 1]
+    with io.open(ruta, encoding='utf-8') as f:
+        os.environ['DB_PASS'] = f.read().strip()
+
+
+_clave_desde_fichero()
+
+
+def _revisar_conexion():
+    """Decir QUE falta, en vez de estrellarse contra localhost.
+
+    En la maquina del dueño no hay `backend/.env`: la base vive en Render. Sin
+    esos datos, `db.py` se va a localhost:5432 y el script moria con un
+    traceback de psycopg2 -- «no muestra ningun cuadro», que es exactamente lo
+    que reporto. Un fallo de configuracion tiene que leerse como tal.
+    """
+    faltan = [v for v in ('DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS')
+              if not os.environ.get(v)]
+    if not faltan:
+        return
+    print('No puedo conectarme a la base: faltan %s.' % ', '.join(faltan))
+    print()
+    print('La base esta en Render y esta maquina no tiene backend/.env.')
+    print('Dos caminos:')
+    print()
+    print('  A) DESDE EL PORTAL, sin credenciales: entra como admin y archiva')
+    print('     las obras de prueba. Es el mismo efecto y no necesita esto.')
+    print()
+    print('  B) Con las variables de Render en esta terminal:')
+    print('       $env:DB_HOST="..."; $env:DB_NAME="..."; $env:DB_USER="..."')
+    print('     y la contrasena SIN teclearla, desde tu fichero:')
+    print('       python archivar_obras_de_prueba.py --clave D:/copias-ecd/clave-app.txt')
+    print()
+    print('Los valores estan en Render -> el servicio backend -> Environment.')
+    sys.exit(2)
+
+
+_revisar_conexion()
+from db import get_db_connection  # noqa: E402  (despues de cargar el entorno)
 
 
 def quien_la_creo(cursor, project_id):
@@ -130,7 +190,7 @@ def main():
                 (autor or '(sin registro)')[:26], que))
 
         print('-' * 118)
-        print('Total %d obras · se conservan %d · se archivan %d'
+        print('Total %d obras - se conservan %d - se archivan %d'
               % (len(obras), len(CONSERVAR), len(a_archivar)))
 
         con_docs = [x for x in a_archivar if x[2]]
