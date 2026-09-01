@@ -430,6 +430,38 @@ export default function PDFViewer({ url, preparando = false,
   // eso salian «sin vista previa» o en blanco. Solo se piden cuando la tira
   // se ABRE: quien no la usa no paga nada.
   const [minisTira, setMinisTira] = useState({});
+
+  // LA SILUETA DEL PLANO, AL INSTANTE.
+  //
+  // «En la cinta lo que demora es el cambio. Es demasiado y asi el supervisor
+  // o gerente se aburrira y preferira no usar el visor.»
+  //
+  // Y tenia razon: por mucho que se adelante el permiso y la descarga, queda
+  // el DIBUJADO DEL VECTOR, que en un A1 denso son segundos y no hay forma de
+  // acortarlo en el navegador. Ese es el limite de dibujar vector en el
+  // cliente, y por eso ACC NO LO HACE: rasteriza en el servidor y manda
+  // IMAGENES, que aparecen en cuanto llegan.
+  //
+  // Nosotros YA RASTERIZAMOS en el servidor -- la primera pagina de cada plano,
+  // cacheada en el almacen, que es lo que alimenta esta misma cinta. Y cuando
+  // la cinta esta abierta el lector YA TIENE su URL firmada en la mano y el
+  // navegador YA LA BAJO para pintar la miniatura. Enseñarla ampliada al pulsar
+  // no cuesta ni una peticion ni un milisegundo de red: el plano aparece EN EL
+  // ACTO, suave, y se afina solo cuando el vector termina.
+  //
+  // Es ademas lo que el dueño pidio con todas las letras hace dos vueltas --
+  // «el logo debe aparecer solo hasta que se muestra la silueta del PDF».
+  //
+  // DESDE EL CLIC, NO DESDE LA DESCARGA. Medido en el banco con un salto frio:
+  // la silueta salia a los 1080 ms porque `planoListo` no caia hasta que
+  // llegaba la URL firmada. Pero al pulsar YA SE SABE que lamina se pidio, asi
+  // que ese valor se apaga en el clic y la silueta sale a los 4 ms. Importa
+  // sobre todo en produccion, donde el dueño midio autorizaciones de 793, 2170
+  // y hasta 8046 ms con la pantalla en blanco.
+  //
+  // SOLO EN LA PAGINA 1: la miniatura ES la primera pagina. Enseñarla mientras
+  // se abre la 3 seria mentir sobre lo que se esta viendo.
+  const [siluetaLista, setSiluetaLista] = useState(false);
   const [tiraAbierta, _setTiraAbierta] = useState(tiraEstaAbierta);
   const setTiraAbierta = (v) => {
     const valor = typeof v === 'function' ? v(tiraAbierta) : v;
@@ -438,6 +470,13 @@ export default function PDFViewer({ url, preparando = false,
   };
   useEffect(() => {
     setSaltandoA(null);
+    setSiluetaLista(false);   // la silueta es la del plano NUEVO, no la anterior
+    // EL PLANO EN PANTALLA YA NO ES EL QUE SE PIDIO -- desde el clic, no desde
+    // que llega la URL firmada. Medido en el banco: con dos señales distintas
+    // (`preparando` para el principio y `planoListo` para el resto) quedaba un
+    // hueco de 4 ms entre que una se apagaba y la otra caia, y la silueta
+    // PARPADEABA. Un solo valor no puede tener huecos.
+    setPlanoListo(false);
     cronoIniciar(fileName);   // el usuario acaba de pedir esta lamina
   }, [fileName]);
   const indiceActual = hermanos.findIndex(h => h.name === fileName);
@@ -456,6 +495,22 @@ export default function PDFViewer({ url, preparando = false,
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiraAbierta, firmaHermanos, obraDelDocumento]);
+
+  // La miniatura de la lamina ACTUAL, tambien con la cinta cerrada.
+  //
+  // El bloque de arriba solo las pide al abrir la cinta; quien llega a un plano
+  // desde el explorador se quedaba sin silueta. Es UNA peticion al mismo sitio
+  // y solo cuando falta, asi que no repite trabajo.
+  const urnActual = indiceActual >= 0 ? (hermanos[indiceActual] || {}).gcs_urn : null;
+  const siluetaUrl = urnActual ? minisTira[urnActual] : null;
+  useEffect(() => {
+    if (!urnActual || siluetaUrl || !obraDelDocumento) return undefined;
+    let vivo = true;
+    urlsDeMiniaturas(obraDelDocumento, [urnActual]).then(({ urls }) => {
+      if (vivo && urls && urls[urnActual]) setMinisTira(prev => ({ ...prev, ...urls }));
+    });
+    return () => { vivo = false; };
+  }, [urnActual, siluetaUrl, obraDelDocumento]);
 
 
   // LA CINTA SE CENTRA UNA SOLA VEZ: AL ABRIRLA.
@@ -1759,12 +1814,20 @@ export default function PDFViewer({ url, preparando = false,
             </div>
         )}
 
+          {/* LA SILUETA (ver arriba): aparece al instante y se afina sola. */}
+          {siluetaUrl && !planoListo && currentPage === 1 && (
+            <img className={`pdf-silueta${siluetaLista ? ' se-ve' : ''}`}
+                 src={siluetaUrl} alt="" aria-hidden="true"
+                 onLoad={() => setSiluetaLista(true)}
+                 onError={() => setSiluetaLista(false)} />
+          )}
+
           {/* LA MARCA SE ANCLA A LA ZONA, NO AL CONTENEDOR QUE SE DESPLAZA.
               Estaba dentro del contenedor con scroll, asi que su «centro» era
               el centro del CONTENIDO: al alejar la lamina y cambiar de plano
               aparecia lejos, fuera de la vista. Aqui el centro es el de lo que
               se ve, siempre. */}
-          <div className={`pdf-espera-encima${mostrarEspera ? ' se-ve' : ''}`}>
+          <div className={`pdf-espera-encima${mostrarEspera && !siluetaLista ? ' se-ve' : ''}`}>
             <MarcaEsperando
                 porcentaje={loading && progress > 0 && progress < 100 ? progress : null} />
           </div>

@@ -594,13 +594,6 @@
 }
 
 
-/* ── LA ESPERA, VISIBLE ──────────────────────────────────────────────────
-   Barra fina arriba del escenario. Cuando se puede medir (la descarga) es
-   una barra de verdad; cuando no (permiso y dibujado), se desliza para
-   decir «sigo trabajando» sin fingir un porcentaje que no existe. */
-
-
-}
 
 
 /* El plano anterior se atenua mientras llega el nuevo: sigue ahi para no
@@ -716,4 +709,26 @@
 
 @media (prefers-reduced-motion: reduce) {
   .pdf-marca-trazo, .pdf-marca-simbolo { animation: none; }
+}
+
+/* LA SILUETA DEL PLANO, MIENTRAS SE DIBUJA EL VECTOR.
+   Es la miniatura que el servidor ya rasterizo y que el navegador ya bajo para
+   la cinta: aparece en el acto, sin red. Debajo del muelle (8) y de la marca
+   (13), encima del lienzo. El porque completo, en PDFViewer.jsx. */
+.pdf-silueta {
+  position: absolute;
+  inset: 10px;
+  width: calc(100% - 20px);
+  height: calc(100% - 20px);
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 6;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.pdf-silueta.se-ve { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pdf-silueta { transition: none; }
 }

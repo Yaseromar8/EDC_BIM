@@ -102,6 +102,11 @@ copias/
 #   cp PDF/<plano>.pdf frontend-docs/public/_probar/plano-A.pdf   (y B, C)
 frontend-docs/public/_probar/
 
+# Salidas de construccion del banco de pruebas (se regeneran solas; el porque,
+# en frontend-docs/vite.banco.config.js).
+frontend-docs/dist-banco/
+frontend-docs/dist-verifica/
+
 # Recursos de pdf.js copiados del paquete instalado al empaquetar
 # (ver vite.config.js). Vienen de node_modules: no se versionan.
 frontend-docs/public/pdfjs/

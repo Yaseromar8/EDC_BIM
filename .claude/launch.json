@@ -1,6 +1,59 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "visor-dev", "url": "http://localhost:5181" }
+    {
+      "name": "backend",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "server.py"
+      ],
+      "cwd": "backend",
+      "port": 3000
+    },
+    {
+      "name": "visor",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend-react",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5173",
+        "--strictPort"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "docs",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend-docs",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5174",
+        "--strictPort"
+      ],
+      "port": 5174
+    },
+    {
+      "name": "banco",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "preview",
+        "--config",
+        "vite.banco.config.js",
+        "--port",
+        "5180",
+        "--strictPort"
+      ],
+      "cwd": "frontend-docs",
+      "port": 5180
+    }
   ]
 }

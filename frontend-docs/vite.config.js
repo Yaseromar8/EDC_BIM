@@ -47,6 +47,18 @@ export default defineConfig(({ command }) => ({
     ? { pure: ['console.log', 'console.debug'], drop: ['debugger'] }
     : undefined,
 
+  // EL BANCO DE PRUEBAS, VISIBLE PARA EL OPTIMIZADOR.
+  //
+  // `probar-lector.html` es una SEGUNDA entrada y vite solo rastrea index.html
+  // para decidir que dependencias pre-empaqueta. Al abrir el banco descubria
+  // React a mitad de carga, volvia a optimizar y la pagina se quedaba con DOS
+  // copias: «Invalid hook call» y el lector sin montar. Normalmente vite lo
+  // tapa recargando por HMR, pero aqui el websocket no conecta y no puede.
+  //
+  // Solo afecta al servidor de desarrollo: `optimizeDeps` no interviene en la
+  // construccion de produccion.
+  optimizeDeps: { entries: ['index.html', 'probar-lector.html'] },
+
   build: {
     chunkSizeWarningLimit: 1200,
     rollupOptions: {

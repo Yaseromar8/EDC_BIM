@@ -25,6 +25,11 @@ const PLANOS = [
   { id: 'a', name: 'plano-A.pdf', gcs_urn: 'urn-a', url: '/_probar/plano-A.pdf' },
   { id: 'b', name: 'plano-B.pdf', gcs_urn: 'urn-b', url: '/_probar/plano-B.pdf' },
   { id: 'c', name: 'plano-C.pdf', gcs_urn: 'urn-c', url: '/_probar/plano-C.pdf' },
+  { id: 'd', name: 'plano-D.pdf', gcs_urn: 'urn-d', url: '/_probar/plano-D.pdf' },
+  { id: 'e', name: 'plano-E.pdf', gcs_urn: 'urn-e', url: '/_probar/plano-E.pdf' },
+  { id: 'f', name: 'plano-F.pdf', gcs_urn: 'urn-f', url: '/_probar/plano-F.pdf' },
+  { id: 'g', name: 'plano-G.pdf', gcs_urn: 'urn-g', url: '/_probar/plano-G.pdf' },
+  { id: 'h', name: 'plano-H.pdf', gcs_urn: 'urn-h', url: '/_probar/plano-H.pdf' },
 ];
 
 // Lo que tarda el backend en devolver la URL firmada. Medido en produccion
@@ -79,5 +84,33 @@ setInterval(() => {
     if (r && r.textContent === 'pedido…') r.textContent = 'dibujado';
   }
 }, 60);
+
+// EL ENDPOINT DE MINIATURAS, SIMULADO.
+//
+// El banco no tiene backend, y la silueta se alimenta de las URLs firmadas que
+// devuelve /api/docs/miniaturas/urls. Aqui se responde con imagenes locales
+// generadas EXACTAMENTE como las genera el servidor (primera pagina a 420 px),
+// asi que lo que se prueba es el camino REAL del componente y no un atajo.
+const fetchReal = window.fetch.bind(window);
+window.fetch = (entrada, opciones) => {
+  const dir = typeof entrada === 'string' ? entrada : (entrada && entrada.url) || '';
+  if (dir.includes('/api/docs/miniaturas/urls')) {
+    return Promise.resolve(new Response(JSON.stringify({
+      success: true,
+      urls: {
+        'urn-a': '/_probar/thumb-a.jpg',
+        'urn-b': '/_probar/thumb-b.jpg',
+        'urn-c': '/_probar/thumb-c.jpg',
+        'urn-d': '/_probar/thumb-d.jpg',
+        'urn-e': '/_probar/thumb-e.jpg',
+        'urn-f': '/_probar/thumb-f.jpg',
+        'urn-g': '/_probar/thumb-g.jpg',
+        'urn-h': '/_probar/thumb-h.jpg',
+      },
+      pendientes: [],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  }
+  return fetchReal(entrada, opciones);
+};
 
 createRoot(document.getElementById('raiz')).render(<Banco />);
