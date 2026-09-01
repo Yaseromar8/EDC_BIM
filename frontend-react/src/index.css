@@ -37,14 +37,12 @@
      LA interacción (y su hover, la única variante). Los colores que
      codifican información (semánticos, fases, categorías, curvas, datos
      civiles y todo lo 4D) NO derivan de aquí: son datos, no identidad. */
-  --alephia-bg: #0B0E12;
-  --alephia-surface: #13191F;
-  --alephia-surface-raised: #18212A;
-  --alephia-border: #2A333C;
-  --alephia-brand: #153754;
-  --alephia-interactive: #3E6F91;
-  --alephia-interactive-hover: #4E82A6;
-  --alephia-text: #F4F6F8;
+  --alephia-bg: var(--a-ink-900);
+  --alephia-surface: var(--a-ink-750);
+  --alephia-surface-raised: var(--a-ink-700);
+  --alephia-brand: var(--a-blue-800);
+  --alephia-interactive: var(--a-blue-600);
+  --alephia-interactive-hover: var(--a-blue-500);
   --alephia-text-muted: #AAB3BC;
 
   font-family: 'Artifakt Element', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;

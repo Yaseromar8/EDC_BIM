@@ -9,16 +9,14 @@
     /* Zona oscura anclada a ALEPHIA (mismo tratamiento que el login de Docs):
        Ink de fondo, superficie Ink->Navy, Signal como primario de interaccion.
        Los avisos (warn/danger) se conservan: codifican estado, no marca. */
-    --cta-ink: #0B0E12;                 /* ALEPHIA Ink */
-    --cta-surface: #111925;
-    --cta-line: #24384C;
-    --cta-line-fuerte: #3A5670;
-    --cta-text: #F3F6F8;                /* ALEPHIA Mist */
+    --cta-ink: var(--a-ink-900);                 /* ALEPHIA Ink */
+    --cta-surface: var(--a-ink-800);
+    --cta-line: var(--a-ink-600);
+    --cta-line-fuerte: var(--a-ink-500);
+    --cta-text: var(--a-neutral-100);                /* ALEPHIA Mist */
     --cta-muted: #A9B6C2;
-    --cta-primary: var(--alephia-interactive);
-    --cta-primary-alto: var(--alephia-interactive-hover);
-    --cta-warn: #F5A524;
-    --cta-danger: #FF6B6B;
+    --cta-primary: var(--a-blue-600);
+    --cta-primary-alto: var(--a-blue-500);
 }
 
 .cta-login {

@@ -6,12 +6,10 @@
    de verdad y no guardan ningún color propio. No añadas valores literales
    aquí — el tema vive en index.css. */
 :root {
-  --adsk-blue: var(--accent);
-  --adsk-dark-blue: var(--accent-hover);
-  --adsk-bg-gray: var(--bg-secondary);
-  --adsk-border: var(--border);
-  --adsk-text: var(--text-primary);
-  --adsk-text-light: var(--text-secondary);
+  --adsk-blue: var(--a-blue-800);
+  --adsk-dark-blue: var(--a-blue-900);
+  --adsk-border: var(--a-neutral-200);
+  --adsk-text: var(--a-neutral-900);
 }
 
 .files-page-container {

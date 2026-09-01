@@ -21,7 +21,7 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 .pdf-viewer {
-  --pdf-chrome: #ffffff;
+  --pdf-chrome: var(--a-neutral-0);
   --pdf-field: #f4f5f7;
   --pdf-line: #e2e6ea;
   --pdf-ink: #1a2430;
@@ -29,8 +29,8 @@
   --pdf-muted: #7b8794;
   --pdf-hover: #eef1f4;
   --pdf-active-bg: #e7eff6;
-  --pdf-active: var(--alephia-navy, #153754);
-  --pdf-focus: var(--accent, #3e6f91);
+  --pdf-active: var(--a-blue-800);
+  --pdf-focus: var(--a-blue-800);
   --pdf-shadow: 0 4px 16px rgba(20, 30, 42, 0.12), 0 1px 3px rgba(20, 30, 42, 0.08);
 
   position: absolute;
