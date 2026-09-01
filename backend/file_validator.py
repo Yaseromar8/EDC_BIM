@@ -16,7 +16,24 @@ import os
 # ── Tipos MIME permitidos por categoria ─────────────────────────────────────
 ALLOWED_TYPES = {
     # Documentos tecnicos
-    'application/pdf':                        {'max_mb': 200, 'extensions': ['.pdf']},
+    # EL PDF ES EL FORMATO DEL EXPEDIENTE: mismo techo que el resto de lo
+    # pesado (CAD, video, ZIP) y que el failsafe absoluto.
+    #
+    # Estaba en 200 MB y rechazaba un plano topografico escaneado de 272 MB
+    # -- documento legitimo de obra que el CDE existe para custodiar. La
+    # incoherencia era doble: una extension DESCONOCIDA recibia el techo
+    # absoluto (2048) y el PDF, que es el formato central, el mas estrecho.
+    #
+    # Subirlo no carga al servidor: la validacion es sobre el tamano DECLARADO
+    # y luego se abre una sesion reanudable de GCS -- los bytes van del
+    # navegador a Google sin pasar por aqui.
+    #
+    # LO QUE SI CAMBIA, y conviene saberlo: por encima de 120 MB no se genera
+    # miniatura (ver MAX_ORIGEN en gcs_manager.get_or_create_thumbnail), asi
+    # que estos ficheros no tienen vista previa en el explorador ni en la cinta
+    # del lector, y abrirlos en el lector web sera lento. Se guardan, se
+    # comparten y se descargan; para revisarlos, el escritorio.
+    'application/pdf':                        {'max_mb': 2048, 'extensions': ['.pdf']},
     'application/msword':                     {'max_mb': 50,  'extensions': ['.doc']},
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
                                               {'max_mb': 50,  'extensions': ['.docx']},
