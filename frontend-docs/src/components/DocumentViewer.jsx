@@ -571,8 +571,25 @@ export default function DocumentViewer({
             );
           }
           
-          // 4. NO PREVIEW FOR OTHERS IN SHARED MODE
-          if (!['.pdf', '.pdfx'].some(ext => lowerName.endsWith(ext)) && isShared) {
+          // 4. SIN VISTA PREVIA PARA EL RESTO, EN MODO COMPARTIDO
+          //
+          // EL CAD QUEDA FUERA DE ESTE CORTE, y esa es la correccion: la vista
+          // compartida de CAD YA ESTABA CONSTRUIDA -- estado `cadCompartido`,
+          // el endpoint /api/docs/cad/compartido/<share_id> con su decorador
+          // de solo lectura, y el visor con `urnDirecto` en la rama 6 -- pero
+          // esta rama devuelve ANTES para todo lo que no sea PDF, asi que la 6
+          // era inalcanzable. Resultado: el invitado solo podia descargar un
+          // DWG que el dueño ya estaba viendo en la web.
+          //
+          // Lo dijo el dueño: «comparto un CAD, le envio el link, y el otro
+          // usuario solo puede descargar, a pesar de que yo ya lo abri».
+          //
+          // No se abre ninguna puerta nueva: la rama 6 solo enseña el modelo si
+          // la obra YA lo tradujo, y un invitado nunca dispara una traduccion
+          // --el coste manda--; si no esta traducido, sigue viendo la descarga.
+          if (!['.pdf', '.pdfx'].some(ext => lowerName.endsWith(ext))
+              && !CAD_EXTENSIONS.some(ext => lowerName.endsWith(ext))
+              && isShared) {
              return (
                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#fff', width: '100%' }}>
                  <div style={{ background: '#f1f3f4', padding: 32, borderRadius: '50%', marginBottom: 24 }}>
