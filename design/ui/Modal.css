@@ -1,0 +1,81 @@
+/* MODAL · solo semánticos. */
+
+/* CAJA DE BORDE · la primitiva no puede depender del reset de quien la aloja.
+   Medido: .a-field__control con width:100% mas relleno y borde desbordaba su
+   panel 8,8 px EN EL VISOR y no en el portal. La primitiva era la misma; lo
+   distinto era la app: Docs declara un reset universal de box-sizing y el
+   visor no. Una primitiva compartida que solo funciona donde el anfitrion la
+   rescata no es compartida.
+   Se declara sobre los elementos QUE ESTA PRIMITIVA PINTA, uno a uno. Ni reset
+   universal ni comodines de descendencia: el contenido que el producto mete
+   dentro conserva su propia caja. */
+.a-modal--sm,
+.a-modal--md,
+.a-modal--lg,
+.a-modal__cabecera,
+.a-modal__titulo,
+.a-modal__cerrar,
+.a-modal__descripcion,
+.a-modal__cuerpo,
+.a-modal__pie {
+  box-sizing: border-box;
+}
+
+.a-modal--sm { width: 380px; }
+.a-modal--md { width: 560px; }
+.a-modal--lg { width: 820px; }
+
+.a-modal__cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--a-space-12);
+}
+
+.a-modal__titulo {
+  margin: 0;
+  font-size: var(--a-type-title-size);
+  font-weight: var(--a-type-title-weight);
+  line-height: var(--a-type-title-lh);
+  color: var(--a-text-primary);
+}
+
+.a-modal__cerrar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--a-radius-md);
+  background: transparent;
+  color: var(--a-text-muted);
+  cursor: pointer;
+  transition: background var(--a-motion-fast) var(--a-ease);
+}
+
+.a-modal__cerrar:hover { background: var(--a-state-hover); color: var(--a-text-primary); }
+.a-modal__cerrar:focus-visible { outline: none; box-shadow: var(--a-focus-ring); }
+
+.a-modal__descripcion {
+  margin: var(--a-space-4) 0 0;
+  font-size: var(--a-type-body-size);
+  line-height: var(--a-type-body-lh);
+  color: var(--a-text-secondary);
+}
+
+.a-modal__cuerpo {
+  margin-top: var(--a-space-16);
+  font-size: var(--a-type-body-size);
+  line-height: var(--a-type-body-lh);
+  color: var(--a-text-primary);
+}
+
+.a-modal__pie {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--a-space-8);
+  margin-top: var(--a-space-24);
+}

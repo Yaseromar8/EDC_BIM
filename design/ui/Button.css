@@ -1,0 +1,116 @@
+/* BUTTON · el rango se ve, y en los dos temas cumple contraste AA. */
+
+/* CAJA DE BORDE · la primitiva no puede depender del reset de quien la aloja.
+   Medido: .a-field__control con width:100% mas relleno y borde desbordaba su
+   panel 8,8 px EN EL VISOR y no en el portal. La primitiva era la misma; lo
+   distinto era la app: Docs declara un reset universal de box-sizing y el
+   visor no. Una primitiva compartida que solo funciona donde el anfitrion la
+   rescata no es compartida.
+   Se declara sobre los elementos QUE ESTA PRIMITIVA PINTA, uno a uno. Ni reset
+   universal ni comodines de descendencia: el contenido que el producto mete
+   dentro conserva su propia caja. */
+.a-btn,
+.a-btn__espera {
+  box-sizing: border-box;
+}
+
+.a-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--a-space-8);
+  border: var(--a-border-width-1) solid transparent;
+  border-radius: var(--a-radius-md);
+  font-family: var(--a-font-sans);
+  font-size: var(--a-type-body-size);
+  font-weight: var(--a-type-label-weight);
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--a-motion-fast) var(--a-ease),
+              border-color var(--a-motion-fast) var(--a-ease);
+}
+
+.a-btn--sm { padding: var(--a-space-4) var(--a-space-8);  min-height: 26px; }
+.a-btn--md { padding: var(--a-space-8) var(--a-space-12); min-height: 32px; }
+.a-btn--lg { padding: var(--a-space-12) var(--a-space-16); min-height: 40px; }
+
+.a-btn--primary {
+  background: var(--a-action-primary);
+  color: var(--a-text-on-action);
+}
+.a-btn--primary:hover:not(:disabled) { background: var(--a-action-primary-hover); }
+
+.a-btn--secondary {
+  background: var(--a-action-secondary);
+  border-color: var(--a-border-default);
+  color: var(--a-text-primary);
+}
+/* HOVER DE SECONDARY · el relleno solo NO basta, y no por culpa del componente.
+   `--a-state-hover` y `--a-action-secondary` resuelven al MISMO hex en los dos
+   temas (#F3F6F8 en claro, #18212A en oscuro), asi que la linea de fondo es hoy
+   un no-op comprobado con puntero real: cinco muestras, cero cambio. Separar
+   esos dos tokens es asunto del canon y queda FUERA de la enmienda autorizada,
+   asi que aqui se resuelve con lo que ya existe: el borde sube a
+   --a-border-strong. La linea de fondo se conserva porque expresa la intencion
+   y funcionara sola el dia que el canon los separe. */
+.a-btn--secondary:hover:not(:disabled) {
+  background: var(--a-state-hover);
+  border-color: var(--a-border-strong);
+}
+
+/* HOVER DE DANGER · POR QUE NO CAMBIA EL RELLENO.
+   Los otros tres rangos oscurecen o aclaran su fondo al pasar el puntero. En
+   danger eso es IMPOSIBLE, y no por gusto: el relleno oscuro (--a-red-500)
+   esta en el techo geometrico de lo que permite texto blanco a 4.5:1 mas
+   frontera a 3:1 a la vez. Oscurecerlo hunde la frontera (red-600 cae a
+   2.49:1 sobre superficie elevada); aclararlo hunde el texto. Se busco un
+   valor intermedio con barrido exhaustivo: NO EXISTE.
+   Por eso el aviso lo da el borde, que .a-btn ya declara `solid transparent`
+   y que ya estaba en la lista de transiciones -- estaba previsto y sin usar.
+   El contorno blanco da 4.94:1 sobre el rojo oscuro y 6.54:1 sobre el claro. */
+.a-btn--danger:hover:not(:disabled) { border-color: var(--a-text-on-action); }
+
+.a-btn--danger {
+  background: var(--a-action-danger);
+  color: var(--a-text-on-action);
+}
+
+.a-btn--ghost {
+  background: transparent;
+  color: var(--a-action-text);
+}
+/* HOVER DE GHOST · el relleno se aplica, pero no se VE.
+   --a-state-hover sobre la superficie base da 1.09:1 en claro y 1.19:1 en
+   oscuro: la regla funciona (comprobado forzandola por CSSOM) y aun asi la
+   captura de pantalla no muestra diferencia. Un realce que no se percibe no
+   es un estado. Se refuerza con el borde, igual que secondary y danger, para
+   que los cuatro rangos respondan de forma perceptible y por el mismo medio. */
+.a-btn--ghost:hover:not(:disabled) {
+  background: var(--a-state-hover);
+  border-color: var(--a-border-strong);
+}
+
+/* PULSADO · un solo mecanismo para los cuatro rangos.
+   Ningun rango declaraba :active: pulsar no producia ninguna respuesta. Se
+   resuelve con desplazamiento, no con color, por dos razones: danger no tiene
+   margen cromatico (ver arriba) y un mecanismo comun mantiene los cuatro
+   rangos coherentes. Sin token nuevo y sin depender del tema.
+   No es animacion -- transform no esta en la lista de transiciones -- asi que
+   no hay nada que atenuar bajo prefers-reduced-motion. */
+.a-btn:active:not(:disabled) { transform: translateY(1px); }
+
+.a-btn:disabled { color: var(--a-text-disabled); cursor: default; opacity: .7; }
+
+/* El foco NO se hereda de nadie: se declara aquí. Hoy el producto entero tiene
+   8 reglas de :focus-visible, y --focus-ring estaba declarado sin usarse. */
+.a-btn:focus-visible { outline: none; box-shadow: var(--a-focus-ring); }
+
+.a-btn__espera {
+  width: 12px; height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: var(--a-radius-full);
+  animation: a-btn-gira var(--a-motion-slow) linear infinite;
+}
+@keyframes a-btn-gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .a-btn__espera { animation: none; } }

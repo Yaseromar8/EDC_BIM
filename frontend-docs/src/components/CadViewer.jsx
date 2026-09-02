@@ -192,7 +192,13 @@ export default function CadViewer({ file, projectPrefix = '', urnDirecto = null 
         },
       }, () => {
         if (cancelled || !containerRef.current) return;
-        const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current);
+        // TEMA DECLARADO. Este es el unico visor del portal, que es claro; el
+        // SDK trae 'dark-theme' por defecto y hasta hoy la barra de Autodesk
+        // salia oscura dentro de una app clara porque nadie lo decidia.
+        // A diferencia de los demas, aqui SI hay delta visual: es el cambio
+        // que se busca.
+        const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current,
+                                                        { theme: 'light-theme' });
         viewer.start();
         viewerRef.current = viewer;
         // La rueda, corregida en el borde (ver interceptarRueda).

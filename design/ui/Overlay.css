@@ -1,0 +1,62 @@
+/* OVERLAY · solo tokens canónicos. Ni un literal de color.
+   Las capas salen de --a-layer-*: nunca un número a mano. Ese es el punto
+   entero — hoy hay 277 referencias a z-index y el techo de producción llegó
+   a 1 000 000 en el portal. */
+
+/* CAJA DE BORDE · la primitiva no puede depender del reset de quien la aloja.
+   Medido: .a-field__control con width:100% mas relleno y borde desbordaba su
+   panel 8,8 px EN EL VISOR y no en el portal. La primitiva era la misma; lo
+   distinto era la app: Docs declara un reset universal de box-sizing y el
+   visor no. Una primitiva compartida que solo funciona donde el anfitrion la
+   rescata no es compartida.
+   Se declara sobre los elementos QUE ESTA PRIMITIVA PINTA, uno a uno. Ni reset
+   universal ni comodines de descendencia: el contenido que el producto mete
+   dentro conserva su propia caja. */
+.a-overlay,
+.a-overlay__velo,
+.a-overlay__caja {
+  box-sizing: border-box;
+}
+
+.a-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--a-space-16);
+}
+
+/* Una clase por capa NOMBRADA. Si hace falta una capa nueva, se añade al
+   canon, no aquí con un número mayor que el vecino. */
+.a-overlay--capa-dropdown { z-index: var(--a-layer-dropdown); }
+.a-overlay--capa-popover  { z-index: var(--a-layer-popover); }
+.a-overlay--capa-drawer   { z-index: var(--a-layer-drawer); }
+.a-overlay--capa-modal    { z-index: var(--a-layer-modal); }
+.a-overlay--capa-toast    { z-index: var(--a-layer-toast); }
+.a-overlay--capa-tooltip  { z-index: var(--a-layer-tooltip); }
+.a-overlay--capa-system   { z-index: var(--a-layer-system); }
+
+/* SIN modalidad la superposición no debe estorbar: el usuario sigue usando
+   el fondo, así que el contenedor no intercepta el puntero -- solo lo hace
+   la caja. Con modalidad sí lo intercepta, que es lo que la hace modal. */
+.a-overlay:not(.a-overlay--modal) { pointer-events: none; }
+.a-overlay:not(.a-overlay--modal) .a-overlay__caja { pointer-events: auto; }
+
+.a-overlay__velo {
+  position: absolute;
+  inset: 0;
+  background: var(--a-surface-overlay);
+}
+
+.a-overlay__caja {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: auto;
+  outline: none;
+}
+
+.a-overlay__caja:focus-visible {
+  box-shadow: var(--a-focus-ring);
+}

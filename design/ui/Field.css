@@ -1,0 +1,70 @@
+/* FIELD · densidad de obra: el producto trabaja a 13 px, no a 16. */
+
+/* CAJA DE BORDE · la primitiva no puede depender del reset de quien la aloja.
+   Medido: .a-field__control con width:100% mas relleno y borde desbordaba su
+   panel 8,8 px EN EL VISOR y no en el portal. La primitiva era la misma; lo
+   distinto era la app: Docs declara un reset universal de box-sizing y el
+   visor no. Una primitiva compartida que solo funciona donde el anfitrion la
+   rescata no es compartida.
+   Se declara sobre los elementos QUE ESTA PRIMITIVA PINTA, uno a uno. Ni reset
+   universal ni comodines de descendencia: el contenido que el producto mete
+   dentro conserva su propia caja. */
+.a-field,
+.a-field__etiqueta,
+.a-field__control,
+.a-field__ayuda,
+.a-field__error,
+.a-solo-lectores {
+  box-sizing: border-box;
+}
+
+.a-field { display: flex; flex-direction: column; gap: var(--a-space-4); }
+
+.a-field__etiqueta {
+  font-size: var(--a-type-label-size);
+  font-weight: var(--a-type-label-weight);
+  line-height: var(--a-type-label-lh);
+  color: var(--a-text-secondary);
+}
+
+.a-field__req { color: var(--a-status-danger); }
+
+.a-field__control {
+  width: 100%;
+  padding: var(--a-space-8) var(--a-space-12);
+  border: var(--a-border-width-1) solid var(--a-border-default);
+  border-radius: var(--a-radius-md);
+  background: var(--a-field-surface);
+  color: var(--a-text-primary);
+  font-family: var(--a-font-sans);
+  font-size: var(--a-type-body-size);
+  line-height: var(--a-type-body-lh);
+}
+
+.a-field__control::placeholder { color: var(--a-text-muted); }
+.a-field__control:focus-visible { outline: none; box-shadow: var(--a-focus-ring); border-color: var(--a-action-text); }
+.a-field__control:disabled { color: var(--a-text-disabled); cursor: default; }
+
+.a-field--error .a-field__control { border-color: var(--a-status-danger); }
+
+.a-field__ayuda {
+  margin: 0;
+  font-size: var(--a-type-caption-size);
+  line-height: var(--a-type-caption-lh);
+  color: var(--a-text-muted);
+}
+
+.a-field__error {
+  margin: 0;
+  font-size: var(--a-type-caption-size);
+  line-height: var(--a-type-caption-lh);
+  color: var(--a-status-danger);
+}
+
+/* Para etiquetas que deben existir sin verse. Nunca `display:none`: eso las
+   quita también del lector de pantalla, que es justo lo contrario. */
+.a-solo-lectores {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}

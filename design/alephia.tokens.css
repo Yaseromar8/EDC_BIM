@@ -87,6 +87,7 @@
   /* Peligro */
   --a-red-700: #8F1E17;
   --a-red-600: #B3261E;
+  --a-red-500: #DA241B;    /* RELLENO danger en oscuro · UX-08 T9        */
   --a-red-400: #FF6B6B;    /* era --cta-danger                          */
   --a-red-200: #EEC6C3;
   --a-red-100: #FDF0EF;
@@ -284,7 +285,7 @@
   --a-action-primary-hover: var(--a-blue-500);
   --a-action-text:          var(--a-blue-400);
   --a-action-secondary:     var(--a-ink-700);
-  --a-action-danger:        var(--a-red-400);
+  --a-action-danger:        var(--a-red-500);
 
   --a-state-hover:    var(--a-ink-700);
   --a-state-selected: var(--a-ink-600);

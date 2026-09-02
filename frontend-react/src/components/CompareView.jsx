@@ -252,7 +252,11 @@ export default function CompareView({ BACKEND_URL, projectId, onExit }) {
     // ── Visores ──
     const makeViewer = (container) => {
         const ViewerCtor = window.Autodesk.Viewing.Viewer3D || window.Autodesk.Viewing.GuiViewer3D;
-        const v = new ViewerCtor(container, {});
+        // TEMA DECLARADO, no heredado. El SDK aplica 'dark-theme' por defecto
+        // (`this.theme = this.config.theme || "dark-theme"`), asi que el pixel
+        // no cambia: cambia que este espacio DECIDA su tema en vez de depender
+        // de un defecto ajeno que Autodesk puede mover cuando quiera.
+        const v = new ViewerCtor(container, { theme: 'dark-theme' });
         v.start();
         return v;
     };

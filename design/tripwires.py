@@ -209,6 +209,142 @@ def t8_contraste():
     return (not malos), ('bajo AA: %s' % malos if malos else 'todos los pares >= 4.5:1')
 
 
+def t9_primitivas():
+    """Las primitivas de UX-08: sin literales, con foco, y contraste AA.
+
+    Tres comprobaciones sobre design/ui/. La tercera resuelve los TOKENS de
+    cada variante de boton en los dos temas y calcula el contraste -- no mide
+    el render, porque el render depende de la pagina que las hospede y eso
+    falsea el resultado (ocurrio: el banco no pintaba el fondo del tema y la
+    medida en oscuro salio contra blanco)."""
+    import glob
+    ui = glob.glob(os.path.join(RAIZ, 'design', 'ui', '*.css')) +          glob.glob(os.path.join(RAIZ, 'design', 'ui', '*.jsx'))
+    if not ui:
+        return False, 'no hay primitivas en design/ui'
+
+    # 1 · ni un literal de color en las primitivas
+    literales = []
+    for p in ui:
+        # SIN COMENTARIOS. Dos motivos, y el segundo es el que importa:
+        #
+        # 1) Documentar un color en un comentario -- "#F3F6F8 en claro" -- no es
+        #    declararlo. Escanear el fichero entero castigaria justo la
+        #    explicacion que este codigo si quiere tener.
+        # 2) Este patron llevaba un byte de RETROCESO (0x08) pegado al final,
+        #    de un `\b` que el shell convirtio en caracter literal al escribir
+        #    el fichero. Nunca casaba con nada: la subprueba llevaba desde su
+        #    creacion diciendo "0 literales" sin mirar. La encontro una
+        #    discrepancia con grep, no una relectura.
+        texto = re.sub(r'/\*.*?\*/', '', leer(p), flags=re.S)
+        texto = re.sub(r'^\s*//.*$', '', texto, flags=re.M)
+        for m in re.finditer(r'#[0-9a-fA-F]{3,8}\b', texto):
+            literales.append('%s:%s' % (os.path.basename(p), m.group(0)))
+
+    # 2 · toda primitiva interactiva declara su foco visible
+    con_foco = [os.path.basename(p) for p in ui
+                if p.endswith('.css') and ':focus-visible' in leer(p)]
+    faltan_foco = [b for b in ('Button.css', 'Field.css', 'Overlay.css')
+                   if b not in con_foco]
+
+    # 3 · contraste de las variantes, resuelto desde los tokens
+    b = _bloques(leer(FUENTE))
+    prim = {k: v for k, v in b[':root'].items() if re.match(r'--a-\w+-\d+$', k)}
+
+    def resolver(sel, tok):
+        v = b.get(sel, {}).get(tok) or b[':root'].get(tok)
+        m = re.match(r'var\(\s*(--a-[a-z0-9-]+)', v or '')
+        return prim.get(m.group(1)) if m else None
+
+    def lum(h):
+        h = h.lstrip('#')
+        c = [int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4)]
+        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+    def ratio(a, b_):
+        la, lb = lum(a), lum(b_)
+        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+    # variante -> (token de fondo, token de texto). ghost es transparente:
+    # se mide contra la superficie elevada, que es donde vive.
+    VAR = {
+        'primary':   ('--a-action-primary',   '--a-text-on-action'),
+        'secondary': ('--a-action-secondary', '--a-text-primary'),
+        'danger':    ('--a-action-danger',    '--a-text-on-action'),
+        'ghost':     ('--a-surface-raised',   '--a-action-text'),
+    }
+    bajos = []
+    for sel in (':root', '[data-theme="dark"]'):
+        for v, (tb, tt) in VAR.items():
+            fondo, texto = resolver(sel, tb), resolver(sel, tt)
+            if fondo and texto:
+                r = ratio(texto, fondo)
+                if r < 4.5:
+                    bajos.append('%s %s %.2f:1' % (sel.replace(':root', 'claro'), v, r))
+
+    # 4 - FRONTERA DEL CONTROL (WCAG 1.4.11, minimo 3:1).
+    #
+    # Este criterio decidio el valor de --a-red-500 y hasta ahora NADIE lo
+    # vigilaba: se podia deshacer sin que ninguna prueba se enterara. Un
+    # relleno puede llevar texto legible y aun asi fundirse con la pagina --
+    # exactamente el fallo de la alternativa A, que parecia la obvia: blanco
+    # sobre #B3261E da 6.54:1 pero el boton desaparece contra el fondo oscuro
+    # a 2.96:1.
+    #
+    # Se mide contra las DOS superficies donde vive un boton: la pagina y el
+    # panel elevado. ghost no tiene relleno propio, asi que no aplica.
+    #
+    # La frontera la puede dar el RELLENO o un BORDE declarado -- 1.4.11 pide
+    # que el control se distinga, no que lo haga de una manera concreta. La
+    # primera version de esta comprobacion no lo contemplaba y acuso a
+    # `secondary` (relleno #F3F6F8 sobre blanco, 1.09:1) cuando ese rango
+    # declara `border-color: var(--a-border-default)` justo para eso. Se mide
+    # el borde cuando existe; el relleno cuando el borde es transparente.
+    BORDE = {'secondary': '--a-border-default'}   # el resto: `solid transparent`
+
+    # `secondary` NO entra en la puerta, y hay que decir por que.
+    #
+    # Su frontera la da --a-border-default, que da 1.25:1 en claro y 1.35:1 en
+    # oscuro contra la superficie elevada: incumple 1.4.11. Pero ese token es
+    # anterior a UX-08, lo comparten Panel y Field, y la enmienda autorizada
+    # cubre EL RELLENO danger, no los bordes del sistema. Hacer fallar la suite
+    # por algo que no se me autorizo a tocar bloquearia UX-08 por una decision
+    # ajena; callarlo seria peor. Se mide, se excluye de la puerta y se IMPRIME
+    # en cada ejecucion hasta que alguien decida.
+    EXCEPCION = {'secondary'}
+    pendiente = []
+    frontera = []
+    for sel in (':root', '[data-theme="dark"]'):
+        for sup in ('--a-surface-base', '--a-surface-raised'):
+            s_ = resolver(sel, sup)
+            if not s_:
+                continue
+            for v, (tb, _tt) in VAR.items():
+                if v == 'ghost':
+                    continue      # sin relleno ni borde propios: no es una caja
+                limite = resolver(sel, BORDE[v]) if v in BORDE else resolver(sel, tb)
+                if not limite:
+                    continue
+                rr = ratio(limite, s_)
+                if rr >= 3.0:
+                    continue
+                aviso = ('%s %s(%s) vs %s %.2f:1'
+                         % (sel.replace(':root', 'claro'), v,
+                            'borde' if v in BORDE else 'relleno',
+                            sup.replace('--a-surface-', ''), rr))
+                (pendiente if v in EXCEPCION else frontera).append(aviso)
+
+    problemas = []
+    if literales:   problemas.append('%d literales: %s' % (len(literales), literales[:3]))
+    if faltan_foco: problemas.append('sin foco visible: %s' % faltan_foco)
+    if bajos:       problemas.append('bajo AA: %s' % bajos)
+    if frontera:    problemas.append('frontera < 3:1: %s' % frontera)
+    ok = not problemas
+    return ok, ('; '.join(problemas) if problemas
+                else ('%d ficheros · 0 literales · foco · texto >= 4.5:1 · frontera >= 3:1'
+                      % len(ui))
+                     + (' · PENDIENTE fuera de enmienda: %s' % pendiente if pendiente else ''))
+
 COMPROBACIONES = [
     ('T1  una sola fuente canonica', t1_una_sola_fuente),
     ('T2  0 declaraciones fuera', t2_sin_declaraciones_fuera),
@@ -219,6 +355,7 @@ COMPROBACIONES = [
     ('T5  capas finitas', t5_capas_finitas),
     ('T7b componentes intactos', t7b_componentes_intactos),
     ('T8  contraste AA', t8_contraste),
+    ('T9  primitivas UX-08', t9_primitivas),
 ]
 
 

@@ -3,6 +3,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// Este fichero es un modulo ES: __dirname no existe y hay que derivarlo.
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // LOS RECURSOS DE pdf.js, AL SITIO DONDE SE SIRVEN.
 //
@@ -58,6 +62,25 @@ export default defineConfig(({ command }) => ({
   // Solo afecta al servidor de desarrollo: `optimizeDeps` no interviene en la
   // construccion de produccion.
   optimizeDeps: { entries: ['index.html', 'probar-lector.html'] },
+
+  // LAS PRIMITIVAS COMPARTIDAS VIVEN FUERA DE ESTA APP, Y REACT NO LAS ALCANZA.
+  //
+  // `design/ui/*.jsx` es fuente única igual que los tokens, pero un componente
+  // NO es CSS: importa `react`, y sobre `design/` no hay node_modules, asi que
+  // Rollup falla con «could not resolve react/jsx-runtime». Los tokens no
+  // tuvieron este problema porque el CSS no importa nada.
+  //
+  // El alias apunta a la copia de React de ESTA app. `dedupe` evita la segunda
+  // copia -- el mismo defecto que dejo el banco de pruebas sin montar en UX-01
+  // («Invalid hook call»), y no conviene repetirlo.
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+    alias: {
+      react: path.resolve(__dirname, 'node_modules/react'),
+      'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
+    },
+  },
+
 
   build: {
     chunkSizeWarningLimit: 1200,

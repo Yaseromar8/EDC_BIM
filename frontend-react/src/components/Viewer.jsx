@@ -523,6 +523,11 @@ const Viewer = ({
                 };
 
                 const viewer = new Autodesk.Viewing.GuiViewer3D(containerRef.current, config);
+                // POLITICA D-UX08-THEME = C. Visor embebido en un espacio de
+                // ALEPHIA View -> tema oscuro. Se declara aunque HOY coincida con
+                // el defecto del SDK (medido: dark-theme): el defecto es de la
+                // biblioteca y puede cambiar con una version. Cero cambio visual.
+                viewer.setTheme?.('dark-theme');
                 // CANAL ALFA del lienzo. Sin el, el contexto WebGL se crea
                 // opaco y ninguna llamada de limpieza puede volverlo
                 // transparente: en AR el area del visor tapaba la camara.

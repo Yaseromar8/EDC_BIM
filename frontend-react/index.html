@@ -1,5 +1,11 @@
 <!doctype html>
-<html lang="es">
+<!-- EL TEMA VIVE AQUI, EN EL DOCUMENTO, Y NO EN #root.
+     Hay 4 portales montando en document.body: con el atributo en #root
+     quedarian FUERA de su ambito y renderizarian en claro dentro de una
+     app oscura. Y va estatico, no por JavaScript: asi esta puesto antes
+     del primer pintado y sobrevive al login, al SSO y a la recarga sin
+     parpadeo. -->
+<html lang="es" data-theme="dark">
 
 <head>
   <meta charset="UTF-8" />

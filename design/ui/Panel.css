@@ -1,0 +1,29 @@
+/* PANEL · ni un valor propio: todo desde semánticos. */
+
+/* CAJA DE BORDE · la primitiva no puede depender del reset de quien la aloja.
+   Medido: .a-field__control con width:100% mas relleno y borde desbordaba su
+   panel 8,8 px EN EL VISOR y no en el portal. La primitiva era la misma; lo
+   distinto era la app: Docs declara un reset universal de box-sizing y el
+   visor no. Una primitiva compartida que solo funciona donde el anfitrion la
+   rescata no es compartida.
+   Se declara sobre los elementos QUE ESTA PRIMITIVA PINTA, uno a uno. Ni reset
+   universal ni comodines de descendencia: el contenido que el producto mete
+   dentro conserva su propia caja. */
+.a-panel {
+  box-sizing: border-box;
+}
+
+.a-panel {
+  background: var(--a-surface-raised);
+  border: var(--a-border-width-1) solid var(--a-border-default);
+  border-radius: var(--a-radius-lg);
+  color: var(--a-text-primary);
+}
+
+.a-panel--d-normal   { padding: var(--a-space-16); }
+.a-panel--d-compacta { padding: var(--a-space-12); }
+
+.a-panel--e-none { box-shadow: none; }
+.a-panel--e-sm   { box-shadow: var(--a-shadow-sm); }
+.a-panel--e-md   { box-shadow: var(--a-shadow-md); }
+.a-panel--e-lg   { box-shadow: var(--a-shadow-lg); }
