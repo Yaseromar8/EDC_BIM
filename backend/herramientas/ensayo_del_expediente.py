@@ -425,10 +425,17 @@ def main():
         _titulo('6', 'Review')
 
         vence = (datetime.datetime.now() + datetime.timedelta(days=5))
+        # `contrato` EXPLICITO, y 'PRE' NO es una eleccion de comodidad: los
+        # pasos de esta revision no declaran `decision`, y mas abajo el ensayo
+        # la APRUEBA. Bajo AUTORIDAD_TERMINAL un paso sin decision no se
+        # interpreta y el acto se rechazaria, asi que el ensayo dejaria de
+        # medir el expediente y pasaria a medir el contrato.
+        #
+        # Explicito porque la fase E de REVIEWS-R01 retira el `DEFAULT 'PRE'`.
         cur.execute("INSERT INTO doc_reviews (model_urn, title, status, items, steps, "
-                    "  current_step, paso_vence_en, created_by) "
+                    "  current_step, paso_vence_en, created_by, contrato) "
                     "VALUES (%s,'Revision del plano DRE-PL-0012','pending',"
-                    "  %s::jsonb,%s::jsonb,0,%s,%s) RETURNING id",
+                    "  %s::jsonb,%s::jsonb,0,%s,%s,'PRE') RETURNING id",
                     (OBRA, json.dumps([{'node_id': plano, 'version_id': v3,
                                         'name': 'DRE-PL-0012'}]),
                      json.dumps([{'user_id': g['supervisor'], 'name': 'Supervisor'},

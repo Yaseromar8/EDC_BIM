@@ -119,6 +119,23 @@ def main():
     import encargos as enc
     import flujo_de_revision as flujo
     from herramientas.recordatorios import pendientes_de_recordar
+
+    # ESTE ENSAYO CORRE BAJO PRE, Y SE FUERZA EN VEZ DE HEREDARSE.
+    #
+    # Lo que mide es el CICLO DE VIDA de una revision --plazo por paso, apertura
+    # y cierre de encargos, revision BLOQUEADA, conciliacion, recordatorio, el
+    # tocayo-- y todo eso es agnostico del contrato. Su diseno es posicional de
+    # arriba abajo: ninguno de sus pasos declara `decision`, ni al insertarlos
+    # por SQL ni al crearlos por la ruta.
+    #
+    # Con la fase D de REVIEWS-R01 la constante pasa a AUTORIDAD_TERMINAL, y el
+    # alta por ruta rechaza pasos sin `decision` -- correctamente. Heredar la
+    # constante convertiria este ensayo en una prueba del contrato en vez de una
+    # prueba del ciclo, y se pondria rojo por algo que no mide.
+    #
+    # El contrato NUEVO tiene su propio ensayo: `ensayo_de_contrato_r01.py`.
+    flujo.CONTRATO_VIGENTE = flujo.PRE
+
     init_db_pool()
 
     print()
@@ -257,9 +274,16 @@ def main():
 
         print()
         print('7 · UN REVISOR SALE DE LA OBRA A MITAD')
+        # `contrato` EXPLICITO, y vale 'PRE' porque es lo que esta revision ES:
+        # sus pasos no declaran `decision` y este ensayo mide el cierre por
+        # POSICION. Bajo AUTORIDAD_TERMINAL un paso sin decision queda congelado
+        # --el motor no lo interpreta-- y el ensayo dejaria de medir lo suyo.
+        #
+        # Va explicito porque la fase E de REVIEWS-R01 retira el `DEFAULT 'PRE'`:
+        # desde entonces omitirlo es un error, no una herencia silenciosa.
         cur.execute("INSERT INTO doc_reviews (model_urn, title, items, steps, final_status, "
-                    "  created_by, history) VALUES (%s,'Revision que se bloquea', "
-                    "  %s,%s,'SHARED','ensayo','[]'::jsonb) RETURNING id",
+                    "  created_by, history, contrato) VALUES (%s,'Revision que se bloquea', "
+                    "  %s,%s,'SHARED','ensayo','[]'::jsonb,'PRE') RETURNING id",
                     (OBRA, json.dumps([{'node_id': g['nodo']}]),
                      json.dumps([{'user_id': g['r2'], 'name': 'Revisor Dos', 'dias': 2}])))
         rid_b = cur.fetchone()[0]
@@ -288,9 +312,11 @@ def main():
         print()
         print('9 · UNA REVISION HISTORICA (sin user_id ni dias) SIGUE IGUAL')
         cur.execute("DELETE FROM encargos WHERE project_id=%s", (OBRA,))
+        # PRE: es literalmente una revision HISTORICA, con paso legacy --solo
+        # correo y nombre-- y sin `decision`. Ver la nota del primer INSERT.
         cur.execute("INSERT INTO doc_reviews (model_urn, title, items, steps, final_status, "
-                    "  created_by, history) VALUES (%s,'Revision historica', "
-                    "  %s,%s,'SHARED','ensayo','[]'::jsonb) RETURNING id",
+                    "  created_by, history, contrato) VALUES (%s,'Revision historica', "
+                    "  %s,%s,'SHARED','ensayo','[]'::jsonb,'PRE') RETURNING id",
                     (OBRA, json.dumps([{'node_id': g['nodo']}]),
                      json.dumps([{'email': PREFIJO + 'r1@ensayo.test', 'name': 'Revisor Uno'}])))
         rid_h = cur.fetchone()[0]
@@ -360,9 +386,10 @@ def main():
               'no se puede sustituir por alguien que no pertenece a la obra')
 
         # Independencia: una revision cuyo autor es el tocayo, con un solo paso.
+        # PRE: paso sin `decision`, cierre por posicion. Ver el primer INSERT.
         cur.execute("INSERT INTO doc_reviews (model_urn, title, items, steps, final_status,"
-                    "  created_by, history) VALUES (%s,'Revision del tocayo',"
-                    "  %s,%s,'SHARED',%s,'[]'::jsonb) RETURNING id",
+                    "  created_by, history, contrato) VALUES (%s,'Revision del tocayo',"
+                    "  %s,%s,'SHARED',%s,'[]'::jsonb,'PRE') RETURNING id",
                     (OBRA, json.dumps([{'node_id': g['nodo']}]),
                      json.dumps([{'user_id': g['r2'], 'name': 'Revisor Dos'}]),
                      PREFIJO + 'tocayo@ensayo.test'))

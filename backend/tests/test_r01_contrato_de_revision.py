@@ -354,6 +354,52 @@ def test_el_molde_y_el_motor_responden_con_la_MISMA_funcion():
     assert 'flujo.cierra_positivamente(' in _leer('routes/reviews.py')
 
 
+# ══ 6b · FASE E · NADIE PUEDE OMITIR EL CONTRATO ═══════════════════════════
+
+ESCRITORES = [
+    ('routes/reviews.py', 1),
+    ('herramientas/ensayo_de_revisiones.py', 3),
+    ('herramientas/ensayo_de_participantes.py', 1),
+    ('herramientas/ensayo_del_expediente.py', 1),
+]
+
+
+@pytest.mark.parametrize('rel,cuantos', ESCRITORES)
+def test_todos_los_INSERT_de_doc_reviews_aportan_contrato(rel, cuantos):
+    """La fase E retira el `DEFAULT 'PRE'`: desde entonces un INSERT que omita
+    `contrato` FALLA. Esta prueba es lo que impide que la fase E rompa un
+    escritor -- o que uno nuevo nazca omitiendolo.
+
+    Se cuenta sobre la lista de columnas de cada INSERT, no sobre el fichero
+    entero: que la palabra `contrato` aparezca en un comentario no vale.
+    """
+    fuente = _leer(rel)
+    # Cada INSERT INTO doc_reviews (...) con su lista de columnas.
+    listas = re.findall(r'INSERT INTO doc_reviews\s*\((.*?)\)',
+                        re.sub(r'"\s*\n\s*"', '', fuente), re.S)
+    assert len(listas) == cuantos, (
+        '%s: esperados %d INSERT, encontrados %d' % (rel, cuantos, len(listas)))
+    for i, lista in enumerate(listas, 1):
+        columnas = [c.strip() for c in lista.replace('\n', ' ').split(',')]
+        assert 'contrato' in columnas, (
+            '%s, INSERT %d: no aporta `contrato`. Tras la fase E ese INSERT '
+            'falla.\n  columnas: %s' % (rel, i, columnas))
+
+
+def test_la_migracion_28_retira_el_default_y_lo_verifica():
+    sql = _sin_comentarios(_leer('sql/28_r01_fase_e_sin_default.sql'))
+    assert 'ALTER COLUMN contrato DROP DEFAULT' in sql
+    assert 'el DEFAULT sigue puesto' in sql, 'no verifica que lo retiro'
+    # Y se niega si la fase A no esta completa: retirar la red sin tener la
+    # otra puesta seria dejar la columna sin ninguna.
+    assert 'ME NIEGO' in sql
+    assert 'ck_contrato_conocido' in sql and 'tg_contrato_inmutable' in sql
+    # No toca ni una fila.
+    for prohibido in ('UPDATE doc_reviews', 'DELETE FROM doc_reviews',
+                      'INSERT INTO doc_reviews'):
+        assert prohibido not in sql, '%s escribe filas: %s' % ('la 28', prohibido)
+
+
 # ══ 7 · LA PUERTA VA ANTES DE LA PRIMERA MUTACION ══════════════════════════
 
 def test_el_contrato_se_comprueba_antes_de_tocar_nada():

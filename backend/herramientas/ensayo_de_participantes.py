@@ -229,8 +229,13 @@ def main():
                     (OBRA_A, g['residente'], PREFIJO + 'resi@e.test', OBRA_A))
         rl = cur.fetchone()[0]
         # `doc_reviews` se identifica por `model_urn`, no lleva `project_id`.
+        # `contrato` EXPLICITO. Vale 'PRE' porque el paso no declara `decision`
+        # y este ensayo no mide el motor de revision, sino el aislamiento entre
+        # obras. Va explicito porque la fase E de REVIEWS-R01 retira el
+        # `DEFAULT 'PRE'`: omitirlo pasa a ser un error.
         cur.execute("INSERT INTO doc_reviews (model_urn, title, status, items, steps, "
-                    "  current_step) VALUES (%s,'Revision','approved',%s::jsonb,%s::jsonb,0) "
+                    "  current_step, contrato) "
+                    "VALUES (%s,'Revision','approved',%s::jsonb,%s::jsonb,0,'PRE') "
                     "RETURNING id::text",
                     (OBRA_A, _json.dumps([{'name': 'PLANO.pdf'}]),
                      _json.dumps([{'user_id': g['residente'], 'name': 'Residente'}])))

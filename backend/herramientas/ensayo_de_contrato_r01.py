@@ -418,9 +418,18 @@ def main():
             return cliente_como(sesion(cur, uid))
         conn.commit()
 
-        _titulo('I10 · alta con la build B (CONTRATO_VIGENTE = PRE)')
+        _titulo('I10 · alta bajo PRE (se FUERZA el contrato, no se hereda)')
+        # Antes esto exigia `CONTRATO_VIGENTE == PRE` y por tanto solo pasaba en
+        # la build B: con la fase D aplicada se ponia rojo sin que nada se
+        # hubiera roto. El ensayo tiene que CONTROLAR el contrato que quiere
+        # ejercitar, igual que hace mas abajo con AUTORIDAD_TERMINAL, en vez de
+        # heredarlo de la build que le toque. Asi mide los dos contratos venga
+        # de donde venga.
+        vigente_real = flujo.CONTRATO_VIGENTE
+        flujo.CONTRATO_VIGENTE = flujo.PRE
         _paso(flujo.CONTRATO_VIGENTE == flujo.PRE,
-              'esta build crea PRE: es la build B', flujo.CONTRATO_VIGENTE)
+              'se fuerza PRE para ejercitar ese contrato (la build real crea %s)'
+              % vigente_real)
         r = crear(como(ids['autor']), [{'user_id': ids['r1'], 'email': 'r1', 'name': 'R1'}],
                   'B sin decision', ids['nodo'])
         d = r.get_json() or {}
