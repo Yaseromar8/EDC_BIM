@@ -75,7 +75,7 @@ CONTRATOS = (PRE, AUTORIDAD_TERMINAL)
 # FASE D  -> AUTORIDAD_TERMINAL  y ese despliegue es el punto de no retorno
 #
 # El valor que mande el cliente se IGNORA. El contrato lo pone el servidor.
-CONTRATO_VIGENTE = PRE
+CONTRATO_VIGENTE = AUTORIDAD_TERMINAL
 
 # ══ EL ACTO DOCUMENTAL DE CADA FIRMA ═══════════════════════════════════════
 # Solo existe bajo AUTORIDAD_TERMINAL. Una revision PRE no adquiere un campo

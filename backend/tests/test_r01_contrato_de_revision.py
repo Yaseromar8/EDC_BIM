@@ -81,15 +81,24 @@ def test_la_migracion_deja_todo_en_PRE_y_lo_exige():
 
 # ══ 2 · LA BUILD B ES IDENTIFICABLE ════════════════════════════════════════
 
-def test_la_build_B_entiende_los_dos_contratos_pero_crea_PRE():
-    """El punto de rollback depende de esto: si la build que se despliega en la
-    fase B ya creara AUTORIDAD_TERMINAL, no habria destino de rollback."""
+def test_el_motor_entiende_los_DOS_contratos_sea_cual_sea_el_vigente():
+    """Que el motor NUNCA deje de entender PRE.
+
+    Antes esta prueba exigia `CONTRATO_VIGENTE == PRE` para identificar la build
+    B. Con la fase D aplicada eso deja de ser cierto, y mantenerlo habria
+    obligado a borrar la prueba -- perdiendo lo que de verdad protege.
+
+    La build B se identifica por su COMMIT (`f003a3b`), que es lo que se
+    despliega si hay que volver. Lo que esta prueba fija es la propiedad que
+    tiene que sobrevivir a cualquier giro: mientras queden revisiones PRE vivas
+    --hoy 6 en produccion-- el motor tiene que seguir entendiendolas.
+    """
     import flujo_de_revision as flujo
-    assert flujo.CONTRATO_VIGENTE == flujo.PRE, (
-        'esta build crea %s: ya no es la build B' % flujo.CONTRATO_VIGENTE)
-    # Y entiende los dos: no es que solo conozca PRE.
-    assert flujo.contrato_conocido(flujo.PRE)
+    assert flujo.contrato_conocido(flujo.PRE), (
+        'el motor dejo de entender PRE: las 6 revisiones vivas quedarian sin motor')
     assert flujo.contrato_conocido(flujo.AUTORIDAD_TERMINAL)
+    assert flujo.CONTRATO_VIGENTE in flujo.CONTRATOS, (
+        'se crea con un contrato que no esta en la lista cerrada')
 
 
 def test_el_contrato_vigente_es_constante_de_codigo_no_variable_de_entorno():
@@ -110,7 +119,7 @@ def test_la_fase_D_es_UNA_linea_y_esta_localizada():
     """
     fuente = _leer('flujo_de_revision.py')
     asignaciones = re.findall(r'^CONTRATO_VIGENTE\s*=\s*(\S+)\s*$', fuente, re.M)
-    assert asignaciones == ['PRE'], (
+    assert asignaciones == ['AUTORIDAD_TERMINAL'], (
         'la fase D tiene que ser UNA sola linea; encontradas: %r' % (asignaciones,))
     # Y no se reasigna en ningun otro sitio del backend.
     for rel in ('routes/reviews.py', 'plantillas_de_revision.py'):

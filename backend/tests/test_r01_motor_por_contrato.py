@@ -15,9 +15,12 @@ suponiendo.
 LO QUE ESTO DEMUESTRA Y LA MEDICION CON BASE NO NECESITA REPETIR
 ----------------------------------------------------------------
   · La autoridad de `/act` sale del `contrato` PERSISTIDO de esa revision, no
-    de `CONTRATO_VIGENTE` ni de ningun valor por defecto.
-  · La BUILD B --la que crea PRE-- opera correctamente los DOS contratos. Es
-    obligatorio: despues de la fase D, build B es el unico rollback permitido.
+    de `CONTRATO_VIGENTE` ni de ningun valor por defecto. Se prueba forzando el
+    DESACUERDO en las dos direcciones, asi que no depende de que build sea esta.
+  · El motor opera correctamente los DOS contratos, cree el que cree. Es
+    obligatorio mientras queden revisiones PRE vivas -- hoy 6 en produccion --
+    y ademas la build B (`f003a3b`) es el unico rollback permitido tras la
+    fase D.
   · El BACKEND SOLO rechaza un alta AUTORIDAD_TERMINAL sin `decision`, aunque
     el cliente sea antiguo, manipulado o no mande el campo. El cambio del
     frontend es comodidad; la barrera esta aqui.
@@ -207,20 +210,38 @@ def actuar(m, contrato, pasos, accion, current_step=0, **kw):
 
 # ══ 1 · LA AUTORIDAD DE /act SALE DEL CONTRATO PERSISTIDO ══════════════════
 
-def test_act_usa_el_contrato_PERSISTIDO_y_no_el_vigente(motor):
-    """El caso que lo prueba: la build B tiene CONTRATO_VIGENTE=PRE, y sobre
-    una revision cuyo contrato PERSISTIDO es AUTORIDAD_TERMINAL el motor aplica
-    la semantica NUEVA. Si la autoridad saliera de la constante, aqui cerraria
-    por posicion."""
+@pytest.mark.parametrize('persistido,vigente', [
+    ('AUTORIDAD_TERMINAL', 'PRE'),
+    ('PRE', 'AUTORIDAD_TERMINAL'),
+])
+def test_act_usa_el_contrato_PERSISTIDO_y_no_el_vigente(motor, monkeypatch,
+                                                        persistido, vigente):
+    """La constante se pone SIEMPRE al contrario del contrato persistido.
+
+    Antes esta prueba se apoyaba en que la build era la B --`CONTRATO_VIGENTE`
+    valia PRE-- y por tanto dejaba de discriminar en cuanto la fase D girara la
+    constante. Ahora fuerza el desacuerdo en LAS DOS DIRECCIONES, asi que
+    discrimina venga de la build que venga y sobreviva a cualquier giro futuro.
+
+    Mismo par de pasos, mismo indice, mismo acto: lo unico que cambia es el
+    contrato PERSISTIDO. Si la autoridad saliera de la constante, los dos casos
+    darian el mismo resultado.
+    """
     flujo = motor['flujo']
-    assert flujo.CONTRATO_VIGENTE == flujo.PRE, 'la premisa: esta es la build B'
+    monkeypatch.setattr(flujo, 'CONTRATO_VIGENTE', vigente)
     pasos = [paso(1, 'APRUEBA'), paso(2, 'REVISA')]
-    # Ultimo paso, REVISA: bajo PRE cerraria; bajo el contrato persistido, NO.
-    r = actuar(motor, flujo.AUTORIDAD_TERMINAL, pasos, 'approve', current_step=1)
-    d = r.get_json()
-    assert r.status_code == 409, d
-    assert d['code'] == 'CONTRATO_NO_PERMITE_EL_ACTO'
-    assert escrituras(motor['estado']) == []
+    r = actuar(motor, persistido, pasos, 'approve', current_step=1)
+
+    if persistido == flujo.AUTORIDAD_TERMINAL:
+        # Ultimo paso REVISA: no puede cerrar. Rechazo, cero escrituras.
+        d = r.get_json()
+        assert r.status_code == 409, d
+        assert d['code'] == 'CONTRATO_NO_PERMITE_EL_ACTO'
+        assert escrituras(motor['estado']) == []
+    else:
+        # PRE cierra por POSICION, sin mirar `decision`.
+        assert r.status_code == 200, r.get_json()
+        assert any("STATUS='APPROVED'" in s for s in escrituras(motor['estado']))
 
 
 def test_una_review_PRE_persistida_cierra_por_POSICION(motor):
@@ -258,19 +279,28 @@ def test_el_dominio_revienta_si_alguien_se_salta_la_puerta(motor):
 
 # ══ 2 · LA BUILD B OPERA LOS DOS CONTRATOS ═════════════════════════════════
 
-def test_build_B_crea_PRE(motor):
-    r = crear(motor, [paso(1), paso(2)])
+def test_el_alta_persiste_EL_CONTRATO_VIGENTE(motor):
+    """Sea cual sea. Antes exigia literalmente 'PRE' y por tanto se rompia con
+    la fase D; ahora compara contra la constante, asi que vale en las dos
+    builds y sigue detectando que el alta persista otra cosa.
+
+    Los pasos llevan `decision` porque bajo AUTORIDAD_TERMINAL es obligatorio y
+    bajo PRE es inerte: el mismo alta vale para los dos contratos.
+    """
+    flujo = motor['flujo']
+    vigente = flujo.CONTRATO_VIGENTE
+    r = crear(motor, [paso(1, 'REVISA'), paso(2, 'APRUEBA')])
     d = r.get_json()
     assert r.status_code == 200 and d['success'], d
-    assert d['contrato'] == 'PRE'
+    assert d['contrato'] == vigente
     # I10 · columna y testigo dicen lo mismo, porque salen de la misma variable.
     inserta = [(s, p) for s, p in motor['estado']['sql']
                if 'INSERT INTO DOC_REVIEWS' in s]
     assert len(inserta) == 1
-    assert inserta[0][1][-1] == 'PRE', 'el ultimo parametro del INSERT'
+    assert inserta[0][1][-1] == vigente, 'el ultimo parametro del INSERT'
     t = busca_el_testigo(motor["estado"])
     assert t, 'no se escribio el registro de alta'
-    assert json.loads(t[1]) == {'contrato': 'PRE'}
+    assert json.loads(t[1]) == {'contrato': vigente}
     # G1 · Y va DENTRO de la transaccion: antes del commit, con el mismo cursor.
     assert t[0] < posicion_del_commit(motor['estado']), (
         'el testigo se escribio DESPUES del commit: no es atomico')
@@ -399,12 +429,21 @@ def test_el_alta_valida_bajo_el_contrato_nuevo_pasa_y_persiste_el_contrato(motor
 
 
 def test_el_contrato_que_manda_el_cliente_se_ignora(motor):
-    """El motor con el que se cierra un expediente no lo elige quien lo abre."""
-    r = crear(motor, [paso(1), paso(2)], contrato='AUTORIDAD_TERMINAL')
+    """El motor con el que se cierra un expediente no lo elige quien lo abre.
+
+    El cliente manda SIEMPRE el contrario del vigente, asi que la prueba
+    discrimina en cualquier build. Antes mandaba 'AUTORIDAD_TERMINAL' literal y
+    dejaba de discriminar en cuanto ese pasara a ser el vigente.
+    """
+    flujo = motor['flujo']
+    vigente = flujo.CONTRATO_VIGENTE
+    el_otro = (flujo.PRE if vigente == flujo.AUTORIDAD_TERMINAL
+               else flujo.AUTORIDAD_TERMINAL)
+    r = crear(motor, [paso(1, 'REVISA'), paso(2, 'APRUEBA')], contrato=el_otro)
     d = r.get_json()
-    assert r.status_code == 200 and d['contrato'] == 'PRE', d
+    assert r.status_code == 200 and d['contrato'] == vigente, d
     inserta = [p for s, p in motor['estado']['sql'] if 'INSERT INTO DOC_REVIEWS' in s]
-    assert inserta[0][-1] == 'PRE'
+    assert inserta[0][-1] == vigente
 
 
 # ══ 4 · EL CASO FUERA DE BANDA · CERO MUTACIONES ═══════════════════════════
@@ -450,7 +489,7 @@ def test_el_testigo_va_en_la_MISMA_transaccion_que_el_INSERT(motor):
     Se demuestra por POSICION en la secuencia de sentencias del mismo cursor:
     la revision, el testigo, y solo entonces el commit.
     """
-    r = crear(motor, [paso(1), paso(2)])
+    r = crear(motor, [paso(1, 'REVISA'), paso(2, 'APRUEBA')])
     assert r.status_code == 200, r.get_json()
     sql = [s for s, _ in motor['estado']['sql']]
     i_rev = next(i for i, s in enumerate(sql) if 'INSERT INTO DOC_REVIEWS' in s)
@@ -469,7 +508,7 @@ def test_si_el_TESTIGO_no_se_puede_escribir_la_REVIEW_NO_NACE(motor, monkeypatch
         raise RuntimeError('activity_log no disponible')
     monkeypatch.setattr(motor['rv'], 'registrar_actividad', revienta)
 
-    r = crear(motor, [paso(1), paso(2)])
+    r = crear(motor, [paso(1, 'REVISA'), paso(2, 'APRUEBA')])
     assert r.status_code == 500, r.get_json()
     assert posicion_del_commit(motor['estado']) is None, (
         'hubo commit: la revision habria quedado sin testigo')
