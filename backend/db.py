@@ -783,56 +783,83 @@ def ensure_ai_brain_schema():
         print(f"Error inicializando esquema AI: {e}")
 
 
+def registrar_actividad(cursor, model_urn, action, entity_type, entity_id=None,
+                        entity_name=None, performed_by=None, details=None):
+    """El evento, escrito CON EL CURSOR QUE SE LE DA. No abre conexion, no
+    confirma, y NO TRAGA EXCEPCIONES.
+
+    POR QUE EXISTE, Y POR QUE ES LA MITAD DE `log_activity`
+    -------------------------------------------------------
+    `log_activity` abre su propia conexion, confirma por su cuenta y traga
+    cualquier fallo con un aviso por consola. Para la inmensa mayoria de los
+    eventos eso es lo correcto: el registro no debe tumbar la operacion que
+    describe.
+
+    Pero hay eventos que un contrato EXIGE. REVIEWS-R01 obliga a que el alta de
+    una revision deje escrito con que contrato nacio, para poder contrastarlo
+    despues con la columna. Con `log_activity` esa garantia no existia: la
+    revision se confirmaba primero, el testigo se escribia en otra transaccion
+    despues, y si fallaba nadie se enteraba -- quedaba una revision sin testigo,
+    en silencio, que es exactamente lo que el contrato prohibe.
+
+    Asi que el evento se puede escribir DENTRO de la transaccion de quien lo
+    provoca. Si el evento no se puede escribir, la operacion entera se deshace.
+
+    El sellado en cadena sigue siendo BEST EFFORT, igual que antes y por la
+    misma razon ya escrita abajo: sin sello el evento se registra y sale como
+    'sin_sellar' en la verificacion. Lo que no puede pasar es que el evento se
+    pierda.
+    """
+    import json as _json
+    detalles = _json.dumps(details or {})
+
+    import datetime as _dt
+    cuando = _dt.datetime.now(_dt.timezone.utc)
+    contenido = {
+        'model_urn': model_urn, 'action': action, 'entity_type': entity_type,
+        'entity_id': entity_id, 'entity_name': entity_name,
+        'performed_by': performed_by,
+        'details': _json.loads(detalles), 'created_at': cuando,
+    }
+    hash_anterior = h = None
+    try:
+        import auditoria_encadenada as cadena
+        hash_anterior, h = cadena.sello_para_insercion(cursor, contenido)
+    except Exception as _e:
+        print(f"[activity_log] sin sello: {_e}")
+
+    cursor.execute("""
+        INSERT INTO activity_log (model_urn, action, entity_type, entity_id,
+                                  entity_name, performed_by, details,
+                                  created_at, hash_anterior, hash)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
+    """, (
+        model_urn, action, entity_type, entity_id, entity_name,
+        performed_by, detalles, cuando, hash_anterior, h
+    ))
+    return cursor.fetchone()[0]
+
+
 def log_activity(model_urn, action, entity_type, entity_id=None, entity_name=None, performed_by=None, details=None):
     """
     Registra una accion en el Activity Log.
     Llamar desde cualquier endpoint que modifique datos.
+
+    Abre su propia conexion y traga los fallos: el registro no debe tumbar la
+    operacion que describe. Si un contrato EXIGE el evento, usa
+    `registrar_actividad` dentro de la transaccion de la operacion.
     """
-    import json as _json
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            detalles = _json.dumps(details or {})
-
-            # La fecha se fija AQUI, no en la base, porque entra en la huella y
-            # hay que conocerla antes de insertar. Ver sello_para_insercion.
-            import datetime as _dt
-            cuando = _dt.datetime.now(_dt.timezone.utc)
-            contenido = {
-                'model_urn': model_urn, 'action': action, 'entity_type': entity_type,
-                'entity_id': entity_id, 'entity_name': entity_name,
-                'performed_by': performed_by,
-                'details': _json.loads(detalles), 'created_at': cuando,
-            }
-            hash_anterior = h = None
-            try:
-                import auditoria_encadenada as cadena
-                hash_anterior, h = cadena.sello_para_insercion(cursor, contenido)
-            except Exception as _e:
-                # Sin sello el evento se registra igual y saldra como
-                # 'sin_sellar' en la verificacion, que es lo honesto. Lo que NO
-                # puede pasar es que el evento se pierda: eso es lo que ocurria
-                # cuando el sellado era un UPDATE posterior.
-                print(f"[activity_log] sin sello: {_e}")
-
-            cursor.execute("""
-                INSERT INTO activity_log (model_urn, action, entity_type, entity_id,
-                                          entity_name, performed_by, details,
-                                          created_at, hash_anterior, hash)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id
-            """, (
-                model_urn, action, entity_type, entity_id, entity_name,
-                performed_by, detalles, cuando, hash_anterior, h
-            ))
-            fila_id = cursor.fetchone()[0]
-
-            # El encadenado ya se hizo ARRIBA, dentro del propio INSERT.
-            # Aqui vivia un segundo sellado por UPDATE que, con la identidad de
-            # aplicacion separada, no solo fallaba: abortaba la transaccion y se
-            # llevaba el INSERT por delante. El evento no quedaba sin sellar,
-            # desaparecia.
-
+            registrar_actividad(cursor, model_urn, action, entity_type, entity_id,
+                                entity_name, performed_by, details)
+            # El encadenado se hace DENTRO del propio INSERT, en
+            # `registrar_actividad`. Aqui vivia un segundo sellado por UPDATE
+            # que, con la identidad de aplicacion separada, no solo fallaba:
+            # abortaba la transaccion y se llevaba el INSERT por delante. El
+            # evento no quedaba sin sellar, desaparecia.
             conn.commit()
     except Exception as e:
         # No romper la operacion principal si el log falla

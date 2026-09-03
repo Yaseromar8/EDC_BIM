@@ -83,6 +83,21 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
                     + 'registrada como aplicación de esa plantilla.');
   };
 
+  // QUÉ SE LE PIDE A CADA PASO: revisar o aprobar (REVIEWS-R01).
+  //
+  // Hasta ahora el camino a mano no lo decía y el de plantilla sí, así que dos
+  // revisiones de la misma obra podían tener pasos con contratos distintos. El
+  // backend lo exige bajo el contrato nuevo, y aquí se manda siempre: mandarlo
+  // sólo cuando el contrato lo pide dejaría el bypass listo para reaparecer.
+  //
+  // EL VALOR POR DEFECTO ES EL FLUJO CANÓNICO --revisan todos, aprueba el
+  // último-- y no una casilla vacía. Un flujo cuyo último paso sólo revisa no
+  // se puede cerrar nunca, así que dejar que el usuario lo acierte sería dejar
+  // que se equivoque. Se deriva, no se guarda: al añadir un paso, el nuevo
+  // último pasa a aprobar sin que nadie lo toque.
+  const decisionDe = (s, i, total) =>
+    s.decision || (i === total - 1 ? 'APRUEBA' : 'REVISA');
+
   const submit = async () => {
     if (!title.trim()) { toast.error('Ponle un título a la revisión'); return; }
     if (!steps.length) { toast.error('Agrega al menos un revisor'); return; }
@@ -112,8 +127,9 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
           // correo O NOMBRE: dos personas llamadas igual eran las dos
           // candidatas al mismo paso.
           ...(plantillaId ? {} : {
-            steps: steps.map(s => ({
+            steps: steps.map((s, i) => ({
               user_id: s.id, email: s.email, name: s.name,
+              decision: decisionDe(s, i, steps.length),
               ...(s.dias ? { dias: Number(s.dias) } : {}),
             })),
           }),
@@ -195,12 +211,22 @@ export function ReviewModal({ isOpen, onClose, items, projectPrefix, onCreated }
               {steps.map((s, i) => (
                 <span key={s.id || s.email} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eef2f7', color: '#1a56a8', padding: '4px 10px', borderRadius: 14, fontSize: 12, fontWeight: 600 }}>
                   {i + 1}. {s.etiqueta ? s.etiqueta + ' — ' : ''}{s.name || s.email}
-                  {s.decision && (
-                    <span title={s.de_funcion ? 'Sale de la función ' + s.de_funcion : ''}
-                          style={{ fontWeight: 700, fontSize: 10, opacity: .75 }}>
-                      {s.decision}
-                    </span>
-                  )}
+                  {/* QUÉ SE LE PIDE. Editable también cuando viene de una
+                      plantilla: cambiarlo suelta la procedencia igual que
+                      cambiar el plazo, porque un flujo retocado ya no es esa
+                      plantilla. */}
+                  <select
+                    value={decisionDe(s, i, steps.length)}
+                    onChange={e => { soltarPlantilla(); setSteps(prev => prev.map((x, j) =>
+                      j === i ? { ...x, decision: e.target.value } : x)); }}
+                    title={s.de_funcion
+                      ? 'Sale de la función ' + s.de_funcion
+                      : 'REVISA: comenta y da paso. APRUEBA: su firma vale como aprobación. El último paso tiene que aprobar, o la revisión no podría cerrarse.'}
+                    style={{ border: '1px solid #c8d6e8', borderRadius: 8, padding: '1px 2px',
+                             fontSize: 10, fontWeight: 700, color: '#1a56a8', background: '#fff' }}>
+                    <option value="REVISA">REVISA</option>
+                    <option value="APRUEBA">APRUEBA</option>
+                  </select>
                   {/* El plazo del paso. Se cuenta desde que EMPIEZA su turno,
                       no desde que se crea la revisión: cuando se crea no se
                       sabe cuándo le tocará al paso 3. Vacío = sin plazo. */}

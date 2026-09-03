@@ -10,7 +10,8 @@ import logging
 import traceback
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
-from db import get_db_connection, log_activity, resolve_project_id
+from db import (get_db_connection, log_activity, registrar_actividad,
+                resolve_project_id)
 import estados_ecd as ecd
 from perimetro_de_obra import guardia_de_obra
 import plantillas_de_revision as plt
@@ -69,8 +70,24 @@ def _empieza_el_turno(cur, rid, steps, indice, actor, titulo, history):
     return vence, history
 
 
-def _pasos_validos(cur, obra, steps):
+def _pasos_validos(cur, obra, steps, contrato):
     """None si los pasos son utilizables; (respuesta, codigo) si no.
+
+    EL CONTRATO SE EXIGE AQUI, PARA LOS DOS CAMINOS DE ALTA (REVIEWS-R01)
+    --------------------------------------------------------------------
+    Esta funcion la atraviesan las revisiones escritas a mano Y las expandidas
+    de una plantilla: por eso la comprobacion del contrato vive aqui y no en
+    cada camino. Si estuviera duplicada, el dia que una de las dos copias se
+    quedara vieja habria un bypass -- y un bypass aqui significa una revision
+    AUTORIDAD_TERMINAL cuyos pasos no dicen quien tiene la autoridad final.
+
+    Bajo `AUTORIDAD_TERMINAL` se exigen dos cosas y las dos son fallo cerrado:
+    que TODOS los pasos declaren REVISA o APRUEBA, y que el flujo pueda
+    cerrarse -- es decir, que el ultimo posicional sea APRUEBA. Lo segundo se
+    pregunta con la misma funcion que usa el motor al aprobar.
+
+    Bajo PRE no se exige ninguna de las dos: los pasos sin `decision` son
+    exactamente lo que el camino manual ha producido siempre.
 
     UNA REVISION NUEVA EXIGE REVISOR ESTRUCTURADO. Hasta ahora un paso era
     `{email, name}` y quien podia actuar se decidia comparando correo O NOMBRE:
@@ -124,6 +141,38 @@ def _pasos_validos(cur, obra, steps):
                 return jsonify({"success": False,
                                 "error": "El plazo del paso %d tiene que ser un "
                                          "numero de dias mayor que cero." % (i + 1)}), 400
+
+    # ── EL CONTRATO DEL FLUJO ──────────────────────────────────────────────
+    #
+    # `contrato` es OBLIGATORIO, sin valor por defecto. Un default aqui seria
+    # una via para que un llamador futuro validara los pasos de un alta contra
+    # un contrato que no es el que se va a persistir.
+    import flujo_de_revision as flujo
+    if not flujo.contrato_conocido(contrato):
+        return jsonify({
+            "success": False,
+            "error": "No se puede crear una revisión sin saber con qué reglas "
+                     "se va a cerrar.",
+            "code": "CONTRATO_DESCONOCIDO",
+        }), 500
+    if contrato == flujo.AUTORIDAD_TERMINAL:
+        faltan = flujo.pasos_sin_decision(steps)
+        if faltan:
+            return jsonify({
+                "success": False,
+                "error": ("El paso %s no dice qué se le pide: revisar o aprobar. "
+                          "Sin eso no se puede saber quién tiene la autoridad "
+                          "final." % ', '.join(str(n) for n in faltan)),
+                "code": "PASO_SIN_DECISION",
+            }), 400
+        if not flujo.cierra_positivamente(contrato, steps, len(steps) - 1):
+            return jsonify({
+                "success": False,
+                "error": ("El último paso de este flujo sólo revisa, así que la "
+                          "revisión no podría cerrarse nunca. El último paso "
+                          "tiene que ser de aprobación."),
+                "code": "FLUJO_SIN_CIERRE",
+            }), 400
     return None
 
 
@@ -210,6 +259,11 @@ def _row_to_dict(r):
         "plantilla_id": str(r[14]) if len(r) > 14 and r[14] else None,
         "plantilla_nombre": r[15] if len(r) > 15 else None,
         "plantilla_version": r[16] if len(r) > 16 else None,
+        # CON QUE REGLAS NACIO ESTA REVISION (REVIEWS-R01). Va al final a
+        # proposito: `_row_to_dict` indexa por posicion, asi que anadir al final
+        # no desplaza nada. Y se devuelve SIN valor por defecto: si llegara
+        # vacio, `/act` tiene que fallar cerrado, no suponer PRE.
+        "contrato": r[17] if len(r) > 17 else None,
     }
 
 
@@ -248,7 +302,8 @@ def list_reviews():
             cur.execute("""SELECT id, model_urn, title, items, steps, current_step, status,
                                   final_status, history, created_by, created_at,
                                   codigo_idoneidad, cerrada_en, paso_vence_en,
-                                  plantilla_id, plantilla_nombre, plantilla_version
+                                  plantilla_id, plantilla_nombre, plantilla_version,
+                                  contrato
                            FROM doc_reviews WHERE model_urn = %s ORDER BY id DESC LIMIT 200""",
                         (model_urn,))
             data = [_con_estado_del_flujo(cur, _row_to_dict(r)) for r in cur.fetchall()]
@@ -315,6 +370,12 @@ def create_review():
     if negativa:
         return negativa
     items, steps = d.get('items') or [], d.get('steps') or []
+
+    # ── CON QUE REGLAS NACE ESTA REVISION (REVIEWS-R01) ───────────────────
+    # Lo pone el SERVIDOR. Si el cliente manda `contrato`, se ignora: el motor
+    # con el que se cierra un expediente no lo elige quien abre el expediente.
+    import flujo_de_revision as flujo
+    contrato = flujo.CONTRATO_VIGENTE
 
     # ── GAP 06 · APLICAR UNA PLANTILLA ────────────────────────────────────
     #
@@ -387,9 +448,10 @@ def create_review():
             if not vale:
                 return jsonify({"success": False, "error": motivo}), 400
 
-            # Una revision NUEVA exige revisor estructurado en cada paso.
+            # Una revision NUEVA exige revisor estructurado en cada paso, y bajo
+            # el contrato nuevo tambien que cada paso diga QUE se le pide.
             obra = resolve_project_id(d['model_urn'])
-            negado = _pasos_validos(cur, obra, steps)
+            negado = _pasos_validos(cur, obra, steps, contrato)
             if negado:
                 return negado
 
@@ -402,14 +464,15 @@ def create_review():
             cur.execute("""INSERT INTO doc_reviews (model_urn, title, items, steps, final_status,
                                                     created_by, history, codigo_idoneidad,
                                                     plantilla_id, plantilla_nombre,
-                                                    plantilla_version)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                                                    plantilla_version, contrato)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                         (d['model_urn'], d['title'], json.dumps(items), json.dumps(steps),
                          final_status, actor, json.dumps(historia),
                          (d.get('codigo_idoneidad') or '').strip().upper() or None,
                          (procedencia or {}).get('plantilla_id'),
                          (procedencia or {}).get('plantilla_nombre'),
-                         (procedencia or {}).get('plantilla_version')))
+                         (procedencia or {}).get('plantilla_version'),
+                         contrato))
             rid = cur.fetchone()[0]
 
             # Arranca el turno del primer revisor: fija su plazo EN EL REVIEW, lo
@@ -419,10 +482,35 @@ def create_review():
                                                 d['title'], historia)
             cur.execute("UPDATE doc_reviews SET paso_vence_en=%s, history=%s WHERE id=%s",
                         (vence, json.dumps(historia), rid))
+
+            # EL TESTIGO DEL CONTRATO, DENTRO DE LA MISMA TRANSACCION.
+            #
+            # El alta deja escrito con que reglas nacio la revision, para poder
+            # CONTRASTARLO despues con la columna: si algun dia una dijera
+            # AUTORIDAD_TERMINAL y el otro dijera PRE, la contradiccion es
+            # detectable. Y `activity_log` tiene UPDATE, DELETE y TRUNCATE
+            # revocados para `ecd_app` (03_grants_ida.sql), asi que la
+            # aplicacion no puede reescribir lo que declaro.
+            #
+            # POR QUE `registrar_actividad` Y NO `log_activity`: el segundo abre
+            # otra conexion, confirma por su cuenta y traga los fallos. Con eso,
+            # la garantia del contrato --«toda revision nueva produce un
+            # registro de alta cuyo contrato coincide con doc_reviews.contrato»--
+            # no existia: la revision se confirmaba primero y el testigo se
+            # escribia despues, y si fallaba quedaba una revision sin testigo en
+            # silencio. Aqui van en la MISMA transaccion: si el testigo no se
+            # puede escribir, la revision no nace.
+            #
+            # LO QUE ESTO NO ES: evidencia independiente frente a `ecd_migrator`
+            # o al superusuario. Quien pueda alterar la columna puede alterar el
+            # testigo -- es dueno de las dos tablas. Se dice aqui para que nadie
+            # lea de esta linea una garantia que no da.
+            registrar_actividad(cur, d['model_urn'], 'review_created', 'review',
+                                entity_id=str(rid), entity_name=d['title'],
+                                performed_by=u.get('name'),
+                                details={"contrato": contrato})
             conn.commit()
-        log_activity(d['model_urn'], 'review_created', 'review', entity_id=str(rid),
-                     entity_name=d['title'], performed_by=u.get('name'))
-        return jsonify({"success": True, "id": rid})
+        return jsonify({"success": True, "id": rid, "contrato": contrato})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
@@ -443,7 +531,8 @@ def act_on_review(rid):
             cur.execute("""SELECT id, model_urn, title, items, steps, current_step, status,
                                   final_status, history, created_by, created_at,
                                   codigo_idoneidad, cerrada_en, paso_vence_en,
-                                  plantilla_id, plantilla_nombre, plantilla_version
+                                  plantilla_id, plantilla_nombre, plantilla_version,
+                                  contrato
                            FROM doc_reviews WHERE id = %s FOR UPDATE""", (rid,))
             row = cur.fetchone()
             if not row:
@@ -481,6 +570,31 @@ def act_on_review(rid):
                                 "error": "Este paso corresponde a %s"
                                          % flujo.etiqueta_del_paso(step)}), 403
 
+            # ── ¿PERMITE EL CONTRATO ESTE ACTO? (REVIEWS-R01) ─────────────
+            #
+            # VA AQUI, Y NO MAS ABAJO, POR UNA RAZON MECANICA: el primer efecto
+            # de este manejador es cerrar el encargo del paso. Cualquier puerta
+            # posterior dejaria un efecto parcial -- el encargo cerrado y la
+            # revision sin avanzar. Esta comprobacion es la ultima cosa que se
+            # hace antes de tocar algo, y hasta aqui no se ha escrito nada.
+            #
+            # Rechaza dos cosas, las dos por fallo cerrado:
+            #
+            #   - Un contrato que este motor no entiende. NUNCA se supone PRE:
+            #     suponer seria aplicar la regla posicional a un expediente que
+            #     declaro otra, que es exactamente el error que R01 evita.
+            #
+            #   - `approve` sobre un ultimo paso que solo REVISA. El acto se
+            #     rechaza y NO se muta nada: ni estado, ni paso, ni historial,
+            #     ni documentos. Y NO se convierte a `rejected`, porque quien
+            #     pulso no ejecuto `reject` -- convertirla seria firmar un
+            #     veredicto en su nombre.
+            permitido, motivo_contrato = flujo.acto_permitido(
+                rev['contrato'], rev['steps'], rev['current_step'], action)
+            if not permitido:
+                return jsonify({"success": False, "error": motivo_contrato,
+                                "code": "CONTRATO_NO_PERMITE_EL_ACTO"}), 409
+
             # CON FECHA. Cada acto de aprobacion o rechazo tiene que quedar
             # fechado: es la primera pregunta de una supervision, y hasta ahora la
             # unica forma de reconstruirla era mirar la fila correlativa del
@@ -488,6 +602,15 @@ def act_on_review(rid):
             entry = {"event": action, "step": rev['current_step'],
                      "by": u.get('email') or u.get('name'), "comment": comment,
                      "at": datetime.now(timezone.utc).isoformat()}
+            # CON QUE AUTORIDAD QUEDA EMITIDO ESTE ACTO (REVIEWS-R01).
+            #
+            # La clave solo APARECE bajo el contrato nuevo. Bajo PRE la entrada
+            # del historial sale identica a como salia antes de R01 -- ni una
+            # clave mas: una revision PRE no adquiere un campo que su proceso
+            # nunca tuvo, y su expediente no cambia de forma a mitad de camino.
+            emitido = flujo.emitido_de(rev['contrato'], step, action)
+            if emitido:
+                entry['emitido'] = emitido
             history = rev['history'] + [entry]
 
             # Se resolvio el paso: quien lo debia deja de deberlo. Va antes de
@@ -505,7 +628,14 @@ def act_on_review(rid):
                 cur.execute("UPDATE doc_reviews SET status='rejected', history=%s, "
                             "       paso_vence_en=NULL WHERE id=%s",
                             (json.dumps(history), rid))
-            elif rev['current_step'] + 1 < len(rev['steps']):
+            elif not flujo.cierra_positivamente(rev['contrato'], rev['steps'],
+                                                rev['current_step']):
+                # AVANZA. La condicion era `current_step + 1 < len(steps)`, y
+                # bajo PRE `cierra_positivamente` devuelve exactamente eso
+                # negado: una revision PRE avanza y cierra igual que antes de
+                # R01. Bajo AUTORIDAD_TERMINAL, un APRUEBA intermedio tambien
+                # cae aqui: completa su paso y da paso, no cierra.
+                #
                 # El turno siguiente calcula SU plazo, no hereda el del anterior
                 # ni se queda sin ninguno -- que es lo que pasaba antes: solo el
                 # primer paso recibia vencimiento.
@@ -517,6 +647,12 @@ def act_on_review(rid):
                             "       paso_vence_en=%s WHERE id=%s",
                             (siguiente, json.dumps(history), vence, rid))
             else:
+                # CIERRE POSITIVO. Bajo PRE, el ultimo paso posicional. Bajo
+                # AUTORIDAD_TERMINAL, el ultimo posicional Y con decision
+                # APRUEBA -- la unica combinacion que produce efecto documental
+                # final. Un REVISA terminal no llega nunca aqui: lo para
+                # `acto_permitido` arriba, sin mutar nada.
+                #
                 # Ultimo paso aprobado: los documentos avanzan al estado final.
                 #
                 # Esto era un UPDATE directo a file_nodes que se saltaba la maquina
@@ -586,6 +722,11 @@ def act_on_review(rid):
                     return jsonify({"success": False, "error": rechazo.motivo}), 409
             conn.commit()
 
+        # `emitido` NO viaja al registro de actividad de las transiciones. El
+        # testigo del contrato se congelo para EL ALTA y solo para el alta;
+        # ampliarlo a los actos seria ampliar el proposito de activity_log
+        # dentro de R01. La autoridad de cada acto vive en `history`, que es
+        # donde el contrato la puso.
         log_activity(rev['model_urn'], f'review_{action}', 'review', entity_id=str(rid),
                      entity_name=rev['title'], performed_by=u.get('name'),
                      details={"step": rev['current_step'], "comment": comment})
@@ -655,7 +796,8 @@ def reasignar_revisor(rid):
             cur.execute("""SELECT id, model_urn, title, items, steps, current_step, status,
                                   final_status, history, created_by, created_at,
                                   codigo_idoneidad, cerrada_en, paso_vence_en,
-                                  plantilla_id, plantilla_nombre, plantilla_version
+                                  plantilla_id, plantilla_nombre, plantilla_version,
+                                  contrato
                            FROM doc_reviews WHERE id = %s FOR UPDATE""", (rid,))
             row = cur.fetchone()
             if not row:

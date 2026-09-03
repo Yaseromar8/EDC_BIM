@@ -182,12 +182,21 @@ def reviews_app(monkeypatch):
         def execute(self, sql, params=None):
             s = ' '.join(sql.split()).upper()
             if s.startswith('SELECT ID, MODEL_URN, TITLE, ITEMS'):
+                # La fila trae TODAS las columnas que la consulta pide, hasta
+                # `contrato` (REVIEWS-R01). Sus pasos son legacy --solo correo y
+                # nombre-- asi que el contrato que le corresponde es PRE: esta
+                # revision cierra por posicion, como siempre.
+                #
+                # Y no vale dejarlo fuera: `/act` falla cerrado ante un contrato
+                # que no reconoce, asi que un doble incompleto devolveria 409 y
+                # esta prueba mediria eso en vez de la version.
                 self._u = (
                     1, OBRA, 'Entrega 3',
                     [{'node_id': DOC, 'name': 'PLANO-01.pdf', 'version': 2,
                       'version_id': V_REVISADA}],
                     [{'email': 'ana@obra.pe', 'name': 'Ana'}], 0, 'pending',
-                    'SHARED', [], 'Ana', None, 'S2', None)
+                    'SHARED', [], 'Ana', None, 'S2', None,
+                    None, None, None, None, 'PRE')
             elif s.startswith('SELECT CURRENT_VERSION_ID, NAME, VERSION_NUMBER'):
                 self._u = (estado['version_viva'], 'PLANO-01.pdf', 4)
             else:

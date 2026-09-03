@@ -90,11 +90,25 @@ def etiqueta_decision(codigo):
 
 # ── VALIDAR EL MOLDE ───────────────────────────────────────────────────────
 
-def validar_pasos(pasos, alcance):
+def validar_pasos(pasos, alcance, contrato=None):
     """None si el molde es utilizable; un mensaje si no.
 
     Se valida AL CREAR LA PLANTILLA. Descubrir que el paso 3 no designa a nadie
     cuando ya se ha aplicado a nueve obras es tarde.
+
+    EL CONTRATO VIGENTE TAMBIEN SE VALIDA AQUI (REVIEWS-R01)
+    --------------------------------------------------------
+    Bajo `AUTORIDAD_TERMINAL` un flujo cuyo ultimo paso solo REVISA no puede
+    cerrarse nunca. Se rechaza al GUARDAR, no al aplicar: una plantilla que no
+    puede producir una revision valida no es una plantilla, es una trampa.
+
+    `modificar` llama a esta misma funcion, asi que editar una plantilla PRE
+    produce configuracion nueva y tiene que satisfacer el contrato vigente para
+    poder guardarse. Las plantillas historicas NO se reescriben: quedan intactas
+    y listadas mientras nadie las edite.
+
+    `contrato=None` significa «el vigente». Se puede pasar explicito para poder
+    probar los dos sin tocar la constante.
     """
     if not isinstance(pasos, list) or not pasos:
         return 'Una plantilla sin pasos no describe ningún flujo.'
@@ -136,6 +150,21 @@ def validar_pasos(pasos, alcance):
                     raise ValueError
             except (TypeError, ValueError):
                 return 'El plazo del paso %d no es un número de días.' % n
+
+    # ── ¿PUEDE ESTE FLUJO CERRARSE? ────────────────────────────────────────
+    # Se pregunta con la MISMA funcion que usa el motor al aprobar. Si el molde
+    # y el motor respondieran cada uno a su manera, se podria guardar una
+    # plantilla que despues no se puede terminar -- la clase de defecto que ya
+    # nos costo la migracion 24: codigo y regla divergiendo sin que nada los
+    # casara.
+    import flujo_de_revision as flujo
+    if contrato is None:
+        contrato = flujo.CONTRATO_VIGENTE
+    if contrato == flujo.AUTORIDAD_TERMINAL and not flujo.cierra_positivamente(
+            contrato, pasos, len(pasos) - 1):
+        return ('El último paso de este flujo sólo revisa, así que la revisión '
+                'no podría cerrarse nunca. El último paso tiene que ser de '
+                'aprobación.')
     return None
 
 

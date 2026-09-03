@@ -161,7 +161,11 @@ def test_una_plantilla_de_ENTIDAD_no_puede_designar_a_una_PERSONA():
 
 def test_el_plazo_por_paso_tiene_que_ser_un_numero():
     import plantillas_de_revision as plt
-    base = {'etiqueta': 'x', 'decision': 'REVISA', 'user_id': 3}
+    # El paso termina en APRUEBA para que esta prueba siga siendo sobre el
+    # PLAZO y no dependa del contrato vigente: bajo AUTORIDAD_TERMINAL un flujo
+    # cuyo ultimo paso solo revisa no se puede guardar (REVIEWS-R01), y esta
+    # prueba se pondria roja el dia de la fase D sin tener nada que ver.
+    base = {'etiqueta': 'x', 'decision': 'APRUEBA', 'user_id': 3}
     assert plt.validar_pasos([dict(base, dias='pronto')], plt.OBRA)
     assert plt.validar_pasos([dict(base, dias=-1)], plt.OBRA)
     assert plt.validar_pasos([dict(base, dias=5)], plt.OBRA) is None
@@ -170,8 +174,12 @@ def test_el_plazo_por_paso_tiene_que_ser_un_numero():
 
 def test_hay_un_techo_de_pasos_y_esta_razonado():
     import plantillas_de_revision as plt
+    # El ultimo APRUEBA por lo mismo que en la prueba del plazo: esto mide el
+    # TECHO de pasos, no el contrato. Con seis REVISA se pondria roja en la
+    # fase D de REVIEWS-R01 sin que el techo hubiera cambiado.
     seis = [{'etiqueta': 'p%d' % i, 'decision': 'REVISA', 'user_id': 3}
-            for i in range(6)]
+            for i in range(5)]
+    seis.append({'etiqueta': 'p5', 'decision': 'APRUEBA', 'user_id': 3})
     assert plt.validar_pasos(seis, plt.OBRA) is None
     assert plt.validar_pasos(seis + [seis[0]], plt.OBRA)
 
