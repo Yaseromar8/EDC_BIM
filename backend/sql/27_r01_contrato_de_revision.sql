@@ -58,6 +58,19 @@
 
 BEGIN;
 
+-- ── FALLO RAPIDO, NO ESPERA INDEFINIDA ─────────────────────────────────────
+-- Todo lo que hay aqui abajo pide ACCESS EXCLUSIVE sobre `doc_reviews`. Si hay
+-- una transaccion larga abierta sobre la tabla, la peticion de lock se pone en
+-- COLA -- y, peor, bloquea a todo el que llegue detras, incluidos los SELECT del
+-- backend vivo. Una migracion esperando en produccion no es una migracion lenta:
+-- es una caida.
+--
+-- Con `lock_timeout` la migracion se rinde en 5 s, la transaccion entera se
+-- deshace y NO QUEDA NADA A MEDIAS. Se reintenta cuando la tabla este libre.
+-- `SET LOCAL` la ata a esta transaccion: no cambia la configuracion del servidor.
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+
 -- ── LA COLUMNA ─────────────────────────────────────────────────────────────
 -- En tres pasos y no en un `ADD COLUMN ... NOT NULL DEFAULT`, para que una
 -- ejecucion parcial anterior no deje la columna a medias sin que se note.
