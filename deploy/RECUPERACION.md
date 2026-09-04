@@ -17,7 +17,7 @@ no pueda activarse por accidente.
 |---|---|---|---|
 | 1 | 518 líneas del 4D sin commitear | *era* solo un disco | ✅ **rama `respaldo/4d-22ago`** |
 | 2 | ~123 MB de datos fuente sin versionar | solo un disco | ❌ **sin copia** |
-| 3 | Base de datos de producción | Cloud SQL | ❌ **copia no demostrada** |
+| 3 | Base de datos de producción | Cloud SQL | ✅ **copia + restauración demostradas** |
 | 4 | Ficheros de obra | GCS | ❌ **sin verificar** |
 | 5 | Configuración de despliegue | solo el panel de Render | ⚠️ **este documento** |
 
@@ -59,7 +59,74 @@ después, y por `git diff` contra la rama.
 almacén de datos. Necesitan una copia fuera del portátil (Drive, disco externo,
 bucket) y verificada por hash. **Falta decidir dónde.**
 
-## 3 · La base de datos — el que puede costar caro
+## 3 · La base de datos — HECHA Y DEMOSTRADA (4-sep-2026)
+
+```
+copia        D:/copias-ecd/produccion/ecd_20260904_214510.copia.gz   15,4 MB
+sha256       137c9055b54b8dc9c284d4d5634429704032e35fdeefb90438c8613ecb01fdd0
+origen       34.86.206.187 / postgres / ecd_migrator / sesión read only
+contenido    118 tablas · 86.277 filas · 57 secuencias · doc_reviews = 9
+```
+
+**La cadena completa, cada eslabón medido:**
+
+```
+produccion       120 tablas · 9 revisiones            censo, solo lectura
+  -> copia       118 tablas · 86.277 filas            manifiesto, releida y verificada
+    -> restaurada 118/118 · fila a fila               ensayo: VEREDICTO RESTAURABLE
+      -> huella  05fb263c9cee...  IDENTICA            contenido, no solo recuento
+```
+
+La huella es la misma que se congeló en la fase A de REVIEWS-R01 sobre producción.
+Que la reproduzca una base restaurada desde la copia demuestra que las revisiones
+no solo *están*: son **los mismos datos**. El ensayo por sí solo cuenta filas; eso
+no habría detectado un contenido corrompido.
+
+Una fila de `pdf_markups` quedó **en cuarentena** (un `file_node_id` que no es
+UUID): no se pierde, se aparta en un `.cuarentena-*.csv` esperando decisión
+humana. Es un problema de datos que ya venía de producción, no de la copia.
+
+### LA RECETA DE VUELTA — y el fallo que tenía
+
+El primer ensayo contra esta copia dio **`CON DESCUADRES`: 86 de 118 tablas**.
+Entre las 32 que no volvían iban **`users`, `project_users` y `doc_reviews`** — una
+recuperación en la que **nadie podría entrar**. Lo engañoso: eran solo 294 filas de
+86.277 (0,34 %), porque el bulto son `lob_element_links` e `inventory_assets`, que
+son derivados regenerables. *La recuperación salvaba lo recalculable y perdía el
+expediente.*
+
+La causa, censada y no supuesta: **las 28 tablas y las 10 columnas que faltaban
+vienen TODAS de `backend/sql/`, ninguna de código Python.** El esquema de esta
+plataforma es **código MÁS migraciones**, y la receta solo tenía la primera mitad.
+`bootstrap.verificar()` decía «completo» porque su manifiesto tampoco las conoce.
+
+**El orden correcto, ya demostrado:**
+
+```
+1. base vacia            propietario = ecd_migrator (como en produccion)
+2. bootstrap_esquema     el esquema que es codigo
+3. aplicar_migraciones   backend/sql/ de la 06 en adelante, COMO ecd_migrator
+4. restaurar             la copia
+```
+
+El paso 3 no existía: es `backend/herramientas/aplicar_migraciones.py`, escrito
+hoy. Y **el rol importa**: aplicadas como `ecd_app` pasan 22 de 23 y falla
+`26_ng04_avance.sql`, que empieza por `ALTER DEFAULT PRIVILEGES FOR ROLE
+ecd_migrator` — sentencia que solo ese rol puede ejecutar. Un privilegio de
+diferencia, invisible hasta el día que hace falta.
+
+`herramientas/ensayo_de_restauracion.py` ya hace los cuatro pasos, así que
+repetir el ensayo vuelve a validar **el procedimiento real**, no uno parecido.
+
+### Lo que sigue pendiente aquí
+
+- **La copia está en el mismo disco que todo lo demás.** Falta sacarla fuera.
+- **Cloud SQL**: sin comprobar si tiene copias automáticas y PITR.
+- Las dos copias de agosto en `D:/copias-ecd/` **no son de producción** (90 tablas,
+  1 y 2 revisiones): son de la base local. Se dejan donde están, sin borrar, pero
+  no cuentan como respaldo.
+
+## 3-bis · Cómo se toma la copia (y por qué agosto salió mal)
 
 Producción es `34.86.206.187`, base `postgres`: **120 tablas, 9 revisiones**.
 

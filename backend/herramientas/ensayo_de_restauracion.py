@@ -153,6 +153,23 @@ def _ensayar(copia, base_ensayo):
         return 1
     print('   esquema completo contra el manifiesto')
 
+    # ── 2b. LAS MIGRACIONES. La mitad que faltaba, y por la que este ensayo
+    # daba CON DESCUADRES el 4-sep-2026: se recuperaban 86 de 118 tablas, y
+    # entre las 32 que no estaban iban `users`, `project_users` y
+    # `doc_reviews`. Una recuperacion en la que nadie podria entrar.
+    #
+    # El censo demostro que las 28 tablas y las 10 columnas que faltaban vienen
+    # TODAS de `backend/sql/`, ninguna de codigo Python: el esquema de esta
+    # plataforma es CODIGO **mas** MIGRACIONES, y aqui solo se hacia la primera
+    # mitad. `bootstrap.verificar()` decia «completo» porque su manifiesto
+    # tampoco las conoce -- por eso el paso de arriba pasaba sin enterarse.
+    print('\n2b. Aplicar las migraciones de sql/ (ARRANQUE.md, en orden)')
+    import herramientas.aplicar_migraciones as migras
+    if migras.aplicar(silencioso=True) != 0:
+        print('   HAY MIGRACIONES SIN APLICAR: el esquema no reproduce produccion.')
+        return 1
+    print('   migraciones aplicadas')
+
     print('\n3. Cargar los datos de la copia')
     import restaurar as rest
     codigo = rest.restaurar(copia, base_ensayo, confirmar=True,
