@@ -18,7 +18,7 @@ no pueda activarse por accidente.
 | 1 | 518 líneas del 4D sin commitear | *era* solo un disco | ✅ **rama `respaldo/4d-22ago`** |
 | 2 | ~123 MB de datos fuente sin versionar | solo un disco | ❌ **sin copia** |
 | 3 | Base de datos de producción | Cloud SQL | ✅ **copia + restauración demostradas** |
-| 4 | Ficheros de obra | GCS | ❌ **sin verificar** |
+| 4 | Ficheros de obra | GCS | ⚠️ **protegidos dentro de Google, sin copia fuera** |
 | 5 | Configuración de despliegue | solo el panel de Render | ⚠️ **este documento** |
 
 El 5 queda **parcialmente** cubierto: la topología ya está aquí, pero **los
@@ -121,7 +121,10 @@ repetir el ensayo vuelve a validar **el procedimiento real**, no uno parecido.
 ### Lo que sigue pendiente aquí
 
 - **La copia está en el mismo disco que todo lo demás.** Falta sacarla fuera.
-- **Cloud SQL**: sin comprobar si tiene copias automáticas y PITR.
+- **Y falta que se tome sola.** Una copia hecha a mano una vez es una foto, no un
+  respaldo. Igual que **el ensayo tiene que repetirse**: el fallo de hoy existía
+  porque nadie volvió a ensayar tras añadir las migraciones 07 a la 28. Esa es la
+  única guardia que detecta esa deriva, y ya demostró que la detecta.
 - Las dos copias de agosto en `D:/copias-ecd/` **no son de producción** (90 tablas,
   1 y 2 revisiones): son de la base local. Se dejan donde están, sin borrar, pero
   no cuentan como respaldo.
@@ -141,13 +144,74 @@ tiene que decir 120 tablas y 9 filas en `doc_reviews`**, o no es de producción.
 Y una copia no restaurada no es una copia: es una creencia. **La prueba es
 restaurarla** en un clúster desechable y volver a contar.
 
-Sin comprobar todavía: si Cloud SQL tiene copias automáticas y PITR encendidos.
+**El `postgres` local (puerto 5433) no tiene contraseña conocida**, y ni `ecd_app`
+ni `ecd_migrator` tienen `CREATEDB` — que es la separación de identidades
+funcionando. Para ensayar no hace falta recuperarla: se levanta un clúster
+desechable con `initdb` en un directorio temporal, puerto propio (55432), con su
+propia contraseña de usar y tirar, y se destruye al terminar. Así se hizo el
+4-sep-2026 y el servidor del dueño no se tocó.
 
-## 4 · Los ficheros de obra
+**En Windows, `getpass` lee de la CONSOLA, no de la entrada estándar**: una
+tubería no le llega y el proceso se cuelga sin crear nada. Hay que sustituir
+`getpass.getpass` en un envoltorio, no canalizar la contraseña.
 
-Viven en Google Cloud Storage (`GCS_BUCKET_NAME`). **Sin verificar** si el
-bucket tiene versionado de objetos y protección contra borrado. Diez minutos de
-consola, y es la diferencia entre que un borrado sea recuperable o definitivo.
+## 4 · La nube — auditada el 4-sep-2026
+
+Proyecto **PLATAFORMA BIM-TALARA** (`correos-gmail-425301`).
+
+**Cloud SQL · `pqt-08-talara`** (PostgreSQL 18, `34.86.206.187`)
+
+```
+copias automatizadas   HABILITADA · 7 retenidas · ventana 6-10 a.m. PET
+las 7 ultimas          29-ago a 4-sep, TODAS en verde, sin huecos
+PITR                   HABILITADA · 7 dias de registros
+ubicacion              multirregion us
+```
+
+**Esto ya cubre el error humano reciente**, que es el fallo más probable: se
+puede volver a cualquier instante de los últimos 7 días. **7 días es corto** para
+un expediente de obra pública —una discrepancia sobre un plano aparece a los
+meses— y Cloud SQL admite hasta 35. Subirlo es un interruptor con coste, y es
+decisión del propietario.
+
+**Bucket de documentos · `yaser-pqt08-talara`** (us-east4, Autoclass)
+
+```
+borrado reversible        HABILITADO · 90 dias   (cubre borrado Y sobrescritura)
+control de versiones      DESACTIVADO
+politica de retencion     no establecida
+replicacion entre buckets no habilitada
+```
+
+`yaser-pqt08-talara-copia` (Nearline) **no es una réplica**: es una foto
+congelada del **20-ago-2026 a las 11:36**, en el mismo proyecto y la misma
+región. Ni está al día ni protege de perder el proyecto.
+
+### EL ÚNICO HUECO SIN COBERTURA
+
+**Los ficheros no tienen ninguna copia fuera de Google.** La base sí. Todo lo de
+arriba —backups, PITR, borrado reversible, bucket copia— vive dentro del **mismo
+proyecto**: si la cuenta se pierde o la facturación entra en mora (**ya pasó una
+vez**), se va todo junto.
+
+Magnitud medida desde la propia copia: **~8 GB** en 3.180 versiones
+(`file_versions.size_bytes`). Es cota inferior — el bucket lleva además
+`multimedia-whatsapp/`, `evidencia/` y `prueba-aislamiento/`.
+
+La herramienta existe: **`backend/herramientas/copia_de_ficheros.py`**. Necesita
+`gcloud` instalado (`gcloud auth login`), que no se instala desde aquí.
+
+```bash
+python herramientas/copia_de_ficheros.py --destino G:/copias-ecd/ficheros
+```
+
+**No borra nunca en el destino, a propósito**: un respaldo que replica los
+borrados no protege del borrado. Es copia de seguridad, no espejo.
+
+> Los tres discos del portátil (`C:`, `D:`, `G:`) son **internos**. Copiar ahí
+> protege de perder el proyecto de Google, pero no del portátil. El destino
+> correcto a medio plazo es otro proveedor (~$0,05/mes por 8 GB) o un disco
+> externo que no viva en la misma mesa.
 
 ---
 
