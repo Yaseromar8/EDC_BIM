@@ -391,37 +391,58 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   Cuarentena y Elementos suprimidos dejan de ser secciones: son formas
                   de MIRAR los archivos, y viven como filtros dentro de Archivos. */}
               {[
-                { titulo: 'Obra', items: [
+                // POR QUE ESTOS GRUPOS Y NO OTROS.
+                //
+                // «Entregas» habia crecido hasta TRECE entradas y mezclaba tres
+                // cosas que no se parecen: tipos de documento, la maquinaria de
+                // aprobacion, y lo que pasa en la obra. Un titulo que no
+                // anticipa lo que hay debajo obliga a leerse la lista entera --
+                // y con veinticuatro entradas eso es exactamente lo que pasaba.
+                //
+                // Se agrupa por LO QUE ESTA HACIENDO QUIEN MIRA, no por el tipo
+                // de objeto: encontrar un documento, hacerlo circular y
+                // aprobarlo, o registrar lo que ocurre en campo. Ningun grupo
+                // pasa de siete entradas.
+                //
+                // Las entradas son LAS MISMAS: no se anade ni se quita ninguna,
+                // y ninguna cambia de modo, de icono ni de manejador. Solo
+                // cambian de grupo y de orden.
+                { titulo: 'Documentos', items: [
                   // Buscar va primero: es lo que se hace cuando NO se sabe en qué
                   // carpeta está el documento. El filtro de la barra de archivos
                   // sólo mira la carpeta abierta, que es otra cosa.
                   { label: 'Buscar', mode: 'buscar', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>, onClick: () => fe.setSidebarView('buscar') },
                   { label: 'Archivos', mode: 'files', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5,5l2,2H20v12h-16V5H12.5 M13.17,3h-10.34A1.83,1.83,0,0,0,1,4.83v14.34A1.83,1.83,0,0,0,2.83,21h18.34A1.83,1.83,0,0,0,23,19.17V6.83A1.83,1.83,0,0,0,21.17,5H14.83Z"/></svg>, onClick: () => { fe.setSidebarView('files'); fe.switchMode(false); } },
-                  { label: 'Fotos de campo', mode: 'multimedia', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>, onClick: () => fe.setSidebarView('multimedia') },
-                  // RFI: registro formal de consultas. Va antes de Red Line porque
-                  // es el objeto contractual; la observacion es interna.
-                  { label: 'RFI', mode: 'rfis', icon: <svg width="22" height="22" viewBox="0 0 24 24"><text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontWeight="bold" fontSize="11" fontFamily="sans-serif">RFI</text></svg>, onClick: () => fe.setSidebarView('rfis') },
-                  { label: 'Red Line', mode: 'redlines', icon: <svg width="22" height="22" viewBox="0 0 24 24"><text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontWeight="bold" fontSize="14" fontFamily="sans-serif">RL</text></svg>, onClick: () => fe.setSidebarView('redlines') },
+                  { label: 'Planos', mode: 'planos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/></svg>, onClick: () => fe.setSidebarView('planos') },
+                  { label: 'Especificaciones', mode: 'specs', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h7"/></svg>, onClick: () => fe.setSidebarView('specs') },
+                  { label: 'Conjuntos', mode: 'sets', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>, onClick: () => fe.setSidebarView('sets') },
                   // «Informes» se retira de V1: era un cascaron que decia
                   // «Proximamente disponible» y no habia nada detras. Lo que el
                   // producto SI sabe hacer --el indice del expediente, la actividad,
                   // el estado de las entregas-- ya vive en sus pantallas. Una entrada
                   // de menu que promete un modulo inexistente es peor que su ausencia.
                 ]},
-                { titulo: 'Entregas', items: [
+                { titulo: 'Revisión y entrega', items: [
                   { label: 'Revisiones', mode: 'reviews', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>, onClick: () => fe.setSidebarView('reviews') },
                   { label: 'Flujos de revisión', mode: 'flujos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 9v6"/><path d="M13 6h5a2 2 0 0 1 2 2v3"/><path d="M13 18h5a2 2 0 0 0 2-2v-1"/></svg>, onClick: () => fe.setSidebarView('flujos') },
-                  { label: 'Transmittals', mode: 'transmittals', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>, onClick: () => fe.setSidebarView('transmittals') },
                   { label: 'Submittals', mode: 'submittals', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>, onClick: () => fe.setSidebarView('submittals') },
-                  { label: 'Planos', mode: 'planos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/></svg>, onClick: () => fe.setSidebarView('planos') },
-                  { label: 'Especificaciones', mode: 'specs', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h7"/></svg>, onClick: () => fe.setSidebarView('specs') },
+                  { label: 'Transmittals', mode: 'transmittals', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>, onClick: () => fe.setSidebarView('transmittals') },
+                  { label: 'Plan de entrega', mode: 'plan', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11H3v10h6V11z"/><path d="M15 3H9v18h6V3z"/><path d="M21 7h-6v14h6V7z"/></svg>, onClick: () => fe.setSidebarView('plan') },
+                  // RFI y Red Line viven aqui y no en «En obra»: son consultas
+                  // FORMALES sobre un documento que esperan respuesta, o sea parte
+                  // del intercambio, no de la ejecucion.
+                  // RFI va antes que Red Line porque es el objeto contractual; la
+                  // observacion es interna.
+                  { label: 'RFI', mode: 'rfis', icon: <svg width="22" height="22" viewBox="0 0 24 24"><text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontWeight="bold" fontSize="11" fontFamily="sans-serif">RFI</text></svg>, onClick: () => fe.setSidebarView('rfis') },
+                  { label: 'Red Line', mode: 'redlines', icon: <svg width="22" height="22" viewBox="0 0 24 24"><text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontWeight="bold" fontSize="14" fontFamily="sans-serif">RL</text></svg>, onClick: () => fe.setSidebarView('redlines') },
+                ]},
+                { titulo: 'En obra', items: [
+                  { label: 'Fotos de campo', mode: 'multimedia', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>, onClick: () => fe.setSidebarView('multimedia') },
+                  { label: 'Trabajo de campo', mode: 'campo', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16"/><path d="M12 4v10"/><path d="M8 8l4-4 4 4"/><circle cx="12" cy="18" r="1"/></svg>, onClick: () => fe.setSidebarView('campo') },
                   { label: 'Protocolos', mode: 'protocolos', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3 5-5"/><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4"/></svg>, onClick: () => fe.setSidebarView('protocolos') },
                   { label: 'Issues y punch', mode: 'punch', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>, onClick: () => fe.setSidebarView('punch') },
                   { label: 'Cuaderno de obra', mode: 'cuaderno', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="9" y1="7" x2="16" y2="7"/><line x1="9" y1="11" x2="16" y2="11"/></svg>, onClick: () => fe.setSidebarView('cuaderno') },
                   { label: 'Avance físico', mode: 'avance', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 20h18"/><path d="M5 20V9l5 3V7l5 3V5l4 2v13"/></svg>, onClick: () => fe.setSidebarView('avance') },
-                  { label: 'Trabajo de campo', mode: 'campo', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16"/><path d="M12 4v10"/><path d="M8 8l4-4 4 4"/><circle cx="12" cy="18" r="1"/></svg>, onClick: () => fe.setSidebarView('campo') },
-                  { label: 'Plan de entrega', mode: 'plan', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11H3v10h6V11z"/><path d="M15 3H9v18h6V3z"/><path d="M21 7h-6v14h6V7z"/></svg>, onClick: () => fe.setSidebarView('plan') },
-                  { label: 'Conjuntos', mode: 'sets', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>, onClick: () => fe.setSidebarView('sets') },
                 ]},
                 // QUIÉN VE QUÉ EN «ADMINISTRACIÓN» — por FIGURA, no por rol global.
                 // La regla es la misma que en el resto del expediente: no ofrecer
@@ -473,8 +494,13 @@ export default function FilesPage({ project, user, onBack, onLogout, onBackToHub
                   return codigos.some(c => fe.herramientasDeObra?.[c] !== false);
                 }) }))
                 .filter(grupo => grupo.items.length > 0)
-                .map((grupo, gi) => (
-                <li key={grupo.titulo} style={{ marginBottom: gi < 2 ? 10 : 0 }}>
+                .map((grupo, gi, visibles) => (
+                // Aire entre grupos, menos tras el ultimo. Antes era `gi < 2`,
+                // que estaba atado a que hubiera exactamente tres grupos: al
+                // pasar a cuatro, el tercero se quedaba pegado al cuarto. Y el
+                // numero de grupos VISIBLES cambia solo, porque los vacios se
+                // filtran antes segun las herramientas de la obra.
+                <li key={grupo.titulo} style={{ marginBottom: gi < visibles.length - 1 ? 10 : 0 }}>
                   {globalSidebarWidth > 100 && (
                     <div style={{ padding: '8px 12px 4px', fontSize: 11, color: '#9aa0a6', letterSpacing: '0.04em' }}>
                       {grupo.titulo}
