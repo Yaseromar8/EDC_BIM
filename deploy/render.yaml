@@ -1,0 +1,158 @@
+# =============================================================================
+# TOPOLOGIA DE DESPLIEGUE DE ALEPHIA  ·  REGISTRO, NO BLUEPRINT EN USO
+# =============================================================================
+#
+# POR QUE EXISTE ESTE FICHERO
+# ---------------------------
+# Hasta el 4-sep-2026 toda la topologia de despliegue --tres servicios, sus
+# ordenes de compilacion, las reglas de reescritura, los dominios y las
+# variables de entorno-- vivia UNICAMENTE dentro del panel de Render. Sin
+# copia, sin historial, sin revision. Si se perdiera el acceso a esa cuenta de
+# Google no habria de donde reconstruirla: habria que redescubrirla a base de
+# probar.
+#
+# ESTE FICHERO NO ESTA APLICADO
+# -----------------------------
+# Vive en `deploy/` y NO en la raiz del repositorio, a proposito: Render solo
+# busca `render.yaml` en la raiz, asi que desde aqui no puede activarse por
+# accidente. Aplicarlo a los servicios que YA existen es una operacion
+# distinta y con riesgo --un Blueprint puede tomar posesion de un servicio y
+# reponer ajustes que hoy estan puestos a mano-- y necesita su propia
+# preparacion y su propio ensayo.
+#
+# LO QUE HAY AQUI ESTA OBSERVADO, NO SUPUESTO
+# -------------------------------------------
+# Cada valor se leyo del panel de Render el 4-sep-2026. Lo que no se pudo
+# comprobar va marcado NO VERIFICADO en vez de rellenarse con lo probable: un
+# registro con un valor inventado es peor que no tener registro, porque se
+# confia en el.
+#
+# LOS VALORES DE LAS VARIABLES NO ESTAN AQUI
+# ------------------------------------------
+# Y no deben estarlo: son secretos, y meter secretos en git fue justamente uno
+# de los hallazgos criticos de la auditoria de junio de 2026. Aqui solo estan
+# los NOMBRES. Donde viven los valores se explica en RECUPERACION.md.
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # 1 · EL BACKEND  ·  https://visor-ecd-backend.onrender.com
+  #     serviceId observado: srv-d4cn0124d50c73d9ns70
+  #     Vive dentro del proyecto "My project" / entorno "Production", no en
+  #     "Ungrouped Services" como los dos frontends. Buscarlo ahi.
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: visor-ecd-backend
+    # El panel dice runtime "Node" aunque el servicio es Python: `yarn` es solo
+    # el envoltorio. `postinstall` crea el venv e instala requirements.txt, y
+    # `start` arranca gunicorn. Ver backend/package.json.
+    runtime: node
+    region: oregon
+    repo: https://github.com/Yaseromar8/EDC_BIM
+    branch: main
+    rootDir: backend
+    buildCommand: yarn
+    startCommand: yarn start
+    # preDeployCommand: vacio en el panel. NO se usa para migrar: las
+    # migraciones de `backend/sql/` se aplican A MANO como ecd_migrator, segun
+    # backend/ARRANQUE.md. `yarn start` solo VERIFICA el esquema
+    # (bootstrap_esquema.py --verificar) y se niega a arrancar si falta algo.
+    #
+    # plan: NO VERIFICADO. El panel muestra el tipo de instancia como "1c-2g";
+    #       no se comprobo a que nombre de plan corresponde.
+    # healthCheckPath: NO VERIFICADO en los ajustes. La ruta existe y responde:
+    #       GET /api/health -> {"status":"ok","version":"<commit vivo>", ...}
+    #       Es la UNICA forma fiable de saber que commit esta corriendo.
+    # autoDeploy: NO VERIFICADO para este servicio. Medido por observacion el
+    #       28-ago-2026: un commit siguio 11 min sin entrar solo, asi que en la
+    #       practica requiere Manual Deploy.
+    envVars:
+      # Los seis que el propio backend declara imprescindibles
+      # (backend/postura_de_seguridad.py, y /api/health cuenta cuantos faltan).
+      # Si alguno falta o es un relleno, la postura deja de estar completa.
+      - key: APP_SECRET            # firma invitaciones, restablecimientos y verificaciones
+        sync: false
+      - key: SESSION_PEPPER        # sin ella la pimienta es una constante publica del repo
+        sync: false
+      - key: CORS_ORIGINS          # sin ella el backend acepta CUALQUIER origen
+        sync: false
+      - key: DDL_EN_CALIENTE       # tiene que estar APAGADO: si no, la app altera su esquema
+        sync: false
+      - key: ENFORCE_PROJECT_AUTHZ # el control de acceso por obra
+        sync: false
+      - key: AUTH_POLICY_MODE      # en "sombra" los decoradores de rol NO bloquean a nadie
+        sync: false
+      # El resto de nombres que el codigo lee estan en RECUPERACION.md.
+
+  # ---------------------------------------------------------------------------
+  # 2 · ALEPHIA DOCS (el portal, y el Hub)  ·  https://alephia.com.pe
+  #     serviceId observado: srv-d81sptnavr4c738ar4o0
+  # ---------------------------------------------------------------------------
+  - type: web
+    runtime: static
+    name: visor-ecd-portal
+    repo: https://github.com/Yaseromar8/EDC_BIM
+    branch: main
+    rootDir: frontend-docs
+    buildCommand: npm install --legacy-peer-deps && npm run build
+    staticPublishPath: frontend-docs/dist
+    domains:
+      - alephia.com.pe          # principal
+      - www.alephia.com.pe      # Render lo creo solo, como redireccion 301 a la raiz
+    # El subdominio de Render sigue ENCENDIDO a proposito:
+    # visor-ecd-portal.onrender.com lo usa el instalador del conector. NO
+    # apagarlo hasta cambiar esas URLs en el codigo.
+    routes:
+      # ESTA es la regla que hace que el backend no necesite dominio propio.
+      # Es del SERVICIO, no del host, asi que funciona igual en
+      # alephia.com.pe/api/... que en visor-ecd-portal.onrender.com/api/...
+      - type: rewrite
+        source: /api/*
+        destination: https://visor-ecd-backend.onrender.com/api/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NPM_CONFIG_LEGACY_PEER_DEPS
+        sync: false
+      # OJO: se hornea AL COMPILAR. Cambiarla exige "Save and rebuild";
+      # reiniciar no basta.
+      - key: VITE_VISOR_URL       # = https://visor.alephia.com.pe
+        sync: false
+    # autoDeploy: OFF (lo puso el dueno el 1-sep-2026). Un push a main NO
+    # publica nada: hay que hacer Manual Deploy.
+
+  # ---------------------------------------------------------------------------
+  # 3 · ALEPHIA VIEW (el visor 3D)  ·  https://visor.alephia.com.pe
+  #     serviceId observado: srv-d81s4j9kh4rs73btfsl0
+  # ---------------------------------------------------------------------------
+  - type: web
+    runtime: static
+    name: visor-ecd-frontend
+    repo: https://github.com/Yaseromar8/EDC_BIM
+    branch: main
+    rootDir: frontend-react
+    buildCommand: npm run build
+    staticPublishPath: frontend-react/dist
+    domains:
+      - visor.alephia.com.pe
+    # POR QUE UN SUBDOMINIO Y NO alephia.com.pe/visor:
+    # frontend-react/vite.config.js NO tiene `base`, asi que este sitio sirve
+    # sus ficheros en /assets/..., la MISMA ruta que el portal. Colgados del
+    # mismo host esa ruta seria ambigua. Ademas hay 11 rutas absolutas en 7
+    # ficheros (/brand, /extensions, /data, /presupuesto_maestro.json...) que
+    # irian a buscar los ficheros del portal. Se puede hacer, pero es un
+    # cambio de codigo con riesgo de 404 silencioso, no un cambio de DNS.
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://visor-ecd-backend.onrender.com/api/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      # Tambien se hornea al compilar.
+      - key: VITE_DOCS_URL        # = https://alephia.com.pe
+        sync: false
+    # autoDeploy: OFF (observado en el panel el 4-sep-2026).
