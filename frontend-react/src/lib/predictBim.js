@@ -95,9 +95,17 @@ export function iniciarPredict() {
                     n_mayor: g.n_mayor,
                     n_menor: g.n_menor,
                     origen: g.origen,
+                    // EL NÚMERO DEL RÓTULO en el modelo: obra de campo, sin
+                    // suministro ni transporte. Es el mismo criterio de la
+                    // pestaña EJECUCIÓN, así que el rótulo y el panel no se
+                    // contradicen cuando abres uno después del otro.
+                    avance_campo_pct: g.avance_campo_pct,
+                    n_campo: g.n_campo,
+                    n_campo_lista: g.n_campo_lista,
                 });
             }
             _listo = true;
+            publicarAvance();
             return true;
         } catch {
             _listo = false;                 // PREDICT apagado: el visor sigue igual
@@ -107,6 +115,28 @@ export function iniciarPredict() {
         }
     })();
     return _iniciando;
+}
+
+/** El avance de cada grupo, en el ventanal, para que la capa de rótulos del
+ *  visor lo lea sin importar nada de PREDICT.
+ *
+ *  La dependencia va en UN SOLO sentido a propósito: el visor mira si el objeto
+ *  existe y lo usa si está; si PREDICT está apagado, el rótulo se dibuja como
+ *  siempre. El visor nunca importa este módulo.
+ */
+function publicarAvance() {
+    const m = {};
+    for (const [cod, g] of _catalogo) {
+        if (g.avance_campo_pct == null) continue;
+        m[cod] = {
+            pct: g.avance_campo_pct,
+            hechas: g.n_campo_lista,
+            n: g.n_campo,
+            calle: g.calle || '',
+        };
+    }
+    window.__predictAvance = m;
+    window.dispatchEvent(new CustomEvent('predict-avance-listo'));
 }
 
 /** HOVER — de memoria, sin red. null si ese código no está en el expediente. */

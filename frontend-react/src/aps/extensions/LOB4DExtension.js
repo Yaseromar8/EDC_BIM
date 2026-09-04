@@ -233,6 +233,9 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             this.setZoneLabelsVisible(on !== false, 'subzona');
         };
         window.addEventListener('lob-zone-labels', this.handleZoneLabels);
+        // PREDICT puede terminar de cargar después de dibujar los rótulos
+        this._onAvanceExterno = () => this.aplicarAvanceExterno();
+        window.addEventListener('predict-avance-listo', this._onAvanceExterno);
 
         // Capa Agrupación: los mismos rótulos, pero la clave es el PAR
         // (SubZona + Ubicacion). Solo caen juntos los que coinciden en los dos.
@@ -296,6 +299,9 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         window.removeEventListener('lob-derive-stations', this.handleDeriveStations);
         window.removeEventListener('lob-focus-elements', this.handleFocusElements);
         window.removeEventListener('lob-zone-labels', this.handleZoneLabels);
+        if (this._onAvanceExterno) {
+            window.removeEventListener('predict-avance-listo', this._onAvanceExterno);
+        }
         window.removeEventListener('lob-group-labels', this.handleGroupLabels);
         window.removeEventListener('lob-ghost-excavation', this.handleGhostExcav);
         window.removeEventListener('lob-pk-heatmap', this.handlePkHeatmap);
@@ -1704,11 +1710,19 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         // Píldora
         const el = document.createElement('div');
         el.className = 'lob-zone-label';
-        el.style.cssText = this.zoneLabelStyle(active);
+        el.style.cssText = this.zoneLabelStyle(active, zone);
 
         const txt = document.createElement('span');
         txt.textContent = text;
         el.appendChild(txt);
+
+        // CHIP DE AVANCE. Lo llena PREDICT desde window.__predictAvance; si no
+        // está, el span queda vacío y la píldora se ve como siempre. Con esto
+        // el estado de cada frente se lee sin pasar el mouse uno por uno.
+        const chip = document.createElement('span');
+        chip.className = 'lob-zone-avance';
+        chip.style.cssText = 'margin-left:8px;font-weight:800;font-variant-numeric:tabular-nums;display:none;';
+        el.appendChild(chip);
 
         // La × de salir del aislamiento. Solo se ve cuando este grupo ES el
         // aislado: volver a pulsar la píldora también funcionaba, pero eso no se
@@ -1731,17 +1745,115 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             event.preventDefault();
             event.stopPropagation();
             this.handleZoneClick(zone);
+            // Quien escuche decide si abre su panel. El visor no sabe ni le
+            // importa qué hay del otro lado. Solo se avisa de los grupos que
+            // el otro lado conoce: en la capa SubZonas los códigos son otros
+            // y abriría un panel vacío.
+            const mapa = window.__predictAvance;
+            if (mapa && mapa[zone]) {
+                window.dispatchEvent(new CustomEvent('zona-rotulo-click', {
+                    detail: { zone, total: this.totalPiezasZona(zone) },
+                }));
+            }
         });
         this._zoneLabelGroup.appendChild(el);
 
         this._zoneLabelElements.push({
-            el, line, dot, zone, cerrar,
+            el, line, dot, zone, cerrar, chip,
             worldPos: worldPos.clone ? worldPos.clone() : worldPos,
             worldBase: worldBase ? (worldBase.clone ? worldBase.clone() : worldBase) : null,
         });
     }
 
-    zoneLabelStyle(active) {
+    // LA ESCALA DEL AVANCE — violeta (sin empezar) → magenta → rojo → ámbar
+    // → verde (terminado).
+    //
+    // NO lleva gris en ningún punto, y ese es el requisito que la define: el
+    // modelo del PQT-8 es terreno gris y estructuras grises, así que una
+    // píldora gris desaparece justo en los frentes que más importa ver, los
+    // que no han arrancado.
+    //
+    // El recorrido es de TONO con luminancia constante (0.115 en el fondo,
+    // 0.300 en el aro). Interpolar en RGB entre dos colores lejanos apaga los
+    // intermedios —violeta y ámbar mezclados dan un gris sucio, medido: 0.07
+    // de saturación—; recorriendo el tono la saturación se queda en 0.52 de
+    // punta a punta. Y como la luminancia no cambia, el título blanco tiene
+    // exactamente 6.1 de contraste en TODOS los porcentajes (AA pide 4.5),
+    // sin puntos flojos ni saltos de texto claro a oscuro.
+    //
+    // El rojo del 40% no significa "problema": aquí es un tono del recorrido,
+    // y el número al lado dice el porcentaje. Para la variante fría
+    // (violeta → azul → cian → verde) basta invertir el recorrido, pero el
+    // cian del 50% chocaría con el teal del grupo aislado, que significa otra
+    // cosa: dónde estás parado.
+    _RAMPA_AVANCE = [
+        ['#7740c3', '#aa82e2'],  //   0%
+        ['#9235a7', '#ca72de'],  //  10%
+        ['#9f3288', '#dd6cc4'],  //  20%
+        ['#a63560', '#de729c'],  //  30%
+        ['#a93735', '#df7775'],  //  40%
+        ['#89522b', '#d48146'],  //  50%
+        ['#6c5f22', '#ac9428'],  //  60%
+        ['#566520', '#859f25'],  //  70%
+        ['#3d6a22', '#58a727'],  //  80%
+        ['#236d24', '#28ac2a'],  //  90%
+        ['#226c41', '#28aa5e'],  // 100%
+    ];
+
+    /** Los colores de la píldora para ese avance. Solo CSS, nada de geometría. */
+    _pildoraAvance(pct) {
+        const R = this._RAMPA_AVANCE;
+        const t = Math.max(0, Math.min(100, Number(pct) || 0)) / 10;
+        const i = Math.min(R.length - 2, Math.floor(t));
+        const u = t - i;
+        // se interpola entre dos peldaños VECINOS de la rampa: están a 24° de
+        // tono, así que la mezcla no puede apagarse
+        const mez = (a, b) => {
+            const n16 = (h, k) => parseInt(h.substr(1 + k * 2, 2), 16);
+            const v = [0, 1, 2].map((k) => Math.round(n16(a, k) + (n16(b, k) - n16(a, k)) * u));
+            return `rgb(${v[0]},${v[1]},${v[2]})`;
+        };
+        return {
+            fondo: mez(R[i][0], R[i + 1][0]),
+            borde: mez(R[i][1], R[i + 1][1]),
+            texto: '#f7fafc',
+        };
+    }
+
+    /** Piezas de geometría del grupo. Sale de _zoneMembers, ya calculado. */
+    totalPiezasZona(zone) {
+        const m = this._zoneMembers && this._zoneMembers.get(zone);
+        if (!m || !m.byModel) return 0;
+        let t = 0;
+        m.byModel.forEach((ids) => { t += (ids && ids.length) || 0; });
+        return t;
+    }
+
+    /** Pinta el avance en cada píldora. Idempotente: se puede llamar cuantas
+     *  veces haga falta (al construir los rótulos y cuando PREDICT termina de
+     *  cargar, que puede ser después). */
+    aplicarAvanceExterno() {
+        const mapa = window.__predictAvance;
+        if (!Array.isArray(this._zoneLabelElements)) return 0;
+        let puestos = 0;
+        for (const it of this._zoneLabelElements) {
+            if (!it.chip) continue;
+            const d = mapa && mapa[it.zone];
+            if (!d || d.pct == null) { it.chip.style.display = 'none'; continue; }
+            // el número va en blanco: el color lo lleva la píldora entera, y
+            // dos codificaciones del mismo dato en el mismo rótulo compiten
+            it.chip.textContent = `${Math.round(d.pct)}%`;
+            it.chip.style.color = this._pildoraAvance(d.pct).texto;
+            it.chip.style.opacity = '0.92';
+            it.chip.style.display = 'inline';
+            it.el.title = `${d.hechas} de ${d.n} trabajos terminados`
+                + (d.calle ? ` · ${d.calle}` : '');
+            puestos += 1;
+        }
+        return puestos;
+    }
+
+    zoneLabelStyle(active, zone) {
         // Con un grupo aislado, los DEMÁS rótulos se atenúan en vez de desaparecer:
         // siguen diciendo dónde está el resto -que es la referencia que uno necesita
         // para situarse- pero dejan de competir con el que estás mirando.
@@ -1750,9 +1862,19 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         // activo lleva el teal de marca sólido; el inactivo, un grafito frío casi
         // opaco. Peso 600 en vez de 700 (menos "grito"), y una sombra más baja y
         // difusa que asienta la píldora sobre el modelo en vez de despegarla.
-        const bg = active ? '#1f6f82' : 'rgba(24,32,42,0.92)';
-        const border = active ? '#3fa7bd' : 'rgba(126,155,189,0.28)';
-        const color = active ? '#eafcff' : '#c3d2e2';
+        // El color dice el avance de un vistazo, sin leer el número. El grupo
+        // AISLADO conserva el teal: ahí el color significa otra cosa —dónde
+        // estás parado—, y mezclar los dos sentidos en un mismo elemento es
+        // lo que hace que una interfaz deje de poder leerse.
+        const mapa = window.__predictAvance;
+        const d = (!active && mapa) ? mapa[zone] : null;
+        const pin = (d && d.pct != null) ? this._pildoraAvance(d.pct) : null;
+        // fondo LLENO, no un dark con borde de color: a distancia el borde de
+        // 1px no se distingue, y el rótulo tiene que leerse desde donde uno
+        // mira el modelo, no pegado a la pantalla
+        const bg = active ? '#1f6f82' : (pin ? pin.fondo : 'rgba(24,32,42,0.92)');
+        const border = active ? '#3fa7bd' : (pin ? pin.borde : 'rgba(126,155,189,0.28)');
+        const color = active ? '#eafcff' : (pin ? pin.texto : '#c3d2e2');
         const atenuar = atenuada ? 'opacity:0.28;' : '';
         return `position:absolute;display:inline-flex;align-items:center;${atenuar}color:${color};background:${bg};padding:5px 12px;border-radius:7px;border:1px solid ${border};font:600 11.5px Inter,-apple-system,'Segoe UI',Arial,sans-serif;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,0.28);transform:translate(-50%,-50%);letter-spacing:0.2px;cursor:pointer;pointer-events:auto;will-change:left,top,display;transition:opacity .18s;backdrop-filter:blur(2px);`;
     }
@@ -1882,6 +2004,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
 
         this._zoneLabelsVisible = true;
         this.updateZoneLabels();
+        this.aplicarAvanceExterno();
         console.log(`[LOB4D] ${etiq}: ${created} grupo(s) rotulados (parámetro "${zoneKey}"). Elementos con clave: ${extZone.size}`);
         if (!created) {
             // El parámetro tiene valores pero ningún elemento cruzó con geometría
@@ -2488,7 +2611,18 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
     }
 
     clearZoneIsolation() {
+        // Salir del grupo cierra también el panel de quien lo esté mostrando.
+        // Va aquí y no en la × porque hay cuatro formas de salir —la ×, volver
+        // a pulsar la misma píldora, apagar la capa y reconstruir los rótulos—
+        // y dejar el panel abierto describiendo un grupo que ya soltaste es
+        // peor que no mostrarlo.
+        const salia = this._activeZone;
         this._activeZone = null;
+        if (salia) {
+            window.dispatchEvent(new CustomEvent('zona-rotulo-cerrar', {
+                detail: { zone: salia },
+            }));
+        }
         this._limpiarTenido();
         this.viewer.impl.invalidate(true, true, true);
         this.refreshZoneLabelStyles();
@@ -2497,7 +2631,7 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
     refreshZoneLabelStyles() {
         if (!this._zoneLabelElements) return;
         for (const l of this._zoneLabelElements) {
-            l.el.style.cssText = this.zoneLabelStyle(this._activeZone === l.zone);
+            l.el.style.cssText = this.zoneLabelStyle(this._activeZone === l.zone, l.zone);
         }
         this.updateZoneLabels(); // re-posicionar (cssText borra left/top)
     }

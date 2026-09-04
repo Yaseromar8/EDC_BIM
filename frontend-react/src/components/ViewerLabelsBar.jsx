@@ -64,11 +64,27 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
             window.removeEventListener('lob-zone-hover-error', onErr);
         };
     }, []);
+    // Ejecución enciende también los rótulos de grupo: son la misma pregunta
+    // vista de dos maneras —el rótulo dice cuánto va cada frente sin tocar
+    // nada, el panel dice qué falta en el que elijas—. Solo los apaga al salir
+    // si fue Ejecución quien los encendió: si ya los tenías puestos a mano, se
+    // quedan.
+    const rotulosMios = useRef(false);
     const toggleHover = () => {
         const next = !hoverOn;
         setHoverOn(next);
         if (!next) { setHoverData(null); setExecCfgOpen(false); }
         window.dispatchEvent(new CustomEvent('lob-zone-hover', { detail: { visible: next } }));
+
+        if (next && !groupOn && !zonesOn) {
+            rotulosMios.current = true;
+            setGroupOn(true);
+            window.dispatchEvent(new CustomEvent('lob-group-labels', { detail: { visible: true } }));
+        } else if (!next && rotulosMios.current) {
+            rotulosMios.current = false;
+            setGroupOn(false);
+            window.dispatchEvent(new CustomEvent('lob-group-labels', { detail: { visible: false } }));
+        }
     };
 
     // ── PREDICT: partidas del expediente para el grupo bajo el cursor ───────
@@ -99,6 +115,45 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
     // se fija aunque vuelvas al modelo. La × lo suelta.
     const [fijado, setFijado] = useState(false);      // explícito, con el 📌
     const [congelado, setCongelado] = useState(null); // instantánea al entrar
+
+    // CLICK EN EL RÓTULO DEL MODELO. La píldora de cada grupo ya muestra su
+    // avance; pulsarla abre este panel fijado. Así el modelo se lee de un
+    // vistazo y el detalle se pide solo donde interesa, en vez de tener que
+    // pasear el mouse por 163 frentes.
+    useEffect(() => {
+        const onRotulo = (e) => {
+            const zone = e.detail && e.detail.zone;
+            if (!zone) return;
+            setCongelado({
+                hoverData: { zone, total: e.detail.total || 0, done: 0, pct: 0,
+                             hasEjecutado: false },
+                predict: resumenPredict(zone),
+                predictDet: null,
+            });
+            setFijado(true);
+            // el detalle llega después: el panel ya se ve mientras tanto
+            detallePredict(zone).then((det) => {
+                setCongelado((c) => (c && c.hoverData?.zone === zone)
+                    ? { ...c, predictDet: det } : c);
+            });
+        };
+        // La × del rótulo (y cualquier otra salida del grupo) cierra el panel:
+        // si soltaste el grupo, el panel que lo describe ya no viene a cuento.
+        const onCerrar = (e) => {
+            const zone = e.detail && e.detail.zone;
+            setCongelado((c) => {
+                if (!c || (zone && c.hoverData?.zone !== zone)) return c;
+                setFijado(false);
+                return null;
+            });
+        };
+        window.addEventListener('zona-rotulo-click', onRotulo);
+        window.addEventListener('zona-rotulo-cerrar', onCerrar);
+        return () => {
+            window.removeEventListener('zona-rotulo-click', onRotulo);
+            window.removeEventListener('zona-rotulo-cerrar', onCerrar);
+        };
+    }, []);
     const vista = congelado || (hoverData ? { hoverData, predict, predictDet } : null);
     const congelar = () => { if (hoverData) setCongelado({ hoverData, predict, predictDet }); };
     const soltar = () => { setFijado(false); setCongelado(null); };
@@ -149,6 +204,45 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
             maxFalta: filas.length ? filas[0].falta : 1,
         };
     }, [vista?.predictDet]);
+
+    // QUÉ FALTA EJECUTAR — sin un solo sol. Ordenado por la secuencia de obra
+    // (el código lleva la fase en el penúltimo nivel), no por plata: parado
+    // frente al modelo la pregunta es "¿qué toca hacer aquí?", y a eso se
+    // responde con el orden de la obra, no con el orden del presupuesto.
+    // Sale del marcado de campo (hoja AVANCE), que no depende de precios.
+    const pendientes = useMemo(() => {
+        const NOM = { '01': 'Preliminares', '02': 'Mov. tierras', '03': 'Obras civiles',
+                      '04': 'Buzones', '05': 'Reposición' };
+        const ps = vista?.predictDet?.partidas;
+        if (!ps?.length) return null;
+        const filas = ps.map(p => {
+            const tr = String(p.id || '').split('.');
+            return {
+                id: p.id,
+                nombre: (p.nombre || '').replace(/^[\d.]+\s*-\s*/, ''),
+                pct: p.avance_ref != null ? p.avance_ref : (p.valorizado_pct ?? 0),
+                fase: tr.length >= 3 ? tr[tr.length - 2] : '00',
+                // suministro y transporte no son obra parada en el tramo
+                logistica: !!p.logistica,
+            };
+        }).filter(f => f.pct < 99.5 && !f.logistica)
+          .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+        if (!filas.length) return null;
+        const porFase = new Map();
+        filas.forEach(f => {
+            if (!porFase.has(f.fase)) porFase.set(f.fase, []);
+            porFase.get(f.fase).push(f);
+        });
+        return {
+            n: filas.length,
+            grupos: [...porFase.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([fase, items]) => ({
+                    fase, nombre: NOM[fase] || 'Otros', items,
+                    empezadas: items.filter(x => x.pct > 0).length,
+                })),
+        };
+    }, [vista?.predictDet]);
+
     const [verTodas, setVerTodas] = useState(false);
     // qué etapa del expediente se está viendo. Arranca en ejecución porque es
     // lo que se pregunta parado frente al modelo.
@@ -771,12 +865,14 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
 
             {/* PANEL DE EJECUCIÓN POR SUBZONA — informa del GRUPO completo bajo
                 el cursor (20, 200 o 2000 elementos), no de la pieza suelta. */}
-            {hoverOn && vista && (
+            {(hoverOn || congelado) && vista && (
                 <div
                     onMouseEnter={congelar}
                     onMouseLeave={salirPanel}
                     style={{
-                    position: 'fixed', right: 18, bottom: 58, zIndex: 55, width: 340,
+                    position: 'fixed', right: 18, bottom: 58, zIndex: 55, width: 520,
+                    // nunca más ancho que la pantalla, pase lo que pase
+                    maxWidth: 'calc(100vw - 36px)',
                     // crece hacia arriba SOLO lo que necesite, sin pasarse de pantalla
                     maxHeight: 'calc(100vh - 130px)', display: 'flex', flexDirection: 'column',
                     background: 'rgba(13,17,23,0.82)', backdropFilter: 'blur(10px)',
@@ -790,9 +886,13 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
                 }}>
                     {/* Encabezado con el control para FIJAR el panel */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {/* El nombre de la calle va primero y grande. Antes
+                            mandaba el código ("CP-APN-4") y quien no armó el
+                            expediente no tenía forma de saber qué estaba viendo. */}
                         <span style={{ fontSize: 13.5, fontWeight: 800, color: '#fcd34d', letterSpacing: '.3px',
-                                       flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {vista.hoverData.zone}
+                                       flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                              title={vista.predict?.calle || vista.hoverData.zone}>
+                            {vista.predict?.calle || vista.hoverData.zone}
                         </span>
                         <button type="button" title={fijado ? 'Soltar' : 'Fijar el panel'}
                             onClick={() => { if (fijado) soltar(); else { congelar(); setFijado(true); } }}
@@ -805,13 +905,12 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
                         )}
                     </div>
 
-                    {/* MODELO — piezas de geometría. Rotulado expreso para que no
-                        se confunda con el avance del contrato (son cosas distintas). */}
-                    <div style={{ fontSize: 10, color: '#7c8798', marginTop: 9 }}>
-                        Modelo · <span style={{ color: '#9aa4b2' }}>{vista.hoverData.total} elementos</span>
-                        {vista.hoverData.hasEjecutado && (
-                            <span style={{ color: '#9aa4b2' }}> · {vista.hoverData.done} marcados ({vista.hoverData.pct}%)</span>
-                        )}
+                    {/* Una sola línea de contexto: qué tramo es y cuánta
+                        geometría trae. "Elementos" es el modelo 3D, no el
+                        contrato — por eso se dice con todas sus letras. */}
+                    <div style={{ fontSize: 10, color: '#7c8798', marginTop: 5 }}>
+                        Tramo <span style={{ color: '#9aa4b2', fontWeight: 700 }}>{vista.hoverData.zone}</span>
+                        {' · '}{vista.hoverData.total} {vista.hoverData.total === 1 ? 'pieza' : 'piezas'} del modelo 3D
                     </div>
 
                     {/* EXPEDIENTE (PREDICT) — el contrato detrás del objeto.
@@ -824,25 +923,53 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
                             {/* El rótulo nombra la CALLE, no dice "expediente" a
                                 secas: sin eso el 75.84% de la calle y el 0% del
                                 tramo se leen como si midieran lo mismo. */}
-                            <div style={{ fontSize: 9, letterSpacing: '.14em', color: '#7c8798',
-                                          textTransform: 'uppercase', overflow: 'hidden',
-                                          textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                 title={vista.predict.calle || 'Expediente'}>
-                                {vista.predict.calle
-                                    ? `${vista.predict.calle_id} · ${vista.predict.calle}`
-                                    : 'Expediente'}
-                            </div>
+                            {/* VEREDICTO EN PALABRAS. Es lo primero que busca quien
+                                no conoce la obra: ¿esto está terminado o no? Un
+                                porcentaje no responde eso sin que alguien lo lea. */}
+                            {(() => {
+                                const falt = pendientes ? pendientes.n : 0;
+                                const arranco = !pendientes
+                                    || pendientes.grupos.some(g => g.empezadas > 0)
+                                    || (vista.predict.lista || 0) > 0;
+                                const e = !falt
+                                    ? { t: 'TRAMO TERMINADO', c: '#7dd3a8', b: 'rgba(63,158,115,0.13)', bo: 'rgba(63,158,115,0.34)' }
+                                    : (arranco
+                                        ? { t: 'EN EJECUCIÓN', c: '#fbbf24', b: 'rgba(194,150,60,0.12)', bo: 'rgba(194,150,60,0.32)' }
+                                        : { t: 'SIN EMPEZAR', c: '#8fa0b3', b: 'rgba(255,255,255,0.05)', bo: 'rgba(255,255,255,0.14)' });
+                                return (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em',
+                                                       color: e.c, background: e.b, border: `1px solid ${e.bo}`,
+                                                       borderRadius: 4, padding: '3px 8px' }}>
+                                            {e.t}
+                                        </span>
+                                        <span style={{ fontSize: 10, color: '#7c8798', overflow: 'hidden',
+                                                       textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
+                                              title={vista.predict.calle || ''}>
+                                            {vista.predict.calle_id || ''}
+                                        </span>
+                                    </div>
+                                );
+                            })()}
 
-                            {/* LAS TRES ETAPAS DEL EXPEDIENTE. Son pestañas y no
+                            {/* LAS TRES CONVERSACIONES. Son pestañas y no
                                 secciones apiladas a propósito: el hover es un
                                 vistazo, no un legajo. Se ve una a la vez.
+
+                                EJECUCIÓN no lleva un solo sol ni un solo metro
+                                cúbico — sale del marcado de campo y responde
+                                "¿qué falta hacer aquí?". COSTO lleva todo el
+                                dinero. Separarlas es lo que dejó de obligarnos a
+                                repartir metrados y precios tramo por tramo para
+                                poder decir algo tan simple como qué está hecho.
+
                                 El cierre contractual está deshabilitado mientras
                                 no haya as-built ni adicionales tramitados — un
                                 botón que abre una pantalla vacía miente. */}
                             <div style={{ display: 'flex', gap: 3, marginTop: 8 }}>
                                 {[
-                                    { k: 'contractual', t: 'Contractual', c: '#9aa4b2', on: true },
                                     { k: 'ejecucion', t: 'Ejecución', c: '#fbbf24', on: true },
+                                    { k: 'costo', t: 'Costo', c: '#7dd3a8', on: true },
                                     { k: 'cierre', t: 'Cierre', c: '#7fc4d6', on: false },
                                 ].map(b => (
                                     <button key={b.k} type="button" disabled={!b.on}
@@ -860,10 +987,205 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
                                     </button>
                                 ))}
                             </div>
-                            {/* CONTRACTUAL — lo que se pactó. Va aparte de la
-                                ejecución porque son dos conversaciones distintas:
-                                una con el expediente y otra con la obra. */}
-                            {etapa === 'contractual' && (
+                            {/* ══ EJECUCIÓN — SIN UN SOLO SOL ══
+                                Responde una sola pregunta: qué falta ejecutar
+                                aquí. El dinero vive en la pestaña de al lado. */}
+                            {etapa === 'ejecucion' && <>
+
+                            {/* LA SECUENCIA CONSTRUCTIVA. Todo frente recorre las
+                                mismas fases en el mismo orden, así que la tira se
+                                lee igual en todos y se comparan de un vistazo:
+                                cuatro barras vacías es "no ha empezado", tres
+                                llenas y una a medias es "falta el remate". */}
+                            {vista.predictDet?.fases?.length > 0 && (
+                                <div style={{ marginTop: 11, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                    <div style={{ fontSize: 9, letterSpacing: '.14em', color: '#7c8798',
+                                                  textTransform: 'uppercase', marginBottom: 1 }}>
+                                        Etapas de la obra
+                                        <span style={{ letterSpacing: 0, textTransform: 'none', marginLeft: 6 }}>
+                                            (trabajos terminados)
+                                        </span>
+                                    </div>
+                                    {vista.predictDet.fases.map(f => {
+                                        const listo = f.pct >= 99.5;
+                                        const col = listo ? '#3f9e73' : (f.pct > 0 ? '#c2963c' : '#4d5560');
+                                        return (
+                                            <div key={f.codigo} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5 }}>
+                                                <span style={{ flex: 'none', width: 84, color: listo ? '#7c8798' : '#b6c2d0' }}>
+                                                    {f.nombre}
+                                                </span>
+                                                <span style={{ flex: 1, height: 6, background: 'rgba(255,255,255,.08)',
+                                                               borderRadius: 3, overflow: 'hidden', minWidth: 40 }}>
+                                                    <i style={{ display: 'block', width: `${Math.min(100, f.pct)}%`,
+                                                                height: '100%', background: col }} />
+                                                </span>
+                                                <span style={{ flex: 'none', width: 46, textAlign: 'right',
+                                                               color: '#8fa0b3', fontVariantNumeric: 'tabular-nums' }}>
+                                                    {f.hechas}/{f.n}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+
+
+                            {/* QUÉ FALTA EJECUTAR — la lista, agrupada por fase y
+                                en orden de obra. Sin montos y sin metrados: al
+                                gerente parado frente al modelo no le sirve un
+                                monto para decidir qué cuadrilla mandar; le sirve
+                                el nombre de la partida y en qué fase cae. */}
+                            {pendientes && !verTodas && (
+                                <div style={{ marginTop: 11, minHeight: 0, flex: '1 1 auto',
+                                              overflowY: 'auto', overscrollBehavior: 'contain', paddingRight: 4 }}>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+                                        <span style={{ fontSize: 9, letterSpacing: '.16em', color: '#c2963c',
+                                                       textTransform: 'uppercase', fontWeight: 700 }}>
+                                            Falta ejecutar
+                                        </span>
+                                        {vista.predictDet?.logistica_pend > 0 && (
+                                            <span style={{ marginLeft: 'auto', fontSize: 9, color: '#5a6673' }}
+                                                  title="Suministro y transporte se compran y se acarrean, no se construyen en el tramo. Están en la pestaña COSTO.">
+                                                sin contar {vista.predictDet.logistica_pend} de suministro y transporte
+                                            </span>
+                                        )}
+                                    </div>
+                                    {pendientes.grupos.map(g => (
+                                        <div key={g.fase} style={{ marginTop: 8 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                {/* el punto dice si la fase ya arrancó: ámbar
+                                                    encendido, gris apagada. Un vistazo, sin leer. */}
+                                                <span style={{ flex: 'none', width: 5, height: 5, borderRadius: 3,
+                                                               background: g.empezadas > 0 ? '#c2963c' : '#4d5560' }} />
+                                                <span style={{ fontSize: 9, color: '#7c8798', letterSpacing: '.08em', textTransform: 'uppercase' }}>
+                                                    {g.nombre}
+                                                </span>
+                                                <span style={{ marginLeft: 'auto', fontSize: 9, color: '#6b7684', fontVariantNumeric: 'tabular-nums' }}>
+                                                    {g.items.length}
+                                                </span>
+                                            </div>
+                                            {g.items.map(f => (
+                                                <div key={f.id} style={{ display: 'flex', gap: 6, alignItems: 'center',
+                                                                         fontSize: 10, marginTop: 3, paddingLeft: 11 }}>
+                                                    <span style={{ flex: 'none', width: 9, textAlign: 'center',
+                                                                   color: f.pct > 0 ? '#fbbf24' : '#6b7684', fontSize: 9 }}>
+                                                        {f.pct > 0 ? '◐' : '○'}
+                                                    </span>
+                                                    <span style={{ color: '#d6dde7', flex: 1, minWidth: 0, overflow: 'hidden',
+                                                                   textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                                          title={`${f.id} · ${f.nombre}`}>
+                                                        {f.nombre}
+                                                    </span>
+                                                    {/* la barra solo aparece si el trabajo ya arrancó:
+                                                        una fila de barras vacías no informa, estorba */}
+                                                    {f.pct > 0 ? (
+                                                        <>
+                                                            <span style={{ flex: 'none', width: 32, height: 4, borderRadius: 2,
+                                                                           background: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
+                                                                <i style={{ display: 'block', height: '100%',
+                                                                            width: `${Math.min(100, f.pct)}%`, background: '#c2963c' }} />
+                                                            </span>
+                                                            <span style={{ flex: 'none', width: 30, textAlign: 'right',
+                                                                           fontVariantNumeric: 'tabular-nums', color: '#fbbf24' }}>
+                                                                {f.pct.toFixed(0)}%
+                                                            </span>
+                                                        </>
+                                                    ) : (
+                                                        <span style={{ flex: 'none', width: 68, textAlign: 'right',
+                                                                       fontSize: 9.5, color: '#6b7684' }}>
+                                                            sin empezar
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* frente cerrado: decirlo, y no dejar el hueco */}
+                            {!pendientes && vista.predict.lista != null && (
+                                <div style={{ marginTop: 11, padding: '9px 11px', borderRadius: 6,
+                                              background: 'rgba(63,158,115,0.10)', border: '1px solid rgba(63,158,115,0.32)',
+                                              fontSize: 11.5, color: '#7dd3a8', fontWeight: 700 }}>
+                                    ✓ Nada pendiente en este frente
+                                </div>
+                            )}
+
+                            {/* La lista completa, solo cuando la pidas */}
+                            {vista.predictDet?.grupos?.length > 0 && (
+                                <button type="button" onClick={() => setVerTodas(v => !v)}
+                                    style={{ marginTop: 9, alignSelf: 'flex-start', background: 'none', border: 'none',
+                                             color: '#8fa0b3', fontSize: 9.5, cursor: 'pointer', padding: 0,
+                                             letterSpacing: '.1em', textTransform: 'uppercase' }}>
+                                    {verTodas ? '▾ ver solo lo que falta' : '▸ ver todas las partidas'}
+                                </button>
+                            )}
+
+                            {verTodas && vista.predictDet?.grupos?.length > 0 && (
+                                <div style={{
+                                    marginTop: 6, overflowY: 'auto', overscrollBehavior: 'contain',
+                                    minHeight: 0, flex: '1 1 auto', paddingRight: 4,
+                                }}>
+                                    {vista.predictDet.grupos.map((g) => (
+                                        <div key={g.nodo} style={{ marginTop: 7 }}>
+                                            <div style={{ fontSize: 9, color: '#7c8798', letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                                                {(g.nombre || g.nodo).replace(/^[\d.]+\s*-\s*/, '')} · {g.partidas.length}
+                                            </div>
+                                            {g.partidas.map((p) => {
+                                                const pc = (p.avance_ref ?? p.valorizado_pct ?? 0);
+                                                const hecho = pc >= 99.5;
+                                                // lo terminado se apaga a propósito: en una lista de 27
+                                                // filas casi todas verdes, lo que falta desaparecía
+                                                return (
+                                                <div key={p.id} style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 9.5, marginTop: 1.5 }}>
+                                                    <span style={{ flex: 'none', width: 9, textAlign: 'center', fontSize: 9,
+                                                                   color: hecho ? '#3f9e73' : (pc > 0 ? '#fbbf24' : '#6b7684') }}>
+                                                        {hecho ? '✓' : (pc > 0 ? '◐' : '○')}
+                                                    </span>
+                                                    <span style={{ color: hecho ? '#5a6673' : '#8fa0b3', fontVariantNumeric: 'tabular-nums', flex: 'none' }}>{p.id}</span>
+                                                    <span style={{ color: hecho ? '#7b8794' : '#d6dde7',
+                                                                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {(p.nombre || '').replace(/^[\d.]+\s*-\s*/, '')}
+                                                    </span>
+                                                    <span style={{
+                                                        marginLeft: 'auto', flex: 'none', fontVariantNumeric: 'tabular-nums',
+                                                        color: pc > 0 ? '#fbbf24' : '#6b7684',
+                                                    }}>{hecho ? '' : `${pc.toFixed(0)}%`}</span>
+                                                </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {/* LEYENDA Y FIRMA. Un panel sin leyenda obliga a que
+                                alguien lo traduzca; uno sin firma no se puede
+                                defender delante de la Entidad. */}
+                            <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,.08)',
+                                          fontSize: 9, color: '#6b7684', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                                <span><span style={{ color: '#3f9e73' }}>✓</span> terminado</span>
+                                <span><span style={{ color: '#fbbf24' }}>◐</span> en proceso</span>
+                                <span><span style={{ color: '#6b7684' }}>○</span> falta</span>
+                            </div>
+                            {vista.predictDet?.fuente?.autor && (
+                                <div style={{ marginTop: 4, fontSize: 9, color: '#5a6673' }}
+                                     title="El avance sale del marcado en obra, no del cronograma ni de la valorización">
+                                    Marcado en obra por <span style={{ color: '#7c8798' }}>{vista.predictDet.fuente.autor}</span>
+                                    {vista.predictDet.fuente.fecha && ` · ${vista.predictDet.fuente.fecha}`}
+                                    {vista.predictDet.fuente.marcadas < vista.predictDet.fuente.total &&
+                                        ` · ${vista.predictDet.fuente.marcadas} de ${vista.predictDet.fuente.total} con dato`}
+                                </div>
+                            )}
+                            </>}
+
+                            {/* ══ COSTO — aquí sí, y solo aquí, hay soles ══
+                                Todo lo que depende de precios o de cantidades vive
+                                de este lado: lo que dice el contrato, lo valorizado,
+                                el metrado que cambió en el replanteo y lo que falta
+                                por construir medido en plata. */}
+                            {etapa === 'costo' && <>
                                 <div style={{ marginTop: 10 }}>
                                     <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                                         <div>
@@ -895,9 +1217,6 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
                                         cuadrilla del ACU, normas citadas— está en PREDICT.
                                     </div>
                                 </div>
-                            )}
-
-                            {etapa === 'ejecucion' && <>
                             {/* EL METRADO CAMBIÓ — primero, porque cambia el alcance
                                 y sin eso los porcentajes de abajo se leen sobre una
                                 base equivocada. Sale del replanteo del RIBA y se
@@ -962,39 +1281,6 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
                                     </div>
                                 );
                             })()}
-
-                            {/* EL CONTEO SALE DE LO CONSTRUIDO — es lo que se ve
-                                parado en la obra. Entre paréntesis, lo mismo por
-                                lo pagado: la diferencia es lo que hay que cobrar. */}
-                            {vista.predict.lista != null && (
-                                <div style={{ display: 'flex', gap: 14, marginTop: 11, alignItems: 'baseline', flexWrap: 'wrap' }}>
-                                    {[
-                                        { n: vista.predict.lista, t: 'listas', c: '#7dd3a8' },
-                                        { n: vista.predict.proceso, t: 'en proceso', c: '#fbbf24' },
-                                        { n: vista.predict.falta, t: 'faltan', c: '#6b7684' },
-                                    ].map(k => (
-                                        <div key={k.t} style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                                            <span style={{ fontSize: 17, fontWeight: 800, color: k.c, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-                                                {k.n}
-                                            </span>
-                                            <span style={{ fontSize: 9.5, color: '#7c8798', letterSpacing: '.05em' }}>{k.t}</span>
-                                        </div>
-                                    ))}
-                                    {/* cuánto del frente respalda la comparación de
-                                        arriba: por debajo del 90% el par de
-                                        porcentajes descansa en datos incompletos
-                                        y el lector tiene derecho a saberlo */}
-                                    <span style={{ marginLeft: 'auto', fontSize: 9.5, color: '#6b7684', fontVariantNumeric: 'tabular-nums' }}
-                                          title={vista.predict.cobertura_comp_pct != null
-                                              ? `los dos % se comparan sobre el ${vista.predict.cobertura_comp_pct}% del frente que tiene dato de campo`
-                                              : ''}>
-                                        construidas · {vista.predict.partidas} partidas
-                                        {vista.predict.cobertura_comp_pct != null
-                                          && vista.predict.cobertura_comp_pct < 99.5
-                                          && <span style={{ color: '#8a6a2f' }}> · {vista.predict.cobertura_comp_pct}% con dato</span>}
-                                    </span>
-                                </div>
-                            )}
 
                             {/* ESTE TRAMO — el número que de verdad le pertenece.
                                 Su metrado por su precio, medido por el cronograma
@@ -1078,54 +1364,6 @@ export default function ViewerLabelsBar({ rightSlot = null }) {
                                 </div>
                             )}
 
-                            {/* La lista completa, solo cuando la pidas */}
-                            {vista.predictDet?.grupos?.length > 0 && (
-                                <button type="button" onClick={() => setVerTodas(v => !v)}
-                                    style={{ marginTop: 9, alignSelf: 'flex-start', background: 'none', border: 'none',
-                                             color: '#8fa0b3', fontSize: 9.5, cursor: 'pointer', padding: 0,
-                                             letterSpacing: '.1em', textTransform: 'uppercase' }}>
-                                    {verTodas ? '▾ ver resumen' : `▸ ver las ${vista.predict.partidas} partidas`}
-                                </button>
-                            )}
-
-                            {verTodas && vista.predictDet?.grupos?.length > 0 && (
-                                <div style={{
-                                    marginTop: 6, overflowY: 'auto', overscrollBehavior: 'contain',
-                                    minHeight: 0, flex: '1 1 auto', paddingRight: 4,
-                                }}>
-                                    {vista.predictDet.grupos.map((g) => (
-                                        <div key={g.nodo} style={{ marginTop: 7 }}>
-                                            <div style={{ fontSize: 9, color: '#7c8798', letterSpacing: '.06em', textTransform: 'uppercase' }}>
-                                                {(g.nombre || g.nodo).replace(/^[\d.]+\s*-\s*/, '')} · {g.partidas.length}
-                                            </div>
-                                            {g.partidas.map((p) => (
-                                                <div key={p.id} style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 9.5, marginTop: 1.5 }}>
-                                                    <span style={{ color: '#8fa0b3', fontVariantNumeric: 'tabular-nums', flex: 'none' }}>{p.id}</span>
-                                                    <span style={{ color: '#b6c2d0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                        {(p.nombre || '').replace(/^[\d.]+\s*-\s*/, '')}
-                                                    </span>
-                                                    {/* el metrado cambió respecto al contrato: verde
-                                                        arriba, rojo abajo. Sale del replanteo del RIBA. */}
-                                                    {p.metrado_replanteo != null && p.metrado > 0 && (
-                                                        p.metrado_replanteo > p.metrado * 1.001 ? (
-                                                            <span style={{ flex: 'none', color: '#7dd3a8', fontSize: 9 }}
-                                                                  title={`replanteo ${p.metrado_replanteo} vs contrato ${p.metrado} ${p.unidad || ''} — mayor metrado`}>▲</span>
-                                                        ) : p.metrado_replanteo < p.metrado * 0.999 ? (
-                                                            <span style={{ flex: 'none', color: '#e0776a', fontSize: 9 }}
-                                                                  title={`replanteo ${p.metrado_replanteo} vs contrato ${p.metrado} ${p.unidad || ''} — menor metrado`}>▼</span>
-                                                        ) : null
-                                                    )}
-                                                    <span style={{
-                                                        marginLeft: 'auto', flex: 'none', fontVariantNumeric: 'tabular-nums',
-                                                        color: (p.avance_ref ?? p.valorizado_pct) >= 99.5 ? '#7dd3a8'
-                                                             : ((p.avance_ref ?? p.valorizado_pct) > 0 ? '#fbbf24' : '#6b7684'),
-                                                    }}>{(p.avance_ref ?? p.valorizado_pct ?? 0).toFixed(0)}%</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
                             </>}
                         </div>
                     )}
