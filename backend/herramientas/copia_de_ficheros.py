@@ -54,6 +54,13 @@ BUCKET_POR_DEFECTO = os.getenv('GCS_BUCKET_NAME') or 'yaser-pqt08-talara'
 
 
 def _gcloud():
+    """El `gcloud` a usar. GCLOUD_BIN gana, para no escribir aqui la ruta de
+    una maquina concreta: el SDK se puede instalar como ZIP en cualquier
+    carpeta --sin instalador, sin registro y sin administrador-- y entonces no
+    esta ni en el PATH ni donde lo deja el instalador."""
+    exe = os.getenv('GCLOUD_BIN')
+    if exe and pathlib.Path(exe).exists():
+        return exe
     exe = shutil.which('gcloud')
     if exe:
         return exe
