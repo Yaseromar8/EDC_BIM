@@ -387,8 +387,12 @@ export function extractSchemaNative(model) {
 // inventario completo (String.replace de URNs, aplanar arrays, resolver rosetta)
 // en CADA clic. Eso lo hacemos UNA sola vez y lo cacheamos: cada toggle solo
 // recorre filas ya normalizadas y hace intersecciones. Misma semántica exacta.
-const _safeUrn = (u) => String(u ?? '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const _normVal = (raw) => Array.isArray(raw)
+// Exportados para que `lib/preflightFiltros.js` valide una Saved View con las
+// MISMAS reglas con las que aqui se construyen los buckets. Duplicarlas alli
+// habria sido garantizar que un dia divergen y la vista se valide contra una
+// verdad distinta de la que luego se aplica. No cambia nada de este modulo.
+export const _safeUrn = (u) => String(u ?? '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+export const _normVal = (raw) => Array.isArray(raw)
     ? raw.map(x => String(x ?? '').trim()).filter(Boolean).join(', ')
     : String(raw ?? '').trim();
 
