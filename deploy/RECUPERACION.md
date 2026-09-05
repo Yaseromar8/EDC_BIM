@@ -26,6 +26,76 @@ valores de los secretos siguen existiendo en un único sitio**. Ver más abajo.
 
 ---
 
+# ESTADO · 4-sep-2026
+
+```
+BACKUP/RESTORE PILOTO ................................. CLOSED
+PRODUCTION RECOVERY HARDENING ......... PENDIENTE ANTES DE PRIMERA OBRA REAL
+```
+
+**La lectura correcta de por qué se cierra:** no es que hoy no haya nada que
+perder. Es que **el impacto potencial de una pérdida todavía es manejable porque
+ALEPHIA sigue en etapa piloto**. Son cosas distintas, y confundirlas lleva a
+relajar la guardia justo cuando deja de ser cierto.
+
+## EL CRITERIO, que es el resultado que sobrevive a esta sesión
+
+> ### BACKUP CREADO ≠ RECUPERACIÓN DEMOSTRADA
+
+```
+backup
+  -> restauracion en entorno limpio
+    -> aplicacion operativa
+      -> usuarios / proyectos / expedientes presentes
+        -> relaciones verificadas
+= RECUPERACION DEMOSTRADA
+```
+
+Nada por debajo de esa cadena cuenta. El 4-sep-2026 se recorrió por primera vez
+y **falló en el cuarto eslabón**: el backup existía y era íntegro, la restauración
+«funcionaba», y los **usuarios no estaban**.
+
+## EL GATE — `ALEPHIA · ANTES DE PRIMERA OBRA REAL`
+
+Registrado, **no implementado**. Ninguno de estos puntos se aborda hoy:
+
+```
+1. backup automatico de base
+2. restore test completo y repetible
+3. comprobacion automatica de que backup/restore cubre el esquema VIGENTE
+   despues de migraciones
+4. RPO definido
+5. RTO definido
+6. politica de retencion y PITR definida
+7. politica de recuperacion del bucket / objetos
+8. gestion adecuada de secretos
+```
+
+**El 3 es el más importante**, y es la lección directa del fallo de hoy: la
+cobertura no puede depender de una lista de tablas escrita a mano que quede
+vieja en silencio. La dirección futura es **verificar contra
+`information_schema`** que toda tabla que deba respaldarse y restaurarse está
+cubierta — que el propio esquema vivo sea quien conteste, no un inventario.
+
+**El 6 no está decidido.** No se congela ningún número: primero **RPO, RTO y
+retención requerida**; después se elige entre 7, 35 o 90 días, instantáneas
+mensuales, o una combinación. Que una discrepancia pueda aflorar meses después
+demuestra precisamente que **35 días tampoco cubriría todos los casos**.
+
+## RIESGOS ACEPTADOS EN ETAPA PILOTO — explícitos, no olvidados
+
+**Los ~8 GB de objetos del bucket no se copian hoy.** Pertenecen al piloto y el
+bucket tiene borrado reversible de 90 días.
+
+> **Y queda dicho: `soft delete` / versionado del bucket NO es un backup
+> independiente.** Vive dentro del mismo proyecto de Google y comparte su
+> destino. Es mitigación, no respaldo.
+
+Se acepta para el piloto. **Antes de una obra real tiene que existir una política
+explícita de recuperación de objetos** (punto 7 del gate).
+
+---
+
 ## 1 · El trabajo del 4D — resuelto
 
 ```
@@ -90,10 +160,19 @@ humana. Es un problema de datos que ya venía de producción, no de la copia.
 
 El primer ensayo contra esta copia dio **`CON DESCUADRES`: 86 de 118 tablas**.
 Entre las 32 que no volvían iban **`users`, `project_users` y `doc_reviews`** — una
-recuperación en la que **nadie podría entrar**. Lo engañoso: eran solo 294 filas de
-86.277 (0,34 %), porque el bulto son `lob_element_links` e `inventory_assets`, que
-son derivados regenerables. *La recuperación salvaba lo recalculable y perdía el
-expediente.*
+recuperación en la que **nadie podría entrar**.
+
+Lo engañoso es el porcentaje: 294 filas de 86.277 (0,34 %). **Pocas filas no
+significa poco valor.** Una review, un acta o un issue puede pesar más en lo
+contractual que decenas de miles de filas de geometría. El recuento no es la
+medida.
+
+> **El grueso del volumen** —`lob_element_links` (31.894) e `inventory_assets`
+> (20.361)— **parece derivado de los modelos**. Se dice así, y no «regenerable»,
+> a propósito: para llamarlo regenerable harían falta tres cosas demostradas
+> —fuente canónica disponible, proceso de reconstrucción disponible, y
+> reconstrucción **ensayada**— y **ninguna de las tres se ha comprobado**.
+> Hasta entonces es una suposición razonable, no una garantía de recuperación.
 
 La causa, censada y no supuesta: **las 28 tablas y las 10 columnas que faltaban
 vienen TODAS de `backend/sql/`, ninguna de código Python.** El esquema de esta

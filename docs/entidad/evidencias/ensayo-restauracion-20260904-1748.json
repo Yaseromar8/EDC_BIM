@@ -1,0 +1,139 @@
+{
+  "cuando": "2026-09-04 17:48:59",
+  "copia": "ecd_20260904_214510.copia.gz",
+  "base_ensayo": "ecd_ensayo_20260904_174821",
+  "tablas": 118,
+  "filas": 85983,
+  "descuadres": [
+    {
+      "tabla": "avance_campo",
+      "motivo": "error: relation \"avance_campo\" does not exist"
+    },
+    {
+      "tabla": "avance_fotos",
+      "motivo": "error: relation \"avance_fotos\" does not exist"
+    },
+    {
+      "tabla": "doc_actas",
+      "motivo": "error: relation \"doc_actas\" does not exist"
+    },
+    {
+      "tabla": "doc_album_fotos",
+      "motivo": "error: relation \"doc_album_fotos\" does not exist"
+    },
+    {
+      "tabla": "doc_albumes",
+      "motivo": "error: relation \"doc_albumes\" does not exist"
+    },
+    {
+      "tabla": "doc_asientos",
+      "motivo": "error: relation \"doc_asientos\" does not exist"
+    },
+    {
+      "tabla": "doc_fotos",
+      "motivo": "error: relation \"doc_fotos\" does not exist"
+    },
+    {
+      "tabla": "doc_instrucciones",
+      "motivo": "error: relation \"doc_instrucciones\" does not exist"
+    },
+    {
+      "tabla": "doc_issues",
+      "motivo": "error: relation \"doc_issues\" does not exist"
+    },
+    {
+      "tabla": "doc_obra_ubicacion",
+      "motivo": "error: relation \"doc_obra_ubicacion\" does not exist"
+    },
+    {
+      "tabla": "doc_partes",
+      "motivo": "error: relation \"doc_partes\" does not exist"
+    },
+    {
+      "tabla": "doc_plano_revisiones",
+      "motivo": "error: relation \"doc_plano_revisiones\" does not exist"
+    },
+    {
+      "tabla": "doc_plano_sets",
+      "motivo": "error: relation \"doc_plano_sets\" does not exist"
+    },
+    {
+      "tabla": "doc_planos",
+      "motivo": "error: relation \"doc_planos\" does not exist"
+    },
+    {
+      "tabla": "doc_protocolos",
+      "motivo": "error: relation \"doc_protocolos\" does not exist"
+    },
+    {
+      "tabla": "doc_review_plantillas",
+      "motivo": "error: relation \"doc_review_plantillas\" does not exist"
+    },
+    {
+      "tabla": "doc_reviews",
+      "motivo": "9 en la copia, 0 restauradas"
+    },
+    {
+      "tabla": "doc_spec_divisiones",
+      "motivo": "error: relation \"doc_spec_divisiones\" does not exist"
+    },
+    {
+      "tabla": "doc_spec_revisiones",
+      "motivo": "error: relation \"doc_spec_revisiones\" does not exist"
+    },
+    {
+      "tabla": "doc_spec_secciones",
+      "motivo": "error: relation \"doc_spec_secciones\" does not exist"
+    },
+    {
+      "tabla": "doc_spec_sets",
+      "motivo": "error: relation \"doc_spec_sets\" does not exist"
+    },
+    {
+      "tabla": "doc_submittals",
+      "motivo": "error: relation \"doc_submittals\" does not exist"
+    },
+    {
+      "tabla": "member_tool_access",
+      "motivo": "error: relation \"member_tool_access\" does not exist"
+    },
+    {
+      "tabla": "pdf_markups",
+      "motivo": "1 en la copia, 0 restauradas"
+    },
+    {
+      "tabla": "perfiles_de_acceso",
+      "motivo": "error: relation \"perfiles_de_acceso\" does not exist"
+    },
+    {
+      "tabla": "plano_anclajes",
+      "motivo": "error: relation \"plano_anclajes\" does not exist"
+    },
+    {
+      "tabla": "plantillas_de_obra",
+      "motivo": "error: relation \"plantillas_de_obra\" does not exist"
+    },
+    {
+      "tabla": "project_tools",
+      "motivo": "error: relation \"project_tools\" does not exist"
+    },
+    {
+      "tabla": "project_users",
+      "motivo": "9 en la copia, 0 restauradas"
+    },
+    {
+      "tabla": "roles_de_entidad",
+      "motivo": "error: relation \"roles_de_entidad\" does not exist"
+    },
+    {
+      "tabla": "sync_operaciones",
+      "motivo": "error: relation \"sync_operaciones\" does not exist"
+    },
+    {
+      "tabla": "users",
+      "motivo": "9 en la copia, 0 restauradas"
+    }
+  ],
+  "en_cuarentena": {},
+  "veredicto": "CON DESCUADRES"
+}
