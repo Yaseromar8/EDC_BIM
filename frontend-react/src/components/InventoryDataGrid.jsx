@@ -3,6 +3,7 @@ import { urlInventario, enlaceCompartido } from '../utils/enlaceCompartido';
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../utils/apiFetch';
 import ColumnConfiguratorModal from './ColumnConfiguratorModal';
+import { leerInventoryConfig, fijarInventoryConfig, columnasParaElGrid, columnasDesdeElGrid } from '../lib/inventoryConfig';
 import { Capacitor } from '@capacitor/core';
 
 const ROW_HEIGHT = 25; // Tandem SlickGrid: 25px per row (from DOM top:25px)
@@ -182,17 +183,20 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
     const [rawData, setRawData] = useState([]); // Unfiltered data from DB
     const [columns, setColumns] = useState([]);
     const [allPropertyKeys, setAllPropertyKeys] = useState([]); // All available column keys
-    const [selectedColumnKeys, setSelectedColumnKeys] = useState(window.__inventoryCacheSelectedColumns || null); // null = auto (show all)
+    // El grid es CLIENTE de la configuracion, no su dueno: arranca leyendola.
+    // Internamente sigue usando `null` = todas, que es lo que su render espera;
+    // la traduccion al triestado vive en un solo sitio, en lib/inventoryConfig.
+    const [selectedColumnKeys, setSelectedColumnKeys] = useState(() => columnasParaElGrid(null)); // null = auto (show all)
     const [columnConfigOpen, setColumnConfigOpen] = useState(false);
     const [highlightedDbId, setHighlightedDbId] = useState(null);
     const [scrollTop, setScrollTop] = useState(0);
     const [containerHeight, setContainerHeight] = useState(0);
     const [activeTab, setActiveTab] = useState('General');
     const [followSelection, setFollowSelection] = useState(true);
-    const [showAssetsOnly, setShowAssetsOnly] = useState(false);
+    const [showAssetsOnly, setShowAssetsOnly] = useState(() => leerInventoryConfig().assetsOnly);
     const [isLoading, setIsLoading] = useState(true);
     const [totalsPickerOpen, setTotalsPickerOpen] = useState(false);
-    const [totalColumns, setTotalColumns] = useState(new Set()); // Set of column keys
+    const [totalColumns, setTotalColumns] = useState(() => new Set(leerInventoryConfig().totals)); // Set of column keys
     const [checkedIds, setCheckedIds] = useState(new Set()); // BULK SELECTION
     const [bulkAssigning, setBulkAssigning] = useState(false);
     const [bulkField, setBulkField] = useState('Status'); // Default column for bulk edit ('__new__' = crear campo propio)
@@ -200,7 +204,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
     const [bulkValue, setBulkValue] = useState('');
 
     // ── Agrupación por parámetro (estilo Tandem "Group rows") ──────────────
-    const [groupByKey, setGroupByKey] = useState(null); // null = sin agrupar
+    const [groupByKey, setGroupByKey] = useState(() => leerInventoryConfig().groupBy); // null = sin agrupar
     const [groupMenuOpen, setGroupMenuOpen] = useState(false);
     const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
     const groupInitRef = useRef(false); // auto-activar SubZona una sola vez
@@ -215,21 +219,45 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         return null;
     };
 
-    // Sync selected columns to cache
+    // AQUI ESTABA R-07b. Un efecto copiaba `selectedColumnKeys` a la global
+    // `__inventoryCacheSelectedColumns` SOLO cuando no era null, con una rama
+    // `else` vacia para no pisarla al montar. Consecuencia: volver a «todas las
+    // columnas» no se escribia nunca y la global se quedaba con la ultima
+    // seleccion parcial -- medido, 473 columnas guardadas con 476 en pantalla.
+    //
+    // Ya no hay efecto. La configuracion se escribe EN EL PUNTO DE DECISION
+    // (`onUpdate` del configurador, y la restauracion de una vista), que es el
+    // unico sitio donde el usuario decide algo. `lib/inventoryConfig` mantiene
+    // el espejo v1 derivado del triestado.
+
+    // Agrupacion, totales y «solo activos» tambien pertenecen a la vista.
+    // Estos tres SI pueden ir por efecto: ninguno tiene el problema de los dos
+    // significados que tenia `null` en las columnas, y su estado inicial sale
+    // ya de la configuracion, asi que el primer disparo no borra nada.
     useEffect(() => {
-        if (selectedColumnKeys !== null) {
-            window.__inventoryCacheSelectedColumns = selectedColumnKeys;
-        } else {
-            // Do not wipe window cache on mount if it's null, just sync forward
-        }
-    }, [selectedColumnKeys]);
+        fijarInventoryConfig({
+            groupBy: groupByKey,
+            totals: Array.from(totalColumns),
+            assetsOnly: showAssetsOnly,
+        });
+    }, [groupByKey, totalColumns, showAssetsOnly]);
 
     // Restore column config from App.jsx (Saved Views)
     useEffect(() => {
         const handleRestoreConfig = (e) => {
-            const columns = e.detail;
-            if (columns) {
-                setSelectedColumnKeys(columns);
+            const d = e.detail;
+            if (!d) return;
+            // v1 manda un array; v2 manda el triestado. Se aceptan los dos: una
+            // vista vieja no tiene por que saber del contrato nuevo.
+            if (Array.isArray(d)) {
+                setSelectedColumnKeys(d);
+                fijarInventoryConfig({ columns: { mode: 'custom', keys: d } });
+            } else if (d.mode === 'all') {
+                setSelectedColumnKeys(null);
+                fijarInventoryConfig({ columns: { mode: 'all' } });
+            } else if (d.mode === 'custom') {
+                setSelectedColumnKeys(d.keys || null);
+                fijarInventoryConfig({ columns: { mode: 'custom', keys: d.keys || [] } });
             }
         };
         window.addEventListener('restore-inventory-config', handleRestoreConfig);
@@ -1470,7 +1498,12 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                 availableColumns={allPropertyKeys}
                 selectedColumns={selectedColumnKeys || allPropertyKeys}
                 onUpdate={(newCols) => {
-                    setSelectedColumnKeys(newCols.length === allPropertyKeys.length ? null : newCols);
+                    const todas = newCols.length === allPropertyKeys.length;
+                    setSelectedColumnKeys(todas ? null : newCols);
+                    // El triestado se escribe AQUI, donde el usuario decide.
+                    // `{mode:'all'}` es un valor, no una ausencia: por eso
+                    // volver a todas las columnas ya no se pierde.
+                    fijarInventoryConfig({ columns: columnasDesdeElGrid(todas ? null : newCols, allPropertyKeys) });
                 }}
             />
 

@@ -25,7 +25,7 @@ const FRENTE_SCOPED = [
   ['postgresInventoryUrn', null],
   ['__inventoryPreloadPromise', null],   // una descarga en curso del frente viejo
   ['__inventoryPreloadKey', null],
-  ['__inventoryCacheSelectedColumns', null],  // columnas elegidas en el grid
+  ['__inventoryCacheSelectedColumns', null],  // espejo v1 de lib/inventoryConfig
 
   // ── Identidad del modelo ─────────────────────────────────────────────────
   // Mapas dbId↔extId del modelo cargado. Aplicarlos a otro modelo señala
@@ -99,6 +99,15 @@ export function resetFrenteSession() {
 
   // Cachés con API propia.
   try { window.__ecdSourceTintCache?.clear?.(); } catch { /* noop */ }
+
+  // La configuración del inventario (columnas, agrupación, totales) ya no vive
+  // en un global suelto sino en `lib/inventoryConfig`, y también pertenece al
+  // frente: sin esto, las columnas de Canal aparecerían en Drenaje Urbano.
+  // Import perezoso a propósito, como el resto de este módulo: lo importa medio
+  // frontend y no debe arrastrar dependencias en su carga.
+  import('../lib/inventoryConfig.js')
+    .then((m) => m.olvidarInventoryConfig && m.olvidarInventoryConfig())
+    .catch(() => { /* noop */ });
 
   // Los paneles escuchan y se ponen al día.
   try {
