@@ -180,6 +180,15 @@ const Viewer = ({
     const modelTransformsRef = useRef({});
     const pushPinListenerRef = useRef(null); // último handler PushPin registrado (anti-fuga)
     const basePlacementRef = useRef(null);
+    // La federacion vigente, para poder leerla desde escuchadores que se
+    // registran UNA vez: OBJECT_TREE_CREATED_EVENT cerraria sobre el valor del
+    // primer render --vacio-- y no sabria a que frente pertenece el modelo.
+    const modelsRef = useRef(models);
+    modelsRef.current = models;
+    // URNs ya anunciados como listos en este ciclo de carga. Un modelo puede
+    // disparar OBJECT_TREE_CREATED mas de una vez (recarga de vista, HMR); el
+    // restaurador tiene que contar modelos, no eventos.
+    const modelosAnunciadosRef = useRef(new Set());
     const spriteViewRef = useRef(null);
     const spriteStylesRef = useRef(null);
     const spriteMeshesRef = useRef({});
@@ -513,6 +522,64 @@ const Viewer = ({
             mountedRef.current = false;
         };
     }, []);
+
+    /**
+     * «Este modelo esta LISTO para participar en la restauracion de una Saved View.»
+     *
+     * No es «loadModel devolvio un objeto». Cuando esto se emite ya se cumple todo:
+     *   · el modelo esta incorporado al visor (getAllModels lo ve)
+     *   · su URN vigente es conocido
+     *   · el emplazamiento esta aplicado: el globalOffset base ya se fijo con el
+     *     primer modelo y este heredo ese mismo valor al cargarse
+     *   · LA ROSETTA DEL MODELO ESTA CONSTRUIDA -- `rosettaToExtId[urn]` con
+     *     TODOS los nodos, que es lo que hace falta para resolver identidad de
+     *     elemento entre versiones. Sin esto el restaurador tendria el modelo
+     *     pero no podria traducir un externalId a dbId.
+     *
+     * Por eso se emite en los dos puntos donde ya se emitia `rosetta-ready`, que
+     * son el final real de la preparacion: el del puente IfcGUID para modelos
+     * IFC --donde los ids de ruta se cambian por IfcGUID, la unica identidad
+     * persistente que tienen-- y el inmediato para el resto.
+     *
+     * `rosetta-ready` sigue existiendo y no se toca: no lleva detalle, asi que
+     * no permite contar una federacion ni saber QUE modelo termino.
+     *
+     * `detail.total` ES INFORMATIVO. No es un contador con el que decidir que la
+     * federacion esta lista, y E-5 no debe usarlo como tal: los modelos que ya
+     * estaban cargados antes de empezar una restauracion NO vuelven a anunciarse,
+     * asi que esperar `total` eventos colgaria la restauracion para siempre.
+     * Lo que E-5 hara es:
+     *
+     *     requiredLineages de la Saved View
+     *   - los que `viewer.getAllModels()` ya tiene preparados
+     *   = los que faltan, y espera SOLO a esos linajes
+     *
+     * UNA INSTANCIA POR URN, y por eso el dedupe por URN basta. Lo garantiza el
+     * cargador, no el esquema: `loadModelInner` (mas abajo) descarta el URN que
+     * ya esta cargado o en vuelo, `loadedModelsRef` es un diccionario indexado
+     * por URN, y los dos unicos `loadDocumentNode` de ESTE visor viven dentro de
+     * esa guarda. El tercero, el de laminas 2D, esta comentado: las laminas van
+     * a su propio visor. `model_config` solo declara UNIQUE en `model_id`, asi
+     * que la garantia es del cargador y hay que revisarla si algun dia se anade
+     * otra via de carga.
+     */
+    const anunciarModeloListo = (urn) => {
+        if (!urn || modelosAnunciadosRef.current.has(urn)) return;
+        modelosAnunciadosRef.current.add(urn);
+
+        const federacion = modelsRef.current || [];
+        const norm = normalizeUrn(urn);
+        const i = federacion.findIndex((m) => m && normalizeUrn(m.urn) === norm);
+        // El linaje puede no resolverse --un modelo cargado fuera de la
+        // configuracion del frente--. Se emite igual con `lineage: null`: dejar
+        // al restaurador esperando un evento que no va a llegar es peor que
+        // decirle que este modelo no tiene identidad logica conocida.
+        const lineage = i >= 0 ? (federacion[i].itemId || null) : null;
+
+        window.dispatchEvent(new CustomEvent('viewer-model-loaded', {
+            detail: { urn, lineage, index: i, total: federacion.length },
+        }));
+    };
 
     useEffect(() => {
         let initTimeout;
@@ -955,9 +1022,13 @@ const Viewer = ({
                                  });
                                  console.log(`[Piedra Rosetta] IfcGUID bridge completado: ${bridgeCount} elementos mapeados.`);
                                  window.dispatchEvent(new CustomEvent('rosetta-ready'));
+                                 // IFC: hasta aqui los externalId eran ids de ruta, que no
+                                 // son identidad persistente. Ahora si lo son.
+                                 anunciarModeloListo(urn);
                              });
                          } else {
                              window.dispatchEvent(new CustomEvent('rosetta-ready'));
+                             anunciarModeloListo(urn);
                          }
                      }, (err) => {
                          console.error("[Piedra Rosetta] Error obteniendo el ExternalIdMapping:", err);
@@ -3255,6 +3326,10 @@ const Viewer = ({
             // Clean Rosetta maps for the removed model
             if (window.rosettaToDbId) delete window.rosettaToDbId[urn];
             if (window.rosettaToExtId) delete window.rosettaToExtId[urn];
+            // Descargado de verdad: si vuelve a cargarse en otro ciclo, vuelve a
+            // anunciarse. Ocultar un modelo NO pasa por aqui, y por eso ocultar
+            // y volver a mostrar no genera eventos: oculto no es descargado.
+            modelosAnunciadosRef.current.delete(urn);
 
             // Remove sheets for this model
             if (sheetsMapRef.current[urn]) {
