@@ -14,6 +14,89 @@ import { DataVizEngine } from '../aps/utils/DataVizEngine';
 
 const BACKEND_URL = (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? 'https://visor-ecd-backend.onrender.com' : (import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location.hostname.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) ? `http://${window.location.hostname}:3000` : 'https://visor-ecd-backend.onrender.com')));
 
+// ============ TOKEN DE AUTODESK PARA EL VISOR ============================
+// El LMV vuelve a invocar `getAccessToken` poco antes de que caduque la vida
+// que le declaramos (mide `expiresIn - tokenExpirationBuffer`, 5 s por
+// defecto). Ese mecanismo YA funcionaba; lo que fallaba era la respuesta: se
+// le devolvia el token capturado al montar y se le declaraban 3600 s fijos, asi
+// que a la hora el modelo dejaba de cargar con un 401 y sin mensaje.
+//
+// Aqui se pide siempre uno fresco al backend y se le pasa la vida RESTANTE
+// real. Si el backend falla, se reintenta con espera creciente -- UNA SOLA
+// peticion en vuelo, sin bucles en paralelo -- avisando por pantalla, y en
+// cuanto vuelve se llama a `onSuccess`. El visor no se reinicializa nunca.
+const ESPERAS_TOKEN_MS = [1000, 2000, 5000, 10000, 20000, 30000];
+
+// Sin `expires_in` el LMV asume 3599 s por su cuenta, que es justo la promesa
+// de mas que causo el fallo. Ante un backend antiguo (el frontend puede
+// desplegarse antes) se declara poco y se vuelve a preguntar pronto.
+const VIDA_SI_NO_LA_DICEN_S = 60;
+
+let peticionDeTokenEnVuelo = null;
+
+// Cuantos Viewer hay montados. Si no queda ninguno, nadie espera el token: el
+// bucle deja de pedirlo (medido: seguia insistiendo cada 30 s despues de que el
+// usuario volviera al inicio) y se queda esperando SIN reintentar. No se
+// abandona la promesa a proposito: el LMV solo re-arma su temporizador dentro de
+// `onSuccess`, asi que rendirse lo dejaria sin reloj hasta una recarga.
+let visoresVivos = 0;
+let alMontarUnVisor = null;
+
+const esperarAVisorMontado = () => new Promise((resolver) => {
+    if (visoresVivos > 0) { resolver(); return; }
+    const anterior = alMontarUnVisor;
+    alMontarUnVisor = () => { if (anterior) anterior(); resolver(); };
+});
+
+const _visorMontado = () => {
+    visoresVivos += 1;
+    if (alMontarUnVisor) { const f = alMontarUnVisor; alMontarUnVisor = null; f(); }
+};
+
+const _visorDesmontado = () => {
+    visoresVivos = Math.max(0, visoresVivos - 1);
+};
+
+const avisarTokenAps = (mensaje) => {
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('aps-token-aviso', { detail: mensaje }));
+    }
+};
+
+const pedirTokenDeVisor = () => {
+    if (peticionDeTokenEnVuelo) return peticionDeTokenEnVuelo;
+    const enCurso = (async () => {
+        for (let intento = 0; ; intento++) {
+            if (visoresVivos === 0) {
+                // Sin visor montado no hay a quien servir: se retira el aviso y
+                // se espera a que vuelva a haber uno, sin pedir nada. La guarda
+                // va ANTES de la peticion: puesta en el `catch` se escapaba una
+                // ultima llamada al despertar del backoff (medido).
+                avisarTokenAps(null);
+                await esperarAVisorMontado();
+            }
+            try {
+                const res = await apiFetch(`${BACKEND_URL}/api/token`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const datos = await res.json();
+                if (!datos || !datos.access_token) throw new Error('respuesta sin access_token');
+                avisarTokenAps(null);
+                return datos;
+            } catch (err) {
+                console.warn('[APS] no se pudo obtener el token, reintentando:', err.message);
+                avisarTokenAps('Sin conexion con el servidor de Autodesk. Reintentando...');
+                const espera = ESPERAS_TOKEN_MS[Math.min(intento, ESPERAS_TOKEN_MS.length - 1)];
+                await new Promise((r) => setTimeout(r, espera));
+            }
+        }
+    })();
+    peticionDeTokenEnVuelo = enCurso;
+    enCurso.finally(() => {
+        if (peticionDeTokenEnVuelo === enCurso) peticionDeTokenEnVuelo = null;
+    });
+    return enCurso;
+};
+
 // Utilidad para normalizar base64 vs base64url-safe y comparar URNs sin cruzarse
 const normalizeUrn = (urn) => {
     if (!urn) return '';
@@ -66,7 +149,6 @@ const Viewer = ({
     onBuildPinSelect,
     selectedPinId, // Add this prop
 
-    accessToken, // Receive token from App
     // SEGUIMIENTO
     trackingTab,
 
@@ -120,6 +202,7 @@ const Viewer = ({
 
     // --- States ---
     const [viewerReady, setViewerReady] = useState(false);
+    const [avisoToken, setAvisoToken] = useState(null);
     const [mobileToolsVisible, setMobileToolsVisible] = useState(false);
     const [contextMenu, setContextMenu] = useState(null);
     const [showProgressives, setShowProgressives] = useState(false);
@@ -433,8 +516,9 @@ const Viewer = ({
 
     useEffect(() => {
         let initTimeout;
+        _visorMontado();
 
-        const initializeViewer = () => {
+        const initializeViewer = async () => {
             // 1. Prevent overlapping initializations
             if (isInitializingRef.current) return;
             if (!mountedRef.current) return;
@@ -453,6 +537,24 @@ const Viewer = ({
 
             isInitializingRef.current = true;
 
+            // UN TOKEN EN MANO ANTES DE ARRANCAR EL LMV.
+            //
+            // `Autodesk.Viewing.Initializer` es global y de una sola vez. Si se
+            // le llama sin token, se queda esperando; y si el visor se desmonta
+            // durante esa espera y monta otro, al llegar el token el LMV
+            // completa la inicializacion del visor MUERTO -- su callback aborta
+            // por `mountedRef` -- y el visor vivo no arranca nunca. Medido:
+            // `cb` solo para la generacion 1, `window.viewer` nulo, 0 modelos.
+            //
+            // Esperando aqui, `Initializer` solo se invoca con token disponible.
+            // El reintento y el aviso siguen siendo los mismos de
+            // `pedirTokenDeVisor`, asi que sigue habiendo un unico mecanismo.
+            await pedirTokenDeVisor();
+            if (!mountedRef.current) {
+                isInitializingRef.current = false;
+                return;
+            }
+
             const options = {
                 // SVF2 (streamingV2) = el formato de Tandem/ACC: INSTANCIA la
                 // geometría repetida (5,799 barras de acero ≈ 1 geometría re-usada)
@@ -461,15 +563,14 @@ const Viewer = ({
                 // Los modelos ACC (wipprod) ya traen derivado SVF2 de fábrica.
                 env: 'AutodeskProduction2',
                 api: 'streamingV2',
+                // SIEMPRE fresco. El atajo `if (accessToken)` devolvia el token
+                // capturado al montar, asi que la renovacion del LMV entregaba
+                // una credencial ya muerta.
                 getAccessToken: (onSuccess) => {
-                    if (accessToken) {
-                        onSuccess(accessToken, 3600);
-                    } else {
-                        apiFetch(`${BACKEND_URL}/api/token`)
-                            .then(res => res.json())
-                            .then(data => onSuccess(data.access_token, data.expires_in))
-                            .catch(err => console.error("Token fetch error", err));
-                    }
+                    pedirTokenDeVisor().then((datos) => {
+                        const vida = Number(datos.expires_in);
+                        onSuccess(datos.access_token, Number.isFinite(vida) && vida > 0 ? vida : VIDA_SI_NO_LA_DICEN_S);
+                    });
                 }
             };
 
@@ -936,12 +1037,14 @@ const Viewer = ({
             });
         };
 
-        if (accessToken) {
-            initializeViewer();
-        }
+        // Sin puerta: el visor arranca al montar y es `getAccessToken` quien
+        // consigue el token, reintentando si hace falta. Antes esperaba a que
+        // App le pasara uno, y si aquella peticion fallaba no arrancaba jamas.
+        initializeViewer();
 
         return () => {
             clearTimeout(initTimeout);
+            _visorDesmontado();
             // 6. ROBUST CLEANUP
             if (viewerRef.current) {
                 console.log("[Viewer] Cleaning up viewer instance");
@@ -966,7 +1069,16 @@ const Viewer = ({
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [accessToken]);
+    }, []);
+
+    // El aviso del token vive aqui porque es aqui donde el visor se queda en
+    // blanco si no llega. Se pone y se quita solo: `pedirTokenDeVisor` emite el
+    // texto mientras falla y `null` en cuanto lo consigue.
+    useEffect(() => {
+        const alAvisar = (e) => setAvisoToken(e.detail || null);
+        window.addEventListener('aps-token-aviso', alAvisar);
+        return () => window.removeEventListener('aps-token-aviso', alAvisar);
+    }, []);
 
     // ============== EVENTOS GLOBALES DE TOPBAR ==============
     useEffect(() => {
@@ -4486,6 +4598,21 @@ const Viewer = ({
                 className="viewer-container"
                 style={{ width: '100%', height: '100%', position: 'relative', zIndex: 1 }}
             />
+
+            {avisoToken && (
+                <div
+                    role="status"
+                    style={{
+                        position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+                        zIndex: 40, background: '#3e2a12', color: '#ffd9a0',
+                        border: '1px solid #7a5320', borderRadius: 6,
+                        padding: '8px 14px', fontSize: 13, pointerEvents: 'none',
+                        boxShadow: '0 2px 10px rgba(0,0,0,.35)'
+                    }}
+                >
+                    {avisoToken}
+                </div>
+            )}
 
 
             {/* Sprite Context Menu */}

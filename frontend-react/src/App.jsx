@@ -1321,21 +1321,13 @@ function App() {
 
 
 
-  // 1. Fetch token on mount
-  const [accessToken, setAccessToken] = useState('');
-
-  useEffect(() => {
-    const getToken = async () => {
-      try {
-        const res = await apiFetch(`${BACKEND_URL}/api/token`);
-        const data = await res.json();
-        setAccessToken(data.access_token);
-      } catch (err) {
-        console.error('Failed to get token', err);
-      }
-    };
-    getToken();
-  }, []);
+  // El token de Autodesk YA NO se pide aqui. Lo pedia este efecto con `[]` y su
+  // unico cometido era servir de puerta para que Viewer se inicializara: si esta
+  // primera peticion fallaba, `accessToken` se quedaba vacio para siempre, el
+  // efecto no volvia a correr y el visor no arrancaba nunca -- ni cuando el
+  // backend volvia. Sin aviso ninguno. Ahora hay UN SOLO mecanismo, el que
+  // Autodesk soporta: Viewer monta -> Initializer -> getAccessToken ->
+  // pedirTokenDeVisor(), que ademas reintenta y avisa. Ver Viewer.jsx.
 
   const handleDocPinComplete = async (position) => {
     const urn = selectedProject?.id || 'global';
@@ -4338,7 +4330,6 @@ function App() {
                   >
                   <Viewer
                     key={selectedProject?.id || 'viewer-default'}
-                    accessToken={accessToken}
                     models={models}
                     hiddenModelUrns={hiddenModelUrns}
                     sprites={sprites}

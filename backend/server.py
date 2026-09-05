@@ -675,10 +675,13 @@ def get_viewer_token():
     """Token para el Viewer del navegador. Publico a proposito (las vistas
     compartidas por enlace no tienen sesion), por eso es de SOLO LECTURA."""
     from aps import get_public_viewer_token
-    token, error = get_public_viewer_token()
+    token, expira_en, error = get_public_viewer_token()
     if error:
         return jsonify({'error': error}), 500
-    return jsonify({'access_token': token})
+    # `expires_in` es la vida RESTANTE del token que va en esta respuesta, no la
+    # nominal con que nacio. El Viewer de Autodesk programa con ella su proxima
+    # peticion, asi que prometer de mas es exactamente el fallo que arregla esto.
+    return jsonify({'access_token': token, 'expires_in': expira_en})
 
 # --- APS DATA ROUTES ---
 

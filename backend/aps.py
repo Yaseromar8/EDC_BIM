@@ -22,6 +22,19 @@ APS_VIEWER_SCOPES = ['data:read', 'viewables:read']
 # Cache for API responses
 cache = SimpleCache()
 
+# El navegador necesita saber CUANTO le queda al token que recibe, no cuanto
+# duraba cuando se pidio. Guardamos su instante de caducidad junto al token,
+# bajo la misma clave con este sufijo y el mismo TTL, para poder responder con
+# la vida RESTANTE real.
+SUFIJO_CADUCA = ':caduca'
+
+# Por debajo de este margen no se entrega el token cacheado: se pide uno nuevo.
+# Coincide a proposito con el recorte del TTL de `_pedir_token`, asi que un
+# token servido desde cache siempre llega con al menos este margen.
+MARGEN_SEGURIDAD_S = 300
+
+CLAVE_VISOR = 'viewer_token'
+
 
 def _pedir_token(scopes, clave_cache):
     """Pide un token 2-legged con esos permisos y lo cachea."""
@@ -45,8 +58,11 @@ def _pedir_token(scopes, clave_cache):
         token = token_data['access_token']
         # Margen de seguridad: sacarlo del cache 5 minutos ANTES de que caduque
         # en Autodesk, para no mandarle al Viewer un token agonizando.
-        safe_timeout = max(60, int(token_data.get('expires_in', 3599)) - 300)
+        vida = int(token_data.get('expires_in', 3599))
+        safe_timeout = max(60, vida - MARGEN_SEGURIDAD_S)
         cache.set(clave_cache, token, timeout=safe_timeout)
+        # Mismo TTL que el token: los dos entran y salen del cache a la vez.
+        cache.set(clave_cache + SUFIJO_CADUCA, time.time() + vida, timeout=safe_timeout)
         return token, None
     except requests.exceptions.RequestException as e:
         if response is not None:
@@ -60,9 +76,43 @@ def get_internal_token():
     return _pedir_token(APS_SCOPES, 'internal_token')
 
 
+def _vida_restante(clave_cache):
+    """Segundos que le quedan de verdad al token cacheado, o None si no consta."""
+    caduca = cache.get(clave_cache + SUFIJO_CADUCA)
+    if caduca is None:
+        return None
+    return caduca - time.time()
+
+
 def get_public_viewer_token():
-    """Token 2-legged de solo lectura. Es el unico que puede salir al navegador."""
-    return _pedir_token(APS_VIEWER_SCOPES, 'viewer_token')
+    """Token 2-legged de solo lectura con su vida RESTANTE real.
+
+    Devuelve `(token, restante_s, error)`. Es el unico token que puede salir al
+    navegador, y el Viewer de Autodesk decide cuando pedir otro a partir del
+    numero que le demos: por eso el contrato es que `restante_s` NUNCA sea
+    mayor que lo que le queda de verdad al token entregado.
+
+    Antes se devolvia el token cacheado sin decir nada de su caducidad, y el
+    visor declaraba 3600 s fijos. Un token servido en el minuto 54 del ciclo de
+    cache llegaba con ~5 minutos de vida y el visor no volvia a preguntar hasta
+    los 3595 s: el modelo dejaba de cargar con un 401 y sin mensaje.
+    """
+    token, error = _pedir_token(APS_VIEWER_SCOPES, CLAVE_VISOR)
+    if error:
+        return None, None, error
+    restante = _vida_restante(CLAVE_VISOR)
+    if restante is None or restante < MARGEN_SEGURIDAD_S:
+        # Agonizando, o sin registro de caducidad (token de un proceso anterior
+        # a este cambio). No se puede prometer nada: se pide uno nuevo.
+        cache.delete(CLAVE_VISOR)
+        cache.delete(CLAVE_VISOR + SUFIJO_CADUCA)
+        token, error = _pedir_token(APS_VIEWER_SCOPES, CLAVE_VISOR)
+        if error:
+            return None, None, error
+        restante = _vida_restante(CLAVE_VISOR)
+        if restante is None:
+            return None, None, 'el token llego sin caducidad'
+    return token, int(restante), None
 
 def get_api_data(endpoint, token):
     """Makes a GET request to the APS API and caches the response."""
