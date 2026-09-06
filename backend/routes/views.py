@@ -14,6 +14,8 @@ from politica import publico_en_lectura
 from db import get_db_connection
 import vistas_contrato as contrato
 import vistas_v2
+import vistas_permisos as permisos
+from perimetro_de_obra import guardia_de_obra
 
 views_bp = Blueprint('views', __name__)
 
@@ -154,17 +156,6 @@ def save_view_to_db(view):
         return False
 
 
-def delete_view_from_db(view_id):
-    """Deletes a view from PostgreSQL by ID."""
-    try:
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('DELETE FROM saved_views WHERE id = %s', (view_id,))
-            conn.commit()
-    except Exception as e:
-        print(f"[views] DB delete failed: {e}")
-
-
 # --- API Routes ---
 
 
@@ -188,7 +179,14 @@ def get_view(view_id):
         return jsonify({"error": "View not found"}), 404
     usuario = getattr(g, 'current_user', None)
     if usuario:
-        return jsonify(contrato.fila_de_detalle(fila, usuario))
+        # CON SESION la obra si se comprueba. Es deliberado que sea mas estricto
+        # que la via anonima: el enlace compartido es una concesion explicita a
+        # quien tiene el identificador, mientras que una sesion identificada
+        # tiene una obra y unos limites que si se pueden comprobar.
+        negativa = guardia_de_obra(fila.get('project_id'), 'ver esta vista')
+        if negativa:
+            return negativa
+        return jsonify(permisos.con_permisos(contrato.fila_de_detalle(fila, usuario), usuario))
     return jsonify(contrato.fila_publica(fila))
 
 
@@ -198,8 +196,17 @@ def get_views():
     el prefijo `/api/views/` --con barra-- para los enlaces compartidos, y esta
     ruta es `/api/views`."""
     project_id = request.args.get('project')
+    if not project_id:
+        # Sin frente no se puede acotar, y un listado sin acotar devolvia las
+        # vistas de TODAS las obras. No se elige una por defecto: se pide.
+        return jsonify({'error': 'Falta el frente: /api/views?project=...',
+                        'code': 'FALTA_OBRA'}), 400
+    negativa = guardia_de_obra(project_id, 'ver las vistas de esta obra')
+    if negativa:
+        return negativa
     usuario = getattr(g, 'current_user', None)
-    return jsonify([contrato.fila_de_listado(f, usuario) for f in listar_vistas(project_id)])
+    return jsonify([permisos.con_permisos(contrato.fila_de_listado(f, usuario), usuario)
+                    for f in listar_vistas(project_id)])
 
 
 # ── ESCRITURA ─────────────────────────────────────────────────────────────
@@ -223,6 +230,60 @@ CAMPOS_DE_METADATOS = ('name', 'description', 'thumbnail')
 
 def _usuario():
     return getattr(g, 'current_user', None) or {}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DOS CAPAS, Y NO SON LA MISMA PREGUNTA
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#   ACCESO AL RECURSO   ¿puede esta persona entrar en esta obra?   -> aqui
+#   AUTORIA             ¿puede modificar ESTA vista?               -> vistas_permisos
+#
+# Hasta E-4C solo existia la segunda, y con eso un miembro de la obra A podia
+# LEER el listado y el detalle de las vistas de la obra B: para leer no hacia
+# falta ser autor de nada.
+#
+# COMO SE RESUELVE LA OBRA DE UNA VISTA
+# -------------------------------------
+# `saved_views.project_id` guarda el FRENTE --'1_DRENAJE', '1_CANAL'--, no
+# `projects.id`. La traduccion NO se inventa aqui: la hace `resolve_project_id`
+# (db.py), cuya autoridad es `project_ref` y que ademas conoce la convencion
+# `<obra>_<FRENTE>`. Medido contra la base de trabajo:
+#
+#     1_CANAL                              -> obra '1'                        4 miembros
+#     1_DRENAJE                            -> obra '1'                        4 miembros
+#     b.proj_pqt8_..._INTERFERENCIAS       -> obra 'b.proj_pqt8_...4852'      1 miembro
+#     ''  (3 vistas de marzo)              -> None
+#
+# Las tres de la cadena vacia NO resuelven, y eso se trata como negativa: no
+# saber de que obra es una vista no puede resolverse dandola por buena. Solo el
+# Entity Admin las alcanza. En el panel ya eran invisibles --el listado filtra
+# por frente-- asi que esto no le quita a nadie algo que estuviera usando.
+#
+# `guardia_de_obra` es la pieza que ya existia para esto: Entity Admin o Project
+# Admin de esa obra pasan; el resto tiene que ser miembro; sin obra resoluble,
+# 403. No se usa `guardia_de_recurso` porque devuelve el valor CRUDO de la
+# columna --el frente-- y se lo pasa a `_user_in_project` sin traducir, que es
+# justamente el paso que aqui hace falta.
+def _alcance_y_autor(view_id):
+    """(frente, autor, schema_version) de una vista. None si no existe.
+
+    Lectura corta y SIN bloqueo: se necesita antes de abrir la transaccion de
+    escritura, porque `guardia_de_obra` abre su propia conexion y encadenarla
+    dentro de un `FOR UPDATE` seria sostener un bloqueo mientras se pide otra
+    conexion del pool. La obra de una vista no cambia --ni PUT ni PATCH pueden
+    tocar `project_id`-- asi que leerla antes es tan valido como leerla dentro;
+    la AUTORIA, que si decide, se vuelve a comprobar ya con la fila bloqueada.
+    """
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT project_id, created_by, schema_version "
+                        "  FROM saved_views WHERE id = %s", (view_id,))
+            return cur.fetchone()
+    except Exception as e:
+        print(f"[views] no se pudo leer el alcance: {e}")
+        return None
 
 
 def _no_persistible(problemas, mensaje='El documento no se puede guardar como v2.'):
@@ -269,6 +330,9 @@ def save_view():
     # con el que el control central acota la peticion, y esconderlo un nivel mas
     # abajo lo deja fuera de su alcance sin que nadie lo decida.
     obra = data.get('project') or data.get('projectId')
+    negativa = guardia_de_obra(obra, 'guardar una vista en esta obra')
+    if negativa:
+        return negativa
 
     if 'state' in data or data.get('schemaVersion') == vistas_v2.SCHEMA_VERSION:
         return _crear_v2(data, autor, obra)
@@ -297,7 +361,9 @@ def _crear_v1(data, autor, obra):
     # subir: quien guarda ya lo tiene, y asi lo que se anade al panel tiene la
     # misma forma que lo que el panel ya tenia.
     fila = leer_fila(new_view['id'])
-    return jsonify(contrato.fila_de_listado(fila, _usuario()) if fila else new_view)
+    if not fila:
+        return jsonify(new_view)
+    return jsonify(permisos.con_permisos(contrato.fila_de_listado(fila, _usuario()), _usuario()))
 
 
 def _crear_v2(data, autor, obra):
@@ -332,7 +398,7 @@ def _crear_v2(data, autor, obra):
         return jsonify({'error': 'No se pudo guardar la vista.'}), 500
 
     fila = leer_fila(vista_id)
-    return jsonify(contrato.fila_de_detalle(fila, _usuario())), 201
+    return jsonify(permisos.con_permisos(contrato.fila_de_detalle(fila, _usuario()), _usuario())), 201
 
 
 @views_bp.route('/api/views/<view_id>', methods=['PUT'])
@@ -360,6 +426,13 @@ def reemplazar_estado(view_id):
         return jsonify({'error': 'PUT solo acepta documentos v2.', 'code': 'SCHEMA_VERSION'}), 400
 
     estado = data['state']
+    alcance = _alcance_y_autor(view_id)
+    if not alcance:
+        return jsonify({'error': 'View not found'}), 404
+    negativa = guardia_de_obra(alcance[0], 'actualizar esta vista')
+    if negativa:
+        return negativa
+
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -368,7 +441,14 @@ def reemplazar_estado(view_id):
             fila = cur.fetchone()
             if not fila:
                 return jsonify({'error': 'View not found'}), 404
-            version_actual = int(fila[0] or 1)
+            version_actual, autor = int(fila[0] or 1), fila[1]
+
+            # QUIEN, antes que QUE. Sobre la fila ya bloqueada: autorizar contra
+            # una lectura anterior seria autorizar contra datos que pueden haber
+            # cambiado entre medias.
+            negativa = permisos.guardia(_usuario(), autor, 'actualizar')
+            if negativa:
+                return negativa
 
             if version_actual != vistas_v2.SCHEMA_VERSION and not CONVERSION_V1_EN_SITIO:
                 return jsonify({
@@ -393,7 +473,8 @@ def reemplazar_estado(view_id):
         print(f"[views] PUT fallido: {e}")
         return jsonify({'error': 'No se pudo actualizar la vista.'}), 500
 
-    return jsonify(contrato.fila_de_detalle(leer_fila(view_id), _usuario()))
+    return jsonify(permisos.con_permisos(
+        contrato.fila_de_detalle(leer_fila(view_id), _usuario()), _usuario()))
 
 
 @views_bp.route('/api/views/<view_id>', methods=['PATCH'])
@@ -424,6 +505,13 @@ def cambiar_metadatos(view_id):
     if not ok:
         return _no_persistible(problemas, 'Los metadatos no son validos.')
 
+    alcance = _alcance_y_autor(view_id)
+    if not alcance:
+        return jsonify({'error': 'View not found'}), 404
+    negativa = guardia_de_obra(alcance[0], 'renombrar esta vista')
+    if negativa:
+        return negativa
+
     columna = {'name': 'name', 'description': 'description', 'thumbnail': 'thumbnail'}
     asignaciones = ', '.join('%s = %%s' % columna[c] for c in presentes)
     valores = [data[c].strip() if c == 'name' else data[c] for c in presentes]
@@ -432,8 +520,12 @@ def cambiar_metadatos(view_id):
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("SELECT created_by FROM saved_views WHERE id = %s FOR UPDATE", (view_id,))
-            if not cur.fetchone():
+            fila = cur.fetchone()
+            if not fila:
                 return jsonify({'error': 'View not found'}), 404
+            negativa = permisos.guardia(_usuario(), fila[0], 'renombrar')
+            if negativa:
+                return negativa
             cur.execute(
                 "UPDATE saved_views SET %s, updated_at = NOW() WHERE id = %%s" % asignaciones,
                 valores + [view_id])
@@ -442,10 +534,42 @@ def cambiar_metadatos(view_id):
         print(f"[views] PATCH fallido: {e}")
         return jsonify({'error': 'No se pudieron cambiar los metadatos.'}), 500
 
-    return jsonify(contrato.fila_de_detalle(leer_fila(view_id), _usuario()))
+    return jsonify(permisos.con_permisos(
+        contrato.fila_de_detalle(leer_fila(view_id), _usuario()), _usuario()))
 
 
 @views_bp.route('/api/views/<view_id>', methods=['DELETE'])
 def delete_view(view_id):
-    delete_view_from_db(view_id)
+    """Borrar una vista. Hasta esta etapa NO PREGUNTABA NADA.
+
+    Bastaba una sesion --cualquiera-- para borrar la vista de cualquier persona
+    en cualquier obra, y ademas respondia `{'success': true}` cuando la vista no
+    existia, de modo que el panel la quitaba de la lista igual. No era un
+    descuido evitable: la tabla no tenia autor a quien preguntar hasta E-0.
+
+    Ahora: 404 si no esta, 403 si no es tuya, y el borrado va en la misma
+    transaccion que la comprobacion.
+    """
+    alcance = _alcance_y_autor(view_id)
+    if not alcance:
+        return jsonify({'error': 'View not found'}), 404
+    negativa = guardia_de_obra(alcance[0], 'borrar esta vista')
+    if negativa:
+        return negativa
+
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT created_by FROM saved_views WHERE id = %s FOR UPDATE", (view_id,))
+            fila = cur.fetchone()
+            if not fila:
+                return jsonify({'error': 'View not found'}), 404
+            negativa = permisos.guardia(_usuario(), fila[0], 'borrar')
+            if negativa:
+                return negativa
+            cur.execute("DELETE FROM saved_views WHERE id = %s", (view_id,))
+            conn.commit()
+    except Exception as e:
+        print(f"[views] DELETE fallido: {e}")
+        return jsonify({'error': 'No se pudo borrar la vista.'}), 500
     return jsonify({'success': True})

@@ -186,6 +186,19 @@ def test_las_rutas_por_id_de_recurso_llevan_guardia():
                      # entidad para una de ENTIDAD. Una plantilla de entidad NO
                      # tiene obra a proposito, asi que `guardia_de_recurso` no
                      # sirve aqui: `obra_del_recurso` no tendria de donde sacarla.
+                     # E-4C · Saved Views. Mismo patron que GAP 06: el
+                     # manejador LEE la obra de la propia fila --`SELECT
+                     # project_id ... WHERE id=%s`, en `_alcance_y_autor`-- y
+                     # llama con ella a `guardia_de_obra`, que traduce el frente
+                     # a obra con `resolve_project_id` y comprueba pertenencia.
+                     #
+                     # `guardia_de_recurso` NO sirve para esta tabla y esta
+                     # medido: `saved_views.project_id` guarda el FRENTE
+                     # ('1_DRENAJE'), no `projects.id`, y aquella se lo pasa
+                     # CRUDO a `_user_in_project`. Traducido resuelve --1_CANAL
+                     # y 1_DRENAJE son la obra '1', con 4 miembros--; sin
+                     # traducir no lo hace nadie.
+                     'guardia_de_obra',
                      '_puede_definir')
             tiene = 'guardia_de_recurso' in cuerpo or any(o in cuerpo for o in otras)
             if toca_obra and not tiene:
