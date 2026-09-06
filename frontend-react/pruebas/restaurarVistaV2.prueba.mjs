@@ -709,32 +709,38 @@ titulo('B5 · EL MARCO SE COMPARA CONTRA EL MODELO BASE');
         !!av3 && /base/.test(av3.motivo), JSON.stringify(av3?.motivo));
 }
 
-titulo('B4 · LA BANDERA: APAGADA, Y EN PRODUCCION NI CON DevTools');
+titulo('B4 Â· LA BANDERA: AHORA APAGA, Y EN PRODUCCION NI CON DevTools');
 {
     const DEV = { DEV: true, MODE: 'development' };
     const PROD = { PROD: true, MODE: 'production' };
-    const CON_BUILD = { PROD: true, MODE: 'production', VITE_SAVED_VIEWS_V2_RESTORE: 'true' };
+    const APAGADA = { PROD: true, MODE: 'production', VITE_SAVED_VIEWS_V2_RESTORE: 'false' };
     // Lo que puede escribir cualquiera desde la consola del navegador.
-    const devTools = { [R.BANDERA]: true, localStorage: { getItem: () => 'true' } };
+    const devTools = { [R.BANDERA]: false, localStorage: { getItem: () => 'false' } };
 
-    ok('sin nada configurado, apagada', R.restauradorV2Activo({}, DEV) === false);
-    ok('DEV · window la enciende', R.restauradorV2Activo({ [R.BANDERA]: true }, DEV) === true);
-    ok('DEV · localStorage también',
-        R.restauradorV2Activo({ localStorage: { getItem: (k) => (k === R.BANDERA ? 'true' : null) } }, DEV) === true);
-    ok('DEV · un valor que no es «true» no la enciende',
-        R.restauradorV2Activo({ localStorage: { getItem: () => 'si' } }, DEV) === false);
+    // E-7: v2 es el camino normal. La bandera pasÃ³ a ser un interruptor de
+    // APAGADO, y lo peor que consigue quien la toca desde la consola de un build
+    // desplegado es volver al camino v1.
+    ok('sin nada configurado, ENCENDIDA', R.restauradorV2Activo({}, DEV) === true);
+    ok('PROD sin nada configurado, tambiÃ©n', R.restauradorV2Activo({}, PROD) === true);
+    ok('la bandera de BUILD la apaga en cualquier modo',
+        R.restauradorV2Activo({}, APAGADA) === false);
+    ok('y con la de build en false, lo demÃ¡s da igual',
+        R.restauradorV2Activo({ [R.BANDERA]: true }, APAGADA) === false);
 
-    ok('PROD · window NO la enciende', R.restauradorV2Activo(devTools, PROD) === false);
-    ok('PROD · localStorage TAMPOCO',
-        R.restauradorV2Activo({ localStorage: { getItem: () => 'true' } }, PROD) === false);
-    ok('PROD · sólo la bandera de BUILD', R.restauradorV2Activo({}, CON_BUILD) === true);
-    ok('PROD · y con la de build puesta, lo demás da igual',
-        R.restauradorV2Activo(devTools, CON_BUILD) === true);
+    ok('DEV Â· window la apaga', R.restauradorV2Activo({ [R.BANDERA]: false }, DEV) === false);
+    ok('DEV Â· localStorage tambiÃ©n',
+        R.restauradorV2Activo({ localStorage: { getItem: (k) => (k === R.BANDERA ? 'false' : null) } }, DEV) === false);
+    ok('DEV Â· un valor que no es Â«falseÂ» no la apaga',
+        R.restauradorV2Activo({ localStorage: { getItem: () => 'no' } }, DEV) === true);
 
-    ok('sin saber en qué modo se está, se trata como PRODUCCION',
-        R.restauradorV2Activo(devTools, null) === false && R.esProduccion(null) === true);
-    ok('MODE production sin PROD/DEV también cuenta como producción',
-        R.restauradorV2Activo(devTools, { MODE: 'production' }) === false);
+    ok('PROD Â· window NO la apaga', R.restauradorV2Activo(devTools, PROD) === true);
+    ok('PROD Â· localStorage TAMPOCO',
+        R.restauradorV2Activo({ localStorage: { getItem: () => 'false' } }, PROD) === true);
+
+    ok('sin saber en quÃ© modo se estÃ¡, se trata como PRODUCCION',
+        R.restauradorV2Activo(devTools, null) === true && R.esProduccion(null) === true);
+    ok('MODE production sin PROD/DEV tambiÃ©n cuenta como producciÃ³n',
+        R.restauradorV2Activo(devTools, { MODE: 'production' }) === true);
 }
 
 titulo('B6 · EL INVENTARIO SE ESPERA EN E5, NO EN EL ARRANQUE');

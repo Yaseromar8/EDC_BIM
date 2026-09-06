@@ -39,26 +39,30 @@ import { planDeRebind, aplicarRebind, resolverElementos,
 import { resolverSeleccion, sePuedeAislar } from './preflightFiltros.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// LA BANDERA
+// LA BANDERA · E-7: AHORA ES UN INTERRUPTOR DE APAGADO
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Tres formas de encenderla, y NO valen lo mismo:
+// Hasta E-6 esto era un interruptor de ENCENDIDO y por omisión estaba apagado:
+// v2 era código nuevo que nadie había visto funcionar sobre modelos reales. Ya
+// se ha visto —capturar, guardar, compartir y restaurar, con la federación de
+// cinco de 1_CANAL— y v2 pasa a ser el camino normal.
 //
-//   VITE_SAVED_VIEWS_V2_RESTORE=true    de BUILD. Vale en cualquier modo.
-//   localStorage SAVED_VIEWS_V2_RESTORE sólo fuera de producción
-//   window.SAVED_VIEWS_V2_RESTORE       sólo fuera de producción
+// Se invierte el sentido, no se borra: apagar sigue siendo posible, y ese es el
+// punto. Un despliegue que salga mal se revierte poniendo una variable, sin
+// tocar una línea ni esperar a un commit.
 //
-// Las dos últimas existen para el desarrollo y el banco: encender el restaurador
-// sin recompilar. Pero en un build de producción CUALQUIERA puede escribirlas
-// desde la consola del navegador, y entonces no serían un interruptor de
-// desarrollo sino una forma de que un usuario active por su cuenta código que
-// todavía no se ha desplegado a nadie. Así que en producción no encienden nada.
+//   VITE_SAVED_VIEWS_V2_RESTORE=false   de BUILD. Apaga en cualquier modo.
+//   localStorage SAVED_VIEWS_V2_RESTORE='false'   sólo fuera de producción
+//   window.SAVED_VIEWS_V2_RESTORE=false           sólo fuera de producción
 //
-// Y en la duda, apagado: sin `import.meta.env` —fuera de un bundle, por ejemplo
-// en una batería de Node— no hay forma de saber en qué modo se está, y lo que no
-// se sabe se trata como producción.
+// Las dos últimas siguen siendo de desarrollo y siguen sin valer en producción,
+// por la misma razón de siempre: en un build desplegado cualquiera puede
+// escribirlas desde la consola, y el estado del producto no lo decide quien
+// abre la página. La diferencia es que ahora lo peor que consiguen es volver al
+// camino v1, no activar código que nadie ha desplegado.
 //
-// No hay variable de Render, y no la habrá hasta que alguien lo decida.
+// EL CAMINO v1 NO SE RETIRA. Una vista v1 se sigue abriendo por el suyo, no se
+// convierte sola, y «Guardar como» desde una v1 crea una v2 NUEVA sin tocarla.
 export const BANDERA = 'SAVED_VIEWS_V2_RESTORE';
 
 /** El entorno del bundler, o nada si no hay bundler. Aparte, para poder probarlo. */
@@ -80,14 +84,16 @@ export function esProduccion(env) {
 export function restauradorV2Activo(ventana = (typeof window !== 'undefined' ? window : null),
                                     env = entornoDeBuild()) {
     // La bandera de BUILD manda en cualquier modo: es la que se decide al
-    // compilar y no la puede tocar quien abre la página.
-    if (env && String(env.VITE_SAVED_VIEWS_V2_RESTORE) === 'true') return true;
-    if (esProduccion(env)) return false;         // ni localStorage ni window
-    if (!ventana) return false;
-    if (ventana[BANDERA] === true) return true;
+    // compilar y no la puede tocar quien abre la página. Sólo un `false`
+    // explícito apaga; cualquier otra cosa —ausente, vacía, 'true'— deja el
+    // camino normal.
+    if (env && String(env.VITE_SAVED_VIEWS_V2_RESTORE) === 'false') return false;
+    if (esProduccion(env)) return true;          // ni localStorage ni window
+    if (!ventana) return true;
+    if (ventana[BANDERA] === false) return false;
     try {
-        return ventana.localStorage?.getItem(BANDERA) === 'true';
-    } catch { return false; }
+        return ventana.localStorage?.getItem(BANDERA) !== 'false';
+    } catch { return true; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
