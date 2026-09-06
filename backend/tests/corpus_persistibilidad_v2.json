@@ -1,0 +1,2504 @@
+{
+  "_lee_esto": "Corpus COMPARTIDO del invariante de persistibilidad v2. Lo recorren entero las dos implementaciones: backend/vistas_v2.py (la autoridad) y frontend-react/src/lib/savedViewV2.js (la comodidad). Si una regla cambia en un lado y no en el otro, una de las dos baterias falla. Los identificadores son sinteticos, con la forma exacta de los reales.",
+  "_baterias": [
+    "backend/tests/test_vistas_v2.py",
+    "frontend-react/pruebas/savedViewV2.prueba.mjs"
+  ],
+  "casos": [
+    {
+      "nombre": "v2 minima",
+      "esperado": true,
+      "motivos": [],
+      "porQue": "un documento v2 solo tiene que declararse v2 y decir de que modelos es",
+      "state": {
+        "schemaVersion": 2,
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "v2 completa",
+      "esperado": true,
+      "motivos": [],
+      "porQue": "camara, cortes, filtros, colores por linaje e inventario: todo indexado por identidad estable",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "v2 con dos modelos y uno oculto por linaje",
+      "esperado": true,
+      "motivos": [],
+      "porQue": "ocultar un modelo se expresa por linaje, que sobrevive al versionado",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          },
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4BbbbBbbbBbbbBbbbBb",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRCYmJiQmJiYkJiYmJCYmJiQmI_dmVyc2lvbj03",
+            "versionAtSave": 7,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": [
+            "urn:adsk.wipprod:dm.lineage:zzE4BbbbBbbbBbbbBbbbBb"
+          ]
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "urnAtSave y versionAtSave SI se guardan",
+      "esperado": true,
+      "motivos": [],
+      "porQue": "son la constancia de que version se estaba viendo, no la identidad del modelo",
+      "state": {
+        "schemaVersion": 2,
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ]
+      }
+    },
+    {
+      "nombre": "Standard::Sources seleccionado por LINAJE",
+      "esperado": true,
+      "motivos": [],
+      "porQue": "ASI se persiste: Sources selecciona MODELOS, y su identidad persistida es el linaje. En runtime la seleccion lleva el urn vigente; al guardar se traduce, al restaurar se vuelve a traducir",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ],
+            "Standard::Sources": [
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+              "urn:adsk.wipprod:dm.lineage:zzE4BbbbBbbbBbbbBbbbBb"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "state es una lista",
+      "esperado": false,
+      "motivos": [
+        "NO_ES_OBJETO"
+      ],
+      "porQue": "un documento es un objeto",
+      "state": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "nombre": "sin schemaVersion",
+      "esperado": false,
+      "motivos": [
+        "SCHEMA_VERSION"
+      ],
+      "porQue": "si no se declara v2 no entra por la puerta de v2",
+      "state": {
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "schemaVersion 1",
+      "esperado": false,
+      "motivos": [
+        "SCHEMA_VERSION"
+      ],
+      "porQue": "una v1 no se guarda por esta via",
+      "state": {
+        "schemaVersion": 1,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "schemaVersion \"2\" en texto",
+      "esperado": false,
+      "motivos": [
+        "SCHEMA_VERSION"
+      ],
+      "porQue": "el 2 es un numero; aceptar la cadena abriria la puerta a comparaciones laxas",
+      "state": {
+        "schemaVersion": "2",
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "sin models",
+      "esperado": false,
+      "motivos": [
+        "MODELOS_AUSENTES"
+      ],
+      "porQue": "una vista que no dice de que modelos es no se puede restaurar",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "models vacio",
+      "esperado": false,
+      "motivos": [
+        "MODELOS_AUSENTES"
+      ],
+      "porQue": "lo mismo: la lista vacia no nombra nada",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "lineage null",
+      "esperado": false,
+      "motivos": [
+        "LINAJE_AUSENTE"
+      ],
+      "porQue": "ES EL CASO DE LA V1: el normalizador deja lineage a null cuando solo pudo deducir el seedUrn. Persistirlo seria persistir una version",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": null,
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "lineage vacio",
+      "esperado": false,
+      "motivos": [
+        "LINAJE_AUSENTE"
+      ],
+      "porQue": "la cadena vacia no es un identificador",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "lineage es un URN de version",
+      "esperado": false,
+      "motivos": [
+        "IDENTIDAD_DE_VERSION"
+      ],
+      "porQue": "el urn lleva ?version= dentro: identifica la version 50, no el modelo",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "lineage con cualquier texto",
+      "esperado": false,
+      "motivos": [
+        "LINAJE_NO_ES_LINAJE"
+      ],
+      "porQue": "no todo identificador vale: tiene que ser un linaje de APS",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "modelo-1",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "urnActual persistido",
+      "esperado": false,
+      "motivos": [
+        "IDENTIDAD_DE_VERSION"
+      ],
+      "porQue": "urnActual lo calcula el rebind al restaurar; guardado, es una version rancia",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0,
+            "urnActual": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "un modelo no es un objeto",
+      "esperado": false,
+      "motivos": [
+        "MODELO_NO_ES_OBJETO"
+      ],
+      "porQue": "la lista de modelos son fichas, no cadenas",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          "urn-suelto"
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "hiddenModelUrnsV1 vacio",
+      "esperado": false,
+      "motivos": [
+        "TRANSITO_V1"
+      ],
+      "porQue": "incluso vacio: el campo ES la marca de que la conversion no ha terminado",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": [],
+          "hiddenModelUrnsV1": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "hiddenModelUrnsV1 con contenido",
+      "esperado": false,
+      "motivos": [
+        "TRANSITO_V1"
+      ],
+      "porQue": "ocultos apuntados por version; hay que resolverlos a linaje",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": [],
+          "hiddenModelUrnsV1": [
+            "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+          ]
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "meta.migradoDeV1",
+      "esperado": false,
+      "motivos": [
+        "TRANSITO_V1"
+      ],
+      "porQue": "la marca que pone normalizarV1aV2: mientras este, es la lectura de una v1",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z",
+          "migradoDeV1": true
+        }
+      }
+    },
+    {
+      "nombre": "hiddenModelLineages con un urn",
+      "esperado": false,
+      "motivos": [
+        "IDENTIDAD_DE_VERSION"
+      ],
+      "porQue": "el campo se llama lineages; lo que lleva dentro tiene que serlo",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": [
+            "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+          ]
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "hiddenModelLineages no es lista",
+      "esperado": false,
+      "motivos": [
+        "TIPO"
+      ],
+      "porQue": "una lista de linajes es una lista",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": "ninguno"
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "Standard::Sources seleccionado por URN",
+      "esperado": false,
+      "motivos": [
+        "IDENTIDAD_DE_VERSION"
+      ],
+      "porQue": "BLOQUEANTE. El urn lleva ?version= dentro: la vista dejaria de encontrar ese modelo en cuanto subiera de version, sin decir nada",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ],
+            "Standard::Sources": [
+              "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "Standard::Sources con un urn entre linajes",
+      "esperado": false,
+      "motivos": [
+        "IDENTIDAD_DE_VERSION"
+      ],
+      "porQue": "uno solo basta: no se guarda medio documento bien identificado",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ],
+            "Standard::Sources": [
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+              "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRCYmJiQmJiYkJiYmJCYmJiQmI_dmVyc2lvbj03"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "Standard::Sources con un nombre de modelo",
+      "esperado": false,
+      "motivos": [
+        "LINAJE_NO_ES_LINAJE"
+      ],
+      "porQue": "el espacio de identidad es el linaje; un nombre no lo es",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ],
+            "Standard::Sources": [
+              "Canal principal.rvt"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "Standard::Sources que no es una lista",
+      "esperado": false,
+      "motivos": [
+        "TIPO"
+      ],
+      "porQue": "una seleccion es una lista, tambien cuando tiene un elemento",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ],
+            "Standard::Sources": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa"
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "otro propId con valores normales no se toca",
+      "esperado": true,
+      "motivos": [],
+      "porQue": "la regla es SOLO de Standard::Sources: los demas propId seleccionan valores de una columna, y ahi un texto es un texto",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls",
+              "Floors"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "sourceColor.custom indexado por urn",
+      "esperado": false,
+      "motivos": [
+        "MAPA_INDEXADO_POR_URN"
+      ],
+      "porQue": "asi lo construye hoy TandemFilterPanel (`normUrn(m.urn)`): el color del modelo se pierde en cuanto sube de version",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "valueColors con la clave de Sources",
+      "esperado": false,
+      "motivos": [
+        "MAPA_INDEXADO_POR_URN"
+      ],
+      "porQue": "las claves son `propId::valor`, asi que las de Sources LLEVAN EL URN DENTRO",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Sources::dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA": "#123456"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "urn escondido en una extension",
+      "esperado": false,
+      "motivos": [
+        "MAPA_INDEXADO_POR_URN"
+      ],
+      "porQue": "el barrido es en profundidad: una extension no puede colar la version",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ],
+          "cutplanes": [
+            [
+              0,
+              0,
+              1,
+              -5
+            ]
+          ]
+        },
+        "models": [
+          {
+            "lineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": 50,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa",
+          "globalOffsetAtSave": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        "filters": {
+          "properties": [
+            "Standard::Revit Category"
+          ],
+          "selections": {
+            "Standard::Revit Category": [
+              "Walls"
+            ]
+          },
+          "colors": {
+            "Standard::Revit Category": true
+          },
+          "valueColors": {
+            "Standard::Revit Category::Walls": "#ff0000"
+          },
+          "sourceColor": {
+            "on": true,
+            "custom": {
+              "urn:adsk.wipprod:dm.lineage:zzE4AaaaAaaaAaaaAaaaAa": "#00ff00"
+            }
+          },
+          "hiddenModelLineages": []
+        },
+        "inventory": {
+          "columns": {
+            "mode": "all"
+          }
+        },
+        "extensions": {
+          "pkHeatmap": null,
+          "loQueSea": {
+            "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA": {
+              "x": 1
+            }
+          }
+        },
+        "meta": {
+          "appVersion": "2026.09",
+          "capturedAt": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "nombre": "lo que produce normalizarV1aV2 tal cual",
+      "esperado": false,
+      "motivos": [
+        "LINAJE_AUSENTE",
+        "TRANSITO_V1"
+      ],
+      "porQue": "LA REGLA CONGELADA POR EL DUENO: la lectura en memoria de una v1 NO se puede persistir. Falla por los tres sitios a la vez, y por eso el informe dice cuales son en vez de un «no»",
+      "state": {
+        "schemaVersion": 2,
+        "lmv": {
+          "viewport": {
+            "eye": [
+              1,
+              2,
+              3
+            ]
+          },
+          "objectSet": [
+            {
+              "id": [
+                966
+              ],
+              "seedUrn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+            }
+          ]
+        },
+        "models": [
+          {
+            "lineage": null,
+            "urnAtSave": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA",
+            "versionAtSave": null,
+            "visible": true,
+            "order": 0
+          }
+        ],
+        "federation": {
+          "activeLineage": null,
+          "globalOffsetAtSave": null
+        },
+        "filters": {
+          "properties": [],
+          "selections": {},
+          "colors": {},
+          "valueColors": {},
+          "sourceColor": {
+            "on": false,
+            "custom": {}
+          },
+          "hiddenModelLineages": [],
+          "hiddenModelUrnsV1": [
+            "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLnp6RTRBYWFhQWFhYUFhYWFBYWFhQWE_dmVyc2lvbj01MA"
+          ]
+        },
+        "extensions": {
+          "pkHeatmap": null
+        },
+        "meta": {
+          "appVersion": null,
+          "capturedAt": null,
+          "migradoDeV1": true
+        }
+      }
+    }
+  ]
+}

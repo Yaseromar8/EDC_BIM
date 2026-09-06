@@ -71,6 +71,12 @@ export function capturarLmv(estadoCompleto) {
 // Esta tabla es DECLARATIVA y va en el repositorio, no en la base: una
 // traducción de identificadores es código, se revisa en un diff y se revierte
 // con git. En una tabla sería un dato que nadie audita.
+/**
+ * El propId que selecciona MODELOS, no valores de una columna. Se nombra aquí
+ * porque el contrato v2 le da un espacio de identidad propio: linaje.
+ */
+export const PROP_SOURCES = 'Standard::Sources';
+
 export const ALIAS_PROPID = Object.freeze({
     'Tandem Category': 'Standard::Revit Category',
     '__category__::Category': 'Standard::Revit Category',
@@ -101,11 +107,100 @@ export const esDocumentoV2 = (fila) =>
  *
  * @returns {{ doc, informe }}
  */
-export function normalizarV1aV2(fila) {
+/**
+ * El LINAJE que hay dentro de un URN de versión. `null` si no se puede leer.
+ *
+ * No es una conjetura: el URN de APS lleva el mismo identificador que el linaje,
+ * y solo cambia el tipo de recurso y la versión pegada al final.
+ *
+ *     base64url  ->  urn:adsk.wipprod:fs.file:vf.ub2xfjDiRByamkMzvCD7zg?version=50
+ *     linaje         urn:adsk.wipprod:dm.lineage:ub2xfjDiRByamkMzvCD7zg
+ *
+ * Comprobado sobre los 17 modelos de `model_config`: 17 de 17 coinciden, hub
+ * incluido. Importa porque una vista de marzo guardó el URN de la v50 y hoy el
+ * frente sirve la v51: `model_config` indexa por el urn VIGENTE, así que buscar
+ * por URN no encuentra nada. Por el linaje sí.
+ */
+export function linajeDeUrn(urn) {
+    if (typeof urn !== 'string' || !urn) return null;
+    let claro = urn;
+    if (!claro.startsWith('urn:')) {
+        try {
+            const b64 = claro.replace(/-/g, '+').replace(/_/g, '/');
+            claro = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+        } catch { return null; }
+    }
+    const m = /^urn:(adsk\.[a-z0-9]+):fs\.file:vf\.([^?]+)/.exec(claro);
+    return m ? `urn:${m[1]}:dm.lineage:${m[2]}` : null;
+}
+
+/**
+ * URN guardado -> linaje del frente de HOY. `null` si ese modelo ya no está.
+ *
+ * Dos pasos, y el segundo es el que evita inventar: primero se mira el índice
+ * del frente por si el URN sigue siendo el vigente; si no, se DEDUCE el linaje
+ * del propio URN y solo se acepta si ese linaje EXISTE en el frente. Deducir sin
+ * confirmar daría por buena la identidad de un modelo que ya no está cargado.
+ */
+export function linajeDelFrente(urn, linajePorUrn, linajesDelFrente) {
+    const directo = linajePorUrn.get(String(urn || '').trim());
+    if (directo) return directo;
+    const deducido = linajeDeUrn(urn);
+    return deducido && linajesDelFrente.has(deducido) ? deducido : null;
+}
+
+/**
+ * Copia las selecciones traduciendo SOLO `Standard::Sources` de URN a linaje.
+ *
+ * Lo que no resuelve se CAE de la selección y se anota. Guardarlo crudo metería
+ * un URN con versión dentro de un documento v2 —justo lo que el invariante
+ * prohíbe—, y silenciarlo haría creer que la vista se restauró entera.
+ */
+export function seleccionesNormalizadas(selecciones, linajePorUrn, linajesDelFrente, informe = []) {
+    const salida = {};
+    for (const propId of Object.keys(selecciones || {})) {
+        const valores = selecciones[propId];
+        if (propId !== PROP_SOURCES || !Array.isArray(valores)) {
+            salida[propId] = valores;
+            continue;
+        }
+        const traducidos = [];
+        const perdidos = [];
+        for (const v of valores) {
+            if (esLinaje(v)) { traducidos.push(v); continue; }   // ya venía traducido
+            const linaje = linajeDelFrente(v, linajePorUrn, linajesDelFrente);
+            if (linaje) traducidos.push(linaje);
+            else perdidos.push(v);
+        }
+        if (perdidos.length) {
+            informe.push({ tipo: 'v1-source-sin-linaje', perdidos, conservados: traducidos.length });
+        }
+        // Una selección de Sources que se queda vacía se OMITE: una propiedad
+        // activa con selección vacía es lo que produce el conjunto vacío que
+        // acaba en `isolate([-1])` (Auditoría 02, modelo fantasma).
+        if (traducidos.length) salida[propId] = traducidos;
+    }
+    return salida;
+}
+
+export function normalizarV1aV2(fila, modelConfig = null) {
     const informe = [];
     const vs = fila?.viewer_state || {};
     const fs = fila?.filter_state || {};
     const cfg = fila?.config || {};
+    // URN vigente -> linaje. Es el único sentido que hace falta al LEER una v1:
+    // lo que guardó fue el URN de aquel día, y hay que averiguar de qué modelo
+    // era. Sin `model_config` no se puede, y entonces no se traduce nada: es
+    // preferible un documento que no se puede guardar a uno que dice linajes
+    // que nadie ha comprobado.
+    const linajePorUrn = new Map();
+    const linajesDelFrente = new Set();
+    for (const m of modelConfig || []) {
+        const linaje = m?.lineage || m?.item_id || m?.itemId;
+        if (!linaje) continue;
+        linajesDelFrente.add(linaje);
+        if (m.urn) linajePorUrn.set(String(m.urn).trim(), linaje);
+    }
 
     // El objectSet v1 son dbIds sin identidad estable detrás. Se conserva, pero
     // el pipeline solo podrá usarlo si la versión del modelo no ha cambiado.
@@ -123,7 +218,9 @@ export function normalizarV1aV2(fila) {
     const models = [];
     for (const entrada of vs.objectSet || []) {
         if (entrada && entrada.seedUrn) {
-            models.push({ lineage: null, urnAtSave: entrada.seedUrn, versionAtSave: null, visible: true, order: models.length });
+            const linaje = linajeDelFrente(entrada.seedUrn, linajePorUrn, linajesDelFrente);
+            if (!linaje) informe.push({ tipo: 'v1-modelo-sin-linaje', urn: entrada.seedUrn });
+            models.push({ lineage: linaje, urnAtSave: entrada.seedUrn, versionAtSave: null, visible: true, order: models.length });
         }
     }
     if (models.length === 0) informe.push({ tipo: 'v1-federacion-desconocida' });
@@ -145,7 +242,7 @@ export function normalizarV1aV2(fila) {
         federation: { activeLineage: null, globalOffsetAtSave: null },
         filters: {
             properties: Array.isArray(fs.filterProperties) ? fs.filterProperties.slice() : [],
-            selections: fs.filterSelections || {},
+            selections: seleccionesNormalizadas(fs.filterSelections, linajePorUrn, linajesDelFrente, informe),
             colors: fs.filterColors || {},
             valueColors: fs.customValueColors || {},
             sourceColor: { on: !!fs.sourceColorOn, custom: fs.sourceCustomColors || {} },
@@ -360,4 +457,170 @@ export function fallar(informe, motivo) {
     informe.estado = 'fallida';
     informe.avisos.push({ tipo: 'fallo', motivo });
     return informe;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// E-4B · ¿ESTE DOCUMENTO SE PUEDE GUARDAR?
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// La autoridad es el SERVIDOR (`backend/vistas_v2.py`). Esto es la misma
+// pregunta hecha antes de gastar una petición, para que quien guarda vea el
+// problema en el sitio donde puede arreglarlo y no como un 422.
+//
+// Las dos implementaciones no pueden separarse con el tiempo, y eso no se
+// confía a la buena voluntad: `backend/tests/corpus_persistibilidad_v2.json`
+// tiene los documentos y su veredicto, y las dos baterías —la de Node y la de
+// Python— lo recorren entero. Si una regla cambia en un lado y no en el otro,
+// falla una de las dos.
+//
+// EL INVARIANTE, EN UNA FRASE
+//     un documento v2 no se persiste mientras contenga identidad transitoria
+//     de v1 o esté indexado por URN.
+//
+// Un URN de APS lleva la versión dentro: `urn:adsk...:fs.file:vf.<id>?version=50`.
+// El linaje —`urn:adsk...:dm.lineage:<id>`— no. Guardar el primero como
+// identidad es guardar «la versión 50», y el día que llegue la 51 el LMV la
+// descarta sin decir nada (`restoreObjectSet`).
+
+const RE_LINAJE = /^urn:adsk\.[a-z0-9]+:dm\.lineage:[A-Za-z0-9_-]+$/;
+const HUELLAS_DE_VERSION = ['fs.file:vf.', '?version='];
+
+export const esLinaje = (v) => typeof v === 'string' && RE_LINAJE.test(v.trim());
+
+/** ¿Hay dentro de este texto un URN con la versión pegada? En claro o en base64. */
+export function contieneUrnDeVersion(texto) {
+    if (typeof texto !== 'string' || !texto) return false;
+    if (HUELLAS_DE_VERSION.some((h) => texto.includes(h))) return true;
+    // Se buscan TROZOS de base64 en cualquier posición: las claves de
+    // `valueColors` son `propId::valor`, así que la clave entera no es base64
+    // pero su cola sí.
+    for (const trozo of texto.match(/[A-Za-z0-9_\-+/]{32,}={0,2}/g) || []) {
+        let claro;
+        try {
+            // `atob` a secas: existe en el navegador y en Node desde la 16, que
+            // es donde corre la batería. Un respaldo con `Buffer` no compilaría
+            // en el navegador y no hace falta en ninguno de los dos sitios.
+            const b64 = trozo.replace(/-/g, '+').replace(/_/g, '/');
+            claro = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+        } catch { continue; }
+        if (HUELLAS_DE_VERSION.some((h) => claro.includes(h))) return true;
+    }
+    return false;
+}
+
+function clavesConUrn(nodo, ruta, problemas, prof = 0) {
+    if (prof > 12 || !nodo || typeof nodo !== 'object') return;
+    if (Array.isArray(nodo)) {
+        nodo.slice(0, 500).forEach((v, i) => clavesConUrn(v, `${ruta}[${i}]`, problemas, prof + 1));
+        return;
+    }
+    for (const k of Object.keys(nodo)) {
+        if (contieneUrnDeVersion(k)) {
+            problemas.push({
+                campo: `${ruta}.${k.slice(0, 60)}`, motivo: 'MAPA_INDEXADO_POR_URN',
+                detalle: 'la clave lleva un URN con versión; el índice debe ser el linaje',
+            });
+        }
+        clavesConUrn(nodo[k], `${ruta}.${k.slice(0, 40)}`, problemas, prof + 1);
+    }
+}
+
+/**
+ * ¿Se puede persistir este documento como v2?
+ * @returns {{ ok: boolean, problemas: {campo,motivo,detalle}[] }}
+ */
+export function esPersistibleV2(state) {
+    const problemas = [];
+    const mal = (campo, motivo, detalle = '') => problemas.push({ campo, motivo, detalle });
+
+    if (!state || typeof state !== 'object' || Array.isArray(state)) {
+        mal('state', 'NO_ES_OBJETO', 'se esperaba un objeto');
+        return { ok: false, problemas };
+    }
+
+    if (state.schemaVersion !== SCHEMA_VERSION) {
+        mal('state.schemaVersion', 'SCHEMA_VERSION',
+            `debe ser exactamente ${SCHEMA_VERSION}, llegó ${JSON.stringify(state.schemaVersion)}`);
+    }
+
+    if (!Array.isArray(state.models) || state.models.length === 0) {
+        mal('state.models', 'MODELOS_AUSENTES',
+            'un documento v2 nombra los modelos a los que pertenece');
+    } else {
+        state.models.forEach((m, i) => {
+            const campo = `state.models[${i}]`;
+            if (!m || typeof m !== 'object' || Array.isArray(m)) {
+                mal(campo, 'MODELO_NO_ES_OBJETO', typeof m);
+                return;
+            }
+            const linaje = m.lineage;
+            if (linaje === null || linaje === undefined || linaje === '') {
+                mal(`${campo}.lineage`, 'LINAJE_AUSENTE',
+                    'identidad de v1 sin resolver: este modelo no se podrá reencontrar');
+            } else if (!esLinaje(linaje)) {
+                mal(`${campo}.lineage`,
+                    contieneUrnDeVersion(linaje) ? 'IDENTIDAD_DE_VERSION' : 'LINAJE_NO_ES_LINAJE',
+                    'se esperaba urn:adsk.<hub>:dm.lineage:<id>');
+            }
+            if (m.urnActual) {
+                mal(`${campo}.urnActual`, 'IDENTIDAD_DE_VERSION',
+                    'campo derivado del rebind; no se persiste');
+            }
+        });
+    }
+
+    const f = state.filters;
+    if (f && typeof f === 'object') {
+        if (Object.prototype.hasOwnProperty.call(f, 'hiddenModelUrnsV1')) {
+            mal('state.filters.hiddenModelUrnsV1', 'TRANSITO_V1',
+                'campo de conversión v1→v2; resuélvelo a `hiddenModelLineages` y quítalo');
+        }
+        const ocultos = f.hiddenModelLineages;
+        if (ocultos !== undefined && ocultos !== null) {
+            if (!Array.isArray(ocultos)) {
+                mal('state.filters.hiddenModelLineages', 'TIPO', 'se esperaba una lista de linajes');
+            } else {
+                ocultos.forEach((v, i) => {
+                    if (!esLinaje(v)) {
+                        mal(`state.filters.hiddenModelLineages[${i}]`,
+                            contieneUrnDeVersion(v) ? 'IDENTIDAD_DE_VERSION' : 'LINAJE_NO_ES_LINAJE',
+                            'se esperaba un linaje');
+                    }
+                });
+            }
+        }
+    }
+
+    // `Standard::Sources` NO selecciona valores de una columna: selecciona
+    // MODELOS. Su espacio de identidad persistido es el LINAJE, no el URN.
+    // En runtime la selección viaja con el URN vigente —así la produce el
+    // producto y así la consume el motor de facetas—; al GUARDAR se traduce a
+    // linaje, y al RESTAURAR se vuelve a traducir al URN de hoy. El shape de
+    // `filters.selections` no cambia: cambia el espacio de identidad de ESTA
+    // clave, y solo de ésta.
+    const sources = f && typeof f === 'object' && f.selections
+        ? f.selections[PROP_SOURCES] : undefined;
+    if (sources !== undefined && sources !== null) {
+        if (!Array.isArray(sources)) {
+            mal(`state.filters.selections['${PROP_SOURCES}']`, 'TIPO',
+                'se esperaba una lista de linajes');
+        } else {
+            sources.forEach((v, i) => {
+                if (!esLinaje(v)) {
+                    mal(`state.filters.selections['${PROP_SOURCES}'][${i}]`,
+                        contieneUrnDeVersion(v) ? 'IDENTIDAD_DE_VERSION' : 'LINAJE_NO_ES_LINAJE',
+                        'la selección de modelos se persiste por linaje: el URN lleva la versión dentro');
+                }
+            });
+        }
+    }
+
+    if (state.meta && typeof state.meta === 'object' && state.meta.migradoDeV1) {
+        mal('state.meta.migradoDeV1', 'TRANSITO_V1',
+            'marca del normalizador: mientras esté, el documento es la lectura de una v1');
+    }
+
+    clavesConUrn(state, 'state', problemas);
+
+    return { ok: problemas.length === 0, problemas };
 }

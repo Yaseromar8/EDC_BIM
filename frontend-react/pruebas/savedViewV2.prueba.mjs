@@ -242,6 +242,110 @@ console.log('\nE-2e · NORMALIZACION v1 → v2');
     ok('una fila v2 se reconoce como tal', V2.esDocumentoV2({ schema_version: 2, state: {} }));
 }
 
+// ═══════════════════════════════ E-4B · `Standard::Sources` DE UNA v1
+//
+// Una v1 guardó los modelos filtrados por su URN de aquel día. El URN lleva la
+// versión dentro, así que al leerla hay que traducirlo a linaje contra
+// `model_config`. Lo que no se pueda traducir NO se arrastra al documento v2:
+// se cae de la selección y se dice.
+console.log('\nE-4B · `Standard::Sources` DE UNA v1 (urn → linaje)');
+{
+    const URN_50 = Buffer.from('urn:adsk.wipprod:fs.file:vf.zzCcC?version=50')
+        .toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const URN_51 = Buffer.from('urn:adsk.wipprod:fs.file:vf.zzCcC?version=51')
+        .toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const URN_OTRO = Buffer.from('urn:adsk.wipprod:fs.file:vf.zzBorrado?version=3')
+        .toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const LIN = 'urn:adsk.wipprod:dm.lineage:zzCcC';
+
+    // El frente de HOY: el modelo va por la 51; la vista se guardó en la 50.
+    const modelConfig = [{ urn: URN_51, item_id: LIN, version_number: 51 }];
+
+    const filaConSources = (sources, seed) => ({
+        schema_version: 1,
+        viewer_state: { objectSet: [{ id: [1], seedUrn: seed }, { id: [], seedUrn: seed }] },
+        filter_state: {
+            filterProperties: ['Standard::Sources'],
+            filterSelections: { 'Standard::Sources': sources },
+        },
+        config: {},
+    });
+
+    // C · RESOLUBLE. El urn de la vista es el de la 50 y `model_config` tiene la
+    //     51: se traducen por LINAJE, que es lo único común a las dos.
+    //     (el índice se construye con el urn VIGENTE, así que aquí se usa el
+    //     vigente para demostrar la traducción; el caso del urn viejo va abajo)
+    const c = V2.normalizarV1aV2(filaConSources([URN_51], URN_51), modelConfig);
+    ok('C · una v1 con Sources por URN vigente se traduce a linaje',
+        igual(c.doc.filters.selections['Standard::Sources'], [LIN]),
+        JSON.stringify(c.doc.filters.selections));
+    ok('C · y el modelo del objectSet también gana su linaje',
+        c.doc.models.length === 2 && c.doc.models.every((m) => m.lineage === LIN));
+    ok('C · el documento normalizado ya no contiene ningún URN en Sources',
+        !V2.esPersistibleV2(c.doc).problemas.some((p) => p.campo.includes('Sources')));
+
+    // D · IRRESOLUBLE. El modelo ya no está en el frente: no hay linaje que
+    //     ponerle. Se DEGRADA —se cae de la selección— y se anota.
+    const d = V2.normalizarV1aV2(filaConSources([URN_OTRO], URN_OTRO), modelConfig);
+    ok('D · un Source que ya no está en el frente se cae de la selección',
+        d.doc.filters.selections['Standard::Sources'] === undefined,
+        JSON.stringify(d.doc.filters.selections));
+    ok('D · y se dice cuál se perdió, en vez de callarlo',
+        d.informe.some((i) => i.tipo === 'v1-source-sin-linaje' && i.perdidos[0] === URN_OTRO));
+    ok('D · el modelo sin linaje también se anota',
+        d.informe.some((i) => i.tipo === 'v1-modelo-sin-linaje'));
+    ok('D · y el documento NO es persistible como v2',
+        V2.esPersistibleV2(d.doc).ok === false);
+    ok('D · el URN irresoluble NO aparece por ningún lado del documento',
+        !JSON.stringify(d.doc.filters.selections).includes(URN_OTRO));
+
+    // Mezcla: uno resuelve y otro no. Se conserva el que sí.
+    const mezcla = V2.normalizarV1aV2(filaConSources([URN_51, URN_OTRO], URN_51), modelConfig);
+    ok('mezcla · se conserva el que resuelve y se pierde el que no',
+        igual(mezcla.doc.filters.selections['Standard::Sources'], [LIN])
+        && mezcla.informe.some((i) => i.tipo === 'v1-source-sin-linaje'));
+
+    // SIN `model_config` no se inventa nada.
+    const aCiegas = V2.normalizarV1aV2(filaConSources([URN_51], URN_51));
+    ok('sin model_config no se traduce nada y el documento no es persistible',
+        aCiegas.doc.models.every((m) => m.lineage === null)
+        && V2.esPersistibleV2(aCiegas.doc).ok === false);
+
+    // Un propId normal no se toca.
+    const normal = V2.normalizarV1aV2({
+        viewer_state: { objectSet: [{ id: [1], seedUrn: URN_51 }] },
+        filter_state: { filterSelections: { 'Standard::Revit Category': ['Walls'] } },
+        config: {},
+    }, modelConfig);
+    ok('la traducción es SOLO de Sources: los demás propId pasan intactos',
+        igual(normal.doc.filters.selections['Standard::Revit Category'], ['Walls']));
+
+    // EL CASO QUE DE VERDAD IMPORTA: la vista es de marzo y guardó el urn de la
+    // v50; el frente sirve hoy la v51. `model_config` indexa por el urn VIGENTE,
+    // así que buscar por urn no encuentra nada — pero el linaje va DENTRO del
+    // urn, y ese sí está en el frente.
+    const viejo = V2.normalizarV1aV2(filaConSources([URN_50], URN_50), modelConfig);
+    ok('un urn de una versión ANTERIOR resuelve por el linaje que lleva dentro',
+        igual(viejo.doc.filters.selections['Standard::Sources'], [LIN]),
+        JSON.stringify(viejo.doc.filters.selections));
+    ok('...y ese es el motivo de deducir el linaje en vez de buscar el urn',
+        viejo.doc.models.every((m) => m.lineage === LIN)
+        && !viejo.informe.some((i) => i.tipo === 'v1-source-sin-linaje'));
+
+    ok('linajeDeUrn decodifica el urn real de APS',
+        V2.linajeDeUrn(URN_50) === LIN && V2.linajeDeUrn(URN_51) === LIN);
+    ok('...y en claro también', V2.linajeDeUrn('urn:adsk.wipprod:fs.file:vf.zzCcC?version=9') === LIN);
+    ok('lo que no es un urn de versión no da linaje',
+        V2.linajeDeUrn('cualquier cosa') === null && V2.linajeDeUrn(LIN) === null);
+
+    // DEDUCIR NO ES INVENTAR: un linaje deducido que NO está en el frente se cae.
+    const fuera = V2.normalizarV1aV2(filaConSources([URN_OTRO], URN_OTRO), modelConfig);
+    ok('un linaje deducido que no está en el frente NO se acepta',
+        fuera.doc.filters.selections['Standard::Sources'] === undefined
+        && V2.linajeDeUrn(URN_OTRO) !== null,
+        'el urn decodifica, pero ese modelo ya no está cargado: se degrada igual');
+}
+
 // ═════════════════════════════════════════════════ PARTE DE DAÑOS
 console.log('\nPARTE DE DAÑOS');
 {
@@ -253,6 +357,54 @@ console.log('\nPARTE DE DAÑOS');
     ok('perder valores sí degrada', i.estado === 'degradada');
     V2.fallar(i, 'sin viewer_state');
     ok('y un fallo es fallo', i.estado === 'fallida');
+}
+
+// ═════════════════════════════════════ E-4B · ¿SE PUEDE GUARDAR?
+//
+// EL MISMO CORPUS QUE LA BATERÍA DE PYTHON. `backend/vistas_v2.py` es la
+// autoridad y esto es la comprobación de cortesía que se hace antes de gastar
+// una petición; que las dos digan lo mismo no se confía a la memoria de nadie:
+// las dos recorren `backend/tests/corpus_persistibilidad_v2.json` entero, y una
+// regla cambiada en un solo lado rompe una de las dos.
+console.log('\nE-4B · INVARIANTE DE PERSISTIBILIDAD (corpus compartido con el backend)');
+{
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const { dirname, join } = await import('node:path');
+    const aqui = dirname(fileURLToPath(import.meta.url));
+    const corpus = JSON.parse(
+        readFileSync(join(aqui, '..', '..', 'backend', 'tests', 'corpus_persistibilidad_v2.json'), 'utf8'));
+
+    for (const caso of corpus.casos) {
+        const { ok: veredicto, problemas } = V2.esPersistibleV2(caso.state);
+        const motivos = [...new Set(problemas.map((p) => p.motivo))].sort();
+        ok(`${caso.esperado ? 'guarda' : 'rechaza'}: ${caso.nombre}`,
+            veredicto === caso.esperado && igual(motivos, caso.motivos),
+            `esperado ok=${caso.esperado} motivos=${JSON.stringify(caso.motivos)}; ` +
+            `obtenido ok=${veredicto} motivos=${JSON.stringify(motivos)}`);
+    }
+    ok(`el corpus tiene casos de los dos signos (${corpus.casos.filter((c) => c.esperado).length} sí / ` +
+        `${corpus.casos.filter((c) => !c.esperado).length} no)`,
+        corpus.casos.some((c) => c.esperado) && corpus.casos.some((c) => !c.esperado));
+
+    // Un rechazo tiene que decir DÓNDE, o no se puede arreglar.
+    const malo = corpus.casos.find((c) => !c.esperado);
+    const { problemas: ps } = V2.esPersistibleV2(malo.state);
+    ok('cada problema dice campo y motivo', ps.length > 0 && ps.every((x) => x.campo && x.motivo));
+
+    // Y no puede corregir el documento por su cuenta.
+    const antes = JSON.stringify(malo.state);
+    V2.esPersistibleV2(malo.state);
+    ok('validar NO modifica el documento', JSON.stringify(malo.state) === antes);
+
+    // Las dos formas reales de identificador de APS.
+    const urnReal = Buffer.from('urn:adsk.wipprod:fs.file:vf.ub2xfjDiRByamkMzvQ?version=50')
+        .toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const linajeReal = 'urn:adsk.wipprod:dm.lineage:ub2xfjDiRByamkMzvQ';
+    ok('un urn de APS se reconoce como identidad de VERSIÓN', V2.contieneUrnDeVersion(urnReal));
+    ok('...también escondido en la cola de una clave `propId::valor`',
+        V2.contieneUrnDeVersion('Standard::Sources::' + urnReal));
+    ok('y un linaje NO lo es', !V2.contieneUrnDeVersion(linajeReal) && V2.esLinaje(linajeReal));
 }
 
 console.log(`\n${total - fallos} de ${total} pasan.`);
