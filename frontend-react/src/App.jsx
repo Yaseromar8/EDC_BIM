@@ -3,6 +3,8 @@ import { urlInventario, enlaceCompartido } from './utils/enlaceCompartido';
 import './App.css';
 import { resetFrenteSession } from './utils/frenteSession';
 import { frenteDeVistas, cargarVistasDelFrente } from './lib/frenteDeVistas';
+import { restaurarVistaV2, restauradorV2Activo } from './lib/restaurarVistaV2';
+import { fijarInventoryConfig, columnasParaElGrid } from './lib/inventoryConfig';
 import TopBar from './components/TopBar';
 import ViewsPanel from './components/ViewsPanel';
 import SourceFilesPanel from './components/SourceFilesPanel';
@@ -197,6 +199,31 @@ const TargetIcon = () => (
   </svg>
 );
 
+
+// EL RECALCULO DE FILTROS TIENE UN SOLO DUEÑO DURANTE UNA RESTAURACIÓN v2.
+//
+// Medido en el visor real (5-sep-2026): abrir una Saved View v2 con filtros
+// emitía `recalculate-filters` TRES veces. Una es la del restaurador, que
+// espera su `filters-calculated`; las otras dos son de esta pantalla, que tiene
+// DOS efectos distintos colgados de `[filterProperties, filterSelections]` y
+// reaccionan a que el restaurador acaba de fijar ese estado. El LMV recorre la
+// federación entera tres veces para dar la misma respuesta.
+//
+// La guardia no es nueva ni es una bandera global: `restaurarVistaV2` ya
+// publica el número de generación en curso y lo suelta SIEMPRE al cerrar
+// --también por excepción--, así que fuera de una restauración vale 0 y esto
+// se comporta exactamente igual que antes.
+//
+// Lo que se suprime es la EMISIÓN, no el estado: los efectos siguen corriendo y
+// React sigue teniendo los filtros nuevos. Quien recalcula es el restaurador.
+function emitirRecalculoDeFiltros(detalle, motivo) {
+    if (typeof window !== 'undefined' && window.__restaurandoVistaV2) {
+        console.log(`[REACT] recalculate-filters omitido (${motivo}): lo emite el restaurador v2`);
+        return false;
+    }
+    window.dispatchEvent(new CustomEvent('recalculate-filters', { detail: detalle }));
+    return true;
+}
 
 const DEFAULT_VISIBLE_VALUES = 5;
 
@@ -772,6 +799,11 @@ function App() {
   // Shared View Mode
   const [isSharedMode, setIsSharedMode] = useState(() => !!new URLSearchParams(window.location.search).get('shareView'));
   const [sharedViewData, setSharedViewData] = useState(null);
+  // ¿Hay ya un visor capaz de responder? Lo dice `viewer-ready` (Viewer.jsx),
+  // que se emite cuando `GuiViewer3D` está operativo y ANTES de que empiece a
+  // cargar la federación. El valor inicial lee el pestillo por si el visor se
+  // adelantó al montaje de este componente: es una lectura, no un sondeo.
+  const [visorListo, setVisorListo] = useState(() => typeof window !== 'undefined' && window.__visorListo === true);
   const [savedViews, setSavedViews] = useState([]); // New State
   const [documents, setDocuments] = useState([]);
   const [sprites, setSprites] = useState([]);
@@ -810,6 +842,19 @@ function App() {
   const tagInventory = useCallback((rows, urn) => {
     window.postgresInventory = rows;
     window.postgresInventoryUrn = rows ? (urn || null) : null;
+    // AQUÍ, Y SÓLO AQUÍ, EL SNAPSHOT PASA A SER UTILIZABLE. Esta función es
+    // la única que lo escribe —los cuatro sitios, caché local incluida, pasan
+    // por ella— así que es el punto exacto donde se puede decir que el
+    // inventario está listo: sin sondear, sin temporizador y sin depender de
+    // que el panel Inventory esté montado. Lo espera el restaurador v2 en E5.
+    // TAMBIÉN CON CERO FILAS. Un inventario vacío está cargado: lo que no
+    // está disponible es `null`. Emitir sólo cuando hay filas dejaba a una obra
+    // sin activos esperando una señal que no iba a llegar nunca.
+    if (Array.isArray(rows)) {
+      window.dispatchEvent(new CustomEvent('inventory-ready', {
+        detail: { filas: rows.length, obra: window.postgresInventoryUrn },
+      }));
+    }
   }, []);
 
 
@@ -1434,7 +1479,12 @@ function App() {
     const shareId = params.get('shareView');
     if (shareId) {
       setIsSharedMode(true);
-      apiFetch(`${BACKEND_URL}/api/views/${shareId}`)
+      // LA RUTA DE LA CAPACIDAD, no la de la identidad. `/api/views/<id>` es
+      // el detalle por id y exige sesión; con sesión abierta un `share_token`
+      // por ahí daba 404 y esta pantalla se quedaba en «Cargando Vista
+      // Compartida...» para siempre. Aquí la clave es una capacidad y se
+      // resuelve igual haya sesión o no.
+      apiFetch(`${BACKEND_URL}/api/views/shared/${encodeURIComponent(shareId)}`)
         .then(res => res.json())
         .then(data => {
           if (!data.error) {
@@ -1453,6 +1503,58 @@ function App() {
     }
   }, []);
 
+  const entornoDeRestauracion = useCallback((detalle) => ({
+    ventana: window,
+    visor: window.NOP_VIEWER,
+    modelConfig: modelsRef.current || [],
+    inventario: window.postgresInventory || null,
+    // Y cómo volver a mirarlo: el de arriba es la foto del instante en que se
+    // armó el entorno, y E5 puede llegar después de que termine la descarga.
+    inventarioFresco: () => window.postgresInventory || null,
+    rosettaPorUrn: window.rosettaToExtId || {},
+    puentesIfc: window.rosettaToDbId || {},
+    viewId: detalle.id,
+    documentoOculto: () => document.visibilityState === 'hidden',
+    // Cargar un modelo que falta es cosa del efecto que ya sincroniza `models`
+    // con el visor: aquí sólo se declara cuál se necesita. No se duplica la
+    // carga, que es donde vive el `globalOffset` heredado.
+    cargarModelos: (lineages) => {
+      window.dispatchEvent(new CustomEvent('viewer-request-models', { detail: { lineages } }));
+    },
+    aplicarFiltros: ({ properties, selections, colors }) => {
+      setFilterProperties(properties);
+      setFilterSelections(selections);
+      setFilterColors(colors || {});
+    },
+    // Los colores por valor los LEE `handleTheme` de `window._customValueColors`,
+    // así que hay que dejarlos puestos antes de emitir el theming. El evento
+    // `custom-colors-restored` sólo pone al día los puntitos del panel.
+    fijarColoresDeValor: (valores) => { window._customValueColors = valores; },
+    // El pintor SÍNCRONO de tintes por fuente, el mismo que usa el camino v1.
+    // El oyente del panel difiere 700 ms y sólo existe si el panel está montado:
+    // esperar a ese sería esperar a algo que puede no ocurrir nunca.
+    aplicarTintesDeFuente: ({ on, customColors }) =>
+      restoreSourceTints(window.NOP_VIEWER, modelsRef.current || [], on, customColors),
+    aplicarInventario: (cfg) => {
+      // El dueño canónico, no el panel: se aplica esté montado o no.
+      fijarInventoryConfig(cfg);
+      const todas = Object.keys((window.postgresInventory || [])[0] || {});
+      const perdidas = cfg.columns?.mode === 'custom'
+        ? cfg.columns.keys.filter((k) => todas.length && !todas.includes(k))
+        : [];
+      columnasParaElGrid(todas);
+      return { columnasPerdidas: perdidas };
+    },
+  }), []);
+
+  useEffect(() => {
+    const alEstarListo = () => setVisorListo(true);
+    window.addEventListener('viewer-ready', alEstarListo);
+    // El evento pudo dispararse entre el render y esta suscripción.
+    if (window.__visorListo === true) setVisorListo(true);
+    return () => window.removeEventListener('viewer-ready', alEstarListo);
+  }, []);
+
   // ------------------------------------
   // SHARED VIEW AUTO-RESTORE
   // ------------------------------------
@@ -1463,6 +1565,13 @@ function App() {
     const handleGeometryLoaded = () => {
       if (!restored) {
         console.log('[App] Auto-restoring shared view state after geometry loaded...');
+
+        // LAS v2 NO PASAN POR AQUÍ. Tienen su propio efecto, que arranca en
+        // `viewer-ready` y no espera a que haya geometría dibujada. Lo de abajo
+        // es el camino v1 entero --sus 1.500 ms, su reinyección de paleta y su
+        // forma de documento, `filterState` y `viewerState`, que una v2 ni
+        // siquiera trae-- y se queda exactamente como estaba.
+        if (sharedViewData.schemaVersion === 2) { restored = true; return; }
 
         // Aplica el estado almacenado (Cámara, colores, filtros, etc.)
         if (sharedViewData.filterState) {
@@ -1518,6 +1627,50 @@ function App() {
     window.addEventListener('viewer-geometry-loaded', handleGeometryLoaded);
     return () => window.removeEventListener('viewer-geometry-loaded', handleGeometryLoaded);
   }, [isSharedMode, sharedViewData]);
+
+  // ------------------------------------
+  // SHARED VIEW v2 · EL MISMO RESTAURADOR, Y SIN ESPERAR A LA GEOMETRÍA
+  // ------------------------------------
+  //
+  // Arranca en cuanto están las CUATRO cosas que `restaurarVistaV2` necesita
+  // para poder decidir, y ni una más:
+  //
+  //     1. el documento v2 del enlace           `sharedViewData`
+  //     2. el frente al que pertenece           `selectedProject`
+  //     3. un visor que responde                `viewer-ready`
+  //     4. la ficha de modelos del frente       `models`
+  //
+  // Lo que falte de ahí en adelante --modelos sin cargar, cargados sin Rosetta--
+  // es precisamente lo que E1/E2 saben mirar y esperar. Esperar antes a
+  // `viewer-geometry-loaded`, como hace v1, era regalar 62 s en frío y 158 s con
+  // la pestaña oculta a cambio de nada: para cuando esa señal llega, el
+  // restaurador ya no tiene nada que decidir.
+  const vistaCompartidaRestaurada = useRef(null);
+  useEffect(() => {
+    if (!isSharedMode || !sharedViewData || sharedViewData.schemaVersion !== 2) return;
+    if (!visorListo || !selectedProject?.id || !models.length) return;
+    // UNA SOLA GENERACIÓN POR VISTA. StrictMode monta, desmonta y vuelve a
+    // montar cada efecto en desarrollo, y `models` cambia de identidad varias
+    // veces mientras el frente se resuelve: sin esto, el mismo enlace lanzaría
+    // varias restauraciones que se cancelarían entre sí. Abrir OTRA vista sí
+    // arranca otra, porque la marca es su id.
+    if (vistaCompartidaRestaurada.current === sharedViewData.id) return;
+    vistaCompartidaRestaurada.current = sharedViewData.id;
+
+    if (!restauradorV2Activo()) {
+      // Igual que en `handleLoadView`: media vista v2 parece correcta y no lo
+      // es. Con la bandera apagada no se abre.
+      console.warn('[App] Vista compartida v2: el restaurador está apagado (SAVED_VIEWS_V2_RESTORE).');
+      return;
+    }
+    restaurarVistaV2(sharedViewData.state, entornoDeRestauracion(sharedViewData))
+      .then((r) => {
+        if (r.estado !== 'completa') {
+          console.warn(`[App] Vista compartida v2 ${r.estado}:`, r.parte.avisos, r.cronologia);
+        }
+      })
+      .catch((e) => console.error('[App] Vista compartida v2:', e));
+  }, [isSharedMode, sharedViewData, visorListo, selectedProject, models, entornoDeRestauracion]);
 
   // LAS SAVED VIEWS SON POR FRENTE. Sin frente no hay lista que pedir, y
   // `'global'` —el marcador que usa el resto del fichero— no es un frente.
@@ -1711,23 +1864,38 @@ function App() {
     return `${window.location.origin}${window.location.pathname}?shareView=${cuerpo.shareToken}`;
   }, []);
 
+  // ── E-5 · EL RESTAURADOR v2, DETRAS DE UNA BANDERA APAGADA ─────────────
+  //
+  // App.jsx no restaura: obtiene el documento, decide si es v1 o v2, llama y
+  // recibe el parte. Toda la máquina —generaciones, esperas por señal, rebind,
+  // preflight, barrera final— vive en `lib/restaurarVistaV2.js`, donde se puede
+  // ejecutar en una batería sin un modelo cargado.
+  //
+  // Con la bandera apagada esto no se ejecuta: una vista v2 sigue sin aplicarse,
+  // exactamente como hasta E-4D.
+
   const handleLoadView = useCallback((view) => {
     if (!view?.id) return;
     apiFetch(`${BACKEND_URL}/api/views/${view.id}`)
       .then(res => res.json())
-      .then(detalle => {
+      .then(async detalle => {
         if (!detalle || detalle.error) throw new Error(detalle?.error || 'la vista no se pudo leer');
-        // Una vista v2 NO se aplica todavía: su restaurador es E-5. Aplicar
-        // medio documento —la cámara sí, la identidad de elemento no— sería
-        // peor que no abrirla, porque el resultado parecería correcto.
-        if (detalle.schemaVersion === 2) {
-          console.warn('[App] Vista v2: el restaurador llega en E-5. No se aplica nada.');
+        if (detalle.schemaVersion !== 2) { aplicarVistaV1(detalle); return; }
+
+        if (!restauradorV2Activo()) {
+          // La bandera está apagada. Aplicar medio documento —la cámara sí, la
+          // identidad de elemento no— sería peor que no abrirla, porque el
+          // resultado parecería correcto.
+          console.warn('[App] Vista v2: el restaurador está apagado (SAVED_VIEWS_V2_RESTORE).');
           return;
         }
-        aplicarVistaV1(detalle);
+        const r = await restaurarVistaV2(detalle.state, entornoDeRestauracion(detalle));
+        if (r.estado !== 'completa') {
+          console.warn(`[App] Vista v2 ${r.estado}:`, r.parte.avisos, r.cronologia);
+        }
       })
       .catch(err => console.error('Error loading view:', err));
-  }, [aplicarVistaV1]);
+  }, [aplicarVistaV1, entornoDeRestauracion]);
 
   const handleToggleModelVisibility = useCallback((urn) => {
     // Normalize to prevent encoding mismatches (+/-  //_  =)
@@ -3746,9 +3914,7 @@ function App() {
 
   // 2. Disparar recálculos nativos sin colapsar React
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('recalculate-filters', {
-      detail: { filterProperties, filterSelections }
-    }));
+    emitirRecalculoDeFiltros({ filterProperties, filterSelections }, 'efecto de filtros');
   }, [filterProperties, filterSelections]);
 
   const togglePropertyAll = useCallback((propId) => {
@@ -3866,9 +4032,7 @@ function App() {
     
     const triggerRecalc = () => {
         console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Cambio detectado: Disparando recalculate-filters hacia LMV`);
-        window.dispatchEvent(new CustomEvent('recalculate-filters', {
-          detail: { filterProperties, filterSelections }
-        }));
+        emitirRecalculoDeFiltros({ filterProperties, filterSelections }, 'cambio de filtros/esquema');
     };
 
     triggerRecalc();

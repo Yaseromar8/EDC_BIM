@@ -1104,6 +1104,21 @@ const Viewer = ({
                 // para quien necesita el 3D principal (Live Link, AR).
                 window.__mainViewer = viewer;
 
+                // EL VISOR YA RESPONDE. Ni un modelo cargado todavía: esto dice
+                // que hay un `GuiViewer3D` operativo --`getAllModels()`,
+                // `loadDocumentNode()`, `impl`-- y nada más.
+                //
+                // Existe porque el restaurador v2 de una vista compartida
+                // necesitaba un punto de arranque y el único que había era
+                // `viewer-geometry-loaded`, que significa otra cosa: que la
+                // geometría está DIBUJADA. Medido en el visor real, esa señal
+                // llega a los 62 s en frío y a los 158 s con la pestaña oculta,
+                // y hasta entonces E-5 no arrancaba. El pestillo en `window`
+                // acompaña al evento para quien se suscriba tarde: sin él habría
+                // que sondear, y sondear es lo que se está quitando.
+                window.__visorListo = true;
+                window.dispatchEvent(new CustomEvent('viewer-ready'));
+
                 setViewerReady(true);
             });
         };
@@ -2395,6 +2410,14 @@ const Viewer = ({
     // Si un modelo arrancaba antes de que el primero estableciera el
     // baseOffset, cargaba con SU propio offset → modelo descolocado hasta el
     // siguiente refresh. Encadenar TODO en una sola cola lo hace determinista.
+    // Referencia estable al cargador, para los efectos que lo usan sin querer
+    // volver a ejecutarse cada vez que el componente se repinta. `loadModelSequentially`
+    // se redefine en cada render --es una funcion de cuerpo de componente-- asi
+    // que ponerla en las dependencias de un efecto lo reinstalaria continuamente;
+    // dejarla fuera es una dependencia que falta. La referencia resuelve las dos:
+    // siempre apunta a la ultima version y no cambia de identidad.
+    const cargadorRef = useRef(null);
+
     const loadModelSequentially = (model) => {
         const next = loadQueueRef.current.then(() => loadModelInner(model));
         loadQueueRef.current = next.catch(() => { /* la cola sigue ante errores */ });
@@ -3365,6 +3388,45 @@ const Viewer = ({
         };
 
         swapAll();
+    }, [models, viewerReady]);
+
+    // ── E-5 · PEDIR UN MODELO CONCRETO, POR EL CARGADOR DE SIEMPRE ─────────
+    //
+    // El restaurador de Saved Views v2 necesita que estén cargados los modelos a
+    // los que pertenece la vista, y los nombra por LINAJE --lo unico que
+    // sobrevive al versionado--. Este oyente traduce linaje a la ficha del
+    // modelo y llama a `loadModelSequentially`: LA MISMA cola, la misma guarda de
+    // «este urn ya esta cargado o en vuelo», y sobre todo las MISMAS opciones de
+    // emplazamiento. Un segundo cargador tendria su propio `globalOffset` y los
+    // modelos aparecerian desplazados unos respecto de otros.
+    //
+    // Lo normal es que no haga nada: al abrir un frente, `swapAll` ya los esta
+    // cargando y la guarda del cargador descarta la peticion. Sirve para el caso
+    // en que la vista pide un modelo que no esta en curso, y para que E-5 tenga
+    // a quien pedirselo en vez de esperar a nadie.
+    cargadorRef.current = loadModelSequentially;
+
+    useEffect(() => {
+        if (!viewerReady) return undefined;
+        const alPedir = (e) => {
+            const linajes = e?.detail?.lineages || [];
+            if (!linajes.length) return;
+            const porLinaje = (l) => models.find((m) => (m.itemId || m.lineage || m.item_id) === l);
+            const pedidos = linajes.map(porLinaje).filter(Boolean);
+            const sinFicha = linajes.filter((l) => !porLinaje(l));
+            if (sinFicha.length) {
+                // No esta en la lista del frente: no hay urn que cargar. Se dice
+                // y se sigue; el restaurador degradara y lo pondra en su parte.
+                console.warn('[Viewer] E-5 pidio modelos que no estan en este frente:', sinFicha);
+            }
+            for (const model of pedidos) {
+                // `loadModelInner` descarta solo el urn ya cargado o en vuelo, asi
+                // que pedir de mas no carga de mas.
+                cargadorRef.current?.(model);
+            }
+        };
+        window.addEventListener('viewer-request-models', alPedir);
+        return () => window.removeEventListener('viewer-request-models', alPedir);
     }, [models, viewerReady]);
 
     // Handle Model Visibility
