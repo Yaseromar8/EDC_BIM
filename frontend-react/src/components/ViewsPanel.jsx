@@ -53,7 +53,7 @@ const CheckIcon = () => (
     </svg>
 );
 
-const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose, sinFrente }) => {
+const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, onPedirEnlace, views, onClose, sinFrente }) => {
     // Nada de window.confirm ni window.alert. Los dos avisos del navegador se
     // veian mal (con el dominio delante y en ingles), pero el problema de
     // fondo era otro: el de borrar no decia QUE vista se borraba, y el de
@@ -63,6 +63,12 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose, sinF
     const [borrando, setBorrando] = useState(null);   // id de la vista a confirmar
     const [enlaceDe, setEnlaceDe] = useState(null);   // id de la vista compartida
     const [copiado, setCopiado] = useState(false);
+    // El enlace ya no se puede escribir aquí: hay que pedirlo. Mientras llega,
+    // la tira dice que está preparándose; si el servidor dice que no, dice por
+    // qué. Antes esto era una concatenación y no podía fallar.
+    const [urlEnlace, setUrlEnlace] = useState(null);
+    const [enlaceCargando, setEnlaceCargando] = useState(false);
+    const [enlaceError, setEnlaceError] = useState(null);
     const [isCreating, setIsCreating] = useState(false);
     const [newViewName, setNewViewName] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
@@ -74,8 +80,17 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose, sinF
         setIsCreating(false);
     };
 
-    const urlDeVista = (view) =>
-        `${window.location.origin}${window.location.pathname}?shareView=${view.id}`;
+    // EL ENLACE YA NO SE CONSTRUYE AQUI.
+    //
+    // Antes este componente hacía `?shareView=${view.id}`: la clave primaria de
+    // la fila era la capacidad pública. Con los ids de reloj de 13 cifras eso
+    // son 33 bits, y 16 si alguien sabe el minuto en que se guardó. Y mientras
+    // identidad y capacidad fueran lo mismo, un enlace no se podía revocar sin
+    // cambiar la clave primaria.
+    //
+    // Ahora se PIDE (`onPedirEnlace`): el servidor comprueba que quien lo pide
+    // puede compartir esa vista, emite un `share_token` aleatorio y devuelve el
+    // enlace ya hecho. Este panel solo lo enseña y lo copia.
 
     const copiarAlPortapapeles = async (texto) => {
         try {
@@ -90,12 +105,26 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose, sinF
         }
     };
 
-    const handleShare = (view, e) => {
+    const handleShare = async (view, e) => {
         e.stopPropagation();
         setBorrando(null);
-        setEnlaceDe(prev => (prev === view.id ? null : view.id));
         setCopiado(false);
-        copiarAlPortapapeles(urlDeVista(view));
+        setEnlaceError(null);
+        const cerrando = enlaceDe === view.id;
+        setEnlaceDe(cerrando ? null : view.id);
+        if (cerrando) return;
+
+        setUrlEnlace(null);
+        setEnlaceCargando(true);
+        try {
+            const url = await onPedirEnlace(view.id);
+            setUrlEnlace(url);
+            copiarAlPortapapeles(url);
+        } catch (err) {
+            setEnlaceError(err?.message || 'No se pudo crear el enlace.');
+        } finally {
+            setEnlaceCargando(false);
+        }
     };
 
     const filteredViews = views.filter(v =>
@@ -208,9 +237,13 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose, sinF
                         {enlaceDe === view.id && (
                             <div className="view-tira view-tira-enlace">
                                 <div className="view-tira-cabecera">
-                                    {copiado
-                                        ? <span className="tira-copiado"><CheckIcon /> Enlace copiado</span>
-                                        : <span>Enlace de solo lectura</span>}
+                                    {enlaceError
+                                        ? <span>{enlaceError}</span>
+                                        : enlaceCargando
+                                            ? <span>Creando el enlace…</span>
+                                            : copiado
+                                                ? <span className="tira-copiado"><CheckIcon /> Enlace copiado</span>
+                                                : <span>Enlace de solo lectura</span>}
                                     <button type="button" className="tira-cerrar"
                                         onClick={(e) => { e.stopPropagation(); setEnlaceDe(null); }}
                                         title="Cerrar">×</button>
@@ -218,11 +251,13 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose, sinF
                                 <input
                                     className="tira-enlace-campo"
                                     readOnly
-                                    value={urlDeVista(view)}
+                                    value={urlEnlace || ''}
+                                    placeholder={enlaceError ? '' : 'Creando el enlace…'}
                                     onClick={(e) => { e.stopPropagation(); e.target.select(); }}
                                 />
                                 <button type="button" className="tira-btn tira-btn-copiar"
-                                    onClick={(e) => { e.stopPropagation(); copiarAlPortapapeles(urlDeVista(view)); }}>
+                                    disabled={!urlEnlace}
+                                    onClick={(e) => { e.stopPropagation(); copiarAlPortapapeles(urlEnlace); }}>
                                     {copiado ? 'Copiado' : 'Copiar'}
                                 </button>
                             </div>

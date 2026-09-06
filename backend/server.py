@@ -1489,25 +1489,43 @@ def civil_base_axis():
         return jsonify({'error': str(e)}), 500
 
 
-def _obra_de_la_vista(view_id):
-    """La obra a la que pertenece una vista guardada, o None si no existe.
+# El limite del endpoint publico de vistas compartidas, declarado en un solo
+# sitio (`vistas_compartidas.LIMITE_PUBLICO`) y aplicado tambien aqui: a estas
+# dos rutas se llega con la MISMA clave de enlace, asi que limitar solo la de la
+# vista dejaria estas de oraculo y el limite seria decorado.
+from rate_limit import limite as _limite_publico
+from vistas_compartidas import LIMITE_PUBLICO as _LIMITE_ENLACE_PUBLICO
 
-    El identificador de la vista ES la credencial (`secrets.token_urlsafe(24)`,
-    ver routes/views.py). Quien lo tiene, abre esa vista -- que es lo que
-    "compartir por enlace" significa. Lo que este resolutor garantiza es el
-    ALCANCE: el enlace solo puede leer el inventario de SU obra, y esa obra
-    sale de la base de datos, no de un parametro de la peticion.
+
+def _obra_de_la_vista(clave):
+    """La obra del enlace compartido, o None. EL MISMO resolutor que la vista.
+
+    Lo que este resolutor garantiza es el ALCANCE: el enlace solo puede leer el
+    inventario de SU obra, y esa obra sale de la base de datos, no de un
+    parametro de la peticion.
+
+    E-4D: la clave ya no es el id de la fila, es la CAPACIDAD --`share_token`--,
+    o el id por la via antigua mientras su ventana siga abierta. Se resuelve con
+    `resolver_vista_compartida`, la misma funcion que usa la ruta de la vista, y
+    no con una copia parecida: dos resolutores que casi coinciden acaban
+    aceptando cosas distintas, y el que se olvide sera el que nadie mire.
+
+    NO se anota el censo aqui (`anotar=False`). Abrir un enlace son dos
+    peticiones --la vista y su inventario-- y contarlas las dos convertiria el
+    censo en «el doble de lo que fue». La vista es la que cuenta.
     """
     try:
-        from routes.views import get_view_by_id
-        vista = get_view_by_id(view_id)
-        return ((vista or {}).get('projectId')) or None
+        from routes.views import leer_fila, leer_por_token
+        from vistas_compartidas import obra_de_la_vista
+        from db import get_db_connection as _gdb
+        return obra_de_la_vista(clave, leer_fila, leer_por_token, _gdb)
     except Exception as e:
         print('[vista-compartida] no se pudo resolver la obra: %s' % str(e)[:120])
         return None
 
 
 @app.route('/api/vista-compartida/<view_id>/inventario', methods=['GET'])
+@_limite_publico(_LIMITE_ENLACE_PUBLICO)
 @publico_en_lectura(motivo='es el enlace de vista compartida: quien lo abre es un tercero sin sesion, y la obra se resuelve desde el enlace')
 def inventario_de_vista_compartida(view_id):
     """El inventario de la obra de una vista compartida, en lectura.
@@ -1527,6 +1545,7 @@ def inventario_de_vista_compartida(view_id):
 
 
 @app.route('/api/vista-compartida/<view_id>/inventario/version', methods=['GET'])
+@_limite_publico(_LIMITE_ENLACE_PUBLICO)
 @publico_en_lectura(motivo='huella de version del inventario del enlace compartido; misma obra que la vista')
 def version_de_inventario_compartido(view_id):
     """La huella de version, para que el invitado tambien use su cache local.

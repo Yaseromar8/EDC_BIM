@@ -37,6 +37,11 @@ TODAS = {
     'DDL_EN_CALIENTE': 'false',
     'ENFORCE_PROJECT_AUTHZ': 'true',
     'AUTH_POLICY_MODE': 'estricto',
+    # E-4D. La ventana de los enlaces compartidos antiguos --el `id` de la vista
+    # haciendo de capacidad publica-- tiene que estar DECIDIDA, no heredada del
+    # silencio. Vale tanto «abierto» como «retirado»: lo que no vale es la
+    # ausencia, que el codigo trata como cerrada y este punto saca a la luz.
+    'ENLACES_LEGACY_HASTA': 'retirado',
 }
 
 

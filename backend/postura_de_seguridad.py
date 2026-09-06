@@ -40,6 +40,21 @@ def _puesta(nombre, minimo=16):
     return len(v.strip()) >= minimo
 
 
+def _ventana_de_enlaces_decidida():
+    """¿Alguien ha decidido que pasa con los enlaces compartidos antiguos?
+
+    Cumple tanto «abierta» como «retirada»: lo que no cumple es el silencio y lo
+    escrito a medias. Se importa aqui dentro para no atar este modulo --que solo
+    mira variables-- al de las vistas.
+    """
+    try:
+        from vistas_compartidas import estado_legacy, SIN_CONFIGURAR, INVALIDO
+    except Exception:
+        return False
+    _abierta, estado, _detalle = estado_legacy()
+    return estado not in (SIN_CONFIGURAR, INVALIDO)
+
+
 def puntos():
     """Cada punto: (clave, cumple, por que importa). Sin valores, nunca.
 
@@ -60,6 +75,13 @@ def puntos():
         ('AUTH_POLICY_MODE_ESTRICTO',
          (os.getenv('AUTH_POLICY_MODE') or 'sombra').strip().lower() != 'sombra',
          'en modo sombra los decoradores de rol no bloquean a nadie'),
+        # E-4D. La via antigua de los enlaces compartidos --el `id` de la vista
+        # haciendo de capacidad publica-- solo sigue abierta si alguien lo ha
+        # ESCRITO. El punto no exige que este cerrada: exige que este decidida.
+        # Sin decision el codigo la cierra igualmente (fallo seguro), y lo que
+        # aporta el punto es que se vea desde fuera que nadie la decidio.
+        ('ENLACES_LEGACY_DECIDIDA', _ventana_de_enlaces_decidida(),
+         'sin ella los enlaces antiguos quedan cerrados sin que nadie lo haya elegido'),
     ]
     # En una instancia de ENTIDAD (perfil portal) hay un punto mas: el
     # administrador inicial declarado. Sin ADMIN_EMAIL, el arranque crea el

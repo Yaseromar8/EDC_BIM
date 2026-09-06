@@ -15,7 +15,9 @@ from db import get_db_connection
 import vistas_contrato as contrato
 import vistas_v2
 import vistas_permisos as permisos
+import vistas_compartidas as compartidas
 from perimetro_de_obra import guardia_de_obra
+from rate_limit import limite
 
 views_bp = Blueprint('views', __name__)
 
@@ -48,6 +50,27 @@ try:
 except Exception:
     pass
 
+
+
+def leer_por_token(token):
+    """La fila cuya CAPACIDAD publica es este token. None si no hay ninguna.
+
+    Consulta separada de `leer_fila` a proposito: son dos preguntas distintas
+    --«la vista tal» y «la vista que abre este enlace»-- y mezclarlas en una
+    funcion con dos ramas es como se acaba aceptando una clave donde se
+    esperaba la otra.
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT %s FROM saved_views WHERE share_token = %%s::uuid"
+                % contrato.SQL_DETALLE, (token,))
+            r = cursor.fetchone()
+            return dict(zip(contrato.COLUMNAS_DETALLE, r)) if r else None
+    except Exception as e:
+        print(f"[views] lectura por token fallida: {e}")
+        return None
 
 
 def leer_fila(view_id):
@@ -160,24 +183,44 @@ def save_view_to_db(view):
 
 
 @views_bp.route("/api/views/<view_id>", methods=["GET"])
+@limite(compartidas.LIMITE_PUBLICO)
 @publico_en_lectura(motivo='es el enlace de vista compartida: quien lo abre es un tercero sin sesion')
 def get_view(view_id):
     """EL DETALLE. La misma ruta sirve a dos lectores muy distintos.
 
-    CON SESION  -> el documento entero mas sus metadatos.
-    SIN SESION  -> un enlace compartido: lo justo para restaurar, y ni un dato
-                   de persona. La forma v1 es exactamente la de antes de esta
-                   etapa mas `schemaVersion`, para que los enlaces ya repartidos
-                   sigan abriendo igual.
+    CON SESION  -> se direcciona por el ID de la vista, y se comprueba la obra.
+    SIN SESION  -> se direcciona por la CAPACIDAD (`share_token`), o por la via
+                   antigua mientras su ventana siga abierta. Lo justo para
+                   restaurar, y ni un dato de persona.
+
+    Que el parametro se llame `view_id` es historia: por la via publica ya no es
+    un id, es una clave de enlace. Renombrarlo cambiaria el nombre del endpoint
+    de Flask y con el las entradas de politica y las pruebas que lo nombran, asi
+    que se deja quieto y se dice aqui.
 
     Quien mira se sabe SIEMPRE, tambien en las rutas publicas: el middleware
     resuelve la identidad antes de decidir si la exige (auth_middleware.py, «se
     resuelve SIEMPRE que venga un token, incluso en rutas publicas»).
     """
+    usuario = getattr(g, 'current_user', None)
+
+    if not usuario:
+        fila, resultado, _via = compartidas.resolver_vista_compartida(
+            view_id, leer_fila, leer_por_token, get_db_connection)
+        if resultado == compartidas.LEGACY_RETIRADO:
+            # 410: este enlace EXISTIO y ya no sirve. Se responde igual exista
+            # la vista o no --no se ha mirado la base-- asi que no dice nada de
+            # ninguna vista concreta.
+            return jsonify({
+                'error': 'Este enlace antiguo ya no esta activo. Pide uno nuevo a quien te lo compartio.',
+                'code': 'ENLACE_RETIRADO'}), 410
+        if not fila:
+            return jsonify({"error": "View not found"}), 404
+        return jsonify(contrato.fila_publica(fila))
+
     fila = leer_fila(view_id)
     if not fila:
         return jsonify({"error": "View not found"}), 404
-    usuario = getattr(g, 'current_user', None)
     if usuario:
         # CON SESION la obra si se comprueba. Es deliberado que sea mas estricto
         # que la via anonima: el enlace compartido es una concesion explicita a
@@ -186,8 +229,9 @@ def get_view(view_id):
         negativa = guardia_de_obra(fila.get('project_id'), 'ver esta vista')
         if negativa:
             return negativa
-        return jsonify(permisos.con_permisos(contrato.fila_de_detalle(fila, usuario), usuario))
-    return jsonify(contrato.fila_publica(fila))
+        manda_aqui = permisos.es_admin_de_la_obra(usuario, fila.get('project_id'))
+        return jsonify(permisos.con_permisos(contrato.fila_de_detalle(fila, usuario),
+                                             usuario, manda_aqui))
 
 
 @views_bp.route('/api/views', methods=['GET'])
@@ -205,7 +249,10 @@ def get_views():
     if negativa:
         return negativa
     usuario = getattr(g, 'current_user', None)
-    return jsonify([permisos.con_permisos(contrato.fila_de_listado(f, usuario), usuario)
+    # UNA sola consulta para todo el listado: la obra es la misma para todas sus
+    # filas, y preguntarla por vista seria N consultas para la misma respuesta.
+    manda_aqui = permisos.es_admin_de_la_obra(usuario, project_id)
+    return jsonify([permisos.con_permisos(contrato.fila_de_listado(f, usuario), usuario, manda_aqui)
                     for f in listar_vistas(project_id)])
 
 
@@ -363,7 +410,8 @@ def _crear_v1(data, autor, obra):
     fila = leer_fila(new_view['id'])
     if not fila:
         return jsonify(new_view)
-    return jsonify(permisos.con_permisos(contrato.fila_de_listado(fila, _usuario()), _usuario()))
+    return jsonify(permisos.con_permisos(contrato.fila_de_listado(fila, _usuario()),
+                                         _usuario(), permisos.es_admin_de_la_obra(_usuario(), obra)))
 
 
 def _crear_v2(data, autor, obra):
@@ -398,7 +446,8 @@ def _crear_v2(data, autor, obra):
         return jsonify({'error': 'No se pudo guardar la vista.'}), 500
 
     fila = leer_fila(vista_id)
-    return jsonify(permisos.con_permisos(contrato.fila_de_detalle(fila, _usuario()), _usuario())), 201
+    return jsonify(permisos.con_permisos(contrato.fila_de_detalle(fila, _usuario()), _usuario(),
+                                         permisos.es_admin_de_la_obra(_usuario(), obra))), 201
 
 
 @views_bp.route('/api/views/<view_id>', methods=['PUT'])
@@ -446,7 +495,9 @@ def reemplazar_estado(view_id):
             # QUIEN, antes que QUE. Sobre la fila ya bloqueada: autorizar contra
             # una lectura anterior seria autorizar contra datos que pueden haber
             # cambiado entre medias.
-            negativa = permisos.guardia(_usuario(), autor, 'actualizar')
+            negativa = permisos.guardia(
+                _usuario(), autor, 'actualizar',
+                permisos.es_admin_de_la_obra(_usuario(), alcance[0], cur))
             if negativa:
                 return negativa
 
@@ -474,7 +525,8 @@ def reemplazar_estado(view_id):
         return jsonify({'error': 'No se pudo actualizar la vista.'}), 500
 
     return jsonify(permisos.con_permisos(
-        contrato.fila_de_detalle(leer_fila(view_id), _usuario()), _usuario()))
+        contrato.fila_de_detalle(leer_fila(view_id), _usuario()), _usuario(),
+        permisos.es_admin_de_la_obra(_usuario(), alcance[0])))
 
 
 @views_bp.route('/api/views/<view_id>', methods=['PATCH'])
@@ -523,7 +575,9 @@ def cambiar_metadatos(view_id):
             fila = cur.fetchone()
             if not fila:
                 return jsonify({'error': 'View not found'}), 404
-            negativa = permisos.guardia(_usuario(), fila[0], 'renombrar')
+            negativa = permisos.guardia(
+                _usuario(), fila[0], 'renombrar',
+                permisos.es_admin_de_la_obra(_usuario(), alcance[0], cur))
             if negativa:
                 return negativa
             cur.execute(
@@ -535,7 +589,74 @@ def cambiar_metadatos(view_id):
         return jsonify({'error': 'No se pudieron cambiar los metadatos.'}), 500
 
     return jsonify(permisos.con_permisos(
-        contrato.fila_de_detalle(leer_fila(view_id), _usuario()), _usuario()))
+        contrato.fila_de_detalle(leer_fila(view_id), _usuario()), _usuario(),
+        permisos.es_admin_de_la_obra(_usuario(), alcance[0])))
+
+
+@views_bp.route('/api/views/<view_id>/enlace', methods=['POST'])
+def emitir_enlace(view_id):
+    """Crea --o rota-- la capacidad publica de una vista.
+
+    El enlace ya NO se puede construir en el navegador, y esa es toda la
+    diferencia: antes `Copiar enlace` concatenaba `?shareView=` con el id que ya
+    tenia en pantalla, asi que compartir no era un acto que el servidor viera
+    pasar. Ahora hay que pedirlo, y para pedirlo hay que poder.
+
+    QUIEN PUEDE
+    -----------
+    Las dos capas de siempre, y en el mismo orden: acceso a la obra primero,
+    autoria despues. Emitir una capacidad publica es una decision sobre QUIEN VE
+    esa vista, asi que pide lo mismo que modificarla: su autor, o administracion.
+    Una vista historica --sin autor-- solo la comparte administracion.
+
+    ROTAR
+    -----
+    Con `{"rotar": true}` se emite una capacidad nueva y LA ANTERIOR DEJA DE
+    SERVIR en el mismo acto: el token es unico por fila. El `id` no se toca, asi
+    que nada que apunte a la vista se entera. Es la revocacion, sin necesidad de
+    una pantalla todavia.
+
+    Sin `rotar`, si ya hay capacidad se DEVUELVE LA MISMA. Emitir una nueva cada
+    vez que alguien abre el desplegable invalidaria en silencio el enlace que
+    esa persona compartio ayer.
+    """
+    data = request.get_json(silent=True) or {}
+    rotar = bool(data.get('rotar'))
+
+    alcance = _alcance_y_autor(view_id)
+    if not alcance:
+        return jsonify({'error': 'View not found'}), 404
+    negativa = guardia_de_obra(alcance[0], 'compartir esta vista')
+    if negativa:
+        return negativa
+
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT created_by, share_token FROM saved_views "
+                        " WHERE id = %s FOR UPDATE", (view_id,))
+            fila = cur.fetchone()
+            if not fila:
+                return jsonify({'error': 'View not found'}), 404
+            negativa = permisos.guardia(
+                _usuario(), fila[0], 'compartir',
+                permisos.es_admin_de_la_obra(_usuario(), alcance[0], cur))
+            if negativa:
+                return negativa
+
+            token = fila[1]
+            if token is None or rotar:
+                # El token lo genera POSTGRES, no el cliente ni el proceso: es
+                # la misma fuente que ya usa `document_shares`.
+                cur.execute("UPDATE saved_views SET share_token = gen_random_uuid() "
+                            " WHERE id = %s RETURNING share_token", (view_id,))
+                token = cur.fetchone()[0]
+            conn.commit()
+    except Exception as e:
+        print(f"[views] no se pudo emitir el enlace: {e}")
+        return jsonify({'error': 'No se pudo crear el enlace.'}), 500
+
+    return jsonify({'shareToken': str(token), 'rotado': bool(rotar)})
 
 
 @views_bp.route('/api/views/<view_id>', methods=['DELETE'])
@@ -564,7 +685,9 @@ def delete_view(view_id):
             fila = cur.fetchone()
             if not fila:
                 return jsonify({'error': 'View not found'}), 404
-            negativa = permisos.guardia(_usuario(), fila[0], 'borrar')
+            negativa = permisos.guardia(
+                _usuario(), fila[0], 'borrar',
+                permisos.es_admin_de_la_obra(_usuario(), alcance[0], cur))
             if negativa:
                 return negativa
             cur.execute("DELETE FROM saved_views WHERE id = %s", (view_id,))

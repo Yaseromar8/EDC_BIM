@@ -1693,6 +1693,24 @@ function App() {
     }, 500);
   }, [filterProperties]);
 
+  // EL ENLACE COMPARTIDO SE PIDE AL SERVIDOR (E-4D).
+  //
+  // Ya no se puede componer aquí: la capacidad pública es un `share_token` que
+  // emite el backend después de comprobar que quien lo pide puede compartir esa
+  // vista. Si ya existe uno, devuelve el mismo — emitir otro invalidaría en
+  // silencio el enlace que esa persona compartió ayer.
+  const pedirEnlaceDeVista = useCallback(async (viewId) => {
+    const res = await apiFetch(`${BACKEND_URL}/api/views/${viewId}/enlace`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    const cuerpo = await res.json().catch(() => ({}));
+    if (!res.ok || !cuerpo.shareToken) {
+      throw new Error(cuerpo.error || 'No se pudo crear el enlace.');
+    }
+    return `${window.location.origin}${window.location.pathname}?shareView=${cuerpo.shareToken}`;
+  }, []);
+
   const handleLoadView = useCallback((view) => {
     if (!view?.id) return;
     apiFetch(`${BACKEND_URL}/api/views/${view.id}`)
@@ -4987,6 +5005,7 @@ function App() {
               sinFrente={!frenteActual}
               onSaveView={handleSaveView}
               onDeleteView={handleDeleteView}
+              onPedirEnlace={pedirEnlaceDeVista}
               onLoadView={handleLoadView}
               onClose={() => setPanelVisible(false)}
             />

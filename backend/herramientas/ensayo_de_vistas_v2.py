@@ -52,6 +52,10 @@ os.environ.setdefault('APP_SECRET', 'x' * 32)
 os.environ.setdefault('SESSION_PEPPER', 'pimienta-de-ensayo')
 os.environ.setdefault('DDL_EN_CALIENTE', 'false')     # el esquema ya esta hecho
 os.environ.setdefault('ALLOW_DEMO_TOKEN', 'false')
+# La via antigua se prueba en sus dos posiciones, asi que la bateria la declara
+# ABIERTA de partida y la mueve donde toca. Sin declararla, el fallo seguro la
+# cerraria y media bateria estaria probando otra cosa.
+os.environ.setdefault('ENLACES_LEGACY_HASTA', 'abierto')
 
 import base64
 
@@ -61,7 +65,7 @@ import auth_middleware
 import politica
 import vistas_v2
 from db import get_db_connection, init_db_pool
-from routes.views import views_bp
+from routes.views import views_bp, leer_fila, leer_por_token
 
 _pasos = []
 
@@ -81,7 +85,7 @@ def titulo(t):
 
 # ── El banco de pruebas ────────────────────────────────────────────────────
 
-def construir_app():
+def construir_app(con_limite=False):
     """SOLO el blueprint de vistas, con el middleware y la politica de verdad.
 
     No se importa `server.py`: arrastraria 89 endpoints y sus tablas, y lo que
@@ -93,6 +97,13 @@ def construir_app():
     app.register_blueprint(views_bp)
     auth_middleware.init_auth_middleware(app)
     politica.aplicar_politicas_por_defecto(app, politica.POLITICAS_POR_BLUEPRINT)
+    # El limitador REAL, el mismo que enchufa server.py, y SOLO en la app que lo
+    # pide: es un singleton, y encenderlo para toda la bateria haria que las 150
+    # peticiones del resto se tropezaran con su propio limite.
+    if con_limite:
+        from rate_limit import limiter
+        if limiter is not None:
+            limiter.init_app(app)
     return app
 
 
@@ -155,7 +166,12 @@ def doc_v2(**cambios):
 
 
 def huella_de_la_tabla():
-    """Como esta la tabla AHORA. Sirve para probar que un rechazo no escribio."""
+    """El estado TECNICO de cada vista. Sirve para probar que nada la movio.
+
+    Deja fuera a proposito `share_token` y el censo: son metadata de COMPARTIR,
+    que E-4D si puede cambiar --emitir un enlace es justamente eso-- y mezclarla
+    aqui haria que la huella dejara de significar «la vista sigue igual».
+    """
     filas = sql("SELECT id, name, project_id, schema_version, "
                 "       md5(coalesce(viewer_state::text,'')||coalesce(filter_state::text,'')"
                 "           ||coalesce(config::text,'')||coalesce(state::text,'')), "
@@ -172,6 +188,10 @@ def main():
     ana, beto, admin = sesion_para(1), sesion_para(2), sesion_para(3)
     carla = sesion_para(sql("SELECT id FROM users WHERE email = %s",
                             ('zz_e4_carla@ejemplo.invalido',))[0])
+    # Diana administra la obra '1' --frentes 1_CANAL y 1_DRENAJE-- sin ser
+    # Entity Admin. Carla administra obra_B, que es OTRA.
+    diana = sesion_para(sql("SELECT id FROM users WHERE email = %s",
+                            ('zz_e4_diana@ejemplo.invalido',))[0])
     anonimo = {}
 
     print()
@@ -189,6 +209,18 @@ def main():
         _cur.execute("DELETE FROM saved_views WHERE created_by IS NOT NULL")
         if _cur.rowcount:
             print('  limpieza  %d fila(s) de una ejecucion anterior' % _cur.rowcount)
+        # Y la metadata de compartir que dejara una ejecucion cortada: si no,
+        # la prueba de «no tenia token» empezaria con uno puesto.
+        _cur.execute("UPDATE saved_views SET share_token = NULL, legacy_accesos = 0, "
+                     "       legacy_ultimo_acceso = NULL "
+                     " WHERE share_token IS NOT NULL OR legacy_accesos <> 0")
+        # Y las notas y fechas que dejaran las pruebas de administracion. Las 14
+        # llegaron de produccion sin `description` ni `updated_at` --las dos
+        # columnas son de E-0, posteriores a ellas-- asi que devolverlas a NULL
+        # es devolverlas a su estado, no inventarlo.
+        _cur.execute("UPDATE saved_views SET description = NULL, updated_at = NULL "
+                     " WHERE created_by IS NULL "
+                     "   AND (description IS NOT NULL OR updated_at IS NOT NULL)")
         _c.commit()
 
     n_v1 = sql("SELECT count(*) FROM saved_views WHERE schema_version = 1")[0]
@@ -202,6 +234,8 @@ def main():
     ids_sin_obra = [f[0] for f in sql(
         "SELECT id FROM saved_views WHERE coalesce(project_id,'') = '' ORDER BY created_at", una=False)]
     huella_v1_inicial = huella_de_la_tabla()
+    ids_v1_iniciales = [f[0] for f in sql("SELECT id FROM saved_views WHERE created_by IS NULL "
+                                          " ORDER BY created_at", una=False)]
     # Copia literal de la vista que se usara para probar la conversion. Se
     # devuelve tal cual al terminar, y el md5 del final lo comprueba.
     estado_cobaya = sql("SELECT viewer_state, filter_state, config FROM saved_views WHERE id = %s",
@@ -289,15 +323,27 @@ def main():
          'con sesion si se dice quien es el autor, y si eres tu')
 
     titulo('E-4A · 4b. ENLACE COMPARTIDO DE UNA v2')
-    r = cli.get('/api/views/%s' % id_v2_ana, headers=anonimo)
+    # E-4D: una vista creada DESPUES de la migracion 30 no se abre por su `id`
+    # --identidad y capacidad ya no son lo mismo--, asi que primero hay que
+    # pedir su enlace. Que este paso haga falta ES el cambio.
+    paso(cli.get('/api/views/%s' % id_v2_ana, headers=anonimo).status_code == 404,
+         'su `id` NO abre nada sin sesion: la capacidad es otra cosa')
+    token_v2 = (cli.post('/api/views/%s/enlace' % id_v2_ana, headers=ana,
+                         json={}).get_json() or {}).get('shareToken')
+    r = cli.get('/api/views/%s' % token_v2, headers=anonimo)
     pub = r.get_json()
-    paso(r.status_code == 200, 'abre sin sesion', r.status_code)
+    paso(r.status_code == 200, 'abre sin sesion con su enlace', r.status_code)
     paso(sorted(pub.keys()) == ['id', 'name', 'projectId', 'schemaVersion', 'state'],
          'y devuelve EXACTAMENTE id, name, projectId, schemaVersion y state',
          sorted(pub.keys()))
     paso('createdBy' not in pub and 'permisos' not in pub and 'esMia' not in pub,
          'NO expone created_by, ni permisos, ni nada de personas')
     paso(pub['state'] == d['state'], 'el documento que llega es el mismo, sin recortar')
+    # Se retira el enlace: las pruebas de E-4D empiezan sin capacidad emitida.
+    with get_db_connection() as _c:
+        _cur = _c.cursor()
+        _cur.execute("UPDATE saved_views SET share_token = NULL WHERE id = %s", (id_v2_ana,))
+        _c.commit()
 
     titulo('E-4B · 6-7. LO QUE NO SE PUEDE GUARDAR')
     casos_malos = [
@@ -453,7 +499,8 @@ def main():
     titulo('E-4C · 15. «GUARDAR COMO» DE UNA VISTA AJENA')
     detalle = cli.get('/api/views/%s' % id_v2_ana, headers=beto).get_json()
     paso(detalle.get('permisos', {}) == {'actualizar': False, 'renombrar': False, 'borrar': False,
-                                         'guardarComo': True, 'esMia': False, 'autorConocido': True},
+                                         'compartir': False, 'guardarComo': True,
+                                         'esMia': False, 'autorConocido': True},
          'Beto la puede LEER, y la respuesta le dice exactamente que puede hacer',
          detalle.get('permisos'))
     r = cli.post('/api/views', headers=beto,
@@ -552,11 +599,18 @@ def main():
     r = cli.get('/api/views/%s' % ids_con_obra[0])
     paso(r.status_code == 200 and 'viewerState' in (r.get_json() or {}),
          'I · v1 sin sesion: abre y trae lo necesario para restaurar', r.status_code)
-    r = cli.get('/api/views/%s' % id_v2_ana)
+    # Una v2 nacida despues de E-4D se abre por su ENLACE, no por su id.
+    tok_i = (cli.post('/api/views/%s/enlace' % id_v2_ana, headers=ana,
+                      json={}).get_json() or {}).get('shareToken')
+    r = cli.get('/api/views/%s' % tok_i)
     paso(r.status_code == 200 and 'state' in (r.get_json() or {}),
-         'I · v2 sin sesion: abre y trae `state`', r.status_code)
+         'I · v2 sin sesion: su enlace abre y trae `state`', r.status_code)
     paso('createdBy' not in (r.get_json() or {}) and 'permisos' not in (r.get_json() or {}),
          'I · y sigue sin decir de quien es')
+    with get_db_connection() as _c:
+        _cur = _c.cursor()
+        _cur.execute("UPDATE saved_views SET share_token = NULL WHERE id = %s", (id_v2_ana,))
+        _c.commit()
 
     titulo('J · EL ORDEN DEL LISTADO')
     lista = cli.get('/api/views?project=' + FRENTE, headers=ana).get_json()
@@ -574,14 +628,360 @@ def main():
          'J · la prueba tiene de los dos tipos (%d con updated_at, %d sin)'
          % (len(con_fecha), len(sin_fecha)))
 
+    # ═══════════════════════════════════════════════ E-4D · LA CAPACIDAD
+    import vistas_compartidas as compartidas
+    import vistas_permisos as permisos_mod
+
+    titulo('E-4D · 1. LAS VISTAS HISTORICAS NO CAMBIAN DE IDENTIDAD')
+    ids_ahora = [f[0] for f in sql("SELECT id FROM saved_views WHERE created_by IS NULL "
+                                   " ORDER BY created_at", una=False)]
+    paso(ids_ahora == ids_v1_iniciales,
+         'los %d ids historicos son EXACTAMENTE los mismos' % len(ids_v1_iniciales),
+         'antes %d, ahora %d' % (len(ids_v1_iniciales), len(ids_ahora)))
+    paso(sql("SELECT count(*) FROM saved_views WHERE created_by IS NULL "
+             "   AND share_token IS NOT NULL")[0] == 0,
+         'y ninguna nace con capacidad publica: NULL es «no compartida»')
+
+    # Para el censo hace falta una vista historica que NADIE haya abierto en esta
+    # ejecucion: la prueba I ya abrio `ids_con_obra[0]`, y el freno de un minuto
+    # haria que el segundo acceso no contara -- que es justo lo que hace bien.
+    legado = ids_con_obra[1]
+
+    titulo('E-4D · 2-3. LA VIA ANTIGUA ABRE, Y QUEDA ANOTADA')
+    antes = sql("SELECT legacy_accesos, legacy_ultimo_acceso FROM saved_views WHERE id = %s",
+                (legado,))
+    r = cli.get('/api/views/%s' % legado)
+    paso(r.status_code == 200 and 'viewerState' in (r.get_json() or {}),
+         '2 · el enlace de 13 cifras sigue abriendo', r.status_code)
+    despues = sql("SELECT legacy_accesos, legacy_ultimo_acceso FROM saved_views WHERE id = %s",
+                  (legado,))
+    paso(antes == (0, None) and despues[0] == 1 and despues[1] is not None,
+         '3 · y deja censo: %s -> accesos=%s, ultimo=%s'
+         % (antes, despues[0], 'si' if despues[1] else 'no'))
+    cli.get('/api/views/%s' % legado)
+    paso(sql("SELECT legacy_accesos FROM saved_views WHERE id = %s", (legado,))[0] == 1,
+         '3 · el censo NO cuenta peticiones: se anota una vez por minuto y por vista',
+         'una escritura por peticion anonima seria un amplificador')
+
+    titulo('E-4D · 7. «COPIAR ENLACE» ENTREGA UNA CAPACIDAD, NUNCA EL ID')
+    r = cli.post('/api/views/%s/enlace' % id_v2_ana, headers=ana, json={})
+    cuerpo = r.get_json() or {}
+    token = cuerpo.get('shareToken')
+    paso(r.status_code == 200 and token, 'responde 200 con `shareToken`', r.status_code)
+    paso(token != id_v2_ana and compartidas.clase_de_clave(token) == compartidas.VIA_TOKEN,
+         '7 · el token NO es el id, y tiene forma de uuid', token)
+    paso(sql("SELECT share_token::text FROM saved_views WHERE id = %s", (id_v2_ana,))[0] == token,
+         '   y es el que guarda la fila')
+    r2 = cli.post('/api/views/%s/enlace' % id_v2_ana, headers=ana, json={})
+    paso((r2.get_json() or {}).get('shareToken') == token,
+         '   pedirlo otra vez devuelve EL MISMO: emitir otro invalidaria el ya compartido')
+
+    titulo('E-4D · 4-5-6. QUE ABRE Y QUE NO')
+    r = cli.get('/api/views/%s' % token)
+    paso(r.status_code == 200 and (r.get_json() or {}).get('id') == id_v2_ana,
+         '4 · el token abre la misma vista', r.status_code)
+    import uuid as _uuid
+    paso(cli.get('/api/views/%s' % _uuid.uuid4()).status_code == 404,
+         '5 · un token que no existe -> 404')
+    paso(cli.get('/api/views/%s' % id_v2_ana).status_code == 404,
+         '6 · el ID de una vista v2 NO abre nada: identidad no es capacidad',
+         'id=%s' % id_v2_ana)
+    paso(cli.get('/api/views/zz-clave-inventada').status_code == 404,
+         '6 · una clave de formato desconocido tampoco')
+    paso(cli.get('/api/views/%s' % ('9' * 13)).status_code == 404,
+         '6 · un timestamp con formato correcto pero inexistente -> 404, igual que el token')
+
+    titulo('E-4D · 8-9. EL INVENTARIO USA LA MISMA RESOLUCION')
+    obra_token = compartidas.obra_de_la_vista(token, leer_fila, leer_por_token, get_db_connection)
+    obra_legacy = compartidas.obra_de_la_vista(legado, leer_fila, leer_por_token, get_db_connection)
+    paso(obra_token == FRENTE, '8 · con el token, el inventario resuelve la obra', obra_token)
+    paso(obra_legacy == sql("SELECT project_id FROM saved_views WHERE id = %s", (legado,))[0],
+         '9 · y con la clave antigua tambien, mientras la ventana este abierta', obra_legacy)
+    paso(compartidas.obra_de_la_vista('zz-inventada', leer_fila, leer_por_token,
+                                      get_db_connection) is None,
+         '   una clave que no resuelve no da obra: el inventario respondera 404')
+    censo_antes = sql("SELECT legacy_accesos FROM saved_views WHERE id = %s", (legado,))[0]
+    compartidas.obra_de_la_vista(legado, leer_fila, leer_por_token, get_db_connection)
+    paso(sql("SELECT legacy_accesos FROM saved_views WHERE id = %s", (legado,))[0] == censo_antes,
+         '   y el inventario NO vuelve a contar: abrir un enlace son dos peticiones')
+
+    titulo('E-4D · 10. ROTAR INVALIDA EL ANTERIOR')
+    r = cli.post('/api/views/%s/enlace' % id_v2_ana, headers=ana, json={'rotar': True})
+    nuevo_token = (r.get_json() or {}).get('shareToken')
+    paso(r.status_code == 200 and nuevo_token and nuevo_token != token,
+         '10 · rotar emite una capacidad distinta', nuevo_token)
+    paso(cli.get('/api/views/%s' % token).status_code == 404,
+         '10 · el enlace anterior DEJA DE SERVIR')
+    paso(cli.get('/api/views/%s' % nuevo_token).status_code == 200,
+         '10 · y el nuevo abre')
+    paso(sql("SELECT id FROM saved_views WHERE share_token = %s::uuid", (nuevo_token,))[0] == id_v2_ana,
+         '10 · el `id` de la vista NO ha cambiado: se revoca sin tocar la identidad')
+
+    titulo('E-4D · 11-12-13. EL TOKEN NO SALE EN NINGUNA RESPUESTA')
+    lista = cli.get('/api/views?project=' + FRENTE, headers=ana).get_json()
+    fugas = set()
+    for v in lista:
+        fugas |= (set(v.keys()) & {'shareToken', 'share_token', 'legacyAccesos', 'legacy_accesos'})
+    paso(not fugas, '11 · el LISTADO no expone la capacidad', sorted(fugas))
+    detalle = cli.get('/api/views/%s' % id_v2_ana, headers=ana).get_json()
+    paso('shareToken' not in detalle and 'share_token' not in detalle,
+         '12 · el DETALLE autenticado tampoco', sorted(detalle.keys()))
+    publica = cli.get('/api/views/%s' % nuevo_token).get_json()
+    paso('shareToken' not in publica and 'share_token' not in publica,
+         '13 · y la respuesta publica no devuelve el token con el que se abrio',
+         sorted(publica.keys()))
+    paso(sorted(publica.keys()) == ['id', 'name', 'projectId', 'schemaVersion', 'state'],
+         '13 · sigue siendo el contrato minimo aprobado', sorted(publica.keys()))
+    paso(not any(k in publica for k in ('createdBy', 'permisos', 'esMia', 'email',
+                                        'description', 'thumbnail', 'updatedAt')),
+         '9 · ni autor, ni permisos, ni metadata interna')
+
+    titulo('E-4D · 14. QUIEN NO PUEDE, NO EMITE')
+    r = cli.post('/api/views/%s/enlace' % id_v2_ana, headers=carla, json={})
+    paso(r.status_code == 403 and (r.get_json() or {}).get('code') == 'PROJECT_FORBIDDEN',
+         '14 · desde fuera de la obra -> 403, sin llegar a la autoria', r.status_code)
+    r = cli.post('/api/views/%s/enlace' % id_v2_ana, headers=beto, json={})
+    paso(r.status_code == 403 and (r.get_json() or {}).get('motivo') == 'VISTA_DE_OTRA_PERSONA',
+         '14 · de la obra pero vista ajena -> 403 por autoria', r.status_code)
+    r = cli.post('/api/views/%s/enlace' % legado, headers=ana, json={})
+    paso(r.status_code == 403 and (r.get_json() or {}).get('motivo') == 'VISTA_HISTORICA_SIN_AUTOR',
+         '14 · una vista historica solo la comparte administracion', r.status_code)
+    paso(sql("SELECT share_token FROM saved_views WHERE id = %s", (legado,))[0] is None,
+         '14 · y ninguno de los tres intentos emitio nada')
+    r = cli.post('/api/views/%s/enlace' % legado, headers=admin, json={})
+    paso(r.status_code == 200 and (r.get_json() or {}).get('shareToken'),
+         '14 · el Entity Admin si puede', r.status_code)
+    r = cli.post('/api/views/%s/enlace' % id_v2_ana, headers=beto, json={'rotar': True})
+    paso(r.status_code == 403 and
+         sql("SELECT share_token::text FROM saved_views WHERE id = %s", (id_v2_ana,))[0] == nuevo_token,
+         '14 · y rotar el enlace de otro tampoco: la capacidad de Ana sigue viva')
+
+    titulo('E-4D · AJUSTE 1. LA VENTANA LEGACY SE DECIDE, Y EL SILENCIO CIERRA')
+    # El token nuevo tiene que abrir en TODOS los estados: la ventana gobierna
+    # la via antigua, no la capacidad.
+    for valor, abre_legacy, etiqueta in (
+            (None, False, 'ausente        -> NO abre sola: nadie lo ha decidido'),
+            ('abierto', True, 'abierto        -> abierta por decision explicita'),
+            ('2099-12-31T23:59:59+00:00', True, 'fecha futura   -> abierta'),
+            ('2020-01-01T00:00:00-05:00', False, 'fecha pasada   -> 410'),
+            ('retirado', False, 'retirado       -> 410'),
+            ('2026-12-31', False, 'sin zona       -> configuracion invalida, cerrada'),
+            ('lo que sea', False, 'texto invalido -> configuracion invalida, cerrada'),
+    ):
+        if valor is None:
+            os.environ.pop('ENLACES_LEGACY_HASTA', None)
+        else:
+            os.environ['ENLACES_LEGACY_HASTA'] = valor
+        r = cli.get('/api/views/%s' % legado)
+        esperado = 200 if abre_legacy else 410
+        paso(r.status_code == esperado, 'ventana %s' % etiqueta,
+             'http=%s (esperado %s)' % (r.status_code, esperado))
+        rt = cli.get('/api/views/%s' % nuevo_token)
+        paso(rt.status_code == 200,
+             '   ...y el share_token abre igualmente', rt.status_code)
+
+    import vistas_compartidas as _vc
+    import postura_de_seguridad as _postura
+    for valor, estado, decidida in ((None, _vc.SIN_CONFIGURAR, False),
+                                    ('lo que sea', _vc.INVALIDO, False),
+                                    ('2026-12-31', _vc.INVALIDO, False),
+                                    ('abierto', _vc.ABIERTO, True),
+                                    ('retirado', _vc.RETIRADO, True)):
+        if valor is None:
+            os.environ.pop('ENLACES_LEGACY_HASTA', None)
+        else:
+            os.environ['ENLACES_LEGACY_HASTA'] = valor
+        _abierta, _estado, _detalle = _vc.estado_legacy()
+        paso(_estado == estado, 'estado de %r es %s' % (valor or '(ausente)', estado), _estado)
+        puntos = dict((n, ok) for n, ok, _r in _postura.puntos())
+        paso(puntos.get('ENLACES_LEGACY_DECIDIDA') is decidida,
+             '   la postura de seguridad lo %s' % ('da por decidido' if decidida else 'marca como pendiente'),
+             puntos.get('ENLACES_LEGACY_DECIDIDA'))
+
+    os.environ.pop('ENLACES_LEGACY_HASTA', None)
+    paso(cli.get('/api/views/%s' % legado).status_code == 410,
+         'sin configurar, el enlace antiguo NO abre: fallo seguro')
+    paso(cli.get('/api/views/%s' % ('9' * 13)).status_code == 410,
+         '   y responde igual para uno que no existe: no dice si existe')
+
+    titulo('E-4D · 16-17. LA VIA ANTIGUA SE APAGA CON UNA VARIABLE')
+    os.environ['ENLACES_LEGACY_HASTA'] = 'retirado'
+    try:
+        r = cli.get('/api/views/%s' % legado)
+        paso(r.status_code == 410 and (r.get_json() or {}).get('code') == 'ENLACE_RETIRADO',
+             '16 · con la ventana cerrada, el enlace antiguo -> 410', r.status_code)
+        paso(cli.get('/api/views/%s' % ('9' * 13)).status_code == 410,
+             '16 · y responde igual para un timestamp que no existe: no dice si existe')
+        censo = sql("SELECT legacy_accesos FROM saved_views WHERE id = %s", (legado,))[0]
+        cli.get('/api/views/%s' % legado)
+        paso(sql("SELECT legacy_accesos FROM saved_views WHERE id = %s", (legado,))[0] == censo,
+             '16 · con la via cerrada ya no se censa: no hay nada que decidir')
+        paso(compartidas.obra_de_la_vista(legado, leer_fila, leer_por_token,
+                                          get_db_connection) is None,
+             '16 · y el inventario por la via antigua tampoco resuelve')
+        r = cli.get('/api/views/%s' % nuevo_token)
+        paso(r.status_code == 200 and (r.get_json() or {}).get('id') == id_v2_ana,
+             '17 · el token nuevo sigue abriendo con la via antigua cerrada', r.status_code)
+        paso(compartidas.obra_de_la_vista(nuevo_token, leer_fila, leer_por_token,
+                                          get_db_connection) == FRENTE,
+             '17 · y su inventario tambien')
+        os.environ['ENLACES_LEGACY_HASTA'] = '2099-12-31T00:00:00+00:00'
+        paso(cli.get('/api/views/%s' % legado).status_code == 200,
+             '16 · con una fecha futura, la via antigua vuelve a abrir')
+        os.environ['ENLACES_LEGACY_HASTA'] = '2020-01-01T00:00:00+00:00'
+        paso(cli.get('/api/views/%s' % legado).status_code == 410,
+             '16 · con una fecha pasada, cerrada')
+    finally:
+        os.environ['ENLACES_LEGACY_HASTA'] = 'abierto'   # el resto de la bateria
+    paso(cli.get('/api/views/%s' % legado).status_code == 200,
+         'con `abierto` explicito, la via antigua funciona')
+
+    titulo('E-4D · AJUSTE 2. QUE SIGNIFICA «ADMIN»')
+    # Diana administra la obra '1'. No es Entity Admin: su `role` es 'user'.
+    paso(sql("SELECT role FROM users WHERE email = %s",
+             ('zz_e4_diana@ejemplo.invalido',))[0] == 'user',
+         'Diana NO es Entity Admin: manda por `project_users.es_admin`')
+
+    r = cli.patch('/api/views/%s' % legado, headers=diana,
+                  json={'description': 'zz_e4 nota de la administracion de obra'})
+    paso(r.status_code == 200,
+         'PROJECT ADMIN opera una vista LEGACY de SU obra', r.status_code)
+    r = cli.patch('/api/views/%s' % id_v2_ana, headers=diana,
+                  json={'description': 'zz_e4 tocada por administracion'})
+    paso(r.status_code == 200,
+         'PROJECT ADMIN opera una vista AJENA de SU obra', r.status_code)
+    r = cli.post('/api/views/%s/enlace' % id_v2_ana, headers=diana, json={'rotar': True})
+    tok_diana = (r.get_json() or {}).get('shareToken')
+    paso(r.status_code == 200 and tok_diana and tok_diana != nuevo_token,
+         'PROJECT ADMIN puede compartir y ROTAR en su obra', r.status_code)
+    nuevo_token = tok_diana
+
+    r = cli.patch('/api/views/%s' % id_v2_ana, headers=carla,
+                  json={'description': 'zz_e4 desde otra obra'})
+    paso(r.status_code == 403 and (r.get_json() or {}).get('code') == 'PROJECT_FORBIDDEN',
+         'PROJECT ADMIN DE OTRA OBRA -> 403, y ni llega a la autoria',
+         'http=%s code=%s' % (r.status_code, (r.get_json() or {}).get('code')))
+    paso(sql("SELECT es_admin FROM project_users WHERE user_id = %s AND project_id = %s",
+             (sql("SELECT id FROM users WHERE email = %s",
+                  ('zz_e4_carla@ejemplo.invalido',))[0], 'obra_B'))[0] is True,
+         '   ...y eso que Carla SI es administradora, pero de obra_B')
+
+    r = cli.patch('/api/views/%s' % id_v2_ana, headers=beto,
+                  json={'description': 'zz_e4 de un usuario normal'})
+    paso(r.status_code == 403 and (r.get_json() or {}).get('motivo') == 'VISTA_DE_OTRA_PERSONA',
+         'USUARIO NORMAL de la obra, vista ajena -> 403', r.status_code)
+    r = cli.patch('/api/views/%s' % legado, headers=beto, json={'description': 'zz_e4'})
+    paso(r.status_code == 403 and (r.get_json() or {}).get('motivo') == 'VISTA_HISTORICA_SIN_AUTOR',
+         'USUARIO NORMAL, vista legacy -> 403', r.status_code)
+    r = cli.patch('/api/views/%s' % legado, headers=admin, json={'description': 'zz_e4 entidad'})
+    paso(r.status_code == 200, 'ENTITY ADMIN -> permitido', r.status_code)
+
+    titulo('E-4D · AJUSTE 2. LA VISTA HUERFANA (project_id vacio)')
+    if ids_sin_obra:
+        huerfana2 = ids_sin_obra[0]
+        r = cli.patch('/api/views/%s' % huerfana2, headers=diana, json={'description': 'zz_e4'})
+        paso(r.status_code == 403 and (r.get_json() or {}).get('code') == 'PROJECT_UNRESOLVED',
+             'PROJECT ADMIN no puede: no hay obra que administrar', r.status_code)
+        r = cli.patch('/api/views/%s' % huerfana2, headers=admin, json={'description': 'zz_e4 huerfana'})
+        paso(r.status_code == 200, 'ENTITY ADMIN si, y es el unico', r.status_code)
+        paso(permisos_mod.es_admin_de_la_obra(
+                {'id': 5, 'role': 'user'}, '') is False,
+             'y la regla sale sola: sin obra resoluble, `es_admin_de_la_obra` dice que no')
+
+    titulo('E-4D · AJUSTE 2. LA INTERFAZ RECIBE LA MISMA REGLA')
+    lista_diana = cli.get('/api/views?project=' + FRENTE, headers=diana).get_json()
+    mia = next(v for v in lista_diana if v['id'] == id_v2_ana)
+    paso(mia['permisos'] == {'actualizar': True, 'renombrar': True, 'borrar': True,
+                             'compartir': True, 'guardarComo': True,
+                             'esMia': False, 'autorConocido': True},
+         'a la administracion de obra el listado le ofrece todo, sin ser suya',
+         mia['permisos'])
+    lista_beto = cli.get('/api/views?project=' + FRENTE, headers=beto).get_json()
+    suya_no = next(v for v in lista_beto if v['id'] == id_v2_ana)
+    paso(suya_no['permisos']['actualizar'] is False,
+         'y a un usuario normal, no')
+
+    # Las pruebas de administracion han RENOMBRADO de verdad dos vistas
+    # historicas --eso es lo que se estaba comprobando-- asi que se devuelven a
+    # como estaban. Es una modificacion real, no censo, y por eso hay que
+    # deshacerla a mano para que la huella del final siga significando algo.
+    with get_db_connection() as _c:
+        _cur = _c.cursor()
+        _cur.execute("UPDATE saved_views SET description = NULL, updated_at = NULL "
+                     " WHERE created_by IS NULL")
+        _c.commit()
+
+    titulo('E-4D · AJUSTE 3. EL CENSO NO MODIFICA LA VISTA')
+    censado = ids_con_obra[2]
+    # El sitio que ocupa en el listado JUSTO ANTES de abrir su enlace. Se toma
+    # aqui y no al principio de la seccion porque entre medias las pruebas de
+    # administracion han renombrado vistas de este mismo frente, y eso SI las
+    # mueve: es una modificacion de verdad.
+    FRENTE_DEL_CENSO = sql("SELECT project_id FROM saved_views WHERE id = %s", (censado,))[0]
+    orden_censado_antes = [v['id'] for v in cli.get('/api/views?project=' + FRENTE_DEL_CENSO,
+                                                    headers=ana).get_json()].index(censado)
+    antes = sql("SELECT updated_at, legacy_accesos, legacy_ultimo_acceso, "
+                "       md5(coalesce(viewer_state::text,'')||coalesce(filter_state::text,'')"
+                "           ||coalesce(config::text,'')||coalesce(state::text,'')), "
+                "       name, description, schema_version "
+                "  FROM saved_views WHERE id = %s", (censado,))
+    r = cli.get('/api/views/%s' % censado)
+    despues = sql("SELECT updated_at, legacy_accesos, legacy_ultimo_acceso, "
+                  "       md5(coalesce(viewer_state::text,'')||coalesce(filter_state::text,'')"
+                  "           ||coalesce(config::text,'')||coalesce(state::text,'')), "
+                  "       name, description, schema_version "
+                  "  FROM saved_views WHERE id = %s", (censado,))
+    paso(r.status_code == 200, 'se abre el enlace antiguo', r.status_code)
+    paso(despues[1] == antes[1] + 1, 'el censo sube: %s -> %s' % (antes[1], despues[1]))
+    paso(antes[2] is None and despues[2] is not None, 'y queda la fecha del ultimo acceso')
+    paso(despues[0] == antes[0],
+         'AJUSTE 3 · `updated_at` NO se mueve: %r -> %r' % (antes[0], despues[0]))
+    paso(despues[3] == antes[3],
+         '   ni el documento: mismo md5 de viewer_state/filter_state/config/state')
+    paso(despues[4:] == antes[4:], '   ni el nombre, la nota o la version')
+    orden = [v['id'] for v in cli.get('/api/views?project=' + FRENTE_DEL_CENSO,
+                                      headers=ana).get_json()]
+    paso(orden.index(censado) == orden_censado_antes,
+         '   y el LISTADO no la sube: abrir un enlace no es actualizar la vista',
+         'posicion %d -> %d' % (orden_censado_antes, orden.index(censado)))
+
+    titulo('E-4D · 15. EL LIMITE DEL ENDPOINT PUBLICO')
+    app_lim = construir_app(con_limite=True)
+    cli_lim = app_lim.test_client()
+    tope = int(compartidas.LIMITE_PUBLICO.split()[0])
+    codigos = []
+    for i in range(tope + 3):
+        codigos.append(cli_lim.get('/api/views/%s' % nuevo_token,
+                                   environ_overrides={'REMOTE_ADDR': '203.0.113.7'}).status_code)
+    paso(codigos[:tope] == [200] * tope,
+         '15 · las primeras %d peticiones pasan' % tope,
+         'codigos: %s' % codigos[:3])
+    paso(429 in codigos[tope:],
+         '15 · y al pasar el limite llega el 429', 'codigos finales: %s' % codigos[tope:])
+    otra = cli_lim.get('/api/views/%s' % nuevo_token,
+                       environ_overrides={'REMOTE_ADDR': '198.51.100.9'})
+    paso(otra.status_code == 200,
+         '15 · el limite es POR IP: otro visitante entra sin problema', otra.status_code)
+    paso(tope < 200, '15 · y es mas estricto que el global de 200/min (%d)' % tope)
+
     # ═══════════════════════════════════════════════ 16 · LAS 14 SIGUEN
     titulo('16. LAS %d VISTAS v1 DESPUES DE TODA LA BATERIA' % n_v1)
     with get_db_connection() as conn:      # se retiran las de la bateria
         c = conn.cursor()
         # Mismo criterio que la limpieza de entrada: lo que firma la bateria.
         c.execute("DELETE FROM saved_views WHERE created_by IS NOT NULL")
+        # Y la metadata de compartir que la bateria dejo en las historicas. Es
+        # lo UNICO que E-4D les toca, y se anota abajo antes de retirarlo.
+        c.execute("SELECT count(*) FROM saved_views WHERE share_token IS NOT NULL")
+        _con_token = c.fetchone()[0]
+        c.execute("SELECT sum(legacy_accesos) FROM saved_views")
+        _censo = c.fetchone()[0] or 0
+        c.execute("UPDATE saved_views SET share_token = NULL, legacy_accesos = 0, "
+                  "       legacy_ultimo_acceso = NULL")
         conn.commit()
 
+    print('    (la bateria dejo %d token(s) emitido(s) y %d anotacion(es) de censo '
+          'en vistas historicas; se retiran aqui)' % (_con_token, _censo))
     huella_final = huella_de_la_tabla()
     paso(sql("SELECT count(*) FROM saved_views")[0] == n_v1,
          'siguen siendo %d' % n_v1, sql("SELECT count(*) FROM saved_views")[0])
@@ -592,8 +992,11 @@ def main():
     paso(sql("SELECT count(*) FROM saved_views WHERE created_by IS NOT NULL")[0] == 0,
          'ninguna adquirio un autor inventado')
     paso(huella_final == huella_v1_inicial,
-         'y la huella md5 de las %d filas es IDENTICA a la del principio' % n_v1,
+         '18 · y la huella md5 del estado TECNICO de las %d es IDENTICA' % n_v1,
          'difieren %d filas' % sum(1 for a, b in zip(huella_v1_inicial, huella_final) if a != b))
+    paso(sql("SELECT count(*) FROM saved_views WHERE share_token IS NOT NULL "
+             "   OR legacy_accesos <> 0 OR legacy_ultimo_acceso IS NOT NULL")[0] == 0,
+         '18 · y su metadata de compartir vuelve a estar vacia')
 
     print()
     print('=' * 78)

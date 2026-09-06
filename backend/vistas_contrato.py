@@ -52,7 +52,11 @@ COLUMNAS_LISTADO = (
 )
 
 # El DETALLE si las lee: es el unico sitio donde el documento sale de la base.
-COLUMNAS_DETALLE = COLUMNAS_LISTADO + ('viewer_state', 'filter_state', 'config', 'state')
+# `legacy_enlace` viaja con la fila --lo necesita el resolutor del enlace
+# compartido para saber si ese `id` sigue sirviendo de capacidad-- pero NO SE
+# SERIALIZA en ninguna respuesta: los serializadores nombran campo por campo.
+COLUMNAS_DETALLE = COLUMNAS_LISTADO + ('viewer_state', 'filter_state', 'config',
+                                       'state', 'legacy_enlace')
 
 SQL_LISTADO = ', '.join(COLUMNAS_LISTADO)
 SQL_DETALLE = ', '.join(COLUMNAS_DETALLE)
