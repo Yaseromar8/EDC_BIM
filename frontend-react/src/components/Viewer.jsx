@@ -1326,6 +1326,19 @@ const Viewer = ({
                              viewer.hideModel(m.id);
                              return;
                          }
+                         // RESTAURACION v2 EN CURSO: no se reinicia el aislamiento.
+                         //
+                         // `isolate([], m)` no solo quita el aislamiento: limpia
+                         // tambien los nodos ocultos del modelo. Si la Saved View
+                         // acaba de fijar por LMV su seleccion, sus ocultos y sus
+                         // aislados, y ademas no lleva ninguna seleccion de valores,
+                         // este reinicio borraba justo lo que se acababa de
+                         // restaurar. Medido en el round-trip de E-6: hidden [4,5]
+                         // restaurado y perdido 300 ms despues.
+                         //
+                         // Fuera de una restauracion la guardia vale 0 y esto se
+                         // comporta exactamente igual que siempre.
+                         if (window.__restaurandoVistaV2) return;
                          viewer.isolate([], m);
                      });
                      if (window.__ghostCleanup) window.__ghostCleanup();
@@ -3289,8 +3302,22 @@ const Viewer = ({
         const viewer = viewerRef.current;
         if (!viewer || !viewerReady) return;
 
-        const handleRequestState = () => {
-            const state = viewer.getState({ viewport: true, renderOptions: true, objectSet: true }); // Captura aislamientos (ocultos, seleccionados)
+        const handleRequestState = (e) => {
+            // EL FILTRO DECIDE QUE CALCULA EL MOTOR, no solo que se copia.
+            // Con `{viewport, renderOptions, objectSet}` el LMV devuelve TRES
+            // claves; sin filtro devuelve DOCE, y entre las nueve que faltaban
+            // estan `cutplanes` --la seccion-- y las cinco `floor*` de AEC
+            // Levels. Es decir: la seccion no se perdia al guardar, se perdia al
+            // PEDIR. Medido en 7.126 sobre la federacion de 1_CANAL.
+            //
+            // El estado completo se pide SOLO para el documento v2, que tiene
+            // allowlist (`CAMPOS_LMV_PERSISTIBLES`) y descarta lo que no
+            // reconoce. El camino v1 sigue pidiendo exactamente lo de siempre:
+            // darle mas claves cambiaria lo que persiste sin decidirlo.
+            const completo = e?.detail?.completo === true;
+            const state = completo
+                ? viewer.getState()
+                : viewer.getState({ viewport: true, renderOptions: true, objectSet: true }); // Captura aislamientos (ocultos, seleccionados)
             window.dispatchEvent(new CustomEvent('viewer-state-captured', { detail: state }));
         };
 

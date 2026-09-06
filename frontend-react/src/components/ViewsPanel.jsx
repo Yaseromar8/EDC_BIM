@@ -53,7 +53,7 @@ const CheckIcon = () => (
     </svg>
 );
 
-const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, onPedirEnlace, views, onClose, sinFrente }) => {
+const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, onPedirEnlace, onActualizarVista, views, onClose, sinFrente }) => {
     // Nada de window.confirm ni window.alert. Los dos avisos del navegador se
     // veian mal (con el dominio delante y en ingles), pero el problema de
     // fondo era otro: el de borrar no decia QUE vista se borraba, y el de
@@ -161,7 +161,7 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, onPedirEnlace, views
                         <button type="button" className="primary-btn wide" onClick={() => setIsCreating(true)}>
                             <span className="btn-icon"><SaveIcon /></span> Save
                         </button>
-                        <button type="button" className="secondary-btn wide">
+                        <button type="button" className="secondary-btn wide" onClick={() => setIsCreating(true)}>
                             + Save As...
                         </button>
                     </>
@@ -208,6 +208,16 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, onPedirEnlace, views
                                 >
                                     <ShareIcon />
                                 </button>
+                                {onActualizarVista && view.schemaVersion === 2 && (
+                                    <button
+                                        className="more-btn"
+                                        onClick={(e) => { e.stopPropagation(); onActualizarVista(view); }}
+                                        title="Actualizar esta vista con el estado actual"
+                                        style={{ marginRight: '6px' }}
+                                    >
+                                        <SaveIcon />
+                                    </button>
+                                )}
                                 <button
                                     className="more-btn es-peligro"
                                     onClick={(e) => { e.stopPropagation(); setEnlaceDe(null); setBorrando(view.id); }}

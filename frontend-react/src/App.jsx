@@ -4,7 +4,8 @@ import './App.css';
 import { resetFrenteSession } from './utils/frenteSession';
 import { frenteDeVistas, cargarVistasDelFrente } from './lib/frenteDeVistas';
 import { restaurarVistaV2, restauradorV2Activo } from './lib/restaurarVistaV2';
-import { fijarInventoryConfig, columnasParaElGrid } from './lib/inventoryConfig';
+import { fijarInventoryConfig, columnasParaElGrid, leerInventoryConfig } from './lib/inventoryConfig';
+import { capturarVistaV2 } from './lib/capturarVistaV2';
 import TopBar from './components/TopBar';
 import ViewsPanel from './components/ViewsPanel';
 import SourceFilesPanel from './components/SourceFilesPanel';
@@ -1688,6 +1689,127 @@ function App() {
     });
   }, [frenteActual, isSharedMode]);
 
+  // E-6 · EL ESPACIO DE TRABAJO DE AHORA MISMO, COMO DOCUMENTO v2.
+  //
+  // El estado del LMV hay que PEDIRLO --`viewer.getState()` vive dentro de
+  // Viewer.jsx-- así que esto envuelve ese ida y vuelta en una promesa y le
+  // pasa al capturador todo lo demás ya reunido. La lógica de traducción
+  // --urn a linaje, dbId a externalId, offset del modelo base-- vive en
+  // `lib/capturarVistaV2.js`, no aquí: aquí sólo se junta lo que hay.
+  const capturarEstadoActualV2 = useCallback(() => new Promise((resolve, reject) => {
+    const plazo = setTimeout(() => {
+      window.removeEventListener('viewer-state-captured', alCapturar);
+      reject(new Error('el visor no devolvió su estado'));
+    }, 10000);
+    function alCapturar(e) {
+      clearTimeout(plazo);
+      window.removeEventListener('viewer-state-captured', alCapturar);
+      try {
+        resolve(capturarVistaV2({
+          visor: window.NOP_VIEWER,
+          estadoLmv: e.detail,
+          modelConfig: modelsRef.current || [],
+          ocultosUrn: hiddenModelUrns,
+          rosettaPorUrn: window.rosettaToExtId || {},
+          filtros: {
+            properties: filterProperties,
+            selections: filterSelections,
+            colors: filterColors,
+            valueColors: window._customValueColors || {},
+            sourceColor: {
+              on: !!window.__ecdSourceColorOn,
+              custom: window.__ecdSourceCustomColors || {},
+            },
+          },
+          inventario: leerInventoryConfig(),
+          pkHeatmap: window.__pkHeatmap || null,
+          appVersion: 'e-6',
+        }));
+      } catch (err) { reject(err); }
+    }
+    window.addEventListener('viewer-state-captured', alCapturar);
+    // `completo: true` -> el visor devuelve las doce claves, entre ellas la
+    // seccion y la planta AEC. La allowlist del capturador decide cuales entran.
+    window.dispatchEvent(new CustomEvent('viewer-request-state', { detail: { completo: true } }));
+  }), [filterProperties, filterSelections, filterColors, hiddenModelUrns]);
+
+  // LO QUE EL RESTAURADOR v2 APLICA, EL ESTADO TIENE QUE SABERLO.
+  //
+  // `restaurarVistaV2` no toca React: avisa por evento, que es lo que le
+  // permite no depender de que haya un panel montado. Pero si nadie recoge esos
+  // avisos, la vista se ve bien y la SIGUIENTE captura no los incluye: guardar
+  // otra vez desde esa sesion perdia el modelo apagado y el mapa de PK.
+  //
+  // Medido en el round-trip de E-6 (guardar -> restaurar -> volver a capturar).
+  useEffect(() => {
+    const alCambiarVisibilidad = (e) => {
+      const ocultos = e?.detail?.hiddenUrns;
+      if (Array.isArray(ocultos)) setHiddenModelUrns(ocultos);
+    };
+    // `window.__pkHeatmap` es el dueno del dato --lo lee la barra 4D y lo lee la
+    // captura-- y el camino v1 ya lo fijaba a mano antes de emitir. El v2 solo
+    // emite, asi que se fija aqui: mismo resultado, un solo sitio.
+    const alHeatmapPk = (e) => { if (e?.detail) window.__pkHeatmap = e.detail; };
+    window.addEventListener('viewer-model-visibility', alCambiarVisibilidad);
+    window.addEventListener('lob-pk-heatmap', alHeatmapPk);
+    return () => {
+      window.removeEventListener('viewer-model-visibility', alCambiarVisibilidad);
+      window.removeEventListener('lob-pk-heatmap', alHeatmapPk);
+    };
+  }, []);
+
+  // EL DOCUMENTO v2, A PETICIÓN. Simétrico a
+  // `viewer-request-state` -> `viewer-state-captured`, que existe desde siempre
+  // porque el estado del LMV vive dentro de Viewer.jsx. El documento v2 vive
+  // aquí por el mismo motivo --se compone con estado de React-- y sin este par
+  // no hay forma de mirarlo sin montar la aplicación entera: ni para depurar,
+  // ni para medirlo en runtime, ni para que E-7 se enganche.
+  //
+  // No guarda nada: responde con el documento, el informe y la validación.
+  useEffect(() => {
+    const alPedir = async () => {
+      try {
+        const r = await capturarEstadoActualV2();
+        window.dispatchEvent(new CustomEvent('saved-view-captured', { detail: r }));
+      } catch (err) {
+        window.dispatchEvent(new CustomEvent('saved-view-captured', {
+          detail: { error: String(err?.message || err) },
+        }));
+      }
+    };
+    window.addEventListener('saved-view-request-capture', alPedir);
+    return () => window.removeEventListener('saved-view-request-capture', alPedir);
+  }, [capturarEstadoActualV2]);
+
+  // ACTUALIZAR UNA v2 QUE YA EXISTE. PUT reemplaza `state` y nada más: el
+  // nombre, la descripción y la miniatura son PATCH. Una v1 NO se actualiza
+  // por aquí --el servidor responde 409 `V1_NO_SE_CONVIERTE`-- y esa es la
+  // regla: convertirla en sitio sería reescribir el documento de otra persona
+  // con un formato que no elidió.
+  const handleUpdateView = useCallback(async (view) => {
+    if (!view?.id) return;
+    if (view.schemaVersion !== 2) {
+      console.warn('[App] Actualizar solo vale para vistas v2; una v1 no se convierte en sitio.');
+      return;
+    }
+    try {
+      const { doc, informe, validacion } = await capturarEstadoActualV2();
+      if (!validacion.ok) {
+        console.error('[App] El estado actual no se puede guardar como v2:', validacion.problemas, informe);
+        return;
+      }
+      const res = await apiFetch(`${BACKEND_URL}/api/views/${view.id}`, {
+        method: 'PUT', body: JSON.stringify({ state: doc }),
+      });
+      const cuerpo = await res.json().catch(() => ({}));
+      if (!res.ok) { console.error('[App] PUT de la vista v2:', res.status, cuerpo); return; }
+      setSavedViews((prev) => prev.map((v) => (v.id === view.id ? { ...v, ...cuerpo } : v)));
+      if (informe.length) console.log('[App] Vista v2 actualizada, con apuntes:', informe);
+    } catch (err) {
+      console.error('[App] No se pudo actualizar la vista:', err);
+    }
+  }, [capturarEstadoActualV2]);
+
   const handleSaveView = useCallback((name) => {
     // Sin frente no hay dónde guardarla. Se comprueba ANTES de pedirle el
     // estado al visor: capturarlo para tirarlo sería trabajo y una promesa
@@ -1696,6 +1818,38 @@ function App() {
       console.warn('[App] No hay frente seleccionado: no se guarda la vista.');
       return;
     }
+    // E-6 · CON EL RESTAURADOR ENCENDIDO, LO QUE NACE ES v2.
+    //
+    // Guardar en v1 lo que sólo v2 sabe restaurar sería guardar a medias: la
+    // identidad de elemento, el linaje de los modelos y el marco espacial no
+    // caben en las tres columnas antiguas. Con la bandera apagada NO cambia
+    // nada: el camino de abajo es el de siempre, palabra por palabra.
+    //
+    // Crear NUNCA toca una vista existente: «Guardar como» desde una v1 crea
+    // una v2 NUEVA y la v1 se queda como estaba.
+    if (restauradorV2Activo()) {
+      capturarEstadoActualV2()
+        .then(({ doc, informe, validacion }) => {
+          if (!validacion.ok) {
+            console.error('[App] El estado actual no se puede guardar como v2:', validacion.problemas, informe);
+            return null;
+          }
+          if (informe.length) console.log('[App] Captura v2 con apuntes:', informe);
+          return apiFetch(`${BACKEND_URL}/api/views`, {
+            method: 'POST',
+            body: JSON.stringify({ name, project: frenteActual, state: doc }),
+          });
+        })
+        .then(async (res) => {
+          if (!res) return;
+          const cuerpo = await res.json().catch(() => ({}));
+          if (!res.ok) { console.error('[App] POST de la vista v2:', res.status, cuerpo); return; }
+          setSavedViews((prev) => [...prev, cuerpo]);
+        })
+        .catch((err) => console.error('[App] No se pudo guardar la vista v2:', err));
+      return;
+    }
+
     const handleStateCapture = (e) => {
       const viewerState = e.detail;
       window.removeEventListener('viewer-state-captured', handleStateCapture);
@@ -1741,7 +1895,7 @@ function App() {
 
     window.addEventListener('viewer-state-captured', handleStateCapture);
     window.dispatchEvent(new CustomEvent('viewer-request-state'));
-  }, [filterSelections, filterColors, filterProperties, hiddenModelUrns, frenteActual]);
+  }, [filterSelections, filterColors, filterProperties, hiddenModelUrns, frenteActual, capturarEstadoActualV2]);
 
   const handleDeleteView = useCallback((viewId) => {
     // Sin window.confirm: la pregunta la hace el propio panel, en la fila.
@@ -5168,6 +5322,7 @@ function App() {
               views={savedViews}
               sinFrente={!frenteActual}
               onSaveView={handleSaveView}
+              onActualizarVista={handleUpdateView}
               onDeleteView={handleDeleteView}
               onPedirEnlace={pedirEnlaceDeVista}
               onLoadView={handleLoadView}
