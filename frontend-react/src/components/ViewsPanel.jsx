@@ -53,7 +53,7 @@ const CheckIcon = () => (
     </svg>
 );
 
-const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose }) => {
+const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose, sinFrente }) => {
     // Nada de window.confirm ni window.alert. Los dos avisos del navegador se
     // veian mal (con el dominio delante y en ingles), pero el problema de
     // fondo era otro: el de borrar no decia QUE vista se borraba, y el de
@@ -157,7 +157,14 @@ const ViewsPanel = ({ onSaveView, onLoadView, onDeleteView, views, onClose }) =>
 
             <div className="views-list-container">
                 {filteredViews.length === 0 && (
-                    <div className="views-empty">No views found.</div>
+                    // «No views found» al entrar sin frente decía una cosa
+                    // falsa: no es que no haya vistas, es que no se ha elegido
+                    // dónde buscarlas. Las Saved Views son de un frente.
+                    <div className="views-empty">
+                        {sinFrente
+                            ? 'Selecciona un frente para usar las Saved Views.'
+                            : 'No views found.'}
+                    </div>
                 )}
                 {filteredViews.map(view => (
                     <div key={view.id} className="view-fila">

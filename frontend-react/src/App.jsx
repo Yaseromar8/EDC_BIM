@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { urlInventario, enlaceCompartido } from './utils/enlaceCompartido';
 import './App.css';
 import { resetFrenteSession } from './utils/frenteSession';
+import { frenteDeVistas, cargarVistasDelFrente } from './lib/frenteDeVistas';
 import TopBar from './components/TopBar';
 import ViewsPanel from './components/ViewsPanel';
 import SourceFilesPanel from './components/SourceFilesPanel';
@@ -1518,22 +1519,30 @@ function App() {
     return () => window.removeEventListener('viewer-geometry-loaded', handleGeometryLoaded);
   }, [isSharedMode, sharedViewData]);
 
+  // LAS SAVED VIEWS SON POR FRENTE. Sin frente no hay lista que pedir, y
+  // `'global'` —el marcador que usa el resto del fichero— no es un frente.
+  // El porqué, y las tres formas que tiene «sin frente» aquí dentro, están en
+  // `lib/frenteDeVistas.js`, que es también donde se pueden ejecutar.
+  const frenteActual = frenteDeVistas(selectedProject);
+
   // Load views on mount
   useEffect(() => {
-    if (!selectedProject) return;
     // El invitado no tiene el panel de vistas: pedir la lista solo daba 401.
     if (isSharedMode) return;
-
-    const projectId = selectedProject?.id || selectedProject?.name || 'global';
-    apiFetch(`${BACKEND_URL}/api/views?project=${encodeURIComponent(projectId)}`)
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) setSavedViews(data);
-      })
-      .catch(err => console.error("Error loading views:", err));
-  }, [selectedProject]);
+    cargarVistasDelFrente({
+      frente: frenteActual, apiFetch, backendUrl: BACKEND_URL,
+      onVistas: setSavedViews,
+    });
+  }, [frenteActual, isSharedMode]);
 
   const handleSaveView = useCallback((name) => {
+    // Sin frente no hay dónde guardarla. Se comprueba ANTES de pedirle el
+    // estado al visor: capturarlo para tirarlo sería trabajo y una promesa
+    // rota en la interfaz.
+    if (!frenteActual) {
+      console.warn('[App] No hay frente seleccionado: no se guarda la vista.');
+      return;
+    }
     const handleStateCapture = (e) => {
       const viewerState = e.detail;
       window.removeEventListener('viewer-state-captured', handleStateCapture);
@@ -1567,7 +1576,7 @@ function App() {
           viewerState,
           filterState,
           config: configState,
-          project: selectedProject?.id || selectedProject?.name || 'global'
+          project: frenteActual
         })
       })
         .then(res => res.json())
@@ -1579,7 +1588,7 @@ function App() {
 
     window.addEventListener('viewer-state-captured', handleStateCapture);
     window.dispatchEvent(new CustomEvent('viewer-request-state'));
-  }, [filterSelections, filterColors, filterProperties, hiddenModelUrns]);
+  }, [filterSelections, filterColors, filterProperties, hiddenModelUrns, frenteActual]);
 
   const handleDeleteView = useCallback((viewId) => {
     // Sin window.confirm: la pregunta la hace el propio panel, en la fila.
@@ -1591,7 +1600,13 @@ function App() {
       .catch(err => console.error("Error deleting view:", err));
   }, []);
 
-  const handleLoadView = useCallback((view) => {
+  // EL LISTADO YA NO TRAE EL DOCUMENTO.
+  // `GET /api/views` devuelve metadatos (id, nombre, fechas, miniatura) y nada
+  // más: el estado de cámara, los filtros y las columnas de las 14 vistas eran
+  // 74 KB que este panel descargaba para pintar una lista de nombres. Abrir una
+  // vista pide AHORA su detalle, que es el único sitio donde el documento sale
+  // de la base.
+  const aplicarVistaV1 = useCallback((view) => {
     // 1. Restaurar estado nativo del Viewer (cámara, renderOptions)
     //    NOTA: restoreState WIPES la visibilidad custom de nuestros filtros.
     //    Por eso re-inyectamos los filtros DESPUÉS con delay.
@@ -1677,6 +1692,24 @@ function App() {
       }
     }, 500);
   }, [filterProperties]);
+
+  const handleLoadView = useCallback((view) => {
+    if (!view?.id) return;
+    apiFetch(`${BACKEND_URL}/api/views/${view.id}`)
+      .then(res => res.json())
+      .then(detalle => {
+        if (!detalle || detalle.error) throw new Error(detalle?.error || 'la vista no se pudo leer');
+        // Una vista v2 NO se aplica todavía: su restaurador es E-5. Aplicar
+        // medio documento —la cámara sí, la identidad de elemento no— sería
+        // peor que no abrirla, porque el resultado parecería correcto.
+        if (detalle.schemaVersion === 2) {
+          console.warn('[App] Vista v2: el restaurador llega en E-5. No se aplica nada.');
+          return;
+        }
+        aplicarVistaV1(detalle);
+      })
+      .catch(err => console.error('Error loading view:', err));
+  }, [aplicarVistaV1]);
 
   const handleToggleModelVisibility = useCallback((urn) => {
     // Normalize to prevent encoding mismatches (+/-  //_  =)
@@ -4951,6 +4984,7 @@ function App() {
           activePanel === 'views' && panelVisible && (
             <ViewsPanel
               views={savedViews}
+              sinFrente={!frenteActual}
               onSaveView={handleSaveView}
               onDeleteView={handleDeleteView}
               onLoadView={handleLoadView}
