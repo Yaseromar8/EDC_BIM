@@ -193,7 +193,7 @@ _SIN_SESION_DEBEN_VIVIR = [
     ('GET', '/api/health'),                    # latido
     ('GET', '/api/token'),                     # Viewer de Autodesk
     ('GET', '/api/config/project'),            # qué modelo carga el enlace
-    ('GET', '/api/views/<view_id>'),           # la vista compartida en sí
+    ('GET', '/api/views/shared/<clave>'),      # la vista compartida en sí
     ('GET', '/api/docs/shared/<share_id>'),    # documento compartido por enlace
     ('POST', '/api/auth/handoff/exchange'),    # canjea ticket POR una sesión
     ('GET', '/api/auth/aps/callback'),         # lo invoca Autodesk, sin sesión
@@ -209,6 +209,9 @@ _SIN_SESION_DEBEN_CAER = [
     ('DELETE', '/api/projects/<project_id>'),
     ('POST', '/api/views'),
     ('DELETE', '/api/views/<view_id>'),
+    # Desde E-5 el detalle por identidad interna NO es publico: la capacidad
+    # publica es `/api/views/shared/<clave>`, que si lo es.
+    ('GET', '/api/views/<view_id>'),
     ('GET', '/api/projects/<project_id>/users'),
     ('GET', '/api/hubs'),
     ('GET', '/api/auth/aps/login'),

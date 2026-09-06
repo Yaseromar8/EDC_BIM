@@ -283,7 +283,13 @@ def main():
     paso('state' not in d, 'y NO trae `state`: una v1 no se convierte al leerla')
 
     titulo('E-4A · 4. DETALLE PUBLICO (ENLACE COMPARTIDO)')
-    r = cli.get('/api/views/%s' % ids_con_obra[0], headers=anonimo)
+    # E-5: LA RUTA DE LA CAPACIDAD ES OTRA. `/api/views/<id>` es la identidad
+    # interna y exige sesion; el enlace vive en `/api/views/shared/<clave>` y
+    # resuelve igual haya sesion o no. Antes la misma ruta significaba una cosa
+    # u otra segun la cookie, y con sesion abierta un `share_token` daba 404.
+    paso(cli.get('/api/views/%s' % ids_con_obra[0], headers=anonimo).status_code == 401,
+         'la ruta de IDENTIDAD ya no abre a un anonimo')
+    r = cli.get('/api/views/shared/%s' % ids_con_obra[0], headers=anonimo)
     pub_v1 = r.get_json()
     paso(r.status_code == 200, 'el enlace v1 sigue abriendo sin sesion', r.status_code)
     paso(all(k in pub_v1 for k in ('id', 'name', 'projectId', 'viewerState', 'filterState',
@@ -326,13 +332,22 @@ def main():
     # E-4D: una vista creada DESPUES de la migracion 30 no se abre por su `id`
     # --identidad y capacidad ya no son lo mismo--, asi que primero hay que
     # pedir su enlace. Que este paso haga falta ES el cambio.
-    paso(cli.get('/api/views/%s' % id_v2_ana, headers=anonimo).status_code == 404,
-         'su `id` NO abre nada sin sesion: la capacidad es otra cosa')
+    paso(cli.get('/api/views/shared/%s' % id_v2_ana, headers=anonimo).status_code == 404,
+         'su `id` NO abre nada por la ruta del enlace: la capacidad es otra cosa')
     token_v2 = (cli.post('/api/views/%s/enlace' % id_v2_ana, headers=ana,
                          json={}).get_json() or {}).get('shareToken')
-    r = cli.get('/api/views/%s' % token_v2, headers=anonimo)
+    r = cli.get('/api/views/shared/%s' % token_v2, headers=anonimo)
     pub = r.get_json()
     paso(r.status_code == 200, 'abre sin sesion con su enlace', r.status_code)
+    # EL CASO QUE FALTABA, Y EL QUE ROMPIA EL PRODUCTO: quien abre un enlace del
+    # equipo suele TENER sesion. Medido el 5-sep-2026 sobre la ruta antigua: 404
+    # y la pantalla en «Cargando Vista Compartida...» para siempre.
+    r_con = cli.get('/api/views/shared/%s' % token_v2, headers=ana)
+    paso(r_con.status_code == 200, 'y abre IGUAL con sesion: el enlace no cambia de significado',
+         r_con.status_code)
+    paso(r_con.get_json() == pub, 'y devuelve exactamente lo mismo, ni mas ni menos')
+    paso(cli.get('/api/views/%s' % token_v2, headers=ana).status_code == 404,
+         'el `share_token` por la ruta de IDENTIDAD no abre nada, ni con sesion')
     paso(sorted(pub.keys()) == ['id', 'name', 'projectId', 'schemaVersion', 'state'],
          'y devuelve EXACTAMENTE id, name, projectId, schemaVersion y state',
          sorted(pub.keys()))
@@ -589,20 +604,20 @@ def main():
              'http=%s' % r.status_code)
         paso(cli.get('/api/views/%s' % huerfana, headers=admin).status_code == 200,
              '...salvo para el Entity Admin, que atraviesa')
-        paso(cli.get('/api/views/%s' % huerfana).status_code == 200,
+        paso(cli.get('/api/views/shared/%s' % huerfana).status_code == 200,
              'y su enlace compartido sigue abriendo: es la excepcion publica deliberada')
     r = cli.get('/api/views?project=' + FRENTE_SIN_OBRA, headers=ana)
     paso(r.status_code == 403 and (r.get_json() or {}).get('code') == 'PROJECT_UNRESOLVED',
          'un frente inventado no resuelve, y no resolver es NEGAR', r.status_code)
 
     titulo('I · EL ENLACE COMPARTIDO SIGUE SIENDO PUBLICO')
-    r = cli.get('/api/views/%s' % ids_con_obra[0])
+    r = cli.get('/api/views/shared/%s' % ids_con_obra[0])
     paso(r.status_code == 200 and 'viewerState' in (r.get_json() or {}),
          'I · v1 sin sesion: abre y trae lo necesario para restaurar', r.status_code)
     # Una v2 nacida despues de E-4D se abre por su ENLACE, no por su id.
     tok_i = (cli.post('/api/views/%s/enlace' % id_v2_ana, headers=ana,
                       json={}).get_json() or {}).get('shareToken')
-    r = cli.get('/api/views/%s' % tok_i)
+    r = cli.get('/api/views/shared/%s' % tok_i)
     paso(r.status_code == 200 and 'state' in (r.get_json() or {}),
          'I · v2 sin sesion: su enlace abre y trae `state`', r.status_code)
     paso('createdBy' not in (r.get_json() or {}) and 'permisos' not in (r.get_json() or {}),
@@ -650,7 +665,7 @@ def main():
     titulo('E-4D · 2-3. LA VIA ANTIGUA ABRE, Y QUEDA ANOTADA')
     antes = sql("SELECT legacy_accesos, legacy_ultimo_acceso FROM saved_views WHERE id = %s",
                 (legado,))
-    r = cli.get('/api/views/%s' % legado)
+    r = cli.get('/api/views/shared/%s' % legado)
     paso(r.status_code == 200 and 'viewerState' in (r.get_json() or {}),
          '2 · el enlace de 13 cifras sigue abriendo', r.status_code)
     despues = sql("SELECT legacy_accesos, legacy_ultimo_acceso FROM saved_views WHERE id = %s",
@@ -658,7 +673,7 @@ def main():
     paso(antes == (0, None) and despues[0] == 1 and despues[1] is not None,
          '3 · y deja censo: %s -> accesos=%s, ultimo=%s'
          % (antes, despues[0], 'si' if despues[1] else 'no'))
-    cli.get('/api/views/%s' % legado)
+    cli.get('/api/views/shared/%s' % legado)
     paso(sql("SELECT legacy_accesos FROM saved_views WHERE id = %s", (legado,))[0] == 1,
          '3 · el censo NO cuenta peticiones: se anota una vez por minuto y por vista',
          'una escritura por peticion anonima seria un amplificador')
@@ -677,18 +692,18 @@ def main():
          '   pedirlo otra vez devuelve EL MISMO: emitir otro invalidaria el ya compartido')
 
     titulo('E-4D · 4-5-6. QUE ABRE Y QUE NO')
-    r = cli.get('/api/views/%s' % token)
+    r = cli.get('/api/views/shared/%s' % token)
     paso(r.status_code == 200 and (r.get_json() or {}).get('id') == id_v2_ana,
          '4 · el token abre la misma vista', r.status_code)
     import uuid as _uuid
-    paso(cli.get('/api/views/%s' % _uuid.uuid4()).status_code == 404,
+    paso(cli.get('/api/views/shared/%s' % _uuid.uuid4()).status_code == 404,
          '5 · un token que no existe -> 404')
-    paso(cli.get('/api/views/%s' % id_v2_ana).status_code == 404,
+    paso(cli.get('/api/views/shared/%s' % id_v2_ana).status_code == 404,
          '6 · el ID de una vista v2 NO abre nada: identidad no es capacidad',
          'id=%s' % id_v2_ana)
-    paso(cli.get('/api/views/zz-clave-inventada').status_code == 404,
+    paso(cli.get('/api/views/shared/zz-clave-inventada').status_code == 404,
          '6 · una clave de formato desconocido tampoco')
-    paso(cli.get('/api/views/%s' % ('9' * 13)).status_code == 404,
+    paso(cli.get('/api/views/shared/%s' % ('9' * 13)).status_code == 404,
          '6 · un timestamp con formato correcto pero inexistente -> 404, igual que el token')
 
     titulo('E-4D · 8-9. EL INVENTARIO USA LA MISMA RESOLUCION')
@@ -710,9 +725,9 @@ def main():
     nuevo_token = (r.get_json() or {}).get('shareToken')
     paso(r.status_code == 200 and nuevo_token and nuevo_token != token,
          '10 · rotar emite una capacidad distinta', nuevo_token)
-    paso(cli.get('/api/views/%s' % token).status_code == 404,
+    paso(cli.get('/api/views/shared/%s' % token).status_code == 404,
          '10 · el enlace anterior DEJA DE SERVIR')
-    paso(cli.get('/api/views/%s' % nuevo_token).status_code == 200,
+    paso(cli.get('/api/views/shared/%s' % nuevo_token).status_code == 200,
          '10 · y el nuevo abre')
     paso(sql("SELECT id FROM saved_views WHERE share_token = %s::uuid", (nuevo_token,))[0] == id_v2_ana,
          '10 · el `id` de la vista NO ha cambiado: se revoca sin tocar la identidad')
@@ -726,7 +741,7 @@ def main():
     detalle = cli.get('/api/views/%s' % id_v2_ana, headers=ana).get_json()
     paso('shareToken' not in detalle and 'share_token' not in detalle,
          '12 · el DETALLE autenticado tampoco', sorted(detalle.keys()))
-    publica = cli.get('/api/views/%s' % nuevo_token).get_json()
+    publica = cli.get('/api/views/shared/%s' % nuevo_token).get_json()
     paso('shareToken' not in publica and 'share_token' not in publica,
          '13 · y la respuesta publica no devuelve el token con el que se abrio',
          sorted(publica.keys()))
@@ -772,11 +787,11 @@ def main():
             os.environ.pop('ENLACES_LEGACY_HASTA', None)
         else:
             os.environ['ENLACES_LEGACY_HASTA'] = valor
-        r = cli.get('/api/views/%s' % legado)
+        r = cli.get('/api/views/shared/%s' % legado)
         esperado = 200 if abre_legacy else 410
         paso(r.status_code == esperado, 'ventana %s' % etiqueta,
              'http=%s (esperado %s)' % (r.status_code, esperado))
-        rt = cli.get('/api/views/%s' % nuevo_token)
+        rt = cli.get('/api/views/shared/%s' % nuevo_token)
         paso(rt.status_code == 200,
              '   ...y el share_token abre igualmente', rt.status_code)
 
@@ -799,41 +814,41 @@ def main():
              puntos.get('ENLACES_LEGACY_DECIDIDA'))
 
     os.environ.pop('ENLACES_LEGACY_HASTA', None)
-    paso(cli.get('/api/views/%s' % legado).status_code == 410,
+    paso(cli.get('/api/views/shared/%s' % legado).status_code == 410,
          'sin configurar, el enlace antiguo NO abre: fallo seguro')
-    paso(cli.get('/api/views/%s' % ('9' * 13)).status_code == 410,
+    paso(cli.get('/api/views/shared/%s' % ('9' * 13)).status_code == 410,
          '   y responde igual para uno que no existe: no dice si existe')
 
     titulo('E-4D · 16-17. LA VIA ANTIGUA SE APAGA CON UNA VARIABLE')
     os.environ['ENLACES_LEGACY_HASTA'] = 'retirado'
     try:
-        r = cli.get('/api/views/%s' % legado)
+        r = cli.get('/api/views/shared/%s' % legado)
         paso(r.status_code == 410 and (r.get_json() or {}).get('code') == 'ENLACE_RETIRADO',
              '16 · con la ventana cerrada, el enlace antiguo -> 410', r.status_code)
-        paso(cli.get('/api/views/%s' % ('9' * 13)).status_code == 410,
+        paso(cli.get('/api/views/shared/%s' % ('9' * 13)).status_code == 410,
              '16 · y responde igual para un timestamp que no existe: no dice si existe')
         censo = sql("SELECT legacy_accesos FROM saved_views WHERE id = %s", (legado,))[0]
-        cli.get('/api/views/%s' % legado)
+        cli.get('/api/views/shared/%s' % legado)
         paso(sql("SELECT legacy_accesos FROM saved_views WHERE id = %s", (legado,))[0] == censo,
              '16 · con la via cerrada ya no se censa: no hay nada que decidir')
         paso(compartidas.obra_de_la_vista(legado, leer_fila, leer_por_token,
                                           get_db_connection) is None,
              '16 · y el inventario por la via antigua tampoco resuelve')
-        r = cli.get('/api/views/%s' % nuevo_token)
+        r = cli.get('/api/views/shared/%s' % nuevo_token)
         paso(r.status_code == 200 and (r.get_json() or {}).get('id') == id_v2_ana,
              '17 · el token nuevo sigue abriendo con la via antigua cerrada', r.status_code)
         paso(compartidas.obra_de_la_vista(nuevo_token, leer_fila, leer_por_token,
                                           get_db_connection) == FRENTE,
              '17 · y su inventario tambien')
         os.environ['ENLACES_LEGACY_HASTA'] = '2099-12-31T00:00:00+00:00'
-        paso(cli.get('/api/views/%s' % legado).status_code == 200,
+        paso(cli.get('/api/views/shared/%s' % legado).status_code == 200,
              '16 · con una fecha futura, la via antigua vuelve a abrir')
         os.environ['ENLACES_LEGACY_HASTA'] = '2020-01-01T00:00:00+00:00'
-        paso(cli.get('/api/views/%s' % legado).status_code == 410,
+        paso(cli.get('/api/views/shared/%s' % legado).status_code == 410,
              '16 · con una fecha pasada, cerrada')
     finally:
         os.environ['ENLACES_LEGACY_HASTA'] = 'abierto'   # el resto de la bateria
-    paso(cli.get('/api/views/%s' % legado).status_code == 200,
+    paso(cli.get('/api/views/shared/%s' % legado).status_code == 200,
          'con `abierto` explicito, la via antigua funciona')
 
     titulo('E-4D · AJUSTE 2. QUE SIGNIFICA «ADMIN»')
@@ -925,7 +940,7 @@ def main():
                 "           ||coalesce(config::text,'')||coalesce(state::text,'')), "
                 "       name, description, schema_version "
                 "  FROM saved_views WHERE id = %s", (censado,))
-    r = cli.get('/api/views/%s' % censado)
+    r = cli.get('/api/views/shared/%s' % censado)
     despues = sql("SELECT updated_at, legacy_accesos, legacy_ultimo_acceso, "
                   "       md5(coalesce(viewer_state::text,'')||coalesce(filter_state::text,'')"
                   "           ||coalesce(config::text,'')||coalesce(state::text,'')), "
@@ -951,14 +966,14 @@ def main():
     tope = int(compartidas.LIMITE_PUBLICO.split()[0])
     codigos = []
     for i in range(tope + 3):
-        codigos.append(cli_lim.get('/api/views/%s' % nuevo_token,
+        codigos.append(cli_lim.get('/api/views/shared/%s' % nuevo_token,
                                    environ_overrides={'REMOTE_ADDR': '203.0.113.7'}).status_code)
     paso(codigos[:tope] == [200] * tope,
          '15 · las primeras %d peticiones pasan' % tope,
          'codigos: %s' % codigos[:3])
     paso(429 in codigos[tope:],
          '15 · y al pasar el limite llega el 429', 'codigos finales: %s' % codigos[tope:])
-    otra = cli_lim.get('/api/views/%s' % nuevo_token,
+    otra = cli_lim.get('/api/views/shared/%s' % nuevo_token,
                        environ_overrides={'REMOTE_ADDR': '198.51.100.9'})
     paso(otra.status_code == 200,
          '15 · el limite es POR IP: otro visitante entra sin problema', otra.status_code)

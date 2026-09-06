@@ -109,7 +109,11 @@ PUBLIC_GET_PREFIXES = (
     # cualquier nodo -- a un anonimo. Sus dos llamadores usan apiFetch.
     # ── Secure Share Engine: SOLO enlaces publicos por UUID ──────────────
     '/api/docs/shared/',      # Enlaces publicos a documentos por UUID
-    '/api/views/',            # Vistas compartidas por UUID
+    # La CAPACIDAD publica de una Saved View, y solo ella. Antes esta linea
+    # decia '/api/views/' a secas, y por tanto abria a cualquier anonimo TODA
+    # ruta GET bajo ese prefijo --entre ellas el detalle por id--. Desde E-5 el
+    # detalle por identidad exige sesion y el enlace vive en su propia ruta.
+    '/api/views/shared/',     # Vista compartida por share_token o clave legacy
     # El inventario de una vista compartida. TIENE QUE ESTAR AQUI, no basta el
     # decorador: AUTH_POLICY_MODE viene en 'sombra', y en sombra la politica
     # declarada solo se ANOTA en el log -- quien decide es esta lista. Sin esta

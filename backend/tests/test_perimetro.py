@@ -44,6 +44,10 @@ def _app(monkeypatch):
     def vista(vid):
         return jsonify(ok=True)
 
+    @app.route('/api/views/shared/<clave>', methods=['GET'])
+    def vista_compartida(clave):
+        return jsonify(ok=True)
+
     @app.route('/api/build/signed-read', methods=['GET', 'POST'])
     def build():
         return jsonify(ok=True)
@@ -92,7 +96,11 @@ def test_lecturas_publicas_siguen_abiertas(monkeypatch):
     _am, app = _app(monkeypatch)
     c = app.test_client()
     assert c.get('/api/projects').status_code == 200
-    assert c.get('/api/views/abc').status_code == 200
+    # E-5: el enlace compartido ya no es `/api/views/<id>` --esa es la identidad
+    # interna y exige sesion-- sino `/api/views/shared/<clave>`. Se comprueban
+    # las dos caras: la que debe abrir y la que debe cerrarse.
+    assert c.get('/api/views/shared/abc').status_code == 200
+    assert c.get('/api/views/abc').status_code == 401
     assert c.get('/api/build/signed-read').status_code == 200
 
 

@@ -182,56 +182,73 @@ def save_view_to_db(view):
 # --- API Routes ---
 
 
-@views_bp.route("/api/views/<view_id>", methods=["GET"])
+@views_bp.route("/api/views/shared/<clave>", methods=["GET"])
 @limite(compartidas.LIMITE_PUBLICO)
 @publico_en_lectura(motivo='es el enlace de vista compartida: quien lo abre es un tercero sin sesion')
+def get_view_shared(clave):
+    """LA CAPACIDAD PUBLICA. Resuelve SIEMPRE por `resolver_vista_compartida`.
+
+    POR QUE UNA RUTA APARTE. Hasta E-5 esta lectura vivia dentro de
+    `GET /api/views/<clave>`, que decidia que era la clave segun hubiera sesion
+    o no: con sesion la trataba como id interno --y un `share_token` daba 404--
+    y sin sesion como capacidad. El mismo string significaba dos cosas segun una
+    cookie. Medido el 5-sep-2026: un miembro del equipo CON sesion abriendo un
+    enlace del equipo recibia 404 y la pantalla se quedaba en «Cargando Vista
+    Compartida...» para siempre. Y ademas deshacia en la API la separacion
+    que E-4D acababa de hacer en la base: identidad != capacidad.
+
+    Aqui la sesion NO SE MIRA. No es un descuido: un enlace concede lo mismo a
+    quien lo abre, tenga o no cuenta, y lo que concede es la forma publica. Si
+    quien mira tiene sesion y quiere el documento entero --autor, permisos,
+    miniatura-- pide la vista por su id, que es la otra ruta.
+
+    Acepta las claves antiguas mientras la ventana legacy siga abierta: son los
+    7 enlaces historicos, y el resolutor decide por la marca `legacy_enlace`,
+    nunca por el formato de la clave.
+    """
+    fila, resultado, _via = compartidas.resolver_vista_compartida(
+        clave, leer_fila, leer_por_token, get_db_connection)
+    if resultado == compartidas.LEGACY_RETIRADO:
+        # 410: este enlace EXISTIO y ya no sirve. Se responde igual exista la
+        # vista o no --no se ha mirado la base-- asi que no dice nada de ninguna
+        # vista concreta.
+        return jsonify({
+            'error': 'Este enlace antiguo ya no esta activo. Pide uno nuevo a quien te lo compartio.',
+            'code': 'ENLACE_RETIRADO'}), 410
+    if not fila:
+        return jsonify({"error": "View not found"}), 404
+    return jsonify(contrato.fila_publica(fila))
+
+
+@views_bp.route("/api/views/<view_id>", methods=["GET"])
+@limite(compartidas.LIMITE_PUBLICO)
 def get_view(view_id):
-    """EL DETALLE. La misma ruta sirve a dos lectores muy distintos.
+    """EL DETALLE, POR IDENTIDAD INTERNA. Exige sesion.
 
-    CON SESION  -> se direcciona por el ID de la vista, y se comprueba la obra.
-    SIN SESION  -> se direcciona por la CAPACIDAD (`share_token`), o por la via
-                   antigua mientras su ventana siga abierta. Lo justo para
-                   restaurar, y ni un dato de persona.
+    Ya no tiene rama anonima: la capacidad publica se sirve por
+    `/api/views/shared/<clave>`. Un `share_token` por aqui NO abre nada, y ese
+    es el contrato: en esta ruta la clave es SIEMPRE `saved_views.id`.
 
-    Que el parametro se llame `view_id` es historia: por la via publica ya no es
-    un id, es una clave de enlace. Renombrarlo cambiaria el nombre del endpoint
-    de Flask y con el las entradas de politica y las pruebas que lo nombran, asi
-    que se deja quieto y se dice aqui.
-
-    Quien mira se sabe SIEMPRE, tambien en las rutas publicas: el middleware
-    resuelve la identidad antes de decidir si la exige (auth_middleware.py, «se
-    resuelve SIEMPRE que venga un token, incluso en rutas publicas»).
+    Quien mira se sabe SIEMPRE: el middleware resuelve la identidad antes de
+    decidir si la exige (auth_middleware.py, «se resuelve SIEMPRE que venga
+    un token, incluso en rutas publicas»).
     """
     usuario = getattr(g, 'current_user', None)
-
     if not usuario:
-        fila, resultado, _via = compartidas.resolver_vista_compartida(
-            view_id, leer_fila, leer_por_token, get_db_connection)
-        if resultado == compartidas.LEGACY_RETIRADO:
-            # 410: este enlace EXISTIO y ya no sirve. Se responde igual exista
-            # la vista o no --no se ha mirado la base-- asi que no dice nada de
-            # ninguna vista concreta.
-            return jsonify({
-                'error': 'Este enlace antiguo ya no esta activo. Pide uno nuevo a quien te lo compartio.',
-                'code': 'ENLACE_RETIRADO'}), 410
-        if not fila:
-            return jsonify({"error": "View not found"}), 404
-        return jsonify(contrato.fila_publica(fila))
+        # Con el middleware en modo sombra manda la lista de prefijos, y
+        # `/api/views/` ya no esta en ella. Esta comprobacion es la que sostiene
+        # el contrato si esa lista cambia: sin sesion, aqui no se lee nada.
+        return jsonify({'error': 'Autenticacion requerida', 'code': 'NO_TOKEN'}), 401
 
     fila = leer_fila(view_id)
     if not fila:
         return jsonify({"error": "View not found"}), 404
-    if usuario:
-        # CON SESION la obra si se comprueba. Es deliberado que sea mas estricto
-        # que la via anonima: el enlace compartido es una concesion explicita a
-        # quien tiene el identificador, mientras que una sesion identificada
-        # tiene una obra y unos limites que si se pueden comprobar.
-        negativa = guardia_de_obra(fila.get('project_id'), 'ver esta vista')
-        if negativa:
-            return negativa
-        manda_aqui = permisos.es_admin_de_la_obra(usuario, fila.get('project_id'))
-        return jsonify(permisos.con_permisos(contrato.fila_de_detalle(fila, usuario),
-                                             usuario, manda_aqui))
+    negativa = guardia_de_obra(fila.get('project_id'), 'ver esta vista')
+    if negativa:
+        return negativa
+    manda_aqui = permisos.es_admin_de_la_obra(usuario, fila.get('project_id'))
+    return jsonify(permisos.con_permisos(contrato.fila_de_detalle(fila, usuario),
+                                         usuario, manda_aqui))
 
 
 @views_bp.route('/api/views', methods=['GET'])
