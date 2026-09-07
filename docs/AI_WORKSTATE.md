@@ -115,6 +115,18 @@ Las 7 vistas históricas conservan **id y md5 idénticos** a la huella tomada
 
 ## LAST COMPLETED
 
+**Investigación Filters, 6-sep-2026: FILTERS BENCHMARK READY, aprobado por el propietario.**
+Informe definitivo: [Tandem vs ALEPHIA / contrato y plan](filters/FILTERS_BENCHMARK.md).
+Takeover STATE MATCH en `main`; baseline `3e413cd`, HEAD observado
+`cf7a845b8512260c746e316b36f07ddad88c7e40`. Investigación de código y fuentes
+oficiales, reproducciones puras en memoria y mediciones sintéticas. El cierre
+aprobado incorpora tres decisiones: resultado explícito (predicados/estado/
+revisión/matches); color cancelable y determinista sin aprobar exclusividad;
+puerta B1 de colisión source/externalId en BD desechable con tres salidas.
+**Sólo documentación commiteada; ningún cambio de código, ejecución de B1,
+push, deploy ni acceso a DB real.** READY no significa Filters corregido.
+Saved Views sigue CLOSED. No repetir la investigación Tandem.
+
 Saved Views 2.0, de E-0 a E-7:
 
 - **E-0…E-7 cerrados**: columnas, contrato V2, señal de modelos, contratos de
@@ -181,6 +193,15 @@ untracked.
 `frontend-react/.env.local` existe y **está ignorado por git**. Contiene
 configuración local. **No leer, no copiar, no commitear.**
 
+### Documentación de Filters — versionada, no suciedad esperada
+
+`docs/filters/FILTERS_BENCHMARK.md` y este `docs/AI_WORKSTATE.md` forman la
+entrega exclusivamente documental `docs(filters): freeze benchmark and target contract`.
+El informe se trasladó de `docs/filters-benchmark/report-source.md`; no quedan
+dos copias canónicas. Tras ese commit no deben aparecer como M/untracked.
+Los cuatro modificados de código y las 28 entradas untracked anteriores
+permanecen ajenos, intactos y con la misma protección.
+
 ## FROZEN / DO NOT REOPEN
 
 - **Saved Views 2.0 está cerrado.** No se reabre la arquitectura salvo
@@ -226,30 +247,66 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
 
 ## CURRENT TASK
 
-**NONE.**
+**FILTERS CORE — B1**
 
-Y mientras `CURRENT TASK = NONE` rige esta regla, que es lo que hace verificable
-el protocolo de relevo:
+## STATUS
 
-> **Desde `3e413cd` sólo deben existir commits documentales de infraestructura de
-> handoff.** Ningún commit funcional por encima del baseline sin que este fichero
-> lo declare primero. Si al tomar el relevo aparece un commit que toca código de
-> producto y no está declarado aquí → **STATE DIVERGENCE**, y parar.
+**Benchmark approved. B1 authorized; implementation not started.**
 
-Commits documentales existentes por encima del baseline:
+El propietario autorizó únicamente B1 para el siguiente ejecutor. Este handoff
+no ejecuta B1 ni implementa Filters; B2–B5 requieren autorización posterior.
+El contrato aprobado vive en [FILTERS_BENCHMARK.md](filters/FILTERS_BENCHMARK.md):
+usar sus fuentes, fixtures propuestos, mediciones y plan, sin reinvestigar Tandem.
+
+> **Desde `3e413cd` sólo hay commits documentales de handoff y del benchmark
+> Filters.** No hay commit funcional posterior declarado ni implementación de
+> B1 iniciada. Cualquier código nuevo por encima del baseline no documentado
+> aquí es STATE DIVERGENCE. El baseline funcional y producción no cambian.
+
+Commits documentales por encima del baseline (sin hash autorreferencial):
 
 - `docs(ai): add shared handoff protocol for coding agents` — crea `AGENTS.md`,
   `docs/AI_WORKSTATE.md` y `docs/AI_DECISIONS.md`.
 - `docs(ai): make handoff state verification non-self-referential` — sustituye el
   HEAD incrustado por `CODE BASELINE HEAD` + verificación por ascendencia.
+- `docs(filters): freeze benchmark and target contract` — incorpora
+  `docs/filters/FILTERS_BENCHMARK.md` y actualiza `docs/AI_WORKSTATE.md`;
+  sólo documentación aprobada, sin código funcional.
 
 ## EXACT NEXT ACTION
 
-**Esperar a que el propietario defina la siguiente funcionalidad.**
+**El ejecutor debe implementar únicamente B1 del plan aprobado
+(`docs/filters/FILTERS_BENCHMARK.md §10`): fixtures, contrato de resultado,
+baseline y reproducción de colisión source/externalId en BD desechable.**
 
-No hay trabajo abierto. Lo único pendiente y ajeno al desarrollo: los commits
-documentales de arriba **están hechos y sin empujar** — `git push` requiere
-autorización explícita del propietario (`../AGENTS.md § 4.1`).
+En la puerta B1: si no hay colisión, seguir; si existe sin afectar cobertura
+requerida, documentar; si mezcla/pierde datos necesarios para Filters, **STOP**
+y pedir autorización de alcance backend. No cambiar la cobertura para pasar
+el ensayo. **B2 no puede introducir una migración escondida.**
+
+No implementar correcciones de Filters ni comenzar B2. Exclusividad de color
+pendiente de decisión de producto en B4; no alterar Saved Views V2 por ello.
+Al cerrar B1, reportar su evidencia y parar. No push ni deploy: cada acto
+requiere autorización explícita (`../AGENTS.md §4.1`).
+
+### [WIP HANDOFF] — B1 autorizado, todavía no iniciado
+
+```text
+[WIP HANDOFF]
+TAREA:                FILTERS CORE — B1
+IMPLEMENTADO:         Benchmark aprobado con las tres decisiones del propietario; sólo documentación commiteada; B1 no iniciado y Filters no implementado
+PENDIENTE:            Ejecutar únicamente B1: fixtures, señales explícitas de FilterResult, baseline y puerta de colisión en BD desechable; reportar y parar
+ARCHIVOS MODIFICADOS: Documentación propia del commit: docs/filters/FILTERS_BENCHMARK.md y docs/AI_WORKSTATE.md. Ajenos sin commit: frontend-react/src/aps/extensions/LOB4DExtension.js, frontend-react/src/components/Viewer.jsx, frontend-react/src/components/ViewerLabelsBar.jsx, frontend-react/src/lib/predictBim.js y las 28 entradas untracked exactas de EXPECTED WORKTREE; preservar
+TESTS EJECUTADOS:     Este cierre: controles Git/documentales, sin ejecutar B1 ni pruebas funcionales. Investigación previa: savedViewV2.prueba.mjs 111/111, 8 reproducciones UI y pruebas motor/color/benchmark con fallos observados según informe
+TESTS PENDIENTES:     Todos los ensayos nuevos de B1, incluida BD desechable y baseline de navegador; no ejecutados en este handoff
+FALLO CONOCIDO:       P0 documentados sin corregir; impacto real de colisión backend no medido; Saved Views sigue CLOSED
+NEXT EXACT ACTION:   Implementar sólo B1 de docs/filters/FILTERS_BENCHMARK.md §10; STOP y pedir alcance backend si la reproducción mezcla/pierde datos requeridos
+DO NOT TOUCH:         Saved Views V2, protegidos AGENTS §6, cuatro M/28 untracked ajenos, producción, DB real y secretos; no B2 ni migración escondida; exclusividad de color pendiente B4; no push/deploy
+COMMIT/HEAD REF:      cf7a845b8512260c746e316b36f07ddad88c7e40 (HEAD al redactar; HEAD final del commit documental se obtiene con git rev-parse HEAD)
+```
+
+No se verificó nuevamente producción. La evidencia de producción y resultados
+históricos que siguen conservan su fecha y no se atribuyen a esta investigación.
 
 ## TEST / BUILD BASELINE
 
