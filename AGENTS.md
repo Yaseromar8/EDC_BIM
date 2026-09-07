@@ -188,19 +188,49 @@ Y las tres equivalencias que nadie debe confundir:
 
 > **WIP ≠ GREEN.**  **GREEN ≠ COMMITTED.**  **COMMITTED ≠ DEPLOYED.**
 
-## 9 · Protocolo de toma de relevo (obligatorio, en este orden)
+## 9 · TAKEOVER — protocolo de toma de relevo (obligatorio)
 
-1. Leer **este** `AGENTS.md`.
-2. Leer `docs/AI_WORKSTATE.md`.
-3. Leer **sólo** los documentos que AI_WORKSTATE enlace. Nada más.
-4. `git status --short`
-5. `git rev-parse HEAD`
-6. `git log --oneline -10`
-7. **Si coincide** con lo que AI_WORKSTATE declara en `BRANCH / HEAD` y en
-   `EXPECTED WORKTREE` → continuar por `EXACT NEXT ACTION`.
-8. **Si no coincide** → **STOP / STATE DIVERGENCE**: no escribas, no commitees,
-   no despliegues. Informa al propietario de la diferencia exacta (HEAD esperado
-   contra real, ficheros de más o de menos) y espera instrucción.
+El estado **no** se verifica comparando el HEAD actual con un hash escrito en un
+fichero: ese hash sería autorreferencial —el fichero vive dentro del commit que
+nombraría— y además todo commit documental daría falsa divergencia. Lo que se
+verifica es **ascendencia** del baseline funcional.
+
+**A · Leer**
+
+1. Este `AGENTS.md`.
+2. `docs/AI_WORKSTATE.md`, y de él **`CODE BASELINE HEAD`** (el último commit
+   funcional desplegado).
+3. Sólo los documentos que AI_WORKSTATE enlace. Nada más.
+
+**B · Ejecutar**
+
+```bash
+git status --short
+git rev-parse HEAD
+git log --oneline -10
+git merge-base --is-ancestor <CODE_BASELINE> HEAD   # salida 0 = es ancestro
+```
+
+**C · Verificar las cuatro cosas**
+
+1. El **baseline es ancestro** del HEAD actual.
+2. **Todo commit posterior al baseline es compatible con lo declarado** en
+   AI_WORKSTATE (hoy: sólo commits documentales de infraestructura de handoff).
+3. El **worktree coincide con `EXPECTED WORKTREE`**.
+4. **`CURRENT TASK` / `[WIP HANDOFF]` coincide** con lo que se encuentra.
+
+**Si las cuatro se cumplen → `STATE MATCH`.** Continuar por `EXACT NEXT ACTION`.
+
+**Si aparece cualquiera de estas → `STATE DIVERGENCE` y STOP:**
+
+- un **commit funcional no documentado** por encima del baseline;
+- un **fichero modificado que no está previsto** en EXPECTED WORKTREE;
+- la **rama es otra** distinta de la esperada;
+- el **baseline no es ancestro** del HEAD (rebase, reset, force-push, otra rama).
+
+STOP significa: no escribas, no commitees, no despliegues. Informa al propietario
+de la diferencia **exacta** —qué commit, qué fichero, qué rama— y espera
+instrucción.
 
 Antes de terminar una sesión: cerrar la unidad mínima segura, pasar las pruebas,
 commitear GREEN o dejar un `[WIP HANDOFF]` explícito, **actualizar

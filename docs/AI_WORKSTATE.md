@@ -19,12 +19,35 @@ Repositorio `Yaseromar8/EDC_BIM`.
 
 ## BRANCH / HEAD
 
-| | |
+| Campo | Valor |
 |---|---|
-| Rama | `main` |
-| HEAD | `3e413cd880fa1093afc4b4759422044e4642c2d6` (`3e413cd`, 6-sep-2026 15:09 -05) |
-| `origin/main` | `3e413cd880fa1093afc4b4759422044e4642c2d6` |
-| Divergencia | **0 adelante / 0 atrás** — local y remoto idénticos |
+| Rama esperada | `main` |
+| **CODE BASELINE HEAD** | **`3e413cd`** (`3e413cd880fa1093afc4b4759422044e4642c2d6`, 6-sep-2026 15:09 -05) |
+| Current HEAD | **consultar en vivo con `git rev-parse HEAD`. No se incrusta aquí.** |
+| Production code baseline | `3e413cd` — backend y frontend desplegados corresponden a este commit |
+| Handoff protocol introduced after baseline | **Sí** |
+
+### Qué es `CODE BASELINE HEAD` y por qué no se escribe el HEAD actual
+
+- Es el **último commit funcional desplegado**: el último que cambia código de
+  producto. `3e413cd` cierra Saved Views 2.0 (E-7).
+- **Producción corresponde a ese baseline**, backend y frontend
+  (`/api/health` → `version 3e413cd880fa`; el bundle servido lleva las marcas de
+  E-5/E-6/E-7).
+- Por encima del baseline **pueden existir commits exclusivamente de
+  documentación / handoff**. No mueven producción y **no** son una divergencia:
+  el baseline sigue siendo ancestro del HEAD.
+- **`CURRENT HEAD` se obtiene siempre en vivo** con `git rev-parse HEAD` y
+  **no se incrusta como requisito autorreferencial**. Escribir aquí el hash del
+  commit que contiene este fichero es circular: cambiarlo cambia el commit, y
+  cambiar el commit cambia el hash. Por eso lo que se verifica es
+  **ascendencia**, no igualdad —
+  `git merge-base --is-ancestor 3e413cd HEAD` — según `../AGENTS.md § 9`.
+- `origin/main` iba en `3e413cd` cuando se midió, y **se queda ahí hasta que el
+  propietario autorice el push**. Que el local vaya por delante en commits
+  documentales es lo esperado, no una anomalía.
+
+Historia funcional hasta el baseline:
 
 ```
 3e413cd feat(saved-views/e-7): make the v2 pipeline the default path
@@ -123,7 +146,7 @@ trabajo cerrado, y **nada de esto se limpia, se añade ni se commitea**.
 | `frontend-react/src/lib/predictBim.js` | ídem | **PROTEGIDO** |
 | `frontend-react/src/components/Viewer.jsx` | **+48 líneas que NO son de Saved Views**: cablean `registerViewerFacade` desde `../aps/viewer/ViewerFacade` (fichero **untracked**), más tres guardas `facadeVisibilityRef`. Lo de Saved Views que hay en este fichero (`viewer-ready`, `__visorListo`, `__restaurandoVistaV2`, `viewer-request-models`) **ya está commiteado** en `3e413cd` | **NO commitear tal cual** — ver DIVERGENCIA 1 |
 
-### Untracked — 31 entradas (28 previas + los 3 ficheros de handoff)
+### Untracked — 28 entradas
 
 - **Trabajo ajeno al task actual / protegido:**
   `frontend-react/src/aps/viewer/` (`ViewerFacade.js`, `README.md`),
@@ -150,8 +173,10 @@ trabajo cerrado, y **nada de esto se limpia, se añade ni se commitea**.
   `frontend-react/vite.banco.config.js`, `frontend-react/dist-banco/`
 - **Evidencia del ensayo de restauración del 6-sep:**
   `docs/entidad/evidencias/ensayo-restauracion-20260906-1804.json`
-- **Esta infraestructura de handoff, recién creada y SIN COMMITEAR:**
-  `AGENTS.md`, `docs/AI_DECISIONS.md`, `docs/AI_WORKSTATE.md`
+
+`AGENTS.md`, `docs/AI_WORKSTATE.md` y `docs/AI_DECISIONS.md` **ya están
+versionados** (commits documentales por encima del baseline). No aparecen como
+untracked.
 
 `frontend-react/.env.local` existe y **está ignorado por git**. Contiene
 configuración local. **No leer, no copiar, no commitear.**
@@ -203,15 +228,28 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
 
 **NONE.**
 
+Y mientras `CURRENT TASK = NONE` rige esta regla, que es lo que hace verificable
+el protocolo de relevo:
+
+> **Desde `3e413cd` sólo deben existir commits documentales de infraestructura de
+> handoff.** Ningún commit funcional por encima del baseline sin que este fichero
+> lo declare primero. Si al tomar el relevo aparece un commit que toca código de
+> producto y no está declarado aquí → **STATE DIVERGENCE**, y parar.
+
+Commits documentales existentes por encima del baseline:
+
+- `docs(ai): add shared handoff protocol for coding agents` — crea `AGENTS.md`,
+  `docs/AI_WORKSTATE.md` y `docs/AI_DECISIONS.md`.
+- `docs(ai): make handoff state verification non-self-referential` — sustituye el
+  HEAD incrustado por `CODE BASELINE HEAD` + verificación por ascendencia.
+
 ## EXACT NEXT ACTION
 
 **Esperar a que el propietario defina la siguiente funcionalidad.**
 
-Hay una única cosa pendiente de su decisión, y no es desarrollo: los tres
-ficheros de handoff (`AGENTS.md`, `docs/AI_DECISIONS.md`, `docs/AI_WORKSTATE.md`)
-están **creados y sin commitear**, por instrucción expresa. Si autoriza el
-commit, va **sólo** con esos tres ficheros y sin arrastrar nada de
-EXPECTED WORKTREE.
+No hay trabajo abierto. Lo único pendiente y ajeno al desarrollo: los commits
+documentales de arriba **están hechos y sin empujar** — `git push` requiere
+autorización explícita del propietario (`../AGENTS.md § 4.1`).
 
 ## TEST / BUILD BASELINE
 
