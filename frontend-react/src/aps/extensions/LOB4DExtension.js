@@ -1822,13 +1822,30 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         const models = this.viewer.impl?.modelQueue?.().getModels?.()
             || [this.viewer.model].filter(Boolean);
 
-        // extId → zona (una vez)
-        const extZone = new Map();
+        // (Source, extId) → zona, una vez. La fila pertenece a UN documento: si
+        // se indexa sólo por extId, el mapa se aplica después a todos los
+        // modelos y la zona de una Source rotula elementos de otra.
+        const zonasPorSource = new Map();   // claveDeSource -> Map(extId -> zona)
+        let conZona = 0;
         for (const row of inv) {
             const v = this.claveDeAgrupacion(row, zoneKey);
-            if (v) extZone.set(row.dbId, v);
+            if (!v) continue;
+            const clave = this.claveDeSource(this.urnDeFila(row));
+            let porExt = zonasPorSource.get(clave);
+            if (!porExt) { porExt = new Map(); zonasPorSource.set(clave, porExt); }
+            porExt.set(row.dbId, v);
+            conZona += 1;
         }
-        if (!extZone.size) {
+        const documentos = this.indiceDeDocumentos(models);
+        const zonasDelModelo = (model) => {
+            const propias = new Map();
+            for (const [clave, porExt] of zonasPorSource) {
+                if (documentos.resolver(clave) !== model) continue;
+                porExt.forEach((zona, extId) => propias.set(extId, zona));
+            }
+            return propias;
+        };
+        if (!conZona) {
             console.warn(`[LOB4D] ${etiq}: el parámetro ${zoneKey} existe pero está vacío en todos los elementos.`);
             return this.reportZoneResult(0, 'parametro-vacio', { key: zoneKey });
         }
@@ -1844,7 +1861,9 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             const fragList = model.getFragmentList?.();
             if (!tree || !fragList) continue;
 
-            extZone.forEach((zone, extId) => {
+            // Sólo las filas de ESTE documento. Sin esto, un externalId presente
+            // en dos modelos rotulaba en los dos con la zona de una sola fila.
+            zonasDelModelo(model).forEach((zone, extId) => {
                 const dbId = map[extId];
                 if (dbId === undefined || dbId === null) return;
                 const box = new THREE.Box3();
@@ -1903,11 +1922,11 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
 
         this._zoneLabelsVisible = true;
         this.updateZoneLabels();
-        console.log(`[LOB4D] ${etiq}: ${created} grupo(s) rotulados (parámetro "${zoneKey}"). Elementos con clave: ${extZone.size}`);
+        console.log(`[LOB4D] ${etiq}: ${created} grupo(s) rotulados (parámetro "${zoneKey}"). Elementos con clave: ${conZona}`);
         if (!created) {
             // El parámetro tiene valores pero ningún elemento cruzó con geometría
             // del visor (mapeo rosetta o bounding boxes vacíos).
-            return this.reportZoneResult(0, 'sin-geometria', { key: zoneKey, extWithZone: extZone.size });
+            return this.reportZoneResult(0, 'sin-geometria', { key: zoneKey, extWithZone: conZona });
         }
         return this.reportZoneResult(created, 'ok', { key: zoneKey, zones: created });
     }
@@ -2047,15 +2066,19 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         // repiten entre modelos (versiones del mismo Revit conviviendo en el
         // frente) hacían que un elemento leyera la fila de otro modelo — de
         // ahí que un buzón de drenaje mostrara el localizador de otro archivo.
-        const _nu = (u) => String(u || '').replace(/^urn:/i, '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const _nu = (u) => this.claveDeSource(u);
         const mapByUrn = new Map();
         for (const mm of modelMaps) {
             try { mapByUrn.set(_nu(mm.model.getData()?.urn), mm); } catch { /* modelo sin urn */ }
         }
+        // Para rebindear por documento cuando el URN de la fila es de otra
+        // versión: el linaje no cambia al versionar y el URN sí.
+        const documentos = this.indiceDeDocumentos(modelMaps.map((mm) => mm.model));
+        const mapaDelModelo = new Map(modelMaps.map((mm) => [mm.model, mm]));
 
         const norm = (v) => Array.isArray(v) ? v.filter(Boolean).join(', ') : String(v ?? '').trim();
         const groups = new Map();       // zona -> stats
-        const extToZone = new Map();    // extId -> zona
+        const extToZone = new Map();    // "claveDeSource|extId" -> zona
         const membersByZone = new Map(); // zona -> [{model, dbId}]  ← PRE-RESUELTO
 
         for (const row of inv) {
@@ -2078,15 +2101,16 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
 
             // Resolver dbId del visor AQUÍ (una sola vez por elemento), en
             // el modelo al que la fila REALMENTE pertenece
-            const own = mapByUrn.get(srcKey);
+            // ANTES, cuando el URN de la fila no era el de ningún modelo cargado
+            // --lo que pasa SIEMPRE al subir una revisión, porque el URN lleva la
+            // versión pegada--, se recorrían todos los modelos y ganaba el primero
+            // que tuviera ese externalId. Ahora se rebindea por linaje, que es el
+            // documento; si no hay documento demostrable, no se cuelga de ninguno.
+            const own = mapByUrn.get(srcKey)
+                || mapaDelModelo.get(documentos.resolver(this.urnDeFila(row))) || null;
             if (own) {
                 const dbId = own.map[row.dbId];
                 if (dbId != null) membersByZone.get(zone).push({ model: own.model, dbId });
-            } else {
-                for (const { model, map } of modelMaps) {
-                    const dbId = map[row.dbId];
-                    if (dbId != null) { membersByZone.get(zone).push({ model, dbId }); break; }
-                }
             }
         }
 
@@ -3715,6 +3739,59 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         return String(urn || '').replace(/^urn:/i, '');
     }
 
+    /**
+     * La clave de Source de una fila de inventario o de un modelo cargado.
+     *
+     * Es la misma normalización que ya usaban `zoneMapForModel` y el índice de
+     * hover: base64 URL-safe sin relleno. Vive aquí para que no haya dos formas
+     * de escribir la misma clave.
+     */
+    claveDeSource(urn) {
+        return String(urn || '')
+            .replace(/^urn:/i, '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    /**
+     * Reparte las Sources cargadas para poder preguntar «¿de qué modelo es esta
+     * fila del inventario?» sin adivinar.
+     *
+     * Un externalId identifica un elemento DENTRO de un documento, no entre
+     * documentos: dos Sources pueden traer el mismo y no son el mismo elemento.
+     * Por eso `resolver` NO tiene rama de «el primer modelo que lo tenga».
+     * Lo que sí hace es rebindear por LINAJE: el URN de APS lleva la versión
+     * pegada, así que deja de coincidir en cuanto se sube una revisión, mientras
+     * que el documento sigue siendo el mismo. Dos versiones del mismo documento
+     * cargadas a la vez no se distinguen por linaje: eso es ambigüedad, y
+     * entonces no se elige ninguna.
+     */
+    indiceDeDocumentos(models) {
+        const porUrn = new Map();
+        const porLinaje = new Map();
+        for (const model of models || []) {
+            if (!model) continue;
+            const crudo = model?.getData?.()?.urn;
+            const clave = this.claveDeSource(crudo);
+            if (clave) porUrn.set(clave, model);
+            const linaje = linajeDeUrn(crudo);
+            if (linaje) porLinaje.set(linaje, porLinaje.has(linaje) ? null : model);
+        }
+        return {
+            porUrn,
+            porLinaje,
+            resolver: (urnDeLaFila) => {
+                const clave = this.claveDeSource(urnDeLaFila);
+                if (clave && porUrn.has(clave)) return porUrn.get(clave);
+                const linaje = linajeDeUrn(urnDeLaFila);
+                return (linaje && porLinaje.get(linaje)) || null;
+            },
+        };
+    }
+
+    /** El URN de Source de una fila del inventario, tal y como la trae la app. */
+    urnDeFila(row) {
+        return row?.source_urn || row?.model_urn || '';
+    }
+
     getExcavationModels(excavationUrns) {
         const wanted = new Set((excavationUrns || []).map((urn) => this.normalizeUrnKey(urn)).filter(Boolean));
         if (!wanted.size) return [];
@@ -3852,10 +3929,18 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         const models = this.getThemingModels();
         if (!target || !models.length) { this.phaseIndex = null; return null; }
 
-        // 1) Valores por external_id desde el inventario de la app.
+        // 1) Valores por elemento desde el inventario de la app.
+        //
+        // La clave es (Source, externalId), no el externalId solo. Antes era un
+        // Map global: dos filas de documentos distintos con el mismo externalId
+        // se pisaban --ganaba la última leída-- y después ese mapa se consultaba
+        // en TODOS los modelos, así que la fase de una Source acababa pintando
+        // elementos de otra. Ninguna de las dos cosas dependía de los datos:
+        // dependían del orden.
         const inv = Array.isArray(window.postgresInventory) ? window.postgresInventory : [];
-        const extIdToValue = new Map();
+        const valoresPorSource = new Map();   // claveDeSource -> Map(extId -> valor)
         let matchedKey = null;
+        let conValor = 0;
         for (const row of inv) {
             if (!row) continue;
             if (!matchedKey) {
@@ -3864,22 +3949,35 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             if (!matchedKey) continue;
             const value = String(row[matchedKey] ?? '').trim();
             const extId = String(row.dbId ?? row.external_id ?? '').trim();
-            if (value && extId) extIdToValue.set(extId, value);
+            if (!value || !extId) continue;
+            const clave = this.claveDeSource(this.urnDeFila(row));
+            let porExt = valoresPorSource.get(clave);
+            if (!porExt) { porExt = new Map(); valoresPorSource.set(clave, porExt); }
+            porExt.set(extId, value);
+            conValor += 1;
         }
 
         // Sin datos en inventario → intentar como propiedad APS (fallback).
-        if (!extIdToValue.size) {
+        if (!conValor) {
             return this.buildParamPhaseIndexFromProps(propName);
         }
 
-        // 2) external_id → dbId del visor, por modelo.
+        // 2) Cada Source se resuelve contra SU modelo, nunca contra todos.
+        const documentos = this.indiceDeDocumentos(models);
         const byPhaseRaw = new Map(); // valorFase -> [{ dbId, model }]
-        for (const model of models) {
-            const mapping = await new Promise((res) => {
-                try { model.getExternalIdMapping((m) => res(m || {}), () => res({})); }
-                catch (e) { res({}); }
-            });
-            for (const [extId, value] of extIdToValue) {
+        const mappings = new Map();
+        for (const [clave, porExt] of valoresPorSource) {
+            const model = documentos.resolver(clave);
+            if (!model) continue;      // documento no cargado o ambiguo: no se adivina
+            let mapping = mappings.get(model);
+            if (!mapping) {
+                mapping = await new Promise((res) => {
+                    try { model.getExternalIdMapping((m) => res(m || {}), () => res({})); }
+                    catch (e) { res({}); }
+                });
+                mappings.set(model, mapping);
+            }
+            for (const [extId, value] of porExt) {
                 const dbId = mapping[extId];
                 if (dbId == null) continue;
                 if (!byPhaseRaw.has(value)) byPhaseRaw.set(value, []);

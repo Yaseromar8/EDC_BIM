@@ -118,13 +118,36 @@ y commiteada localmente.** El propietario levantó el STOP de frontera protegida
 y autorizó `LOB4DExtension.js`, `backend/routes/lob4d.py` y
 `backend/routes/compare.py`. Tres seams cualificados por `(Source, externalId)`,
 7/7 en el ensayo de rutas reales y 12/12 en el banco del 4D, cuatro mutantes
-muertos, suite backend de vuelta a su línea base. **Sigue abierto** el seam que
-motivó el STOP: `LOB4DExtension.buildParamPhaseIndex`, que todavía reproduce
-mezcla entre Sources — ver EXACT NEXT ACTION.
-[STOP original](filters/B1_INTEGRATION_PROTECTED_STOP.md). No B1 PASS. No push,
+muertos, suite backend de vuelta a su línea base.
+
+**PROTECTED IDENTITY HARDENING GREEN.** El seam que motivó el STOP
+—`buildParamPhaseIndex`— y sus dos equivalentes —`buildSubZoneLabels` y el
+respaldo de `buildZoneHoverIndex`— quedan cualificados por `(Source, externalId)`
+con rebind por linaje. La búsqueda residual sobre los tres ficheros autorizados
+no encuentra otro consumidor de Inventory que resuelva por externalId global.
+[STOP original, ya levantado](filters/B1_INTEGRATION_PROTECTED_STOP.md).
+No B1 PASS: quedan los pendientes de B1 que no son de identidad. No push,
 deploy ni B2.
 
 ## LAST COMPLETED
+
+**B1 · cierre de la identidad en los consumidores protegidos, 7-sep-2026: GREEN.**
+Tres seams más, del mismo tipo y con la misma regla:
+
+- `buildParamPhaseIndex` construía un `Map externalId → valor` global —la última
+  fila leída ganaba— y luego lo consultaba en TODOS los modelos, así que la fase
+  de una Source pintaba elementos de otra. Ahora los valores se agrupan por
+  Source y cada grupo se resuelve contra su propio documento.
+- `buildSubZoneLabels` tenía exactamente el mismo patrón con las zonas: mapa
+  global por `row.dbId` aplicado a todos los modelos.
+- `buildZoneHoverIndex` ya resolvía bien el camino principal, pero conservaba el
+  respaldo prohibido: cuando el URN de la fila no era el de ningún modelo
+  cargado —lo que ocurre siempre al versionar— recorría los modelos y se quedaba
+  con el primero que tuviera ese externalId.
+
+Los tres comparten ahora `indiceDeDocumentos`, `claveDeSource` y `urnDeFila`:
+URN exacto → mismo linaje → nada. No hay rama de «el primero que lo tenga».
+
 
 **B1 · identidad cualificada en los consumidores 4D/5D, 7-sep-2026: GREEN.**
 Tres seams, ninguna fórmula ni algoritmo tocado:
@@ -376,11 +399,18 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
 (`fix(filters): qualify identity in 4d and compare consumers`). Sin push.**
 
 El STOP de frontera protegida quedó levantado por el propietario para los tres
-módulos nombrados, y esa unidad está cerrada y verde. Queda abierto el seam que
-originó el STOP: `buildParamPhaseIndex`, que **sigue reproduciendo** mezcla
-entre Sources con el reproductor del ciclo anterior contra el fichero actual
-(`REPRODUCED_IDENTITY_MIX`). No se eligió una Source ni se levantó un Inventory
-paralelo para taparlo.
+módulos nombrados, y **todos los seams de identidad del alcance autorizado están
+cerrados**. No se eligió una Source ni se levantó un Inventory paralelo para
+taparlo: donde no hay documento demostrable, no se enlaza nada.
+
+El reproductor del ciclo anterior
+(`docs/filters/evidencias/B1_PROTECTED_BOUNDARY_REPRO.cjs`) **ya no puede
+ejecutarse**: copia el cuerpo del método fuera de la clase, así que al ganar
+`buildParamPhaseIndex` tres helpers falla con `this.urnDeFila is not a function`.
+Eso no prueba nada por sí solo y no se presenta como prueba. La demostración
+está en `frontend-react/pruebas/lob4dIdentidad.prueba.mjs`, que ejecuta los
+métodos reales sobre una instancia real —todos los métodos del prototipo son los
+del producto— e incluye los mismos casos control/colisión/orden.
 
 Entrega actual: [B1_INTEGRATION_PROTECTED_STOP.md](filters/B1_INTEGRATION_PROTECTED_STOP.md).
 Base aprobada: [B1_BACKEND_IDENTITY_RESULTADOS.md](filters/B1_BACKEND_IDENTITY_RESULTADOS.md).
@@ -407,45 +437,39 @@ Commits documentales por encima del baseline (sin hash autorreferencial):
 
 ## EXACT NEXT ACTION
 
-**Cualificar `LOB4DExtension.buildParamPhaseIndex` (línea ~3984) con la misma
-regla ya aplicada y probada en `setElementLinks`: la clave del mapa deja de ser
-el externalId y pasa a ser `(Source, externalId)`.**
+**Testigo a Astra.** La identidad de los consumidores 4D/5D del alcance
+autorizado está cerrada; lo que queda de B1 no es identidad:
 
-Es el seam que motivó el STOP y **sigue abierto**: comprobado contra el fichero
-actual con el reproductor de sólo lectura del ciclo anterior —
-`node docs/filters/evidencias/B1_PROTECTED_BOUNDARY_REPRO.cjs` →
-`REPRODUCED_IDENTITY_MIX`. Construye un `Map externalId → valor` global y luego
-lo consulta en TODOS los modelos, así que la última Source escrita gana y el
-resultado depende del orden. La autorización del propietario cubre
-`LOB4DExtension.js`; el fix es del mismo tipo L2 que el ya aceptado.
+1. Pendientes B1 que nunca se ejecutaron por el SCOPE STOP: normalizadores P0-2,
+   fixture de Saved Views V2, baseline de navegador, endpoints y migración
+   conectados. Ninguno bloqueado ya por frontera protegida.
+2. Antes de conectar nada: la migración real del esquema con identidad
+   cualificada sigue sin numerar y sin aplicar
+   ([rollout](filters/B1_IDENTITY_ROLLOUT.md)), y el backfill de
+   `asset_user_data` exige una prueba de cobertura externa — el flag
+   `coverage_complete` no la mide, y así está escrito.
 
-Al hacerlo: preservar los **8 hunks ajenos** del fichero byte a byte (siguen
-fuera del índice), no tocar fórmulas 4D, avance, metrados, colores ni etiquetas,
-y adoptar como fitness los mismos tres casos —control, colisión, orden— que ya
-usa `frontend-react/pruebas/lob4dIdentidad.prueba.mjs`.
+Dos cosas quedan registradas y **no** son trabajo de B1:
 
-No repetir la reproducción original, el censo ni el hardening: están cerrados.
+- El emparejamiento **frente↔frente** del comparador cruza documentos distintos
+  por externalId (backlog nº 7). Semántica de producto, decisión del propietario.
+- `buildParamPhaseIndexFromProps` —el respaldo por propiedades de APS— ya es
+  por modelo y no cruza; no necesitó cambio.
 
-Los pendientes B1 (normalizadores P0-2, fixture V2, baseline browser,
-endpoints/migración conectados) siguen sin ejecutar por SCOPE STOP, no por
-fallo de entorno o incompatibilidad demostrada de Saved Views.
-Commits locales sólo para unidades GREEN; este WIP queda sin commit.
-No push/deploy, producción ni B2.
-
-### [WIP HANDOFF] — identidad 4D/5D: unidad cerrada, un seam abierto
+### [WIP HANDOFF] — identidad 4D/5D cerrada
 
 ~~~text
 [WIP HANDOFF]
 TAREA:                FILTERS CORE — B1, identidad cualificada en los consumidores 4D/5D
-IMPLEMENTADO:         Tres seams cerrados y commiteados: LOB4DExtension.setElementLinks resuelve por linaje (URN exacto -> mismo documento -> nada), compare.py indexa cada lado por (source_urn, external_id) y resuelve el detalle solo si la identidad es una, lob4d._derive_locations_from_model agrupa por (source_urn, external_id). Corregido tambien test_gap11core_issues, que fallaba con PermissionError sobre sql/candidates y no comprobaba nada
-PENDIENTE:            buildParamPhaseIndex (LOB4DExtension.js ~3984) sigue mezclando Sources. Despues: P0-2, fixture Saved Views V2, baseline de navegador, endpoints/migracion conectados. No B2
-ARCHIVOS MODIFICADOS: Commiteados en esta unidad: frontend-react/src/aps/extensions/LOB4DExtension.js (SOLO mis 3 hunks de identidad); backend/routes/compare.py; backend/routes/lob4d.py; backend/tests/test_gap11core_issues.py; frontend-react/pruebas/lob4dIdentidad.prueba.mjs; backend/herramientas/ensayo_identidad_4d_5d.py; docs/filters/evidencias/IDENTIDAD_4D_5D.json; docs/AI_WORKSTATE.md. Ajenos intactos y FUERA del indice: los 8 hunks de LOB4DExtension.js mas Viewer.jsx, ViewerLabelsBar.jsx y predictBim.js. La infraestructura B1 anterior sigue untracked
-TESTS EJECUTADOS:     node frontend-react/pruebas/lob4dIdentidad.prueba.mjs 12/12; python -B backend/herramientas/ensayo_identidad_4d_5d.py 7/7 exit 0 (cluster nuevo, DDL real por AST, rutas reales de compare); pytest 1701 passed / 1 failed, que es el fallo documentado del backlog 1; build del visor OK; filtersCore 8 KNOWN FAIL y interacciones 6 KNOWN FAIL, 0 inesperados; Saved Views 63/63, 150/150, 111/111
+IMPLEMENTADO:         Seis seams cerrados en dos commits locales. be114a1: setElementLinks por linaje, compare.py por (source_urn, external_id) con detalle no ambiguo, lob4d GROUP BY por (source_urn, external_id), y el test_gap11core_issues que fallaba con PermissionError. Segundo commit: buildParamPhaseIndex, buildSubZoneLabels y el respaldo de buildZoneHoverIndex, los tres sobre los helpers compartidos indiceDeDocumentos / claveDeSource / urnDeFila
+PENDIENTE:            Nada de identidad en el alcance autorizado. De B1 quedan P0-2, fixture Saved Views V2, baseline de navegador, endpoints y migracion conectados. No B2
+ARCHIVOS MODIFICADOS: Commiteados: LOB4DExtension.js (SOLO mis hunks de identidad, en dos rondas); backend/routes/compare.py; backend/routes/lob4d.py; backend/tests/test_gap11core_issues.py; frontend-react/pruebas/lob4dIdentidad.prueba.mjs; backend/herramientas/ensayo_identidad_4d_5d.py; docs/filters/evidencias/IDENTIDAD_4D_5D.json; docs/AI_WORKSTATE.md. Ajenos intactos y FUERA del indice: las 136 lineas de los 8 hunks de LOB4DExtension.js, mas Viewer.jsx, ViewerLabelsBar.jsx y predictBim.js
+TESTS EJECUTADOS:     node frontend-react/pruebas/lob4dIdentidad.prueba.mjs 26/26; python -B backend/herramientas/ensayo_identidad_4d_5d.py 7/7 exit 0; pytest 1701 passed / 1 failed (el documentado del backlog 1); build del visor OK; filtersCore 8 KNOWN FAIL e interacciones 6 KNOWN FAIL, 0 inesperados; Saved Views 63/63, 150/150, 111/111. Siete mutantes muertos entre las dos rondas
 TESTS PENDIENTES:     Navegador, APS real, HTTP auth, migracion conectada y P0-2: NOT EXECUTED, fuera de esta unidad
-FALLO CONOCIDO:       buildParamPhaseIndex reproduce REPRODUCED_IDENTITY_MIX contra el fichero actual con B1_PROTECTED_BOUNDARY_REPRO.cjs. El emparejamiento frente-frente del comparador cruza documentos por externalId: es semantica de producto, queda FUERA de B1 por decision del propietario
-NEXT EXACT ACTION:    Cualificar buildParamPhaseIndex por (Source, externalId) con los tres casos control/colision/orden, preservando los 8 hunks ajenos
-DO NOT TOUCH:         Identidad (scope, lineage, externalId) y las seis responsabilidades; Saved Views V2 CLOSED y las V1 historicas; migraciones 29/30; LMV 7; formulas 4D, avance, metrados, algoritmos de compare, colores y etiquetas; los 4 M ajenos y las entradas untracked ajenas; produccion
-COMMIT/HEAD REF:      el commit de esta unidad es el HEAD actual; obtenerlo con git rev-parse HEAD
+FALLO CONOCIDO:       Ninguno de identidad en el alcance autorizado. El reproductor ajeno B1_PROTECTED_BOUNDARY_REPRO.cjs ya no corre porque copia el metodo fuera de la clase; no se toco y no se usa como prueba. El emparejamiento frente-frente del comparador sigue cruzando documentos: backlog 7, semantica de producto, fuera de B1
+NEXT EXACT ACTION:    Testigo a Astra: pendientes B1 que no son de identidad
+DO NOT TOUCH:         Identidad (scope, lineage, externalId) y las seis responsabilidades; Saved Views V2 CLOSED y las V1 historicas; migraciones 29/30; LMV 7; formulas 4D, avance, scheduling, metrados, algoritmo frente-frente de compare, colores, labels y UI; AR; los 4 M ajenos y las entradas untracked ajenas; produccion
+COMMIT/HEAD REF:      el segundo commit de esta unidad es el HEAD actual; obtenerlo con git rev-parse HEAD
 ~~~
 
 Los resultados identidad29/29 y mutantes14/14 son del hardening aprobado de
@@ -475,7 +499,7 @@ Todo medido el **6-sep-2026 sobre este mismo worktree**.
 | *(ajeno)* ViewerFacade | `node frontend-react/pruebas/viewerFacade.prueba.mjs` | **28 / 28** — banco untracked, trabajo ajeno al task actual: se anota, no se adopta |
 | Ensayo HTTP de vistas V2 | `backend/herramientas/ensayo_de_vistas_v2.py` (base desechable) | **201 / 201** en su última ejecución, 6-sep |
 | Build del visor | `npx vite build --outDir <fuera del repo> --emptyOutDir` | **✓ en 12,63 s.** Los *chunks* compartidos salen con el mismo hash que sirve producción (`vendor-BzrpNAyj`, `pdf-DNJrdseb`, `xlsx-BmGrHcps`); `index-*` difiere, y difiere **porque el worktree lleva los cambios sin commitear** |
-| Identidad 4D | `node frontend-react/pruebas/lob4dIdentidad.prueba.mjs` | **12 / 12** — `setElementLinks` real y `linajeDeUrn` real; dobles sólo del visor |
+| Identidad 4D | `node frontend-react/pruebas/lob4dIdentidad.prueba.mjs` | **26 / 26** — `setElementLinks` real y `linajeDeUrn` real; dobles sólo del visor |
 | Identidad 4D/5D backend | `python -B backend/herramientas/ensayo_identidad_4d_5d.py --pg-bin <bin> --confirm-disposable-only` | **7 / 7**, exit 0 — clúster nuevo, DDL de `inventory_assets` por AST, rutas reales de `compare.py` |
 | Lint del visor | `npx eslint src` | 422 problemas (381 errores, 41 avisos). **No es una puerta**, ver backlog nº 5 |
 
