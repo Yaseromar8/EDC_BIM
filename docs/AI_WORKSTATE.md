@@ -123,6 +123,14 @@ documentado del backlog nº 1). Los KNOWN FAIL de B2 siguen visibles y **ninguno
 desapareció**. Baseline de navegador: **NOT EXECUTED / ENVIRONMENT**.
 B1 GREEN no significa Filters terminado. No push, deploy ni B2.
 
+**Revisión adversarial de la integración: PASS**, con dos defectos encontrados y
+corregidos. El cutover es **fail-closed demostrado por código**, no por
+documentación: `db.py` fija `search_path` a la proyección canónica y **falla al
+arrancar** si falta la migración 31, sin caer nunca a `public.inventory_assets`;
+la 31 revoca la escritura legacy a `ecd_app`; y la lectura devuelve **409** en
+vez de un 200 incompleto —`INVENTORY_REEXTRACTION_REQUIRED` para lo nativo y
+`LEGACY_USER_DATA_PENDING` para la metadata humana—. Ensayo integrado **24/24**.
+
 ## LAST COMPLETED
 
 **B1 · cierre de la identidad en los consumidores protegidos, 7-sep-2026: GREEN.**

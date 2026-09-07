@@ -91,6 +91,9 @@ MAX_LINEA = 2000
 # es el NOMBRE de la variable, no la contrasena.
 VARIABLE_PSQL = re.compile(r":" + COMILLA)
 
+# `(Unassigned)`, `(No aplica)`: solo letras y espacios entre parentesis.
+PLACEHOLDER = re.compile(r'\([^\W\d_][^\W\d_ ]*(?: [^\W\d_][^\W\d_ ]*)*\)', re.UNICODE)
+
 
 def parece_secreto(valor):
     """¿Este valor tiene forma de credencial, o es una palabra normal?
@@ -106,6 +109,13 @@ def parece_secreto(valor):
     if len(valor) < 6:
         return False
     if ' ' in valor:
+        return False
+    # Un marcador de interfaz entre parentesis -- `(Unassigned)`, `(No aplica)`.
+    # Los parentesis contaban como "simbolo" y bastaban para que una etiqueta
+    # pasara por credencial: se marcaron dos en un fixture de pruebas. Aqui no
+    # se pierde deteccion, porque dentro solo se admiten letras: un secreto de
+    # verdad no cabe sin un digito, un simbolo o un espacio.
+    if PLACEHOLDER.fullmatch(valor):
         return False
     tiene_digito = any(c.isdigit() for c in valor)
     tiene_simbolo = any(not c.isalnum() for c in valor)

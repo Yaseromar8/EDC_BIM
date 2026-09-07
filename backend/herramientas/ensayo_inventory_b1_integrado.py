@@ -795,6 +795,41 @@ def main():
                         'legacyPreservedNotPromoted': True, 'unconfiguredUnknownLegacyIs409': True}
             case('I23-read-readiness-preserves-orphan-native-without-false-empty', read_readiness)
 
+            def legacy_human_data_that_matches():
+                """Metadata humana legacy emparejable: no puede desaparecer callando.
+
+                El banco ya cubre la que NO empareja ('legacy-only', como las
+                siete de produccion). Esta es la otra: un external_id que SI
+                corresponde al elemento publicado. O la lectura la sirve, o se
+                niega; lo que no puede es devolver 200 fingiendo que ese
+                elemento nunca tuvo metadata humana.
+                """
+                scope = 'B1A_HUMAN_LEGACY'
+                ext = native()['external_id']
+                query("INSERT INTO asset_user_data(external_id,model_urn,status,extras,project_id)"
+                      " VALUES (%s,%s,'Valor humano anterior','{}','B1A')",
+                      (ext, scope), 'ecd_migrator')
+                publish(scope, 'B1HumanLegacy')
+                respuesta = client.open('/api/inventory?model_urn=' + scope + '&include_props=true',
+                                        method='GET', headers={'Authorization': 'Bearer ' + tokens['memberA']})
+                cuerpo = respuesta.get_data()
+                if respuesta.headers.get('Content-Encoding') == 'gzip':
+                    cuerpo = gzip.decompress(cuerpo)
+                datos = json.loads(cuerpo.decode('utf-8')) if cuerpo else None
+                preservada = query("SELECT COUNT(*) FROM public.asset_user_data WHERE external_id=%s AND model_urn=%s",
+                                   (ext, scope), 'ecd_migrator')[0][0]
+                check(preservada == 1, 'La fila humana legacy se borro o se movio')
+                if respuesta.status_code != 200:
+                    return {'legacyHumanRowPreserved': True, 'notAutoPromoted': True,
+                            'readFailsClosed': respuesta.status_code,
+                            'code': (datos or {}).get('code')}
+                servido = [f for f in (datos or []) if f.get('installation_status') == 'Valor humano anterior']
+                check(bool(servido),
+                      'FALSO EXITO: 200 sin la metadata humana legacy del elemento y sin aviso')
+                return {'legacyHumanRowPreserved': True, 'servedFromLegacy': True}
+            case('I24-matching-legacy-human-data-cannot-vanish-silently', legacy_human_data_that_matches)
+
+
         failed = sum(c['status'] != 'PASS' for c in report['cases'])
         report['summary'] = {'passed': len(report['cases']) - failed, 'failed': failed, 'total': len(report['cases'])}
         report['sourceFilesUnchangedDuringRun'] = fingerprints() == report['sourceFingerprints']

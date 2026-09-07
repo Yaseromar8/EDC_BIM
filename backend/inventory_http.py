@@ -31,7 +31,8 @@ def identity_error_response(exc):
         status = 404
     elif code in {"LEGACY_AMBIGUOUS", "STALE_SNAPSHOT", "SNAPSHOT_CONFLICT",
                   "IDENTITY_CONFLICT", "INVENTORY_REEXTRACTION_REQUIRED",
-                  "NO_PROMOTION", "STALE_GENERATION", "STALE_ACTIVE_URN", "SNAPSHOT_CONTENT_CONFLICT"}:
+                  "NO_PROMOTION", "STALE_GENERATION", "STALE_ACTIVE_URN", "SNAPSHOT_CONTENT_CONFLICT",
+                  "LEGACY_USER_DATA_PENDING"}:
         status = 409
     messages = {
         "LEGACY_AMBIGUOUS": "La identidad es ambigua. Seleccione el elemento con su Source y frente.",
@@ -40,6 +41,7 @@ def identity_error_response(exc):
         "UNRESOLVED_SCOPE": "No se pudo verificar la obra de este frente.",
         "AUTH_REQUIRED": "Autenticación requerida.",
         "IDENTITY_CONFLICT": "Las referencias de identidad de la petición no coinciden.",
+        "LEGACY_USER_DATA_PENDING": "Este frente tiene metadata humana anterior sin migrar. No se muestra el inventario a medias: sus datos siguen guardados.",
     }
     # Domain details may contain candidates from other scopes: never serialize them.
     return jsonify({"error": messages.get(code, "No se pudo completar la operación de Inventory."),
@@ -153,6 +155,41 @@ def _ensure_readable(conn, scopes):
                 # A tombstone from explicit removal is known absence, not missing data.
                 if state is None or (state[0] is None and state[1] == 0):
                     raise IdentityError("INVENTORY_REEXTRACTION_REQUIRED")
+        _ensure_no_hidden_legacy_user_data(conn, scopes)
+
+
+def _ensure_no_hidden_legacy_user_data(conn, scopes):
+    """Serving an element without its legacy human metadata is a false success.
+
+    The canonical projection joins inventory_identity_b1.user_data. A legacy row
+    in public.asset_user_data that is attributable to this scope AND matches an
+    element now served canonically would simply stop appearing, with 200 and no
+    signal: the value is still in the database and gone from the screen. That is
+    not promotion pending, it is data the reader believes was never there.
+
+    So the read fails closed instead. It does NOT promote: promotion needs
+    demonstrated coverage and stays disabled. Rows that cannot be attributed to
+    a scope -- model_urn NULL, the shape of the seven unresolved production
+    rows -- are NOT counted here: they are already quarantined by absence of
+    identity, and blocking every scope on them would be fail-closed against
+    nothing. Once a row is promoted for its triple, it is served and no longer
+    withheld.
+    """
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT to_regclass('public.asset_user_data')")
+        if cursor.fetchone()[0] is None:
+            return
+        for scope in scopes:
+            cursor.execute("""
+                SELECT COUNT(*) FROM public.asset_user_data a
+                 WHERE a.model_urn = %s
+                   AND EXISTS (SELECT 1 FROM inventory_identity_b1.elements e
+                                WHERE e.scope_id = a.model_urn AND e.external_id = a.external_id)
+                   AND NOT EXISTS (SELECT 1 FROM inventory_identity_b1.user_data u
+                                    WHERE u.scope_id = a.model_urn AND u.external_id = a.external_id)
+            """, (scope,))
+            if cursor.fetchone()[0]:
+                raise IdentityError("LEGACY_USER_DATA_PENDING")
 
 
 def read_inventory_request(*, forced_scope=None):
