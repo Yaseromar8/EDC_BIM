@@ -472,8 +472,8 @@ def compare_cleanup():
     try:
         with get_db_connection() as conn:
             cur = conn.cursor()
-            cur.execute("DELETE FROM inventory_assets WHERE model_urn = '__cmp__'")
-            n = cur.rowcount
+            from inventory_identity import InventoryIdentityRepository
+            n = InventoryIdentityRepository(conn).clear_temporary_snapshots()['deleted']
             conn.commit()
         if n:
             logger.info(f"cleanup comparador: {n} filas temporales eliminadas")

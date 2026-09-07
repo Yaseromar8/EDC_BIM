@@ -107,7 +107,6 @@ SIN_CUBRIR = {
     ('routes/projects.py', '/api/projects'): 'LISTA obras; filtra por project_users y devuelve vacio al anonimo',
     ('routes/projects.py', '/api/hubs/<hub_id>/projects'): 'lista obras de un hub; mismo filtro por pertenencia',
     ('routes/projects.py', '/api/projects/join'): 'canjea un codigo de invitacion; aun no hay obra. Protegida con limite de intentos y codigo de `secrets` de 8 caracteres',
-    ('server.py', '/api/inventory/schema'): 'catalogo de campos, igual para todas las obras',
     # GAP 05. Devuelve el catalogo MasterFormat sugerido, que es una constante
     # del codigo: ni lee ni escribe nada. El detector la marca porque su
     # docstring explica que la estructura la fija el contrato de cada obra --y
@@ -119,7 +118,6 @@ SIN_CUBRIR = {
     # PENDIENTE: reciben un identificador cuya obra hay que deducir consultando
     # la base. Deuda declarada, no excusa.
     ('routes/civil_solids.py', '/api/civil/extract-surfaces'): 'PENDIENTE: deducir la obra del modelo',
-    ('routes/compare.py', '/api/compare/cleanup'): 'borra solo el ambito temporal fijo __cmp__, que no es de ninguna obra. Residual: es compartido, y un usuario puede tirar la comparacion en curso de otro',
     ('routes/digital_twin.py', '/api/modelos/firmar-subida'): 'exige rol admin dentro de la vista; traducir cuesta creditos de Autodesk',
     # Las dos vias del enlace de vista compartida. El middleware NO puede
     # resolver la obra aqui, y es a proposito: la peticion no la nombra. La
@@ -135,8 +133,6 @@ SIN_CUBRIR = {
         'la obra se resuelve dentro, desde el identificador del enlace; no hay parametro de obra que manipular',
     ('server.py', '/api/vista-compartida/<view_id>/inventario/version'):
         'misma via y misma obra que la anterior: solo devuelve la huella de version',
-    ('server.py', '/api/inventory'): 'va por external_id, no por obra: el limite esta en el propio SQL contra project_users',
-    ('server.py', '/api/inventory/bulk'): 'va por external_id, no por obra: el limite esta en el propio SQL contra project_users',
     # Anadida el 17-ago. NO es deuda por descuido: no hay de donde sacar la
     # obra. El unico dato es el id del WorkItem de Autodesk y no existe
     # tabla que lo ate a una obra -- el vinculo vive en memoria del proceso.

@@ -76,19 +76,10 @@ def _sin_guardia():
 # Los que quedan fuera de la cuenta, escritos UNO A UNO con su motivo. Una
 # excepcion sin justificar es una guardia que falta con otro nombre.
 EXCEPCIONES = {
-    # Borra solo el ambito temporal del comparador, un valor fijo ('__cmp__')
-    # que no es de ninguna obra. Residual: es un ambito COMPARTIDO, asi que un
-    # usuario puede tirar la comparacion en curso de otro. Molesta, no filtra.
-    'compare.py  POST  /api/compare/cleanup',
     # Uno se inscribe A SI MISMO con el codigo de invitacion. Exigir pertenecer
     # ya a la obra haria imposible entrar en ella: es la puerta de entrada, no
     # un agujero. Se protege con limite de intentos y codigo de `secrets`.
     'projects.py  POST  /api/projects/join',
-    # Estos dos NO van por obra: van por external_id, y el limite esta metido en
-    # el propio SQL contra project_users. Ponerles ademas una guardia por obra
-    # seria pedirles un dato que el cuerpo de la peticion no trae.
-    'server.py  PATCH  /api/inventory',
-    'server.py  PATCH  /api/inventory/bulk',
 }
 
 # Cifra medida hoy, DESPUES de la segunda tanda de guardias. Solo puede bajar.
@@ -127,3 +118,69 @@ def test_el_tope_esta_ajustado_a_la_realidad():
     de obra sin guardia rompe la prueba. Es lo que se queria desde el principio:
     que la separacion entre obras no dependa de una variable de entorno."""
     assert TOPE == 0, 'el tope ya no puede subir'
+
+
+def test_inventory_wrappers_conservan_la_frontera_unica():
+    """SQL moved to helpers, so the regex counter alone no longer covers them."""
+    import ast
+    source = io.open(os.path.join(BACKEND, 'server.py'), encoding='utf-8').read()
+    tree = ast.parse(source)
+    functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    for name, bulk in [('update_inventory', False), ('bulk_update_inventory', True)]:
+        calls = [node for node in ast.walk(functions[name]) if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Name) and node.func.id == 'patch_inventory_request']
+        assert len(calls) == 1
+        assert any(keyword.arg == 'bulk' and isinstance(keyword.value, ast.Constant)
+                   and keyword.value.value is bulk for keyword in calls[0].keywords)
+
+
+def test_inventory_bulk_usa_autorizacion_real_antes_de_escribir(monkeypatch):
+    from flask import Flask, g
+    import inventory_http as boundary
+
+    class Conn:
+        def __init__(self):
+            self.projects = []
+            self.commits = 0
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def cursor(self): return self
+        def execute(self, statement, params):
+            assert 'FROM project_users' in statement
+            assert 'FOR SHARE' in statement
+            self.projects.append(params[0])
+        def fetchone(self):
+            return (1,) if self.projects[-1] == 'allowed-project' else None
+        def commit(self): self.commits += 1
+
+    class Repo:
+        def bulk_update(self, *args, **kwargs):
+            raise AssertionError('bulk must not write before every scope passes the real ACL')
+
+    conn = Conn()
+    monkeypatch.setattr(boundary, 'get_db_connection', lambda: conn)
+    monkeypatch.setattr(boundary, 'InventoryIdentityRepository', lambda connection: Repo())
+    monkeypatch.setattr(boundary, 'resolve_project_id', lambda scope: {
+        'front-A': 'allowed-project', 'front-B': 'forbidden-project'}[scope])
+    identity = {'source_lineage': 'urn:adsk.wipprod:dm.lineage:Source', 'external_id': 'same'}
+    app = Flask(__name__)
+    with app.test_request_context('/api/inventory/bulk', method='PATCH', json={
+        'identities': [{**identity, 'scope_id': 'front-A'}, {**identity, 'scope_id': 'front-B'}],
+        'fieldName': 'Status', 'fieldValue': 'Must not write'}):
+        g.current_user = {'id': 'user', 'role': 'user'}
+        response, status = boundary.patch_inventory_request(bulk=True)
+    assert status == 403 and response.get_json()['code'] == 'FORBIDDEN_SCOPE'
+    assert conn.projects == ['allowed-project', 'forbidden-project']
+    assert conn.commits == 0
+
+
+def test_compare_cleanup_helper_no_acepta_datos_de_obra():
+    from inventory_identity import IdentityError, InventoryIdentityRepository
+    import pytest
+    class Conn:
+        autocommit = False
+        def cursor(self):
+            raise AssertionError('non-temporary cleanup must fail before SQL')
+    with pytest.raises(IdentityError) as error:
+        InventoryIdentityRepository(Conn()).clear_temporary_snapshots('front-A')
+    assert error.value.code == 'NOT_TEMPORARY_SCOPE'

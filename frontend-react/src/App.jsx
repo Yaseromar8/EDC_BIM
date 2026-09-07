@@ -1,3 +1,5 @@
+import { INVENTORY_IDENTITY_FORMAT, INVENTORY_INTERNAL_KEYS, withInventoryIdentity, requireInventoryResponse } from './lib/inventoryIdentity';
+import { normalizeInventoryPreload, normalizeInventoryRefresh } from './lib/inventoryNormalizers';
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { urlInventario, enlaceCompartido } from './utils/enlaceCompartido';
 import './App.css';
@@ -1539,7 +1541,7 @@ function App() {
     aplicarInventario: (cfg) => {
       // El dueño canónico, no el panel: se aplica esté montado o no.
       fijarInventoryConfig(cfg);
-      const todas = Object.keys((window.postgresInventory || [])[0] || {});
+      const todas = Object.keys((window.postgresInventory || [])[0] || {}).filter(k => !INVENTORY_INTERNAL_KEYS.has(k));
       const perdidas = cfg.columns?.mode === 'custom'
         ? cfg.columns.keys.filter((k) => todas.length && !todas.includes(k))
         : [];
@@ -2361,9 +2363,14 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject?.id]);
 
+  const inventoryPreloadRequestRef = useRef(null);
+  const inventoryReadRevisionRef = useRef(0);
   // Twin Config: Load models from backend on mount (and when project changes)
   useEffect(() => {
     if (!selectedProject) return; // Don't fetch if no project selected
+    let active = true;
+    const revision = ++inventoryReadRevisionRef.current;
+    const current = () => active && revision === inventoryReadRevisionRef.current;
 
     // CRITICAL: Clear models immediately before fetching to prevent old project's
     // models from briefly rendering in the new project viewer
@@ -2377,6 +2384,7 @@ function App() {
     apiFetch(`${BACKEND_URL}/api/config/project?project=${selectedProject.id}`)
       .then(res => res.json())
       .then(data => {
+        if (!active) return;
         if (data.models && Array.isArray(data.models)) {
           // Map backend format to viewer format
           const mapped = data.models.map(m => ({
@@ -2454,12 +2462,9 @@ function App() {
     // su PROPIA copia en paralelo. GUARD anti-duplicado: React (StrictMode dev)
     // monta los efectos DOS veces → sin esto se lanzaban 2 descargas de 73MB
     // simultáneas (se partían el ancho de banda y una moría con 500).
-    if (window.__inventoryPreloadKey === selectedProject.id && window.__inventoryPreloadPromise) {
-      console.log('[Piedra Rosetta] Preload ya en curso para este proyecto — reutilizando (sin descarga duplicada).');
-      return;
-    }
     window.__inventoryPreloadKey = selectedProject.id;
-    window.__inventoryPreloadPromise = (async () => {
+    if (inventoryPreloadRequestRef.current?.scope !== selectedProject.id) {
+      inventoryPreloadRequestRef.current = { scope: selectedProject.id, promise: (async () => {
       // ── CACHÉ LOCAL (IndexedDB, patrón Tandem/ACC) ────────────────────────
       // 1) Pedir la HUELLA de versión (~100 bytes). 2) Si coincide con la del
       // caché local → usarlo (0 descarga, apertura ~1s). 3) Si no → descarga
@@ -2475,77 +2480,27 @@ function App() {
 
       if (verKey) {
         const cached = await getCachedInventory(selectedProject.id);
-        if (cached && cached.verKey === verKey && Array.isArray(cached.mappedData) && cached.mappedData.length) {
-          tagInventory(cached.mappedData, selectedProject?.id);
-          console.log(`[Piedra Rosetta] ⚡ Inventario desde caché LOCAL (${cached.mappedData.length} activos, 0 bytes descargados)`);
-          window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema: cached.schemaList || [] } }));
-          return;
+        if (cached && cached.identityFormat === INVENTORY_IDENTITY_FORMAT && cached.verKey === verKey && Array.isArray(cached.mappedData) && cached.mappedData.length) {
+          return { cached };
         }
         if (cached) console.log('[Piedra Rosetta] Caché local desactualizado (hubo re-extracción/edición) — descargando fresco…');
       }
 
       const dbData = await fetchInventoryResilient();
       return { dbData, verKey };
-    })()
+      })() };
+    }
+    window.__inventoryPreloadPromise = inventoryPreloadRequestRef.current.promise
       .then(payload => {
-        if (!payload) return; // servido desde caché
+        if (!current()) return;
+        if (payload.cached) {
+          tagInventory(payload.cached.mappedData, selectedProject.id);
+          window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema: payload.cached.schemaList || [] } }));
+          setPermToast(null);
+          return;
+        }
         const { dbData, verKey } = payload;
-        const schemaMap = {};
-
-        // Flatten as in InventoryDataGrid
-        const mappedData = dbData.map(node => {
-          let row = {
-            dbId: node.external_id,
-            model_urn: node.model_urn,
-            source_urn: node.source_urn || node.model_urn,
-            Name: node.name,
-            Material: node.material || '',
-            Status: node.installation_status || '',
-            Vaciado_Nro: node.vaciado_nro || ''
-          };
-          if (node.properties && typeof node.properties === 'object') {
-            Object.entries(node.properties).forEach(([cName, cVal]) => {
-              if (typeof cVal === 'object' && cVal !== null) {
-                Object.entries(cVal).forEach(([rawPName, pVal]) => {
-                  // Civil 3D: strip redundant group prefix from property name
-                  let pName = rawPName;
-                  if (pName.startsWith(cName)) {
-                    let cleaned = pName.slice(cName.length).replace(/^[\s\-\_\.]+/, '');
-                    if (cleaned.length > 0) pName = cleaned;
-                  } else if (cName.toUpperCase() === 'PROPERTY SETS' && pName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)) {
-                    pName = pName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)[1];
-                  }
-                  const val = Array.isArray(pVal) ? pVal.map(x => String(x ?? '').trim()).filter(Boolean).join(', ') : String(pVal).trim();
-                  // FIX: Solo sobreescribir si el nuevo valor no está vacío,
-                  // o si la propiedad aún no existe. Esto protege los valores válidos.
-                  if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
-                    row[pName] = val;
-                  }
-
-                  // Construir esquema exacto para FilterConfigurator
-                  const key = cName + '::' + pName;
-                  if (!schemaMap[key]) {
-                    schemaMap[key] = {
-                      id: key,
-                      name: pName,
-                      category: cName,
-                      group: 'text',
-                      path: cName + ' ▸ ' + pName
-                    };
-                  }
-                });
-              }
-            });
-          }
-
-          // Inyectar "Revit Category" normalizada (ES→EN, linked models, etc.)
-          const rawCat = node.properties?.['__category__']?.['__category__']
-            || row['__category__']  // ya aplanado por el loop anterior
-            || '(Unassigned)';
-          row['Revit Category'] = normalizeRevitCategory(rawCat);
-
-          return row;
-        });
+        const { mappedData, schemaMap } = normalizeInventoryPreload(dbData, normalizeRevitCategory);
         tagInventory(mappedData, selectedProject?.id);
         console.log(`[Piedra Rosetta] Descargados ${mappedData.length} activos desde PostgreSQL (Enterprise CDE Mode)`);
 
@@ -2582,61 +2537,37 @@ function App() {
         // Guardar en caché local para que la PRÓXIMA apertura sea instantánea
         // (se invalida sola cuando cambia la huella de versión del servidor).
         if (verKey) {
-          setCachedInventory(selectedProject.id, { verKey, mappedData, schemaList, savedAt: Date.now() });
+          setCachedInventory(selectedProject.id, { verKey, mappedData, schemaList, identityFormat: INVENTORY_IDENTITY_FORMAT, savedAt: Date.now() });
         }
+        setPermToast(null);
       })
-      .catch(err => console.error("[Piedra Rosetta] Error pre-cargando inventario PostgreSQL:", err));
+      .catch(err => {
+        if (!current()) return;
+        inventoryPreloadRequestRef.current = null;
+        console.error('[Piedra Rosetta] Error pre-cargando inventario:', err);
+        setPermToast(err.message);
+      });
+
+    return () => { active = false; };
 
   }, [selectedProject]);
 
   // Recarga reactiva: cuando una extracción termina, re-descargar inventario fresco
   useEffect(() => {
     if (!selectedProject) return;
+    let active = true;
     const handleRefresh = () => {
+      inventoryPreloadRequestRef.current = null;
+      const revision = ++inventoryReadRevisionRef.current;
+      const current = () => active && revision === inventoryReadRevisionRef.current;
       console.log('[Piedra Rosetta] Recarga reactiva disparada — descargando inventario fresco...');
       apiFetch(urlInventario(BACKEND_URL, selectedProject.id))
         .then(res => {
-          if (!res.ok) throw new Error('Falló el fetch a /api/inventory');
-          return res.json();
+          return requireInventoryResponse(res).then(ok => ok.json());
         })
         .then(dbData => {
-          const schemaMap = {};
-          const mappedData = dbData.map(node => {
-            let row = {
-              dbId: node.external_id,
-              model_urn: node.model_urn,
-              source_urn: node.source_urn || node.model_urn,
-              Name: node.name,
-              Material: node.material || '',
-              Status: node.installation_status || '',
-              Vaciado_Nro: node.vaciado_nro || ''
-            };
-            if (node.properties && typeof node.properties === 'object') {
-              Object.entries(node.properties).forEach(([cName, cVal]) => {
-                if (typeof cVal === 'object' && cVal !== null) {
-                  Object.entries(cVal).forEach(([rawPName, pVal]) => {
-                    let pName = rawPName;
-                    for (const d of [' - ', ' \u2013 ', ' \u2014 ']) {
-                      if (pName.startsWith(cName + d)) { pName = pName.slice((cName + d).length); break; }
-                    }
-                    const val = Array.isArray(pVal) ? pVal.map(x => String(x ?? '').trim()).filter(Boolean).join(', ') : String(pVal).trim();
-                    if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
-                      row[pName] = val;
-                    }
-                    const key = cName + '::' + pName;
-                    if (!schemaMap[key]) {
-                      schemaMap[key] = { id: key, name: pName, category: cName, group: 'text', path: cName + ' ▸ ' + pName };
-                    }
-                  });
-                }
-              });
-            }
-            const rawCat2 = node.properties?.['__category__']?.['__category__']
-              || row['__category__']
-              || '(Unassigned)';
-            row['Revit Category'] = normalizeRevitCategory(rawCat2);
-            return row;
-          });
+          if (!current()) return;
+          const { mappedData, schemaMap } = normalizeInventoryRefresh(dbData, normalizeRevitCategory);
 
           tagInventory(mappedData, selectedProject?.id);
           window.__inventoryCache = null;
@@ -2647,12 +2578,13 @@ function App() {
           };
           const schemaList = Object.values(schemaMap).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
           window.dispatchEvent(new CustomEvent('viewer-schema-extracted', { detail: { schema: schemaList } }));
+          setPermToast(null);
         })
-        .catch(err => console.error('[Piedra Rosetta] Error en recarga reactiva:', err));
+        .catch(err => { if (current()) { console.error('[Piedra Rosetta] Error en recarga reactiva:', err); setPermToast(err.message); } });
     };
 
     window.addEventListener('inventory-needs-refresh', handleRefresh);
-    return () => window.removeEventListener('inventory-needs-refresh', handleRefresh);
+    return () => { active = false; window.removeEventListener('inventory-needs-refresh', handleRefresh); };
   }, [selectedProject]);
 
   // Background Extraction Logic for Updates/Relinks
@@ -3101,7 +3033,7 @@ function App() {
                 || '(Unassigned)';
               row['Revit Category'] = normalizeRevitCategory(rawCat3);
 
-              return row;
+              return withInventoryIdentity(node, row);
             });
             tagInventory(mappedData, selectedProject?.id);
             console.log(`[Piedra Rosetta] Caché reactualizada: ${mappedData.length} activos`);

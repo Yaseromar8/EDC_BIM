@@ -96,6 +96,37 @@ def _is_conn_alive(conn):
         return False
 
 
+def _configure_inventory_path(conn):
+    """Pin the canonical projection before lending a clean pooled connection.
+
+    Session scope survives caller commits/rollbacks. Missing migration is an
+    error, never a fallback to public.inventory_assets. No DDL or role change.
+    """
+    if conn.status != psycopg2.extensions.STATUS_READY:
+        conn.rollback()
+    original_autocommit = conn.autocommit
+    try:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute('SELECT current_user')
+            if cur.fetchone()[0] == 'ecd_migrator':
+                cur.execute('SET SESSION search_path TO public,pg_catalog,pg_temp')
+                return
+            cur.execute('SET SESSION search_path TO pg_catalog,inventory_identity_b1,public,pg_temp')
+            cur.execute("""SELECT to_regclass('inventory_assets') =
+                to_regclass('inventory_identity_b1.inventory_assets'),
+                EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                    WHERE n.nspname='inventory_identity_b1' AND c.relname='inventory_assets'
+                      AND c.relkind='v')""")
+            if cur.fetchone() != (True, True):
+                raise RuntimeError('Inventory canonical schema unavailable: apply migration 31 as ecd_migrator')
+            cur.execute("SELECT has_table_privilege(current_user,'inventory_identity_b1.inventory_assets','SELECT')")
+            if cur.fetchone()[0] is not True:
+                raise RuntimeError('Inventory canonical SELECT grant missing; no legacy fallback')
+    finally:
+        conn.autocommit = original_autocommit
+
+
 @contextmanager
 def get_db_connection():
     """
@@ -144,6 +175,7 @@ def get_db_connection():
         raise Exception("No se pudo obtener una conexión sana del pool después de reintentos.")
 
     try:
+        _configure_inventory_path(conn)
         yield conn
     except Exception as e:
         conn_is_good = False

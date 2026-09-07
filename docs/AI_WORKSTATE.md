@@ -113,21 +113,15 @@ Las 7 vistas históricas conservan **id y md5 idénticos** a la huella tomada
 
 **Saved Views 2.0 = CLOSED / PRODUCTION GREEN.**
 
-**FILTERS CORE — B1 = EN CURSO. Primera unidad de identidad conectada: GREEN
-y commiteada localmente.** El propietario levantó el STOP de frontera protegida
-y autorizó `LOB4DExtension.js`, `backend/routes/lob4d.py` y
-`backend/routes/compare.py`. Tres seams cualificados por `(Source, externalId)`,
-7/7 en el ensayo de rutas reales y 12/12 en el banco del 4D, cuatro mutantes
-muertos, suite backend de vuelta a su línea base.
-
-**PROTECTED IDENTITY HARDENING GREEN.** El seam que motivó el STOP
-—`buildParamPhaseIndex`— y sus dos equivalentes —`buildSubZoneLabels` y el
-respaldo de `buildZoneHoverIndex`— quedan cualificados por `(Source, externalId)`
-con rebind por linaje. La búsqueda residual sobre los tres ficheros autorizados
-no encuentra otro consumidor de Inventory que resuelva por externalId global.
-[STOP original, ya levantado](filters/B1_INTEGRATION_PROTECTED_STOP.md).
-No B1 PASS: quedan los pendientes de B1 que no son de identidad. No push,
-deploy ni B2.
+**FILTERS CORE — B1 = CODE/TEST GREEN.** Identidad
+`(scope_id, source_lineage, external_id)` integrada extremo a extremo: migración
+**31** numerada y aplicada en desechable, `inventory_identity.py` como única
+autoridad, rutas Inventory reales (lectura, PATCH, bulk, extracción), payload
+cualificado y frontend que conserva la identidad. Ensayo integrado **23/23**,
+identidad 4D/5D **7/7**, suite backend **1721 passed / 1 failed** (el fallo
+documentado del backlog nº 1). Los KNOWN FAIL de B2 siguen visibles y **ninguno
+desapareció**. Baseline de navegador: **NOT EXECUTED / ENVIRONMENT**.
+B1 GREEN no significa Filters terminado. No push, deploy ni B2.
 
 ## LAST COMPLETED
 
@@ -395,81 +389,52 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
 
 ## STATUS
 
-**B1 EN CURSO — primera unidad de identidad GREEN y commiteada localmente
-(`fix(filters): qualify identity in 4d and compare consumers`). Sin push.**
+**B1 CODE/TEST GREEN.** El bloque que Codex dejó a medias se adoptó entero
+--era coherente con el contrato-- y se cerró con dos correcciones locales. La
+frontera de identidad es coherente de la base al frontend y no hay una segunda
+autoridad de Inventory: `window.postgresInventory` sigue siendo la única, ahora
+cualificada.
 
-El STOP de frontera protegida quedó levantado por el propietario para los tres
-módulos nombrados, y **todos los seams de identidad del alcance autorizado están
-cerrados**. No se eligió una Source ni se levantó un Inventory paralelo para
-taparlo: donde no hay documento demostrable, no se enlaza nada.
-
-El reproductor del ciclo anterior
-(`docs/filters/evidencias/B1_PROTECTED_BOUNDARY_REPRO.cjs`) **ya no puede
-ejecutarse**: copia el cuerpo del método fuera de la clase, así que al ganar
-`buildParamPhaseIndex` tres helpers falla con `this.urnDeFila is not a function`.
-Eso no prueba nada por sí solo y no se presenta como prueba. La demostración
-está en `frontend-react/pruebas/lob4dIdentidad.prueba.mjs`, que ejecuta los
-métodos reales sobre una instancia real —todos los métodos del prototipo son los
-del producto— e incluye los mismos casos control/colisión/orden.
-
-Entrega actual: [B1_INTEGRATION_PROTECTED_STOP.md](filters/B1_INTEGRATION_PROTECTED_STOP.md).
-Base aprobada: [B1_BACKEND_IDENTITY_RESULTADOS.md](filters/B1_BACKEND_IDENTITY_RESULTADOS.md).
-B1 original: [B1_RESULTADOS.md](filters/B1_RESULTADOS.md).
-Contrato: [FILTER_RESULT_B1.md](filters/FILTER_RESULT_B1.md).
-Plan: [FILTERS_BENCHMARK.md](filters/FILTERS_BENCHMARK.md).
-No reinvestigar Tandem, censo, identidad ni hardening. No B2.
-
-> **Desde `3e413cd` sólo hay commits documentales de handoff y del benchmark
-> Filters.** No hay commit funcional posterior declarado ni implementación de
-> B1 commiteada. La infraestructura B1 nueva permanece untracked y está
-> declarada en EXPECTED WORKTREE. Cualquier otro código nuevo no documentado
-> es STATE DIVERGENCE. El baseline funcional y producción no cambian.
-
-Commits documentales por encima del baseline (sin hash autorreferencial):
-
-- `docs(ai): add shared handoff protocol for coding agents` — crea `AGENTS.md`,
-  `docs/AI_WORKSTATE.md` y `docs/AI_DECISIONS.md`.
-- `docs(ai): make handoff state verification non-self-referential` — sustituye el
-  HEAD incrustado por `CODE BASELINE HEAD` + verificación por ascendencia.
-- `docs(filters): freeze benchmark and target contract` — incorpora
-  `docs/filters/FILTERS_BENCHMARK.md` y actualiza `docs/AI_WORKSTATE.md`;
-  sólo documentación aprobada, sin código funcional.
+Lo que NO está hecho, y por qué: el baseline de navegador
+`intención → cálculo → resultado → Viewer → frame` sólo se midió en sus tres
+primeros tramos (bancos deterministas). Los dos últimos exigen LMV con un modelo
+real, credenciales APS y una sesión: no se pueden montar sin secretos del
+propietario ni sin tocar producción. Se declara **NOT EXECUTED / ENVIRONMENT**,
+no verde.
 
 ## EXACT NEXT ACTION
 
-**Testigo a Astra.** La identidad de los consumidores 4D/5D del alcance
-autorizado está cerrada; lo que queda de B1 no es identidad:
+**Esperar decisión del propietario sobre B2.** B1 dejó la infraestructura y el
+oráculo; los defectos del motor Filters siguen deliberadamente vivos como KNOWN
+FAIL (8 en `filtersCore`, 6 en `interacciones`, 6 en `interaccionesIntegradas`,
+3 en `normalizadores`). Arreglarlos es B2 y **no está autorizado**.
 
-1. Pendientes B1 que nunca se ejecutaron por el SCOPE STOP: normalizadores P0-2,
-   fixture de Saved Views V2, baseline de navegador, endpoints y migración
-   conectados. Ninguno bloqueado ya por frontera protegida.
-2. Antes de conectar nada: la migración real del esquema con identidad
-   cualificada sigue sin numerar y sin aplicar
-   ([rollout](filters/B1_IDENTITY_ROLLOUT.md)), y el backfill de
-   `asset_user_data` exige una prueba de cobertura externa — el flag
-   `coverage_complete` no la mide, y así está escrito.
+Pendientes que quedan fuera de B1, registrados y no bloqueantes:
 
-Dos cosas quedan registradas y **no** son trabajo de B1:
+1. **Baseline de navegador**: medir `Viewer → frame` cuando haya un entorno con
+   modelo real y sesión. Hoy NOT EXECUTED / ENVIRONMENT.
+2. **Backfill legacy**: las siete filas de `asset_user_data` sin procedencia
+   demostrable siguen **sin asignar**, en preserve/quarantine. Promocionarlas
+   exige una prueba de cobertura determinista; `coverage_complete` no la mide.
+3. **`element_docs`**: se acota por `(model_urn, external_id)`, no por Source.
+   Es tan preciso como permite el esquema legacy y está fuera del alcance
+   autorizado de B1; queda anotado, no tocado.
+4. **Comparador frente↔frente** (backlog nº 7): semántica de producto.
 
-- El emparejamiento **frente↔frente** del comparador cruza documentos distintos
-  por externalId (backlog nº 7). Semántica de producto, decisión del propietario.
-- `buildParamPhaseIndexFromProps` —el respaldo por propiedades de APS— ya es
-  por modelo y no cruza; no necesitó cambio.
-
-### [WIP HANDOFF] — identidad 4D/5D cerrada
+### [WIP HANDOFF] — B1 cerrado
 
 ~~~text
 [WIP HANDOFF]
-TAREA:                FILTERS CORE — B1, identidad cualificada en los consumidores 4D/5D
-IMPLEMENTADO:         Seis seams cerrados en dos commits locales. be114a1: setElementLinks por linaje, compare.py por (source_urn, external_id) con detalle no ambiguo, lob4d GROUP BY por (source_urn, external_id), y el test_gap11core_issues que fallaba con PermissionError. Segundo commit: buildParamPhaseIndex, buildSubZoneLabels y el respaldo de buildZoneHoverIndex, los tres sobre los helpers compartidos indiceDeDocumentos / claveDeSource / urnDeFila
-PENDIENTE:            Nada de identidad en el alcance autorizado. De B1 quedan P0-2, fixture Saved Views V2, baseline de navegador, endpoints y migracion conectados. No B2
-ARCHIVOS MODIFICADOS: Commiteados: LOB4DExtension.js (SOLO mis hunks de identidad, en dos rondas); backend/routes/compare.py; backend/routes/lob4d.py; backend/tests/test_gap11core_issues.py; frontend-react/pruebas/lob4dIdentidad.prueba.mjs; backend/herramientas/ensayo_identidad_4d_5d.py; docs/filters/evidencias/IDENTIDAD_4D_5D.json; docs/AI_WORKSTATE.md. Ajenos intactos y FUERA del indice: las 136 lineas de los 8 hunks de LOB4DExtension.js, mas Viewer.jsx, ViewerLabelsBar.jsx y predictBim.js
-TESTS EJECUTADOS:     node frontend-react/pruebas/lob4dIdentidad.prueba.mjs 26/26; python -B backend/herramientas/ensayo_identidad_4d_5d.py 7/7 exit 0; pytest 1701 passed / 1 failed (el documentado del backlog 1); build del visor OK; filtersCore 8 KNOWN FAIL e interacciones 6 KNOWN FAIL, 0 inesperados; Saved Views 63/63, 150/150, 111/111. Siete mutantes muertos entre las dos rondas
-TESTS PENDIENTES:     Navegador, APS real, HTTP auth, migracion conectada y P0-2: NOT EXECUTED, fuera de esta unidad
-FALLO CONOCIDO:       Ninguno de identidad en el alcance autorizado. El reproductor ajeno B1_PROTECTED_BOUNDARY_REPRO.cjs ya no corre porque copia el metodo fuera de la clase; no se toco y no se usa como prueba. El emparejamiento frente-frente del comparador sigue cruzando documentos: backlog 7, semantica de producto, fuera de B1
-NEXT EXACT ACTION:    Testigo a Astra: pendientes B1 que no son de identidad
-DO NOT TOUCH:         Identidad (scope, lineage, externalId) y las seis responsabilidades; Saved Views V2 CLOSED y las V1 historicas; migraciones 29/30; LMV 7; formulas 4D, avance, scheduling, metrados, algoritmo frente-frente de compare, colores, labels y UI; AR; los 4 M ajenos y las entradas untracked ajenas; produccion
-COMMIT/HEAD REF:      el segundo commit de esta unidad es el HEAD actual; obtenerlo con git rev-parse HEAD
+TAREA:                FILTERS CORE — B1, integracion de identidad extremo a extremo
+IMPLEMENTADO:         Migracion 31 numerada con guardas de rol y bootstrap solo-migrador; inventory_identity.py como autoridad unica; inventory_http.py con la autorizacion por scope; rutas Inventory reales (schema, read, version, PATCH, bulk, extract) cualificadas; digital_twin relink/remove/purge sobre la persistencia canonica; payload con scope_id, source_lineage y element_key; frontend con inventoryIdentity.js e inventoryNormalizers.js que conservan la identidad. Adoptado de Codex y corregido en dos puntos: I17 del ensayo integrado y el reanclaje de P0-7
+PENDIENTE:            Nada de B1. B2 no autorizado. Baseline de navegador NOT EXECUTED / ENVIRONMENT
+ARCHIVOS MODIFICADOS: Commiteados en este checkpoint: los 28 del git show. Ajenos intactos y FUERA del indice: LOB4DExtension.js, ViewerLabelsBar.jsx, predictBim.js y Viewer.jsx. Siguen untracked a proposito: los documentos narrativos B1, backend/prototypes/ y backend/sql/candidates/ (prototipo superado por inventory_identity.py y sql/31)
+TESTS EJECUTADOS:     ensayo_inventory_b1_integrado 23/23 INTEGRATION PASS; ensayo_identidad_4d_5d 7/7; pytest 1721 passed / 1 failed (documentado); filtersCore 27+1 PASS / 8 KNOWN FAIL; interacciones 2 PASS / 6 KNOWN FAIL; interaccionesIntegradas 2 PASS / 6 KNOWN FAIL; normalizadores 5 PASS / 3 KNOWN FAIL; savedViewsBoundary 6 PASS; inventoryIdentity 17/17; lob4dIdentidad 26/26; Saved Views 63/63, 150/150, 111/111; build del visor OK. Cero UNEXPECTED FAIL y cero UNEXPECTED PASS en todos los oraculos
+TESTS PENDIENTES:     Navegador con LMV y modelo real: NOT EXECUTED / ENVIRONMENT, no false-green
+FALLO CONOCIDO:       Los KNOWN FAIL de B2 siguen vivos y ninguno desaparecio. test_capacidades_con_puerta sigue fallando por /api/docs/miniaturas/preparar, del 29-ago, ajeno a B1
+NEXT EXACT ACTION:    Esperar decision del propietario sobre B2
+DO NOT TOUCH:         Identidad aprobada y las seis responsabilidades; Saved Views V2 CLOSED y las V1 historicas; migraciones 29/30/31 aplicadas; LMV 7; semantica OR/AND y faceting; compare frente-frente; formulas 4D/5D; AR; ViewerFacade; exclusividad de color; produccion
+COMMIT/HEAD REF:      el checkpoint B1 es el HEAD actual; obtenerlo con git rev-parse HEAD
 ~~~
 
 Los resultados identidad29/29 y mutantes14/14 son del hardening aprobado de
@@ -501,6 +466,10 @@ Todo medido el **6-sep-2026 sobre este mismo worktree**.
 | Build del visor | `npx vite build --outDir <fuera del repo> --emptyOutDir` | **✓ en 12,63 s.** Los *chunks* compartidos salen con el mismo hash que sirve producción (`vendor-BzrpNAyj`, `pdf-DNJrdseb`, `xlsx-BmGrHcps`); `index-*` difiere, y difiere **porque el worktree lleva los cambios sin commitear** |
 | Identidad 4D | `node frontend-react/pruebas/lob4dIdentidad.prueba.mjs` | **26 / 26** — `setElementLinks` real y `linajeDeUrn` real; dobles sólo del visor |
 | Identidad 4D/5D backend | `python -B backend/herramientas/ensayo_identidad_4d_5d.py --pg-bin <bin> --confirm-disposable-only` | **7 / 7**, exit 0 — clúster nuevo, DDL de `inventory_assets` por AST, rutas reales de `compare.py` |
+| Integración B1 | `python -B backend/herramientas/ensayo_inventory_b1_integrado.py --pg-bin <bin> --confirm-disposable-only` | **23 / 23** INTEGRATION PASS — SQL, rutas y middleware reales sobre PG18 nuevo |
+| Identidad Inventory (frontend) | `node frontend-react/pruebas/inventoryIdentity.prueba.mjs` | **17 / 17** |
+| P0-2 normalizadores | `node frontend-react/pruebas/filtersCore.normalizadores.prueba.mjs` | 5 PASS + **3 KNOWN FAIL** (divergencia load/refresh caracterizada, defecto de B2) |
+| Saved Views boundary | `node frontend-react/pruebas/filtersCore.savedViewsBoundary.prueba.mjs` | **6 / 6** — el contrato V2 CLOSED no necesita cambios |
 | Lint del visor | `npx eslint src` | 422 problemas (381 errores, 41 avisos). **No es una puerta**, ver backlog nº 5 |
 
 ## PRODUCTION OPERATIONS

@@ -1,5 +1,32 @@
 # Como arranca este backend, y por que
 
+## Inventory B1: migracion 31 preparada, no aplicada automaticamente
+
+`sql/31_inventory_identity.sql` crea la autoridad canonica en
+`inventory_identity_b1`: Sources, elementos, snapshots, ocurrencias, datos de
+usuario y cuarentena. La vista `inventory_assets` de ese namespace es solamente
+una proyeccion; no copia ni alimenta `public.inventory_assets`.
+
+- Se aplica manualmente como `ecd_migrator` antes del codigo nuevo, o mediante
+  el constructor explicito `yarn migrate`. `yarn start` solo verifica.
+- El pool runtime fija su `search_path` a la proyeccion canonica. Si falta la
+  migracion/vista/permisos, falla; no recurre silenciosamente al Inventory viejo.
+- La migracion no hace backfill ni asigna las filas humanas legacy. La API
+  operativa rechaza promociones con `NO_PROMOTION`: un booleano de cobertura
+  no prueba que el conjunto de Sources este completo.
+- Hay que planificar una ventana coordinada: la 31 revoca las escrituras del
+  runtime sobre las tablas legacy. El binario anterior no podra seguir
+  escribiendo Inventory desde ese momento. Los datos legacy quedan intactos.
+- El rollback de esquema se niega si el namespace tiene datos. Retirar el
+  codigo nuevo no restaura por si solo los grants legacy ni sincroniza datos:
+  regresar al binario anterior requiere un plan explicito de permisos y datos,
+  autorizado antes de la ventana. Nunca habilitar doble escritura automatica.
+- Limpiar comparaciones oculta sus snapshots temporales; conserva identidad,
+  historial y datos humanos. Una reextraccion autorizada puede volver a
+  publicarlos con un token de generacion nuevo.
+
+Nada de esta preparacion local autoriza migracion o despliegue en produccion.
+
 El despliegue tiene dos identidades y, por tanto, dos comandos distintos:
 
     yarn migrate   # servicio/job de migracion: DB_USER=ecd_migrator

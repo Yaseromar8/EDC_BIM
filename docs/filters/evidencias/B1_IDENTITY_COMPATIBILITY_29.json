@@ -1,0 +1,281 @@
+{
+  "verdict": "PROTOTYPE PASS",
+  "executionContext": "Compatibility rerun of the unchanged hardened 29-case bank against the guarded wrapper; not the integrated HTTP/migration31 bank.",
+  "bankSha256": "cb099a0cf7f52c339103822059f21ac85a799a161426f2cde4ab450b6ff0a8de",
+  "originalEvidenceSha256Preserved": "87347ac4dca24bc7af008e686a7677b4806230456098e77d6a3af81bcd6d7b42",
+  "operationalCoreSha256BeforeAndAfter": "1aa351f8bf79657fdef2413b68efd26a56ddcabf4fd13c6f77418bc817da989c",
+  "createdAt": "2026-09-07T14:58:29.223010+00:00",
+  "environment": {
+    "host": "127.0.0.1",
+    "port": 52774,
+    "database": "ecd_ensayo_identity_candidate_9427821525",
+    "clusterDirectory": "C:\\Users\\ASUS\\AppData\\Local\\Temp\\alephia_filters_identity_candidate_03572cxr\\data",
+    "newCluster": true
+  },
+  "sourceFingerprints": {
+    "backend\\prototypes\\inventory_identity_b1.py": "c53fdd7f1ab0505e2328a06e61cadb482552db9a9841d77528c6b393a653e45f",
+    "backend\\sql\\candidates\\inventory_identity_b1.sql": "3df6990e288a7757d9b923fefa75aafea3287654ed96feb3d27bb530093067e5",
+    "backend\\sql\\candidates\\inventory_identity_b1_rollback.sql": "4635ce1eead72ffce8f17308c63932f87de87405220316220218e90f6cf168d6"
+  },
+  "limitations": [
+    "Synthetic APS document IDs and elements, no APS request or import.",
+    "Candidate repository only: no production route or HTTP authentication.",
+    "No real-data backfill, census, deployment, B2 or Saved Views change.",
+    "The accepted historical evidence is preserved; operational integration is tested separately."
+  ],
+  "cases": [
+    {
+      "case": "T1-two-sources-same-externalId",
+      "status": "PASS",
+      "expectedCount": 2,
+      "actualCount": 2
+    },
+    {
+      "case": "T2-new-version-same-logical-element",
+      "status": "PASS",
+      "logicalElements": 1,
+      "snapshots": 2,
+      "activeRows": 1
+    },
+    {
+      "case": "T3-distinct-externalIds",
+      "status": "PASS",
+      "expectedCount": 2,
+      "actualCount": 2
+    },
+    {
+      "case": "T4-same-document-element-two-scopes",
+      "status": "PASS",
+      "expectedScopes": 2,
+      "distinctElementKeys": 2
+    },
+    {
+      "case": "T5-identical-publication-idempotent",
+      "status": "PASS",
+      "logicalElements": 1,
+      "snapshots": 1,
+      "activeRows": 1
+    },
+    {
+      "case": "T6-qualified-edit-name-base-fields-and-extra",
+      "status": "PASS",
+      "editedSourceCount": 1,
+      "unchangedOtherSourceCount": 1,
+      "fieldFamiliesTested": 6
+    },
+    {
+      "case": "T7-read-both-sources-full-and-lite",
+      "status": "PASS",
+      "fullPayloadCount": 2,
+      "litePayloadCount": 2,
+      "legacyModelUrnSemanticsPreserved": true
+    },
+    {
+      "case": "T8-user-data-no-cross-scope-leakage",
+      "status": "PASS",
+      "isolatedScopes": 2,
+      "deniedReadAndWrite": true
+    },
+    {
+      "case": "T9-ambiguous-legacy-user-data-quarantined",
+      "status": "PASS",
+      "quarantined": 1,
+      "promoted": 0,
+      "reason": "LEGACY_AMBIGUOUS",
+      "originalPayloadPreserved": true
+    },
+    {
+      "case": "T10-user-data-survives-version-and-temporary-absence",
+      "status": "PASS",
+      "activeRowsAfterV2": 1,
+      "activeRowsAfterV3": 2,
+      "userDataPreserved": true
+    },
+    {
+      "case": "X1-compare-retains-explicit-snapshots",
+      "status": "PASS",
+      "coexistingVersions": 2,
+      "pointerUnchangedByCompare": true
+    },
+    {
+      "case": "X2-stale-publication-CAS-rejected-atomically",
+      "status": "PASS",
+      "expectedError": "STALE_ACTIVE_URN",
+      "actualError": "STALE_ACTIVE_URN",
+      "snapshotsAfterRejectedPublication": 2
+    },
+    {
+      "case": "X3-bulk-validates-all-identities-before-writing",
+      "status": "PASS",
+      "rejectedBatches": 2,
+      "partialWrites": 0,
+      "successfulBatchUpdated": 2
+    },
+    {
+      "case": "X4-ifc-path-and-guid-are-not-conflated",
+      "status": "PASS",
+      "distinctExactExternalIds": 2,
+      "guidPropertyDidNotReplacePath": true
+    },
+    {
+      "case": "X5-lineage-conflict-opaque-incomplete-and-conflicting-snapshot",
+      "status": "PASS",
+      "rejectedInputs": 4,
+      "originalSnapshotUnchanged": true
+    },
+    {
+      "case": "X6-legacy-unique-incomplete-and-no-candidate",
+      "status": "PASS",
+      "promotedWithProvenCoverage": 1,
+      "quarantinedIncomplete": 1,
+      "quarantinedNoCandidate": 1
+    },
+    {
+      "case": "X7-ecd-app-no-DDL-no-quarantine",
+      "status": "PASS",
+      "identity": [
+        "ecd_app",
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "actualDeniedOperations": 4,
+      "runtimeOperationsAboveUseDmlOnly": true
+    },
+    {
+      "case": "X10-native-new-version-does-not-touch-other-document",
+      "status": "PASS",
+      "sourceAUpdatedVersion": 2,
+      "sourceBPayloadExactlyUnchanged": true
+    },
+    {
+      "case": "X11-historical-inactive-snapshot-preserves-active-pointer",
+      "status": "PASS",
+      "historicalSnapshotsAdded": 1,
+      "activeVersionStill": 2
+    },
+    {
+      "case": "X12-legacy-retry-idempotent-conflict-does-not-overwrite-user",
+      "status": "PASS",
+      "repeatStatus": "promoted",
+      "logicalUserRowsAfterRepeat": 1,
+      "conflictStatus": "quarantined",
+      "conflictReason": "QUALIFIED_DATA_EXISTS",
+      "humanEditPreserved": true
+    },
+    {
+      "case": "X13-permission-narrowing-does-not-invent-legacy-origin",
+      "status": "PASS",
+      "unqualifiedCandidatesDespiteNarrowAllowlist": 2,
+      "unqualifiedQuarantined": true,
+      "explicitScopeHintPromoted": 1,
+      "otherScopeUnmodified": true
+    },
+    {
+      "case": "X14-invalid-legacy-extras-quarantined-without-coercion",
+      "status": "PASS",
+      "invalidPayloadsQuarantined": 2,
+      "originalPayloadsPreserved": 2,
+      "promoted": 0
+    },
+    {
+      "case": "X15-caller-database-transaction-and-mutation-guards",
+      "status": "PASS",
+      "explicitRejections": 6,
+      "originalSnapshotUnchanged": true,
+      "inferredIdentityWrites": 0
+    },
+    {
+      "case": "X8-DDL-idempotence-and-role-database-guards",
+      "status": "PASS",
+      "idempotentRepeatedDDL": true,
+      "wrongRoleAndDatabaseRejected": 2,
+      "tableCountsAndHashesUnchanged": true
+    },
+    {
+      "case": "X9-rollback-refuses-populated-data",
+      "status": "PASS",
+      "populatedRollbackRejected": true,
+      "populatedDataUnchanged": true,
+      "emptyCandidateSchemaRollback": true,
+      "filesystemDeletions": 0
+    },
+    {
+      "case": "X16-legacy-ambiguity-counts-a-historical-rival-identity",
+      "status": "PASS",
+      "activeCandidates": 1,
+      "historicalCandidates": 1,
+      "weighedCandidates": 2,
+      "promoted": 0
+    },
+    {
+      "case": "X17-row-declared-identity-must-match-the-batch",
+      "status": "PASS",
+      "rejectedDeclarations": [
+        "model_urn",
+        "scope_id",
+        "source_lineage",
+        "source_urn"
+      ],
+      "nothingIngested": true,
+      "matchingDeclarationAccepted": true
+    },
+    {
+      "case": "X18-resolver-and-migrator-agree-on-ambiguity",
+      "status": "PASS",
+      "resolverVerdict": "LEGACY_AMBIGUOUS",
+      "migratorVerdict": "LEGACY_AMBIGUOUS",
+      "agree": true,
+      "narrowSemanticsRequiresExplicitOptIn": true
+    },
+    {
+      "case": "X19-promotion-persists-provenance-and-runtime-cannot-forge-it",
+      "status": "PASS",
+      "provenanceOnPromotion": true,
+      "provenanceOnOrdinaryEdit": false,
+      "runtimeWritesDenied": 4,
+      "halfRecordedProvenanceRejected": true,
+      "retryIdempotent": true
+    }
+  ],
+  "clusterStopped": true,
+  "candidateDataFingerprint": {
+    "elements": {
+      "count": 43,
+      "md5": "4dad6aea411d96d2d915c2c82f0139ae"
+    },
+    "legacy_user_quarantine": {
+      "count": 9,
+      "md5": "7e948d1bd017ce1d0b2ed55fd0696e4e"
+    },
+    "occurrences": {
+      "count": 51,
+      "md5": "f88695d8c10b131798af9e287db0a0ca"
+    },
+    "snapshots": {
+      "count": 43,
+      "md5": "b278938dd71a04815c266263e2fd1160"
+    },
+    "sources": {
+      "count": 35,
+      "md5": "d841fa4de818f667e296a2b4ebff83c9"
+    },
+    "user_data": {
+      "count": 12,
+      "md5": "49c9928e09357cf90242d0c34e4a5be8"
+    }
+  },
+  "summary": {
+    "passed": 29,
+    "failed": 0,
+    "total": 29
+  },
+  "clusterRetained": "C:\\Users\\ASUS\\AppData\\Local\\Temp\\alephia_filters_identity_candidate_03572cxr",
+  "exitCode": 0
+}

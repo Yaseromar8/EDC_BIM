@@ -168,8 +168,21 @@ def _rutinas():
         # van con las claves ajenas, al final, no donde se crean sus tablas.
         ('reglas_del_rfi', ensure_reglas_del_rfi),
         ('reglas_del_redline', ensure_reglas_del_redline),
+        ('inventory_canonical_31', _inventory_canonical_31),
         ('integridad_referencial', ensure_claves_ajenas),
     ]
+
+
+def _inventory_canonical_31():
+    """Migration 31 only in explicit migrator bootstrap, never runtime startup."""
+    from db import get_db_connection
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sql', '31_inventory_identity.sql')
+    with open(ruta, encoding='utf-8') as archivo:
+        migration = archivo.read()
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(migration)
+        conn.commit()
 
 
 def _tabla_nomenclatura():
@@ -361,6 +374,9 @@ def aplicar_grants_aplicacion():
         cur.execute(sql)
         conn.commit()
     print('permisos de ecd_app aplicados: datos SI, DDL NO')
+    # 03 grants public broadly; restore the explicit legacy Inventory write
+    # prohibition from migration31, without backfill or runtime DDL.
+    _inventory_canonical_31()
 
 
 def _manifiesto():
@@ -522,7 +538,11 @@ def verificar():
     from db import get_db_connection
     with get_db_connection() as conn:
         cur = conn.cursor()
+        # Keep legacy manifest regclass names stable; catalog inspection only.
+        cur.execute('SET LOCAL search_path TO public,pg_catalog,pg_temp')
         presente = _objetos_presentes(cur)
+        from inventory_identity import verify_inventory_schema
+        inventory_missing = verify_inventory_schema(cur)
 
     esperadas_tablas = _manifiesto()
     esperado = _objetos_esperados()
@@ -548,7 +568,7 @@ def verificar():
         print('%-14s : %d de %d%s' % (_PLURAL[tipo], total - faltan_n, total,
                                       '   *** FALTAN %d ***' % faltan_n if faltan_n else ''))
 
-    todo_lo_que_falta = []
+    todo_lo_que_falta = list(inventory_missing)
     for tipo in _TIPOS:
         for n in faltan_por_tipo.get(tipo, []):
             todo_lo_que_falta.append('%s %s' % (tipo, n))

@@ -208,14 +208,89 @@ def sanitize_urn(urn):
     urn = urn.replace('+', '-').replace('/', '_').rstrip('=')
     return urn
 
+def _extraction_source_context(conn, urn, target_urn):
+    """Identidad demostrable y destino exacto; no afirma propiedad APS de un URN nuevo.
+
+    La admision previa al vinculo se conserva para DOCS: un Source nunca
+    registrado puede solicitarse a un frente autorizado. Si el registro ya
+    lo atribuye a otra obra, se rechaza; no se acepta una declaracion cliente
+    como prueba de propiedad. __cmp__ exige un linaje registrado y una obra
+    inequivoca; su scope de almacenamiento es interno, no una obra nueva.
+    """
+    from db import resolve_project_id
+    from inventory_identity import IdentityError, source_identity
+
+    normalized, source_lineage = source_identity(urn)
+    if not isinstance(target_urn, str) or not target_urn.strip() or target_urn != target_urn.strip():
+        raise IdentityError('INVALID_SCOPE')
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT app_project_id, urn, item_id FROM public.model_config")
+        config_rows = cursor.fetchall()
+    related = []
+    for configured_scope, configured_urn, configured_item in config_rows:
+        try:
+            configured_normalized, configured_lineage = source_identity(configured_urn)
+        except IdentityError:
+            continue
+        if configured_lineage != source_lineage:
+            continue
+        # Incluye versiones previas del mismo documento; nunca model_id/slot.
+        source_identity(configured_urn, configured_item)
+        configured_project = resolve_project_id(configured_scope)
+        if not configured_project:
+            raise IdentityError('SOURCE_PROJECT_UNRESOLVED')
+        related.append((configured_scope, configured_project, configured_item,
+                        configured_normalized))
+    known_projects = {entry[1] for entry in related}
+    if target_urn == '__cmp__':
+        if not related:
+            raise IdentityError('SOURCE_NOT_REGISTERED')
+        if len(known_projects) != 1:
+            raise IdentityError('SOURCE_SCOPE_AMBIGUOUS')
+        project_id = next(iter(known_projects))
+        authorization_scopes = sorted({entry[0] for entry in related})
+    else:
+        project_id = resolve_project_id(target_urn)
+        if not project_id:
+            raise IdentityError('PROJECT_UNRESOLVED')
+        if known_projects and project_id not in known_projects:
+            raise IdentityError('SOURCE_PROJECT_CONFLICT')
+        authorization_scopes = [target_urn]
+    exact = [entry for entry in related
+             if entry[0] == target_urn and entry[3] == normalized]
+    applicable = exact or [entry for entry in related if entry[0] == target_urn] or related
+    item_ids = {entry[2] for entry in applicable if entry[2] is not None}
+    if len(item_ids) > 1:
+        raise IdentityError('ITEM_LINEAGE_CONFLICT')
+    item_id = next(iter(item_ids)) if item_ids else None
+    source_identity(normalized, item_id)
+    return {'source_urn': normalized, 'source_lineage': source_lineage,
+            'item_id': item_id, 'project_id': project_id,
+            'authorization_scopes': authorization_scopes,
+            'registered_source': bool(related)}
+
+
+def _aps_collection(response):
+    """Una coleccion ausente/malformada NO es una extraccion vacia completa."""
+    from inventory_identity import IdentityError
+    response.raise_for_status()
+    payload = response.json()
+    data = payload.get('data') if isinstance(payload, dict) else None
+    collection = data.get('collection') if isinstance(data, dict) else None
+    if response.status_code != 200 or not isinstance(collection, list):
+        raise IdentityError('INCOMPLETE_APS_COLLECTION')
+    if any(not isinstance(row, dict) for row in collection):
+        raise IdentityError('INVALID_APS_ROW')
+    return collection
+
+
 def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
     """ Tarea en segundo plano para extraer metadata de Autodesk.
 
-    purge_source_urns: lista opcional de source_urn (de OTRO linaje) a borrar de
-    forma ATÓMICA tras una extracción exitosa. La usa el Relink: el modelo viejo
-    apunta a otro archivo, así que la limpieza por linaje no lo cubre. Se borra
-    DENTRO de la misma transacción que inserta los datos nuevos -> si la extracción
-    falla, NO se borra nada y el inventario viejo queda intacto. """
+    purge_source_urns: Sources de OTRO linaje que se retiran (sin borrar historia)
+    en la misma transaccion que publica la extraccion completa. CAS se captura
+    ANTES de APS; una descarga antigua no puede reactivar un modelo retirado.
+    La firma se conserva para los callers update/relink/upload. """
     # Clave de concurrencia: mismo modelo + mismo scope
     _key = None
     try:
@@ -228,15 +303,32 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
         with _EXTRACTING_LOCK:
             if _key in _EXTRACTING_KEYS:
                 print(f"[Extractor] Ya hay una extracción en curso para {_key}; este job se omite.")
-                set_job(job_id, {'status': 'success', 'progress': 100,
-                                 'message': 'Ya había una extracción en curso para este modelo.'})
                 _key = None  # no liberar lo que no tomamos
-                return
+                from inventory_identity import IdentityError
+                raise IdentityError('EXTRACTION_IN_PROGRESS')
             _EXTRACTING_KEYS.add(_key)
         print(f"[Extractor] URN sanitizado: {urn}")
         print(f"[Extractor] Target URN: {target_urn}")
-        
-        set_job(job_id, {'status': 'pending', 'progress': 0, 'message': 'Conectando con Autodesk...'})
+
+        from db import get_db_connection
+        from inventory_identity import InventoryIdentityRepository, IdentityError, source_identity
+        with get_db_connection() as conn:
+            source_context = _extraction_source_context(conn, urn, target_urn)
+            urn = source_context['source_urn']
+            expected = InventoryIdentityRepository(conn).active_snapshot(
+                target_urn, urn, allowed_scopes=[target_urn])
+            # active_snapshot registra Source/generation: retirar mientras APS
+            # trabaja invalida tambien una primera publicacion en vuelo (ABA).
+            conn.commit()
+        retire = []
+        for old_source in purge_source_urns or []:
+            old_normalized, old_lineage = source_identity(old_source)
+            if old_lineage != source_context['source_lineage']:
+                retire.append(old_normalized)
+        retire = list(dict.fromkeys(retire))
+        set_job(job_id, {'status': 'pending', 'progress': 0,
+                         'model_urn': source_context['project_id'] if target_urn == '__cmp__' else target_urn,
+                         'message': 'Conectando con Autodesk...'})
         token_result = get_internal_token()
         if isinstance(token_result, tuple):
             token, err = token_result
@@ -277,8 +369,8 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
             with get_db_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT default_view_guid FROM model_config WHERE urn = %s AND default_view_guid IS NOT NULL",
-                    (urn,)
+                    "SELECT default_view_guid FROM model_config WHERE urn = %s AND app_project_id = %s AND default_view_guid IS NOT NULL",
+                    (urn, target_urn if target_urn != '__cmp__' else source_context['authorization_scopes'][0])
                 )
                 row = cursor.fetchone()
                 if row and row[0]:
@@ -358,6 +450,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
         try:
             all_items = []
             offset = 0
+            pagination_complete = False
             max_pages = 200  # Safety limit (100,000 elementos max)
             for page in range(max_pages):
                 payload = {
@@ -376,18 +469,22 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
                 if resp.status_code == 202:
                     raise Exception("Timeout en paginación")
                 resp.raise_for_status()
-                batch = resp.json().get('data', {}).get('collection', [])
+                batch = _aps_collection(resp)
                 all_items.extend(batch)
                 print(f"[Extractor] Fase 2 - Página {page+1}: +{len(batch)} elementos (total: {len(all_items)})")
                 set_job(job_id, {'status': 'pending', 'progress': min(40 + page * 3, 65), 'message': f'Descargando propiedades ({len(all_items)} elementos)...'})
                 
                 if len(batch) < PAGE_SIZE:
-                    break  # Última página
+                    pagination_complete = True
+                    break  # Ultima pagina demostrada, no limite del bucle.
                 offset += PAGE_SIZE
-            
+            if not pagination_complete:
+                raise IdentityError('INCOMPLETE_EXTRACTION_PAGE_LIMIT')
             collection = all_items
             print(f"[Extractor] Fase 2 - POST paginado completado: {len(collection)} elementos totales")
             
+        except IdentityError:
+            raise  # limite/malformacion no se convierte en exito via fallback.
         except Exception as paginated_err:
             # FALLBACK: GET legacy (funciona para modelos pequeños/medianos)
             print(f"[Extractor] Fase 2 - POST paginado falló ({paginated_err}), usando GET legacy...")
@@ -403,7 +500,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
                     time.sleep(5)
                     continue
                 resp.raise_for_status()
-                collection = resp.json().get('data', {}).get('collection', [])
+                collection = _aps_collection(resp)
                 print(f"[Extractor] Fase 2 (GET fallback) - Recibidos {len(collection)} elementos")
                 break
                 
@@ -416,8 +513,12 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
         print(f"[Extractor] Fase 2.1 - GET {hier_url}")
         hier_resp = requests.get(hier_url, headers=headers)
         hier_resp.raise_for_status()
-        hier_objects = hier_resp.json().get('data', {}).get('objects', [])
-        
+        hierarchy_payload = hier_resp.json()
+        hierarchy_data = hierarchy_payload.get('data') if isinstance(hierarchy_payload, dict) else None
+        hier_objects = hierarchy_data.get('objects') if isinstance(hierarchy_data, dict) else None
+        if hier_resp.status_code != 200 or not isinstance(hier_objects, list):
+            raise IdentityError('INCOMPLETE_APS_HIERARCHY')
+
         parent_map = {}
         def build_parent_map(objects_list, parent_id):
             for obj in objects_list:
@@ -477,7 +578,7 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
                     }
                     q_resp = requests.post(q_url, headers={**headers, 'Content-Type': 'application/json'}, json=q_payload, timeout=30)
                     if q_resp.status_code == 200:
-                        batch_results = q_resp.json().get('data', {}).get('collection', [])
+                        batch_results = _aps_collection(q_resp)
                         collection.extend(batch_results)
                         recovered += len(batch_results)
                 except Exception as gap_err:
@@ -485,6 +586,10 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
             print(f"[Extractor] Fase 2.2 - Recuperados {recovered}/{len(missing_leaf_ids)} elementos faltantes")
         else:
             print(f"[Extractor] Fase 2.2 - [OK] Cobertura completa: {len(tree_leaf_ids)} hojas, todas presentes en collection")
+
+        still_missing = tree_leaf_ids - {node.get('objectid') for node in collection}
+        if still_missing:
+            raise IdentityError('INCOMPLETE_MODEL_COVERAGE', missing_leaves=len(still_missing))
 
         # Fase 3: Inserción BD y Fusión Genética
         set_job(job_id, {'status': 'pending', 'progress': 80, 'message': 'Estructurando gemelo digital (Fusionando Familias)...'})
@@ -545,6 +650,8 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
             external_id = node.get('externalId')
             objectid = node.get('objectid')
             if not external_id:
+                if objectid in tree_leaf_ids:
+                    raise IdentityError('INCOMPLETE_ELEMENT_IDENTITY')
                 print(f"[Extractor] [!] Nodo sin externalId descartado: objectid={objectid}, name={name}")
                 continue
                 
@@ -712,98 +819,20 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
 
         print(f"[Extractor] Fase 3 - {len(inventory_data)} instancias geométricas para insertar ({skipped_nodes} nodos type/category descartados)")
 
-        if not inventory_data:
-            set_job(job_id, {'status': 'success', 'progress': 100, 'message': 'El modelo no contiene objetos con ID.'})
-            print(f"[Extractor] Sin objetos con ID. Finalizando.")
-            return
-
-        from db import get_db_connection
+        # Una extraccion completa puede tener cero instancias: publica el vacio
+        # y cambia generation. No hereda filas de la version anterior.
+        rows = [{**item, 'project_id': source_context['project_id']}
+                for item in inventory_data]
+        # No se añade datetime.now a cada fila: haria diferente el content_hash
+        # de un reintento identico y destruiria la idempotencia del snapshot.
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            
-            # IDENTIDAD (model_urn, external_id): un elemento = una fila por frente.
-            # El upsert actualiza la MISMA fila (incl. su source_urn a la versión nueva)
-            # -> duplicado IMPOSIBLE por diseño, sin depender de decodificar URNs.
-            #
-            # El linaje (base_urn) se usa SOLO para acotar la limpieza de elementos
-            # REMOVIDOS a ESTE modelo dentro del frente (los presentes ya pasan a
-            # source_urn=urn en el upsert; lo que quede bajo una source_urn vieja del
-            # mismo linaje = elemento eliminado en la versión nueva). Si el decode
-            # falla, a lo sumo queda algún removido sin limpiar — NUNCA un duplicado.
-            import base64
-            def get_base_urn(b64_urn):
-                try:
-                    padded = b64_urn + '=' * (-len(b64_urn) % 4)
-                    url_safe = padded.replace('-', '+').replace('_', '/')
-                    decoded = base64.b64decode(url_safe).decode('utf-8')
-                    return decoded.split('?')[0]
-                except Exception:
-                    return b64_urn
-
-            base_urn = get_base_urn(urn)
-            cursor.execute("SELECT DISTINCT source_urn FROM inventory_assets WHERE model_urn = %s", (target_urn,))
-            old_lineage = [s for (s,) in cursor.fetchall() if s and s != urn and get_base_urn(s) == base_urn]
-
-            current_time = datetime.now()
-            from db import resolve_project_id
-            project_id = resolve_project_id(target_urn)  # obra canonica (Pilar Identidad)
-            records = [
-                (item['external_id'], target_urn, urn, item['name'], item['properties'], current_time, project_id)
-                for item in inventory_data
-            ]
-
-            from psycopg2.extras import execute_values
-            insert_query = """
-                INSERT INTO inventory_assets (external_id, model_urn, source_urn, name, properties, last_updated, project_id)
-                VALUES %s
-                ON CONFLICT (model_urn, external_id) DO UPDATE SET
-                    source_urn = EXCLUDED.source_urn,
-                    name = EXCLUDED.name,
-                    properties = EXCLUDED.properties,
-                    last_updated = EXCLUDED.last_updated,
-                    project_id = EXCLUDED.project_id;
-            """
-            execute_values(cursor, insert_query, records)
-
-            # Limpiar elementos REMOVIDOS de este modelo: los presentes ya migraron a
-            # source_urn=urn; lo que siga bajo una source_urn vieja del mismo linaje
-            # es un elemento que ya no existe en la versión nueva.
-            if old_lineage:
-                fmt = ','.join(['%s'] * len(old_lineage))
-                cursor.execute(
-                    f"DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN ({fmt})",
-                    [target_urn] + old_lineage
-                )
-                removed = cursor.rowcount
-                if removed:
-                    print(f"[Extractor] Limpieza: {removed} elementos eliminados en la versión nueva.")
-
-            # Purga ATÓMICA de Relink: borra el inventario del/los URN viejos (otro
-            # linaje) DENTRO de esta misma transacción, ya con los datos nuevos
-            # insertados. Si la extracción hubiera fallado antes, no llegamos aquí
-            # y la data vieja sigue intacta -> el frente nunca queda vacío por error.
-            if purge_source_urns:
-                purge_norm = []
-                for u in purge_source_urns:
-                    if not u:
-                        continue
-                    purge_norm.append(u)
-                    su = sanitize_urn(u)
-                    if su != u:
-                        purge_norm.append(su)
-                purge_norm = list(dict.fromkeys(purge_norm))  # dedup, mantiene orden
-                # No borrar el propio URN nuevo (por si coincidiera tras sanitizar)
-                purge_norm = [u for u in purge_norm if u != urn]
-                if purge_norm:
-                    fmtp = ','.join(['%s'] * len(purge_norm))
-                    cursor.execute(
-                        f"DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN ({fmtp})",
-                        [target_urn] + purge_norm
-                    )
-                    purged = cursor.rowcount
-                    if purged:
-                        print(f"[Extractor] Relink: {purged} elementos del modelo anterior purgados (atómico).")
-
+            repository = InventoryIdentityRepository(conn)
+            publication = repository.publish_snapshot(
+                target_urn, urn, rows, expected_active_urn=expected['active_urn'],
+                expected_generation=expected['generation'], allowed_scopes=[target_urn],
+                item_id=source_context['item_id'], complete=True)
+            if retire:
+                repository.deactivate_sources(target_urn, retire, allowed_scopes=[target_urn])
             conn.commit()
 
         set_job(job_id, {'status': 'success', 'progress': 100, 'message': f'Extracción completa. {len(inventory_data)} activos insertados.'})
@@ -814,7 +843,8 @@ def extract_metadata_task(urn, target_urn, job_id, purge_source_urns=None):
         import traceback
         traceback.print_exc()
         print(f"[Extractor ERROR] {e}")
-        set_job(job_id, {'status': 'error', 'progress': 0, 'message': str(e)})
+        set_job(job_id, {'status': 'error', 'progress': 0,
+                         'message': str(e), 'code': getattr(e, 'code', 'EXTRACTION_FAILED')})
     finally:
         # Liberar el guard de concurrencia para este modelo+scope
         if _key:
@@ -827,9 +857,32 @@ def start_extraction():
     data = request.get_json() or {}
     urn = data.get('urn')
     target_urn = data.get('target_urn') or urn
-    
+
     if not urn:
         return jsonify({'error': 'Missing urn'}), 400
+
+    # Sesion y ACL se comprueban SINCRONICAMENTE antes de crear job/hilo.
+    # Los callers internos del extractor ya pasan por la guardia de su ruta.
+    from db import get_db_connection
+    from inventory_http import authorize_scope
+    from inventory_identity import IdentityError
+    try:
+        with get_db_connection() as conn:
+            if target_urn != '__cmp__':
+                authorize_scope(conn, target_urn)
+            context = _extraction_source_context(conn, urn, target_urn)
+            if target_urn == '__cmp__':
+                for authorized_scope in context['authorization_scopes']:
+                    authorize_scope(conn, authorized_scope)
+            urn = context['source_urn']
+    except IdentityError as exc:
+        forbidden = {'FORBIDDEN_SCOPE', 'UNRESOLVED_SCOPE', 'SOURCE_PROJECT_CONFLICT',
+                     'SOURCE_NOT_REGISTERED', 'PROJECT_UNRESOLVED',
+                     'SOURCE_PROJECT_UNRESOLVED'}
+        status = 403 if exc.code in forbidden else 409
+        if exc.code == 'AUTH_REQUIRED':
+            status = 401
+        return jsonify({'error': str(exc), 'code': exc.code}), status
 
     # Sanitize job_id: replace / with _ to avoid breaking Flask URL routing
     safe_urn = urn.replace('/', '_').replace('+', '-')
@@ -838,7 +891,7 @@ def start_extraction():
     # Sembrar el job CON su obra antes de arrancar el hilo: el primer sondeo
     # de estado puede llegar antes de que el hilo escriba nada.
     set_job(job_id, {'status': 'queued', 'progress': 0,
-                     'message': 'En cola', 'model_urn': target_urn})
+                     'message': 'En cola', 'model_urn': context['project_id'] if target_urn == '__cmp__' else target_urn})
 
     # Iniciar hilo secundario
     thread = threading.Thread(target=extract_metadata_task, args=(urn, target_urn, job_id))

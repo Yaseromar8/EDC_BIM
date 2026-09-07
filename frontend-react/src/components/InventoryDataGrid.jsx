@@ -1,3 +1,4 @@
+import { INVENTORY_IDENTITY_FORMAT, INVENTORY_INTERNAL_KEYS, withInventoryIdentity, inventoryRowKey, inventoryRowForViewer, inventoryEditPayload, inventoryBulkPayload, resolveInventoryTargets, updateInventoryRows, requireInventoryResponse } from '../lib/inventoryIdentity';
 import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import { urlInventario, enlaceCompartido } from '../utils/enlaceCompartido';
 import * as XLSX from 'xlsx';
@@ -123,6 +124,7 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
     return (
         <div 
             data-inventory-dbid={row.dbId}
+            data-inventory-key={inventoryRowKey(row)}
             style={{
                 position: 'absolute', top, left: 0, display: 'inline-flex', 
                 minWidth: '100%',
@@ -133,10 +135,10 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
                 cursor: 'pointer', userSelect: 'none', transition: 'background 0.1s ease',
                 opacity: row._isSaving ? 0.6 : 1
             }}
-            onClick={() => { if(!editingCol) onRowClick(row.dbId, row.source_urn || row.model_urn); }}
+            onClick={() => { if(!editingCol) onRowClick(row.dbId, row.source_urn || row.model_urn, inventoryRowKey(row)); }}
         >
             <div style={{ width: '40px', flexShrink: 0, padding: '0 4px', color: '#666', borderRight: '1px solid #32363e', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-                <input type="checkbox" checked={!!isChecked} onChange={(e) => { e.stopPropagation(); onToggleCheck(row.dbId); }} onClick={e => e.stopPropagation()} style={{ accentColor: '#7e9bbd', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }} />
+                <input type="checkbox" checked={!!isChecked} onChange={(e) => { e.stopPropagation(); onToggleCheck(inventoryRowKey(row)); }} onClick={e => e.stopPropagation()} style={{ accentColor: '#7e9bbd', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }} />
                 <span style={{ fontSize: '10px', minWidth: '18px', textAlign: 'right' }}>{index + 1}</span>
             </div>
             {columns.map(col => {
@@ -164,9 +166,9 @@ const InventoryRow = memo(({ row, columns, index, onRowClick, isHighlighted, top
                         {isEditing ? (
                             <input ref={inputRef} type="text" style={{ width: '100%', height: '100%', background: '#7e9bbd', color: '#fff', border: 'none', padding: '0 12px', outline: 'none', fontSize: '12.5px' }}
                                 value={editValue} onChange={(e) => setEditValue(e.target.value)}
-                                onBlur={() => { if(editValue !== displayText) onCellEdit(row.dbId, col.key, editValue, row.model_urn); setEditingCol(null); }}
+                                onBlur={() => { if(editValue !== displayText) onCellEdit(row, col.key, editValue); setEditingCol(null); }}
                                 onKeyDown={(e) => {
-                                    if(e.key==='Enter') { onCellEdit(row.dbId, col.key, editValue, row.model_urn); setEditingCol(null); }
+                                    if(e.key==='Enter') e.currentTarget.blur();
                                     else if(e.key==='Escape') setEditingCol(null);
                                 }} onClick={e => e.stopPropagation()} />
                         ) : displayText}
@@ -195,6 +197,21 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
     const [followSelection, setFollowSelection] = useState(true);
     const [showAssetsOnly, setShowAssetsOnly] = useState(() => leerInventoryConfig().assetsOnly);
     const [isLoading, setIsLoading] = useState(true);
+    const [inventoryError, setInventoryError] = useState(null);
+    const [inventoryRevision, setInventoryRevision] = useState(0);
+    useEffect(() => {
+        setRawData([]);
+        setFlattenedData([]);
+        setCheckedIds(new Set());
+        setLocalSelIds(null);
+        setIsolatedExtIds(null);
+        setActiveSelectionFilter(null);
+        setHighlightedDbId(null);
+        setInventoryError(null);
+        const ready = e => { if (e.detail?.obra === activeModelUrn) setInventoryRevision(v => v + 1); };
+        window.addEventListener('inventory-ready', ready);
+        return () => window.removeEventListener('inventory-ready', ready);
+    }, [activeModelUrn]);
     const [totalsPickerOpen, setTotalsPickerOpen] = useState(false);
     const [totalColumns, setTotalColumns] = useState(() => new Set(leerInventoryConfig().totals)); // Set of column keys
     const [checkedIds, setCheckedIds] = useState(new Set()); // BULK SELECTION
@@ -302,14 +319,16 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
 
             if (targetExtId) {
                 // Hacemos brillar la fila basándonos en nuestra UUID de base de datos
-                setHighlightedDbId(targetExtId);
+                const targetRow = inventoryRowForViewer(flattenedData, targetExtId, urn);
+                const targetKey = targetRow ? inventoryRowKey(targetRow) : null;
+                setHighlightedDbId(targetKey);
                 
                 // Efecto Tandem: Scrollear automáticamente hacia el dato en la grilla virtual.
                 // Con agrupación activa el índice visual incluye las cabeceras de grupo,
                 // por eso buscamos en displayList (no en flattenedData).
                 if (followSelection) {
                     const list = displayListRef.current;
-                    const idx = list.findIndex(it => it.type === 'data' && it.row.dbId === targetExtId);
+                    const idx = list.findIndex(it => it.type === 'data' && inventoryRowKey(it.row) === targetKey);
                     if (idx >= 0 && containerRef.current) {
                         const targetTop = idx * ROW_HEIGHT;
                         containerRef.current.scrollTop = targetTop - (containerHeight / 2) + ROW_HEIGHT;
@@ -399,7 +418,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                         }
                     });
                 }
-                return row;
+                return withInventoryIdentity(node, row);
             });
 
             let preferredOrder = ['Name', 'Material', 'Status', 'Vaciado_Nro', 'Level', 'Tandem Category', 'Rooms', 'Dimensions', 'Categoría', 'Nivel base'];
@@ -430,9 +449,10 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         };
 
         const loadInventoryFromDB = async () => {
+            setInventoryError(null);
             // CACHÉ TANDEM: Si ya tenemos datos en memoria para EL FRENTE ACTUAL, usarlos al instante
             if (!window.__inventoryCache) window.__inventoryCache = {};
-            if (window.__inventoryCache[activeModelUrn]) {
+            if (window.__inventoryCache[activeModelUrn]?.identityFormat === INVENTORY_IDENTITY_FORMAT) {
                 const { mappedData, cols, orderedCols } = window.__inventoryCache[activeModelUrn];
                 console.log(`[Inventory] ⚡ Cache hit for ${activeModelUrn} — ${mappedData.length} items loaded instantly`);
                 if (!isMounted) return;
@@ -446,6 +466,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
             }
 
             setIsLoading(true);
+            setInventoryError(null);
             try {
                 let result;
                 // Si el preload de App está en curso, ESPERARLO en vez de bajar
@@ -474,7 +495,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                          const newRow = { ...row };
                          if (!newRow.Name && newRow.name) newRow.Name = newRow.name;
                          Object.keys(newRow).forEach(k => {
-                             if (!['dbId', 'name', 'model_urn', 'source_urn', '_nodeType'].includes(k)) {
+                             if (!INVENTORY_INTERNAL_KEYS.has(k)) {
                                  allProps.add(k);
                              }
                          });
@@ -502,7 +523,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                     result = { mappedData, cols, orderedCols };
                 } else {
                     const res = await apiFetch(urlInventario(BACKEND_URL, activeModelUrn));
-                    if (!res.ok) throw new Error('Falló el fetch a /api/inventory');
+                    await requireInventoryResponse(res);
                     
                     const dbData = await res.json();
                     result = processDbData(dbData);
@@ -511,7 +532,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                 if (!isMounted) return;
 
                 // Guardar en caché global PARTICIONADO POR FRENTE para que no haya conflictos
-                window.__inventoryCache[activeModelUrn] = result;
+                window.__inventoryCache[activeModelUrn] = { ...result, identityFormat: INVENTORY_IDENTITY_FORMAT };
                 console.log(`[Inventory] 📦 First load for ${activeModelUrn} — ${result.mappedData.length} items cached for instant re-open`);
 
                 setAllPropertyKeys(result.orderedCols);
@@ -522,7 +543,9 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                 setScrollTop(0);
 
             } catch(e) {
-                console.error("[InventoryDataGrid] Error al extraer PostgreSQL Data:", e);
+                console.error('[InventoryDataGrid] Error al extraer PostgreSQL Data:', e);
+                if (!isMounted) return;
+                setInventoryError(e.message);
                 setIsLoading(false);
             }
         };
@@ -530,7 +553,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         loadInventoryFromDB();
 
         return () => { isMounted = false; };
-    }, [activeModelUrn]);
+    }, [activeModelUrn, inventoryRevision]);
 
     // React to hiddenModelUrns: filter out rows from hidden models
     useEffect(() => {
@@ -585,7 +608,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         const isolationTarget = activeSelectionFilter || isolatedExtIds;
 
         if (isolationTarget && isolationTarget.size > 0) {
-            const filtered = rawData.filter(row => isolationTarget.has(row.dbId));
+            const filtered = rawData.filter(row => isolationTarget.has(inventoryRowKey(row)) || isolationTarget.has(row.dbId));
             setFlattenedData(applyAssetsFilter(applyHiddenFilter(filtered)));
             window._lastHasActiveFilters = true;
             console.log(`[Inventory] Isolation active: ${filtered.length}/${rawData.length} items`);
@@ -734,9 +757,9 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
     }, [flattenedData, columns, totalColumns]);
 
     // (A) Tabla -> Visor
-    const handleRowClick = useCallback((rowExtId, rowUrn) => {
+    const handleRowClick = useCallback((rowExtId, rowUrn, rowKey) => {
         // En nuestro estado visual (React), la fila brilla usando el external_id
-        setHighlightedDbId(rowExtId); 
+        setHighlightedDbId(rowKey);
 
         if (!rowUrn) {
             console.warn(`[Inventory] El elemento ${rowExtId} no tiene model_urn en la base de datos.`);
@@ -767,43 +790,29 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
         }
     }, []);
 
-    const handleCellEdit = useCallback(async (extId, colKey, newValue, modelUrn) => {
-        // Guardar el valor previo para poder revertir si el guardado falla
-        let prevValue;
-        setFlattenedData(prev => prev.map(r => {
-            if (r.dbId === extId) { prevValue = r[colKey]; return { ...r, _isSaving: true, _saveError: false, [colKey]: newValue }; }
-            return r;
-        }));
-
+    const handleCellEdit = useCallback(async (row, colKey, newValue) => {
+        setInventoryError(null);
         try {
+            const payload = inventoryEditPayload(row, colKey, newValue);
+            const key = inventoryRowKey(row);
+            setFlattenedData(prev => prev.map(r => inventoryRowKey(r) === key ? { ...r, _isSaving: true } : r));
             const res = await apiFetch(`${BACKEND_URL}/api/inventory`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ external_id: extId, fieldName: colKey, fieldValue: newValue, model_urn: modelUrn })
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             });
-
-            if (!res.ok) throw new Error('Error al actualizar inventario en Backend');
-            setFlattenedData(prev => prev.map(r => r.dbId === extId ? { ...r, _isSaving: false, [colKey]: newValue } : r));
-            setRawData(prev => prev.map(r => r.dbId === extId ? { ...r, [colKey]: newValue } : r));
-            // Invalidar caché para que el próximo re-open refleje cambios
+            await requireInventoryResponse(res);
+            const apply = rows => updateInventoryRows(rows, [row], colKey, newValue)
+                .map(r => inventoryRowKey(r) === key ? { ...r, _isSaving: false } : r);
+            setFlattenedData(apply);
+            setRawData(apply);
             window.__inventoryCache = null;
-            
-            // INYECCIÓN DEMO: Actualizar la fuente de verdad en memoria y forzar re-cálculo
-            if (window.postgresInventory) {
-                const target = window.postgresInventory.find(node => node.dbId === extId);
-                if (target) {
-                    target[colKey] = newValue;
-                }
-                // Si el panel de filtros está abierto, esto actualizará las barras/colores en tiempo real
+            if (Array.isArray(window.postgresInventory)) {
+                window.postgresInventory = apply(window.postgresInventory);
                 window.dispatchEvent(new CustomEvent('recalculate-filters'));
             }
-
-        } catch(e) {
-            console.error('[LIVE EDIT] Error:', e);
-            // Revertir al valor previo (no mostrar como guardado lo que falló) y marcar la fila
-            setFlattenedData(prev => prev.map(r => r.dbId === extId ? { ...r, _isSaving: false, _saveError: true, [colKey]: prevValue } : r));
-            // Limpiar la marca de error después de unos segundos
-            setTimeout(() => setFlattenedData(prev => prev.map(r => r.dbId === extId ? { ...r, _saveError: false } : r)), 4000);
+        } catch (error) {
+            console.error('[LIVE EDIT] Error:', error);
+            setInventoryError(error.message);
+            setFlattenedData(prev => prev.map(r => inventoryRowKey(r) === inventoryRowKey(row) ? { ...r, _isSaving: false } : r));
         }
     }, []);
 
@@ -1011,6 +1020,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                 </div>
             </div>
 
+            {inventoryError && <div role="alert" style={{ color: '#fecaca', background: '#4c1d24', padding: '8px 12px', fontSize: '12px' }}>{inventoryError}</div>}
             {/* Toolbar (Filters, Columns, Group rows...) */}
             <div style={{ display: 'flex', background: '#1c1d22', minHeight: '36px', alignItems: 'center', padding: '0 12px', borderBottom: checkedIds.size > 0 ? 'none' : '1px solid #252630', gap: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -1202,6 +1212,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
 
             {/* BULK EDIT TOOLBAR — opera sobre los checks del grid Y/O la selección 3D */}
             {(() => {
+                if (enlaceCompartido()) return null;
                 const bulkTargetIds = checkedIds.size > 0
                     ? checkedIds
                     : (localSelIds && localSelIds.size > 0 ? localSelIds : null);
@@ -1268,19 +1279,19 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                                 return;
                             }
                             setBulkAssigning(true);
-                            const ids = [...bulkTargetIds];
+                            setInventoryError(null);
                             try {
-                                await apiFetch(`${BACKEND_URL}/api/inventory/bulk`, {
-                                    method: 'PATCH',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ external_ids: ids, fieldName, fieldValue })
+                                const targets = resolveInventoryTargets(rawData, bulkTargetIds, { legacyExternalIds: checkedIds.size === 0 });
+                                const payload = inventoryBulkPayload(targets, fieldName, fieldValue);
+                                const response = await apiFetch(`${BACKEND_URL}/api/inventory/bulk`, {
+                                    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
                                 });
-                                setFlattenedData(prev => prev.map(r => bulkTargetIds.has(r.dbId) ? { ...r, [fieldName]: fieldValue } : r));
-                                setRawData(prev => prev.map(r => bulkTargetIds.has(r.dbId) ? { ...r, [fieldName]: fieldValue } : r));
-                                if (window.postgresInventory) {
-                                    window.postgresInventory.forEach(node => {
-                                        if (bulkTargetIds.has(node.dbId)) node[fieldName] = fieldValue;
-                                    });
+                                await requireInventoryResponse(response);
+                                const apply = rows => updateInventoryRows(rows, targets, fieldName, fieldValue);
+                                setFlattenedData(apply);
+                                setRawData(apply);
+                                if (Array.isArray(window.postgresInventory)) {
+                                    window.postgresInventory = apply(window.postgresInventory);
                                     window.dispatchEvent(new CustomEvent('recalculate-filters'));
                                 }
                                 window.__inventoryCache = null;
@@ -1297,7 +1308,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                                 setBulkValue('');
                             } catch (e) {
                                 console.error('[BULK] Error:', e);
-                                alert('Error en asignación masiva: ' + e.message);
+                                setInventoryError('Error en asignación masiva: ' + e.message);
                             } finally {
                                 setBulkAssigning(false);
                             }
@@ -1361,7 +1372,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                                     if (checkedIds.size === flattenedData.length) {
                                         setCheckedIds(new Set());
                                     } else {
-                                        setCheckedIds(new Set(flattenedData.map(r => r.dbId)));
+                                        setCheckedIds(new Set(flattenedData.map(inventoryRowKey)));
                                     }
                                 }}
                                 style={{ accentColor: '#7e9bbd', cursor: 'pointer', width: '13px', height: '13px', margin: 0 }}
@@ -1437,15 +1448,15 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                                 </div>
                             ) : (
                                 <InventoryRow
-                                    key={item.row.dbId || index}
+                                    key={inventoryRowKey(item.row)}
                                     row={item.row}
                                     columns={columns}
                                     index={index}
                                     onRowClick={handleRowClick}
-                                    isHighlighted={highlightedDbId === item.row.dbId}
+                                    isHighlighted={highlightedDbId === inventoryRowKey(item.row)}
                                     top={top}
                                     onCellEdit={handleCellEdit}
-                                    isChecked={checkedIds.has(item.row.dbId)}
+                                    isChecked={checkedIds.has(inventoryRowKey(item.row))}
                                     onToggleCheck={(dbId) => setCheckedIds(prev => { const next = new Set(prev); if (next.has(dbId)) next.delete(dbId); else next.add(dbId); return next; })}
                                 />
                             ))}

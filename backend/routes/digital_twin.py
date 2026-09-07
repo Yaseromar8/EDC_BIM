@@ -117,6 +117,11 @@ def save_project_config_internal(config):
                     ON CONFLICT (model_id) DO UPDATE SET
                         name = EXCLUDED.name,
                         urn = EXCLUDED.urn,
+                        source = EXCLUDED.source,
+                        region = EXCLUDED.region,
+                        project_id = EXCLUDED.project_id,
+                        item_id = EXCLUDED.item_id,
+                        app_project_id = EXCLUDED.app_project_id,
                         version_id = EXCLUDED.version_id,
                         version_number = EXCLUDED.version_number,
                         last_modified_time = EXCLUDED.last_modified_time,
@@ -131,6 +136,8 @@ def save_project_config_internal(config):
                     model.get('defaultViewGuid')
                 ))
             conn.commit()
+            from db import invalidar_resolver_de_obras
+            invalidar_resolver_de_obras()
             db_ok = True
     except Exception as e:
         print(f"[digital_twin] DB save failed: {e}")
@@ -1239,17 +1246,31 @@ def purge_inventory_source():
             return jsonify({'purged': 0, 'linked': True}), 200
 
         from db import get_db_connection
-        urns = list(dict.fromkeys([source_urn, sanitize_urn(source_urn)]))
+        from inventory_http import authorize_scope
+        from inventory_identity import InventoryIdentityRepository, source_identity
+        _, requested_lineage = source_identity(source_urn)
+        # A different textual encoding/version of the same linked Source is not
+        # an orphan. Never deactivate it because an import cancellation used v1.
+        for model in config.get('models', []):
+            if model.get('appProjectId') == target:
+                try:
+                    _, lineage = source_identity(model.get('urn'))
+                except ValueError:
+                    continue
+                if lineage == requested_lineage:
+                    return jsonify({'purged': 0, 'linked': True}), 200
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            fmt = ','.join(['%s'] * len(urns))
-            cursor.execute(
-                f"DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN ({fmt})",
-                [target] + urns)
-            purged = cursor.rowcount
+            authorize_scope(conn, target, lock=True)
+            with conn.cursor() as cursor:
+                cursor.execute('SELECT count(*) FROM inventory_assets WHERE scope_id=%s AND source_lineage=%s',
+                               (target, requested_lineage))
+                purged = cursor.fetchone()[0]
+            retired = InventoryIdentityRepository(conn).deactivate_sources(
+                target, [source_urn], allowed_scopes=[target])
             conn.commit()
-        print(f"[PurgeSource] {purged} filas huérfanas eliminadas (import cancelado).")
-        return jsonify({'purged': purged}), 200
+        print(f"[PurgeSource] {purged} elementos retirados de la vista; historia conservada.")
+        return jsonify({'purged': purged, 'deactivated_sources': retired['deactivated'],
+                        'retained_history': True}), 200
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -1257,64 +1278,45 @@ def purge_inventory_source():
 
 @digital_twin_bp.route('/api/config/project/remove', methods=['POST'])
 def remove_model_route():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     urn = data.get('urn')
     app_project_id = data.get('project')
     negativa = guardia_de_obra(app_project_id, 'desvincular un modelo de la obra')
     if negativa:
         return negativa
-    print(f"\n[DIAG-REMOVE] project={app_project_id}, urn=...{str(urn or '')[-20:]}")
-
-    config = get_project_config_internal()
-    initial_len = len(config.get('models', []))
-    
-    if app_project_id:
-        config['models'] = [m for m in config.get('models', []) if not (m.get('urn') == urn and m.get('appProjectId') == app_project_id)]
-    else:
-        config['models'] = [m for m in config.get('models', []) if m.get('urn') != urn]
-    
-    if len(config['models']) < initial_len:
-        # Delete model config from DB
-        delete_model_from_db(urn, app_project_id)
-
-        # CLEANUP: Purgar metadata de inventory_assets
-        # COHERENCIA: sanitize_urn normaliza el URN exactamente como lo hace
-        # extract_metadata_task antes de almacenar source_urn en inventory_assets.
-        try:
-            from db import get_db_connection
-            urn_sanitized = sanitize_urn(urn)
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                
-                # Estrategia multi-capa para garantizar purga completa:
-                # 1. Intentar con URN sanitizado (como lo guarda extract_metadata_task)
-                if app_project_id:
-                    cursor.execute("DELETE FROM inventory_assets WHERE source_urn = %s AND model_urn = %s", (urn_sanitized, app_project_id))
+    if not urn or not app_project_id:
+        return jsonify({'error': 'Faltan urn o project'}), 400
+    from db import get_db_connection, invalidar_resolver_de_obras
+    from inventory_http import authorize_scope, identity_error_response
+    from inventory_identity import IdentityError, InventoryIdentityRepository, source_identity
+    try:
+        with get_db_connection() as conn:
+            authorize_scope(conn, app_project_id, lock=True)
+            with conn.cursor() as cursor:
+                cursor.execute('SELECT model_id FROM model_config WHERE urn=%s AND app_project_id=%s FOR UPDATE',
+                               (urn, app_project_id))
+                if not cursor.fetchone():
+                    return jsonify({'error': 'Model not found'}), 404
+                try:
+                    source_identity(urn)
+                except IdentityError as exc:
+                    if exc.code != 'INVALID_SOURCE_URN':
+                        raise
+                    # OSS/point clouds cannot have canonical APS-lineage rows.
                 else:
-                    cursor.execute("DELETE FROM inventory_assets WHERE source_urn = %s", (urn_sanitized,))
-                deleted_count = cursor.rowcount
-                
-                # 2. Si no encontró nada, intentar con URN raw (por si hay datos legacy)
-                if deleted_count == 0 and urn != urn_sanitized:
-                    if app_project_id:
-                        cursor.execute("DELETE FROM inventory_assets WHERE source_urn = %s AND model_urn = %s", (urn, app_project_id))
-                    else:
-                        cursor.execute("DELETE FROM inventory_assets WHERE source_urn = %s", (urn,))
-                    deleted_count = cursor.rowcount
-                
-
-                
-                conn.commit()
-                print(f"[Remove] Limpieza inventario: {deleted_count} registros eliminados (URN: ...{urn_sanitized[-30:]})")
-        except Exception as cleanup_err:
-            print(f"[Remove] Advertencia: Error limpiando inventory_assets: {cleanup_err}")
-
-        # Return filtered list
-        if app_project_id:
-            config['models'] = [m for m in config['models'] if m.get('appProjectId') == app_project_id]
+                    InventoryIdentityRepository(conn).deactivate_sources(
+                        app_project_id, [urn], allowed_scopes=[app_project_id])
+                cursor.execute('DELETE FROM model_config WHERE urn=%s AND app_project_id=%s',
+                               (urn, app_project_id))
+            conn.commit()  # Config and active pointer change together or neither does.
+        invalidar_resolver_de_obras()
+        config = get_project_config_internal()
+        config['models'] = [m for m in config.get('models', []) if m.get('appProjectId') == app_project_id]
         return jsonify(config)
-    
-    return jsonify({"error": "Model not found"}), 404
+    except IdentityError as exc:
+        return identity_error_response(exc)
+    except Exception:
+        return jsonify({'error': 'No se pudo desvincular el modelo. No se aplicaron cambios.'}), 503
 
 @digital_twin_bp.route('/api/config/project/relink', methods=['POST'])
 def relink_model_route():
@@ -1337,6 +1339,22 @@ def relink_model_route():
     # Pre-chequeo: no seguimos si el nuevo modelo aún no está traducido (la
     # extracción fallaría y daría una mala UX inmediata).
     _new_urn = new_data.get('urn')
+    if not _new_urn or not app_project_id:
+        return jsonify({'error': 'El nuevo modelo necesita urn y un frente verificable.'}), 400
+    # Reuse the extraction boundary BEFORE APS/config mutation. A known foreign
+    # Source must not replace the current link while its async extraction fails.
+    from db import get_db_connection
+    from inventory_http import authorize_scope, identity_error_response
+    from inventory_identity import IdentityError
+    from routes.inventory import _extraction_source_context
+    try:
+        with get_db_connection() as conn:
+            authorize_scope(conn, app_project_id, lock=True)
+            _extraction_source_context(conn, _new_urn, app_project_id)
+    except IdentityError as exc:
+        if exc.code == 'SOURCE_PROJECT_CONFLICT':
+            return jsonify({'error': 'El Source pertenece a otra obra.', 'code': exc.code}), 403
+        return identity_error_response(exc)
     if _new_urn:
         _tok, _ = get_internal_token()
         if _tok and not _is_model_translated(_new_urn, _tok):
@@ -1349,30 +1367,17 @@ def relink_model_route():
     # extracción (purge_source_urns): solo se borra cuando los datos nuevos ya
     # están insertados y a punto de commitear. Si la extracción falla, NO se
     # pierde la data vieja -> el frente nunca queda vacío por un error.
-    # Solo si NO vamos a extraer (faltan urn/proyecto) caemos al borrado directo.
-    will_extract = bool(_new_urn and app_project_id)
-    if old_urn and app_project_id and not will_extract:
-        try:
-            from db import get_db_connection
-            old_urn_sanitized = sanitize_urn(old_urn)
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "DELETE FROM inventory_assets WHERE model_urn = %s AND source_urn IN (%s, %s)",
-                    (app_project_id, old_urn_sanitized, old_urn)
-                )
-                deleted = cursor.rowcount
-                conn.commit()
-                print(f"[Relink] Limpieza inventario (respaldo, sin extracción): {deleted} registros eliminados")
-        except Exception as cleanup_err:
-            print(f"[Relink] Advertencia: Error limpiando inventario viejo: {cleanup_err}")
 
     config = get_project_config_internal()
     model_found = False
 
     for m in config.get('models', []):
         # Match by ID (preferred) or URN if needed
-        if m.get('id') == target_id or (not target_id and m.get('urn') == old_urn):
+        if m.get('appProjectId') == app_project_id and (
+                m.get('id') == target_id or (not target_id and m.get('urn') == old_urn)):
+            if old_urn and m.get('urn') != old_urn:
+                return jsonify({'error': 'El modelo cambió; actualice antes de reapuntar.'}), 409
+            old_urn = m.get('urn')
             model_found = True
             # Update fields
             m['urn'] = new_data.get('urn')
