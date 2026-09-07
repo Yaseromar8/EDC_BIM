@@ -15,14 +15,8 @@ import { fixture, oracle, inspectCell, elementKey, ref, ALL } from './filtersCor
 const totals = { contractPass: 0, baselinePass: 0, knownFail: 0, unexpectedFail: 0, unexpectedPass: 0 };
 // Exact defective signatures, independent from the CORRECT expectations.
 const baselineSignatures = new Map([
-    ['P0-1/in-place-inventory-stale', ['Before']],
-    ['P0-1/rosetta-remap-same-cardinality', [{ id: 1, modelUrn: 'm1' }]],
     ['P0-2/homonyms-cannot-survive-flat-contract', []],
-    ['P0-3/global-fallback-crosses-hidden-source', [{ id: 11, modelUrn: 'm1' }]],
-    ['P0-5/duplicate-rows-not-unique-counts', { count: 2, matches: [{ id: 1, modelUrn: 'm1' }, { id: 1, modelUrn: 'm1' }] }],
 ]);
-for (const value of ['constructor', 'toString', '__proto__']) baselineSignatures.set('P0-4/reserved-value-' + value,
-    { error: "Cannot read properties of undefined (reading 'push')", prototypeChanged: value === '__proto__' });
 function check(id, run, { baseline = false, known = false } = {}) {
     try {
         run();
@@ -165,12 +159,12 @@ check('P0-1/in-place-inventory-stale', () => {
     const rows = [{ dbId: 'a', source_urn: 'm1', P: 'Before' }], rosetta = { m1: { a: 1 } };
     calculate(rows, ['G::P'], {}, rosetta); rows[0].P = 'After';
     assert.deepEqual(calculate(rows, ['G::P'], {}, rosetta).buckets['G::P'].values.map(v => v.value), ['After']);
-}, { known: true });
+});
 check('P0-1/rosetta-remap-same-cardinality', () => {
     const rows = [{ dbId: 'a', source_urn: 'm1', P: 'X' }], rosetta = { m1: { a: 1 } };
     calculate(rows, ['G::P'], { 'G::P': ['X'] }, rosetta); rosetta.m1.a = 99;
     assert.deepEqual(calculate(rows, ['G::P'], { 'G::P': ['X'] }, rosetta).globalValidDbIds, [{ id: 99, modelUrn: 'm1' }]);
-}, { known: true });
+});
 check('P0-2/homonyms-cannot-survive-flat-contract', () => {
     // The origin has two groups. Existing App collapses both into Estado.
     // This literal baseline input reflects the second value winning flattening;
@@ -183,7 +177,7 @@ check('P0-2/homonyms-cannot-survive-flat-contract', () => {
 check('P0-3/global-fallback-crosses-hidden-source', () => {
     const result = calculate([{ dbId: 'same', source_urn: 'unloaded', P: 'X' }], ['G::P'], { 'G::P': ['X'] }, { m1: { same: 11 }, m2: { same: 22 } }, ['m1']);
     assert.deepEqual(result.globalValidDbIds, []);
-}, { known: true });
+});
 for (const value of ['constructor', 'toString', '__proto__']) check(`P0-4/reserved-value-${value}`, () => {
     // A fresh process contains Object.prototype damage to the test child.
     const moduleUrl = new URL('../src/aps/utils/model.js', import.meta.url).href;
@@ -195,12 +189,25 @@ console.log(JSON.stringify({...outcome,prototypeChanged:Object.hasOwn(Object.pro
     const child = spawnSync(process.execPath, ['--input-type=module', '-e', source], { encoding: 'utf8' });
     if (child.error || child.status !== 0) throw new Error(`Child infrastructure error: ${child.error?.message || child.stderr}`);
     assert.deepEqual(JSON.parse(child.stdout), { values: [value], count: 1, prototypeChanged: false });
-}, { known: true });
+});
+// La huella de la rosetta solo es portante CON revision: sin ella no se cachea
+// y cualquier remapeo se ve igual. Este caso es el del producto, que si la pasa.
+check('P0-1/rosetta-remap-with-revision-invalidates', () => {
+    const rows = [{ dbId: 'a', source_urn: 'm1', P: 'X' }], rosetta = { m1: { a: 1 } };
+    calculate(rows, ['G::P'], { 'G::P': ['X'] }, rosetta, [], 7); rosetta.m1.a = 99;
+    assert.deepEqual(calculate(rows, ['G::P'], { 'G::P': ['X'] }, rosetta, [], 7).globalValidDbIds, [{ id: 99, modelUrn: 'm1' }]);
+});
+// Y la revision, cuando cambia, invalida aunque el array sea el mismo objeto.
+check('P0-1/revision-change-invalidates-in-place-edit', () => {
+    const rows = [{ dbId: 'a', source_urn: 'm1', P: 'Before' }], rosetta = { m1: { a: 1 } };
+    calculate(rows, ['G::P'], {}, rosetta, [], 1); rows[0].P = 'After';
+    assert.deepEqual(calculate(rows, ['G::P'], {}, rosetta, [], 2).buckets['G::P'].values.map(v => v.value), ['After']);
+});
 check('P0-5/duplicate-rows-not-unique-counts', () => {
     const row = { dbId: 'a', source_urn: 'm1', P: 'X' };
     const result = calculate([row, { ...row }], ['G::P'], { 'G::P': ['X'] }, { m1: { a: 1 } });
     assert.deepEqual({ count: result.buckets['G::P'].values[0].count, matches: result.globalValidDbIds }, { count: 1, matches: [{ id: 1, modelUrn: 'm1' }] });
-}, { known: true });
+});
 
 console.log(JSON.stringify({ summary: totals, scope: 'B1-only synthetic contract and current-code baseline; no frontend correction',
     green: totals.knownFail + totals.unexpectedFail + totals.unexpectedPass === 0 }));

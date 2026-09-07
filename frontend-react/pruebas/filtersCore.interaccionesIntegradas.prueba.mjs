@@ -29,17 +29,32 @@ async function run({ mutant = false } = {}) {
     let moduleUrl = normalizerUrl.href;
     if (mutant) {
         let altered = replaceOnce(normalizer, "from './inventoryIdentity.js'", `from ${JSON.stringify(identityUrl.href)}`);
-        // Mutate only the first (preload) actual return, leaving refresh intact.
+        // Ya no hay dos algoritmos que mutar por separado: precarga y refresco
+        // convergieron en UNA funcion, que es justamente lo que arreglo la
+        // divergencia. Se muta ese unico retorno real; sigue demostrando lo
+        // mismo --que el caso original muere si el ayudante REAL cambia-- y
+        // ahora ademas comprueba que la convergencia no se deshizo.
         const marker = '    return { mappedData, schemaMap };';
-        assert.equal(altered.split(marker).length, 3, 'Expected two real normalizer returns');
+        assert.equal(altered.split(marker).length, 2, 'Expected one canonical normalizer return');
         altered = altered.replace(marker, '    return { mappedData: [], schemaMap };');
         moduleUrl = dataUrl(altered);
     }
-    let code = replaceOnce(original, locator, replacement);
+    // El banco original YA fue reanclado al ayudante real: su localizador de
+    // texto desaparecio cuando el preload dejo de estar en linea en App.jsx. Si
+    // el puente lo encuentra, lo adapta como antes; si no, el original ya llama
+    // a `normalizeInventoryPreload` y lo unico que hay que hacer es apuntar ese
+    // import al modulo mutado. Lo que el puente demuestra --que mutar el ayudante
+    // REAL mata el mismo caso original-- no cambia.
+    const yaReanclado = original.split(locator).length !== 2;
+    let code = yaReanclado ? original : replaceOnce(original, locator, replacement);
+    if (yaReanclado) {
+        code = replaceOnce(code, "await import('../src/lib/inventoryNormalizers.js')",
+            `await import(${JSON.stringify(moduleUrl)})`);
+    }
     // data: modules need an explicit source root, not a relative import.meta URL.
     code = replaceOnce(code, "const repoRoot = fileURLToPath(new URL('../../', import.meta.url));",
         `const repoRoot = ${JSON.stringify(fileURLToPath(new URL('../../', import.meta.url)))};`);
-    code = `import { normalizeInventoryPreload } from ${JSON.stringify(moduleUrl)};\n` + code;
+    if (!yaReanclado) code = `import { normalizeInventoryPreload } from ${JSON.stringify(moduleUrl)};\n` + code;
     const loaded = await import(dataUrl(code));
     return loaded.runInteractionChecks();
 }

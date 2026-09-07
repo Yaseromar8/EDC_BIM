@@ -88,3 +88,24 @@ export async function requireInventoryResponse(response) {
     try { const body = await response.json(); detail = body.message || body.error || body.code || ''; } catch { /* HTTP status stays visible */ }
     throw new Error(`Inventario HTTP ${response.status}${detail ? ': ' + detail : ''}`);
 }
+
+// LA REVISION DEL DATASET.
+//
+// El inventario se edita EN SITIO: la rejilla escribe sobre las mismas filas al
+// guardar, asi que el array sigue siendo el mismo objeto y cualquier cache que
+// compare referencias se queda con el valor anterior para siempre. La revision
+// es la declaracion explicita de "esto ya no es lo que era": la incrementa quien
+// cambia el dataset, y la cache del motor de facetas depende de ella.
+let _revision = 0;
+
+/** Declara que el inventario cambio. La llama quien lo escribe o lo edita. */
+export function markInventoryRevision() {
+    _revision += 1;
+    try { if (typeof window !== 'undefined') window.postgresInventoryRevision = _revision; } catch { /* sin window */ }
+    return _revision;
+}
+
+/** La revision vigente del inventario en memoria. */
+export function inventoryRevision() {
+    return _revision;
+}

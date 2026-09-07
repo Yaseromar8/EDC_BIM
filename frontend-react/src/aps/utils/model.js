@@ -1,3 +1,7 @@
+// El linaje de un URN de APS: el documento, que no cambia al versionar.
+// Se reutiliza el derivador que ya existe en vez de escribir otro.
+import { linajeDeUrn } from '../../lib/savedViewV2.js';
+
 /**
  * Encuentra todos los nodos hoja en el árbol del modelo.
  * @param {Autodesk.Viewing.Model} model El modelo del visor.
@@ -396,7 +400,7 @@ export const _normVal = (raw) => Array.isArray(raw)
     ? raw.map(x => String(x ?? '').trim()).filter(Boolean).join(', ')
     : String(raw ?? '').trim();
 
-let _facetCache = { allData: null, rosetta: null, rosettaFp: '', prepared: null };
+let _facetCache = { revision: null, allData: null, rosetta: null, rosettaFp: '', prepared: null };
 
 // Huella de la rosetta: window.rosettaToDbId se MUTA en el mismo objeto cuando
 // cada modelo termina de indexar (el pesado llega al final). Comparar solo la
@@ -406,46 +410,77 @@ const _rosettaFingerprint = (r) => {
     if (!r) return '';
     const parts = [];
     for (const urn in r) {
+        // CONTAR NO BASTA. Un remapeo conserva la cardinalidad --el mismo
+        // externalId apuntando a otro dbId-- y la huella anterior, que solo
+        // contaba claves, daba igual: el indice se reutilizaba con dbIds
+        // viejos y el visor aislaba elementos que no eran. Se mezclan tambien
+        // los valores, con una combinacion barata y sensible al orden.
         let n = 0;
-        for (const _k in r[urn]) n++;
-        parts.push(urn.slice(-10) + ':' + n);
+        let h = 0;
+        const mapa = r[urn];
+        for (const k in mapa) {
+            n++;
+            const v = mapa[k];
+            h = (h * 31 + (typeof v === 'number' ? v : 0) + k.length) | 0;
+        }
+        parts.push(urn.slice(-10) + ':' + n + ':' + h);
     }
     return parts.sort().join('|');
 };
 
 function _buildFacetIndex(allData, rosettaToExtIdReversed) {
-    // FALLBACK GLOBAL: extId -> {dbId, urn} para IFC de Civil cuyo source_urn
-    // difiere del URN del viewer.
-    const globalExtIdLookup = {};
+    // POR LINAJE, NO POR "EL PRIMERO QUE LO TENGA".
+    //
+    // Antes habia un fallback global externalId -> {dbId, urn} que se quedaba
+    // con el PRIMER modelo cargado que tuviera ese externalId. Existia por un
+    // motivo real --el source_urn guardado deja de coincidir en cuanto se sube
+    // una revision, porque el URN de APS lleva la version pegada-- pero la cura
+    // cruzaba Sources: un elemento de un documento acababa resuelto contra otro,
+    // incluso contra uno que el usuario habia ocultado. Lo que no cambia al
+    // versionar es el LINAJE, asi que el respaldo se hace por documento y, si el
+    // documento no esta cargado, no se resuelve nada.
+    const byLinaje = new Map();
     if (rosettaToExtIdReversed) {
         for (const loadedUrn in rosettaToExtIdReversed) {
-            const mapping = rosettaToExtIdReversed[loadedUrn];
-            for (const extId in mapping) {
-                if (!globalExtIdLookup[extId]) globalExtIdLookup[extId] = { dbId: mapping[extId], urn: loadedUrn };
-            }
+            const linaje = linajeDeUrn(loadedUrn);
+            if (!linaje) continue;
+            // Dos versiones del mismo documento cargadas a la vez no se
+            // distinguen por linaje: eso es ambiguedad, y no se elige ninguna.
+            byLinaje.set(linaje, byLinaje.has(linaje) ? null
+                : { mapping: rosettaToExtIdReversed[loadedUrn], urn: loadedUrn });
         }
     }
 
     // colUrnsWithValue: por columna, en qué modelos (safeUrn) el parámetro EXISTE.
     // Sirve para distinguir '(Unassigned)' (vacío real) de '(No aplica)' (el modelo
     // ni usa el parámetro). Se computa sobre TODAS las filas (idéntico a antes).
-    const colUrnsWithValue = {};
+    const colUrnsWithValue = new Map();
     // preparedRows: solo filas que resuelven en rosetta (las que producían buckets).
     const rows = [];
+    const vistos = new Set();
     for (let i = 0; i < allData.length; i++) {
         const row = allData[i];
         const extId = row.dbId;
         const rawUrn = row.source_urn || row.model_urn;
         const safeUrn = _safeUrn(rawUrn);
 
-        // Normalizar columnas una vez + registrar scope por columna
-        const norm = {};
+        // Normalizar columnas una vez + registrar scope por columna.
+        //
+        // `Map` y no un objeto: los VALORES de una propiedad son datos del
+        // modelo, y un elemento cuyo valor es `constructor`, `toString` o
+        // `__proto__` es un elemento normal. Con un objeto plano esos nombres
+        // caen en Object.prototype: `bucket[val]` devolvia una funcion en vez de
+        // undefined --y reventaba con "Cannot read properties of undefined"-- o,
+        // con `__proto__`, escribia en el prototipo. Aqui la clave es una clave.
+        const norm = new Map();
         for (const k in row) {
             if (k === 'dbId' || k === 'source_urn' || k === 'model_urn') continue;
             const v = _normVal(row[k]);
             if (v) {
-                norm[k] = v;
-                (colUrnsWithValue[k] || (colUrnsWithValue[k] = new Set())).add(safeUrn);
+                norm.set(k, v);
+                let scope = colUrnsWithValue.get(k);
+                if (!scope) { scope = new Set(); colUrnsWithValue.set(k, scope); }
+                scope.add(safeUrn);
             }
         }
 
@@ -469,12 +504,25 @@ function _buildFacetIndex(allData, rosettaToExtIdReversed) {
         let effectiveModelUrn = safeUrn;
         if (urnDict && urnDict[extId] !== undefined) {
             viewerDbId = urnDict[extId];
-        } else if (globalExtIdLookup[extId]) {
-            viewerDbId = globalExtIdLookup[extId].dbId;
-            effectiveModelUrn = globalExtIdLookup[extId].urn;
         } else {
-            continue; // no existe en ningún modelo cargado → no participa
+            const linaje = linajeDeUrn(rawUrn);
+            const mismoDocumento = linaje ? byLinaje.get(linaje) : null;
+            if (mismoDocumento && mismoDocumento.mapping[extId] !== undefined) {
+                viewerDbId = mismoDocumento.mapping[extId];
+                effectiveModelUrn = _safeUrn(mismoDocumento.urn);
+            } else {
+                continue; // no existe en ningún modelo cargado → no participa
+            }
         }
+
+        // UN ELEMENTO CUENTA UNA VEZ. El inventario puede traer la misma fila
+        // repetida --un refresco solapado, una reextraccion-- y contar por fila
+        // inflaba los contadores y devolvia el mismo dbId dos veces en las
+        // coincidencias. La identidad es (documento, externalId): dos Sources
+        // distintas que compartan externalId siguen siendo dos elementos.
+        const claveDeElemento = safeUrn + '\u0000' + extId;
+        if (vistos.has(claveDeElemento)) continue;
+        vistos.add(claveDeElemento);
 
         rows.push({
             viewerDbId,
@@ -488,7 +536,7 @@ function _buildFacetIndex(allData, rosettaToExtIdReversed) {
     return { rows, colUrnsWithValue };
 }
 
-export function calculateBucketsFromPostgres(allData, filterProperties, filterSelections, rosettaToExtIdReversed, hiddenModelUrns = []) {
+export function calculateBucketsFromPostgres(allData, filterProperties, filterSelections, rosettaToExtIdReversed, hiddenModelUrns = [], datasetRevision = null) {
     // allData is array of objects: { dbId: 'UUID', model_urn: 'URN', <PropName>: 'Value', ... }
     // rosettaToExtIdReversed: URN -> ExternalId -> dbId
     // hiddenModelUrns: array of URNs que el usuario ocultó en Sources (formato React/raw)
@@ -496,10 +544,19 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
     // Índice cacheado: se reconstruye si cambió el inventario o la rosetta
     // (por referencia O por CONTENIDO — la rosetta se muta al indexar cada
     // modelo). Los toggles de Sources/valores NO lo invalidan.
+    // LA REFERENCIA DEL ARRAY NO ES UNA REVISION. El inventario se edita EN
+    // SITIO --la rejilla escribe sobre las mismas filas al guardar-- asi que el
+    // array seguia siendo el mismo objeto y el indice cacheado devolvia el valor
+    // anterior indefinidamente. Ahora la cache exige una revision explicita que
+    // el llamador incrementa cuando el dataset cambia; sin revision no se
+    // cachea, que es lo correcto para un llamador que no sabe declararla.
     const rosettaFp = _rosettaFingerprint(rosettaToExtIdReversed);
-    if (_facetCache.allData !== allData || _facetCache.rosetta !== rosettaToExtIdReversed
+    const cacheUtilizable = datasetRevision !== null && datasetRevision !== undefined;
+    if (!cacheUtilizable || _facetCache.revision !== datasetRevision
+        || _facetCache.allData !== allData || _facetCache.rosetta !== rosettaToExtIdReversed
         || _facetCache.rosettaFp !== rosettaFp || !_facetCache.prepared) {
         _facetCache = {
+            revision: cacheUtilizable ? datasetRevision : null,
             allData,
             rosetta: rosettaToExtIdReversed,
             rosettaFp,
@@ -516,11 +573,13 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
     });
 
     // Preparar buckets vacíos para las propiedades solicitadas (filterProperties)
-    const bucketMaps = {};
-    const totalMaps = {}; // val -> count IGNORANDO selecciones (el "(total)" de Tandem)
+    // Map, no objeto: la clave es un VALOR del modelo y puede llamarse
+    // `constructor` o `__proto__` sin dejar de ser un dato corriente.
+    const bucketMaps = new Map();
+    const totalMaps = new Map(); // val -> count IGNORANDO selecciones (el "(total)" de Tandem)
     filterProperties.forEach(propId => {
-        bucketMaps[propId] = {}; // val -> { count, dbIds: [{id, modelUrn}] }
-        totalMaps[propId] = {};
+        bucketMaps.set(propId, new Map()); // val -> { count, dbIds: [{id, modelUrn}] }
+        totalMaps.set(propId, new Map());
     });
 
     const hasAnySelection = Object.keys(filterSelections).some(k => filterSelections[k] && filterSelections[k].length > 0);
@@ -530,12 +589,32 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
     //   valor real (incluye typos)  → su propio bucket
     //   '(Unassigned)'              → vacío real, en modelos que SÍ usan el parámetro
     //   '(No aplica)'               → el modelo vinculado no trae ese parámetro
+    // LA CLAVE ES `Grupo::Propiedad`, NO SOLO EL NOMBRE. Dos grupos pueden
+    // traer una propiedad homonima --`G1::Estado` y `G2::Estado`-- y buscar por
+    // el nombre suelto las fundia en una: la fila solo conservaba un valor y el
+    // filtro del otro grupo respondia con el ajeno. Se lee primero la clave
+    // cualificada; el nombre suelto queda como compatibilidad para datasets que
+    // todavia vengan aplanados, y solo cuando NO hay homonimia entre las
+    // propiedades pedidas: si la hay, un valor sin grupo no se atribuye a
+    // ninguna, porque no se sabe de cual es.
+    const homonimos = new Set();
+    const vistosPorNombre = new Set();
+    for (const propId of filterProperties) {
+        const pn = propId.split('::')[1] || propId;
+        if (vistosPorNombre.has(pn)) homonimos.add(pn);
+        vistosPorNombre.add(pn);
+    }
     const getRowValue = (r, propId) => {
         if (propId === 'Standard::Sources') return r.sourceVal;
+        const cualificado = r.norm.get(propId);
+        if (cualificado) return cualificado;
         const pn = propId.split('::')[1] || propId;
-        const v = r.norm[pn];
-        if (v) return v;
-        return colUrnsWithValue[pn]?.has(r.safeUrn) ? '(Unassigned)' : '(No aplica)';
+        if (!homonimos.has(pn)) {
+            const suelto = r.norm.get(pn);
+            if (suelto) return suelto;
+            if (colUrnsWithValue.get(pn)?.has(r.safeUrn)) return '(Unassigned)';
+        }
+        return colUrnsWithValue.get(propId)?.has(r.safeUrn) ? '(Unassigned)' : '(No aplica)';
     };
 
     // Nivel 1: recorrer filas YA normalizadas (sin re-parsear en cada clic)
@@ -572,7 +651,8 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
 
             // "(total)": universo del valor entre los Sources visibles, sin importar
             // las selecciones activas (el segundo número de Tandem: 445 (2891)).
-            totalMaps[propId][val] = (totalMaps[propId][val] || 0) + 1;
+            const totMap = totalMaps.get(propId);
+            totMap.set(val, (totMap.get(val) || 0) + 1);
 
             let passesFacet = true;
             if (hasAnySelection) {
@@ -588,26 +668,26 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
             }
 
             if (passesFacet) {
-                if (!bucketMaps[propId][val]) {
-                    bucketMaps[propId][val] = { count: 0, dbIds: [] };
-                }
-                bucketMaps[propId][val].count++;
-                bucketMaps[propId][val].dbIds.push({ id: viewerDbId, modelUrn: effectiveModelUrn });
+                const map = bucketMaps.get(propId);
+                let bucket = map.get(val);
+                if (!bucket) { bucket = { count: 0, dbIds: [] }; map.set(val, bucket); }
+                bucket.count++;
+                bucket.dbIds.push({ id: viewerDbId, modelUrn: effectiveModelUrn });
             }
         }
     }
 
     const result = {};
     filterProperties.forEach(propId => {
-        const map = bucketMaps[propId];
-        const totMap = totalMaps[propId] || {};
+        const map = bucketMaps.get(propId) || new Map();
+        const totMap = totalMaps.get(propId) || new Map();
         const values = [];
-        for (let val in map) {
+        for (const [val, bucket] of map) {
             values.push({
                  value: val,
-                 count: map[val].count,
-                 totalCount: totMap[val] || map[val].count,
-                 dbIds: map[val].dbIds
+                 count: bucket.count,
+                 totalCount: totMap.get(val) || bucket.count,
+                 dbIds: bucket.dbIds
             });
         }
         

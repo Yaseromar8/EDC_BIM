@@ -133,6 +133,34 @@ vez de un 200 incompleto —`INVENTORY_REEXTRACTION_REQUIRED` para lo nativo y
 
 ## LAST COMPLETED
 
+**B2 · representación canónica y cache por revisión, 7-sep-2026.** Diez de los
+once P0 de B2 pasan porque el producto se corrigió, no porque se debilitara el
+oráculo:
+
+- **Un solo normalizador.** Precarga y refresco llamaban a dos algoritmos que,
+  con el mismo dato, producían `Height` y `Group_Height`. Ahora comparten
+  `normalizarInventario`, y las filas salen **cualificadas** (`Grupo::Propiedad`
+  además del nombre suelto): dos grupos homónimos dejan de pisarse.
+- **La cache exige una revisión explícita.** La referencia del array no era una
+  revisión: la rejilla edita en sitio y el índice devolvía el valor anterior
+  indefinidamente. `markInventoryRevision()` la declara donde se escribe o se
+  edita; sin revisión el motor no cachea.
+- **La huella de la rosetta mira el contenido**, no la cardinalidad: un remapeo
+  que conserva el número de claves ya no reutiliza dbIds viejos.
+- **Los valores del modelo dejan de ser claves peligrosas**: `Map` en vez de
+  objeto, así que `constructor`, `toString` y `__proto__` son datos ordinarios.
+- **Un elemento cuenta una vez**, por `(documento, externalId)`.
+- **El respaldo global por externalId se sustituye por linaje**: ya no se cae al
+  primer modelo cargado que tenga ese identificador.
+
+Rendimiento medido contra B1 sobre 40.000 filas y cinco modelos: primera pasada
+255,7 → **183,3 ms**; repetida 74,8 → **34,1 ms**. Sin regresión.
+
+Queda **un KNOWN FAIL**: `P0-2/homonyms-cannot-survive-flat-contract`. Ver
+KNOWN BACKLOG nº 8.
+
+
+
 **B1 · cierre de la identidad en los consumidores protegidos, 7-sep-2026: GREEN.**
 Tres seams más, del mismo tipo y con la misma regla:
 
@@ -382,6 +410,19 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    retenido por Windows). Es un problema **de esta máquina, no del código**: el
    build sí completa apuntando a otro `--outDir`. Render compila en un checkout
    limpio y no lo ve.
+
+8. **`P0-2/homonyms-cannot-survive-flat-contract` sigue en KNOWN FAIL.** El caso
+   entrega al motor una fila **plana** —`{Estado:'Pendiente'}`, el valor de G2
+   tras el aplanado— y espera que el elemento case a la vez con
+   `G1::Estado=['Ejecutado']` y `G2::Estado=['Pendiente']`. Desde esa entrada,
+   G1 no existe: ningún motor correcto puede recuperarla sin inventarla, y
+   hacer que un valor no atribuible case con cualquier selección sería cambiar
+   la semántica de Filters, que está congelada. La propiedad que el caso protege
+   **sí** quedó demostrada extremo a extremo con el normalizador y el motor
+   reales: `P0-2/homonyms-survive-normalizer-to-engine`,
+   `homonyms-are-not-interchangeable` y `homonym-facets-are-independent`.
+   Decisión del propietario: reescribir el caso a la forma que hoy produce el
+   pipeline, o retirarlo por duplicado. No se tocó.
 
 7. **Comparador frente↔frente: emparejamiento entre documentos distintos.**
    Cuando los dos lados son frentes, el diff empareja por `external_id`, así que

@@ -1,4 +1,4 @@
-import { INVENTORY_IDENTITY_FORMAT, INVENTORY_INTERNAL_KEYS, withInventoryIdentity, inventoryRowKey, inventoryRowForViewer, inventoryEditPayload, inventoryBulkPayload, resolveInventoryTargets, updateInventoryRows, requireInventoryResponse } from '../lib/inventoryIdentity';
+import { INVENTORY_IDENTITY_FORMAT, INVENTORY_INTERNAL_KEYS, withInventoryIdentity, inventoryRowKey, inventoryRowForViewer, inventoryEditPayload, inventoryBulkPayload, resolveInventoryTargets, updateInventoryRows, requireInventoryResponse, markInventoryRevision } from '../lib/inventoryIdentity';
 import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import { urlInventario, enlaceCompartido } from '../utils/enlaceCompartido';
 import * as XLSX from 'xlsx';
@@ -807,6 +807,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
             window.__inventoryCache = null;
             if (Array.isArray(window.postgresInventory)) {
                 window.postgresInventory = apply(window.postgresInventory);
+                markInventoryRevision();   // edicion EN SITIO: la cache de facetas caduca
                 window.dispatchEvent(new CustomEvent('recalculate-filters'));
             }
         } catch (error) {
@@ -1292,6 +1293,7 @@ const InventoryDataGrid = ({ activeModelUrn = 'global', dynamicFilterBuckets, fi
                                 setRawData(apply);
                                 if (Array.isArray(window.postgresInventory)) {
                                     window.postgresInventory = apply(window.postgresInventory);
+                                    markInventoryRevision();   // edicion EN SITIO
                                     window.dispatchEvent(new CustomEvent('recalculate-filters'));
                                 }
                                 window.__inventoryCache = null;

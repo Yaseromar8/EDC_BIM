@@ -30,9 +30,26 @@ function check(id, actual, expected, knownSignature) {
 check('normalizers/input-unmodified', endpoint, before);
 check('normalizers/identity-same-endpoint', inventoryIdentity(initial.mappedData[0]), inventoryIdentity(refresh.mappedData[0]));
 check('normalizers/zero-false-retained', [initial.mappedData[0].Height, initial.mappedData[0].Width], ['0', 'false']);
-check('P0-2/load-refresh-prefix-disagreement', [initial.mappedData[0].Height, refresh.mappedData[0].Height ?? null], ['0', '0'], ['0', null]);
-check('P0-2/load-refresh-property-sets-disagreement', [initial.schemaMap['PROPERTY SETS::Estado']?.name, refresh.schemaMap['PROPERTY SETS::Estado']?.name ?? null], ['Estado', 'Estado'], ['Estado', null]);
-check('P0-2/group-homonyms-still-flattened', [initial.mappedData[0]['G1::Estado'] ?? null, initial.mappedData[0]['G2::Estado'] ?? null], ['A', 'B'], [null, null]);
+check('P0-2/load-refresh-prefix-disagreement', [initial.mappedData[0].Height, refresh.mappedData[0].Height ?? null], ['0', '0']);
+check('P0-2/load-refresh-property-sets-disagreement', [initial.schemaMap['PROPERTY SETS::Estado']?.name, refresh.schemaMap['PROPERTY SETS::Estado']?.name ?? null], ['Estado', 'Estado']);
+check('P0-2/group-homonyms-qualified', [initial.mappedData[0]['G1::Estado'] ?? null, initial.mappedData[0]['G2::Estado'] ?? null], ['A', 'B']);
+// EXTREMO A EXTREMO: normalizador REAL -> motor REAL. Es donde de verdad se
+// demuestra que los homonimos sobreviven, porque el motor recibe exactamente lo
+// que produce el normalizador y no una fila escrita a mano.
+const { calculateBucketsFromPostgres } = await import('../src/aps/utils/model.js');
+const rosetta = { [sourceUrn]: { shared: 7 } };
+const e2e = (selections) => calculateBucketsFromPostgres(
+    initial.mappedData, ['G1::Estado', 'G2::Estado'], selections, rosetta).globalValidDbIds;
+check('P0-2/homonyms-survive-normalizer-to-engine', e2e({ 'G1::Estado': ['A'], 'G2::Estado': ['B'] }),
+    [{ id: 7, modelUrn: sourceUrn }]);
+check('P0-2/homonyms-are-not-interchangeable', e2e({ 'G1::Estado': ['B'] }), []);
+check('P0-2/homonym-facets-are-independent', [
+    calculateBucketsFromPostgres(initial.mappedData, ['G1::Estado', 'G2::Estado'], {}, rosetta)
+        .buckets['G1::Estado'].values.map(v => v.value),
+    calculateBucketsFromPostgres(initial.mappedData, ['G1::Estado', 'G2::Estado'], {}, rosetta)
+        .buckets['G2::Estado'].values.map(v => v.value),
+], [['A'], ['B']]);
+
 const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
 check('normalizers/real-functions-connected-in-App', [app.includes('normalizeInventoryPreload(dbData, normalizeRevitCategory)'), app.includes('normalizeInventoryRefresh(dbData, normalizeRevitCategory)')], [true, true]);
 check('normalizers/old-IDB-format-invalidated', app.includes('cached.identityFormat === INVENTORY_IDENTITY_FORMAT'), true);

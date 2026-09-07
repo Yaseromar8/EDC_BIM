@@ -1,4 +1,4 @@
-import { INVENTORY_IDENTITY_FORMAT, INVENTORY_INTERNAL_KEYS, withInventoryIdentity, requireInventoryResponse } from './lib/inventoryIdentity';
+import { INVENTORY_IDENTITY_FORMAT, INVENTORY_INTERNAL_KEYS, withInventoryIdentity, requireInventoryResponse, markInventoryRevision } from './lib/inventoryIdentity';
 import { normalizeInventoryPreload, normalizeInventoryRefresh } from './lib/inventoryNormalizers';
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { urlInventario, enlaceCompartido } from './utils/enlaceCompartido';
@@ -844,6 +844,7 @@ function App() {
   // descarga lo que le toca.
   const tagInventory = useCallback((rows, urn) => {
     window.postgresInventory = rows;
+    markInventoryRevision();   // el dataset cambio: la cache de facetas caduca
     window.postgresInventoryUrn = rows ? (urn || null) : null;
     // AQUÍ, Y SÓLO AQUÍ, EL SNAPSHOT PASA A SER UTILIZABLE. Esta función es
     // la única que lo escribe —los cuatro sitios, caché local incluida, pasan

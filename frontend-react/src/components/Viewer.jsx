@@ -1,5 +1,6 @@
 import { apiFetch } from '../utils/apiFetch';
 import { installPivotUnderPointer } from '../utils/pivotUnderPointer';
+import { inventoryRevision } from '../lib/inventoryIdentity';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './viewer.css';
 import './IconMarkup.css'; // Add this line
@@ -1270,7 +1271,11 @@ const Viewer = ({
                     detail.filterProperties, 
                     detail.filterSelections,
                     window.rosettaToDbId, // Mapeo Directo: URN -> ExtId -> DbId
-                    hiddenModelUrnsRef.current // Modelos ocultos en Sources
+                    hiddenModelUrnsRef.current, // Modelos ocultos en Sources
+                    // La revision del dataset: sin ella el motor no cachea, y con
+                    // ella caduca en cuanto el inventario se escribe o se edita en
+                    // sitio. Comparar la referencia del array no bastaba.
+                    inventoryRevision()
                 );
 
                 finalBuckets = buckets;

@@ -1,105 +1,106 @@
-// Existing App preload and refresh algorithms, extracted without convergence.
-// Their property-name divergence remains an explicit B2 KNOWN FAIL.
+// UN SOLO NORMALIZADOR SEMANTICO.
+//
+// Habia dos algoritmos para el mismo payload. El de precarga limpiaba el
+// prefijo de grupo con `startsWith` y tenia ademas una regla para
+// `PROPERTY SETS`; el de refresco solo quitaba `Grupo - `. Con el mismo dato,
+// una ruta producia `Height` y la otra `Group_Height`, y `PROPERTY SETS::Estado`
+// existia en el esquema de una y no en el de la otra. El filtro que el usuario
+// habia guardado dejaba de encontrar su propiedad segun por donde hubiera
+// llegado el inventario.
+//
+// Aqui las dos rutas llaman a la misma funcion. Se conservan los dos nombres
+// exportados porque `App.jsx` distingue precarga de refresco por otras razones
+// --cache, esquema, avisos-- y esa distincion no es de normalizacion.
+//
+// Y las filas salen CUALIFICADAS: cada propiedad se escribe con su clave
+// `Grupo::Propiedad` ademas del nombre suelto. Aplanar solo por el nombre hacia
+// que dos grupos homonimos --`G1::Estado` y `G2::Estado`-- se pisaran en la
+// misma columna y el segundo ganara; el nombre suelto se mantiene para los
+// consumidores que todavia lo leen, pero la identidad de la propiedad es la
+// clave cualificada.
 import { withInventoryIdentity } from './inventoryIdentity.js';
 
-export function normalizeInventoryPreload(dbData, normalizeRevitCategory) {
-        const schemaMap = {};
+const SEPARADOR_INICIAL = /^[\s\-_.]+/;
+const COLA_TRAS_GUION = /^.*?\s*[-–—]\s*(.+)$/;
 
-        // Flatten as in InventoryDataGrid
-        const mappedData = dbData.map(node => {
-          let row = {
+/** El nombre de la propiedad sin el prefijo redundante de su grupo. */
+export function nombreDePropiedad(grupo, nombreCrudo) {
+    let nombre = nombreCrudo;
+    if (nombre.startsWith(grupo)) {
+        const limpio = nombre.slice(grupo.length).replace(SEPARADOR_INICIAL, '');
+        if (limpio.length > 0) return limpio;
+        return nombre;
+    }
+    // Civil 3D publica los conjuntos de propiedades como `Pset - Nombre`.
+    if (grupo.toUpperCase() === 'PROPERTY SETS') {
+        const cola = nombre.match(COLA_TRAS_GUION);
+        if (cola) return cola[1];
+    }
+    return nombre;
+}
+
+/** El valor de una propiedad como texto, sin perder `0` ni `false`. */
+export function valorDePropiedad(bruto) {
+    if (Array.isArray(bruto)) {
+        return bruto.map(x => String(x ?? '').trim()).filter(Boolean).join(', ');
+    }
+    return String(bruto).trim();
+}
+
+function normalizarInventario(dbData, normalizeRevitCategory) {
+    const schemaMap = {};
+    const mappedData = (dbData || []).map(node => {
+        const row = {
             dbId: node.external_id,
             model_urn: node.model_urn,
             source_urn: node.source_urn || node.model_urn,
             Name: node.name,
             Material: node.material || '',
             Status: node.installation_status || '',
-            Vaciado_Nro: node.vaciado_nro || ''
-          };
-          if (node.properties && typeof node.properties === 'object') {
-            Object.entries(node.properties).forEach(([cName, cVal]) => {
-              if (typeof cVal === 'object' && cVal !== null) {
-                Object.entries(cVal).forEach(([rawPName, pVal]) => {
-                  // Civil 3D: strip redundant group prefix from property name
-                  let pName = rawPName;
-                  if (pName.startsWith(cName)) {
-                    let cleaned = pName.slice(cName.length).replace(/^[\s\-\_\.]+/, '');
-                    if (cleaned.length > 0) pName = cleaned;
-                  } else if (cName.toUpperCase() === 'PROPERTY SETS' && pName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)) {
-                    pName = pName.match(/^.*?\s*[\-\u2013\u2014]\s*(.+)$/)[1];
-                  }
-                  const val = Array.isArray(pVal) ? pVal.map(x => String(x ?? '').trim()).filter(Boolean).join(', ') : String(pVal).trim();
-                  // FIX: Solo sobreescribir si el nuevo valor no está vacío,
-                  // o si la propiedad aún no existe. Esto protege los valores válidos.
-                  if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
-                    row[pName] = val;
-                  }
-
-                  // Construir esquema exacto para FilterConfigurator
-                  const key = cName + '::' + pName;
-                  if (!schemaMap[key]) {
-                    schemaMap[key] = {
-                      id: key,
-                      name: pName,
-                      category: cName,
-                      group: 'text',
-                      path: cName + ' ▸ ' + pName
-                    };
-                  }
-                });
-              }
-            });
-          }
-
-          // Inyectar "Revit Category" normalizada (ES→EN, linked models, etc.)
-          const rawCat = node.properties?.['__category__']?.['__category__']
-            || row['__category__']  // ya aplanado por el loop anterior
+            Vaciado_Nro: node.vaciado_nro || '',
+        };
+        if (node.properties && typeof node.properties === 'object') {
+            for (const [grupo, contenido] of Object.entries(node.properties)) {
+                if (typeof contenido !== 'object' || contenido === null) continue;
+                for (const [nombreCrudo, bruto] of Object.entries(contenido)) {
+                    const nombre = nombreDePropiedad(grupo, nombreCrudo);
+                    const valor = valorDePropiedad(bruto);
+                    const clave = grupo + '::' + nombre;
+                    // La clave cualificada es la identidad de la propiedad: se
+                    // escribe siempre, sin que otro grupo pueda pisarla.
+                    row[clave] = valor;
+                    // El nombre suelto se conserva para los consumidores que aun
+                    // lo leen. Aqui si puede haber choque entre grupos, y por eso
+                    // no es la identidad: se respeta la regla anterior de no
+                    // sustituir un valor con uno vacio.
+                    if (valor !== '' || !Object.hasOwn(row, nombre) || row[nombre] === '') {
+                        row[nombre] = valor;
+                    }
+                    if (!schemaMap[clave]) {
+                        schemaMap[clave] = {
+                            id: clave,
+                            name: nombre,
+                            category: grupo,
+                            group: 'text',
+                            path: grupo + ' ▸ ' + nombre,
+                        };
+                    }
+                }
+            }
+        }
+        const categoria = node.properties?.['__category__']?.['__category__']
+            || row['__category__']
             || '(Unassigned)';
-          row['Revit Category'] = normalizeRevitCategory(rawCat);
-
-          return withInventoryIdentity(node, row);
-        });
+        row['Revit Category'] = normalizeRevitCategory(categoria);
+        return withInventoryIdentity(node, row);
+    });
     return { mappedData, schemaMap };
 }
 
-export function normalizeInventoryRefresh(dbData, normalizeRevitCategory) {
-          const schemaMap = {};
-          const mappedData = dbData.map(node => {
-            let row = {
-              dbId: node.external_id,
-              model_urn: node.model_urn,
-              source_urn: node.source_urn || node.model_urn,
-              Name: node.name,
-              Material: node.material || '',
-              Status: node.installation_status || '',
-              Vaciado_Nro: node.vaciado_nro || ''
-            };
-            if (node.properties && typeof node.properties === 'object') {
-              Object.entries(node.properties).forEach(([cName, cVal]) => {
-                if (typeof cVal === 'object' && cVal !== null) {
-                  Object.entries(cVal).forEach(([rawPName, pVal]) => {
-                    let pName = rawPName;
-                    for (const d of [' - ', ' \u2013 ', ' \u2014 ']) {
-                      if (pName.startsWith(cName + d)) { pName = pName.slice((cName + d).length); break; }
-                    }
-                    const val = Array.isArray(pVal) ? pVal.map(x => String(x ?? '').trim()).filter(Boolean).join(', ') : String(pVal).trim();
-                    if (val !== '' || !row.hasOwnProperty(pName) || row[pName] === '') {
-                      row[pName] = val;
-                    }
-                    const key = cName + '::' + pName;
-                    if (!schemaMap[key]) {
-                      schemaMap[key] = { id: key, name: pName, category: cName, group: 'text', path: cName + ' ▸ ' + pName };
-                    }
-                  });
-                }
-              });
-            }
-            const rawCat2 = node.properties?.['__category__']?.['__category__']
-              || row['__category__']
-              || '(Unassigned)';
-            row['Revit Category'] = normalizeRevitCategory(rawCat2);
-            return withInventoryIdentity(node, row);
-          });
+export function normalizeInventoryPreload(dbData, normalizeRevitCategory) {
+    return normalizarInventario(dbData, normalizeRevitCategory);
+}
 
-    return { mappedData, schemaMap };
+export function normalizeInventoryRefresh(dbData, normalizeRevitCategory) {
+    return normalizarInventario(dbData, normalizeRevitCategory);
 }
