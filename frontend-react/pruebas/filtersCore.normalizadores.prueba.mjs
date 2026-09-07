@@ -54,5 +54,5 @@ const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
 check('normalizers/real-functions-connected-in-App', [app.includes('normalizeInventoryPreload(dbData, normalizeRevitCategory)'), app.includes('normalizeInventoryRefresh(dbData, normalizeRevitCategory)')], [true, true]);
 check('normalizers/old-IDB-format-invalidated', app.includes('cached.identityFormat === INVENTORY_IDENTITY_FORMAT'), true);
 assert.equal(initial.mappedData[0].dbId, 'shared');
-console.log(JSON.stringify({ suite: 'filtersCore.normalizadores', ...totals, limitations: 'No filters-engine fix; defects are B2, not weakened expectations.' }));
+console.log(JSON.stringify({ suite: 'filtersCore.normalizadores', ...totals, limitations: 'Normalizador y motor REALES, sin navegador ni DB. Los defectos B2 se corrigieron en el producto; las expectativas no se tocaron.' }));
 process.exitCode = totals.knownFail || totals.unexpectedFail || totals.unexpectedPass ? 1 : 0;

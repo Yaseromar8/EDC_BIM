@@ -156,8 +156,9 @@ oráculo:
 Rendimiento medido contra B1 sobre 40.000 filas y cinco modelos: primera pasada
 255,7 → **183,3 ms**; repetida 74,8 → **34,1 ms**. Sin regresión.
 
-Queda **un KNOWN FAIL**: `P0-2/homonyms-cannot-survive-flat-contract`. Ver
-KNOWN BACKLOG nº 8.
+**B2 CODE/TEST GREEN.** Cero KNOWN FAIL de B2, cero UNEXPECTED FAIL y cero
+UNEXPECTED PASS. Los KNOWN FAIL de B3/B4 siguen intactos en sus propios
+bancos: 6 en `interacciones` y 6 en `interaccionesIntegradas`.
 
 
 
@@ -411,18 +412,16 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    build sí completa apuntando a otro `--outDir`. Render compila en un checkout
    limpio y no lo ve.
 
-8. **`P0-2/homonyms-cannot-survive-flat-contract` sigue en KNOWN FAIL.** El caso
-   entrega al motor una fila **plana** —`{Estado:'Pendiente'}`, el valor de G2
-   tras el aplanado— y espera que el elemento case a la vez con
-   `G1::Estado=['Ejecutado']` y `G2::Estado=['Pendiente']`. Desde esa entrada,
-   G1 no existe: ningún motor correcto puede recuperarla sin inventarla, y
-   hacer que un valor no atribuible case con cualquier selección sería cambiar
-   la semántica de Filters, que está congelada. La propiedad que el caso protege
-   **sí** quedó demostrada extremo a extremo con el normalizador y el motor
-   reales: `P0-2/homonyms-survive-normalizer-to-engine`,
-   `homonyms-are-not-interchangeable` y `homonym-facets-are-independent`.
-   Decisión del propietario: reescribir el caso a la forma que hoy produce el
-   pipeline, o retirarlo por duplicado. No se tocó.
+8. **`P0-2/homonyms-cannot-survive-flat-contract`: TEST DEFECT, retirado.**
+   El caso entregaba al motor una fila **plana** y exigía que casara a la vez con
+   dos propiedades homónimas cualificadas. Desde esa entrada el valor de uno de
+   los grupos **ya no existe**: se perdió al aplanar. El oráculo era imposible y
+   estaba en la capa equivocada. Se sustituyó por lo que **sí** se puede afirmar
+   desde una entrada aplanada —que un dato ambiguo no se atribuye en silencio a
+   una propiedad cualificada que no lo respalda, y que sin homonimia el nombre
+   suelto sigue resolviendo— y la propiedad original se demuestra extremo a
+   extremo en `filtersCore.normalizadores`. Ninguna expectativa de producto se
+   cambió para conseguir verde.
 
 7. **Comparador frente↔frente: emparejamiento entre documentos distintos.**
    Cuando los dos lados son frentes, el diff empareja por `external_id`, así que

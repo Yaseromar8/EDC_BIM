@@ -15,7 +15,6 @@ import { fixture, oracle, inspectCell, elementKey, ref, ALL } from './filtersCor
 const totals = { contractPass: 0, baselinePass: 0, knownFail: 0, unexpectedFail: 0, unexpectedPass: 0 };
 // Exact defective signatures, independent from the CORRECT expectations.
 const baselineSignatures = new Map([
-    ['P0-2/homonyms-cannot-survive-flat-contract', []],
 ]);
 function check(id, run, { baseline = false, known = false } = {}) {
     try {
@@ -165,15 +164,43 @@ check('P0-1/rosetta-remap-same-cardinality', () => {
     calculate(rows, ['G::P'], { 'G::P': ['X'] }, rosetta); rosetta.m1.a = 99;
     assert.deepEqual(calculate(rows, ['G::P'], { 'G::P': ['X'] }, rosetta).globalValidDbIds, [{ id: 99, modelUrn: 'm1' }]);
 });
-check('P0-2/homonyms-cannot-survive-flat-contract', () => {
-    // The origin has two groups. Existing App collapses both into Estado.
-    // This literal baseline input reflects the second value winning flattening;
-    // the expected result comes from the qualified origin, not from that loss.
-    const origin = { G1: { Estado: 'Ejecutado' }, G2: { Estado: 'Pendiente' } };
-    const rows = [{ dbId: 'a', source_urn: 'm1', Estado: origin.G2.Estado }];
-    const result = calculate(rows, ['G1::Estado', 'G2::Estado'], { 'G1::Estado': [origin.G1.Estado], 'G2::Estado': [origin.G2.Estado] }, { m1: { a: 1 } });
+// TEST DEFECT: wrong layer / impossible oracle.
+//
+// El caso anterior --`P0-2/homonyms-cannot-survive-flat-contract`-- entregaba al
+// motor una fila PLANA, la que producia el aplanado, y exigia que el elemento
+// casara a la vez con `G1::Estado=['Ejecutado']` y `G2::Estado=['Pendiente']`.
+// Desde esa entrada el valor de G1 YA NO EXISTE: se perdio al aplanar. Ningun
+// motor correcto puede recuperarlo sin inventarlo, y hacer que un valor no
+// atribuible case con cualquier seleccion seria cambiar la semantica de Filters.
+// El oraculo era imposible y estaba ademas en la capa equivocada: lo que hay que
+// demostrar --que los homonimos sobreviven-- se demuestra sobre el pipeline
+// completo, y asi se hace en `filtersCore.normalizadores`:
+//   P0-2/homonyms-survive-normalizer-to-engine
+//   P0-2/homonyms-are-not-interchangeable
+//   P0-2/homonym-facets-are-independent
+//
+// Lo que SI se puede afirmar desde una entrada aplanada es lo de abajo, y es la
+// mitad que faltaba: un dato ambiguo no se atribuye en silencio a una propiedad
+// cualificada que no lo respalda.
+check('P0-2/flat-input-is-not-attributed-to-qualified-properties', () => {
+    const rows = [{ dbId: 'a', source_urn: 'm1', Estado: 'Pendiente' }];
+    const seleccionado = calculate(rows, ['G1::Estado', 'G2::Estado'],
+        { 'G1::Estado': ['Ejecutado'], 'G2::Estado': ['Pendiente'] }, { m1: { a: 1 } });
+    // Ni siquiera casa con el grupo cuyo valor coincide por casualidad: el dato
+    // plano no dice de que grupo es, y adivinarlo seria inventar la atribucion.
+    assert.deepEqual(seleccionado.globalValidDbIds, []);
+    const facetas = calculate(rows, ['G1::Estado', 'G2::Estado'], {}, { m1: { a: 1 } });
+    assert.deepEqual(facetas.buckets['G1::Estado'].values.map(v => v.value), ['(No aplica)']);
+    assert.deepEqual(facetas.buckets['G2::Estado'].values.map(v => v.value), ['(No aplica)']);
+});
+check('P0-2/flat-input-still-serves-a-property-without-homonyms', () => {
+    // Y no se rompe la compatibilidad: sin homonimia, el nombre suelto sigue
+    // resolviendo, que es como llega un dataset aun no cualificado.
+    const rows = [{ dbId: 'a', source_urn: 'm1', Estado: 'Pendiente' }];
+    const result = calculate(rows, ['G1::Estado'], { 'G1::Estado': ['Pendiente'] }, { m1: { a: 1 } });
+    assert.deepEqual(result.buckets['G1::Estado'].values.map(v => v.value), ['Pendiente']);
     assert.deepEqual(result.globalValidDbIds, [{ id: 1, modelUrn: 'm1' }]);
-}, { known: true });
+});
 check('P0-3/global-fallback-crosses-hidden-source', () => {
     const result = calculate([{ dbId: 'same', source_urn: 'unloaded', P: 'X' }], ['G::P'], { 'G::P': ['X'] }, { m1: { same: 11 }, m2: { same: 22 } }, ['m1']);
     assert.deepEqual(result.globalValidDbIds, []);
@@ -209,6 +236,6 @@ check('P0-5/duplicate-rows-not-unique-counts', () => {
     assert.deepEqual({ count: result.buckets['G::P'].values[0].count, matches: result.globalValidDbIds }, { count: 1, matches: [{ id: 1, modelUrn: 'm1' }] });
 });
 
-console.log(JSON.stringify({ summary: totals, scope: 'B1-only synthetic contract and current-code baseline; no frontend correction',
+console.log(JSON.stringify({ summary: totals, scope: 'Synthetic contract and code baseline. B1 identity plus the B2 dataset/normalizer/cache correction; B3/B4 defects stay in their own suites',
     green: totals.knownFail + totals.unexpectedFail + totals.unexpectedPass === 0 }));
 process.exitCode = totals.knownFail || totals.unexpectedFail || totals.unexpectedPass ? 1 : 0;
