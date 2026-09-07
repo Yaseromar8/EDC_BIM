@@ -1,0 +1,76 @@
+{
+  "verdict": "IDENTITY PASS",
+  "createdAt": "2026-09-07T06:14:56.850131+00:00",
+  "environment": {
+    "host": "127.0.0.1",
+    "port": 58811,
+    "database": "ecd_ensayo_identidad_4d5d_f8c481d9ef",
+    "clusterDirectory": "C:\\Users\\ASUS\\AppData\\Local\\Temp\\alephia_identidad_4d5d_3m85yea7\\data",
+    "newCluster": true
+  },
+  "limitations": [
+    "Filas sinteticas: ni APS, ni importacion real, ni produccion.",
+    "Sesion de administrador simulada: no prueba autenticacion HTTP.",
+    "No se ejecutan formulas 4D ni reglas de metrados: solo identidad."
+  ],
+  "cases": [
+    {
+      "case": "1-control-ids-distintos-mismo-resultado",
+      "status": "PASS",
+      "partidas": 3,
+      "ladoA": 10.0,
+      "ladoB": 99.0
+    },
+    {
+      "case": "2-dos-sources-mismo-ext-cada-una-conserva-lo-suyo",
+      "status": "PASS",
+      "sumaDeLasDosSources": 109.0,
+      "ambiguoOmitidoDeByElement": true,
+      "inequivocosPresentes": 2
+    },
+    {
+      "case": "3-orden-de-las-sources-no-cambia-el-resultado",
+      "status": "PASS",
+      "metradosIdenticos": true,
+      "detalleIdentico": true
+    },
+    {
+      "case": "4-dato-solo-en-A-no-aparece-en-B",
+      "status": "PASS",
+      "noHerenciaEntreLados": true,
+      "ambiguoNoResuelto": true
+    },
+    {
+      "case": "5-lob-group-by-no-colapsa-dos-sources",
+      "status": "PASS",
+      "gruposParaElExtCompartido": 2,
+      "progresivas": [
+        "0+100.00",
+        "0+900.00"
+      ]
+    },
+    {
+      "case": "6-compare-5d-cada-lado-mantiene-su-identidad",
+      "status": "PASS",
+      "algoritmoDeDiffIntacto": true,
+      "cadaLadoConservaSuNombre": [
+        "Elemento de A",
+        "Elemento de B"
+      ]
+    },
+    {
+      "case": "7-regresion-sin-colision-comportamiento-identico",
+      "status": "PASS",
+      "byElementCompleto": 3,
+      "metradosPorElementoIntactos": true
+    }
+  ],
+  "clusterStopped": true,
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7
+  },
+  "clusterRetained": "C:\\Users\\ASUS\\AppData\\Local\\Temp\\alephia_identidad_4d5d_3m85yea7",
+  "exitCode": 0
+}

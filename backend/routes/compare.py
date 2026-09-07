@@ -534,8 +534,17 @@ def compare_metrados():
             def fetch_side(cond, params):
                 # Escanea TODOS los grupos de properties (Civil3D usa 'PROPERTY SETS',
                 # Revit usa sus propios grupos como 'Cotas' o el del shared parameter).
+                #
+                # La clave del pivote es (Source, externalId) y no el externalId
+                # solo. Un scope de tipo `sources` abarca varios documentos: con
+                # la clave antigua, dos elementos distintos que compartieran
+                # externalId se fundian en una entrada y el metrado de uno
+                # sustituia al del otro --no era una mezcla, era una PERDIDA, y
+                # dependia del orden de las filas--. Cuando el externalId es
+                # inequivoco, cada elemento sigue teniendo su propia clave y las
+                # sumas por partida salen identicas.
                 cur.execute(f"""
-                    SELECT ia.external_id, kv.key, kv.value
+                    SELECT ia.source_urn, ia.external_id, kv.key, kv.value
                     FROM inventory_assets ia,
                          jsonb_each(ia.properties) g,
                          jsonb_each_text(CASE WHEN jsonb_typeof(g.value) = 'object'
@@ -546,7 +555,8 @@ def compare_metrados():
                            OR kv.key ~ 'DSI_Unidad[0-9]\\s*$'
                            OR kv.key ~* '(Volume|Volumen|Area|Área|Length|Longitud)\\s*$')
                 """, params)
-                return _pivot_dsi_rows(cur.fetchall())
+                return _pivot_dsi_rows([((src, ext), key, val)
+                                        for src, ext, key, val in cur.fetchall()])
 
             elems_a = fetch_side(cond_a, par_a)
             elems_b = fetch_side(cond_b, par_b)
@@ -594,9 +604,33 @@ def compare_metrados():
             }
         }
         if include_elements:
-            ext_ids = set(elems_a) | set(elems_b)
+            # `byElement` va al frontend indexado por externalId, que es la forma
+            # que ese consumidor entiende; no se cambia. Lo que si cambia es que
+            # un externalId reclamado por DOS Sources del mismo lado ya no se
+            # publica con los numeros de una de ellas: se omite. Mostrar una
+            # cifra sin poder decir de que documento es, es peor que no mostrarla.
+            def por_external_id(elems):
+                salida, ambiguos = {}, set()
+                for (_src, ext), cods in elems.items():
+                    if ext in salida:
+                        ambiguos.add(ext)
+                    salida[ext] = cods
+                for ext in ambiguos:
+                    salida.pop(ext, None)
+                return salida, ambiguos
+
+            lado_a, amb_a = por_external_id(elems_a)
+            lado_b, amb_b = por_external_id(elems_b)
+            # Ambiguo en UN lado es ambiguo para la fila entera: publicarlo con
+            # el lado bueno y `null` en el otro afirmaria que ese lado no tiene
+            # el elemento, cuando lo que pasa es que tiene dos.
+            ambiguos = amb_a | amb_b
+            if ambiguos:
+                logger.warning('[compare] %d externalId ambiguos entre Sources; '
+                               'omitidos de byElement', len(ambiguos))
+            ext_ids = (set(lado_a) | set(lado_b)) - ambiguos
             resp['byElement'] = {
-                ext: {'a': elems_a.get(ext), 'b': elems_b.get(ext)} for ext in ext_ids
+                ext: {'a': lado_a.get(ext), 'b': lado_b.get(ext)} for ext in ext_ids
             }
         return jsonify(resp)
     except Exception as e:
@@ -628,7 +662,7 @@ def compare_element_metrados():
 
             def fetch_side(cond, params):
                 cur.execute(f"""
-                    SELECT ia.external_id, kv.key, kv.value
+                    SELECT ia.source_urn, ia.external_id, kv.key, kv.value
                     FROM inventory_assets ia,
                          jsonb_each(ia.properties) g,
                          jsonb_each_text(CASE WHEN jsonb_typeof(g.value) = 'object'
@@ -640,7 +674,16 @@ def compare_element_metrados():
                            OR kv.key ~ 'DSI_Unidad[0-9]\\s*$'
                            OR kv.key ~* '(Volume|Volumen|Area|Ãrea|Length|Longitud)\\s*$')
                 """, params + [ext_id])
-                return _pivot_dsi_rows(cur.fetchall()).get(ext_id, {})
+                # Un externalId que en este lado pertenece a dos Sources no tiene
+                # una respuesta: antes se fundian las dos y el tooltip mostraba
+                # una mezcla que no era de ningun elemento real.
+                por_elemento = _pivot_dsi_rows([((src, ext), key, val)
+                                                for src, ext, key, val in cur.fetchall()])
+                if len(por_elemento) > 1:
+                    logger.warning('[compare] externalId presente en %d Sources del mismo '
+                                   'lado; metrados no resolubles', len(por_elemento))
+                    return {}
+                return next(iter(por_elemento.values()), {})
 
             side_a = fetch_side(cond_a, par_a)
             side_b = fetch_side(cond_b, par_b)
@@ -670,11 +713,21 @@ def compare_element():
             cur = conn.cursor()
 
             def fetch(cond, params):
+                # ANTES: LIMIT 1 sin orden. Con un scope que abarca varias Sources
+                # --`{type:'sources'}`-- dos documentos distintos pueden traer el
+                # mismo externalId, y el motor devolvia el que le convenia: el
+                # detalle de A podia salir con el nombre y las propiedades de B, y
+                # cambiaba entre dos ejecuciones iguales. Se piden las dos filas y
+                # solo se responde cuando la identidad es una.
                 cur.execute(
-                    f"SELECT name, properties FROM inventory_assets ia WHERE {cond} AND ia.external_id = %s LIMIT 1",
+                    f"SELECT name, properties FROM inventory_assets ia WHERE {cond} AND ia.external_id = %s LIMIT 2",
                     params + [ext_id])
-                row = cur.fetchone()
-                return {'name': row[0], 'properties': row[1]} if row else None
+                rows = cur.fetchall()
+                if len(rows) > 1:
+                    logger.warning('[compare] externalId en varias Sources del mismo lado; '
+                                   'detalle no resoluble')
+                    return None
+                return {'name': rows[0][0], 'properties': rows[0][1]} if rows else None
 
             side_a = fetch(cond_a, par_a)
             side_b = fetch(cond_b, par_b)

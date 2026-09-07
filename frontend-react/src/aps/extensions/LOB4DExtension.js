@@ -13,6 +13,11 @@
 // Se enumera lo que SI cuenta en vez de descartar lo que no: un valor
 // inesperado tiene que salir como "no ejecutado", nunca como ejecutado. Un
 // avance inflado acaba en una valorizacion equivocada.
+// El linaje de un URN de APS. Se reutiliza el que ya existe en vez de escribir
+// otra derivacion: dos formas de deducir el mismo documento acabarian
+// discrepando. Este modulo NO se modifica desde aqui.
+import { linajeDeUrn } from '../../lib/savedViewV2.js';
+
 const EJECUTADO_SI = new Set([
     '1', 'x',
     'si', 'sí', 'yes', 'y', 'true', 'verdadero',
@@ -917,9 +922,18 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
             }
         })));
         const byUrn = new Map();
+        // El URN de APS lleva la VERSION pegada; el linaje es el DOCUMENTO y no
+        // cambia al subir una revision. Se indexa por los dos para poder caer
+        // del uno al otro sin salir nunca del mismo documento.
+        const byLinaje = new Map();
         mappings.forEach(({ model, mapping }) => {
-            const urn = this.normalizeUrnKey(model?.getData?.()?.urn);
+            const crudo = model?.getData?.()?.urn;
+            const urn = this.normalizeUrnKey(crudo);
             if (urn) byUrn.set(urn, { model, mapping });
+            const linaje = linajeDeUrn(crudo);
+            // Dos versiones del MISMO documento cargadas a la vez: el linaje deja
+            // de distinguirlas, asi que no se elige ninguna.
+            if (linaje) byLinaje.set(linaje, byLinaje.has(linaje) ? null : { model, mapping });
         });
 
         const seen = new Set();
@@ -934,12 +948,19 @@ export default class LOB4DExtension extends window.Autodesk.Viewing.Extension {
         };
 
         (links || []).forEach((link) => {
-            const sourceUrn = this.normalizeUrnKey(link.source_urn || link.sourceUrn);
-            let target = byUrn.get(sourceUrn);
+            const urnDelEnlace = link.source_urn || link.sourceUrn;
+            let target = byUrn.get(this.normalizeUrnKey(urnDelEnlace));
             if (!target) {
-                target = mappings.find(({ mapping }) => mapping[link.external_id || link.externalId] != null);
+                // ANTES: se caia al PRIMER modelo que tuviera ese externalId. Con
+                // una federacion, el 4D de una Source acababa pintando elementos
+                // de otra --y el resultado dependia del orden de carga--. Un
+                // externalId no identifica un elemento entre documentos: solo
+                // dentro de uno. Lo que si sirve es el linaje, porque lo unico
+                // que cambia al versionar es el URN.
+                const linaje = linajeDeUrn(urnDelEnlace);
+                target = linaje ? byLinaje.get(linaje) : null;
             }
-            if (!target) return;
+            if (!target) return;   // sin documento demostrable no se enlaza nada
             const externalId = String(link.external_id || link.externalId || '');
             const dbId = Number(target.mapping[externalId]);
             add(link.codigo || link.code, dbId, target.model);

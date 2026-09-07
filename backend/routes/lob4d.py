@@ -233,7 +233,14 @@ def _derive_locations_from_model(cur, dataset_id, scope):
     """Progresivas por partida DERIVADAS del modelo (Línea de Balance
     Tiempo × Progresiva). Cada elemento lleva DSI_Progresiva (punto, '0+065.00')
     y DSI_CodigoDePartida[1..n]; la partida ocupa el rango [min..max] de las
-    progresivas de sus elementos. No pisa filas cargadas a mano (source='manual')."""
+    progresivas de sus elementos. No pisa filas cargadas a mano (source='manual').
+
+    El grupo es (Source, externalId), no el externalId solo: un externalId
+    identifica un elemento DENTRO de un documento, no entre documentos. Con el
+    agrupado antiguo, dos Sources que compartieran externalId se fundian en una
+    fila y el MAX() elegia una progresiva cualquiera de las dos --resultado
+    dependiente del orden--. Con el frente actual, donde el externalId es unico,
+    los grupos son exactamente los mismos y los rangos no cambian."""
     import re
     cur.execute("""
         SELECT ia.external_id,
@@ -249,7 +256,7 @@ def _derive_locations_from_model(cur, dataset_id, scope):
         ) kv
         WHERE ia.model_urn = %s
           AND (kv.key ~* 'DSI_Progresiva\\s*$' OR kv.key ~* 'DSI_CodigoDePartida\\d*\\s*$')
-        GROUP BY ia.external_id
+        GROUP BY ia.source_urn, ia.external_id
     """, (scope,))
 
     code_re = re.compile(r'^\d{1,3}(\.\d{1,3})+$')

@@ -258,7 +258,15 @@ def test_el_punch_es_un_TIPO_y_no_un_objeto_aparte():
     import flujo_de_issue as iss
     assert iss.PUNCH in iss.CODIGOS_TIPO
     # No existe ninguna tabla de punch.
+    #
+    # Se miran los `.sql` del directorio, que es EXACTAMENTE lo que aplica
+    # `herramientas/aplicar_migraciones.py` con su `glob('*.sql')`. Sin el filtro,
+    # `os.listdir` devolvia tambien los subdirectorios --`sql/candidates/`, que no
+    # entra al aplicador-- y `io.open` sobre una carpeta reventaba con
+    # PermissionError: la prueba dejaba de comprobar nada y fallaba por otra cosa.
     for fichero in os.listdir(os.path.join(RAIZ, 'sql')):
+        if not fichero.endswith('.sql'):
+            continue
         sql = io.open(os.path.join(RAIZ, 'sql', fichero), encoding='utf-8').read().lower()
         assert 'create table if not exists doc_punch' not in sql
         assert 'create table if not exists punch' not in sql
