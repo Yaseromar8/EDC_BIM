@@ -1,3 +1,4 @@
+import { makePopoutDom } from './filtersRuntime/popoutDom.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { setImmediate as turn } from 'node:timers/promises';
@@ -127,17 +128,12 @@ assert.equal(v.host.__filterResult.matches.length,5000);
 rt.dispose();check('V2 real restore homonyms/Sources/multiple colors followed by manual edit',{rows:10001});
 
 // A popout lifetime releases host listeners; opening/closing never computes.
-class Node extends EventTarget {constructor(tag){super();this.tag=tag;this.children=[];this.dataset={};this.style={};}
-append(...nodes){for(const n of nodes)this.children.push(...(n.tag==='fragment'?n.children:[n]));}
-replaceChildren(...nodes){this.children=[];this.append(...nodes);}setAttribute(){}scrollIntoView(){}}
 const p=makeRuntimeFixture({count:2000}),mount=mountFiltersRuntime({host:p.host,viewer:p.viewer,getIntent:()=>p.state,models:()=>p.models,ready:()=>true});
 await microtasks();
 const initial=getEventListeners(p.host,'filter-result').length,computations=mount.controller.metrics.computed;
 p.host.location={origin:'http://local'};
 for(let i=0;i<10;i++) {
-    const popup=new EventTarget();popup.document={body:new Node('body'),open(){},close(){},write(){},createElement:tag=>new Node(tag),createDocumentFragment:()=>new Node('fragment')};
-    popup.closed=false;popup.close=()=>{popup.closed=true;popup.dispatchEvent(new Event('beforeunload'));};
-    p.host.open=()=>popup;
+    const {popup}=makePopoutDom(p.host);
     openInventoryFilterPopout({host:p.host,scopeId:'front',columns:[{key:'dbId',header:'ID'}],selection:null});
     popup.close();
     assert.equal(getEventListeners(p.host,'filter-result').length,initial);

@@ -1,3 +1,4 @@
+import { makePopoutDom } from './filtersRuntime/popoutDom.mjs';
 /**
  * B3 — revisión adversarial independiente.
  *
@@ -108,25 +109,7 @@ await check('clear devuelve el aislamiento ajeno, no una pantalla completa', asy
 });
 
 // ── 5 · El popout no resalta el elemento de otra Source ────────────────────
-function popupDoble(host) {
-    const listeners = new Map();
-    const nodo = () => ({ children: [], style: {}, dataset: {}, textContent: '',
-        setAttribute() {},
-        append(...hijos) { for (const h of hijos) this.children.push(...(h?.esFragmento ? h.children : [h])); },
-        replaceChildren(...hijos) { this.children = hijos; },
-        addEventListener(tipo, fn) { (listeners.get(this) || listeners.set(this, []).get(this)).push([tipo, fn]); this._click = fn; },
-        scrollIntoView() {} });
-    const doc = { open() {}, close() {}, write() {}, createElement: () => nodo(),
-        createDocumentFragment: () => ({ esFragmento: true, children: [], append(...h) { this.children.push(...h); } }),
-        body: nodo() };
-
-    const popup = { closed: false, document: doc, addEventListener() {}, removeEventListener() {},
-        close() { this.closed = true; }, opener: null };
-    host.open = () => popup;
-    host.alert = () => {};
-    host.location = { origin: 'http://local' };
-    return popup;
-}
+function popupDoble(host) { return makePopoutDom(host).popup; }
 
 await check('popout: mismo dbId en dos Sources no resalta el ajeno', async () => {
     const f = makeRuntimeFixture({ count: 2, sources: ['m1', 'm2'] });

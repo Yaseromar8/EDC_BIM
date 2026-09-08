@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+const file=new URL('./filtersCore.popoutScale.prueba.mjs',import.meta.url);
+const run=args=>spawnSync(process.execPath,[fileURLToPath(file),...args],{encoding:'utf8'});
+const healthy=run([]);assert.equal(healthy.status,0,healthy.stdout+healthy.stderr);
+const mutant=run(['--mutant']);
+assert.notEqual(mutant.status,0,'render-all mutant survived');
+assert.match(mutant.stderr,/BOUNDED_DOM: render-all is forbidden/,'mutant must fail the same structural oracle, not crash elsewhere');
+console.log(JSON.stringify({suite:'popoutScaleMutants',control:'PASS',killed:1,total:1,oracle:'BOUNDED_DOM',mutation:'windowed → render-all'}));

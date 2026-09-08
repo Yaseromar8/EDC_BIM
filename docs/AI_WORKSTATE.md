@@ -535,12 +535,28 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**NONE — B5 FINAL INTEGRATION REVIEW PASS, pendiente campaña HOST del propietario**
+**HOST DEFECT — POPOUT SCALE / CODE/TEST GREEN — pendiente validación HOST**
 
 ## STATUS
 
 **B1 = CLOSED. B2 = CLOSED (71d23c7). B3 = CLOSED.**
-**B4 = CLOSED. B5 = FINAL INTEGRATION REVIEW PASS. FILTERS CORE HOST READY.**
+**B4 = CLOSED. B5 = CLOSED. FILTERS CORE = CODE/INTEGRATION CLOSED.**
+**HOST DEFECT POPOUT SCALE = CODE/TEST GREEN / COMMITTED.**
+**HOST ENVIRONMENT = READY sobre 82ae5d9; no actualizado al follow-up.**
+**HOST VALIDATION = BLOCKED / pendiente reensayo. H1 = FAIL histórico; H2–H6 = NOT EXECUTED.**
+
+Follow-up local autorizado: únicamente ventana virtual del popout, fitness y
+handoff. Máximo 103 filas físicas, un click delegado, mismo FilterResult B3 e
+identidad cualificada. Edge aislado: 13.783 y 50k × 80 columnas PASS; 36 filas
+DOM iniciales y 103 máximas. Mutante render-all muerto; restaurarVistaV2 150/150;
+regresiones afectadas y build limpio PASS. **No significa HOST GREEN.**
+
+Evidencia y reproducción: [POPOUT_SCALE_RESULTADOS](filters/POPOUT_SCALE_RESULTADOS.md).
+El nuevo candidato es el commit de este follow-up:
+`git log -1 --format=%H -- frontend-react/src/lib/inventoryFilterPopout.js`.
+Base anterior: `82ae5d9f6e8945dc293e3075bb7d7570d72a5392`; baseline productivo
+`3e413cd` intacto. No push, deploy, H1–H6, APS, backend ni BD en esta tarea.
+
 La revisión final independiente de B5 se hizo el 8-sep-2026: diez ataques, un
 defecto L2 real encontrado y corregido —color huérfano al retirar un modelo—
 más un hueco L1 del plan HOST. Declarar B5 CLOSED es decisión del propietario.
@@ -570,9 +586,27 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-Esperar instrucciones para ejecutar los seis casos de
-[B5_HOST_RELEASE](filters/B5_HOST_RELEASE.md) en un entorno legítimo disponible.
-No implementar otro bloque, no repetir B1–B4 ni certificar HOST sin ensayo real.
+Entregar el candidato local POPOUT SCALE a Claude/propietario para preparar el
+reensayo HOST autorizado, con frontend y backend del mismo SHA. El entorno real
+conserva 82ae5d9 y los cinco snapshots: no repetir migración/reextracción.
+No ejecutar H1–H6 ni actualizar servicios en esta tarea; esperar instrucción.
+
+### Handoff vigente — POPOUT SCALE
+
+[WIP HANDOFF]
+TAREA: HOST DEFECT — POPOUT SCALE; código terminado, validación real pendiente.
+IMPLEMENTADO: ventana virtual <=103 filas; revisión B3 e identidad intactas; 9 listeners constantes y cleanup; fitness 13.783/50k, navegador aislado, mutante, regresiones y build PASS.
+PENDIENTE: integrar el follow-up en el entorno de ensayo mediante autorización separada; propietario/Claude retoman HOST. No afirmar H1 PASS antes del ensayo.
+ARCHIVOS MODIFICADOS: propios frontend-react/src/lib/inventoryFilterPopout.js; frontend-react/pruebas/filtersCore.popout.prueba.mjs; frontend-react/pruebas/filtersCore.b3Adversarial.prueba.mjs; frontend-react/pruebas/filtersCore.b5Stress.prueba.mjs; frontend-react/pruebas/filtersCore.popoutScale.prueba.mjs; frontend-react/pruebas/filtersCore.popoutScaleMutants.prueba.mjs; frontend-react/pruebas/filtersCore.popoutBrowser.prueba.mjs; frontend-react/pruebas/filtersRuntime/popoutDom.mjs; docs/filters/POPOUT_SCALE_RESULTADOS.md; hunks selectivos de docs/AI_WORKSTATE.md. Ajenos: todos los de EXPECTED WORKTREE, incluidos los hunks históricos de docs/AI_WORKSTATE.md.
+TESTS EJECUTADOS: node frontend-react/pruebas/<banco>.prueba.mjs: popout, scale, browser, mutante 1/1, runtime 17/17, runtimeMutants 4/4, b3Adversarial 7/7, adversarialMutants 3/3, B4 13/13, interacciones 8/8, integradas, B5 lifecycle/stress, inventoryIdentity, Saved Views y boundary; restaurarVistaV2 150/150; npm ci offline y build aislado exit 0, 516 módulos/14,11 s. Detalle reproducible en POPOUT_SCALE_RESULTADOS.
+TESTS PENDIENTES: H1–H6 reales; no autorizados aquí. No se midieron GPU/heap del renderer HOST.
+FALLO CONOCIDO: H1 FAIL del candidato previo 82ae5d9; follow-up sólo CODE/TEST GREEN. Sin fallo de popout reproducible pendiente en los bancos ejecutados.
+NEXT EXACT ACTION: handoff del commit local para preparar el reensayo HOST con el nuevo SHA; esperar instrucciones, no modificar entorno por cuenta propia.
+DO NOT TOUCH: B1–B5 CLOSED, Viewer/ViewerFacade/WIP ajeno, multi-color, Saved Views, backend/BD/APS, producción 3e413cd, secretos; no push/deploy ni reextracción.
+COMMIT/HEAD REF: base 82ae5d9f6e8945dc293e3075bb7d7570d72a5392; el follow-up es el commit que contiene este handoff y inventoryFilterPopout.js (resolver mediante git log indicado arriba).
+
+### Evidencia histórica B5 (cerrada; no repetir)
+
 Checkpoint B5 de implementación local: lifecycle 5/5, stress 11/11,
 memoria 25 scopes sin referencias históricas retenidas, mutantes 3/3,
 escala 6/6, integración PostgreSQL + frontend 25/25. Regresiones verdes
