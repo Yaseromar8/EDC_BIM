@@ -396,6 +396,13 @@ M propio: `docs/AI_WORKSTATE.md`. Ningún cambio de producto en este ciclo.
 Los candidatos/evidencia previos contienen el hardening aprobado de Claude
 (29/29), no se reemplazan por la versión anterior de 25/25.
 
+### Entrega documental de revisión B2 / bloqueo B3 — 7-sep
+
+Propios de esta revisión: `docs/AI_WORKSTATE.md` y
+`docs/filters/B2_REVIEW_B3_BLOCKED.md`, destinados a commit exclusivamente
+documental. No hay cambios funcionales propios. Los cinco M ajenos y los
+untracked declarados permanecen UNRELATED / PROTECTED / PRESERVE.
+
 ## FROZEN / DO NOT REOPEN
 
 - **Saved Views 2.0 está cerrado.** No se reabre la arquitectura salvo
@@ -460,40 +467,46 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**B2 INTEGRATION REVIEW → si PASS, B2 CLOSED → FILTERS CORE — B3.**
+**FILTERS CORE — B3 BLOCKED / frontera FROZEN de Saved Views.**
+B2 INTEGRATION REVIEW bloqueada, no cerrada.
 
 ## STATUS
 
-**B1 = CLOSED. B2 = CODE/TEST GREEN**, commits locales `e3218e6` y
-`8495ad7`. B2 pendiente de cierre adversarial, no de reimplementación.
-El propietario autorizó continuar directamente con B3 si no aparece un L3.
-No B4, push, deploy ni producción.
+**B1 = CLOSED. B2 = CODE/TEST GREEN histórico** en `e3218e6` y `8495ad7`,
+pero **NO CLOSED**: dos ataques nuevos fallan y la integración reproduce
+un **L3/FROZEN** en el preflight del restaurador V2. **B3 no implementado.**
+Evidencia, comando reproducible y permiso mínimo pendiente:
+[`filters/B2_REVIEW_B3_BLOCKED.md`](filters/B2_REVIEW_B3_BLOCKED.md).
+El propietario autorizó B3 sin pausa sólo si no aparecía L3; se aplica STOP.
+No B4, push, deploy ni producción. No se modificó código funcional.
 
 El bloque B1 anterior queda como historia en LAST COMPLETED y en sus informes;
 sus instrucciones de esperar autorización para B2 ya no gobiernan esta sesión.
 
 ## EXACT NEXT ACTION
 
-Atacar B2 con homónimos cuando sólo se solicita un grupo y con una mutación
-real de Inventory sin incremento de revisión. Corregir L1/L2 con fitness.
-Si no hay L3, cerrar B2 y continuar inmediatamente B3: una autoridad
-FilterResult por revisión para Viewer e Inventory; cancelación, máscaras
-propias, no-filter distinto de zero-result, pending/error explícitos.
+Solicitar autorización explícita para corregir únicamente la consulta de
+propiedades cualificadas de `frontend-react/src/lib/preflightFiltros.js`
+y probar su integración V2, sin alterar serialización/datos/arquitectura.
+La reproducción demuestra que el restaurador elimina un predicado válido
+antes de que llegue a Filters. No parchear ni saltarse la frontera sin permiso.
+Después del permiso: corregir los L2 B2 documentados, validar y cerrar B2,
+y continuar el B3 ya autorizado. Hasta entonces STOP.
 
-### [WIP HANDOFF] — misión autorizada B2 → B3
+### [WIP HANDOFF] — B3 BLOCKED por L3/FROZEN reproducido
 
 ~~~text
 [WIP HANDOFF]
-TAREA:                B2 INTEGRATION REVIEW, seguido sin pausa por FILTERS CORE — B3
-IMPLEMENTADO:         B1 CLOSED; B2 CODE/TEST GREEN en e3218e6 y 8495ad7, pendiente revisión adversarial de integración
-PENDIENTE:            Ataques B2, corregir L1/L2, cerrar B2, implementar B3 y validar fitness/concurrencia/regresiones
-ARCHIVOS MODIFICADOS: Propio: docs/AI_WORKSTATE.md (sincronización autorizada). Ajenos: cinco M y todos los untracked declarados en EXPECTED WORKTREE, íntegros y protegidos
-TESTS EJECUTADOS:     Sólo takeover en esta sesión: main, HEAD 8495ad70b76c1875db605c91155baab82f5347b2, baseline ancestro exit 0; pruebas históricas en LAST COMPLETED, no presentadas como ejecuciones nuevas
-TESTS PENDIENTES:     Adversarial B2, fitness B3, mutantes y regresiones: implementación aún no iniciada
-FALLO CONOCIDO:       Seis KNOWN FAIL de interacciones B3; miniaturas backend preexistente; baseline navegador NOT EXECUTED / ENVIRONMENT
-NEXT EXACT ACTION:    Revalidar takeover documental y ejecutar los dos ataques prioritarios sobre B2 real
+TAREA:                FILTERS CORE — B3 BLOCKED; B2 INTEGRATION REVIEW no cerrada
+IMPLEMENTADO:         Sólo handoff sincronizado en 0cf10a5 y diagnóstico reproducible; B1 CLOSED intacto, B2 e3218e6/8495ad7 intactos; ningún cambio funcional propio
+PENDIENTE:            Permiso de frontera preflight V2; corregir dos L2 B2 y frontera, cerrar B2 tras pruebas, implementar B3 completo sin B4
+ARCHIVOS MODIFICADOS: Propios: docs/AI_WORKSTATE.md, docs/filters/B2_REVIEW_B3_BLOCKED.md. Ajenos: docs/filters/evidencias/IDENTIDAD_4D_5D.json; frontend-react/src/aps/extensions/LOB4DExtension.js; frontend-react/src/components/Viewer.jsx; frontend-react/src/components/ViewerLabelsBar.jsx; frontend-react/src/lib/predictBim.js; todos los untracked en EXPECTED WORKTREE, preservados
+TESTS EJECUTADOS:     Repro stdin Node del informe: 4 controles PASS/3 FAIL, exit 1; normalizadores 11/11, boundary 6/6, restaurarVistaV2 150/150; interacciones e integradas 2 PASS+6 KNOWN FAIL cada una, exit 1, 0 unexpected producto; mutante del puente 1/1 eliminado
+TESTS PENDIENTES:     Build/lint, backend, campaña B1/4D/5D, concurrencia/mutantes/perfil B3, navegador: sin implementación nueva y STOP por FROZEN
+FALLO CONOCIDO:       Preflight V2 elimina G1::Estado=Ejecutado válido; homónimo no solicitado contamina fallback plano; huella Rosetta colisiona al sustituir a:1 por b:1; seis KNOWN FAIL B3 siguen presentes
+NEXT EXACT ACTION:    Obtener autorización acotada para preflightFiltros.js y sus pruebas de integración V2; sin ella no escribir código funcional
 DO NOT TOUCH:         WIP ajeno declarado, B1 CLOSED, Saved Views V1/V2, LMV7, Rosetta contract, 4D/5D/AR, compare frente-frente, ViewerFacade, exclusividad de color B4, producción
-COMMIT/HEAD REF:      8495ad70b76c1875db605c91155baab82f5347b2 (antes del commit documental)
+COMMIT/HEAD REF:      0cf10a5fb4a1ab4e98ea3e401a7e43f9a2a204ec (código reproducido, antes del commit documental de bloqueo)
 ~~~
 
 ## TEST / BUILD BASELINE
