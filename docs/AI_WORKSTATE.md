@@ -47,6 +47,14 @@ Repositorio `Yaseromar8/EDC_BIM`.
   propietario autorice el push**. Que el local vaya por delante en commits
   documentales es lo esperado, no una anomalía.
 
+
+Commits posteriores al baseline compatibles con el estado declarado: tres
+commits documentales (`8f58a4b`, `cf7a845`, `336e09c`), dos de identidad
+protegida (`be114a1`, `06f9a9a`), integración/cutover B1 (`5113e67`,
+`89cdc79`) y B2 (`e3218e6`, `8495ad7`). El nuevo commit documental de
+sincronización no cambia el baseline funcional desplegado. La referencia
+local observada `origin/main` es `cf7a845`; no se hizo fetch ni push.
+
 Historia funcional hasta el baseline:
 
 ```
@@ -121,7 +129,7 @@ cualificado y frontend que conserva la identidad. Ensayo integrado **23/23**,
 identidad 4D/5D **7/7**, suite backend **1721 passed / 1 failed** (el fallo
 documentado del backlog nº 1). Los KNOWN FAIL de B2 siguen visibles y **ninguno
 desapareció**. Baseline de navegador: **NOT EXECUTED / ENVIRONMENT**.
-B1 GREEN no significa Filters terminado. No push, deploy ni B2.
+B1 GREEN no significa Filters terminado. B2 posterior se documenta en LAST COMPLETED; misión vigente en CURRENT TASK.
 
 **Revisión adversarial de la integración: PASS**, con dos defectos encontrados y
 corregidos. El cutover es **fail-closed demostrado por código**, no por
@@ -262,7 +270,26 @@ Saved Views 2.0, de E-0 a E-7:
 El worktree **está sucio a propósito**. Nada de lo que sigue pertenece al
 trabajo cerrado, y **nada de esto se limpia, se añade ni se commitea**.
 
-### Modificados (`M`) — 4 ficheros, +566 / −116
+### WIP ajeno adicional confirmado por el propietario — takeover B2/B3
+
+**UNRELATED / PROTECTED / PRESERVE**, sin adoptar ni normalizar:
+
+- `frontend-react/src/lib/predictBim.js` completo en su estado actual
+  (+55/−5 respecto de HEAD, no los +30/−0 históricos).
+- `frontend-react/public/predict/` y
+  `frontend-react/src/lib/predictBim.js.bak.20260907`.
+- Delta actual de `docs/filters/evidencias/IDENTIDAD_4D_5D.json`
+  (+5/−5, metadatos de una ejecución posterior).
+- Los otros tres M históricos: LOB4DExtension.js, ViewerLabelsBar.jsx y
+  únicamente los hunks históricos Viewer.jsx / ViewerFacade.
+- Todos los untracked históricos y artefactos B1 ya enumerados abajo.
+
+Hay **cinco M ajenos**, no cuatro. Las listas y conteos anteriores de B1 son
+históricos; los bancos B1 ya versionados no se consideran untracked.
+La divergencia administrativa fue aceptada expresamente por el propietario.
+Ninguno de estos archivos forma parte del alcance adoptado de B2/B3.
+
+### Modificados históricos (`M`) — 4 ficheros, +566 / −116
 
 | Fichero | Qué es | Trato |
 |---|---|---|
@@ -433,69 +460,41 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**FILTERS CORE — B1**
+**B2 INTEGRATION REVIEW → si PASS, B2 CLOSED → FILTERS CORE — B3.**
 
 ## STATUS
 
-**B1 CODE/TEST GREEN.** El bloque que Codex dejó a medias se adoptó entero
---era coherente con el contrato-- y se cerró con dos correcciones locales. La
-frontera de identidad es coherente de la base al frontend y no hay una segunda
-autoridad de Inventory: `window.postgresInventory` sigue siendo la única, ahora
-cualificada.
+**B1 = CLOSED. B2 = CODE/TEST GREEN**, commits locales `e3218e6` y
+`8495ad7`. B2 pendiente de cierre adversarial, no de reimplementación.
+El propietario autorizó continuar directamente con B3 si no aparece un L3.
+No B4, push, deploy ni producción.
 
-Lo que NO está hecho, y por qué: el baseline de navegador
-`intención → cálculo → resultado → Viewer → frame` sólo se midió en sus tres
-primeros tramos (bancos deterministas). Los dos últimos exigen LMV con un modelo
-real, credenciales APS y una sesión: no se pueden montar sin secretos del
-propietario ni sin tocar producción. Se declara **NOT EXECUTED / ENVIRONMENT**,
-no verde.
+El bloque B1 anterior queda como historia en LAST COMPLETED y en sus informes;
+sus instrucciones de esperar autorización para B2 ya no gobiernan esta sesión.
 
 ## EXACT NEXT ACTION
 
-**Esperar decisión del propietario sobre B2.** B1 dejó la infraestructura y el
-oráculo; los defectos del motor Filters siguen deliberadamente vivos como KNOWN
-FAIL (8 en `filtersCore`, 6 en `interacciones`, 6 en `interaccionesIntegradas`,
-3 en `normalizadores`). Arreglarlos es B2 y **no está autorizado**.
+Atacar B2 con homónimos cuando sólo se solicita un grupo y con una mutación
+real de Inventory sin incremento de revisión. Corregir L1/L2 con fitness.
+Si no hay L3, cerrar B2 y continuar inmediatamente B3: una autoridad
+FilterResult por revisión para Viewer e Inventory; cancelación, máscaras
+propias, no-filter distinto de zero-result, pending/error explícitos.
 
-Pendientes que quedan fuera de B1, registrados y no bloqueantes:
-
-1. **Baseline de navegador**: medir `Viewer → frame` cuando haya un entorno con
-   modelo real y sesión. Hoy NOT EXECUTED / ENVIRONMENT.
-2. **Backfill legacy**: las siete filas de `asset_user_data` sin procedencia
-   demostrable siguen **sin asignar**, en preserve/quarantine. Promocionarlas
-   exige una prueba de cobertura determinista; `coverage_complete` no la mide.
-3. **`element_docs`**: se acota por `(model_urn, external_id)`, no por Source.
-   Es tan preciso como permite el esquema legacy y está fuera del alcance
-   autorizado de B1; queda anotado, no tocado.
-4. **Comparador frente↔frente** (backlog nº 7): semántica de producto.
-
-### [WIP HANDOFF] — B1 cerrado
+### [WIP HANDOFF] — misión autorizada B2 → B3
 
 ~~~text
 [WIP HANDOFF]
-TAREA:                FILTERS CORE — B1, integracion de identidad extremo a extremo
-IMPLEMENTADO:         Migracion 31 numerada con guardas de rol y bootstrap solo-migrador; inventory_identity.py como autoridad unica; inventory_http.py con la autorizacion por scope; rutas Inventory reales (schema, read, version, PATCH, bulk, extract) cualificadas; digital_twin relink/remove/purge sobre la persistencia canonica; payload con scope_id, source_lineage y element_key; frontend con inventoryIdentity.js e inventoryNormalizers.js que conservan la identidad. Adoptado de Codex y corregido en dos puntos: I17 del ensayo integrado y el reanclaje de P0-7
-PENDIENTE:            Nada de B1. B2 no autorizado. Baseline de navegador NOT EXECUTED / ENVIRONMENT
-ARCHIVOS MODIFICADOS: Commiteados en este checkpoint: los 28 del git show. Ajenos intactos y FUERA del indice: LOB4DExtension.js, ViewerLabelsBar.jsx, predictBim.js y Viewer.jsx. Siguen untracked a proposito: los documentos narrativos B1, backend/prototypes/ y backend/sql/candidates/ (prototipo superado por inventory_identity.py y sql/31)
-TESTS EJECUTADOS:     ensayo_inventory_b1_integrado 23/23 INTEGRATION PASS; ensayo_identidad_4d_5d 7/7; pytest 1721 passed / 1 failed (documentado); filtersCore 27+1 PASS / 8 KNOWN FAIL; interacciones 2 PASS / 6 KNOWN FAIL; interaccionesIntegradas 2 PASS / 6 KNOWN FAIL; normalizadores 5 PASS / 3 KNOWN FAIL; savedViewsBoundary 6 PASS; inventoryIdentity 17/17; lob4dIdentidad 26/26; Saved Views 63/63, 150/150, 111/111; build del visor OK. Cero UNEXPECTED FAIL y cero UNEXPECTED PASS en todos los oraculos
-TESTS PENDIENTES:     Navegador con LMV y modelo real: NOT EXECUTED / ENVIRONMENT, no false-green
-FALLO CONOCIDO:       Los KNOWN FAIL de B2 siguen vivos y ninguno desaparecio. test_capacidades_con_puerta sigue fallando por /api/docs/miniaturas/preparar, del 29-ago, ajeno a B1
-NEXT EXACT ACTION:    Esperar decision del propietario sobre B2
-DO NOT TOUCH:         Identidad aprobada y las seis responsabilidades; Saved Views V2 CLOSED y las V1 historicas; migraciones 29/30/31 aplicadas; LMV 7; semantica OR/AND y faceting; compare frente-frente; formulas 4D/5D; AR; ViewerFacade; exclusividad de color; produccion
-COMMIT/HEAD REF:      el checkpoint B1 es el HEAD actual; obtenerlo con git rev-parse HEAD
+TAREA:                B2 INTEGRATION REVIEW, seguido sin pausa por FILTERS CORE — B3
+IMPLEMENTADO:         B1 CLOSED; B2 CODE/TEST GREEN en e3218e6 y 8495ad7, pendiente revisión adversarial de integración
+PENDIENTE:            Ataques B2, corregir L1/L2, cerrar B2, implementar B3 y validar fitness/concurrencia/regresiones
+ARCHIVOS MODIFICADOS: Propio: docs/AI_WORKSTATE.md (sincronización autorizada). Ajenos: cinco M y todos los untracked declarados en EXPECTED WORKTREE, íntegros y protegidos
+TESTS EJECUTADOS:     Sólo takeover en esta sesión: main, HEAD 8495ad70b76c1875db605c91155baab82f5347b2, baseline ancestro exit 0; pruebas históricas en LAST COMPLETED, no presentadas como ejecuciones nuevas
+TESTS PENDIENTES:     Adversarial B2, fitness B3, mutantes y regresiones: implementación aún no iniciada
+FALLO CONOCIDO:       Seis KNOWN FAIL de interacciones B3; miniaturas backend preexistente; baseline navegador NOT EXECUTED / ENVIRONMENT
+NEXT EXACT ACTION:    Revalidar takeover documental y ejecutar los dos ataques prioritarios sobre B2 real
+DO NOT TOUCH:         WIP ajeno declarado, B1 CLOSED, Saved Views V1/V2, LMV7, Rosetta contract, 4D/5D/AR, compare frente-frente, ViewerFacade, exclusividad de color B4, producción
+COMMIT/HEAD REF:      8495ad70b76c1875db605c91155baab82f5347b2 (antes del commit documental)
 ~~~
-
-Los resultados identidad29/29 y mutantes14/14 son del hardening aprobado de
-Claude, no se rehicieron. Los nueve B1 originales y cuatro M ajenos conservaron
-sus hashes previos 13/13. No se abrió navegador, DB ni producción en este ciclo.
-Una búsqueda del subagente frontend fue rechazada y no se reintentó; el STOP
-determinante es la frontera4D reproducida por la tarea principal.
-
-Los clústeres previos siguen documentados en B1_BACKEND_IDENTITY_RESULTADOS.md
-y B1_RESULTADOS.md §6; no se arrancaron ni consultaron en este ciclo.
-Los census contienen copia local sensible: no compartir/commitear/borrar sin
-instrucción. Ninguna variable/configuración persistente cambiada; no .env ni
-contraseñas leídas. Los resultados generales siguientes son históricos.
 
 ## TEST / BUILD BASELINE
 
