@@ -45,6 +45,7 @@
  */
 
 import { _safeUrn, _normVal } from '../aps/utils/model.js';
+import { knownPropertyNames, readFilterProperty } from './filterPropertyIdentity.js';
 
 /** Los dos valores sintéticos que el motor de facetas fabrica por su cuenta. */
 export const VALORES_SINTETICOS = Object.freeze(['(Unassigned)', '(No aplica)']);
@@ -61,12 +62,11 @@ export const nombreDeColumna = (propId) => String(propId).split('::')[1] || Stri
  */
 export function valoresPresentes(filas, propiedades) {
     const porProp = new Map();
-    const columnas = new Map();               // nombre de columna -> propId
     for (const propId of propiedades) {
         porProp.set(propId, new Set());
-        if (propId !== PROP_SOURCES) columnas.set(nombreDeColumna(propId), propId);
     }
     if (!Array.isArray(filas)) return porProp;
+    const owners = knownPropertyNames(filas, propiedades);
 
     for (let i = 0; i < filas.length; i++) {
         const fila = filas[i];
@@ -75,8 +75,9 @@ export function valoresPresentes(filas, propiedades) {
             const urn = fila.source_urn || fila.model_urn;
             if (urn) porProp.get(PROP_SOURCES).add(String(urn).trim());
         }
-        for (const [columna, propId] of columnas) {
-            const v = _normVal(fila[columna]);
+        for (const propId of propiedades) {
+            if (propId === PROP_SOURCES) continue;
+            const v = _normVal(readFilterProperty(fila, propId, owners));
             if (v) porProp.get(propId).add(v);
         }
     }

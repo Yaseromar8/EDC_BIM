@@ -1,6 +1,7 @@
 // El linaje de un URN de APS: el documento, que no cambia al versionar.
 // Se reutiliza el derivador que ya existe en vez de escribir otro.
 import { linajeDeUrn } from '../../lib/savedViewV2.js';
+import { knownPropertyNames, legacyAliasAllowed } from '../../lib/filterPropertyIdentity.js';
 
 /**
  * Encuentra todos los nodos hoja en el árbol del modelo.
@@ -407,25 +408,11 @@ let _facetCache = { revision: null, allData: null, rosetta: null, rosettaFp: '',
 // referencia dejaba el índice SIN los elementos de los modelos tardíos
 // (p. ej. ENCOFRADO: sin categoría y sin coloreo hasta refrescar la página).
 const _rosettaFingerprint = (r) => {
-    if (!r) return '';
-    const parts = [];
-    for (const urn in r) {
-        // CONTAR NO BASTA. Un remapeo conserva la cardinalidad --el mismo
-        // externalId apuntando a otro dbId-- y la huella anterior, que solo
-        // contaba claves, daba igual: el indice se reutilizaba con dbIds
-        // viejos y el visor aislaba elementos que no eran. Se mezclan tambien
-        // los valores, con una combinacion barata y sensible al orden.
-        let n = 0;
-        let h = 0;
-        const mapa = r[urn];
-        for (const k in mapa) {
-            n++;
-            const v = mapa[k];
-            h = (h * 31 + (typeof v === 'number' ? v : 0) + k.length) | 0;
-        }
-        parts.push(urn.slice(-10) + ':' + n + ':' + h);
-    }
-    return parts.sort().join('|');
+    // Exact content, including full source and externalId. A length/hash of
+    // names cannot distinguish {a:1} from {b:1}. Order differences may cause
+    // a harmless rebuild, but distinct mappings must never reuse an index.
+    return JSON.stringify(Object.entries(r || {}).map(([urn, mapping]) =>
+        [urn, Object.entries(mapping || {})]));
 };
 
 function _buildFacetIndex(allData, rosettaToExtIdReversed) {
@@ -525,6 +512,7 @@ function _buildFacetIndex(allData, rosettaToExtIdReversed) {
         vistos.add(claveDeElemento);
 
         rows.push({
+            keys: new Set(Object.keys(row)),
             viewerDbId,
             effectiveModelUrn,
             rawUrn,
@@ -533,10 +521,10 @@ function _buildFacetIndex(allData, rosettaToExtIdReversed) {
             norm,
         });
     }
-    return { rows, colUrnsWithValue };
+    return { rows, colUrnsWithValue, propertyNames: knownPropertyNames(allData) };
 }
 
-export function calculateBucketsFromPostgres(allData, filterProperties, filterSelections, rosettaToExtIdReversed, hiddenModelUrns = [], datasetRevision = null) {
+export function calculateBucketsFromPostgres(allData, filterProperties, filterSelections, rosettaToExtIdReversed, hiddenModelUrns = [], datasetRevision = null, schema = []) {
     // allData is array of objects: { dbId: 'UUID', model_urn: 'URN', <PropName>: 'Value', ... }
     // rosettaToExtIdReversed: URN -> ExternalId -> dbId
     // hiddenModelUrns: array of URNs que el usuario ocultó en Sources (formato React/raw)
@@ -597,19 +585,17 @@ export function calculateBucketsFromPostgres(allData, filterProperties, filterSe
     // todavia vengan aplanados, y solo cuando NO hay homonimia entre las
     // propiedades pedidas: si la hay, un valor sin grupo no se atribuye a
     // ninguna, porque no se sabe de cual es.
-    const homonimos = new Set();
-    const vistosPorNombre = new Set();
-    for (const propId of filterProperties) {
-        const pn = propId.split('::')[1] || propId;
-        if (vistosPorNombre.has(pn)) homonimos.add(pn);
-        vistosPorNombre.add(pn);
+    const propertyNames = knownPropertyNames([], [...schema, ...filterProperties, ...Object.keys(filterSelections)]);
+    for (const [name, ids] of _facetCache.prepared.propertyNames) {
+        if (!propertyNames.has(name)) propertyNames.set(name, new Set());
+        for (const id of ids) propertyNames.get(name).add(id);
     }
     const getRowValue = (r, propId) => {
         if (propId === 'Standard::Sources') return r.sourceVal;
         const cualificado = r.norm.get(propId);
         if (cualificado) return cualificado;
         const pn = propId.split('::')[1] || propId;
-        if (!homonimos.has(pn)) {
+        if (!r.keys.has(propId) && legacyAliasAllowed(propId, propertyNames)) {
             const suelto = r.norm.get(pn);
             if (suelto) return suelto;
             if (colUrnsWithValue.get(pn)?.has(r.safeUrn)) return '(Unassigned)';

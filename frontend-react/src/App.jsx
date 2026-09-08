@@ -4001,8 +4001,8 @@ function App() {
 
   // 2. Disparar recálculos nativos sin colapsar React
   useEffect(() => {
-    emitirRecalculoDeFiltros({ filterProperties, filterSelections }, 'efecto de filtros');
-  }, [filterProperties, filterSelections]);
+    emitirRecalculoDeFiltros({ filterProperties, filterSelections, schema: availableProperties }, 'efecto de filtros');
+  }, [filterProperties, filterSelections, availableProperties]);
 
   const togglePropertyAll = useCallback((propId) => {
     const bucket = dynamicFilterBuckets[propId];
@@ -4119,7 +4119,7 @@ function App() {
     
     const triggerRecalc = () => {
         console.log(`[REACT] ⏱️ ${performance.now().toFixed(2)}ms - Cambio detectado: Disparando recalculate-filters hacia LMV`);
-        emitirRecalculoDeFiltros({ filterProperties, filterSelections }, 'cambio de filtros/esquema');
+        emitirRecalculoDeFiltros({ filterProperties, filterSelections, schema: availableProperties }, 'cambio de filtros/esquema');
     };
 
     triggerRecalc();
@@ -4128,7 +4128,7 @@ function App() {
     // para que la UI incluya sus elementos en los buckets de filtros.
     window.addEventListener('rosetta-ready', triggerRecalc);
     return () => window.removeEventListener('rosetta-ready', triggerRecalc);
-  }, [filterProperties, filterSelections, availableProperties.length, hiddenModelUrns]);
+  }, [filterProperties, filterSelections, availableProperties, hiddenModelUrns]);
 
   // Guardar en la UI las nuevas cubetas calculadas asincrónicamente por el Viewer LMV Worker
   useEffect(() => {

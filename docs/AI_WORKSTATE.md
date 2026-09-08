@@ -467,46 +467,39 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**FILTERS CORE — B3 BLOCKED / frontera FROZEN de Saved Views.**
-B2 INTEGRATION REVIEW bloqueada, no cerrada.
+**FILTERS CORE — B3**
 
 ## STATUS
 
-**B1 = CLOSED. B2 = CODE/TEST GREEN histórico** en `e3218e6` y `8495ad7`,
-pero **NO CLOSED**: dos ataques nuevos fallan y la integración reproduce
-un **L3/FROZEN** en el preflight del restaurador V2. **B3 no implementado.**
-Evidencia, comando reproducible y permiso mínimo pendiente:
-[`filters/B2_REVIEW_B3_BLOCKED.md`](filters/B2_REVIEW_B3_BLOCKED.md).
-El propietario autorizó B3 sin pausa sólo si no aparecía L3; se aplica STOP.
-No B4, push, deploy ni producción. No se modificó código funcional.
-
-El bloque B1 anterior queda como historia en LAST COMPLETED y en sus informes;
-sus instrucciones de esperar autorización para B2 ya no gobiernan esta sesión.
+**B1 = CLOSED. B2 INTEGRATION REVIEW PASS. B2 = CLOSED.**
+Las tres correcciones de frontera autorizadas y sus fitness permanentes pasan.
+Evidencia nueva: [filters/B2_INTEGRATION_REVIEW.md](filters/B2_INTEGRATION_REVIEW.md).
+El informe [filters/B2_REVIEW_B3_BLOCKED.md](filters/B2_REVIEW_B3_BLOCKED.md)
+queda como evidencia histórica, no como bloqueo vigente.
+B3 autorizado, implementación por comenzar. No B4/push/deploy/producción.
 
 ## EXACT NEXT ACTION
 
-Solicitar autorización explícita para corregir únicamente la consulta de
-propiedades cualificadas de `frontend-react/src/lib/preflightFiltros.js`
-y probar su integración V2, sin alterar serialización/datos/arquitectura.
-La reproducción demuestra que el restaurador elimina un predicado válido
-antes de que llegue a Filters. No parchear ni saltarse la frontera sin permiso.
-Después del permiso: corregir los L2 B2 documentados, validar y cerrar B2,
-y continuar el B3 ya autorizado. Hasta entonces STOP.
+Implementar B3: FilterState → DatasetSnapshot → FilterResult(revision) →
+Viewer + Inventory. Una autoridad por revisión, no-filter/zero/pending/error,
+cancelación de trabajo viejo, máscaras propias y puente live edit sin detail.
+Mantener los KNOWN FAIL de B4 fuera de alcance salvo corrección legítima
+demostrada, y no tocar contrato/serialización/capturador ni arquitectura V2.
 
-### [WIP HANDOFF] — B3 BLOCKED por L3/FROZEN reproducido
+### [WIP HANDOFF] — B2 CLOSED, continúa B3 sin nueva autorización
 
 ~~~text
 [WIP HANDOFF]
-TAREA:                FILTERS CORE — B3 BLOCKED; B2 INTEGRATION REVIEW no cerrada
-IMPLEMENTADO:         Sólo handoff sincronizado en 0cf10a5 y diagnóstico reproducible; B1 CLOSED intacto, B2 e3218e6/8495ad7 intactos; ningún cambio funcional propio
-PENDIENTE:            Permiso de frontera preflight V2; corregir dos L2 B2 y frontera, cerrar B2 tras pruebas, implementar B3 completo sin B4
-ARCHIVOS MODIFICADOS: Propios: docs/AI_WORKSTATE.md, docs/filters/B2_REVIEW_B3_BLOCKED.md. Ajenos: docs/filters/evidencias/IDENTIDAD_4D_5D.json; frontend-react/src/aps/extensions/LOB4DExtension.js; frontend-react/src/components/Viewer.jsx; frontend-react/src/components/ViewerLabelsBar.jsx; frontend-react/src/lib/predictBim.js; todos los untracked en EXPECTED WORKTREE, preservados
-TESTS EJECUTADOS:     Repro stdin Node del informe: 4 controles PASS/3 FAIL, exit 1; normalizadores 11/11, boundary 6/6, restaurarVistaV2 150/150; interacciones e integradas 2 PASS+6 KNOWN FAIL cada una, exit 1, 0 unexpected producto; mutante del puente 1/1 eliminado
-TESTS PENDIENTES:     Build/lint, backend, campaña B1/4D/5D, concurrencia/mutantes/perfil B3, navegador: sin implementación nueva y STOP por FROZEN
-FALLO CONOCIDO:       Preflight V2 elimina G1::Estado=Ejecutado válido; homónimo no solicitado contamina fallback plano; huella Rosetta colisiona al sustituir a:1 por b:1; seis KNOWN FAIL B3 siguen presentes
-NEXT EXACT ACTION:    Obtener autorización acotada para preflightFiltros.js y sus pruebas de integración V2; sin ella no escribir código funcional
-DO NOT TOUCH:         WIP ajeno declarado, B1 CLOSED, Saved Views V1/V2, LMV7, Rosetta contract, 4D/5D/AR, compare frente-frente, ViewerFacade, exclusividad de color B4, producción
-COMMIT/HEAD REF:      0cf10a5fb4a1ab4e98ea3e401a7e43f9a2a204ec (código reproducido, antes del commit documental de bloqueo)
+TAREA:                FILTERS CORE — B3
+IMPLEMENTADO:         B2 INTEGRATION REVIEW PASS/CLOSED: preflight cualificado, homonimia dataset/schema y huella exacta Rosetta; B1 cerrado intacto
+PENDIENTE:            B3 resultado autoritativo, revisión/cancelación, Viewer/Inventory, eventos/color; fitness, mutantes, build y regresiones
+ARCHIVOS MODIFICADOS: Propios B2: frontend-react/src/lib/filterPropertyIdentity.js; frontend-react/src/lib/preflightFiltros.js; frontend-react/src/aps/utils/model.js; frontend-react/src/App.jsx; un hunk de frontend-react/src/components/Viewer.jsx; frontend-react/pruebas/filtersCore.adversarial.prueba.mjs; frontend-react/pruebas/filtersCore.adversarialMutants.prueba.mjs; docs/filters/B2_INTEGRATION_REVIEW.md; docs/AI_WORKSTATE.md. Ajenos: cinco M y todos los untracked declarados; ViewerFacade/hunks históricos excluidos del commit
+TESTS EJECUTADOS:     node frontend-react/pruebas/<nombre>.prueba.mjs: adversarial 10/10; mutantes 3/3; filtersCore 39 PASS; normalizadores 11/11; boundary 6/6; restaurarVistaV2 150/150; capturarVistaV2 63/63; savedViewV2 111/111; inventoryIdentity 17/17; inventoryConfig 20/20; frenteDeVistas 20/20; lob4dIdentidad 26/26; interacciones e integradas 2 PASS+6 KNOWN FAIL cada una; build alterno exit 0 en 10,90 s
+TESTS PENDIENTES:     B3 todavía no implementado; navegador/LMV/GPU y backend no ejecutados en esta corrección frontend
+FALLO CONOCIDO:       Seis KNOWN FAIL de interacciones intactos; live edit emite recalculate-filters sin detail (B3); coste caliente sintético sube 86,83→154,37 ms por validación exacta, documentado
+NEXT EXACT ACTION:    Implementar controlador/resultado B3 y conectar los consumidores reales, sin pedir otra autorización
+DO NOT TOUCH:         WIP ajeno, B1 CLOSED, formato/capturador/contrato/datos Saved Views V1/V2, esquema backend, arquitectura restore, LMV7/Rosetta contract, 4D/5D/AR, compare, ViewerFacade, B4/exclusividad de color, producción
+COMMIT/HEAD REF:      b7014be124d0ba990fa3e8943d91ab1bd5e201cb (antes del commit funcional B2)
 ~~~
 
 ## TEST / BUILD BASELINE

@@ -1275,7 +1275,7 @@ const Viewer = ({
                     // La revision del dataset: sin ella el motor no cachea, y con
                     // ella caduca en cuanto el inventario se escribe o se edita en
                     // sitio. Comparar la referencia del array no bastaba.
-                    inventoryRevision()
+                    inventoryRevision(), detail.schema || []
                 );
 
                 finalBuckets = buckets;
