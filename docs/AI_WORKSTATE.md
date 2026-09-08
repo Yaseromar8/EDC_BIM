@@ -535,12 +535,15 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**NONE — FILTERS CORE HOST READY, pendiente campaña HOST del propietario**
+**NONE — B5 FINAL INTEGRATION REVIEW PASS, pendiente campaña HOST del propietario**
 
 ## STATUS
 
 **B1 = CLOSED. B2 = CLOSED (71d23c7). B3 = CLOSED.**
-**B4 = CLOSED. B5 = CODE/TEST GREEN / COMMITTED. FILTERS CORE HOST READY.**
+**B4 = CLOSED. B5 = FINAL INTEGRATION REVIEW PASS. FILTERS CORE HOST READY.**
+La revisión final independiente de B5 se hizo el 8-sep-2026: diez ataques, un
+defecto L2 real encontrado y corregido —color huérfano al retirar un modelo—
+más un hueco L1 del plan HOST. Declarar B5 CLOSED es decisión del propietario.
 El propietario aceptó B4 (`f38bc0c`, revisión `df2c03e`) y autorizó B5:
 integración reproducible, escala/stress, lifecycle y preparación HOST/release.
 No cambia el baseline productivo. No push ni deploy.
@@ -615,6 +618,58 @@ No queda trabajo B4 local a medias; no se declara CLOSED ni validación de host.
 - WIP ajeno intacto; las 48 líneas ViewerFacade siguen sin commit.
 - No navegador/React DOM/LMV GPU ni producción certificados. Receta manual en
   B4_RESULTADOS. No B5, push, deploy, backend ni DB.
+
+### Evidencia de la revisión final independiente B5 — 8-sep-2026
+
+**B5 FINAL INTEGRATION REVIEW PASS**, tras corregir un defecto L2 real.
+
+- **L2 — un modelo retirado conservaba el tinte de Filters.** La retirada que
+  añadió B5 en `bindModels` soltaba el gancho y quitaba el modelo de `painted`
+  **sin retirarle antes el color**. El driver siguiente arranca con `painted`
+  vacío, así que ese tinte ya no lo podía limpiar nadie: sobrevivía al propio
+  `dispose()`. Es la misma invariante que B3 fijó para `dispose()` —el color
+  propio se retira ANTES de soltar la propiedad—, que la ruta nueva no cumplía.
+  Reproducido en aislamiento y alcanzable: `loadModelSequentially` no descarga,
+  y en `reset3D` (`Viewer.jsx`, vuelta de lámina 2D a 3D) el `unloadModel` está
+  comentado, así que se borra del registro un modelo que sigue en la escena.
+  Los otros dos sitios que borran del registro descargan antes. El arreglo
+  limpia sólo lo que Filters pintó y tolera que la instancia ya esté muerta.
+- **L1 — el plan HOST no ejercitaba ese camino.** Ningún caso abría una lámina
+  2D, que es el único gesto del visor que saca un modelo de `models()` sin
+  descargarlo. Se añadió al caso 6 sin crear un séptimo.
+
+**Ataques sin defecto.** Checkout limpio de `afe48dc` reproducido por el
+revisor: `npm ci` desde lockfile y `npm run build` **exit 0, 516 módulos**, sin
+ViewerFacade, `public/predict`, `.env` ni symlinks —los 517 del worktree son el
+import ajeno del ViewerFacade—. Backend↔frontend: `ensayo_inventory_b1_integrado
+--b5` ejecutado por el revisor sobre clúster PG18 desechable, **25/25 exit 0**,
+clúster detenido. Migración/cutover: 31 revoca INSERT/UPDATE/DELETE/TRUNCATE en
+`public.inventory_assets` **y** `public.asset_user_data`, y el rollback SQL trae
+`B1_ROLE_GUARD`, `B1_OWNER_GUARD`, `B1_DATA_PRESENT` y ningún CASCADE —las dos
+afirmaciones que la receta hace sobre el SQL son ciertas—. Lifecycle: un runtime
+viejo no borra resultado ni espejos de uno nuevo, comprobado con dos runtimes
+vivos de verdad y no sólo con el doble dispose. Escala y memoria: la campaña se
+abstiene explícitamente de comparar protocolos distintos y de leer `heapUsed`
+como prueba de ausencia de fugas; sus límites enumeran justo lo que mide.
+Release: la receta es orden, no autorización, y cubre frontend-primero, backend
+viejo tras 31, escrituras antes de HOST y los dos rollbacks.
+
+**Bancos nuevos del revisor:** `filtersCore.b5Adversarial` (8 casos) y
+`filtersCore.b5AdversarialMutants` (1/1 muerto: retirar sin retirar el color).
+
+**Regresión:** filtersCore 38+1 knownFail 0; b5Lifecycle 5/5; b5Stress 11/11;
+b5Memory 1/1 con 0 retenidos —exige `node --expose-gc`—; b5Scale exit 0;
+b5Mutants 3/3; b5Adversarial 8/8; b5AdversarialMutants 1/1; runtime 17/17;
+runtimeMutants 4/4; popout 1(16); b3Adversarial 7/7; adversarial V2 0/4;
+normalizadores 11/11; boundary 6/6; b4 13/13; b4Mutants 3/3; b4Adversarial
+19/19; b4AdversarialMutants 2/2; interacciones e integradas 8/8 con exit 0;
+inventoryIdentity 17/17; inventoryConfig 20/20; lob4dIdentidad 26/26;
+**captura 63/63, restore 150/150, V2 111/111**, frenteDeVistas 20/20;
+`pytest` 1721 passed / 1 failed (el documentado); build exit 0.
+
+**Límites:** HOST no ejecutado. Sin navegador, React DOM, LMV/GPU ni producción.
+`filtersCore.b5BackendPayload` no es autónomo: lo alimenta por stdin el arnés
+Python. Se certifica código, bancos y receta, no el host real.
 
 ### Evidencia de la revisión independiente B4 — 8-sep-2026
 

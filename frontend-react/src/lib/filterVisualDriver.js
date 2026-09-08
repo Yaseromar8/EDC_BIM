@@ -37,6 +37,16 @@ export function createFilterVisualDriver({ viewer, models, window: host,
         // A runtime survives Source reloads. Retired LMV instances must not
         // retain this driver or claim ownership through an obsolete hook.
         for (const [model,{original,hook}] of modelHooks) if (!live.has(model)) {
+            // El color propio se retira ANTES de soltar la propiedad, igual que
+            // en dispose(). Soltarla a secas dejaba tinte de Filters en un modelo
+            // que este driver ya no gobierna y que ningun driver posterior puede
+            // limpiar: `painted` arranca vacio. Ocurre cuando el consumidor saca
+            // de `models()` un modelo que sigue vivo en la escena. El modelo
+            // puede estar ya descargado, asi que el intento no puede tumbar el
+            // barrido ni dejar los ganchos puestos.
+            if (painted.has(model)) {
+                try { owned(() => originalClear.call(viewer,model)); } catch { /* modelo ya descargado */ }
+            }
             if (model.setThemingColor === hook) model.setThemingColor = original;
             modelHooks.delete(model); base.delete(model); painted.delete(model);
             retired = true;

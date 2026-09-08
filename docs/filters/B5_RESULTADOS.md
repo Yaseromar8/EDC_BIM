@@ -103,6 +103,24 @@ hook de modelo retirado, espejos retenidos, cleanup por scope en vez de dueño.
 Se mantienen los mutantes B3 de A tardío, cancelación, zero→show-all y color
 huérfano tras dispose; no se añadieron por cantidad.
 
+## Revisión final independiente — 8-sep-2026
+
+Un defecto **L2** encontrado y corregido: la retirada de modelos que introdujo
+B5 soltaba el gancho y quitaba el modelo de `painted` sin retirarle el color, y
+ese tinte quedaba sin dueño —el driver siguiente arranca con `painted` vacío—.
+Se retira ahora el color propio ANTES de soltar la propiedad, igual que en
+`dispose()`, tolerando que la instancia ya esté descargada. Camino alcanzable:
+`reset3D` borra del registro un modelo que sigue dibujado. Mutante dirigido
+`retire-without-clearing-own-color`, muerto.
+
+Un **L1** documental: el plan HOST no abría ninguna lámina 2D, el único gesto
+que saca un modelo de `models()` sin descargarlo. Añadido al caso 6.
+
+Comprobados por el revisor, no sólo leídos: checkout limpio de `afe48dc`
+(`npm ci` + build **exit 0, 516 módulos**), `ensayo_inventory_b1_integrado --b5`
+**25/25 exit 0** sobre clúster PG18 desechable ya detenido, las dos afirmaciones
+de la receta sobre 31 y su rollback, y Saved Views **150/150 · 63/63 · 111/111**.
+
 ## Regresión y reproducibilidad
 
 - filtersCore 38 CONTRACT + 1 BASELINE; normalizadores 11; boundary 6.
