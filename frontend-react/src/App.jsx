@@ -21,6 +21,7 @@ import AddDocumentModal from './components/AddDocumentModal';
 import LandingPage from './components/LandingPage'; // Import Landing Page
 import LoginScreen from './components/LoginScreen';
 import FilterConfiguratorModal from './components/FilterConfiguratorModal';
+import { selectedPropertyItems, retainPropertyConfig } from './lib/filterPresentation';
 import NativeARView from './components/NativeARView';
 import GeoControlPanel from './components/GeoControlPanel';
 import { isNativeAR } from './native/arcore';
@@ -3974,9 +3975,7 @@ function App() {
 
 
   const selectedPropertyObjects = useMemo(() => (
-    filterProperties
-      .map(id => availableProperties.find(prop => prop.id === id))
-      .filter(Boolean)
+    selectedPropertyItems(filterProperties, availableProperties)
   ), [filterProperties, availableProperties]);
 
   const [visiblePropertiesCount, setVisiblePropertiesCount] = useState(5);
@@ -4027,30 +4026,12 @@ function App() {
   }, [filterState]);
 
   const togglePropertyAll = useCallback((propId) => {
-    const bucket = dynamicFilterBuckets[propId];
-    if (!bucket) return;
-
-    const allValues = bucket.values.map(v => v.value);
-    const currentSelection = filterSelections[propId] || [];
-
-    // Logic: If ALL are currently selected, deselect ALL.
-    // Otherwise (mix or none), select ALL.
-    // Use the bucket values count to determine if all are selected
-    const isAllSelected = currentSelection.length === bucket.values.length;
-
-    if (isAllSelected) {
-      setFilterSelections(prev => {
-        const next = { ...prev };
-        delete next[propId]; // Empty selection
-        return next;
-      });
-    } else {
-      setFilterSelections(prev => ({
-        ...prev,
-        [propId]: allValues
-      }));
-    }
-  }, [dynamicFilterBuckets, filterSelections]);
+    // "Todos / sin restricción" is absence of the predicate, not a frozen
+    // enumeration of today's facet values. It also works during pending/error.
+    setFilterSelections(prev => {
+      const next = { ...prev }; delete next[propId]; return next;
+    });
+  }, []);
 
   const handleValueToggle = useCallback((propId, value) => {
     setFilterSelections(prev => {
@@ -4454,6 +4435,8 @@ function App() {
             expandedFilters={expandedFilters}
             facetSearch={facetSearch}
             visiblePropertyObjects={visiblePropertyObjects}
+            allPropertyObjects={selectedPropertyObjects}
+            filterResult={filterResult} filterProgress={filterProgress} filterScopeId={filterState.scopeId}
             hasMoreProperties={hasMoreProperties}
             handleToggleModelVisibility={handleToggleModelVisibility}
             togglePropertyAll={togglePropertyAll}
@@ -5276,11 +5259,12 @@ function App() {
           open={filterConfiguratorOpen}
           availableProperties={availableProperties}
           selectedProperties={filterProperties}
+          filterSelections={filterSelections}
           onClose={() => setFilterConfiguratorOpen(false)}
           onUpdate={(newProps) => {
-            // Mock update logic or implement real prop reordering if needed
-            // For now we just close or update state if we implement reorder
             setFilterProperties(newProps);
+            setFilterSelections(prev => retainPropertyConfig(prev, newProps));
+            setFilterColors(prev => retainPropertyConfig(prev, newProps));
             setFilterConfiguratorOpen(false);
           }}
         />

@@ -452,6 +452,16 @@ En Viewer sólo quedan sin commit las **48 líneas ViewerFacade** ajenas.
 Los dos bancos históricos se adaptaron con autorización explícita:
 expected/datos originales intactos; sólo dos KNOWN_FAIL de B4.
 
+### Unidad B4 incorporada — posterior a 6ddc5a0
+
+Commit local `feat(filters): complete b4 search and identity-safe interactions`:
+App, TandemSidebar, TandemFilterPanel, FilterConfiguratorModal,
+lib/filterPresentation, bancos interacciones/interaccionesIntegradas,
+filtersCore.b4/b4Mutants/b4Performance, B4_RESULTADOS y este WORKSTATE.
+NO queda WIP propio B4 esperado tras el commit. Siguen exactamente los cinco
+M ajenos y los untracked históricos declarados; Viewer queda +48/-0.
+Los dos KNOWN_FAIL de B4 ahora son PASS, sin modificar expected históricos.
+
 ## FROZEN / DO NOT REOPEN
 
 - **Saved Views 2.0 está cerrado.** No se reabre la arquitectura salvo
@@ -516,19 +526,20 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**B3 INTEGRATION REVIEW**
+**NONE — B4 CODE/TEST GREEN, pendiente revisión/decisión del propietario**
 
 ## STATUS
 
-**B1 = CLOSED. B2 = CLOSED (71d23c7). B3 = INTEGRATION REVIEW PASS.**
-**B4 = NOT STARTED / NOT AUTHORIZED.**
+**B1 = CLOSED. B2 = CLOSED (71d23c7). B3 = CLOSED.**
+**B4 = CODE/TEST GREEN / COMMITTED. B5 = NOT STARTED / NOT AUTHORIZED.**
 La revisión adversarial independiente se hizo el 8-sep-2026 y dictaminó PASS,
-tras corregir un defecto L2 real. Declarar B3 CLOSED es decisión del
-propietario, no del revisor.
+tras corregir un defecto L2 real. El propietario aceptó el cierre de B3 y
+autorizó B4. `6ddc5a0bbc648cfc7dcc52b06961f718cdb422f0` es EXPECTED REVIEW
+DELTA de Claude sobre `c091c55`, no divergencia. No repetir la revisión B3.
 Resultado único revisionado conectado a Viewer/Inventory/popout.
 Todos los casos B3 históricos cumplen el mismo expected original.
-Sólo permanecen dos KNOWN_FAIL B4 (búsqueda/DnD), cero resultados inesperados
-en los casos sanos. Mutante integrado muerto sin modificar la mutación.
+Los dos KNOWN_FAIL históricos B4 (búsqueda/DnD) ahora son PASS con el mismo
+expected original; cero resultados inesperados sanos. Mutante integrado intacto.
 Evidencia: [filters/B3_RESULTADOS.md](filters/B3_RESULTADOS.md).
 [filters/B3_WIP_VALIDATION.md](filters/B3_WIP_VALIDATION.md) es historia del
 bloqueo ya resuelto, NO la instrucción vigente.
@@ -541,13 +552,39 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-Esperar instrucción del propietario. La revisión B3 está entregada y comiteada
-localmente; nada queda a medias. Las tres decisiones abiertas son suyas:
-declarar B3 CLOSED, autorizar B4, y qué hacer con PREDICT —que sigue sin
-comitear y que, si se despliega desde este HEAD, arrastraría B1/B2 y rompería
-la edición de Inventory en producción, porque el backend vivo aún es 3e413cd.
-No push. No deploy. No B4. CODE/TEST GREEN no equivale a validación de
-host/LMV/GPU ni a producción.
+Esperar instrucciones del propietario sobre el checkpoint B4 CODE/TEST GREEN.
+Para revisión independiente, partir del delta B4 desde 6ddc5a0 y de
+[filters/B4_RESULTADOS.md](filters/B4_RESULTADOS.md), sin repetir investigación
+Tandem ni reabrir B1/B2/B3 CLOSED. No iniciar B5 ni certificar host sin ensayo.
+PREDICT y todo WIP ajeno siguen protegidos. No push, deploy ni B5.
+El backend vivo registrado sigue en 3e413cd: desplegar este HEAD sin coordinación
+arrastraría el cutover B1/B2. CODE/TEST GREEN no certifica host/LMV/GPU/producción.
+
+### Checkpoint B4 — 8-sep-2026
+
+**B4 CODE/TEST GREEN**, implementación acotada sobre `6ddc5a0`.
+Informe canónico: [filters/B4_RESULTADOS.md](filters/B4_RESULTADOS.md).
+El bloqueo anterior de permisos fue resuelto por autorización directa en chat.
+No queda trabajo B4 local a medias; no se declara CLOSED ni validación de host.
+
+- B4 fitness **13/13**; mutantes **3/3 muertos**.
+- Interacciones e integradas: **8 PASS** cada una, cero KNOWN_FAIL y cero
+  resultados inesperados; mutante integrado 1/1, expected históricos intactos.
+- Regresiones B1/B2/B3/V2 aceptadas del WIP conservadas: restore 150/150,
+  captura 63/63 y contrato 111/111; detalle completo en el informe.
+- Build final con módulos protegidos tomados de HEAD sólo en memoria:
+  **exit 0, 516 módulos, 14,14 s**, outDir temporal fuera del repo.
+- Búsqueda completa antes de recorte, DnD canónico, estados desde FilterResult,
+  selección count0 removible, pending no rotulado como cero y color por identidad.
+- Múltiples propiedades de color conservadas con arbitraje B3 explícito.
+  Sin cambios en motor/identity/runtime/driver/V2 ni en Viewer.
+- Performance sintética aceptada: búsqueda entre 10001 valores mediana
+  0,258 ms/p95 0,669 ms; 20 intenciones rápidas coalescidas en un cálculo.
+- Commit B4: `feat(filters): complete b4 search and identity-safe interactions`,
+  descendiente de `6ddc5a0`; consultar hash real en Git.
+- WIP ajeno intacto; las 48 líneas ViewerFacade siguen sin commit.
+- No navegador/React DOM/LMV GPU ni producción certificados. Receta manual en
+  B4_RESULTADOS. No B5, push, deploy, backend ni DB.
 
 ### Evidencia CODE/TEST del checkpoint B3
 

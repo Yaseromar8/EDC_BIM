@@ -10,6 +10,7 @@ import DocsPanel from './DocsPanel';
 
 
 const TandemSidebar = ({
+    filterResult, filterProgress, filterScopeId, allPropertyObjects,
     activePanel,
     panelVisible,
     sidebarWidth,
@@ -169,6 +170,7 @@ const TandemSidebar = ({
                     dynamicFilterBuckets={dynamicFilterBuckets}
                     filterSelections={filterSelections}
                     filterColors={filterColors}
+                    filterResult={filterResult} filterProgress={filterProgress} filterScopeId={filterScopeId} allPropertyObjects={allPropertyObjects}
                     expandedFilters={expandedFilters}
                     facetSearch={facetSearch}
                     visiblePropertyObjects={visiblePropertyObjects}

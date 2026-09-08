@@ -1,12 +1,12 @@
 /**
- * Reproducciones históricas B1, reancladas al producto B3 autorizado.
+ * Reproducciones históricas B1, conectadas al producto B3/B4 autorizado.
  * Ejecutar: node frontend-react/pruebas/filtersCore.interacciones.prueba.mjs
  *
  * Extrae fragmentos del producto sin importar/montar App ni tocar DB/red.
  * Los expected representan el contrato correcto, no el defecto del baseline.
  * KNOWN_FAIL exige una firma defectuosa exacta; cualquier otro fallo es
  * UNEXPECTED_FAIL. Los cuatro defectos B3 corregidos exigen el expected original;
- * sólo búsqueda/DnD B4 conservan KNOWN_FAIL y detectan UNEXPECTED_PASS.
+ * búsqueda/DnD B4 también cumplen ya sus expected originales.
  * Exit 1 con cualquier KNOWN_FAIL/resultado inesperado. Los controles sanos
  * se clasifican PASS. Esto NO es una prueba de React DOM, LMV GPU ni navegador.
  */
@@ -16,6 +16,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { createFilterVisualDriver } from '../src/lib/filterVisualDriver.js';
+import { facetItems, searchFacetItems, selectedPropertyItems, reorderProperty } from '../src/lib/filterPresentation.js';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const quietConsole = { log() {}, warn() {}, error() {} };
@@ -192,29 +193,29 @@ function inventoryMountScenario(src, { eventBeforeMount }) {
 
 function searchScenario(src) {
     const body = between(src.panel, '    const validItems = useMemo(() => {', '    const handleSearchChange = useCallback');
-    const query = new Function('bucket', 'selectedValues', 'expanded', 'DEFAULT_VISIBLE_VALUES', 'searchConfig', 'useMemo',
+    const query = new Function('bucket', 'selectedValues', 'expanded', 'DEFAULT_VISIBLE_VALUES', 'searchConfig', 'useMemo', 'useState', 'facetItems', 'searchFacetItems',
         `${body}\nreturn filteredVisibleItems.map(item => item.value);`);
     const bucket = { values: Array.from({ length: 6 }, (_, i) => ({ value: `Valor ${i + 1}`, count: 1 })) };
-    const run = expanded => query(bucket, [], expanded, 5, { query: 'Valor 6' }, f => f());
+    const run = expanded => query(bucket, [], expanded, 5, { query: 'Valor 6' }, f => f(), v => [v, () => {}], facetItems, searchFacetItems);
     return { collapsed: run(false), expanded: run(true) };
 }
 
 function dragScenario(src) {
     const initial = ['G::A', 'G::BB', 'G::BC'];
     const selectionBody = between(src.modal, '    const selectedObjects = useMemo(() => {', '    // --- HANDLERS ---');
-    const select = new Function('currentSelection', 'availableProperties', 'searchTermSelected', 'useMemo',
+    const select = new Function('currentSelection', 'availableProperties', 'searchTermSelected', 'useMemo', 'selectedPropertyItems',
         `${selectionBody}\nreturn selectedObjects;`);
-    const visible = select(initial, initial.map(id => ({ id, name: id.split('::')[1] })), 'B', f => f());
+    const visible = select(initial, initial.map(id => ({ id, name: id.split('::')[1] })), 'B', f => f(), selectedPropertyItems);
     const dragItem = { current: null }, dragOverItem = { current: null };
     const fakeEvent = { currentTarget: { style: {} } };
     const startBody = matchOne(src.modal, /onDragStart=\{\(e\) => \{([\s\S]*?)\}\}/g);
     const enterBody = matchOne(src.modal, /onDragEnter=\{\(e\) => \{([\s\S]*?)\}\}/g);
-    new Function('idx', 'dragItem', 'e', startBody)(visible.findIndex(v => v.id === 'G::BB'), dragItem, fakeEvent);
-    new Function('idx', 'dragOverItem', 'e', enterBody)(visible.findIndex(v => v.id === 'G::BC'), dragOverItem, fakeEvent);
+    new Function('item', 'dragItem', 'dragOverItem', 'e', startBody)(visible.find(v => v.id === 'G::BB'), dragItem, dragOverItem, fakeEvent);
+    new Function('item', 'dragOverItem', 'e', enterBody)(visible.find(v => v.id === 'G::BC'), dragOverItem, fakeEvent);
     const sortBody = between(src.modal, '    const handleSort = () => {', '    if (!open) return null;');
     let reordered;
-    new Function('currentSelection', 'dragItem', 'dragOverItem', 'setCurrentSelection', `${sortBody}\nhandleSort();`)(
-        initial, dragItem, dragOverItem, value => { reordered = value; });
+    new Function('currentSelection', 'dragItem', 'dragOverItem', 'setCurrentSelection', 'reorderProperty', `${sortBody}\nhandleSort();`)(
+        initial, dragItem, dragOverItem, value => { reordered = typeof value === 'function' ? value(initial) : value; }, reorderProperty);
     return { reordered };
 }
 
@@ -260,13 +261,13 @@ const definitions = [
         run: src => inventoryMountScenario(src, { eventBeforeMount: false }),
     },
     {
-        id: 'P1-search-full-domain', defect: 'P1-search', evidence: ['TandemFilterPanel.jsx:29 FilterCategory'],
+        id: 'P1-search-full-domain', defect: 'P1-search', fixedIn: 'B4', evidence: ['TandemFilterPanel.jsx:29 FilterCategory'],
         limitation: 'Se ejecuta derivacion real, sin renderizar input ni DOM.',
         expected: { collapsed: ['Valor 6'], expanded: ['Valor 6'] }, knownActual: { collapsed: [], expanded: ['Valor 6'] },
         run: searchScenario,
     },
     {
-        id: 'P0-ui-drag-filtered-list', defect: 'P0-ui', evidence: ['FilterConfiguratorModal.jsx:55,97,251 seleccion/drag/sort'],
+        id: 'P0-ui-drag-filtered-list', defect: 'P0-ui', fixedIn: 'B4', evidence: ['FilterConfiguratorModal.jsx seleccion/drag/sort por identidad'],
         limitation: 'Ejecuta cuerpos reales de handlers; no sintetiza gesto HTML drag/drop.',
         expected: { reordered: ['G::A', 'G::BC', 'G::BB'] }, knownActual: { reordered: ['G::BB', 'G::A', 'G::BC'] },
         run: dragScenario,
@@ -301,11 +302,12 @@ export async function runInteractionChecks() {
     const summary = { total: cases.length, PASS: 0, KNOWN_FAIL: 0, UNEXPECTED_FAIL: 0, UNEXPECTED_PASS: 0 };
     for (const result of cases) summary[result.status]++;
     return {
-        suite: 'filtersCore.interacciones B3 (B4 visible)',
+        suite: 'filtersCore.interacciones B3/B4',
         limits: 'Fragmentos reales con mocks locales; sin DB/red/React DOM/LMV GPU. No certifica UI integrada ni Saved Views.',
         sources: Object.fromEntries(Object.values(src).map(({ path, sha256 }) => [path, sha256])),
         summary,
-        b3Green: summary.PASS === 6 && summary.KNOWN_FAIL === 2 && !summary.UNEXPECTED_FAIL && !summary.UNEXPECTED_PASS,
+        b3Green: cases.filter(c => c.fixedIn === 'B3').every(c => c.status === 'PASS') && !summary.UNEXPECTED_FAIL && !summary.UNEXPECTED_PASS,
+        b4Green: summary.PASS === 8 && !summary.KNOWN_FAIL && !summary.UNEXPECTED_FAIL && !summary.UNEXPECTED_PASS,
         cases,
         exitCode: summary.KNOWN_FAIL || summary.UNEXPECTED_FAIL || summary.UNEXPECTED_PASS ? 1 : 0,
     };

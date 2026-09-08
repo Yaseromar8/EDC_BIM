@@ -56,6 +56,8 @@ async function run({ mutant = false } = {}) {
     if (!yaReanclado) code = `import { normalizeInventoryPreload } from ${JSON.stringify(moduleUrl)};\n` + code;
     code = replaceOnce(code, "from '../src/lib/filterVisualDriver.js'",
         `from ${JSON.stringify(new URL('../src/lib/filterVisualDriver.js', import.meta.url).href)}`);
+    code = replaceOnce(code, "from '../src/lib/filterPresentation.js'",
+        `from ${JSON.stringify(new URL('../src/lib/filterPresentation.js', import.meta.url).href)}`);
     const loaded = await import(dataUrl(code));
     return loaded.runInteractionChecks();
 }
@@ -68,15 +70,16 @@ const killed = actual?.status === 'PASS' && isDeepStrictEqual(actual.actual, act
     && isDeepStrictEqual(actual.expected, mutated?.expected)
     && mutated?.status === 'UNEXPECTED_FAIL' && !isDeepStrictEqual(mutated.actual, actual.expected)
     && mutated.actual?.before === 0 && mutated.actual?.afterAssetsOnly === 0;
-const output = { suite: 'filtersCore.interaccionesIntegradas B3 (B4 visible)',
+const output = { suite: 'filtersCore.interaccionesIntegradas B3/B4',
     originalDirectStatus: report.summary,
     adapter: 'Authorized production-driver locator and Sync arguments; original inputs, expected and normalizer mutation unchanged',
     hashes: { original: sha256(originalRaw), normalizer: sha256(normalizerRaw), bridge: sha256(readFileSync(fileURLToPath(import.meta.url))) },
     summary: report.summary, cases: report.cases,
     b3Green: report.b3Green && killed,
+    b4Green: report.b4Green && killed,
     mutants: { total: 1, killed: killed ? 1 : 0, survivor: killed ? 0 : 1,
         case: 'actual-preload-return-empty', observed: mutated },
-    limits: report.limits + ' B4 known failures retain their original behaviour and nonzero whole-suite exit.',
+    limits: report.limits + ' B4 search/DnD now PASS with the original expected; mutation unchanged.',
 };
 console.log(JSON.stringify(output, null, 2));
 process.exitCode = report.exitCode || !killed ? 1 : 0;
