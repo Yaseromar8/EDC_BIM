@@ -526,12 +526,15 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**NONE — B4 INTEGRATION REVIEW PASS, pendiente decisión del propietario**
+**FILTERS CORE — B5**
 
 ## STATUS
 
 **B1 = CLOSED. B2 = CLOSED (71d23c7). B3 = CLOSED.**
-**B4 = INTEGRATION REVIEW PASS. B5 = NOT STARTED / NOT AUTHORIZED.**
+**B4 = CLOSED. B5 = AUTHORIZED / WIP / NOT GREEN.**
+El propietario aceptó B4 (`f38bc0c`, revisión `df2c03e`) y autorizó B5:
+integración reproducible, escala/stress, lifecycle y preparación HOST/release.
+No cambia el baseline productivo. No push ni deploy.
 La revisión independiente de B4 se hizo el 8-sep-2026: diez ataques, ningún
 defecto de producto. Declarar B4 CLOSED es decisión del propietario, no del
 revisor.
@@ -555,11 +558,23 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-Esperar instrucción del propietario. B4 está implementado y revisado; nada queda
-a medias. Las decisiones abiertas son suyas: declarar B4 CLOSED, autorizar B5, y
-qué hacer con PREDICT —que sigue sin comitear—. No repetir la revisión B4 ni
-reabrir B1/B2/B3 CLOSED. No certificar host sin ensayo real.
-PREDICT y todo WIP ajeno siguen protegidos. No push, deploy ni B5.
+Validar checkout limpio de df2c03e con dependencias normales; después ejecutar
+integración backend/frontend en desechable, escala y stress B5, regresiones,
+y preparar campaña HOST y release coordinado. No reabrir B1–B4 sin regresión.
+Checkpoint B5 de implementación local: lifecycle 5/5, stress 11/11,
+memoria 25 scopes sin referencias históricas retenidas, mutantes 3/3,
+escala 6/6, integración PostgreSQL + frontend 25/25. Regresiones verdes
+salvo el fallo backend histórico aceptado. Detalle y archivos:
+[filters/B5_RESULTADOS.md](filters/B5_RESULTADOS.md),
+[filters/B5_HOST_RELEASE.md](filters/B5_HOST_RELEASE.md) y
+[filters/evidencias/B5_CAMPAIGN.json](filters/evidencias/B5_CAMPAIGN.json).
+Crear checkpoint local por lista explícita y verificar su build limpio + ensayo
+backend/frontend desde el mismo checkout antes de declarar B5 GREEN.
+Archivos propios B5: filterRuntimeBridge.js, filterVisualDriver.js,
+pruebas/filtersCore.b5{BackendPayload,Lifecycle,Memory,Mutants,Scale,Stress}.prueba.mjs,
+backend/herramientas/ensayo_inventory_b1_integrado.py (--b5), los tres documentos
+anteriores y este handoff. No adoptar los cinco M ajenos ni untracked históricos.
+PREDICT y todo WIP ajeno siguen protegidos. No push ni deploy.
 El backend vivo registrado sigue en 3e413cd: desplegar este HEAD sin coordinación
 arrastraría el cutover B1/B2. CODE/TEST GREEN no certifica host/LMV/GPU/producción.
 

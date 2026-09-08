@@ -1,0 +1,973 @@
+{
+  "sourceCheckpoint": "df2c03e5df9b1b9a121f47adb99025bcc537537c",
+  "productDelta": "B5 runtime lifecycle fixes only; fingerprints of backend product recorded below",
+  "backend": {
+    "verdict": "INTEGRATION PASS",
+    "createdAt": "2026-09-08T14:44:48.947775+00:00",
+    "environment": {
+      "newCluster": true,
+      "host": "127.0.0.1",
+      "port": 60699,
+      "database": "ecd_ensayo_inventory_integrado_2e344df0487a",
+      "clusterDirectory": "C:\\Users\\ASUS\\AppData\\Local\\Temp\\alephia_inventory_b1_integrado_o9zqyq8f\\data",
+      "serverVersionNum": "180004"
+    },
+    "sourceFingerprints": {
+      "backend\\sql\\31_inventory_identity.sql": "e84fa126e9126471595c0e02fa0f85c2bbb4404d3401447a4aad5771c7fdeace",
+      "backend\\inventory_identity.py": "1aa351f8bf79657fdef2413b68efd26a56ddcabf4fd13c6f77418bc817da989c",
+      "backend\\inventory_http.py": "5bd94df04686f6c22ab9c4b91fcb63d2c3c75dab890d23c62ca6728e654d762b",
+      "backend\\server.py": "f36b47a0cdb80c77e0f417649de804ccbb0e214e12f3796938f3343582cd6e0b",
+      "backend\\routes\\inventory.py": "2f998b348b092c8620c47a9947362454861054fe4084d0ed63aa581e17ac099c",
+      "backend\\db.py": "0a37cccdcf4dc51c0cb25ae6637e0a92a899451175dc31968f6dfe6e0bd6c963",
+      "backend\\auth_middleware.py": "e0fb47cfd2c320c8511099ece5d0c8bab245ead394f2200c282c5884ba62c5cd",
+      "backend\\routes\\digital_twin.py": "d84ed6584cfb7c69673986d35458042f61120f7de111efa557eff278e7913b80",
+      "backend\\bootstrap_esquema.py": "87cd46a7698047ec99293509836ed20615367d4be6e095fdc7294a4963324293",
+      "backend\\sql\\03_grants_ida.sql": "a7b087e0bfa2ccbb54a4ea628475e4a8a2ba21adf9a2515bf53224011d275d31"
+    },
+    "cases": [
+      {
+        "case": "I01-real-http-full-lite-six-sources-complete-identity",
+        "status": "PASS",
+        "fullRows": 6,
+        "liteRows": 6,
+        "distinctKeys": 6
+      },
+      {
+        "case": "B5-real-HTTP-payload-frontend-driver-PATCH-and-V2",
+        "status": "PASS",
+        "frontendRows": 6,
+        "frontendMatches": 1,
+        "normalizationRuntimeViewerInventoryPresentation": true,
+        "frontendPatchThroughRealHttp": true,
+        "savedViewsRoundtripAndForeign403": true,
+        "sameCheckout": true
+      },
+      {
+        "case": "I02-real-hashed-session-activation-expiry-revocation",
+        "status": "PASS",
+        "realSessionRejections": 5,
+        "activatedMemberAccepted": true
+      },
+      {
+        "case": "I03-membership-real-sql-no-cross-scope-read-or-write",
+        "status": "PASS",
+        "foreignGetAndPatchRejected": 2,
+        "sameDocumentAcrossScopesSeparated": true
+      },
+      {
+        "case": "I04-qualified-http-patch-all-main-edit-paths",
+        "status": "PASS",
+        "realQualifiedHttpEdits": 5,
+        "otherSourceExactlyPreserved": true,
+        "nameOnlyInvalidatesRevision": true
+      },
+      {
+        "case": "I05-real-bulk-all-or-nothing-authorization",
+        "status": "PASS",
+        "unauthorizedBulkAtomic": true,
+        "qualifiedRowsUpdated": 2
+      },
+      {
+        "case": "I06-legacy-http-ambiguous-externalId-is-409",
+        "status": "PASS",
+        "httpStatus": 409,
+        "errorCode": "LEGACY_AMBIGUOUS",
+        "writes": 0
+      },
+      {
+        "case": "I07-new-version-logical-identity-and-stale-CAS",
+        "status": "PASS",
+        "logicalElements": 1,
+        "snapshots": 2,
+        "firstPublication": {
+          "created": true,
+          "activated": true,
+          "row_count": 1,
+          "scope_id": "B1A_CAS",
+          "source_lineage": "urn:adsk.wipprod:dm.lineage:B1DocumentA",
+          "source_urn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLkIxRG9jdW1lbnRBP3ZlcnNpb249MQ",
+          "active_urn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLkIxRG9jdW1lbnRBP3ZlcnNpb249MQ",
+          "generation": 1
+        },
+        "secondPublication": {
+          "created": true,
+          "activated": true,
+          "row_count": 1,
+          "scope_id": "B1A_CAS",
+          "source_lineage": "urn:adsk.wipprod:dm.lineage:B1DocumentA",
+          "source_urn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLkIxRG9jdW1lbnRBP3ZlcnNpb249Mg",
+          "active_urn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLkIxRG9jdW1lbnRBP3ZlcnNpb249Mg",
+          "generation": 2
+        }
+      },
+      {
+        "case": "I08-idempotent-retry-does-not-overwrite-same-version",
+        "status": "PASS",
+        "identicalRetry": {
+          "created": false,
+          "activated": false,
+          "row_count": 1,
+          "scope_id": "B1A_RETRY",
+          "source_lineage": "urn:adsk.wipprod:dm.lineage:B1DocumentA",
+          "source_urn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLkIxRG9jdW1lbnRBP3ZlcnNpb249MQ",
+          "active_urn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLkIxRG9jdW1lbnRBP3ZlcnNpb249MQ",
+          "generation": 1
+        },
+        "contentConflictRejected": true
+      },
+      {
+        "case": "I09-historical-rival-cannot-be-ignored-for-legacy",
+        "status": "PASS",
+        "historicalRivalBlocksLegacyResolution": true,
+        "historicalReadPreserved": true
+      },
+      {
+        "case": "I10-runtime-no-promotion-by-coverage-boolean",
+        "status": "PASS",
+        "noPromotionEvenMigratorBoolean": true,
+        "legacyRowPreserved": 1
+      },
+      {
+        "case": "I11-runtime-grants-protect-DDL-quarantine-provenance",
+        "status": "PASS",
+        "actualPrivilegeRejections": 5
+      },
+      {
+        "case": "I12-source-and-row-identity-conflict-fail-atomic",
+        "status": "PASS",
+        "rowAndSourceIdentityConflictsRejected": 2,
+        "partialSnapshots": 0
+      },
+      {
+        "case": "I13-complete-empty-snapshot-invalidates-generation",
+        "status": "PASS",
+        "emptyActiveRows": 0,
+        "versionChanged": true,
+        "publication": {
+          "created": true,
+          "activated": true,
+          "row_count": 0,
+          "scope_id": "B1A_EMPTY",
+          "source_lineage": "urn:adsk.wipprod:dm.lineage:B1DocumentA",
+          "source_urn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLkIxRG9jdW1lbnRBP3ZlcnNpb249Mg",
+          "active_urn": "dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLkIxRG9jdW1lbnRBP3ZlcnNpb249Mg",
+          "generation": 2
+        }
+      },
+      {
+        "case": "I14-real-extractor-two-sources-to-real-HTTP",
+        "status": "PASS",
+        "realExtractorPublications": 2,
+        "realHttpRows": 2
+      },
+      {
+        "case": "I15-real-extractor-captures-CAS-before-APS",
+        "status": "PASS",
+        "rivalActiveVersion": 3,
+        "staleJobRejected": true,
+        "apsTransportCalls": 3
+      },
+      {
+        "case": "I16-real-extractor-complete-empty-publication",
+        "status": "PASS",
+        "realEmptyPublication": true,
+        "newVersionVisible": true
+      },
+      {
+        "case": "I17-real-extract-HTTP-prelink-source-target-ACL",
+        "status": "PASS",
+        "prelinkAuthorized": true,
+        "unauthorizedTargetBeforeJobAndAPS": true,
+        "foreignOnlySourceBeforeJobAndAPS": true,
+        "sharedSourceWithTargetLinkAllowed": true,
+        "foreignOnlyDeniedBy": "PROJECT_FORBIDDEN",
+        "domainBoundaryRaises": "SOURCE_PROJECT_CONFLICT"
+      },
+      {
+        "case": "I18-HTTP-identity-alias-conflicts-and-missing-bulk-atomic",
+        "status": "PASS",
+        "contradictoryDeclarationsRejected": 5,
+        "missingTargetBulkAtomic": true
+      },
+      {
+        "case": "I19-real-extractor-rejects-malformed-gaps-missing-ID-limit-and-APSerror",
+        "status": "PASS",
+        "rejectedIncompleteExtractions": {
+          "malformed": {
+            "code": "INCOMPLETE_APS_COLLECTION",
+            "transportCalls": 2,
+            "snapshots": 0
+          },
+          "missing-leaf": {
+            "code": "INCOMPLETE_MODEL_COVERAGE",
+            "transportCalls": 4,
+            "snapshots": 0
+          },
+          "missing-external": {
+            "code": "INCOMPLETE_ELEMENT_IDENTITY",
+            "transportCalls": 3,
+            "snapshots": 0
+          },
+          "page-limit": {
+            "code": "INCOMPLETE_EXTRACTION_PAGE_LIMIT",
+            "transportCalls": 201,
+            "snapshots": 0
+          },
+          "transport": {
+            "code": "EXTRACTION_FAILED",
+            "transportCalls": 3,
+            "snapshots": 0
+          }
+        }
+      },
+      {
+        "case": "I20-real-extractor-first-publication-retirement-ABA",
+        "status": "PASS",
+        "firstPublicationRetiredDuringAPSRejected": true,
+        "snapshots": 0
+      },
+      {
+        "case": "I21-real-digital-twin-relink-remove-purge-and-foreign-relink",
+        "status": "PASS",
+        "relinkAtomicPublicationRetirement": true,
+        "removeKeepsTwoSnapshotsAndHumanData": true,
+        "sameLineagePurgeProtected": true,
+        "foreignRelinkNoConfigMutationOrAPS": true
+      },
+      {
+        "case": "I22-real-bootstrap31-and-03-regrant-parity-verifier",
+        "status": "PASS",
+        "realBootstrapAndGrantsExecuted": true,
+        "catalogAndPrivilegeChecks": [
+          "direct31:ecd_migrator:public",
+          "direct31:ecd_migrator:inventory_identity_b1,public",
+          "direct31:ecd_app:public",
+          "direct31:ecd_app:inventory_identity_b1,public",
+          "bootstrap31:ecd_migrator:public",
+          "bootstrap31:ecd_migrator:inventory_identity_b1,public",
+          "bootstrap31:ecd_app:public",
+          "bootstrap31:ecd_app:inventory_identity_b1,public",
+          "bootstrap03then31:ecd_migrator:public",
+          "bootstrap03then31:ecd_migrator:inventory_identity_b1,public",
+          "bootstrap03then31:ecd_app:public",
+          "bootstrap03then31:ecd_app:inventory_identity_b1,public"
+        ],
+        "signatureOnlyUnrelatedGrantDependencies": [
+          "ai_brain",
+          "activity_log",
+          "auth_events",
+          "resolve_folder_path"
+        ]
+      },
+      {
+        "case": "I23-read-readiness-preserves-orphan-native-without-false-empty",
+        "status": "PASS",
+        "configuredIncompleteIs409": true,
+        "configuredReadyIgnoresOnlyUnconfiguredLegacy": true,
+        "legacyPreservedNotPromoted": true,
+        "unconfiguredUnknownLegacyIs409": true
+      },
+      {
+        "case": "I24-matching-legacy-human-data-cannot-vanish-silently",
+        "status": "PASS",
+        "legacyHumanRowPreserved": true,
+        "notAutoPromoted": true,
+        "readFailsClosed": 409,
+        "code": "LEGACY_USER_DATA_PENDING"
+      }
+    ],
+    "clusterStopped": true,
+    "limitations": [
+      "Datos sinteticos; no produccion, backups, censo, APS real ni browser.",
+      "Wrappers server.py compilados por AST; no se importa su arranque ni .env.",
+      "Sesiones/membresia y SQL de identidad reales; no se simulan decisiones de permiso.",
+      "APS simulado; hilos se ejecutan sincronicamente y readiness de traduccion es sintetico.",
+      "Transformacion, publicacion, ACL, config, SQL y rutas son implementaciones reales.",
+      "No certifica bootstrap integral, 4D/5D ni comparacion frente-frente."
+    ],
+    "compiledRouteFingerprints": {
+      "get_inventory_schema": "d139ff5d1d8dd814f0d903a098a9da95442e72f6cd1b3c04f9a8fc24edf1179c",
+      "get_inventory": "10d3e99d53dd1a863d3edc01027d979bb026af42a54769727e57f390f4e5cc00",
+      "get_inventory_version": "05a25a95a5ff6649a6cb7a5445ff04076d6c7e8a90640e82d0a01e00458f593d",
+      "update_inventory": "1e8266c93c7888b30716355a41c6d6ad330a07a82b8fdfe4c728a8e0a0f9297d",
+      "bulk_update_inventory": "a9d4c37dca946370de4db17d3e1c6c61ce37bd544ad13002f78ca66dbd4b9abf"
+    },
+    "summary": {
+      "passed": 25,
+      "failed": 0,
+      "total": 25
+    },
+    "sourceFilesUnchangedDuringRun": true,
+    "capturedRuntimeLogCharacters": 41238,
+    "completedAt": "2026-09-08T14:45:03.705552+00:00",
+    "exitCode": 0
+  },
+  "stress": {
+    "suite": "b5Stress",
+    "pass": 11,
+    "fail": 0,
+    "report": [
+      {
+        "name": "A B A coalesced current result",
+        "status": "PASS",
+        "gestures": 3,
+        "calculated": 1,
+        "readyPublications": 1,
+        "applications": 1,
+        "pendingPublications": 3
+      },
+      {
+        "name": "zero -> pending -> clear never old zero or old match",
+        "status": "PASS"
+      },
+      {
+        "name": "live/bulk edit revision retains intent",
+        "status": "PASS",
+        "edited": 1000,
+        "matches": 10500
+      },
+      {
+        "name": "same-cardinality Rosetta rebuild no old dbId",
+        "status": "PASS"
+      },
+      {
+        "name": "hidden Source absent from same Viewer/Inventory result",
+        "status": "PASS"
+      },
+      {
+        "name": "late Source pending recovers on readiness",
+        "status": "PASS"
+      },
+      {
+        "name": "visible current error and explicit retry",
+        "status": "PASS"
+      },
+      {
+        "name": "scope switch replaces snapshot without old values",
+        "status": "PASS"
+      },
+      {
+        "name": "color ON OFF cancels in-flight job",
+        "status": "PASS",
+        "rows": 20000
+      },
+      {
+        "name": "V2 real restore homonyms/Sources/multiple colors followed by manual edit",
+        "status": "PASS",
+        "rows": 10001
+      },
+      {
+        "name": "popout 10 open/close cycles no listener or calculation accumulation",
+        "status": "PASS",
+        "rows": 2000
+      }
+    ],
+    "limits": "real runtime/restore/presentation, synthetic Node event loop + LMV/DOM doubles; no frame claim"
+  },
+  "memory": {
+    "suite": "b5Memory",
+    "pass": 1,
+    "cycles": 25,
+    "rowsPerScope": 1000,
+    "heapAfterGc": [
+      6131024,
+      6172816,
+      6221096,
+      6721312,
+      6254904,
+      6256896,
+      6257616,
+      6736352,
+      6321352,
+      6341336,
+      6340264,
+      6341072,
+      6278720,
+      6318848,
+      6343048,
+      6351144,
+      6351272,
+      6351992,
+      6352376,
+      6363744,
+      6353312,
+      6353488,
+      6353648,
+      6353744,
+      6353888
+    ],
+    "retiredRetained": {
+      "models": 0,
+      "rows": 0,
+      "results": 0
+    },
+    "limits": "WeakRefs cover 25 retired source models, input datasets, FilterResults. One module-global facet index for the latest dataset remains bounded until replacement; not a browser heap snapshot or zero-memory claim."
+  },
+  "mutants": {
+    "suite": "b5Mutants",
+    "killed": 3,
+    "survived": 0,
+    "result": [
+      {
+        "name": "retired-model-hook",
+        "healthy": "PASS",
+        "mutant": "FAIL",
+        "killed": true,
+        "reason": "retired model retains ownership hook"
+      },
+      {
+        "name": "retained-result-mirrors",
+        "healthy": "PASS",
+        "mutant": "FAIL",
+        "killed": true,
+        "reason": "result mirrors retained after dispose"
+      },
+      {
+        "name": "cleanup-by-scope-not-owner",
+        "healthy": "PASS",
+        "mutant": "FAIL",
+        "killed": true,
+        "reason": "old dispose erases another owner result"
+      }
+    ]
+  },
+  "regressions": [
+    {
+      "name": "filtersCore",
+      "exit": 0
+    },
+    {
+      "name": "filtersCore.normalizadores",
+      "exit": 0
+    },
+    {
+      "name": "filtersCore.adversarial",
+      "exit": 0
+    },
+    {
+      "name": "filtersCore.adversarialMutants",
+      "exit": 0
+    },
+    {
+      "name": "filtersCore.savedViewsBoundary",
+      "exit": 0
+    },
+    {
+      "name": "filtersCore.interacciones",
+      "exit": 0
+    },
+    {
+      "name": "filtersCore.interaccionesIntegradas",
+      "exit": 0
+    },
+    {
+      "name": "filtersCore.runtime",
+      "exit": 0
+    },
+    {
+      "name": "filtersCore.runtimeMutants",
+      "exit": 0
+    },
+    {
+      "name": "filtersCore.b3Adversarial",
+      "exit": 0
+    },
+    {
+      "name": "filtersCore.popout",
+      "exit": 0
+    },
+    {
+      "name": "filtersCore.b4",
+      "exit": 0
+    },
+    {
+      "name": "filtersCore.b4Mutants",
+      "exit": 0
+    },
+    {
+      "name": "filtersCore.b4Adversarial",
+      "exit": 0
+    },
+    {
+      "name": "filtersCore.b4AdversarialMutants",
+      "exit": 0
+    }
+  ],
+  "scale": {
+    "suite": "b5Scale",
+    "node": "v24.14.0",
+    "pass": 6,
+    "fail": 0,
+    "protocol": "fresh process / 1 cold + 7 warm / normalized qualified 10 properties / same real calculateFilterResult path; no historical speedup claim (B1 bypassed controller and lacked revision); heap after GC excludes GPU",
+    "results": [
+      {
+        "n": 20000,
+        "sources": 1,
+        "properties": 10,
+        "duplicateRows": 100,
+        "preparationMs": 244.419,
+        "coldMs": 202.206,
+        "warmMs": [
+          187.675,
+          177.369,
+          165.35,
+          171.577,
+          184.137,
+          167.112,
+          166.479
+        ],
+        "warmMedianMs": 171.577,
+        "scenarios": [
+          {
+            "name": "single",
+            "ms": 167.038,
+            "matches": 10000,
+            "facetMembers": 20000
+          },
+          {
+            "name": "and",
+            "ms": 151.646,
+            "matches": 3334,
+            "facetMembers": 6667
+          },
+          {
+            "name": "broad-or",
+            "ms": 174.711,
+            "matches": 20000,
+            "facetMembers": 20000
+          },
+          {
+            "name": "zero",
+            "ms": 178.636,
+            "matches": 0,
+            "facetMembers": 20000
+          },
+          {
+            "name": "null",
+            "ms": 167.863,
+            "matches": 5000,
+            "facetMembers": 5000
+          },
+          {
+            "name": "missing-empty",
+            "ms": 174.379,
+            "matches": 10000,
+            "facetMembers": 10000
+          }
+        ],
+        "search": {
+          "domain": 20000,
+          "ms": 1.689
+        },
+        "visual": {
+          "ms": 70.978,
+          "jobs": 1,
+          "properties": 2,
+          "commands": 20000,
+          "acks": 2
+        },
+        "heapBytes": {
+          "before": 4878328,
+          "fixture": 19216664,
+          "resultAndCache": 73261176,
+          "cacheAfterResultRelease": 57018168
+        }
+      },
+      {
+        "n": 20000,
+        "sources": 5,
+        "properties": 10,
+        "duplicateRows": 100,
+        "preparationMs": 234.832,
+        "coldMs": 227.6,
+        "warmMs": [
+          217.783,
+          204.308,
+          200.742,
+          199.152,
+          195.199,
+          198.248,
+          193.845
+        ],
+        "warmMedianMs": 199.152,
+        "scenarios": [
+          {
+            "name": "single",
+            "ms": 181.032,
+            "matches": 10000,
+            "facetMembers": 20000
+          },
+          {
+            "name": "and",
+            "ms": 162.624,
+            "matches": 3334,
+            "facetMembers": 6667
+          },
+          {
+            "name": "broad-or",
+            "ms": 197.777,
+            "matches": 20000,
+            "facetMembers": 20000
+          },
+          {
+            "name": "zero",
+            "ms": 147.849,
+            "matches": 0,
+            "facetMembers": 20000
+          },
+          {
+            "name": "null",
+            "ms": 187.099,
+            "matches": 5000,
+            "facetMembers": 5000
+          },
+          {
+            "name": "missing-empty",
+            "ms": 257.795,
+            "matches": 10000,
+            "facetMembers": 10000
+          }
+        ],
+        "search": {
+          "domain": 20000,
+          "ms": 1.65
+        },
+        "visual": {
+          "ms": 87.614,
+          "jobs": 1,
+          "properties": 2,
+          "commands": 20000,
+          "acks": 2
+        },
+        "heapBytes": {
+          "before": 4878400,
+          "fixture": 19393832,
+          "resultAndCache": 73377520,
+          "cacheAfterResultRelease": 57137472
+        }
+      },
+      {
+        "n": 40000,
+        "sources": 1,
+        "properties": 10,
+        "duplicateRows": 100,
+        "preparationMs": 464.146,
+        "coldMs": 398.164,
+        "warmMs": [
+          374.448,
+          391.869,
+          373.931,
+          407.55,
+          357.93,
+          393.272,
+          422.477
+        ],
+        "warmMedianMs": 391.869,
+        "scenarios": [
+          {
+            "name": "single",
+            "ms": 424.192,
+            "matches": 20000,
+            "facetMembers": 40000
+          },
+          {
+            "name": "and",
+            "ms": 437.739,
+            "matches": 6667,
+            "facetMembers": 13334
+          },
+          {
+            "name": "broad-or",
+            "ms": 417.616,
+            "matches": 40000,
+            "facetMembers": 40000
+          },
+          {
+            "name": "zero",
+            "ms": 361.661,
+            "matches": 0,
+            "facetMembers": 40000
+          },
+          {
+            "name": "null",
+            "ms": 331.273,
+            "matches": 10000,
+            "facetMembers": 10000
+          },
+          {
+            "name": "missing-empty",
+            "ms": 439.959,
+            "matches": 20000,
+            "facetMembers": 20000
+          }
+        ],
+        "search": {
+          "domain": 40000,
+          "ms": 3.716
+        },
+        "visual": {
+          "ms": 140.299,
+          "jobs": 1,
+          "properties": 2,
+          "commands": 40000,
+          "acks": 2
+        },
+        "heapBytes": {
+          "before": 4877480,
+          "fixture": 34281888,
+          "resultAndCache": 142931312,
+          "cacheAfterResultRelease": 109930448
+        }
+      },
+      {
+        "n": 40000,
+        "sources": 5,
+        "properties": 10,
+        "duplicateRows": 100,
+        "preparationMs": 490.749,
+        "coldMs": 458.307,
+        "warmMs": [
+          428.916,
+          404.421,
+          395.546,
+          430.258,
+          454.476,
+          453.336,
+          472.57
+        ],
+        "warmMedianMs": 430.258,
+        "scenarios": [
+          {
+            "name": "single",
+            "ms": 427.914,
+            "matches": 20000,
+            "facetMembers": 40000
+          },
+          {
+            "name": "and",
+            "ms": 403.728,
+            "matches": 6667,
+            "facetMembers": 13334
+          },
+          {
+            "name": "broad-or",
+            "ms": 536.614,
+            "matches": 40000,
+            "facetMembers": 40000
+          },
+          {
+            "name": "zero",
+            "ms": 346.331,
+            "matches": 0,
+            "facetMembers": 40000
+          },
+          {
+            "name": "null",
+            "ms": 398.811,
+            "matches": 10000,
+            "facetMembers": 10000
+          },
+          {
+            "name": "missing-empty",
+            "ms": 484.393,
+            "matches": 20000,
+            "facetMembers": 20000
+          }
+        ],
+        "search": {
+          "domain": 40000,
+          "ms": 3.282
+        },
+        "visual": {
+          "ms": 183.801,
+          "jobs": 1,
+          "properties": 2,
+          "commands": 40000,
+          "acks": 2
+        },
+        "heapBytes": {
+          "before": 4877608,
+          "fixture": 34651664,
+          "resultAndCache": 143197160,
+          "cacheAfterResultRelease": 110202032
+        }
+      },
+      {
+        "n": 100000,
+        "sources": 1,
+        "properties": 10,
+        "duplicateRows": 100,
+        "preparationMs": 1158.586,
+        "coldMs": 1018.267,
+        "warmMs": [
+          1114.204,
+          1204.022,
+          1066.365,
+          1268.281,
+          1025.621,
+          1064.463,
+          1176.599
+        ],
+        "warmMedianMs": 1114.204,
+        "scenarios": [
+          {
+            "name": "single",
+            "ms": 1024.994,
+            "matches": 50000,
+            "facetMembers": 100000
+          },
+          {
+            "name": "and",
+            "ms": 974.078,
+            "matches": 16667,
+            "facetMembers": 33334
+          },
+          {
+            "name": "broad-or",
+            "ms": 1019.03,
+            "matches": 100000,
+            "facetMembers": 100000
+          },
+          {
+            "name": "zero",
+            "ms": 809.58,
+            "matches": 0,
+            "facetMembers": 100000
+          },
+          {
+            "name": "null",
+            "ms": 1066.393,
+            "matches": 25000,
+            "facetMembers": 25000
+          },
+          {
+            "name": "missing-empty",
+            "ms": 1174.238,
+            "matches": 50000,
+            "facetMembers": 50000
+          }
+        ],
+        "search": {
+          "domain": 100000,
+          "ms": 11.852
+        },
+        "visual": {
+          "ms": 295.735,
+          "jobs": 1,
+          "properties": 2,
+          "commands": 100000,
+          "acks": 2
+        },
+        "heapBytes": {
+          "before": 4877480,
+          "fixture": 82018728,
+          "resultAndCache": 352451728,
+          "cacheAfterResultRelease": 271039536
+        }
+      },
+      {
+        "n": 100000,
+        "sources": 5,
+        "properties": 10,
+        "duplicateRows": 100,
+        "preparationMs": 1132.518,
+        "coldMs": 1146.044,
+        "warmMs": [
+          1231.809,
+          1216.341,
+          1256.391,
+          1274.271,
+          1267.255,
+          1228.663,
+          1282.619
+        ],
+        "warmMedianMs": 1256.391,
+        "scenarios": [
+          {
+            "name": "single",
+            "ms": 1104.928,
+            "matches": 50000,
+            "facetMembers": 100000
+          },
+          {
+            "name": "and",
+            "ms": 920.472,
+            "matches": 16667,
+            "facetMembers": 33334
+          },
+          {
+            "name": "broad-or",
+            "ms": 1153.738,
+            "matches": 100000,
+            "facetMembers": 100000
+          },
+          {
+            "name": "zero",
+            "ms": 1069.136,
+            "matches": 0,
+            "facetMembers": 100000
+          },
+          {
+            "name": "null",
+            "ms": 1059.755,
+            "matches": 25000,
+            "facetMembers": 25000
+          },
+          {
+            "name": "missing-empty",
+            "ms": 1153.906,
+            "matches": 50000,
+            "facetMembers": 50000
+          }
+        ],
+        "search": {
+          "domain": 100000,
+          "ms": 7.421
+        },
+        "visual": {
+          "ms": 382.188,
+          "jobs": 1,
+          "properties": 2,
+          "commands": 100000,
+          "acks": 2
+        },
+        "heapBytes": {
+          "before": 4877480,
+          "fixture": 79615256,
+          "resultAndCache": 349917912,
+          "cacheAfterResultRelease": 268517752
+        }
+      }
+    ]
+  },
+  "regressionV2": {
+    "restore": 150,
+    "capture": 63,
+    "contract": 111,
+    "inventoryIdentity": 17,
+    "inventoryConfig": 20,
+    "frenteDeVistas": 20,
+    "lob4dIdentidad": 26
+  },
+  "backendSuite": {
+    "passed": 1721,
+    "failed": 1,
+    "historicalOnly": "/api/docs/miniaturas/preparar",
+    "seconds": 83.52
+  },
+  "cleanBase": {
+    "head": "df2c03e5df9b1b9a121f47adb99025bcc537537c",
+    "npmCi": "772 packages; offline normal lockfile install",
+    "build": {
+      "exit": 0,
+      "modules": 516,
+      "seconds": 14.54
+    },
+    "without": [
+      "ViewerFacade",
+      "public/predict",
+      "env files",
+      "untracked"
+    ]
+  }
+}

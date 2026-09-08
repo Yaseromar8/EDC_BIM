@@ -152,6 +152,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--pg-bin', required=True)
     parser.add_argument('--confirm-disposable-only', action='store_true')
+    parser.add_argument('--b5', action='store_true', help='Cruza el payload HTTP real con frontend y Saved Views del mismo checkout')
     args = parser.parse_args()
     if not args.confirm_disposable_only:
         parser.error('Requiere --confirm-disposable-only; no acepta DB existente.')
@@ -280,6 +281,11 @@ def main():
                     cur.execute("INSERT INTO project_ref(alias,kind,project_id,es_escritura,origen) VALUES (%s,'PROJECT',%s,true,'fixture')", (project, project))
                 cur.execute("INSERT INTO asset_user_data(external_id,status,extras,project_id) VALUES ('legacy-only','Legacy must remain unassigned','{}','B1A')")
                 cur.execute(DDL.read_text(encoding='utf-8-sig'))
+                if args.b5:
+                    cur.execute(ddl_literal('backend/routes/views.py', 'saved_views', 'ensure_saved_views_table'))
+                    cur.execute(source('backend/sql/29_saved_views_v2.sql'))
+                    cur.execute(source('backend/sql/30_saved_views_share_token.sql'))
+                    cur.execute('GRANT SELECT,INSERT,UPDATE,DELETE ON saved_views TO ecd_app')
 
         # Solo parametros de destino NUEVO; el guard driver cubre tambien el pool real.
         def guarded_connect(*argv, **kwargs):
@@ -307,6 +313,8 @@ def main():
             app.register_blueprint(extractor.inventory_bp)
             twin = importlib.import_module('routes.digital_twin')
             app.register_blueprint(twin.digital_twin_bp)
+            if args.b5:
+                app.register_blueprint(importlib.import_module('routes.views').views_bp)
             auth.init_auth_middleware(app)
             client = app.test_client()
             check('server' not in sys.modules and 'config' not in sys.modules,
@@ -383,6 +391,36 @@ def main():
                 check(sum(r['external_id'] == 'shared' for r in full) == 2, 'externalId compartido se colapsa')
                 return {'fullRows': 6, 'liteRows': 6, 'distinctKeys': 6}
             case('I01-real-http-full-lite-six-sources-complete-identity', payload_identity)
+            if args.b5:
+                def b5_frontend_and_views():
+                    corpus = json.loads(source('backend/tests/corpus_persistibilidad_v2.json'))
+                    saved = next(c['state'] for c in corpus['casos'] if c['nombre'] == 'v2 completa')
+                    worker = subprocess.run(['node', str(ROOT / 'frontend-react/pruebas/filtersCore.b5BackendPayload.prueba.mjs')],
+                        input=json.dumps({'full': get(base_scope), 'lite': get(base_scope, full=False), 'saved': saved}),
+                        capture_output=True, text=True, encoding='utf-8', timeout=40, creationflags=flags)
+                    check(worker.returncode == 0, 'Frontend real rechaza payload: ' + worker.stderr[-2000:])
+                    projected = json.loads(worker.stdout)
+                    before = get(base_scope)
+                    http('PATCH', '/api/inventory', body=projected['edit'])
+                    after = get(base_scope)
+                    target = projected['edit']['identity']
+                    changed = [r for r in after if all(r[k] == v for k, v in target.items())]
+                    check(len(changed) == 1 and changed[0]['installation_status'] == 'B5 frontend write', 'PATCH frontend no llega a identidad exacta')
+                    check([r for r in after if r['element_key'] != changed[0]['element_key']] ==
+                          [r for r in before if r['element_key'] != changed[0]['element_key']], 'PATCH frontend contamina otra Source')
+                    created = http('POST', '/api/views', body={'projectId': base_scope, 'name': 'B5 synthetic',
+                        'schemaVersion': 2, 'state': projected['saved']}, expected=201)
+                    detail = http('GET', '/api/views/' + created['id'])
+                    check(detail['state'] == saved, 'Saved View modifica documento')
+                    http('GET', '/api/views/' + created['id'], user='memberB', expected=403)
+                    check(query('SELECT viewer_state,filter_state,config FROM saved_views WHERE id=%s', (created['id'],))[0] == (None,None,None), 'V2 duplica estado V1')
+                    # Restore original native-looking status to leave all B1 oracles unchanged.
+                    http('PATCH', '/api/inventory', body={'identity': target, 'fieldName': 'Status',
+                        'fieldValue': next(r['installation_status'] for r in before if r['element_key'] == changed[0]['element_key'])})
+                    return {'frontendRows': projected['rows'], 'frontendMatches': projected['matches'],
+                        'normalizationRuntimeViewerInventoryPresentation': True, 'frontendPatchThroughRealHttp': True,
+                        'savedViewsRoundtripAndForeign403': True, 'sameCheckout': True}
+                case('B5-real-HTTP-payload-frontend-driver-PATCH-and-V2', b5_frontend_and_views)
 
             def sessions():
                 denied = 0

@@ -32,13 +32,23 @@ export function createFilterVisualDriver({ viewer, models, window: host,
     viewer.setThemingColor = setHook;
     viewer.clearThemingColors = clearHook;
     const bindModels = () => {
-        for (const model of models()) {
+        const live = new Set(models());
+        let retired = false;
+        // A runtime survives Source reloads. Retired LMV instances must not
+        // retain this driver or claim ownership through an obsolete hook.
+        for (const [model,{original,hook}] of modelHooks) if (!live.has(model)) {
+            if (model.setThemingColor === hook) model.setThemingColor = original;
+            modelHooks.delete(model); base.delete(model); painted.delete(model);
+            retired = true;
+        }
+        for (const model of live) {
             if (modelHooks.has(model) || typeof model.setThemingColor !== 'function') continue;
             const original = model.setThemingColor;
             const hook = function(...args) { externalColor(); return original.apply(this,args); };
             model.setThemingColor = hook;
             modelHooks.set(model,{original,hook});
         }
+        return retired;
     };
     const hiddenOf = model => [...(viewer.getAggregateHiddenNodes?.().find(x=>x.model===model)?.selection || [])];
     const capture = model => ({ isolated:[...(viewer.getIsolatedNodes?.(model)||[])], hidden:hiddenOf(model) });
@@ -69,6 +79,7 @@ export function createFilterVisualDriver({ viewer, models, window: host,
         return palette[hash%palette.length];
     };
     return {
+        syncModels() { if (!disposed && bindModels()) ++colorJob; },
         claimColors() { foreignOwner=null; },
         cancelColors(clear = false) { ++colorJob; if (clear) clearOwned(); },
         resetBase() { ++colorJob; base.clear(); },
@@ -76,8 +87,8 @@ export function createFilterVisualDriver({ viewer, models, window: host,
             const started=performance.now(), job=++colorJob;
             const current=()=>!disposed && isCurrent() && job===colorJob;
             if(!current()) return {paused:true,reason:'superseded'};
-            if(foreignOwner) return {paused:true,owner:foreignOwner,reason:'visual-owned-elsewhere'};
             bindModels();
+            if(foreignOwner) return {paused:true,owner:foreignOwner,reason:'visual-owned-elsewhere'};
             const hidden=new Set((state.hiddenModelUrns||[]).map(_safeUrn));
             const byModel=new Map(result.matchesByModel.map(g=>[_safeUrn(g.modelUrn),g.matches.map(x=>x.dbId)]));
             const validByModel=new Map([...byModel].map(([urn,ids])=>[urn,new Set(ids)]));

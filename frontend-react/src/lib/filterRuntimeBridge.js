@@ -3,7 +3,7 @@ import { createFilterVisualDriver } from './filterVisualDriver.js';
 import { inventoryRevision } from './inventoryIdentity.js';
 
 export function mountFiltersRuntime({ host, viewer, getIntent, models, ready }) {
-    let controller, snapshotRows, sourceRows, sourceRevision;
+    let controller, snapshotRows, sourceRows, sourceRevision, disposed=false;
     const emit=(name,detail)=>host.dispatchEvent(new CustomEvent(name,{detail}));
     const progress=detail=>emit('filter-progress',detail);
     const driver=createFilterVisualDriver({ viewer, models, window:host,
@@ -44,7 +44,7 @@ export function mountFiltersRuntime({ host, viewer, getIntent, models, ready }) 
         else if(e.detail) request(e.detail);
         else controller.request({}, {force:true}); // live edit: retain authoritative intent
     };
-    const refresh=()=>{if(!host.__restaurandoVistaV2) controller.request({}, {force:true});};
+    const refresh=()=>{driver.syncModels();if(!host.__restaurandoVistaV2) controller.request({}, {force:true});};
     const theme=e=>{
         const {propId,active,customColors}=e.detail || {};
         if(!propId) return;
@@ -68,6 +68,7 @@ export function mountFiltersRuntime({ host, viewer, getIntent, models, ready }) 
     };
     const beforeRestore=()=>{controller.cancel({filterColors:{}});driver.cancelColors(true);driver.resetBase();};
     const scopeReset=()=>{
+        driver.syncModels();
         controller.cancel();driver.resetBase();driver.cancelColors(true);
         request({filterSelections:{},filterColors:{}});
     };
@@ -81,11 +82,17 @@ export function mountFiltersRuntime({ host, viewer, getIntent, models, ready }) 
     for(const [name,handler] of listeners) host.addEventListener(name,handler);
     request();
     return {request,controller,driver,dispose(){
+        if(disposed) return;
+        disposed=true;
+        const ownedResult=controller.getResult();
         controller.dispose();driver.dispose();
         for(const [name,handler] of listeners) host.removeEventListener(name,handler);
         // No stale result survives this runtime's lifetime.
-        if(host.__filterResult?.scopeId===getIntent()?.scopeId) {
-            host.__filterResult=null;emit('filter-result',null);
+        if(host.__filterResult===ownedResult) {
+            host.__filterResult=null;
+            host._lastHasActiveFilters=false;host._lastValidDbIds=null;host._lastCalculatedBuckets=null;
+            emit('filter-result',null);
         }
+        snapshotRows=null;sourceRows=null;
     }};
 }
