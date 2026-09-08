@@ -23,8 +23,11 @@ async function cancel(m) {
     const f=makeRuntimeFixture({count:5001}),pause=gate();
     const d=m.createFilterVisualDriver({viewer:f.viewer,models:()=>f.models,window:f.host,yieldFrame:()=>pause.promise});
     const job=d.apply(calculateFilterResult(f.state,f.snapshot(),1),{...f.state,filterColors:{'G::Estado':true}},()=>true);
-    assert.equal(f.models[0].colors.size,5000);d.cancelColors(true);pause.resolve();await job;d.dispose();
-    assert.equal(f.models[0].colors.size,0,'late color tail');
+    assert.equal(f.models[0].colors.size,5000);d.cancelColors(true);pause.resolve();await job;
+    // La cola se mide ANTES de dispose: lo que se afirma es que CANCELAR mata el
+    // trabajo en vuelo, no que la limpieza del desmontaje acabe tapandolo.
+    // Medirlo despues dejaba pasar un `cancelColors` que no cancelaba nada.
+    assert.equal(f.models[0].colors.size,0,'late color tail');d.dispose();
 }
 async function zero(m) {
     const f=makeRuntimeFixture(),d=m.createFilterVisualDriver({viewer:f.viewer,models:()=>f.models,window:f.host});
@@ -32,10 +35,21 @@ async function zero(m) {
     await d.apply(calculateFilterResult(state,f.snapshot(),1),state,()=>true);d.dispose();
     assert.deepEqual(f.models[0].isolated,[-1],'zero incorrectly released isolation');
 }
+async function disposeColors(m) {
+    // El color de Filters no puede sobrevivir al desmontaje: el driver siguiente
+    // arranca con `painted` vacio y ya nadie podria quitarlo.
+    const f=makeRuntimeFixture(),d=m.createFilterVisualDriver({viewer:f.viewer,models:()=>f.models,window:f.host});
+    const state={...f.state,filterColors:{'G::Estado':true}};
+    await d.apply(calculateFilterResult(state,f.snapshot(),1),state,()=>true);
+    assert.ok(f.models[0].colors.size>0,'el caso no llego a pintar nada');
+    d.dispose();
+    assert.equal(f.models[0].colors.size,0,'color propio huerfano tras dispose');
+}
 const cases=[
     ['stale-publication',core,['if (!isCurrent(r)) { metrics.superseded++; return; }','/* mutant: publish stale calculation */'],stale],
     ['color-cancellation',driver,['cancelColors(clear = false) { ++colorJob;','cancelColors(clear = false) {'],cancel],
     ['zero-means-show-all',driver,['ids.length?ids:[-1]','ids'],zero],
+    ['dispose-leaves-orphan-color',driver,['            clearOwned();','            /* mutant: orphan color */'],disposeColors],
 ];
 let killed=0,fail=0;
 for(const [name,url,mutation,check] of cases){

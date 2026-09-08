@@ -162,6 +162,13 @@ export function createFilterVisualDriver({ viewer, models, window: host,
         },
         dispose() {
             disposed=true; ++colorJob;
+            // El color propio se retira ANTES de soltar los ganchos. Si no, al
+            // desmontar quedaba tinte de Filters sin dueño: este driver ya no
+            // existe y el siguiente arranca con `painted` vacio, asi que nada
+            // vuelve a poder quitarlo --sobrevive a la revision, al OFF y al
+            // remount--. Solo se limpia lo que Filters pinto: si otra
+            // herramienta tomo el color, `painted` ya estaba vacio.
+            clearOwned();
             for(const name of eventNames) viewer.removeEventListener?.(name,nativeVisibility);
             if(viewer.setThemingColor===setHook) viewer.setThemingColor=originalSet;
             if(viewer.clearThemingColors===clearHook) viewer.clearThemingColors=originalClear;

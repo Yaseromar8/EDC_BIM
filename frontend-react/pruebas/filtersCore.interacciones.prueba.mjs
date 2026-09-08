@@ -131,10 +131,16 @@ async function colorScenario(src, { count, turnOff }) {
     const eventBoundary = emitted.length;
     await timers.drain();
     await job;
+    // Se mide ANTES de dispose. Lo que este caso afirma es que el trabajo de
+    // color COMPLETA --o que apagarlo no deja cola--, no lo que quede tras el
+    // desmontaje. Con el driver antiguo daba igual porque dispose no tocaba el
+    // color; ahora si lo retira, y medir a traves del desmontaje confundiria
+    // "pinto" con "quedo pintado". Los valores esperados no cambian.
+    const paintedAfterDrain = painted.size;
     driver.dispose();
     return {
         afterFirstChunk,
-        paintedAfterDrain: painted.size,
+        paintedAfterDrain,
         nonemptyEventsAfterBoundary: emitted.slice(eventBoundary).filter(e => e.type === 'viewer-colors-applied' && e.groups > 0).length,
     };
 }

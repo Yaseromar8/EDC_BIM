@@ -20,17 +20,25 @@
  * Medido: 1126 «Walls» antes y 1126 después de mutar 50 filas a otro valor.
  * Validar una vista contra esa caché sería validarla contra datos viejos.
  *
- * R-08 sigue fuera de alcance. Este módulo no lo arregla: lo esquiva.
+ * R-08 QUEDO ARREGLADO EN B2: la caché ya no compara `allData` por referencia,
+ * sino que exige una revisión declarada por quien escribe o edita el inventario.
+ * Este módulo sigue sin usar el motor de todos modos, y ahora por un motivo más
+ * simple: validar una vista no necesita calcular facetas ni tocar el visor.
  *
  * LAS REGLAS DE VALOR SON LAS DEL PRODUCTO, NO LAS MIAS
  * -----------------------------------------------------
- * La traducción propId -> clave de fila y la normalización de valores se toman
- * de `aps/utils/model.js` (`_safeUrn`, `_normVal`) y replican su `getRowValue`:
+ * La normalización de valores se toma de `aps/utils/model.js` (`_safeUrn`,
+ * `_normVal`), y la identidad de propiedad NO se replica: se importa de
+ * `lib/filterPropertyIdentity.js`, el mismo módulo que usa el motor.
  *
- *     nombre = propId.split('::')[1] || propId      // "Standard::Revit Category" -> "Revit Category"
+ *     Grupo::Propiedad                              es la identidad
+ *     el nombre suelto                              sólo si no hay homónimos
  *     Standard::Sources                             -> el urn del modelo
  *
- * Si divergieran, el preflight aprobaría una selección que luego no casa.
+ * Antes aquí se copiaba `propId.split('::')[1]`, que aplanaba los homónimos: dos
+ * grupos con la misma propiedad se validaban como uno. Compartir el módulo es lo
+ * que impide que vuelvan a divergir; si divergieran, el preflight aprobaría una
+ * selección que luego no casa.
  *
  * CONSERVADURISMO — LA REGLA QUE LO GOBIERNA TODO
  * -----------------------------------------------

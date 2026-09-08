@@ -147,6 +147,39 @@ vez de un 200 incompleto —`INVENTORY_REEXTRACTION_REQUIRED` para lo nativo y
 
 ## LAST COMPLETED
 
+**B3 · revisión adversarial independiente, 8-sep-2026: PASS.** Un defecto real
+encontrado y corregido, más dos mediciones que se hacían a través de un paso de
+limpieza.
+
+- **L2 — el color de Filters sobrevivía a `dispose()`.** El driver restauraba
+  los ganchos y vaciaba `painted` sin retirar el tinte: el driver siguiente
+  arranca con `painted` vacío, así que nadie podía volver a quitarlo. Sobrevivía
+  al OFF, a la revisión nueva y al remount. `dispose()` retira ahora lo que
+  Filters pintó, y sólo eso: si otra herramienta tomó el color, `painted` ya
+  estaba vacío. Mutante dirigido `dispose-leaves-orphan-color`: sin el arreglo
+  quedan 3 modelos tintados.
+- **L1 — dos casos medían `painted` después de `dispose()`.** Con el driver
+  anterior daba igual, porque `dispose` no tocaba el color; el arreglo lo
+  destapó. Se mide antes, sin cambiar ningún valor esperado: lo que afirman es
+  que el trabajo de color completa —o que apagarlo no deja cola—, no lo que
+  queda tras el desmontaje.
+- **L1 — el docstring de `preflightFiltros` describía la regla anterior a B2**
+  (`propId.split('::')[1]`, R-08 abierto). Ese módulo importa hoy la identidad
+  de propiedad compartida; dejar escrito que la copia es exactamente lo que
+  volvería a divergir.
+
+Ataques sin defecto: A tarde tras B y A→B→A, no-filter frente a zero-result,
+propiedad de la máscara visual sobre un objectSet ajeno, color OFF con lotes
+pendientes y dueño externo, ciclo de vida con remount, scope/readiness, live
+edit sin `detail`, popout con el mismo dbId en dos Sources, y búsqueda mecánica
+de una segunda autoridad: el motor se llama desde un solo sitio y los globals
+legacy se escriben desde uno solo.
+
+Banco nuevo `filtersCore.b3Adversarial` (7 casos). Mutantes 4/4 muertos. Los dos
+KNOWN FAIL de B4 —búsqueda y DnD— siguen intactos.
+
+
+
 **B2 · representación canónica y cache por revisión, 7-sep-2026.** Diez de los
 once P0 de B2 pasan porque el producto se corrigió, no porque se debilitara el
 oráculo:
@@ -487,9 +520,11 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
 
 ## STATUS
 
-**B1 = CLOSED. B2 = CLOSED (71d23c7). B3 = CODE/TEST GREEN / COMMITTED.**
-**B3 = PENDING INTEGRATION REVIEW. B4 = NOT STARTED / NOT AUTHORIZED.**
-B3 NO está CLOSED: Claude realizará la revisión adversarial independiente.
+**B1 = CLOSED. B2 = CLOSED (71d23c7). B3 = INTEGRATION REVIEW PASS.**
+**B4 = NOT STARTED / NOT AUTHORIZED.**
+La revisión adversarial independiente se hizo el 8-sep-2026 y dictaminó PASS,
+tras corregir un defecto L2 real. Declarar B3 CLOSED es decisión del
+propietario, no del revisor.
 Resultado único revisionado conectado a Viewer/Inventory/popout.
 Todos los casos B3 históricos cumplen el mismo expected original.
 Sólo permanecen dos KNOWN_FAIL B4 (búsqueda/DnD), cero resultados inesperados
@@ -506,12 +541,13 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-Claude: revisar adversarialmente el checkpoint `c091c556acc3d0d1af884594f8e5ee259bcae162`
-(delta funcional desde `71d23c7`), usando B3_RESULTADOS y los bancos existentes.
-Emitir el resultado de B3 INTEGRATION REVIEW sin asumir B3 CLOSED.
-Codex se detiene después de entregar este checkpoint. No implementar B4,
-no reabrir B1/B2/V2, no push ni deploy. WIP ajeno fuera del alcance.
-CODE/TEST GREEN no equivale a validación de host/LMV/GPU ni a producción.
+Esperar instrucción del propietario. La revisión B3 está entregada y comiteada
+localmente; nada queda a medias. Las tres decisiones abiertas son suyas:
+declarar B3 CLOSED, autorizar B4, y qué hacer con PREDICT —que sigue sin
+comitear y que, si se despliega desde este HEAD, arrastraría B1/B2 y rompería
+la edición de Inventory en producción, porque el backend vivo aún es 3e413cd.
+No push. No deploy. No B4. CODE/TEST GREEN no equivale a validación de
+host/LMV/GPU ni a producción.
 
 ### Evidencia CODE/TEST del checkpoint B3
 
@@ -529,21 +565,31 @@ CODE/TEST GREEN no equivale a validación de host/LMV/GPU ni a producción.
   ver límites del informe. No se repitió la campaña al fijar este handoff:
   no hubo cambios de producto posteriores al GREEN.
 
-### [WIP HANDOFF] — checkpoint para Claude, 8-sep-2026
+### Evidencia de la revisión independiente B3 — 8-sep-2026
 
-~~~text
-[WIP HANDOFF]
-TAREA:                B3 INTEGRATION REVIEW — revisión independiente por Claude
-IMPLEMENTADO:         B1/B2 CLOSED; B3 CODE/TEST GREEN / COMMITTED en c091c556acc3d0d1af884594f8e5ee259bcae162; 17 archivos propios, ViewerFacade 0 líneas en código del commit
-PENDIENTE:            Revisión adversarial independiente de B3 y dictamen; no declarar B3 CLOSED antes de ella; B4 no autorizado
-ARCHIVOS MODIFICADOS: Propio de este handoff: docs/AI_WORKSTATE.md solamente. Ajenos preservados: docs/filters/evidencias/IDENTIDAD_4D_5D.json; frontend-react/src/aps/extensions/LOB4DExtension.js; frontend-react/src/components/Viewer.jsx (48 líneas ViewerFacade); frontend-react/src/components/ViewerLabelsBar.jsx; frontend-react/src/lib/predictBim.js; todos los untracked de EXPECTED WORKTREE
-TESTS EJECUTADOS:     Git status/log/rev-parse, staged diff vacío, diff restante, inspección del commit y aserciones: 17 archivos, 0 referencias Facade en Viewer comprometido, 3e413cd/5113e67/89cdc79/e3218e6/8495ad7/71d23c7 ancestros; sin pruebas funcionales nuevas
-TESTS PENDIENTES:     Campaña independiente de Claude; host/React DOM/LMV/GPU no certificado. Campaña GREEN anterior no repetida porque sólo cambia documentación
-FALLO CONOCIDO:       Dos KNOWN_FAIL B4 (búsqueda y DnD) intactos; bancos completos exit 1 con b3Green=true; cero inesperados sanos en la campaña B3 reportada; no se afirma revisión independiente PASS
-NEXT EXACT ACTION:    Claude revisa c091c55 contra 71d23c7 y emite dictamen B3 INTEGRATION REVIEW; no tocar WIP ajeno ni B4
-DO NOT TOUCH:         B1/B2 CLOSED, contratos/datos/capturador/restaurador V2, backend/DB, WIP protegido y untracked históricos, ViewerFacade, .env, producción; no push/deploy
-COMMIT/HEAD REF:      c091c556acc3d0d1af884594f8e5ee259bcae162 (checkpoint funcional y HEAD observado antes del handoff documental)
-~~~
+- Diez ataques numerados ejecutados contra `71d23c7..c091c55`. Nueve sin
+  defecto; el décimo —propiedad de la máscara visual— destapó el L2 del color
+  huérfano tras `dispose()`.
+- Bancos tras el arreglo: filtersCore 38 CONTRACT + 1 BASELINE, knownFail 0,
+  inesperados 0; normalizadores 11/11; boundary 6/6; runtime 17/17; mutantes
+  runtime **4/4 muertos** (uno nuevo, `dispose-leaves-orphan-color`);
+  popout 1 escenario/16 aserciones; adversarial de V2 0 fallos/4 controles;
+  `filtersCore.b3Adversarial` 7/7; interacciones e integradas 6 PASS +
+  2 KNOWN_FAIL B4 cada uno, 0 inesperados, mutante integrado 1/1;
+  inventoryIdentity 17/17; lob4dIdentidad 26/26; captura 63/63, restore
+  150/150, V2 111/111, frenteDeVistas 20/20.
+- `python -m pytest -q`: **1721 passed / 1 failed**, el fallo preexistente del
+  backlog nº 1 (`/api/docs/miniaturas/preparar` sin puerta de cliente).
+- Build: `npm run build` en sitio vuelve a dar el `EPERM` de DIVERGENCIA 4
+  —entorno, no código—; con `--outDir` alterno, **exit 0, 516 módulos, 11,45 s,
+  213 ficheros**.
+- Sin cambios de DB, `.env`, backend ni producción. WIP ajeno intacto.
+- **Incidente de esta sesión, corregido:** al crear el banco nuevo se sobrescribió
+  `filtersCore.adversarial.prueba.mjs`, que ya existía desde `71d23c7`. Se
+  restauró a su contenido exacto de HEAD —56 líneas, idéntico— y el banco nuevo
+  se movió a `filtersCore.b3Adversarial.prueba.mjs`. Los dos existen y pasan.
+- Límites: sin navegador, React DOM, LMV/GPU, DB ni red. La revisión certifica
+  código y bancos, no el host real ni producción.
 
 ## TEST / BUILD BASELINE
 
