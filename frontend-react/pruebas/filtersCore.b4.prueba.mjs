@@ -250,6 +250,10 @@ export async function runB4({ mutant = null } = {}) {
     return { suite: 'filtersCore.b4', cases, pass: cases.filter(c => c.status === 'PASS').length,
         fail: cases.filter(c => c.status === 'FAIL').length, limits: 'JSX/handlers + simulated hooks/LMV; no browser/GPU/DB' };
 }
+// Reviewer B4: the adversarial bench reuses THIS harness instead of copying it,
+// so a divergence between the two can never hide a defect. No oracle changes.
+export { componentHost, nodes, text, label, event, all, appCallback, panelFile, modalFile, categoryExport };
+
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
     const report = await runB4(); console.log(JSON.stringify(report, null, 2)); process.exitCode = report.fail ? 1 : 0;
 }

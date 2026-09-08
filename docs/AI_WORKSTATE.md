@@ -526,12 +526,15 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**NONE — B4 CODE/TEST GREEN, pendiente revisión/decisión del propietario**
+**NONE — B4 INTEGRATION REVIEW PASS, pendiente decisión del propietario**
 
 ## STATUS
 
 **B1 = CLOSED. B2 = CLOSED (71d23c7). B3 = CLOSED.**
-**B4 = CODE/TEST GREEN / COMMITTED. B5 = NOT STARTED / NOT AUTHORIZED.**
+**B4 = INTEGRATION REVIEW PASS. B5 = NOT STARTED / NOT AUTHORIZED.**
+La revisión independiente de B4 se hizo el 8-sep-2026: diez ataques, ningún
+defecto de producto. Declarar B4 CLOSED es decisión del propietario, no del
+revisor.
 La revisión adversarial independiente se hizo el 8-sep-2026 y dictaminó PASS,
 tras corregir un defecto L2 real. El propietario aceptó el cierre de B3 y
 autorizó B4. `6ddc5a0bbc648cfc7dcc52b06961f718cdb422f0` es EXPECTED REVIEW
@@ -552,10 +555,10 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-Esperar instrucciones del propietario sobre el checkpoint B4 CODE/TEST GREEN.
-Para revisión independiente, partir del delta B4 desde 6ddc5a0 y de
-[filters/B4_RESULTADOS.md](filters/B4_RESULTADOS.md), sin repetir investigación
-Tandem ni reabrir B1/B2/B3 CLOSED. No iniciar B5 ni certificar host sin ensayo.
+Esperar instrucción del propietario. B4 está implementado y revisado; nada queda
+a medias. Las decisiones abiertas son suyas: declarar B4 CLOSED, autorizar B5, y
+qué hacer con PREDICT —que sigue sin comitear—. No repetir la revisión B4 ni
+reabrir B1/B2/B3 CLOSED. No certificar host sin ensayo real.
 PREDICT y todo WIP ajeno siguen protegidos. No push, deploy ni B5.
 El backend vivo registrado sigue en 3e413cd: desplegar este HEAD sin coordinación
 arrastraría el cutover B1/B2. CODE/TEST GREEN no certifica host/LMV/GPU/producción.
@@ -585,6 +588,57 @@ No queda trabajo B4 local a medias; no se declara CLOSED ni validación de host.
 - WIP ajeno intacto; las 48 líneas ViewerFacade siguen sin commit.
 - No navegador/React DOM/LMV GPU ni producción certificados. Receta manual en
   B4_RESULTADOS. No B5, push, deploy, backend ni DB.
+
+### Evidencia de la revisión independiente B4 — 8-sep-2026
+
+**B4 INTEGRATION REVIEW PASS. Ningún defecto de producto.** Diez ataques contra
+el delta `6ddc5a0..f38bc0c`. B4 es capa de presentación: no añade otra autoridad
+de matching, conteos, facetas ni selección global.
+
+- **Búsqueda sobre el dominio completo.** Panel y configurador buscan primero y
+  limitan después, en las dos listas. Buscar no toca conteos ni muta el
+  `FilterResult`; limpiar devuelve el dominio y conserva la selección.
+- **Reorder por identidad canónica.** `reorderProperty` opera sobre la lista
+  completa por id; `originalIndex` se calcula antes de filtrar, así que Subir y
+  Bajar usan el vecino canónico aunque la búsqueda esconda el intermedio. El
+  arrastre se confirma sólo en `onDrop`: `onDragEnd` limpia sin reordenar.
+- **El configurador no muta antes de Confirmar.** Escape, Cancelar y la X cierran
+  sin llamar a `onUpdate`. Aplicar entrega el conjunto exacto, y el `onUpdate`
+  real de App poda por id sólo las selecciones y colores de lo quitado.
+- **Pending/zero/error.** El controlador publica una instantánea `pending` en
+  cada `request()` y App vacía los buckets salvo `ready`: el zero de A no puede
+  quedar vigente como estado de B, ni con el progreso viejo de A en mano.
+- **El color de la UI es el del driver.** El swatch coincide con el tinte real
+  en todos los valores y no depende del orden de la lista; con dos propiedades
+  de color, la prioridad que el panel anuncia (`sort().reverse()`) predice
+  exactamente la que gana en el driver (`sort()`, último escribe).
+- **Sin segunda autoridad.** `filterPresentation.js` no importa motor,
+  controlador ni driver, y el motor de matching se sigue llamando desde un solo
+  sitio. Los seis `useState` nuevos son límites de render y términos de
+  búsqueda; ninguno guarda estado de filtro.
+
+**Fitness histórico:** los dos defectos B4 —búsqueda y DnD— pasan contra sus
+`expected` originales, byte a byte; sólo cambió el cableado del banco. 0
+KNOWN_FAIL propios de B4, 0 UNEXPECTED_FAIL, 0 UNEXPECTED_PASS.
+
+**Bancos nuevos del revisor:** `filtersCore.b4Adversarial` (19 casos, reutiliza
+el arnés del banco B4 en vez de copiarlo) y `filtersCore.b4AdversarialMutants`
+(2/2 muertos: mutar la configuración antes de Confirmar, y dejar vigente el
+resultado viejo durante pending —los dos ataques que `b4Mutants` no cubría—).
+
+**Regresión:** filtersCore 38+1 knownFail 0; b4 13/13; b4Mutants 3/3 muertos;
+b4Adversarial 19/19; b4AdversarialMutants 2/2; runtime 17/17; runtimeMutants
+4/4; popout 1(16); adversarial 0 fallos/4 controles; b3Adversarial 7/7;
+normalizadores 11/11; boundary 6/6; interacciones e integradas 8/8 PASS con
+exit 0 y mutante integrado 1/1; inventoryIdentity 17/17; lob4dIdentidad 26/26;
+inventoryConfig 20/20; captura 63/63; restore 150/150; V2 111/111;
+frenteDeVistas 20/20; `pytest` 1721 passed / 1 failed (el documentado);
+build con `--outDir` alterno exit 0, 517 módulos, 213 ficheros —517 y no 516
+porque el `Viewer.jsx` del worktree importa el ViewerFacade ajeno, que no
+existe en HEAD—.
+
+**Límites:** sin navegador, React DOM, LMV/GPU, DB ni red. Se certifica código y
+bancos, no el host real ni producción.
 
 ### Evidencia CODE/TEST del checkpoint B3
 
