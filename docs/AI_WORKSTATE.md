@@ -147,6 +147,15 @@ vez de un 200 incompleto —`INVENTORY_REEXTRACTION_REQUIRED` para lo nativo y
 
 ## LAST COMPLETED
 
+**B5 · CODE/TEST GREEN / COMMITTED, 8-sep-2026. FILTERS CORE HOST READY.**
+Checkpoint funcional `e1a16016c192bb8674fb576294771138e29d2df6`.
+Build limpio y ensayo backend/frontend desde ese mismo SHA verificados:
+516 módulos/15,24 s, PG18 25/25. WIP ajeno intacto, ViewerFacade 0 líneas
+incluidas. [Resultados B5](filters/B5_RESULTADOS.md) y
+[campaña HOST/release](filters/B5_HOST_RELEASE.md).
+Este cierre documental posterior no cambia producto ni el baseline desplegado.
+HOST real: NOT EXECUTED / ENVIRONMENT; no confundir HOST READY con HOST GREEN.
+
 **B3 · revisión adversarial independiente, 8-sep-2026: PASS.** Un defecto real
 encontrado y corregido, más dos mediciones que se hacían a través de un paso de
 limpieza.
@@ -526,12 +535,12 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**FILTERS CORE — B5**
+**NONE — FILTERS CORE HOST READY, pendiente campaña HOST del propietario**
 
 ## STATUS
 
 **B1 = CLOSED. B2 = CLOSED (71d23c7). B3 = CLOSED.**
-**B4 = CLOSED. B5 = AUTHORIZED / WIP / NOT GREEN.**
+**B4 = CLOSED. B5 = CODE/TEST GREEN / COMMITTED. FILTERS CORE HOST READY.**
 El propietario aceptó B4 (`f38bc0c`, revisión `df2c03e`) y autorizó B5:
 integración reproducible, escala/stress, lifecycle y preparación HOST/release.
 No cambia el baseline productivo. No push ni deploy.
@@ -558,9 +567,9 @@ autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-Validar checkout limpio de df2c03e con dependencias normales; después ejecutar
-integración backend/frontend en desechable, escala y stress B5, regresiones,
-y preparar campaña HOST y release coordinado. No reabrir B1–B4 sin regresión.
+Esperar instrucciones para ejecutar los seis casos de
+[B5_HOST_RELEASE](filters/B5_HOST_RELEASE.md) en un entorno legítimo disponible.
+No implementar otro bloque, no repetir B1–B4 ni certificar HOST sin ensayo real.
 Checkpoint B5 de implementación local: lifecycle 5/5, stress 11/11,
 memoria 25 scopes sin referencias históricas retenidas, mutantes 3/3,
 escala 6/6, integración PostgreSQL + frontend 25/25. Regresiones verdes
@@ -568,12 +577,15 @@ salvo el fallo backend histórico aceptado. Detalle y archivos:
 [filters/B5_RESULTADOS.md](filters/B5_RESULTADOS.md),
 [filters/B5_HOST_RELEASE.md](filters/B5_HOST_RELEASE.md) y
 [filters/evidencias/B5_CAMPAIGN.json](filters/evidencias/B5_CAMPAIGN.json).
-Crear checkpoint local por lista explícita y verificar su build limpio + ensayo
-backend/frontend desde el mismo checkout antes de declarar B5 GREEN.
+Checkpoint B5 `e1a1601` creado y comprobado en checkout limpio:
+npm ci 772 dependencias/20 s; build 516 módulos/15,24 s;
+once bancos de integración pasan allí y ensayo PG18 + frontend 25/25.
 Archivos propios B5: filterRuntimeBridge.js, filterVisualDriver.js,
 pruebas/filtersCore.b5{BackendPayload,Lifecycle,Memory,Mutants,Scale,Stress}.prueba.mjs,
 backend/herramientas/ensayo_inventory_b1_integrado.py (--b5), los tres documentos
-anteriores y este handoff. No adoptar los cinco M ajenos ni untracked históricos.
+anteriores y este handoff. Todos versionados; no queda WIP propio B5.
+EXPECTED WORKTREE sigue siendo los cinco M ajenos y untracked históricos
+declarados. No adoptarlos. Checks SHA256 de los cinco M coinciden con takeover.
 PREDICT y todo WIP ajeno siguen protegidos. No push ni deploy.
 El backend vivo registrado sigue en 3e413cd: desplegar este HEAD sin coordinación
 arrastraría el cutover B1/B2. CODE/TEST GREEN no certifica host/LMV/GPU/producción.

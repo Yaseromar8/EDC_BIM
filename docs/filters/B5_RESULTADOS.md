@@ -2,8 +2,9 @@
 
 8-sep-2026. Base cerrada: B1/B2/B3; B4 implementación `f38bc0c` +
 revisión independiente `df2c03e`. B5 no rediseña esos contratos.
-**Checkpoint de código/pruebas candidato; falta verificar su commit en checkout
-limpio antes de declarar B5 CODE/TEST GREEN / FILTERS CORE HOST READY.**
+**B5 CODE/TEST GREEN / FILTERS CORE HOST READY.**
+Checkpoint funcional: `e1a16016c192bb8674fb576294771138e29d2df6`.
+Verificado posteriormente desde checkout limpio del mismo SHA, sin cambios de producto.
 No HOST GREEN, no despliegue. Evidencia: [B5_CAMPAIGN.json](evidencias/B5_CAMPAIGN.json).
 
 ## Integración y correcciones acotadas
@@ -119,7 +120,14 @@ huérfano tras dispose; no se añadieron por cantidad.
   instala 772 paquetes desde lockfile; `npm run build`: 516 módulos, 14,54 s.
   Sin overlays, symlinks a node_modules principal, env copiado, ViewerFacade,
   public/predict ni archivos ajenos. Avisos históricos de clave volver duplicada,
-  imports mixtos y bundle grande; no errores. Falta el build del checkpoint B5.
+  imports mixtos y bundle grande; no errores.
+- **Checkout limpio del commit B5 e1a1601**: npm ci 772 paquetes/20 s;
+  npm run build **exit 0, 516 módulos, 15,24 s**, bundle index-CAvlMK_a.js.
+  Once bancos directamente integrados pasan también desde ese checkout,
+  incluido stress/lifecycle/memory/mutantes/runtime/Inventory/4D.
+  Backend→frontend→PATCH + V2 repetido allí: **25/25**, clúster detenido.
+  Backend y frontend ensayados son exactamente el mismo SHA. Git status limpio
+  en ese checkout después de instalar/build/ensayo.
 
 Incidencia del **harness nuevo**, no de producto: el primer intento V2-zero
 usó un valor inexistente y obtuvo correctamente restore degradado por preflight.
@@ -155,3 +163,16 @@ el backend nuevo sin 31 falla cerrado. No se autoriza una combinación de versio
 Rollback antes de escrituras exclusivas y después de ellas son situaciones
 distintas; no existe down-migration automática sin pérdida. Ver receta.
 Sin cambios productivos, sin push/deploy. WIP histórico permanece protegido.
+
+## Residuos locales de validación (conservados)
+
+- Checkout base: C:/Users/ASUS/AppData/Local/Temp/alephia-b5-clean-844da6e96c6f480bb3efb9f184b840ab.
+  Conserva build/deps y el JSON de ensayo 4D generado sólo en esa copia.
+- Checkout B5: C:/Users/ASUS/AppData/Local/Temp/b5-fac88b60 (limpio en Git).
+- Un intento con nombre temporal largo falló al extraer un PDF histórico por
+  límite Windows; Git no lo registró como worktree. Ruta intentada:
+  C:/Users/ASUS/AppData/Local/Temp/alephia-b5-checkpoint-c07ebeef544f46ecbc17a98da6fec77c.
+  No se cambió core.longpaths, no se eliminó contenido para continuar.
+- Clústeres PG desechables quedan **detenidos**, conservados; rutas en JSON
+  de evidencia. Ningún servicio persistente arrancado ni configuración restaurable
+  pendiente. No se tocaron variables/credenciales de producción ni .env.

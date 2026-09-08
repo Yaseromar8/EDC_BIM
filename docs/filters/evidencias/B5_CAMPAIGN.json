@@ -1,4 +1,89 @@
 {
+  "finalCommittedCheckpoint": {
+    "head": "e1a16016c192bb8674fb576294771138e29d2df6",
+    "checkout": "C:/Users/ASUS/AppData/Local/Temp/b5-fac88b60",
+    "trackedWorktreeClean": true,
+    "dependencies": {
+      "command": "npm ci --offline --no-audit --no-fund",
+      "packages": 772,
+      "seconds": 20
+    },
+    "build": {
+      "command": "npm run build",
+      "exit": 0,
+      "modules": 516,
+      "seconds": 15.24,
+      "bundle": "index-CAvlMK_a.js"
+    },
+    "backend": {
+      "summary": {
+        "passed": 25,
+        "failed": 0,
+        "total": 25
+      },
+      "cluster": {
+        "newCluster": true,
+        "host": "127.0.0.1",
+        "port": 59419,
+        "database": "ecd_ensayo_inventory_integrado_d2fce5687edb",
+        "clusterDirectory": "C:\\Users\\ASUS\\AppData\\Local\\Temp\\alephia_inventory_b1_integrado_67nm33_j\\data",
+        "serverVersionNum": "180004"
+      },
+      "clusterStopped": true
+    },
+    "regressions": [
+      {
+        "name": "filtersCore.b5Stress",
+        "exit": 0
+      },
+      {
+        "name": "filtersCore.b5Lifecycle",
+        "exit": 0
+      },
+      {
+        "name": "filtersCore.b5Memory",
+        "exit": 0
+      },
+      {
+        "name": "filtersCore.b5Mutants",
+        "exit": 0
+      },
+      {
+        "name": "filtersCore.runtime",
+        "exit": 0
+      },
+      {
+        "name": "filtersCore.runtimeMutants",
+        "exit": 0
+      },
+      {
+        "name": "filtersCore.interacciones",
+        "exit": 0
+      },
+      {
+        "name": "filtersCore.interaccionesIntegradas",
+        "exit": 0
+      },
+      {
+        "name": "filtersCore.b4Adversarial",
+        "exit": 0
+      },
+      {
+        "name": "inventoryIdentity",
+        "exit": 0
+      },
+      {
+        "name": "lob4dIdentidad",
+        "exit": 0
+      }
+    ],
+    "protectedFilesAbsent": [
+      "frontend-react/src/aps/viewer",
+      "frontend-react/public/predict"
+    ],
+    "host": "NOT EXECUTED / ENVIRONMENT",
+    "limits": "No dependencies or env copied from dirty worktree; offline npm cache is normal dependency source, not application WIP"
+  },
   "sourceCheckpoint": "df2c03e5df9b1b9a121f47adb99025bcc537537c",
   "productDelta": "B5 runtime lifecycle fixes only; fingerprints of backend product recorded below",
   "backend": {

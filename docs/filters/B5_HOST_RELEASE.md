@@ -32,8 +32,8 @@ el propietario después de esta campaña, no este documento.
 
 ## Release coordinado — orden, no autorización
 
-**Commit backend = commit frontend = checkpoint funcional B5 consignado en
-AI_WORKSTATE tras la verificación limpia.** Si se elige un descendiente sólo
+**Commit backend = commit frontend = e1a16016c192bb8674fb576294771138e29d2df6**,
+checkpoint funcional B5 verificado en checkout limpio. Si se elige un descendiente sólo
 documental, usar el mismo SHA en ambos servicios y verificar su ascendencia.
 Producción registrada sigue en `3e413cd`; no se consultó ni modificó aquí.
 Auto-Deploy registrado OFF; no cambiarlo. Push y cada deploy requieren permiso
