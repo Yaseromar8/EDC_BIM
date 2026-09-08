@@ -58,8 +58,10 @@ local observada `origin/main` es `cf7a845`; no se hizo fetch ni push.
 Historia funcional hasta el baseline:
 
 Posteriores declarados adicionales: `0cf10a5` (handoff), `b7014be` (bloqueo),
-`71d23c7` (corrección B2 autorizada) y el commit funcional de cierre B3 descrito
+`71d23c7` (corrección B2 autorizada) y el commit funcional de checkpoint B3 descrito
 en STATUS. Ninguno se desplegó ni cambia el CODE BASELINE de producción.
+El handoff documental posterior `docs(filters): prepare b3 independent review checkpoint`
+sólo fija el estado de revisión; no duplica ni modifica el commit funcional B3.
 
 ```
 3e413cd feat(saved-views/e-7): make the v2 pipeline the default path
@@ -481,11 +483,13 @@ Observaciones reales, ya conocidas y aceptadas. Ninguna bloquea nada.
    propietario (7-sep-2026). No bloquea B1.
 ## CURRENT TASK
 
-**NONE**
+**B3 INTEGRATION REVIEW**
 
 ## STATUS
 
-**B1 = CLOSED. B2 = CLOSED (71d23c7). B3 = CODE/TEST GREEN.**
+**B1 = CLOSED. B2 = CLOSED (71d23c7). B3 = CODE/TEST GREEN / COMMITTED.**
+**B3 = PENDING INTEGRATION REVIEW. B4 = NOT STARTED / NOT AUTHORIZED.**
+B3 NO está CLOSED: Claude realizará la revisión adversarial independiente.
 Resultado único revisionado conectado a Viewer/Inventory/popout.
 Todos los casos B3 históricos cumplen el mismo expected original.
 Sólo permanecen dos KNOWN_FAIL B4 (búsqueda/DnD), cero resultados inesperados
@@ -493,17 +497,23 @@ en los casos sanos. Mutante integrado muerto sin modificar la mutación.
 Evidencia: [filters/B3_RESULTADOS.md](filters/B3_RESULTADOS.md).
 [filters/B3_WIP_VALIDATION.md](filters/B3_WIP_VALIDATION.md) es historia del
 bloqueo ya resuelto, NO la instrucción vigente.
-B3 entra en el commit funcional descendiente de 71d23c7 titulado
+Checkpoint B3 verificado el 8-sep-2026:
+**`c091c556acc3d0d1af884594f8e5ee259bcae162`**, descendiente de 71d23c7, titulado
 `feat(filters): unify revisioned results across viewer and inventory`.
-Consultar HEAD real; no exigir un hash autorreferencial dentro del documento.
+Ya contiene los 17 archivos del delta GREEN; no se creó otro commit funcional.
+Este hash es una referencia al checkpoint anterior, no un requisito
+autorreferencial del presente documento. Consultar HEAD real por separado.
 
 ## EXACT NEXT ACTION
 
-Esperar instrucciones del propietario. **B4 NOT AUTHORIZED / NOT STARTED.**
-No programar, no reabrir B1/B2/V2, no push ni deploy.
+Claude: revisar adversarialmente el checkpoint `c091c556acc3d0d1af884594f8e5ee259bcae162`
+(delta funcional desde `71d23c7`), usando B3_RESULTADOS y los bancos existentes.
+Emitir el resultado de B3 INTEGRATION REVIEW sin asumir B3 CLOSED.
+Codex se detiene después de entregar este checkpoint. No implementar B4,
+no reabrir B1/B2/V2, no push ni deploy. WIP ajeno fuera del alcance.
 CODE/TEST GREEN no equivale a validación de host/LMV/GPU ni a producción.
 
-### Cierre de unidad B3
+### Evidencia CODE/TEST del checkpoint B3
 
 - Runtime 17/17, mutantes runtime 3/3, popout 1 escenario/16 aserciones.
 - Interacciones e integradas: cada uno 6 PASS + 2 KNOWN_FAIL B4, cero
@@ -515,7 +525,25 @@ CODE/TEST GREEN no equivale a validación de host/LMV/GPU ni a producción.
 - Build normal alterno exit 0 (516 módulos/11,19 s); build final con Viewer
   del índice sin las 48 líneas ajenas exit 0 (515 módulos/9,99 s).
 - WIP ajeno preservado; ningún cambio de DB, .env, backend ni producción.
-- No quedan tareas activas de B3. Host real no ejecutado; ver límites del informe.
+- Pendiente revisión independiente de integración. Host real no ejecutado;
+  ver límites del informe. No se repitió la campaña al fijar este handoff:
+  no hubo cambios de producto posteriores al GREEN.
+
+### [WIP HANDOFF] — checkpoint para Claude, 8-sep-2026
+
+~~~text
+[WIP HANDOFF]
+TAREA:                B3 INTEGRATION REVIEW — revisión independiente por Claude
+IMPLEMENTADO:         B1/B2 CLOSED; B3 CODE/TEST GREEN / COMMITTED en c091c556acc3d0d1af884594f8e5ee259bcae162; 17 archivos propios, ViewerFacade 0 líneas en código del commit
+PENDIENTE:            Revisión adversarial independiente de B3 y dictamen; no declarar B3 CLOSED antes de ella; B4 no autorizado
+ARCHIVOS MODIFICADOS: Propio de este handoff: docs/AI_WORKSTATE.md solamente. Ajenos preservados: docs/filters/evidencias/IDENTIDAD_4D_5D.json; frontend-react/src/aps/extensions/LOB4DExtension.js; frontend-react/src/components/Viewer.jsx (48 líneas ViewerFacade); frontend-react/src/components/ViewerLabelsBar.jsx; frontend-react/src/lib/predictBim.js; todos los untracked de EXPECTED WORKTREE
+TESTS EJECUTADOS:     Git status/log/rev-parse, staged diff vacío, diff restante, inspección del commit y aserciones: 17 archivos, 0 referencias Facade en Viewer comprometido, 3e413cd/5113e67/89cdc79/e3218e6/8495ad7/71d23c7 ancestros; sin pruebas funcionales nuevas
+TESTS PENDIENTES:     Campaña independiente de Claude; host/React DOM/LMV/GPU no certificado. Campaña GREEN anterior no repetida porque sólo cambia documentación
+FALLO CONOCIDO:       Dos KNOWN_FAIL B4 (búsqueda y DnD) intactos; bancos completos exit 1 con b3Green=true; cero inesperados sanos en la campaña B3 reportada; no se afirma revisión independiente PASS
+NEXT EXACT ACTION:    Claude revisa c091c55 contra 71d23c7 y emite dictamen B3 INTEGRATION REVIEW; no tocar WIP ajeno ni B4
+DO NOT TOUCH:         B1/B2 CLOSED, contratos/datos/capturador/restaurador V2, backend/DB, WIP protegido y untracked históricos, ViewerFacade, .env, producción; no push/deploy
+COMMIT/HEAD REF:      c091c556acc3d0d1af884594f8e5ee259bcae162 (checkpoint funcional y HEAD observado antes del handoff documental)
+~~~
 
 ## TEST / BUILD BASELINE
 
